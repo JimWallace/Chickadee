@@ -78,6 +78,10 @@
     }) : [];
     muted.forEach(function (mark) { mark.classList.add('result-mark-skipped'); });
     if (plan.counts && grade) {
+        // Hold the final width while the grade counts, so the tiles beside
+        // it do not slide as "—" grows to "100%". This is measured layout
+        // geometry, not a styling decision.
+        grade.style.setProperty('--celebrate-grade-width', grade.getBoundingClientRect().width + 'px');
         grade.classList.add('score-figure-counting');
         grade.classList.remove('score-figure-perfect');
         grade.textContent = plan.from === 0 ? '—' : plan.from + '%';
@@ -216,6 +220,7 @@
             grade.textContent = finalText;
             grade.classList.remove('score-figure-counting');
             grade.style.removeProperty('--celebrate-grade-scale');
+            grade.style.removeProperty('--celebrate-grade-width');
             if (plan.isPerfect) { grade.classList.add('score-figure-perfect'); }
         }
         if (bird) { bird.style.removeProperty('--celebrate-bird-y'); }

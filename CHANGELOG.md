@@ -9,6 +9,38 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.684] - 2026-10-15
+
+### Added
+
+- **A weekly digest of the scheduled reports.** Every Monday afternoon, `weekly-digest.yml` has a small model (the haiku family) read the week's ZAP scan, the open CodeQL alerts, the kernel-currency result (with the upstream release notes of any kernel that moved), the flake tally and the open Dependabot PRs, and file one issue: what is new, and at most five items that need a person. The reports themselves do not change. It never dispatches a re-vendor or merges anything.
+
+
+## [0.5.683] - 2026-10-15
+
+### Added
+
+- **A monthly documentation audit.** `docs-audit.yml` runs the new `docs-audit` agent (the sonnet family), which checks every `CLAUDE.md` file and a rotating quarter of `docs/` against the repository: paths, workflows, scripts and agents that no longer exist, counts that changed, processes that no longer run, and docs the reference list does not name. It files one issue that replaces the previous one. It is a report, never a gate.
+
+### Fixed
+
+- **The result-page count-up no longer shifts the tiles.** While the grade counts up from "—", it keeps its final width, so the Passed, Failed, Errors and Skipped tiles stay in place.
+
+
+## [0.5.682] - 2026-10-15
+
+### Added
+
+- **An explanation of each visual-regression failure.** When the visual check fails on a PR, `visual-diff-explainer.yml` has a model (the sonnet family) compare each changed page's baseline, capture and diff image with the PR's UI diff, and comment once per PR: what changed, and whether the diff explains it. It is a report; the visual check stays the gate.
+
+
+## [0.5.681] - 2026-10-15
+
+### Removed
+
+- **The "weekly triage routine" section of `docs/mutation-triage.md`.** It described a scheduled Claude Code routine that no longer exists. The triage protocol and the automatic first pass (`mutation-pretriage.yml`) are unchanged.
+
+
 ## [0.5.680] - 2026-10-15
 
 ### Added

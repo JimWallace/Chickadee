@@ -434,6 +434,8 @@ The subagents are in `.claude/agents/`. Each one reports and does not edit.
 - For the state of the whole UI, run `ui-audit`. It applies the usability
   heuristics in `docs/ui-design.md` across all pages. CI runs it each month
   (`.github/workflows/ui-audit.yml`) and files the report as an issue.
+- For drift between the docs and the code, run `docs-audit`. CI runs it each
+  month (`.github/workflows/docs-audit.yml`) and files the report as an issue.
 - Before a commit, run `diff-reviewer` on the uncommitted diff.
 
 The hooks in `.claude/hooks/` do three jobs, so you need not:

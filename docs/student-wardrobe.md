@@ -149,7 +149,6 @@ gets the ring. It is not a rank.
 | snowflake, shown as "Winter" | seasonal (Winter) | a ramp from ice blue at the top to indigo at the bottom |
 | blossom, shown as "Spring" | seasonal (Spring) | a ramp from blossom pink to apricot to new-leaf green |
 | maple, shown as "Fall" | seasonal (Fall) | a ramp from gold to orange to brick to maroon |
-| the six concept rings | earned | see "Concept rings" below |
 
 Rainbow is a starter on purpose. It is also the Pride flag, and a student must
 not have to earn a way to show it.
@@ -168,39 +167,6 @@ locked item does not show at all (see "Earning: the design pass", E3). When a ru
 earned when every test passes on three assignments"); stitched and spectrum
 have no rule yet ("Stitched · earned"). `AvatarCustomization` refuses a
 locked ring, so a hand-made request cannot choose one.
-
-**Concept rings.** Six earned rings, one for each lab concept. They are
-lateral: different, not better. The raw value is the sprite name
-(`av-ring-<raw value>`).
-
-| Raw value | Display name | Art | Concept |
-|---|---|---|---|
-| `lifering` | Life ring | A red and white life ring with rope wraps: a float | Variables & numbers |
-| `greenlight` | Green light | A green band, with a traffic light at the bottom and the green lamp lit | Conditionals |
-| `ouroboros` | Ouroboros | A snake that eats its tail (`while True:`), head at the lower left | Loops |
-| `function` | Function | The ring broken into a tapered `(` and `)` | Functions |
-| `binary` | Binary | Eight dashes, long for 1 and short for 0, that spell 230 clockwise from the top | Data representation |
-| `pulse` | Pulse | A solid band with one ECG trace (P, QRS, T) at the lower right | Health data |
-
-- **Three rings are wider, inward only.** The usual band is r 28.8 to 32.
-  The ouroboros head goes in to r 25.6, the green light housing to r 25.4,
-  and the life ring to r 25.6 all the way round. Nothing goes past r 32. At
-  36 and 96 px, at all three tilts, none of the three touches the eyes or the
-  beak.
-- **Contrast applies to the band colours only.** `--avatar-function`,
-  `--avatar-binary`, `--avatar-pulse`, `--avatar-ouroboros-body`,
-  `--avatar-greenlight-band`, `--avatar-lifering-red` and
-  `--avatar-lifering-rim` hold the term-ring floors (1.45:1 light, 1.8:1
-  dark). The lamps, the rope, the snake's back pattern and the white
-  quarters are exempt. The snake's eye uses the bird's own `.av-eyewhite`
-  and `.av-pupil`. The white quarters rely on the rim to
-  separate them from a light backdrop. The rim was lifted from the design's
-  `#8E2A20` to `#AB3327` (same hue), because the design value gave only
-  1.40:1 on the dark sky backdrop. No dark mirror.
-- **Locked for now.** No rule earns a concept ring yet, so each shows under
-  "Not open yet" as "{Name} · earned". The rule needs an instructor to tag an
-  assignment with its concept, which is the first wardrobe rule that is not
-  read only from a student's own work.
 
 ### 6b. Earned items (a small W3, #2592)
 
@@ -528,12 +494,14 @@ wardrobe must work first. What we learned is kept here for when it comes back:
 | W2 | Rings as sprite art; rainbow (starter), two-tone and stitched (earned), spectrum (special); the staff ring | shipped |
 | W2b | Seasonal rings: snowflake, blossom and maple, open during their term and kept after | shipped |
 | W3 (small) | `wardrobe_unlocks`; three items earned by a student's own graded work (#2592) | shipped |
-| J1 | The result-page celebration: the bird at 56px, the 100% moment, the Improved and Already-100% states ([result-celebration.md](result-celebration.md)) | in progress |
-| E-a | Hide locked items; say how an item was earned after it is earned (E1 to E3) | planned |
-| E-b | The `dreamy` and stitched rules and the pace test (E4, E5) | in progress |
-| C1 | Concept rings and the instructor's concept link (E6) | in review: the art and cases, locked (#2605); the unlock rule (#2607) |
-| J2 | The Earned toast for wardrobe items (E11) | planned |
-| J3 | One toast for everything earned, achievements included (E7) | planned |
-| W4 | Slots and the first earned accessories (gradcap for completion, rubber duck) | planned |
-| W5 | Trophy case + class-activity medals | planned |
+| J1 | The result-page celebration: the bird at 56px, the 100% moment, the Improved and Already-100% states ([result-celebration.md](result-celebration.md), #2608) | shipped |
+| E-b | The `dreamy` and stitched rules and the pace test (E4, E5, #2608) | shipped |
+| E-a | Hide locked items; say how an item was earned after it is earned (E1 to E3) | #2615 |
+| C1, C2 | Concept rings, and the instructor's concept link on an assignment (E6) | #2605, #2607 |
+| J1b | The reduced-motion banner for a 100% result | #2618 |
+| J2 | The Earned toast for wardrobe items (E11) | #2616 |
+| J3 | One toast for everything earned, achievements included | #2617 |
+| E7 | Design: can an achievement grant a wardrobe item? | #2619 |
+| W4 | Slots and the first earned accessories (gradcap for completion, rubber duck) | #2620 |
+| W5 | Trophy case + class-activity medals | #2621 |
 | — | Participation currency | shelved |
