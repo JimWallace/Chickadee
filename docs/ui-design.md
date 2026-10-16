@@ -719,6 +719,23 @@ duplicate.
   itself, because there the non-matching rows really are absent.
   `.standin-panel` — the placeholder a panel shows while its content is
   unavailable.  `.detail-grid` — label/value pairs in a two-column grid.
+- **`.nb-boot`** — the notebook editor's loading panel (design frame 18e).  It
+  covers the iframe inside an `.nb-stage` (a positioned flex column, so the
+  iframe still shrinks to the workbench pane) while the editor starts.  It
+  holds the viewer's bird pecking at seeds (`.nb-boot-bird`, `.nb-boot-seeds`;
+  static under reduced motion), a `.nb-boot-title`, three `.nb-boot-steps`
+  whose glyph changes shape with each step's `data-state` (the active glyph is
+  the `.spinner` idiom at glyph size), a `.nb-boot-bar` and a `.nb-boot-note`.
+  `notebook-boot.js` moves it through the steps from the kernel phases and adds
+  `.nb-boot-leaving` for its 200ms fade.  The failure panel, a
+  `.standin-panel`, replaces it, and the slow-boot notice sits above it.  It
+  does not reuse `.standin-panel`, because it is an overlay on the editor
+  that has to fill it, not a centred card in the page flow.
+- **`.kernel-chip`** — the notebook toolbar's kernel state: the language, a
+  dot and the state in words ("Python · starting").  The dot is the
+  `.state-select` scan cue: `data-state` colours it amber while the kernel
+  starts and green when it is ready, and the words always say the state.  It
+  is not a `.chip`, because it carries a status colour.
 - **`.log-payload`** — the `.detail-grid` inside a log/event row's payload
   disclosure (the audit log, alert firings).  A log row shows when, who, what
   and how it went; everything else — category, target, remote address,

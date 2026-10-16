@@ -173,11 +173,12 @@
     // Submit before their work is loaded, causing a blank notebook to be
     // submitted (the fallback path reads the starter template instead of
     // their saved cells).
+    // The loading panel over the editor (notebook-boot.js) shows the boot,
+    // so the status line stays empty while the editor starts.
     if (submitBtn) {
         submitBtn.disabled = true;
         submitBtn.title = 'Loading notebook\u2026';
     }
-    setStatus('loading', 'Loading notebook\u2026');
 
     // -------------------------------------------------------------------------
     // 1. Load JupyterLite in the iframe
@@ -478,6 +479,9 @@
 
     function markKernelEverReady() {
         kernelEverReady = true;
+        // The watchdog's probe can see the kernel before the in-iframe
+        // collector reports it. Either one ends the loading panel.
+        if (window.ChickadeeNotebookBoot) window.ChickadeeNotebookBoot.finish();
         if (slowBootNoticeTimer) {
             clearTimeout(slowBootNoticeTimer);
             slowBootNoticeTimer = null;

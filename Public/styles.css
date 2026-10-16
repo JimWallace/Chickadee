@@ -1338,6 +1338,152 @@ code { font-family: var(--font-mono); font-size: .9em; }
    workbench's own bar and pane head take more than 3rem between them. */
 .jl-frame-embedded { height: calc(100vh - 3rem); }
 
+/* The kernel chip in the notebook toolbar: the language and its state, with a
+   dot as the scan cue. notebook-boot.js writes data-state; the text always
+   says the state too, so colour is never the only carrier. */
+.kernel-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: .4rem;
+    font-size: var(--text-sm);
+    color: var(--text-secondary);
+    white-space: nowrap;
+}
+.kernel-chip::before {
+    content: "";
+    width: .5rem;
+    height: .5rem;
+    border-radius: 50%;
+    background: var(--gray-400);
+}
+.kernel-chip[data-state="starting"]::before { background: var(--state-amber); }
+.kernel-chip[data-state="ready"]::before { background: var(--green); }
+
+/* The editor stage: the loading panel over the iframe. A flex column, so the
+   iframe still shrinks to the workbench pane as it did when it was the pane's
+   own flex item. */
+.nb-stage {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+}
+
+/* The loading panel (design frame 18e) over the editor while it starts. The
+   iframe loads underneath it. notebook-boot.js moves it through its steps
+   (data-phase, and data-state on each step) and fades it out when the kernel
+   is idle. Phones never see it: below 640px the editor is hidden. */
+.nb-boot {
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: .75rem;
+    padding: 1.5rem 1rem;
+    overflow-y: auto;
+    background: var(--surface-muted);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    transition: opacity .2s ease-out;
+}
+.nb-boot-leaving { opacity: 0; }
+@media (max-width: 640px) {
+    .nb-boot { display: none; }
+}
+.nb-boot-bird {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: .4rem;
+}
+.nb-boot-seeds { display: flex; gap: .3rem; }
+.nb-boot-seeds span {
+    width: .3rem;
+    height: .3rem;
+    border-radius: 50%;
+    background: var(--celebrate-seed);
+}
+.nb-boot-seeds span:last-child { opacity: .5; }
+/* The peck: a 2s loop that tilts the bird down and back. Static under reduced
+   motion. */
+@keyframes bird-peck { 30% { transform: rotate(12deg); } 60% { transform: rotate(0deg); } }
+@media (prefers-reduced-motion: no-preference) {
+    .nb-boot-bird .avatar { animation: bird-peck 2s ease-in-out infinite; }
+}
+.nb-boot-title { margin: .5rem 0 0; font-size: var(--text-lg); }
+.nb-boot-steps {
+    display: grid;
+    gap: .5rem;
+    width: min(24rem, 100%);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    font-size: var(--text-base);
+}
+.nb-boot-steps li {
+    display: flex;
+    align-items: center;
+    gap: .6rem;
+    color: var(--muted);
+}
+/* The glyph: a ring while pending, a turning ring while active, a check when
+   done. The shape changes with the state, not only the colour. */
+.nb-boot-steps li::before {
+    content: "";
+    flex: none;
+    display: grid;
+    place-items: center;
+    box-sizing: border-box;
+    width: 1.1rem;
+    height: 1.1rem;
+    border: 2px solid var(--gray-300);
+    border-radius: 50%;
+    font-size: var(--text-2xs);
+}
+.nb-boot-steps li[data-state="active"] { color: var(--gray-900); font-weight: 600; }
+.nb-boot-steps li[data-state="active"]::before {
+    border-color: var(--gray-200);
+    border-top-color: var(--health-teal);
+}
+@media (prefers-reduced-motion: no-preference) {
+    .nb-boot-steps li[data-state="active"]::before { animation: spin .8s linear infinite; }
+}
+.nb-boot-steps li[data-state="done"] { color: var(--gray-700); }
+.nb-boot-steps li[data-state="done"]::before {
+    content: "✓";
+    border-color: var(--open-bg);
+    background: var(--open-bg);
+    color: var(--open-fg);
+}
+.nb-boot-bar {
+    width: min(24rem, 100%);
+    height: .3rem;
+    overflow: hidden;
+    border-radius: var(--radius-full);
+    background: var(--gray-200);
+}
+.nb-boot-bar::before {
+    content: "";
+    display: block;
+    width: 10%;
+    height: 100%;
+    background: var(--health-teal);
+    transition: width .4s ease-out;
+}
+.nb-boot[data-phase="app_ready"] .nb-boot-bar::before { width: 35%; }
+.nb-boot[data-phase="kernel_starting"] .nb-boot-bar::before { width: 60%; }
+.nb-boot[data-phase="kernel_idle"] .nb-boot-bar::before { width: 100%; }
+.nb-boot-note {
+    max-width: 26rem;
+    margin: 0;
+    font-size: var(--text-sm);
+    color: var(--text-secondary);
+    text-align: center;
+}
+
 /* ── Auth pages ──────────────────────────────────────── */
 
 .auth-box {

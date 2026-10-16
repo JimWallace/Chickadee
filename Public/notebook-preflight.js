@@ -136,6 +136,13 @@
         const slowNotice = document.getElementById('nb-slow-notice');
         if (slowNotice && !slowNotice.hidden) hideNotice(slowNotice, false);
 
+        // It also replaces the loading panel and the kernel chip
+        // (notebook-boot.js): the editor is not starting any more.
+        const boot = document.getElementById('nb-boot');
+        const kernelChip = document.getElementById('nb-kernel-chip');
+        if (boot) boot.hidden = true;
+        if (kernelChip) kernelChip.hidden = true;
+
         // Memory-crash variant: the editor DID load, but the kernel died on a
         // fatal WASM/OOM crash mid-session — swap in memory-specific copy on the
         // same fallback panel (which already offers .ipynb upload + reset link),

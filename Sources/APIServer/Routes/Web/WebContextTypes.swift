@@ -349,6 +349,13 @@ struct NotebookContext: Encodable {
     /// gates on (docs/ai-assisted-feedback.md): the header says so before
     /// they submit.
     var aiFeedbackNotice = false
+    /// The declared language's name when it has an editor kernel ("Python"),
+    /// for the loading panel and the kernel chip. Nil when the assignment
+    /// declares no language, or one that is upload-only.
+    let kernelLanguage: String?
+    /// The viewer's own bird for the loading panel, with the curious face, or
+    /// nil when they have no bird.
+    let bootBird: AvatarPresentation?
 }
 
 // MARK: - Submission history page

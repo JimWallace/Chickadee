@@ -274,7 +274,9 @@ extension WebRoutes {
                 isStudentSolutionView: false,
                 workingCopyMtime: workingCopyMtimeEpoch(absolutePath: submissionViewAbsPath),
                 currentUser: req.currentUserContext,
-                embedded: args.embedded
+                embedded: args.embedded,
+                kernelLanguage: NotebookBootFacts.kernelLanguage(manifestJSON: setup.manifest),
+                bootBird: NotebookBootFacts.bird(avatarSpecJSON: args.user.avatarSpecJSON, isStaff: args.isStaff)
             ))
     }
 
@@ -413,7 +415,9 @@ extension WebRoutes {
             workingCopyMtime: workingCopyMtimeEpoch(absolutePath: workingCopyAbsPath),
             currentUser: req.currentUserContext,
             embedded: args.embedded,
-            aiFeedbackNotice: aiFeedbackNotice
+            aiFeedbackNotice: aiFeedbackNotice,
+            kernelLanguage: NotebookBootFacts.kernelLanguage(manifestJSON: setup.manifest),
+            bootBird: NotebookBootFacts.bird(avatarSpecJSON: args.user.avatarSpecJSON, isStaff: args.isStaff)
         )
     }
 
