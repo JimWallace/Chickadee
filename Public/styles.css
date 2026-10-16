@@ -3926,7 +3926,7 @@ tr.drop-adopt  { outline: 2px solid var(--blue); outline-offset: -2px; }
    the avatar sprite, so it shows the ring the student would wear. It inherits
    --av-backdrop from the form, which the live preview updates, so the samples
    follow a backdrop change before it is saved. "No border" is a dashed grey
-   ring. A locked ring is not a swatch at all: see .bird-locked. */
+   ring. A ring out of its term is not a swatch at all: see .bird-locked. */
 .swatch-backdrop { background: var(--av-backdrop); }
 
 /* A bird sample is the student's own bird wearing that face, at the roster
@@ -4139,8 +4139,9 @@ tr.drop-adopt  { outline: 2px solid var(--blue); outline-offset: -2px; }
 
 .bird-card-groups > .toolbar .field-note { margin: 0; }
 
-/* The faces and rings that are not open yet: a dimmed sample, a lock and a name. Not
-   inputs, since nothing about them can be chosen. */
+/* The seasonal rings out of their term: a dimmed sample, a lock and a name.
+   Not inputs, since nothing about them can be chosen. No earned item is ever
+   listed here: items are surprises (docs/student-wardrobe.md, E1). */
 .bird-locked {
     margin-top: 1rem;
     padding-top: .75rem;
@@ -4170,11 +4171,15 @@ tr.drop-adopt  { outline: 2px solid var(--blue); outline-offset: -2px; }
     opacity: .5;
 }
 
-/* A locked face differs from the open ones only by its eyes and beak, so it
-   keeps the roster size, where a face reads. */
-.bird-locked .swatch-bird {
-    width: 2.25rem;
-    height: 2.25rem;
+/* "How you earned these" (#2615): one closed section under the choices,
+   with how each earned item was earned. */
+.bird-card-earned { padding: 0 1.25rem 1.25rem; }
+
+.bird-card-earned ul {
+    margin: .5rem 0 0;
+    padding-left: 1.25rem;
+    font-size: var(--text-sm);
+    color: var(--muted);
 }
 
 /* The leaderboard's "you" card bird (6rem) and the Present-mode podium bird

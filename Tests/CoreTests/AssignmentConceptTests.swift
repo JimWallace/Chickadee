@@ -52,10 +52,10 @@ import Testing
         #expect(AssignmentConcept.conditionals.ringPhrase == "the Green light ring")
     }
 
-    @Test func theHowToEarnTextNamesTheConcept() {
-        #expect(WardrobeItem.ouroborosRing.howToEarn == "when every test passes on a loops lab")
-        #expect(WardrobeItem.lifeRing.howToEarn == "when every test passes on a variables & numbers lab")
-        #expect(WardrobeItem.pulseRing.howToEarn == "when every test passes on a health data lab")
+    @Test func theHowEarnedTextNamesTheConcept() {
+        #expect(WardrobeItem.ouroborosRing.howEarned == "when every test passed on a loops lab")
+        #expect(WardrobeItem.lifeRing.howEarned == "when every test passed on a variables & numbers lab")
+        #expect(WardrobeItem.pulseRing.howEarned == "when every test passed on a health data lab")
     }
 
     /// One test per ring: full marks on a tagged assignment earn its ring, and

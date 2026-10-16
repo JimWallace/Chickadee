@@ -161,13 +161,12 @@ stripe inside the accent). The segments lost the edge of the disc on a pale
 backdrop, and the stripe made two thin lines, which is the shape of the staff
 ring.
 
-A locked earned or special ring is listed under "Not open yet", as an item
-and not as an input, with "earned" in the name, so that a student can see
-what there is to earn. **The design pass (#2603) removes this list:** a
-locked item does not show at all (see "Earning: the design pass", E3). When a rule earns it, the name says how ("Two-tone ·
-earned when every test passes on three assignments"); stitched and spectrum
-have no rule yet ("Stitched · earned"). `AvatarCustomization` refuses a
-locked ring, so a hand-made request cannot choose one.
+A locked earned or special ring does not show on the account page at all
+(#2615; see "Earning: the design pass", E1 to E3). After the student earns
+it, it is a choice like any other, and the closed "How you earned these"
+section says how it was earned ("Two-tone: earned when every test passed on
+three assignments"). `AvatarCustomization` refuses a locked ring, so a
+hand-made request cannot choose one.
 
 **Concept rings.** Six earned rings, one for each lab concept. They are
 lateral: different, not better. The raw value is the sprite name
@@ -294,14 +293,16 @@ One page section on the account page, "Your bird", one card:
 
 - The bird at the podium size (10rem), with its species name. The bird is no
   longer in Account info.
-- Three groups of choices: **Face** (the starter expressions, each option
-  the student's own bird wearing that face, then the unlockable faces under
-  "Not open yet"), **Backdrop** (the eight backdrops) and **Ring** (the rings
+- Three groups of choices: **Face** (the starter expressions and the faces
+  the student has earned, each option the student's own bird wearing that
+  face), **Backdrop** (the eight backdrops) and **Ring** (the rings
   open now: none, the five colours, rainbow, and the seasonal ring of the
   term). Each choice is a radio input with a round sample, so the form works
   with the keyboard and with no JavaScript. A ring's sample is the ring
-  itself, drawn from the sprite on the student's backdrop. The faces and
-  rings not open yet follow under "Not open yet" as plain items, not inputs.
+  itself, drawn from the sprite on the student's backdrop. A face or ring not
+  earned yet does not show. The seasonal rings out of their term follow under
+  "Not open yet" as plain items, not inputs. Under the groups, a closed "How
+  you earned these" section lists each earned item and how it was earned.
   Staff see the staff ring and a note in place of the Ring group.
 - One **Save** button. The form posts to `POST /account/avatar`.
 
@@ -534,7 +535,7 @@ wardrobe must work first. What we learned is kept here for when it comes back:
 | W3 (small) | `wardrobe_unlocks`; three items earned by a student's own graded work (#2592) | shipped |
 | J1 | The result-page celebration: the bird at 56px, the 100% moment, the Improved and Already-100% states ([result-celebration.md](result-celebration.md), #2608) | shipped |
 | E-b | The `dreamy` and stitched rules and the pace test (E4, E5, #2608) | shipped |
-| E-a | Hide locked items; say how an item was earned after it is earned (E1 to E3) | #2615 |
+| E-a | Hide locked items; say how an item was earned after it is earned (E1 to E3) | shipped (#2615) |
 | C1, C2 | Concept rings, and the instructor's concept link on an assignment (E6) | #2605, #2607 |
 | J1b | The reduced-motion banner for a 100% result | #2618 |
 | J2 | The Earned toast for wardrobe items (E11) | #2616 |

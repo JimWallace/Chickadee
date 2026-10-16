@@ -34,7 +34,7 @@ import Testing
     func eachItemOpensOneExistingOption(item: WardrobeItem) {
         #expect(AvatarCustomization.options(for: item.slot).contains(item.value))
         #expect(WardrobeItem(slot: item.slot, value: item.value) == item)
-        #expect(!item.howToEarn.isEmpty)
+        #expect(!item.howEarned.isEmpty)
     }
 
     @Test func noWorkEarnsNothing() {

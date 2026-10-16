@@ -70,17 +70,18 @@ public enum WardrobeItem: String, CaseIterable, Codable, Sendable {
         self = item
     }
 
-    /// How a student earns the item, as the account page says it after
-    /// "earned": "Chirp · earned by a first graded submission".
-    public var howToEarn: String {
+    /// How the student earned the item, in the past tense, as the account
+    /// page says it after "earned" once the item is earned: "Chirp: earned by
+    /// a first graded submission" (docs/student-wardrobe.md, E2).
+    public var howEarned: String {
         switch self {
         case .chirpFace: "by a first graded submission"
-        case .slyFace: "when every test passes on a first attempt"
-        case .twoToneRing: "when every test passes on three assignments"
+        case .slyFace: "when every test passed on a first attempt"
+        case .twoToneRing: "when every test passed on three assignments"
         case .dreamyFace: "by submitting two days early on three assignments"
         case .stitchedRing: "for a comeback on three assignments"
         case .lifeRing, .greenLightRing, .ouroborosRing, .functionRing, .binaryRing, .pulseRing:
-            "when every test passes on a \(concept?.displayName.lowercased() ?? "concept") lab"
+            "when every test passed on a \(concept?.displayName.lowercased() ?? "concept") lab"
         }
     }
 

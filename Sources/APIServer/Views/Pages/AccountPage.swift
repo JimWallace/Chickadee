@@ -236,8 +236,32 @@ private struct AccountBirdCard: HTML {
                     AccountBirdHero(page: page, picker: picker)
                     AccountBirdForm(page: page, picker: picker)
                 }
+                if !picker.earned.isEmpty {
+                    AccountEarnedItems(earned: picker.earned)
+                }
             }
             script(.src(page.asset("/avatar-picker.js"))) {}
+        }
+    }
+}
+
+/// "How you earned these" (#2615): closed by default, so the card stays
+/// clean. Each earned item says how it was earned, in the past tense. Nothing
+/// says what is left to earn.
+private struct AccountEarnedItems: HTML {
+    let earned: [AvatarEarnedItem]
+
+    var body: some HTML {
+        details(.class("bird-card-earned")) {
+            summary(.class("disclosure-summary")) {
+                span(.class("accordion-caret"), .ariaHidden) { Icon("i-chevron-right") }
+                "How you earned these"
+            }
+            ul {
+                for item in earned {
+                    li { item.text }
+                }
+            }
         }
     }
 }
@@ -469,8 +493,8 @@ private struct AccountBackdropSwatch: HTML {
     }
 }
 
-/// The Ring group: the open rings as radios, then the rings not open yet as
-/// plain items. Staff see the staff ring and a note instead.
+/// The Ring group: the open rings as radios, then the seasonal rings out of
+/// their term as plain items. Staff see the staff ring and a note instead.
 private struct AccountRingGroup: HTML {
     let picker: AvatarPickerContext
 
@@ -493,9 +517,9 @@ private struct AccountRingGroup: HTML {
                         AccountBorderSwatch(option: option)
                     }
                 }
-                if !picker.lockedRings.isEmpty {
+                if !picker.laterRings.isEmpty {
                     AccountLockedList(labelID: "bird-locked-label") {
-                        for option in picker.lockedRings {
+                        for option in picker.laterRings {
                             li(.data("av-season", value: option.season)) {
                                 AccountRingSample(token: option.token, ringRef: option.ringRef)
                                 " "
@@ -511,7 +535,7 @@ private struct AccountRingGroup: HTML {
 }
 
 /// The Face group: the open faces as radios, each the student's own bird
-/// wearing it, then the faces not open yet as plain items.
+/// wearing it. A face not earned yet is not shown.
 private struct AccountFaceGroup: HTML {
     let picker: AvatarPickerContext
 
@@ -525,27 +549,13 @@ private struct AccountFaceGroup: HTML {
                     AccountFaceSwatch(option: option)
                 }
             }
-            if !picker.lockedFaces.isEmpty {
-                AccountLockedList(labelID: "bird-locked-faces-label") {
-                    for option in picker.lockedFaces {
-                        li {
-                            span(.class("swatch-sample swatch-bird"), .ariaHidden) {
-                                Avatar(avatar: option.presentation)
-                            }
-                            " "
-                            Icon("i-lock")
-                            " \(option.label)"
-                        }
-                    }
-                }
-            }
         }
     }
 }
 
 /// A labelled list of dimmed bird samples under a dashed rule: plain items,
-/// not inputs. It lists the faces or rings not open yet. `labelID` names the
-/// list, and is unique on the page.
+/// not inputs. It lists the seasonal rings out of their term. `labelID` names
+/// the list, and is unique on the page.
 private struct AccountLockedList<Items: HTML>: HTML {
     let labelID: String
     let items: Items

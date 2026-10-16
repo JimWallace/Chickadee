@@ -118,21 +118,18 @@ import VaporTesting
         }
     }
 
-    @Test func lockedRingsAreListedNotOfferedAndRefused() async throws {
+    @Test func lockedRingsAreHiddenAndRefused() async throws {
         try await withAssignmentRoutesApp { app in
             let pupil = try await enroll("ring_locked", on: app)
             let cookie = try await loginUser(
                 username: pupil.username, password: "testpassword", role: "user", on: app)
             let html = try await getHTML("/account", cookie: cookie, on: app)
-            // A locked ring is listed under "Not open yet" and is not an input.
+            // A locked earned ring is not shown at all: items are surprises.
             for value in ["spectrum", "twotone", "stitched"] {
                 #expect(!html.contains(##"name="border" value="\##(value)""##), "\(value) is an input")
-                #expect(html.contains(##"<use href="#av-ring-\##(value)" />"##), "\(value) is not shown")
+                #expect(!html.contains(##"<use href="#av-ring-\##(value)" />"##), "\(value) is shown")
             }
-            #expect(html.contains("Not open yet"))
-            #expect(html.contains("Spectrum · earned"))
-            #expect(html.contains("Two-tone · earned"))
-            #expect(html.contains("Stitched · earned"))
+            #expect(!html.contains("· earned"))
             #expect(html.contains(##"name="border" value="rainbow""##))
 
             let before = try await storedSpec(pupil, on: app)
