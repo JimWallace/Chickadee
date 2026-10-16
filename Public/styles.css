@@ -1452,7 +1452,7 @@ body:has(.notebook-header .nb-title-block) .nav {
     background: var(--gray-100);
     color: var(--text-secondary);
 }
-.outline-row[data-status="pass"] .outline-glyph { background: var(--open-bg); color: var(--open-fg); }
+.outline-row:is([data-status="pass"], [data-status="written"]) .outline-glyph { background: var(--open-bg); color: var(--open-fg); }
 .outline-row[data-status="fail"] .outline-glyph { background: var(--danger-bg); color: var(--danger-fg); }
 .outline-row[data-status="starter"] .outline-glyph { background: var(--preview-bg); color: var(--preview-fg); }
 .outline-short { display: none; }

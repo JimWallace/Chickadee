@@ -185,6 +185,19 @@ test('two tasks with no section keep their own status', async () => {
   assert.equal(page.rows()[1].getAttribute('data-status'), 'fail');
 });
 
+test('a reflection row follows the extension, and reveals its cell by tag', async () => {
+  const page = await loadPage({ ...GUIDE, reflections: [{ label: 'Reflection', tag: 'reflection', readBy: 'course staff' }] });
+  const reflection = () => page.rows()[2];
+  assert.equal(page.rows().length, 3);
+  assert.equal(reflection().getAttribute('data-status'), 'empty');
+  assert.match(reflection().textContent, /Reflection, Empty/);
+  page.message({ ck: 'ck:tasks', tasks: [], reflections: [{ tag: 'reflection', status: 'written' }] });
+  assert.equal(reflection().getAttribute('data-status'), 'written');
+  reflection().listeners.click.forEach((fn) => fn());
+  const reveal = page.executed.find(([c]) => c === 'chickadee:reveal');
+  assert.equal(JSON.stringify(reveal[1]), '{"tag":"reflection"}');
+});
+
 test('a message from another origin is ignored', async () => {
   const page = await loadPage();
   page.message({ ck: 'ck:tasks', tasks: [{ sectionID: 's1', status: 'fail' }, { sectionID: 's2', status: 'fail' }] }, 'https://evil.test');

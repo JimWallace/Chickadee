@@ -37,6 +37,7 @@ export interface Guide {
   attempt?: { number: number; pending: boolean; url: string } | null;
   tasks: GuideTask[];
   starterSources: { [key: string]: string };
+  reflections?: { label: string; tag: string }[];
 }
 
 /** One notebook cell, as the placement reads it. */
@@ -204,4 +205,9 @@ export function taskOfCell(index: number, headers: { sectionID: string | null; c
     }
   }
   return owner;
+}
+
+/** `written` when any cell with `tag` has text, else `empty`. */
+export function reflectionStatus(tag: string, cells: { tags: string[]; source: string }[]): 'written' | 'empty' {
+  return cells.some(c => c.tags.includes(tag) && c.source.trim() !== '') ? 'written' : 'empty';
 }

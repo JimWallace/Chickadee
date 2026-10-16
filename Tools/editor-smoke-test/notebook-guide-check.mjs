@@ -11,7 +11,9 @@
 //   3. an edit to a task's cell changes its pill and its outline row, after
 //      the edit debounce;
 //   4. a row click moves the editor, and ck:active-cell names that task;
-//   5. at 900px the outline is a row of chips, each at least 44px tall.
+//   5. the Reflection row turns Written when its cell gets text;
+//   6. a renamed function gives "Can't find" on its checks line;
+//   7. at 900px the outline is a row of chips, each at least 44px tall.
 //
 // SMOKE_SCREENSHOT_DIR, when set, receives a screenshot after each step.
 //
@@ -46,6 +48,7 @@ const NOTEBOOK = {
     code("count", ["def count_to(n):\n", "    return list(range(n))\n"]),
     { cell_type: "markdown", id: "h2", source: ["## Task 2: Total\n"], metadata: {} },
     code("total", ["def total(xs):\n", "    return 0\n"]),
+    { cell_type: "markdown", id: "refl", source: [], metadata: { tags: ["reflection"] } },
   ],
 };
 
@@ -128,7 +131,7 @@ async function main() {
     await waitFor("ck:kernel idle", async () => (await events("ck:kernel")).some((d) => d.status === "idle"), KERNEL_BOOT_MS);
 
     // (1) The outline.
-    await waitFor("outline rows", async () => (await rows().count()) === 2);
+    await waitFor("outline rows", async () => (await rows().count()) === 3);
     const outline = await page.locator("#nb-outline").textContent();
     console.log(`outline: ${outline.replace(/\s+/g, " ").trim()}`);
     if (!outline.includes("Not submitted yet")) return fail("the attempt card does not say Not submitted yet");
@@ -136,13 +139,13 @@ async function main() {
     await shot("outline");
 
     // (2) Headers and checks lines in the editor.
-    await waitFor("two task headers", async () => (await headers().count()) === 2);
+    await waitFor("two task headers and the reflection", async () => (await headers().count()) === 3);
     const labels = await headers().locator(".ck-task-label").allTextContents();
     console.log(`headers: ${labels.join(" | ")}; pills: ${(await pills()).join(" | ")}`);
-    if (labels[0] !== "Task 1" || labels[1] !== "Task 2") return fail(`header labels ${labels}`);
+    if (labels.join("|") !== "Task 1|Task 2|Reflection") return fail(`header labels ${labels}`);
     // The header sits in the heading cell's own header widget.
     const inHeading = await editor().locator(".jp-MarkdownCell .jp-CellHeader .ck-task-header").count();
-    if (inHeading !== 2) return fail(`${inHeading} headers sit in a markdown cell header, not 2`);
+    if (inHeading !== 3) return fail(`${inHeading} headers sit in a markdown cell header, not 3`);
     if ((await pills())[1] !== "Still the starter code") return fail(`task 2 pill is ${(await pills())[1]}`);
     const checks = editor().locator(".jp-CodeCell .jp-CellFooter .ck-checks");
     await waitFor("two checks lines", async () => (await checks.count()) === 2);
@@ -179,7 +182,28 @@ async function main() {
     await waitFor("ck:active-cell task s1", async () => (await events("ck:active-cell")).some((d) => d.task === "s1"));
     await waitFor("row 1 current", async () => (await rows().nth(0).getAttribute("aria-current")) === "step");
 
-    // (5) Narrow: chips.
+    // (5) The reflection row.
+    if ((await rows().nth(2).getAttribute("data-status")) !== "empty") return fail("the reflection row is not Empty");
+    await rows().nth(2).click();
+    await page.keyboard.press("Enter");
+    await page.keyboard.type("I chose the median.");
+    await waitFor("reflection written", async () => (await rows().nth(2).getAttribute("data-status")) === "written");
+    await page.keyboard.press("Escape");
+
+    // (6) A renamed function.
+    await page.evaluate(() => window.chickadeeEditorCommand("chickadee:reveal", { name: "total" }));
+    await editor().locator(".jp-CodeCell").nth(1).locator(".cm-content").click();
+    await page.keyboard.press("Control+a");
+    await page.keyboard.type("def total_sum(xs):\n    return 0");
+    // With no anchor left, the checks line sits under the task's heading.
+    const missing = editor().locator(".ck-missing");
+    await waitFor("Can't find", async () => (await missing.count()) === 1);
+    const missingText = await missing.textContent();
+    console.log(`missing: ${missingText}`);
+    if (missingText !== "Can't find total in your notebook") return fail(`missing text ${missingText}`);
+    await shot("renamed");
+
+    // (7) Narrow: chips.
     await page.setViewportSize({ width: 900, height: 800 });
     await waitFor("short labels", async () => await page.locator("#nb-outline .outline-short").first().isVisible());
     const heights = await rows().evaluateAll((els) => els.map((el) => el.getBoundingClientRect().height));

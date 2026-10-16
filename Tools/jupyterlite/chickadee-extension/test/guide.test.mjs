@@ -5,7 +5,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { compilePatterns } from '../lib/definitions.js';
 import {
-  checksPrefix, inlineCodeParts, normalizedSource, pillText, placeTask, taskOfCell, taskStatus,
+  checksPrefix, inlineCodeParts, normalizedSource, pillText, placeTask, reflectionStatus, taskOfCell, taskStatus,
 } from '../lib/guide.js';
 
 const python = compilePatterns([
@@ -95,4 +95,15 @@ test('a cell belongs to the task whose header comes last before it', () => {
   assert.equal(taskOfCell(1, headers), 's1');
   assert.equal(taskOfCell(4, headers), 's2');
   assert.equal(taskOfCell(0, []), null);
+});
+
+test('a reflection is written when a cell with its tag has text', () => {
+  const tagged = [
+    { tags: ['reflection'], source: '  \n' },
+    { tags: [], source: 'not a reflection' },
+  ];
+  assert.equal(reflectionStatus('reflection', tagged), 'empty');
+  tagged.push({ tags: ['reflection'], source: 'I chose the median.' });
+  assert.equal(reflectionStatus('reflection', tagged), 'written');
+  assert.equal(reflectionStatus('other', tagged), 'empty');
 });

@@ -764,8 +764,9 @@ duplicate.
   `.outline-tasks` list of `.outline-row` buttons.  Each row has an
   `.outline-glyph`, an `.outline-name` and its points; `data-status` colours the
   glyph, and the glyph character and the editor's pill always say the status
-  too.  `aria-current` marks the task under the cursor.  Each node carries an
-  `.outline-wide` or an `.outline-short` text: below 1100px the same nodes
+  too.  `aria-current` marks the task under the cursor.  A Reflection row,
+  `written` or `empty`, follows the tasks.  A task row carries an
+  `.outline-wide` name and an `.outline-short` label: below 1100px the same nodes
   become a row of chips at least 44px tall, and below 640px the outline is
   hidden.  A hidden status word follows each row's name, because the glyph is
   `aria-hidden` and the pill is inside the editor.  It is not a `.card` list,

@@ -5,8 +5,9 @@
 //   - Fetches the guide (`#jl-frame[data-guide-url]`, docs/notebook-guide.md)
 //     and hands it to the Chickadee extension (`chickadee:set-guide`), which
 //     draws the task headers and checks lines inside the editor.
-//   - Draws the outline in `#nb-outline`: the attempt card and one row per
-//     task. The editor draws the reflection headers itself. Below 1100px
+//   - Draws the outline in `#nb-outline`: the attempt card, one row per
+//     task, then one row per reflection (`docs/ai-assisted-feedback.md`; its
+//     state comes from the extension). Below 1100px
 //     the stylesheet lays the same nodes out as a row of chips under the
 //     toolbar.
 //   - Follows the extension: `ck:tasks` updates each row's status (the
@@ -20,8 +21,11 @@
 (function (global) {
     'use strict';
 
-    var GLYPHS = { pass: '✓', fail: '✗', starter: '!', fresh: '○' };
-    var WORDS = { pass: 'Passed', fail: 'Checks failed', starter: 'Still the starter code', fresh: 'Not submitted yet' };
+    var GLYPHS = { pass: '✓', fail: '✗', starter: '!', fresh: '○', written: '✓', empty: '○' };
+    var WORDS = {
+        pass: 'Passed', fail: 'Checks failed', starter: 'Still the starter code', fresh: 'Not submitted yet',
+        written: 'Written', empty: 'Empty',
+    };
 
     /// The glyph beside a status. Pure.
     function glyph(status) {
@@ -75,6 +79,7 @@
         var guide = null;
         var sentToEditor = false;
         var statuses = {};
+        var reflectionStatuses = {};
         var activeSection = null;
 
         var frame = function () { return document.getElementById('jl-frame'); };
@@ -138,6 +143,23 @@
                 item.appendChild(row);
                 list.appendChild(item);
             });
+            (guide.reflections || []).forEach(function (reflection) {
+                var status = reflectionStatuses[reflection.tag] || 'empty';
+                var item = el('li');
+                var row = el('button', 'outline-row');
+                row.type = 'button';
+                row.setAttribute('data-status', status);
+                var mark = el('span', 'outline-glyph', glyph(status));
+                mark.setAttribute('aria-hidden', 'true');
+                row.appendChild(mark);
+                row.appendChild(el('span', 'outline-name', reflection.label));
+                row.appendChild(el('span', 'visually-hidden', ', ' + statusWord(status)));
+                row.addEventListener('click', function () {
+                    void execute('chickadee:reveal', { tag: reflection.tag });
+                });
+                item.appendChild(row);
+                list.appendChild(item);
+            });
             nav.appendChild(list);
             nav.hidden = false;
             markActive(activeSection);
@@ -192,6 +214,7 @@
                     // In the guide's task order: a task has no sectionID
                     // when its checks are in no section.
                     d.tasks.forEach(function (t, i) { statuses[i] = t.status; });
+                    (d.reflections || []).forEach(function (r) { reflectionStatuses[r.tag] = r.status; });
                     draw();
                 } else if (d.ck === 'ck:active-cell') {
                     markActive(d.task == null ? null : d.task);

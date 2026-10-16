@@ -25,6 +25,7 @@ import {
   normalizedSource,
   pillText,
   placeTask,
+  reflectionStatus,
   resultGlyph,
   starterKey,
   statusGlyph,
@@ -110,7 +111,8 @@ export class GuideView {
       type: c.model.type,
       source: c.model.sharedModel.getSource()
     }));
-    const input = JSON.stringify(cells);
+    // Tags too: a cell that becomes a reflection changes no source.
+    const input = JSON.stringify([cells, widgets.map(tagsOf)]);
     const sameWidgets =
       widgets.length === this.lastWidgets.length && widgets.every((w, i) => w === this.lastWidgets[i]);
     if (sameWidgets && input === this.lastInput) {
@@ -146,17 +148,20 @@ export class GuideView {
         headerCell: placement.headerCell
       };
     });
+    const tags = (guide.reflections ?? []).map(r => r.tag);
     for (const cell of widgets) {
-      if (isReflection(cell)) {
+      if (tagsOf(cell).some(t => tags.includes(t))) {
         attach(header(cell), reflectionHeader(cell.model.sharedModel.getSource()));
       }
     }
+    const tagged = widgets.map(c => ({ tags: tagsOf(c), source: c.model.sharedModel.getSource() }));
     post({
       ck: 'ck:tasks',
       tasks: this.drawn.map(t => ({
         sectionID: t.sectionID,
         status: t.status
-      }))
+      })),
+      reflections: tags.map(tag => ({ tag, status: reflectionStatus(tag, tagged) }))
     });
   }
 
@@ -233,9 +238,9 @@ function attach(host: HTMLElement | null, node: HTMLElement): void {
   }
 }
 
-function isReflection(cell: Cell): boolean {
+function tagsOf(cell: Cell): string[] {
   const tags = cell.model.getMetadata('tags');
-  return Array.isArray(tags) && tags.includes('reflection');
+  return Array.isArray(tags) ? tags.filter((t): t is string => typeof t === 'string') : [];
 }
 
 // MARK: - Building the nodes

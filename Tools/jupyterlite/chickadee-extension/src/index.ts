@@ -251,6 +251,14 @@ function findCell(notebook: Notebook, args: { [key: string]: unknown }, patterns
     }
     return null;
   }
+  const tag = args['tag'];
+  if (typeof tag === 'string') {
+    const index = cells.findIndex(c => {
+      const tags = c.model.getMetadata('tags');
+      return Array.isArray(tags) && tags.includes(tag);
+    });
+    return index === -1 ? null : index;
+  }
   const section = args['section'];
   if (typeof section === 'string') {
     const heading = cells.findIndex(
