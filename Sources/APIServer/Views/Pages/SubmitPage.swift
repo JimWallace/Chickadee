@@ -36,16 +36,11 @@ struct SubmitPage: HTML {
             if aiFeedbackNotice {
                 p(.class("fine-print")) {
                     "Course staff can use an AI agent, without your name, to help draft feedback on your written answers. "
-                    a(
-                        .href(
-                            "https://github.com/JimWallace/Chickadee/blob/main/docs/ai-assisted-feedback.md#information-for-students"
-                        ),
-                        .target(.blank), .rel("noopener noreferrer")
-                    ) {
-                        "How it works "
-                        Icon("i-external")
-                        span(.class("visually-hidden")) { "(opens in a new tab)" }
-                    }
+                    NewTabLink(
+                        href:
+                            "https://github.com/JimWallace/Chickadee/blob/main/docs/ai-assisted-feedback.md#information-for-students",
+                        text: "How it works "
+                    )
                 }
             }
             if let requiredFilesText {

@@ -66,15 +66,11 @@ struct InstructorMCPPage: HTML {
             if agentAccess.canAttest {
                 p(.class("field-note")) {
                     "The attestation says you connect only your UW-licensed AI account for feedback. "
-                    a(
-                        .href(
-                            "https://github.com/JimWallace/Chickadee/blob/main/docs/ai-assisted-feedback.md#the-ai-agents-tab"
-                        ), .target(.blank), .rel("noopener noreferrer")
-                    ) {
-                        "Why "
-                        Icon("i-external")
-                        span(.class("visually-hidden")) { "(opens in a new tab)" }
-                    }
+                    NewTabLink(
+                        href:
+                            "https://github.com/JimWallace/Chickadee/blob/main/docs/ai-assisted-feedback.md#the-ai-agents-tab",
+                        text: "Why "
+                    )
                 }
             }
             if agentAccess.feedbackOn {

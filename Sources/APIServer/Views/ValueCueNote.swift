@@ -12,15 +12,10 @@ struct ValueCueNote: HTML {
     var body: some HTML {
         p(.class("field-note field-note--muted js-value-cue-note"), .hidden) {
             "If a value has an amber border, read "
-            a(
-                .href(
-                    "https://github.com/JimWallace/Chickadee/blob/main/docs/inputs.md#the-amber-cue-on-a-value"),
-                .target(.blank), .rel("noopener noreferrer")
-            ) {
-                "the amber cue on a value "
-                Icon("i-external")
-                span(.class("visually-hidden")) { "(opens in a new tab)" }
-            }
+            NewTabLink(
+                href: "https://github.com/JimWallace/Chickadee/blob/main/docs/inputs.md#the-amber-cue-on-a-value",
+                text: "the amber cue on a value "
+            )
             "."
         }
     }

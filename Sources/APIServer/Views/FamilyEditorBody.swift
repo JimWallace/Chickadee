@@ -189,16 +189,11 @@ struct FamilyEditorBody: HTML {
             // editor script toggles it with the kind.
             p(.class("field-note field-note--muted"), .id("family-auto-compute-note"), .hidden) {
                 "If an Expected cell shows a warning, read "
-                a(
-                    .href(
-                        "https://github.com/JimWallace/Chickadee/blob/main/docs/auto-compute.md"
-                            + "#when-expected-shows-a-warning"),
-                    .target(.blank), .rel("noopener noreferrer")
-                ) {
-                    "auto-compute warnings "
-                    Icon("i-external")
-                    span(.class("visually-hidden")) { "(opens in a new tab)" }
-                }
+                NewTabLink(
+                    href: "https://github.com/JimWallace/Chickadee/blob/main/docs/auto-compute.md"
+                        + "#when-expected-shows-a-warning",
+                    text: "auto-compute warnings "
+                )
                 "."
             }
         }
