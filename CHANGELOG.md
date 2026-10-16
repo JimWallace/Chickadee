@@ -9,6 +9,13 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.686] - 2026-10-16
+
+### Added
+
+- **Concept rings can be earned.** An instructor may tag an assignment with a lab concept in the new "Wardrobe ring" select under Student Options, or through the new MCP tool `set_assignment_concept`; `get_assignment` reports the concept. A student who passes every test on a tagged assignment earns that concept's ring.
+
+
 ## [0.5.685] - 2026-10-16
 
 ### Added
