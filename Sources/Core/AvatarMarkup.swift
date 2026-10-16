@@ -5,7 +5,9 @@
 // Holds NO geometry, NO colour and NO markup: the paths live once in
 // Resources/Sprites/avatar-sprite.svg, the hex values live once in
 // Public/styles.css, and the element is assembled once in
-// Sources/APIServer/Views/Avatar.swift.  This file only names things.
+// Sources/APIServer/Views/Avatar.swift.  This file only names things.  The
+// browser tab icon (Sources/APIServer/Services/AvatarIconRenderer.swift) reads
+// the same names and copies the paths and the hex values from those two files.
 //
 // It emits TOKEN NAMES rather than a finished style attribute for a specific
 // reason.  check-styles.sh permits an inline style only when every declaration

@@ -30,10 +30,8 @@ struct PresentLayout<Content: HTML>: HTML {
                 // The projector arena posts match results (tournament-arena.js).
                 meta(.name("csrf-token"), .content(page.csrfToken))
                 Elementary.title { "\(title) — Chickadee" }
-                // Elementary models neither `sizes` nor `type` on a link.
-                link(
-                    .rel(.icon), .href(page.asset("/favicon.png")), .custom(name: "sizes", value: "32x32"),
-                    .custom(name: "type", value: "image/png"))
+                // The house bird, never the viewer's: this page is on a projector.
+                TabIcons(page: page, key: AvatarIconKey.house)
                 link(.rel(.stylesheet), .href(page.asset("/styles.css")))
                 script(.src(page.asset("/chickadee-ui.js"))) {}
                 script(.src(page.asset("/relative-time.js"))) {}

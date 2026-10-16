@@ -344,6 +344,9 @@ duplicate.
   The name resolves display name → preferred name → username, and the username
   line is omitted when it would merely repeat the name.
 - **`.avatar`** and the `.av-*` part classes — the generated student bird.
+  The browser tab icon also reads the `.av-*` rules and the light `:root`
+  palette, at boot. A missing rule or token stops the server
+  (docs/student-avatars.md, "The tab icon").
   One `<svg>` carrying the size class wraps seven `<use>` elements naming
   symbols in `Resources/Sprites/avatar-sprite.svg`: backdrop, then — inside one group that
   carries the tilt transform — tuft, plumage, wing, expression, accessory, and
