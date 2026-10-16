@@ -38,6 +38,10 @@ PUT  /instructor/:assignmentID/families — Save a pattern family (add/edit/dele
 POST /testsetups/:id/notebook/save      — Write the notebook open in JupyterLite
                                           back to the assignment
                                           (?file=assignment|solution)
+
+# The student guide beside each task in the editor (docs/notebook-guide.md)
+GET  /testsetups/:id/notebook-guide.json — The viewer's own guide: public
+                                          results only, anchors, starter sources
 ```
 
 Web routes (Elementary views, session auth required) live under `/` and handle

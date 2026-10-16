@@ -239,6 +239,24 @@ public enum FunctionScanSyntax: Equatable, Sendable {
     case noSolutionNotebook
 }
 
+/// How a solution notebook's top-level variable assignments are read, for
+/// anchoring a suite item to the cell that defines its name
+/// (`NotebookTestAnchoring`).
+///
+/// A sibling of `FunctionScanSyntax`, not a field of it: Python reads its
+/// functions with a full parser, but its assignments with one pattern like the
+/// other languages.
+public enum VariableScanSyntax: Equatable, Sendable {
+
+    /// A regex for one line. Capture group 1 must be the assigned name. The
+    /// pattern must not match a comparison (`==`).
+    case assignmentPattern(String)
+
+    /// The language has no solution notebook to scan
+    /// (`EditorSupport.uploadOnly`), like `FunctionScanSyntax.noSolutionNotebook`.
+    case noSolutionNotebook
+}
+
 /// Where a pattern-family case's expected value is computed by running the
 /// instructor's solution.
 ///
@@ -327,6 +345,10 @@ public struct LanguageDescriptor: Equatable, Sendable {
     /// How this language's definitions are read out of a solution notebook.
     /// See `FunctionScanSyntax` — it carries the patterns, not a claim.
     public let functionScan: FunctionScanSyntax
+
+    /// How this language's top-level variable assignments are read out of a
+    /// notebook. See `VariableScanSyntax`.
+    public let variableScan: VariableScanSyntax
 
     /// Where a case's expected value is computed. See `AutoComputeSubstrate`.
     public let autoCompute: AutoComputeSubstrate
@@ -460,6 +482,7 @@ public struct LanguageDescriptor: Equatable, Sendable {
         sourceFileExtension: String,
         lineCommentPrefix: String,
         functionScan: FunctionScanSyntax,
+        variableScan: VariableScanSyntax,
         autoCompute: AutoComputeSubstrate,
         inputsFileName: String,
         notebookKernelNames: Set<String>,
@@ -477,6 +500,7 @@ public struct LanguageDescriptor: Equatable, Sendable {
         self.sourceFileExtension = sourceFileExtension
         self.lineCommentPrefix = lineCommentPrefix
         self.functionScan = functionScan
+        self.variableScan = variableScan
         self.autoCompute = autoCompute
         self.inputsFileName = inputsFileName
         self.notebookKernelNames = notebookKernelNames
@@ -558,6 +582,7 @@ extension AssignmentLanguage {
         sourceFileExtension: "py",
         lineCommentPrefix: "#",
         functionScan: .pythonDefStatements,
+        variableScan: .assignmentPattern(#"^([A-Za-z_][A-Za-z0-9_]*)\s*(?::[^=]*)?=(?!=)"#),
         autoCompute: .inPageKernel(workerScript: "/python-eval-worker.js"),
         inputsFileName: "_ck_inputs.py",
         notebookKernelNames: AssignmentLanguage.pythonKernelNames,
@@ -592,6 +617,7 @@ extension AssignmentLanguage {
         functionScan: .definitionPatterns([
             #"^([A-Za-z._][A-Za-z0-9._]*)\s*(?:<-|=)\s*function\s*\(([^)]*)\)"#
         ]),
+        variableScan: .assignmentPattern(#"^([A-Za-z.][A-Za-z0-9._]*)\s*(?:<<?-|=(?!=))"#),
         autoCompute: .inPageKernel(workerScript: "/r-eval-worker.js"),
         inputsFileName: "_ck_inputs.R",
         notebookKernelNames: AssignmentLanguage.rKernelNames,
@@ -625,6 +651,7 @@ extension AssignmentLanguage {
             #"^(?:local\s+)?function\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(([^)]*)\)"#,
             #"^(?:local\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=\s*function\s*\(([^)]*)\)"#,
         ]),
+        variableScan: .assignmentPattern(#"^(?:local\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=(?!=)"#),
         autoCompute: .inPageKernel(workerScript: "/lua-eval-worker.js"),
         inputsFileName: "_ck_inputs.lua",
         notebookKernelNames: AssignmentLanguage.luaKernelNames,
@@ -664,6 +691,7 @@ extension AssignmentLanguage {
             #"^function\s*(?:\[[^\]]*\]|[A-Za-z_][A-Za-z0-9_]*)\s*=\s*([A-Za-z_][A-Za-z0-9_]*)\s*\(([^)]*)\)"#,
             #"^function\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(([^)]*)\)"#,
         ]),
+        variableScan: .assignmentPattern(#"^([A-Za-z_][A-Za-z0-9_]*)\s*=(?!=)"#),
         autoCompute: .inPageKernel(workerScript: "/octave-eval-worker.js"),
         inputsFileName: "_ck_inputs.m",
         notebookKernelNames: AssignmentLanguage.octaveKernelNames,
@@ -711,6 +739,7 @@ extension AssignmentLanguage {
         sourceFileExtension: "cpp",
         lineCommentPrefix: "//",
         functionScan: .noSolutionNotebook,
+        variableScan: .noSolutionNotebook,
         autoCompute: .serverDriver,
         inputsFileName: "_ck_inputs.hpp",
         // No notebook workflow, so no kernel aliases to claim — like
@@ -762,6 +791,7 @@ extension AssignmentLanguage {
         sourceFileExtension: "rkt",
         lineCommentPrefix: ";",
         functionScan: .noSolutionNotebook,
+        variableScan: .noSolutionNotebook,
         autoCompute: .serverDriver,
         inputsFileName: "_ck_inputs.rkt",
         // No kernel exists to claim aliases for. Empty for the same
@@ -824,6 +854,7 @@ extension AssignmentLanguage {
         sourceFileExtension: "java",
         lineCommentPrefix: "//",
         functionScan: .noSolutionNotebook,
+        variableScan: .noSolutionNotebook,
         autoCompute: .serverDriver,
         // A class of `public static final` fields — see
         // `renderInputsFile`. `_ck_inputs` is a legal Java identifier and

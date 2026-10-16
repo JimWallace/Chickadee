@@ -652,7 +652,7 @@ extension WebRoutes {
     /// The preferred display result plus its collection, fetched from the
     /// result_collections side table and decoded ONCE (#1173) — the presenter
     /// and the individual-badge evaluation share the decoded value.
-    private func loadDisplayResultAndCollection(
+    func loadDisplayResultAndCollection(
         subID: String, decoder: JSONDecoder, on db: any Database
     ) async throws -> (APIResult?, TestOutcomeCollection?) {
         guard let result = try await loadPreferredDisplayResult(subID: subID, on: db) else {
