@@ -68,6 +68,14 @@ Exit 1 on drift, with `*.diff.png` / `*.actual.png` evidence. In CI
 (`visual-regression.yml`, path-filtered, not a required check) the evidence
 uploads as the `visual-diffs` artifact.
 
+## When the check fails on a PR
+
+`.github/workflows/visual-diff-explainer.yml` then comments on the PR with
+one row per changed page: what changed, and whether the PR's UI diff explains
+it (`intended`), does not (`regression`) or cannot be told (`unclear`). It
+reads the `visual-diffs` artifact and the PR's own baselines. It is a report:
+the baselines still change only when a person regenerates them.
+
 ## Captures for the UI audit
 
 ```bash
