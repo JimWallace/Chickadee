@@ -30,8 +30,8 @@ final class APIAvatarHatch: Model, @unchecked Sendable {
     @Timestamp(key: "created_at", on: .create)
     var createdAt: Date?
 
-    /// `AvatarSpecies.rawValue` of the bird before this hatch, for the life
-    /// list (#2593). Nil on a row made before species were recorded.
+    /// `AvatarSpecies.rawValue` of the bird before this hatch (#2593). Nil on
+    /// a row made before species were recorded.
     @OptionalField(key: "from_species")
     var fromSpecies: String?
 

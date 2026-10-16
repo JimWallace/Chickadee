@@ -236,33 +236,8 @@ private struct AccountBirdCard: HTML {
                     AccountBirdHero(page: page, picker: picker)
                     AccountBirdForm(page: page, picker: picker)
                 }
-                if !picker.lifeList.isEmpty {
-                    AccountLifeList(picker: picker)
-                }
             }
             script(.src(page.asset("/avatar-picker.js"))) {}
-        }
-    }
-}
-
-/// The life list (#2593): every species, the ones the student has had at full
-/// strength (`.bird-locked-had`), the others dimmed and marked "not yet".
-/// Private: the account page only.
-private struct AccountLifeList: HTML {
-    let picker: AvatarPickerContext
-
-    var body: some HTML {
-        AccountLockedList(labelID: "bird-life-list-label", label: "Life list · \(picker.lifeListNote)") {
-            for entry in picker.lifeList {
-                li {
-                    span(.class("swatch-sample swatch-bird"), .ariaHidden) {
-                        Avatar(avatar: entry.presentation)
-                    }
-                    " "
-                    entry.seen ? entry.name : "\(entry.name) · not yet"
-                }
-                .attributes(.class("bird-locked-had"), when: entry.seen)
-            }
         }
     }
 }
@@ -569,22 +544,20 @@ private struct AccountFaceGroup: HTML {
 }
 
 /// A labelled list of dimmed bird samples under a dashed rule: plain items,
-/// not inputs. The faces or rings not open yet ("Not open yet"), and the life
-/// list. `labelID` names the list, and is unique on the page.
+/// not inputs. It lists the faces or rings not open yet. `labelID` names the
+/// list, and is unique on the page.
 private struct AccountLockedList<Items: HTML>: HTML {
     let labelID: String
-    let label: String
     let items: Items
 
-    init(labelID: String, label: String = "Not open yet", @HTMLBuilder items: () -> Items) {
+    init(labelID: String, @HTMLBuilder items: () -> Items) {
         self.labelID = labelID
-        self.label = label
         self.items = items()
     }
 
     var body: some HTML {
         div(.class("bird-locked")) {
-            p(.class("field-note"), .id(labelID)) { label }
+            p(.class("field-note"), .id(labelID)) { "Not open yet" }
             ul(.custom(name: "aria-labelledby", value: labelID)) { items }
         }
     }

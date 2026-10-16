@@ -145,11 +145,9 @@ struct AccountRoutes: RouteCollection {
         let userID = try user.requireID()
         let stored = (try? await WardrobeUnlockStore.unlocked(for: userID, on: req.db)) ?? []
         let unlocked = (try? await WardrobeUnlockStore.grantEarned(for: userID, on: req.db)) ?? stored
-        // The life list is a cosmetic: a failed read hides it, not the page.
-        let lifeList = (try? await AvatarStore.lifeList(for: user, on: req.db)) ?? []
         guard let term = AcademicTerm.current() else {
             return AvatarPickerContext(
-                for: spec, isStaff: isStaff, handle: handle ?? "", unlocked: unlocked, lifeList: lifeList)
+                for: spec, isStaff: isStaff, handle: handle ?? "", unlocked: unlocked)
         }
         let status = try await AvatarStore.hatchStatus(for: user, term: term, on: req.db)
         let requested: AvatarHatchStrip? =
@@ -163,7 +161,7 @@ struct AccountRoutes: RouteCollection {
         let hatchedText = (status.lastHatchedAt ?? user.createdAt).map { "Hatched \(formatter.string(from: $0))" }
         return AvatarPickerContext(
             for: spec, isStaff: isStaff, handle: handle ?? "", hatchedText: hatchedText ?? "", hatch: hatch,
-            unlocked: unlocked, lifeList: lifeList)
+            unlocked: unlocked)
     }
 
     /// The one-shot success banner after a redirect back to this page.

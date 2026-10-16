@@ -1,8 +1,10 @@
 // APIServer/Migrations/AddAvatarHatchSpecies.swift
 //
 // `avatar_hatches.from_species` and `avatar_hatches.species`: the species a
-// hatch came from and went to, for the life list (#2593). Optional: a row
-// made before the columns has neither, and no species is guessed for it.
+// hatch came from and went to (#2593). They were for the life list, which
+// the account page no longer shows; they stay as the record of each hatch,
+// and the data export carries them. Optional: a row made before the columns
+// has neither, and no species is guessed for it.
 
 import Fluent
 
