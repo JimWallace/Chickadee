@@ -150,6 +150,7 @@ const bridgePlugin: JupyterFrontEndPlugin<void> = {
 
     hideNotebookChrome(app, tracker);
     watchKernel(tracker);
+    watchOpen(tracker);
     watchSaves(tracker);
     watchEdits(tracker, [state.view, state.margin]);
     watchPinning(tracker, state.margin);
@@ -206,6 +207,16 @@ function watchKernel(tracker: INotebookTracker): void {
   };
   tracker.currentChanged.connect((_, panel) => follow(panel));
   follow(tracker.currentWidget);
+}
+
+/** Posts ck:notebook-open once each notebook's cells are drawn. The kernel
+ * may still be starting: a cell run before it is ready waits for it. */
+function watchOpen(tracker: INotebookTracker): void {
+  const watch = (panel: NotebookPanel) => {
+    void Promise.all([panel.context.ready, panel.revealed]).then(() => post({ ck: 'ck:notebook-open' }));
+  };
+  tracker.forEach(watch);
+  tracker.widgetAdded.connect((_, panel) => watch(panel));
 }
 
 /** Posts ck:saved as each notebook's document saves: started, completed or failed. */

@@ -9,6 +9,12 @@
 //   Download and start {Language} active from kernel_starting, done at kernel_idle
 //   Open your notebook            active at kernel_idle, then the panel fades
 //
+// The panel also fades as soon as the extension reports the cells drawn
+// (`ck:notebook-open`), with the kernel still starting. A cell run then waits
+// for the kernel, and the kernel chip shows its state. On a workbench switch
+// the cells are drawn about 2 s after the click and the kernel is idle at
+// about 7.7 s.
+//
 // The phases are the `kernel-diag` messages that jl-kernel-diagnostics.js
 // posts from inside the editor iframe. notebook.js forwards the same messages
 // to the diagnostics pipeline; this script only reads them. The Chickadee
@@ -113,21 +119,33 @@
             if (chip) chip.hidden = true;
         };
 
-        // The kernel is idle: the last step is active while the panel fades.
-        var finish = function () {
-            // Only over "starting": once the extension reports the kernel
-            // (idle, busy), notebook-toolbar.js owns the chip.
-            var chip = document.getElementById('nb-kernel-chip');
-            if (!chip || chip.getAttribute('data-state') === 'starting') setKernelChip('ready');
+        // The panel fades over FADE_MS, showing `phase`.
+        var fade = function (phase) {
             var el = panel();
             if (!el || el.hidden || fadeTimer) return;
-            render(el, 'kernel_idle');
+            render(el, phase);
             el.classList.add('nb-boot-leaving');
             fadeTimer = setTimeout(function () {
                 fadeTimer = null;
                 el.hidden = true;
                 el.classList.remove('nb-boot-leaving');
             }, FADE_MS);
+        };
+
+        // The kernel is idle: the last step is active while the panel fades.
+        var finish = function () {
+            // Only over "starting": once the extension reports the kernel
+            // (idle, busy), notebook-toolbar.js owns the chip.
+            var chip = document.getElementById('nb-kernel-chip');
+            if (!chip || chip.getAttribute('data-state') === 'starting') setKernelChip('ready');
+            fade('kernel_idle');
+        };
+
+        // The cells are drawn: the panel fades with the steps as they are,
+        // and the chip keeps "starting" until the kernel reports.
+        var reveal = function () {
+            var el = panel();
+            if (el) fade(el.getAttribute('data-phase') || 'boot_start');
         };
 
         var onMessage = function (e) {
@@ -139,6 +157,10 @@
                 // busy means it is up, whatever the diagnostics have seen.
                 if (d.ck === 'ck:kernel' && (d.status === 'idle' || d.status === 'busy')) {
                     finish();
+                    return;
+                }
+                if (d.ck === 'ck:notebook-open') {
+                    reveal();
                     return;
                 }
                 if (d.ck !== 'kernel-diag') return;
@@ -155,13 +177,14 @@
                     if (el.hidden || el.getAttribute('data-phase') !== 'boot_start') show('boot_start');
                     return;
                 }
-                if (el.hidden) return;
-                var phase = nextPhase(el.getAttribute('data-phase'), d.source);
-                if (phase === 'kernel_idle') {
+                // Before the hidden check: a panel that faded when the cells
+                // were drawn still leaves the chip to mark ready.
+                if (d.source === 'kernel_idle') {
                     finish();
-                } else {
-                    render(el, phase);
+                    return;
                 }
+                if (el.hidden) return;
+                render(el, nextPhase(el.getAttribute('data-phase'), d.source));
             } catch (_) { /* the panel must never break the page */ }
         };
 
