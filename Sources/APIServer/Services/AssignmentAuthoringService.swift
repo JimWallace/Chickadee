@@ -210,8 +210,20 @@ enum AssignmentAuthoringService {
             }
         }
 
+        // A library source resolves only in a course whose library has the
+        // dataset; a clone into another course drops the ones that do not
+        // (docs/datasets-course-library.md).
+        let clonedManifest: String
+        do {
+            clonedManifest = try await CourseDatasetService.reconciledManifestText(
+                try cloneManifest(of: sourceSetup), courseID: targetCourseID, zipPath: dstZip, on: db)
+        } catch {
+            try? fm.removeItem(atPath: dstZip)
+            if let newNotebookPath { try? fm.removeItem(atPath: newNotebookPath) }
+            throw error
+        }
         let newSetup = APITestSetup(
-            id: newSetupID, manifest: try cloneManifest(of: sourceSetup), zipPath: dstZip,
+            id: newSetupID, manifest: clonedManifest, zipPath: dstZip,
             notebookPath: newNotebookPath, courseID: targetCourseID)
 
         var copiedSolutionPath: String?

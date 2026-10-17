@@ -9,6 +9,34 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.705] - 2026-10-17
+
+### Added
+
+- **Course dataset library, slice 3: attachments.** A library dataset version can be attached to an assignment, updated to another version, detached and promoted from an existing support file. An attached file is a copy of its version, so the support-file edit and delete doors refuse it, the test-setup upload refuses a source that does not match, and clone, bundle import and version restore drop a source that does not resolve in the target course. Detaching keeps the student's sample. Nothing in the interface uses attachments yet.
+
+
+## [0.5.704] - 2026-10-17
+
+### Added
+
+- **Course dataset library, slices 1 and 2.** A dataset spec can now record the library version it came from and whether its rows are the same in every assignment, and stored manifests encode to the same bytes as before. The server gains the `course_datasets` and `course_dataset_versions` tables and a service that creates, versions, describes, publishes and deletes library datasets, with a data dictionary inferred from each upload. The blob collector counts library versions as references. Nothing in the interface uses the library yet. The plan is `docs/datasets-course-library.md`.
+
+
+## [0.5.703] - 2026-10-17
+
+### Changed
+
+- **Staff test-submit from the student view again.** The notebook page as the dashboard links it is now the same for everyone: Submit, the task guide, upload and reset, and no "Save to assignment". Staff work there in a copy of their own, apart from the copy that a save writes back, so a test attempt never reaches the starter. Editing is on the editing view (`?edit=1`, which the instructor area links to) and in the workbench, with Save and no Submit. This replaces the change that took Submit away from staff on the notebook page.
+
+
+## [0.5.702] - 2026-10-17
+
+### Changed
+
+- **The notebook shows before its kernel is ready.** The loading panel now fades when the editor has drawn the cells, not when the kernel is idle. The kernel chip shows "starting" until the kernel is ready, and a cell run before then waits for it. Measured in headless Chromium: after a workbench switch between the starter and the solution, the cells show in about 2.5 s instead of about 8.7 s; on a first load, in about 4 s instead of about 10 s.
+
+
 ## [0.5.701] - 2026-10-17
 
 ### Changed

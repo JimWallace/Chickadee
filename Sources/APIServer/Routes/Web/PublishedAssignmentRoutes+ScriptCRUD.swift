@@ -53,6 +53,10 @@ extension PublishedAssignmentRoutes {
             throw WebAssignmentError.notFound(resource: "File '\(filename)' in setup zip")
         }
 
+        if let refusal = libraryAttachmentRefusal(manifest: setup.decodedManifest(), filename: filename) {
+            throw WebAssignmentError.conflict(reason: refusal)
+        }
+
         if let familyID = generatedByFamilyID(manifestJSON: setup.manifest, filename: filename) {
             throw WebAssignmentError.conflict(
                 reason:

@@ -55,16 +55,47 @@ public struct DatasetSpec: Codable, Equatable, Sendable {
     /// student's slice carries the pool's values verbatim, which is every
     /// dataset authored before derivation existed.
     public let transforms: [DatasetTransform]
+    /// The course library version this file was copied from, or nil for a file
+    /// uploaded into this assignment by hand (docs/datasets-course-library.md).
+    /// Only the library attach path writes it; every other door carries the
+    /// stored value through unchanged.
+    public let source: DatasetSource?
+    /// Which seed selects the student's rows. `.assignment` is the decoded
+    /// default, so every spec written before the course library keeps the bytes
+    /// it delivers.
+    public let scope: DatasetSliceScope
 
     public init(
         file: String, kind: DatasetKind = .rowSample, sampleSize: Int? = nil,
-        stratumColumn: String? = nil, transforms: [DatasetTransform] = []
+        stratumColumn: String? = nil, transforms: [DatasetTransform] = [],
+        source: DatasetSource? = nil, scope: DatasetSliceScope = .assignment
     ) {
         self.file = file
         self.kind = kind
         self.sampleSize = sampleSize
         self.stratumColumn = stratumColumn
         self.transforms = transforms
+        self.source = source
+        self.scope = scope
+    }
+
+    /// The spec once the file is no longer attached from the library: the same
+    /// selection and transforms with no source and the assignment scope. Nil
+    /// when the spec exists only because of the attachment — no sample and no
+    /// transforms — because the file then delivers the same bytes with no
+    /// spec at all, and a spec with neither would be refused at the next edit.
+    ///
+    /// Detaching keeps a sample a student already receives. Removing the spec
+    /// instead would hand every student the whole pool.
+    public func withoutLibraryFields() -> DatasetSpec? {
+        if sampleSize == nil, transforms.isEmpty { return nil }
+        return DatasetSpec(
+            file: file, kind: kind, sampleSize: sampleSize, stratumColumn: stratumColumn,
+            transforms: transforms)
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case file, kind, sampleSize, stratumColumn, transforms, source, scope
     }
 
     public init(from decoder: any Decoder) throws {
@@ -74,5 +105,25 @@ public struct DatasetSpec: Codable, Equatable, Sendable {
         sampleSize = try c.decodeIfPresent(Int.self, forKey: .sampleSize)
         stratumColumn = try c.decodeIfPresent(String.self, forKey: .stratumColumn)
         transforms = try c.decodeIfPresent([DatasetTransform].self, forKey: .transforms) ?? []
+        source = try c.decodeIfPresent(DatasetSource.self, forKey: .source)
+        scope = try c.decodeIfPresent(DatasetSliceScope.self, forKey: .scope) ?? .assignment
+    }
+
+    /// Writes the same keys, in the same form, as the synthesized encoder did
+    /// before the library fields existed, and adds each library field only when
+    /// it differs from its default. A stored manifest that re-encodes must give
+    /// the same bytes, because the manifest hash gates the retest fan-out and
+    /// the runner cache.
+    public func encode(to encoder: any Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(file, forKey: .file)
+        try c.encode(kind, forKey: .kind)
+        try c.encodeIfPresent(sampleSize, forKey: .sampleSize)
+        try c.encodeIfPresent(stratumColumn, forKey: .stratumColumn)
+        try c.encode(transforms, forKey: .transforms)
+        try c.encodeIfPresent(source, forKey: .source)
+        if scope != .assignment {
+            try c.encode(scope, forKey: .scope)
+        }
     }
 }

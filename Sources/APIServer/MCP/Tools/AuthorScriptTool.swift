@@ -258,6 +258,11 @@ struct AuthorScriptTool: ContentTool {
         }
 
         let manifest = setup.decodedManifest()
+        // A file attached from the course library is a copy of a library
+        // version; overwriting it here would make its source untrue.
+        if let refusal = libraryAttachmentRefusal(manifest: manifest, filename: cleaned) {
+            throw MCPToolError.invalidArguments(detail: refusal)
+        }
         let existingTestEntry = manifest?.testSuites.first { $0.script == cleaned }
         let existedInZip = await listZipEntries(zipPath: setup.zipPath).contains(cleaned)
 

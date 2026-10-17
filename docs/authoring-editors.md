@@ -35,12 +35,17 @@ tools, it never changes visibility, so fixing a typo mid-lab does not close the
 assignment out from under students. Re-validation still runs (debounced for the
 starter, always for a solution, since the new solution *is* what validates).
 
-Staff do not get Submit on the notebook page. Beside "Save to assignment" it
-reads as a second save, but it grades the notebook as the staff member's own
-attempt and saves nothing for students. The task guide, "Upload .ipynb" and
-"Reset to starter" belong to a student's own notebook, so staff do not get them
-there either. To see what a student gets, use "Preview as student" in the
-workbench.
+**The notebook page has two views.** The student view
+(`/testsetups/:id/notebook`, linked from the dashboard) is the same for
+everyone: Submit, the task guide, "Upload .ipynb" and "Reset to starter", and
+no "Save to assignment". Course staff test-submit there as a student does, in a
+copy of their own (`staffPracticeWorkingCopyRelativePath`), so a test attempt
+never reaches a save. Like a student's copy, it is seeded once and not
+refreshed when the starter changes; "Reset to starter" brings in the new
+starter. The editing view (`?edit=1`, linked from the instructor
+area, and every workbench pane) has "Save to assignment" and the template
+switch, and no Submit. `?view=` is the editing view's own switch, so it names
+the editing view too. No page shows Save and Submit together.
 
 **The authoring UI reads the assignment's language from ONE seed (v0.5.36).**
 The browser editors had no notion of language at all: `pattern-family-editor.js`

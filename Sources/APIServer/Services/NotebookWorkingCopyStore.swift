@@ -86,6 +86,27 @@ func userNotebookWorkingCopyRelativePath(
         + userNotebookFilename(fileKind: fileKind, viewMode: viewMode)
 }
 
+/// A staff member's copy of `fileKind` on the student view, where they
+/// test-submit as a student does. It is apart from their authoring copy
+/// (`userNotebookWorkingCopyRelativePath`), which is refreshed from the stored
+/// notebook and saved back to the assignment, so a test attempt never reaches
+/// a save.
+func staffPracticeWorkingCopyRelativePath(setupID: String, userID: UUID, fileKind: NotebookFileKind) -> String {
+    "users/\(userID.uuidString.lowercased())/\(setupID)/\(fileKind.rawValue)-practice.ipynb"
+}
+
+/// The copy a viewer works in on the student view: a student's own copy, or
+/// the practice copy for course staff. The page, its content fetch, the reset
+/// and the write-back after a submission all resolve it here, so they never
+/// disagree.
+func studentViewWorkingCopyRelativePath(
+    setupID: String, userID: UUID, fileKind: NotebookFileKind, isStaff: Bool
+) -> String {
+    isStaff
+        ? staffPracticeWorkingCopyRelativePath(setupID: setupID, userID: userID, fileKind: fileKind)
+        : userNotebookWorkingCopyRelativePath(setupID: setupID, userID: userID, fileKind: fileKind)
+}
+
 /// Whether `userID` has previously engaged with `assignment`: a durable
 /// participation row exists (written the first time they were given the
 /// assignment's materials) or they have at least one student submission.
@@ -378,6 +399,7 @@ func overwriteUserNotebookWithPersonalizedStarter(
     setup: APITestSetup,
     userID: UUID,
     starter: Data,
+    relativePath: String? = nil,
     on db: any Database,
     application: Application,
     logger: Logger
@@ -395,6 +417,7 @@ func overwriteUserNotebookWithPersonalizedStarter(
         setupID: setupID,
         userID: userID,
         fallbackSetup: setup,
+        relativePath: relativePath,
         overwriteWith: personalized,
         on: db,
         application: application,
