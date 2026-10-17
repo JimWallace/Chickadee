@@ -104,3 +104,15 @@ test('a margin key changes with what the cards show, and with the selection in t
   assert.notEqual(marginKey(margins.get(1), 'test_a.py'), key);
   assert.notEqual(marginKey(margins.get(3), null), key);
 });
+
+test('a test the starter passes for points is amber, and the strip counts it (NB8)', () => {
+  const free = item('x', null, 'pass', { starter: { result: 'pass' } });
+  assert.equal(itemState(free), 'starter');
+  assert.equal(itemState({ ...free, points: 0 }), 'pass');
+  assert.equal(itemState(item('x', null, 'fail', { starter: { result: 'pass' } })), 'fail');
+  assert.deepEqual(stripSummary([free, item('y', null, 'fail')]), [
+    '2 checks · 2 pts',
+    '1 fails on the solution',
+    '1 passes on the starter',
+  ]);
+});

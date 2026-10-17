@@ -6,7 +6,8 @@
 //
 //   - "3 checks · 5 pts";
 //   - one group per section: "TASK 2" · "3 pts", then its items, each with a
-//     glyph for its result on the solution and its name in mono;
+//     glyph for its result on the solution (amber when the starter passes it
+//     too, NB8) and its name in mono;
 //   - "NOT LINKED TO A CELL", then the items that link to no cell.
 //
 // A click on an item selects it: the editor reveals its cell and opens its
@@ -18,23 +19,77 @@
 // test opens the test in the suite sheet, Run again is Save & validate, Pin
 // to a cell saves the pin (PUT /instructor/:id/suite-anchor), and a section
 // action or Add check opens that section in the suite sheet.
+//
+// The app bar's pill (NB8) counts the issues: tests that fail on the
+// solution, and tests worth points that pass on the starter. With issues, the
+// pill is a button, and each click selects the next issue.
 
 (function (global) {
     'use strict';
 
-    var WORDS = { pass: 'Passes on the solution', fail: 'Fails on the solution', none: 'Not validated yet' };
+    var WORDS = {
+        pass: 'Passes on the solution',
+        fail: 'Fails on the solution',
+        starter: 'Passes on the starter too',
+        none: 'Not validated yet',
+    };
 
-    /// The item's state on the solution: `pass`, `fail` (any result that is
-    /// not a pass) or `none`. Pure.
+    /// The item's state: `fail` (any result on the solution that is not a
+    /// pass), `starter` (passes on the solution and on the starter, for
+    /// points), `pass` or `none`. Pure.
     function itemState(item) {
         var result = item && item.solution && item.solution.result;
         if (!result) return 'none';
-        return result === 'pass' ? 'pass' : 'fail';
+        if (result !== 'pass') return 'fail';
+        var free = item.starter && item.starter.result === 'pass' && item.points > 0;
+        return free ? 'starter' : 'pass';
     }
 
     /// The glyph beside a state. Pure.
     function glyph(state) {
-        return state === 'pass' ? '✓' : state === 'fail' ? '✗' : '○';
+        return state === 'pass' ? '✓' : state === 'fail' ? '✗' : state === 'starter' ? '!' : '○';
+    }
+
+    var count = function (n, one, many) { return n + ' ' + (n === 1 ? one : many); };
+
+    /// What the app bar's pill and the note beside it say for the outline's
+    /// `validation`, or null to keep the server's wording (no runner, not
+    /// validated, failed with no outline issue). The pill is short; the note
+    /// says what it counts. `issues` lists the item ids to step through. Pure.
+    function pillState(validation) {
+        if (!validation) return null;
+        var issues = validation.issues || [];
+        var starterNote = validation.starterError
+            ? 'Starter didn’t run: ' + clip(validation.starterError)
+            : '';
+        if (validation.status === 'pending') return { text: 'Validating…', note: '', tone: '', issues: [] };
+        if (issues.length) {
+            var failing = issues.filter(function (i) { return i.kind === 'failsOnSolution'; }).length;
+            var free = issues.length - failing;
+            var parts = [];
+            if (failing) parts.push(count(failing, 'fails', 'fail') + ' on the solution');
+            if (free) parts.push(count(free, 'passes', 'pass') + ' on the starter');
+            return {
+                text: '! ' + count(issues.length, 'issue', 'issues'),
+                note: starterNote || parts.join(' · '),
+                tone: failing ? 'err' : 'warn',
+                issues: issues.map(function (i) { return i.itemID; }),
+            };
+        }
+        if (validation.status !== 'passed') return null;
+        var starterRan = validation.starterRunAt && !validation.starterError;
+        return {
+            text: '✓ Validated',
+            note: starterRan ? 'Every test passes on the solution; none earns points on the starter' : starterNote,
+            tone: 'ok',
+            issues: [],
+        };
+    }
+
+    /// A reason cut to one short phrase: its first 60 characters. Pure.
+    function clip(text) {
+        var line = String(text);
+        return line.length > 60 ? line.slice(0, 59) + '…' : line;
     }
 
     /// "3 checks · 5 pts". Pure.
@@ -72,7 +127,7 @@
     }
 
     var api = {
-        itemState: itemState, glyph: glyph, totalsText: totalsText,
+        itemState: itemState, glyph: glyph, totalsText: totalsText, pillState: pillState, clip: clip,
         sectionCaption: sectionCaption, revealTarget: revealTarget, findItem: findItem, cssEscape: cssEscape,
     };
 
@@ -134,8 +189,46 @@
             return box;
         };
 
+        // The pill: the server's chip, or the issues button that steps
+        // through the issues, and the note that says what it counts.
+        var issueIDs = [];
+        var nextIssue = 0;
+        var drawPill = function () {
+            var chip = document.getElementById('wb-validation');
+            var button = document.getElementById('wb-issues');
+            var note = document.getElementById('wb-validation-note');
+            var state = pillState(outline && outline.validation);
+            if (!chip || !button || !state) return;
+            issueIDs = state.issues;
+            nextIssue = 0;
+            button.hidden = !issueIDs.length;
+            chip.hidden = !!issueIDs.length;
+            if (issueIDs.length) {
+                button.textContent = state.text;
+                button.setAttribute('data-tone', state.tone);
+                button.setAttribute('aria-label', state.text.slice(2) + ': select the next');
+            } else {
+                chip.textContent = state.text;
+                chip.classList.toggle('chip-ok', state.tone === 'ok');
+                chip.classList.remove('chip-err');
+            }
+            if (note) {
+                note.textContent = state.note;
+                note.hidden = !state.note;
+            }
+        };
+
+        var stepIssue = function () {
+            if (!issueIDs.length) return;
+            var id = issueIDs[nextIssue % issueIDs.length];
+            nextIssue += 1;
+            markSelected(id);
+            void execute('chickadee:select-item', { itemID: id });
+        };
+
         var draw = function (fresh) {
             outline = fresh;
+            drawPill();
             var suite = document.getElementById('wb-rail-suite');
             var totals = document.getElementById('wb-rail-totals');
             if (!suite || !outline) return;
@@ -275,6 +368,9 @@
                 sectionAction(d.sectionID, 'add-check');
             }
         });
+
+        var issuesButton = document.getElementById('wb-issues');
+        if (issuesButton) issuesButton.addEventListener('click', stepIssue);
 
         global.ChickadeeWorkbenchRail = { refresh: refresh };
         void refresh();

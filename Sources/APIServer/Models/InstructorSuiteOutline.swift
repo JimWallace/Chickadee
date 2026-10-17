@@ -2,9 +2,9 @@
 //
 // The instructor's suite outline (notebook views NB6, design frame 18c): each
 // suite section with its items, each item with its anchor cell and its result
-// on the solution. The workbench rail draws it, and NB7's margin cards read
-// the same payload through `chickadee:set-suite`. The contract is in
-// docs/notebook-guide.md, "The instructor's suite outline".
+// on the solution and, from NB8, on the starter. The workbench rail draws it,
+// and NB7's margin cards read the same payload through `chickadee:set-suite`.
+// The contract is in docs/notebook-guide.md, "The instructor's suite outline".
 //
 // Course staff only: it names every tier, hidden tests included.
 
@@ -26,11 +26,17 @@ struct InstructorSuiteOutline: Codable, Sendable, Equatable {
         var status: String?
         var solutionRunAt: Date?
         var issues: [Issue]
+        /// The time of the last starter run (NB8), or nil before one.
+        var starterRunAt: Date?
+        /// Why the last starter run did not run ("Starter didn't run"), or
+        /// nil. Such a run flags nothing.
+        var starterError: String?
     }
 
     struct Issue: Codable, Sendable, Equatable {
         var itemID: String
-        /// `failsOnSolution`. NB8 adds `passesOnStarter`.
+        /// `failsOnSolution`, or `passesOnStarter` for a test worth points
+        /// that the starter passes. In that order.
         var kind: String
     }
 
@@ -63,6 +69,8 @@ struct InstructorSuiteOutline: Codable, Sendable, Equatable {
         var points: Int
         var anchor: Anchor?
         var solution: RunResult?
+        /// The result on the starter (NB8), or nil before a starter run.
+        var starter: RunResult?
         /// The family or check id of a generated item, or nil.
         var generatorID: String?
         /// The test's script, shown when its card opens (NB7).

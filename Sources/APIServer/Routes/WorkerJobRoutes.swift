@@ -429,8 +429,9 @@ struct WorkerJobRoutes: RouteCollection {
     /// students' code, and the rows it opened never completed, because the
     /// class effects read only a `.student` result (#2188).
     static func playsPractice(activity: ClassActivity, submission: APISubmission) -> Bool {
-        let notAnEntry =
-            submission.kind == APISubmission.Kind.validation || submission.kind == APISubmission.Kind.classAggregate
+        let notAnEntry = [
+            APISubmission.Kind.validation, APISubmission.Kind.starterValidation, APISubmission.Kind.classAggregate,
+        ].contains(submission.kind)
         let source = activity.kind.opponentSource
         return notAnEntry && (source == .classmates || source == .champion)
     }

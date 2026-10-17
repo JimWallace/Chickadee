@@ -771,7 +771,9 @@ duplicate.
   frame 18c).  A `.wb-appbar` (`WorkbenchAppBar`: the `.wb-title` with a ✎
   that opens the Details sheet, the due date and the language in a
   `.nb-title-block`, the `.wb-viewswitch` of `.wb-view` buttons, the
-  validation `.chip`, the `.wb-save-status` and Save & validate, with a
+  validation `.chip` (or, with issues, the `.wb-issues` button that steps
+  through them, NB8, then a `.field-note` that says what the pill counts),
+  the `.wb-save-status` and Save & validate, with a
   `.wb-bar-spacer` between) over a `.wb-body`: the `.wb-rail` and the
   `.wb-pane-notebook`, a `.wb-pane` whose `.wb-notebook-body` holds the
   editor.  `.wb-scroll` makes a pane scroll inside the page.  The rail
@@ -830,9 +832,14 @@ duplicate.
   `.ck-add` follows the cards.  Below 1100px of editor width the cards fold
   into one `.ck-strip` button for each cell, with `aria-expanded`.  The glyph
   is the rail's `.outline-glyph` under a second name: the same characters
-  (✓ pass, ✗ fail, ○ none) and the same status words.  The card has no
-  `starter` or `written` state, because a card shows a test's result on the
-  solution, not a student's task.  The strip is a button, not a
+  (✓ pass, ✗ fail, ! starter, ○ none) and the same status words.  On a card,
+  `starter` means that the starter passes the test too (NB8), with the same
+  amber pair.  In the workbench rail, `.outline-row[data-status="starter"]`
+  means the same.  The student outline gives that state another meaning
+  ("Still the starter code"), but the two outlines never share a page.
+  `.wb-issues` is a button, not a `.chip`, because a click steps through the
+  issues; its `data-tone` takes the chip's danger pair, or the amber pair.  The card has no `written` state, because a card shows a test,
+  not a student's task.  The strip is a button, not a
   `<details>`, because it toggles the cards that are already drawn beside it.
 - **`.log-payload`** — the `.detail-grid` inside a log/event row's payload
   disclosure (the audit log, alert firings).  A log row shows when, who, what

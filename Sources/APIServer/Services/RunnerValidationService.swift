@@ -92,6 +92,12 @@ func enqueueRunnerValidationSubmission(
         submitterUserID: resolvedSubmitterID,
         targetRunnerID: targetRunnerID)
 
+    // The starter run: the assignment notebook against the same suite, with
+    // the same seed, so the workbench can flag a test that passes with no
+    // work. Best-effort, after the solution run: it never blocks the save.
+    await StarterValidationRun.enqueue(
+        context: context, setupID: setupID, submitterUserID: resolvedSubmitterID, targetRunnerID: targetRunnerID)
+
     // Keep the server-side `shared/{setupID}/solution.py` in lockstep with the
     // reference solution, so a Global Input expression can compute an expected
     // value as `solution.<fn>(...)` — one source of truth — instead of a

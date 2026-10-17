@@ -118,13 +118,17 @@ export function issueText(issue: 'failsOnSolution' | 'passesOnStarter'): string 
     : 'Passes on the starter too, so it earns its point with no work';
 }
 
-/** The state of a test's glyph: its result on the solution. */
-export function itemState(item: SuiteItem): 'pass' | 'fail' | 'none' {
+/** The state of a test's glyph: its result on the solution, or `starter`
+ * when the starter passes it too for points (NB8). */
+export function itemState(item: SuiteItem): 'pass' | 'fail' | 'starter' | 'none' {
   const result = item.solution?.result;
   if (!result) {
     return 'none';
   }
-  return result === 'pass' ? 'pass' : 'fail';
+  if (result !== 'pass') {
+    return 'fail';
+  }
+  return itemIssue(item) === 'passesOnStarter' ? 'starter' : 'pass';
 }
 
 /** "3 pts · 3 checks" for a section card. */
@@ -134,7 +138,7 @@ export function sectionMeta(section: SuiteSection): string {
 }
 
 /** The folded strip's summary: "3 checks · 3 pts", then "1 fails on the
- * solution" when any does. */
+ * solution" and "1 passes on the starter" when any does. */
 export function stripSummary(items: SuiteItem[]): string[] {
   const points = items.reduce((sum, item) => sum + item.points, 0);
   const parts = [
@@ -143,6 +147,10 @@ export function stripSummary(items: SuiteItem[]): string[] {
   const failing = items.filter(item => itemIssue(item) === 'failsOnSolution').length;
   if (failing > 0) {
     parts.push(`${failing} ${failing === 1 ? 'fails' : 'fail'} on the solution`);
+  }
+  const free = items.filter(item => itemIssue(item) === 'passesOnStarter').length;
+  if (free > 0) {
+    parts.push(`${free} ${free === 1 ? 'passes' : 'pass'} on the starter`);
   }
   return parts;
 }

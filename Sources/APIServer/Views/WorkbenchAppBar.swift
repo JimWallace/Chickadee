@@ -39,6 +39,11 @@ struct WorkbenchAppBar: HTML {
             // Advisory only: reloading the notebook would restart the kernel.
             span(.class("field-note"), .id("wb-stale-chip"), .role("status"), .hidden) {}
             span(.class(pillClass), .id("wb-validation"), .role("status")) { pillText }
+            // With issues, workbench-rail.js shows this in place of the chip:
+            // "! 3 issues". Each click selects the next issue. The note says
+            // what the pill counts (NB8).
+            button(.class("btn action-btn wb-issues"), .type(.button), .id("wb-issues"), .hidden) {}
+            span(.class("field-note"), .id("wb-validation-note"), .role("status"), .hidden) {}
             span(.class("wb-save-status"), .id("wb-save-status"), .role("status")) {}
             button(.class("btn btn-primary"), .type(.button), .id("wb-save")) { "Save & validate" }
         }
@@ -80,7 +85,8 @@ struct WorkbenchAppBar: HTML {
 
     // MARK: - The validation pill
 
-    /// NB8 replaces this with the issues pill.
+    /// The wording before the outline arrives. workbench-rail.js then counts
+    /// the issues from the outline (NB8).
     private var pillText: String {
         switch facts.validationStatus {
         case "passed": "✓ Validated"

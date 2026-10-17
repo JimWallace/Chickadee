@@ -119,12 +119,21 @@ func collectClaimCandidates(
         candidates.append((match, setup, manifest))
     }
 
-    let pendingValidation = try await APISubmission.query(on: db)
+    let pendingSolutionRuns = try await APISubmission.query(on: db)
         .filter(\.$status == SubmissionStatus.pending.rawValue)
         .filter(\.$kind == APISubmission.Kind.validation)
         .sort(\.$submittedAt, .ascending)
         .limit(claimCandidateScanLimit)
         .all()
+    // A starter run goes after every solution run: the solution run's verdict
+    // gates opening, and the starter run only warns.
+    let pendingStarterRuns = try await APISubmission.query(on: db)
+        .filter(\.$status == SubmissionStatus.pending.rawValue)
+        .filter(\.$kind == APISubmission.Kind.starterValidation)
+        .sort(\.$submittedAt, .ascending)
+        .limit(claimCandidateScanLimit)
+        .all()
+    let pendingValidation = pendingSolutionRuns + pendingStarterRuns
 
     for validation in pendingValidation {
         if let cached = resolvedBySetupID[validation.testSetupID] {

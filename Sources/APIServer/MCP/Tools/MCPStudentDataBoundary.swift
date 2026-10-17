@@ -3,8 +3,8 @@
 // The single sanctioned access point from the MCP tool surface to the two
 // student-data tables it must touch — submissions and results. Every accessor
 // in the main enum hard-filters to the instructor's own VALIDATION runs
-// (`kind == .validation`), so a student submission or grade is never reachable
-// through them.
+// (`kind == .validation`, or `.starterValidation` for the starter run), so a
+// student submission or grade is never reachable through them.
 //
 // The one exception is the gated feedback extension at the foot of this file
 // (docs/ai-assisted-feedback.md). It reaches students' written reasoning, and
@@ -68,6 +68,14 @@ enum MCPStudentDataBoundary {
             .filter(\.$submissionID == submissionID)
             .sort(\.$receivedAt, .descending)
             .first()
+    }
+
+    /// The last starter run of the setup (notebook views NB8): the assignment
+    /// notebook graded against the suite. `StarterValidationRun.latest`
+    /// filters on `kind == .starterValidation`, so it never yields a student
+    /// row.
+    static func starterRun(setupID: String, on db: any Database) async throws -> TestOutcomeCollection? {
+        try await StarterValidationRun.latest(setupID: setupID, on: db)
     }
 
     /// A validation variant's most recent result (multi-variant validation).

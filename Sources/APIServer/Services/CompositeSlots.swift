@@ -136,7 +136,8 @@ enum CompositeSlots {
             manifest: manifest, courseID: courseID, assignmentID: assignmentID,
             // Only a student's own submission is dealt a slot.
             userID: submission.kind == APISubmission.Kind.student ? submission.userID : nil,
-            usesReferenceSlot: submission.kind == APISubmission.Kind.validation, on: db)
+            usesReferenceSlot: submission.kind == APISubmission.Kind.validation
+                || submission.kind == APISubmission.Kind.starterValidation, on: db)
     }
 
     /// Merges composite inputs over the personalization inputs. The composite
