@@ -477,7 +477,7 @@ import VaporTesting
     /// nothing.
     @Test func seedResponseHasNoOpponentWithoutABot() async throws {
         try await withApp(app) { _ in
-            let manifest = #"{"schemaVersion":1,"testSuites":[],"timeLimitSeconds":10}"#
+            let manifest = TestManifests.emptySuite
             let setupID = try await insertSetup(manifest: manifest)
             _ = try await insertAssignment(testSetupID: setupID, isOpen: true)
             let cookie = try await loginAsStudent("student1", on: app)

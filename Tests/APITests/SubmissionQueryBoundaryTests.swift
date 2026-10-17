@@ -37,7 +37,7 @@ final class SubmissionQueryBoundaryTests {
         try await makeTestSetup(
             on: app, id: setupID, courseID: courseID,
             manifest:
-                #"{"schemaVersion":1,"gradingMode":"worker","requiredFiles":[],"testSuites":[],"timeLimitSeconds":10,"makefile":null}"#
+                TestManifests.workerEmptyExplicit
         )
         try await makeTestAssignment(
             on: app, testSetupID: setupID, courseID: courseID, dueAt: Date().addingTimeInterval(86_400))

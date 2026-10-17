@@ -5,6 +5,7 @@
 // notebookVariablesFamily, helloPrintsFamily) and the Fixture plumbing
 // helpers (makeFixture, writeEmptyZip, etc.).
 
+import ChickadeeTestSupport
 import Core
 import Crypto
 import Fluent

@@ -3,11 +3,12 @@ import Core
 import Foundation
 import Testing
 
-@testable import chickadee_runner
-
 // Native side of the shared output-interpretation contract. Feeds the cases in
 // Tests/Fixtures/output-contract.json through interpretScriptOutput and asserts
-// the native runner produces the recorded status + display strings. The browser
+// the native runner produces the recorded status + display strings.
+// `interpretScriptOutput` is RunnerCore, so this runs in the core lane: the
+// worker links the same code, and the core lane is the one a RunnerCore change
+// runs first. The browser
 // side is asserted by Tests/BrowserRunnerJSTests/output-contract.test.mjs, and
 // the shared `status` field is what keeps the two runners' GRADING lock-step.
 @Suite struct OutputContractTests {
@@ -35,7 +36,6 @@ import Testing
     }
 
     private func loadCorpus() throws -> Corpus {
-        // .../Tests/WorkerTests/OutputContractTests.swift -> repo root
         let root = repositoryRoot
         let url = root.appendingPathComponent("Tests/Fixtures/output-contract.json")
         return try JSONDecoder().decode(Corpus.self, from: Data(contentsOf: url))

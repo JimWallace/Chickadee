@@ -369,8 +369,8 @@ greeting. The example below does so in R."
   each module whose members a file uses), through `sourceSettings` in
   `Package.swift`. Import the umbrella modules `Foundation` and
   `NIOFoundationCompat`, not the split `FoundationEssentials` and
-  `NIOFoundationEssentialsCompat` modules that a fix-it suggests on Linux. No `@unchecked Sendable` except on a Fluent
-  `Model` class, where the reason is always the same (Fluent's property
+  `NIOFoundationEssentialsCompat` modules that a fix-it suggests on Linux. No `@unchecked Sendable`, in `Sources/` or
+  `Tests/`, except on a Fluent `Model` class, where the reason is always the same (Fluent's property
   wrappers are what the compiler cannot check). Use an actor or a `Mutex`
   instead. `scripts/check-unchecked-sendable.sh` fails `format-lint` on any
   other site, with or without a comment.
@@ -470,8 +470,8 @@ The reason for each rule is in
 - **No force unwraps in tests.** Use `try #require(value)`.
 - **Skip with a `ConditionTrait`, never with `Issue.record`.** A bare
   `guard … else { return }` is allowed only where a trait cannot express the
-  condition, with a comment that says so. The shared traits (`.ciOnly`, `.requires<Tool>`) live in one
-  `HostConditionTraits.swift` per target. `scripts/check-no-skipped-tests.sh`
+  condition, with a comment that says so. The shared traits (`.ciOnly`, `.requires<Tool>`) live once, in
+  `Tests/TestSupport/HostConditionTraits.swift`. `scripts/check-no-skipped-tests.sh`
   fails every CI lane on any skip. A broken test setup throws
   `IssueRecorded("...")`.
 - **Pattern references:** `COEPMiddlewareTests` (struct suite),

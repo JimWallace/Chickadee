@@ -22,7 +22,7 @@ import Vapor
     }
 
     private let sampleManifest =
-        #"{"schemaVersion":1,"gradingMode":"browser","testSuites":[],"timeLimitSeconds":10}"#
+        TestManifests.browserEmpty
 
     // MARK: - resources/list
 

@@ -72,7 +72,7 @@ import Vapor
 
     @Test func invalidSeedThrows() async throws {
         let manifest =
-            #"{"schemaVersion":1,"language":"python","languageDeclared":true,"testSuites":[],"timeLimitSeconds":10}"#
+            TestManifests.pythonDeclaredEmpty
         let app = try await makeTestApp()
         try await withApp(app) { app in
             let assignment = try await enrolledFixture(on: app, id: "setup_pv", manifest: manifest)
@@ -182,7 +182,7 @@ import Vapor
 
     @Test func deniesWhenSubjectNotEnrolled() async throws {
         let manifest =
-            #"{"schemaVersion":1,"language":"python","languageDeclared":true,"testSuites":[],"timeLimitSeconds":10}"#
+            TestManifests.pythonDeclaredEmpty
         let app = try await makeTestApp()
         try await withApp(app) { app in
             let course = try await makeTestCourse(on: app, code: "CS246", name: "OOP")

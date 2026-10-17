@@ -21,7 +21,7 @@ import Vapor
     }
 
     private let manifest =
-        #"{"schemaVersion":1,"gradingMode":"worker","testSuites":[],"timeLimitSeconds":10}"#
+        TestManifests.workerEmpty
 
     /// A live course + setup + assignment, with `tester` (a *global student*)
     /// enrolled at the given per-course role.

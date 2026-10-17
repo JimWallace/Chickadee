@@ -194,23 +194,7 @@ import VaporTesting
     }
 
     private func makeZipAt(zipPath: String, entries: [(name: String, content: String)]) async throws {
-        guard FileManager.default.fileExists(atPath: "/usr/bin/env") else {
-            throw IssueRecorded("env not available")
-        }
-
-        let entriesCode = entries.map { entry in
-            "z.writestr(\(entry.name.debugDescription), \(entry.content.debugDescription))"
-        }.joined(separator: "\n    ")
-        let script = """
-            import zipfile
-            with zipfile.ZipFile('\(zipPath)', 'w') as z:
-                \(entriesCode)
-            """
-
-        let run = try await runTool(["python3", "-c", script])
-        guard run.exitCode == 0 else {
-            throw IssueRecorded("python3 not available or failed to create zip")
-        }
+        try await writeZipFixture(at: zipPath, entries: entries.map { ($0.name, $0.content) })
     }
 
     // MARK: - Embedded mode (assignment workbench panes)
@@ -2091,7 +2075,7 @@ import VaporTesting
             let setup = APITestSetup(
                 id: setupID,
                 manifest:
-                    #"{"schemaVersion":1,"gradingMode":"worker","requiredFiles":[],"testSuites":[],"timeLimitSeconds":10,"makefile":null}"#,
+                    TestManifests.workerEmptyExplicit,
                 zipPath: zipPath,
                 notebookPath: nil,
                 courseID: try await makeCourse().requireID()

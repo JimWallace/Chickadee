@@ -389,7 +389,7 @@ import VaporTesting
             let draft = APITestSetup(
                 id: draftID,
                 manifest:
-                    #"{"schemaVersion":1,"gradingMode":"worker","requiredFiles":[],"testSuites":[],"timeLimitSeconds":10,"makefile":null}"#,
+                    TestManifests.workerEmptyExplicit,
                 zipPath: zipPath, courseID: fx.archived.courseID)
             try await draft.save(on: app.db)
 

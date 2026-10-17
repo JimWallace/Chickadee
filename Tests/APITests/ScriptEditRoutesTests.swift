@@ -56,27 +56,11 @@ import VaporTesting
     /// Creates a zip at `zipPath` containing the given entries.
     /// Skips the test if Python 3 is unavailable (same pattern as ZipArchiverTests).
     private func makeZipAt(zipPath: String, entries: [(name: String, content: String)]) async throws {
-        guard FileManager.default.fileExists(atPath: "/usr/bin/env") else {
-            throw IssueRecorded("env not available")
-        }
-        // An empty zip can be made with a dummy entry then deleted, but it's easier
-        // to always include a placeholder if no entries are given.
+        // `zip` refuses to write an archive with no entries, so an empty list
+        // gets one placeholder file.
         let allEntries =
-            entries.isEmpty
-            ? [("test_runtime.py", "# placeholder\n")]
-            : entries
-        let entriesCode = allEntries.map { e in
-            "z.writestr(\(e.name.debugDescription), \(e.content.debugDescription))"
-        }.joined(separator: "\n    ")
-        let script = """
-            import zipfile
-            with zipfile.ZipFile('\(zipPath)', 'w') as z:
-                \(entriesCode)
-            """
-        let run = try await runTool(["python3", "-c", script])
-        guard run.exitCode == 0 else {
-            throw IssueRecorded("python3 not available or failed to create zip")
-        }
+            entries.isEmpty ? [("test_runtime.py", "# placeholder\n")] : entries.map { ($0.name, $0.content) }
+        try await writeZipFixture(at: zipPath, entries: allEntries)
     }
 
     // MARK: - GET /instructor/:assignmentID/scripts/:filename

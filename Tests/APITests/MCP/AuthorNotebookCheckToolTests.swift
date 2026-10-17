@@ -19,7 +19,7 @@ import Vapor
     }
 
     private let emptyManifest =
-        #"{"schemaVersion":1,"language":"python","languageDeclared":true,"testSuites":[],"timeLimitSeconds":10}"#
+        TestManifests.pythonDeclaredEmpty
 
     private func fixture(on app: Application) async throws -> APIAssignment {
         let course = try await makeTestCourse(on: app, code: "CS246", name: "OOP")

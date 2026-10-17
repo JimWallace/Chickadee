@@ -11,7 +11,7 @@ import { loadRunnerWasm } from './support/runner-wasm.mjs';
 // and asserts the browser produces byte-for-byte the same status / shortResult /
 // longResult the native worker does (the fixture's `native` block) — and never
 // leaks the raw JSON result envelope into student-facing strings. The native
-// side is asserted by Tests/WorkerTests/OutputContractTests.swift; both consume
+// side is asserted by Tests/CoreTests/OutputContractTests.swift; both consume
 // one fixture, so the two runners cannot drift.
 
 async function ensureWasm() {

@@ -1,5 +1,6 @@
 import Foundation
 import Logging
+import Synchronization
 import Testing
 import Vapor
 
@@ -188,16 +189,15 @@ import Vapor
 
 // MARK: - Helpers
 
-private final class LogSink: @unchecked Sendable {
-    private let queue = DispatchQueue(label: "appconfig.test.log")
-    private var lines: [String] = []
+private final class LogSink: Sendable {
+    private let lines = Mutex<[String]>([])
 
     func append(_ line: String) {
-        queue.sync { lines.append(line) }
+        lines.withLock { $0.append(line) }
     }
 
     var allText: String {
-        queue.sync { lines.joined(separator: "\n") }
+        lines.withLock { $0.joined(separator: "\n") }
     }
 }
 
