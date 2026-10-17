@@ -1,4 +1,4 @@
-// Tests/APITests/DatasetAttachedFileDoorTests.swift
+// Tests/APITests/Personalization/DatasetAttachedFileDoorTests.swift
 //
 // A file attached from the course library is a copy of one library version
 // (docs/datasets-course-library.md, slice 3). The doors that write or delete a

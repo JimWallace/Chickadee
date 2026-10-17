@@ -1,4 +1,4 @@
-// Tests/APITests/CourseDatasetServiceTests.swift
+// Tests/APITests/Personalization/CourseDatasetServiceTests.swift
 //
 // The course dataset library service (docs/datasets-course-library.md,
 // slice 2): a dataset is created from its first version, versions are added

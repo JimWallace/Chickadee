@@ -1,4 +1,4 @@
-// Tests/APITests/DatasetAttachedSpecRemovalTests.swift
+// Tests/APITests/Personalization/DatasetAttachedSpecRemovalTests.swift
 //
 // An attached spec is ended by a detach, which keeps the sample
 // (docs/datasets-course-library.md, slice 3). The `/datasets` PUT refuses a

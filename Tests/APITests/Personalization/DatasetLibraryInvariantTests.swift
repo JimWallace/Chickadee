@@ -1,4 +1,4 @@
-// Tests/APITests/DatasetLibraryInvariantTests.swift
+// Tests/APITests/Personalization/DatasetLibraryInvariantTests.swift
 //
 // The doors that defend "a spec with a library source names the file's own
 // bytes" (docs/datasets-course-library.md, slice 3), and the rules that keep

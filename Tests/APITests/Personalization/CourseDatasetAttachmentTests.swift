@@ -1,4 +1,4 @@
-// Tests/APITests/CourseDatasetAttachmentTests.swift
+// Tests/APITests/Personalization/CourseDatasetAttachmentTests.swift
 //
 // Attaching a course library dataset to an assignment
 // (docs/datasets-course-library.md, slice 3): attach copies a version's bytes

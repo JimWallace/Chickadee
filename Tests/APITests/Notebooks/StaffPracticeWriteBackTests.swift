@@ -1,4 +1,4 @@
-// Tests/APITests/StaffPracticeWriteBackTests.swift
+// Tests/APITests/Notebooks/StaffPracticeWriteBackTests.swift
 //
 // Staff test-submit from the student view, as a student does. After a browser
 // result, the submitted notebook is written back to the viewer's student-view

@@ -1,4 +1,4 @@
-// Tests/APITests/DatasetLibraryFieldDoorTests.swift
+// Tests/APITests/Personalization/DatasetLibraryFieldDoorTests.swift
 //
 // The library fields on a dataset spec (`source`, `scope`) are written by the
 // library attach path only (docs/datasets-course-library.md, slice 1). The
