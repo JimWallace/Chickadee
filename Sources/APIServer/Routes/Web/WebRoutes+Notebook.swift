@@ -358,8 +358,8 @@ extension WebRoutes {
         // `.closed` (the close-on-save contract) and a freshly created or
         // cloned assignment starts closed, so the old blanket lock made the
         // starter and solution notebooks uneditable for exactly the window in
-        // which they are being written.  Submission stays gated separately —
-        // `showSubmit` still follows `isClosed` for everyone.
+        // which they are being written.  Submission is gated separately:
+        // `showSubmit` follows `isClosed`, and staff never get it.
         let isReadOnly = args.isClosed && !args.isStaff
         // Staff can write the open notebook back to the assignment
         // (`POST /testsetups/:id/notebook/save`).  Mirrors that endpoint's own
@@ -405,8 +405,10 @@ extension WebRoutes {
             browserUnsupported: SupportedBrowserMatrix.assess(req).tier == .unsupported,
             // A template still holds `{{name}}`, which does not run and
             // would fail every test, so Submit belongs to the rendered
-            // view only.  Staff who want to test-submit switch views.
-            showSubmit: fileKind == .assignment && !args.isClosed && viewMode == .personalized,
+            // view only.  Staff never get Submit here: beside "Save to
+            // assignment" it reads as a second save.  Staff see what a
+            // student gets through the workbench's "Preview as student".
+            showSubmit: fileKind == .assignment && !args.isClosed && viewMode == .personalized && !args.isStaff,
             isClosed: args.isClosed,
             isReadOnly: isReadOnly,
             canSaveToAssignment: canSaveToAssignment,

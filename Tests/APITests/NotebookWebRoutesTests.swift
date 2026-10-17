@@ -1131,7 +1131,8 @@ import VaporTesting
                 beforeRequest: { req in req.headers.add(name: .cookie, value: staffLogin) },
                 afterResponse: { res in
                     #expect(res.body.string.contains(toggleHref(personalizedID, to: "template")))
-                    #expect(res.body.string.contains(#"id="nb-submit""#))
+                    // Staff never get Submit: it reads as a second save.
+                    #expect(res.body.string.contains(#"id="nb-submit""#) == false)
                 })
 
             let plainID = "setup_nb_switch_no"
@@ -1144,8 +1145,30 @@ import VaporTesting
                 afterResponse: { res in
                     #expect(res.body.string.contains(toggleHref(plainID, to: "template")) == false)
                     #expect(res.body.string.contains(toggleHref(plainID, to: "personalized")) == false)
-                    // Nothing about a plain assignment changes for staff.
-                    #expect(res.body.string.contains(#"id="nb-submit""#))
+                    #expect(res.body.string.contains(#"id="nb-submit""#) == false)
+                })
+        }
+    }
+
+    @Test func staffOnAnOpenAssignmentGetSaveAndNoSubmit() async throws {
+        try await withApp(app) { _ in
+            // "Save to assignment" and Submit side by side read as two saves,
+            // so staff get Save only. A student keeps Submit
+            // (notebookPageOpenAssignmentRendersSubmitAndEditableIframe).
+            let staffLogin = try await staffCookie(username: "notebook_staff_no_submit")
+            let setupID = "setup_nb_staff_no_submit"
+            _ = try await insertSetup(id: setupID, notebookJSON: notebookJSON(markdown: "Open"))
+            _ = try await insertAssignment(testSetupID: setupID, title: "Staff Lab", isOpen: true)
+
+            try await app.asyncTest(
+                .GET, "/testsetups/\(setupID)/notebook",
+                beforeRequest: { req in req.headers.add(name: .cookie, value: staffLogin) },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    let html = res.body.string
+                    #expect(html.contains(#"id="nb-save-assignment""#))
+                    #expect(html.contains(#"id="nb-submit""#) == false)
+                    #expect(html.contains("nb-menu-upload-file") == false)
                 })
         }
     }
