@@ -22,6 +22,7 @@ states what it adds and what proves it.
 | 8 | Lifecycle: course clone, bundle export and import, storage page, purge | proposed |
 | 9 | Migration of HLTH 230: promote the two live datasets; docs and CLAUDE.md | proposed |
 | 10 | Optional: the `formatNoise` transform | proposed |
+| 11 | Class-wide data: the `partition` kind dealt by slot, the ranked-activity refusal, and the rule for jobs with no student | proposed |
 
 ---
 
@@ -144,7 +145,12 @@ smaller sample from the same seed is a prefix of a larger one. Under course
 scope, a lab that gives 100 rows and a later lab that gives 500 rows give the
 same first 100 patients. This is a property to pin with a test, not to build.
 It does not hold across a change of `stratumColumn` or across transforms, and
-the doc says so.
+the doc says so. The same mechanism decides what a new version does to a
+cohort: the picks depend on the seed and the row count only, so an edit that
+keeps the row count (a corrected value, a renamed column) keeps every student's
+rows, and an edit that adds or removes rows deals every cohort again. A test
+pins both halves, and the Datasets tab says which kind of change a new version
+is before the instructor updates an attachment.
 
 **D7. The data dictionary is instructor prose, checked against the header.**
 A version carries the header's columns, inferred when the file is uploaded. The
@@ -418,6 +424,94 @@ the row-set theorem. It is independent of the library and can land before or
 after it. It is in this plan so the "clean your cohort" lab in the arc below
 has a second kind of dirt.
 
+### 4.11 Class-wide data: activities and the dealt partition (slice 11)
+
+An activity is an assignment (`docs/class-activities.md`, decision 1), so
+everything above applies to it unchanged: a dataset attaches to a bug hunt, a
+leaderboard activity or a composite the same way it attaches to a lab. What
+the plan above does not say is which of three ways a dataset can be shared
+across a class, and what happens on the jobs an activity runs that no student
+owns. This section says both.
+
+**Three modes of sharing.** Two exist today and one is new.
+
+| Mode | Spec | Every student gets | Fits |
+|---|---|---|---|
+| shared | `sampleSize == nil`, no transforms | the same bytes | ranked and matched activities, a shared bug-hunt registry, a class reference |
+| personal | a sample, a stratum or a transform; scope `assignment` or `course` | their own rows | labs, the cohort arc, a composite of per-student results |
+| dealt (new) | `kind: partition`, `partCount: N` | one disjoint part of the file | work the class divides and then combines |
+
+`shared` needs no new code; the library adds provenance, a dictionary and a
+version to a file that is already shared today. The Files panel names the mode
+on the row, so an instructor sees which one they have.
+
+**The dealt partition.** `DatasetKind.partition` with `partCount`. The
+student's part is not chosen by a seed; it is dealt, like a composite slot.
+Data row `i` belongs to part `i mod partCount`, so every part spans the whole
+file in order, which matters for time-ordered records. The deal reuses
+`CompositeDealing.dealSequence` and the row shape of `composite_slots` (one
+slot per student per assignment, dealt at first open, a second round when
+attendance passes the count). Whether that table is renamed or given a sibling
+is decided inside the slice; the dealer is not written twice. `DatasetResolver`
+and `DatasetMaterializer` gain a `part: Int?` beside the seed, and
+`DatasetSeedDerivation` becomes `DatasetSliceKey` (seed or part). A composite
+whose `contribution` count equals `partCount` deals one slot for both, so a
+student's tile and their rows agree.
+
+The diagnostics still hold: overlap for a partition is zero by construction,
+which the `allCases` completeness test makes the formula say; divergence is
+measured as for every other kind. A partition does not change the row set a
+transform sees, so the row-set theorem holds. Under course scope a part is
+dealt per assignment in this slice; a course-wide part (the same part of the
+same file in every assignment) is a later decision.
+
+A dealt partition is what makes "the class cleans the whole registry" an
+assignment: each student cleans their part, and the class corpus run
+(`docs/collaborative-class-assignments.md` §"The corpus run") or a composite
+combines the parts. The combination step exists; the deal is what is missing.
+
+**Jobs with no student grade the pool.** Several jobs run with no student
+seed, and the rule is the same for every mode and every scope:
+
+| Job | Seed today | Rows the job sees |
+|---|---|---|
+| class corpus run (`classAggregate`, no owner) | none | the pool |
+| composite reference render | none | the pool |
+| composite spare | the student's own seed, pinned | the student's rows |
+| a match (round robin, tournament, king of the hill) | the submitter's seed | the submitter's rows, for both sides |
+| validation | the enqueuing instructor's seed | that one variant |
+| validation variants | the preflight seeds | one synthetic student each |
+
+`CourseSeedStore.ensureSeed` needs a user, so a job with no owner has no
+course seed either, and the course scope changes nothing in this table. For a
+`shared` dataset every row of the table is the same bytes, which is why ranked
+activities use it. For a `personal` dataset the corpus run and the reference
+render grade the pool, and the doc for each activity says so: a reference
+render of the pool beside per-student tiles is the sampling distribution shown
+against the truth, which is a lesson, not a bug. For a `partition`, a job with
+no student sees the whole file, so a corpus run over everyone's parts checks
+the class's combined work against the complete data.
+
+**Ranked activities refuse personal data.** A leaderboard that ranks a metric
+computed on different rows per student compares nothing. Every door that saves
+a dataset spec or an activity (both `/datasets` PUTs, `set_dataset`,
+`attach_dataset`, `set_activity`, the edit page) refuses the pair "an activity
+whose aggregation is a leaderboard or whose opponent source matches students,
+and a dataset that is not `shared`", with a message that names the file and
+says to clear the sample. A composite is not ranked, so a composite with
+personal data is allowed; that is the per-student histogram gallery above. The
+refusal is a save-time check in `ActivityAuthoring`, beside the kind lock, with
+the delivery side unchanged.
+
+**What this does not add.** A dataset built from the students' own
+contributions (each student submits rows; the class's union becomes a version)
+is not in this plan. The corpus run shows the shape is reachable, but the
+result is student data, and in a health course it can be the students' own
+health data. That needs the student-data wall decided first
+(`Sources/APIServer/MCP/CLAUDE.md`), not a dataset slice. A dataset that
+changes during a live session is a new version attached mid-session; D6 says
+what that does to cohorts, and nothing here makes a version "tick" on its own.
+
 ---
 
 ## 5. The course arc this makes possible
@@ -435,6 +529,14 @@ With the library and the cohort, a course can run one story:
    holdout.
 5. **Assignment 4**: write the report on your cohort, with the Data page as
    the citation for provenance and licence.
+6. **Class activity, shared**: "Beat the instructor at finding duplicate
+   records" runs on the shared registry, versioned in the library, instead of
+   a generator script in the zip.
+7. **Class activity, dealt**: the class cleans the whole registry, one part
+   each; the corpus run grades the combined result against the complete file.
+8. **Class activity, composite**: each student's tile is a histogram of their
+   cohort; the projector shows the sampling distribution, with the pool as
+   the reference render.
 
 The same 100 patients from Lab 2 are the first 100 of the 500 in Assignment 4
 (D6). A student's numbers differ from every peer's, and their own numbers agree
@@ -460,6 +562,7 @@ own changelog fragment.
 | 8 | `CourseCloneService.swift`, `CourseBundleRoutes*.swift`, `AdminStoragePage.swift` | clone resolves sources; bundle round trip v1 and v2 |
 | 9 | docs, `CLAUDE.md`; the promotion is done through the UI or MCP on the live course | docs-audit clean |
 | 10 | `DatasetTransform.swift`, `DatasetTransformApplication.swift` | transform tests, the row-set theorem still holds |
+| 11 | `DatasetSpec.swift`, `DatasetMaterializer.swift`, `DatasetResolver.swift`, `CompositeSlots.swift`, `ActivityAuthoring`, the dataset save doors | partition bytes pinned by fixture; overlap formula answers zero; the ranked-activity refusal at every door; a corpus run on a partition sees the whole file |
 
 The rules that apply to every slice: Swift Testing only; no new environment
 variables; `scripts/format-lint.sh` before each push; the `ui-review` agent on
@@ -501,3 +604,9 @@ slice it names.
 4. **Tab name.** "Datasets" on the instructor bar and "Data" on the student
    side. Confirm the words.
 5. **Slice 10.** In or out of this arc.
+6. **The ranked-activity refusal (§4.11).** A refusal is the recommendation,
+   on the same footing as the kind lock. A warning on the row instead would let
+   an instructor rank on personal data on purpose, for example a leaderboard
+   on a stratified sample where every student has every category. Refusal or
+   warning.
+7. **Slice 11.** In this arc, or after the cohort work has run for a term.
