@@ -21,6 +21,17 @@ enum CourseDatasetError: Error, Sendable, Equatable, CustomStringConvertible {
     case governanceRequiredWhilePublished
     case inUse(by: [String])
     case versionNumberContended
+    case datasetGone
+    case wrongCourse
+    case unreadableManifest
+    case unreadableFile(String)
+    case notASupportFile(String)
+    case fileTaken(String)
+    case alreadyAttached(String)
+    case notAttached(String)
+    case alreadyAtVersion(Int)
+    case attachmentIssue(String)
+    case fileInUse(String, by: [String])
 
     var description: String {
         switch self {
@@ -54,6 +65,30 @@ enum CourseDatasetError: Error, Sendable, Equatable, CustomStringConvertible {
             return "This dataset is attached to \(users.joined(separator: ", ")). Detach it first."
         case .versionNumberContended:
             return "Other uploads to this dataset took every version number this upload tried. Upload it again."
+        case .datasetGone:
+            return "This dataset was deleted from the course library."
+        case .wrongCourse:
+            return "This dataset belongs to another course. Attach a dataset from this assignment's own course."
+        case .unreadableManifest:
+            return "The assignment's manifest could not be read, so nothing was changed."
+        case .unreadableFile(let name):
+            return "'\(name)' could not be read from the assignment's files."
+        case .notASupportFile(let name):
+            return "'\(name)' is a test, a notebook or a grader-only file. Only a support data file can come from "
+                + "the course library."
+        case .fileTaken(let name):
+            return "This assignment already has a file named '\(name)'. Choose another name, or move that file "
+                + "to the course library instead."
+        case .alreadyAttached(let name):
+            return "'\(name)' is already attached from the course library. Update it to another version instead."
+        case .notAttached(let name):
+            return "'\(name)' was not attached from the course library."
+        case .alreadyAtVersion(let version):
+            return "The file is already at version \(version)."
+        case .attachmentIssue(let message):
+            return message
+        case .fileInUse(let name, let users):
+            return "'\(name)' is used by \(users.joined(separator: ", ")). Remove that use first, or keep the file."
         }
     }
 }

@@ -119,6 +119,9 @@ struct DeleteSupportFileTool: ContentTool {
                     + "remove the family with delete_suite_item(familyID: \"\(familyID)\") instead.")
         }
         let manifest = setup.decodedManifest()
+        if let refusal = libraryAttachmentRefusal(manifest: manifest, filename: cleaned) {
+            throw MCPToolError.invalidArguments(detail: refusal)
+        }
         if manifest?.testSuites.contains(where: { $0.script == cleaned }) == true {
             throw MCPToolError.invalidArguments(
                 detail: "\"\(cleaned)\" is a graded test, not a support file. Remove it with "

@@ -505,9 +505,14 @@ private func importBundledTestSetups(
             notebookPath = nbPath
         }
 
+        // A library source names a dataset in the exporting course. The
+        // imported course's library does not have it, so the source goes and
+        // the file keeps its sample (docs/datasets-course-library.md).
+        let importedManifest = try await CourseDatasetService.reconciledManifestText(
+            try storableImportedManifest(bundledSetup.manifest), courseID: courseID, zipPath: newZipPath, on: db)
         let setup = APITestSetup(
             id: newSetupID,
-            manifest: try storableImportedManifest(bundledSetup.manifest),
+            manifest: importedManifest,
             zipPath: newZipPath,
             notebookPath: notebookPath,
             courseID: courseID

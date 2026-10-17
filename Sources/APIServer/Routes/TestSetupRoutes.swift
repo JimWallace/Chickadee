@@ -133,6 +133,17 @@ struct TestSetupRoutes: RouteCollection {
             throw AppError.unprocessable(reason: String(describing: error))
         }
 
+        // A spec that claims a library version must name one this course has,
+        // and the file must be its bytes (docs/datasets-course-library.md).
+        for spec in manifest.datasets {
+            if let issue = try await CourseDatasetService.sourceIssue(
+                for: spec, courseID: upload.courseID, zipPath: zipPath, on: req.db)
+            {
+                try? FileManager.default.removeItem(atPath: zipPath)
+                throw AppError.unprocessable(reason: issue)
+            }
+        }
+
         // Store metadata in DB. `encodeManifest` is the one way a manifest
         // becomes the stored string: the stable encoder, so equal values
         // store equal bytes (#1719).

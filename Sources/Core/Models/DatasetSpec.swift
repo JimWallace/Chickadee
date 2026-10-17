@@ -79,6 +79,21 @@ public struct DatasetSpec: Codable, Equatable, Sendable {
         self.scope = scope
     }
 
+    /// The spec once the file is no longer attached from the library: the same
+    /// selection and transforms with no source and the assignment scope. Nil
+    /// when the spec exists only because of the attachment — a whole-file
+    /// row sample with no transforms — because the file then delivers the same
+    /// bytes with no spec at all.
+    ///
+    /// Detaching keeps a sample a student already receives. Removing the spec
+    /// instead would hand every student the whole pool.
+    public func withoutLibraryFields() -> DatasetSpec? {
+        if kind == .rowSample, sampleSize == nil, transforms.isEmpty { return nil }
+        return DatasetSpec(
+            file: file, kind: kind, sampleSize: sampleSize, stratumColumn: stratumColumn,
+            transforms: transforms)
+    }
+
     private enum CodingKeys: String, CodingKey {
         case file, kind, sampleSize, stratumColumn, transforms, source, scope
     }
