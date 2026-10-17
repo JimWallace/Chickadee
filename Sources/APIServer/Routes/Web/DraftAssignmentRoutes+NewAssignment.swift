@@ -557,7 +557,11 @@ extension DraftAssignmentRoutes {
                 notebookPath: paths.notebookPath,
                 courseID: courseID
             )
-        setup.manifest = manifest
+        // The draft is published into `courseID`, which can differ from the
+        // course it was drafted in; a library source must resolve in this one
+        // (docs/datasets-course-library.md).
+        setup.manifest = try await CourseDatasetService.reconciledManifestText(
+            manifest, courseID: courseID, zipPath: paths.zipPath, on: req.db)
         setup.zipPath = paths.zipPath
         setup.notebookPath = paths.notebookPath
         setup.courseID = courseID

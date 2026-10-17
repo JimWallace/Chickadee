@@ -14,7 +14,7 @@ states what it adds and what proves it.
 | 0 | This design note | shipped |
 | 1 | Core: `DatasetSource` and `DatasetSliceScope` on `DatasetSpec`; `DatasetSeedDerivation`; the data dictionary model | built |
 | 2 | Server: the `course_datasets` and `course_dataset_versions` tables, the blob-backed store, `CourseDatasetService` | built |
-| 3 | Attachment: copy a pinned version into the setup zip and record the source; promote a support file into the library; detect a newer version | proposed |
+| 3 | Attachment: copy a pinned version into the setup zip and record the source; promote a support file into the library; detect a newer version | built |
 | 4 | Course cohort: the per-(student, course) seed, and `DatasetResolver` choosing the seed per spec at every delivery path | proposed |
 | 5 | Instructor surfaces: the Datasets tab, the Files-panel picker and the scope control | proposed |
 | 6 | Student surfaces: the course Data page, the assignment-page dataset line, the "my rows" download | proposed |
@@ -280,54 +280,72 @@ with the callers of later slices.
 
 Tests: `CourseDatasetServiceTests` in `APITests`.
 
-### 4.3 Attachment and promotion (slice 3)
+### 4.3 Attachment and promotion (slice 3, built)
 
-`attach(dataset:version:to setup:as filename:)` in `CourseDatasetService`:
+`CourseDatasetService+Attachment.swift` holds four operations. Each one writes
+the setup zip, then the manifest, then refreshes the shared support directory
+that the editor and personalization read. The re-grade, the re-validation, the
+version capture and the close stay with the caller, as for every other edit;
+the callers arrive in slices 5 and 7.
 
-1. Writes the version's bytes into the setup zip under `filename` (default:
-   the version's `filename`), through the same zip helper the support-file
-   upload uses, so the version snapshot and the shared directory are rebuilt
-   as they are for any upload.
-2. Appends a `DatasetSpec` with `source` set and `sampleSize == nil` (the
-   whole file) unless the caller gives a sample. The spec then edits through
-   every existing control.
-3. Runs the existing content-edit effects for a support-file change.
+| Operation | What it does |
+|---|---|
+| `attach` | Copies a version (the newest by default) into the zip under its filename or another one, and appends a spec with the source, the sample and the scope. Refuses a dataset from another course, a deleted dataset, a name the zip already has, a test, a notebook or a grader-only name, and a spec the file cannot hold. A nil sample attaches the whole file. |
+| `updateAttachment` | Re-copies another version (the newest by default). The sample, the stratum, the transforms and the scope carry over and are checked again against the new bytes. `attachmentIsBehind` says when a newer version exists. |
+| `detach` | Drops the library fields. The file stays, and so does its sample (`DatasetSpec.withoutLibraryFields`), so no student starts to receive the pool. A course-scoped sample goes back to the assignment seed. With `removeFile`, the file and its spec go, unless a test depends on the file. |
+| `promote` | Creates a library dataset from a support file already in the zip and attaches the file to it. The bytes and the sample do not change, so every student keeps the rows they had. |
 
-`detach` removes the spec and leaves the file in the zip as a plain support
-file, or removes both when asked. `promote(filename:from setup:)` creates a
-dataset from a support file already in a zip and sets `source` on its spec, so
-the two live HLTH 230 datasets move into the library without a re-upload.
+The build changed one rule of the plan: the plan's detach removed the spec,
+which would have given every student the whole pool.
 
-"Newer version available" is a read: the spec's pinned version is lower than
-the dataset's current version. `update(to version:)` re-copies and re-runs the
-effects. Nothing updates on its own. A closed assignment keeps grading against
-what it was validated against, which is the manifest-hash rule from
-`datasets.md` §"Why bother".
+**One invariant.** A spec with a source names a version whose bytes are the
+file in the zip. The operations above keep it, and the other doors defend it:
 
-A file that is attached from the library cannot be deleted through the
-support-file delete controls; the row says to detach it instead.
+- **The doors that write or delete one support file** refuse an attached file
+  and point at detach: the web script PUT and DELETE, MCP `author_script` and
+  MCP `delete_support_file` (`libraryAttachmentRefusal`).
+- **The test-setup upload** refuses a source that does not name a dataset and a
+  version in the course, or whose file is not that version's bytes
+  (`sourceIssue`).
+- **The course clone, the bundle import and a version restore** drop a source
+  that does not resolve, keep the file and its sample, and leave the manifest
+  bytes alone when nothing is dropped (`reconciledManifestText`). A clone
+  inside the course keeps every source. Until slice 8 copies the library, a
+  clone into another course drops them all.
 
-Three facts from slices 1 and 2 that this slice must handle:
+**A spec must do something.** The `/datasets` PUTs and `set_dataset` used to
+require a sample. They now require a sample, a transform or a library source,
+because an attached file or a transformed file may deliver every row. A spec
+with none of the three is still refused. `set_dataset` keeps the stored
+sample when a call omits it, as it already did for transforms, so an agent
+that changes only the stratum cannot turn a sample into the whole file. An
+attach refuses a stratum with no sample.
 
-- **The whole-file attachment needs its own door.** `datasetSpecRefusal`
-  refuses a nil `sampleSize` at the `/datasets` PUTs and `set_dataset`. An
-  attachment of the whole file is therefore written by the attach path, which
-  runs the same file checks without the sample rule. Once attached, a panel
-  edit that sets a sample goes through the existing doors as usual.
-- **Other doors take a whole manifest.** The zip upload with
-  `test.properties.json`, the bundle import and a v2 manifest import can carry
-  `source` and `scope` without `libraryFieldIssue`. Before this slice ships,
-  each of them must check that a `source` names a dataset and a version that
-  exist in the course, and refuse it or drop it with a message otherwise.
-  Slice 8 does the same for the bundle import of a library.
-- **Attach re-reads the dataset.** `delete` checks `usage` and then deletes,
-  so an attach that runs between the two would pin a version that is gone.
-  The attach path reads the dataset and the version inside its own write, and
-  fails when either is missing.
+**A failed write rolls the zip back.** Attach and update re-read the dataset
+before and after the zip write. When the manifest write or the second read
+fails, the zip goes back to what it held, so a failed attach never leaves the
+pool behind as a plain support file.
 
-Tests: attach writes the bytes and the spec; the diagnostics chips read the
-attached file; detach keeps or removes the file as asked; promote on a live
-fixture zip; the "newer version" predicate.
+**The doors list, as reviewed.** Besides the doors above, the draft suite-file
+upload, the draft suite clear and the draft publish reconcile the manifest,
+because each rebuilds the zip or moves the draft into its final course.
+Dropping a source also drops a course scope, so a course-scoped sample is
+dealt again with the assignment seed after a restore or a bundle import.
+
+**Removing an attached spec needs a detach.** The `/datasets` PUTs refuse a
+body that leaves out a stored attached spec, and `set_dataset remove:true`
+refuses an attached file. Either would end the attachment and give every
+student the whole file; detach ends it and keeps the sample.
+
+**Known gaps for later slices.** A
+promote whose manifest write loses three races leaves an unused library
+dataset, which can be deleted. Two suites added in this slice
+(`CourseDatasetAttachmentTests`, `DatasetAttachedFileDoorTests`) have no time
+limit; changing them needs the maintainer, so the gap is recorded here.
+
+Tests: `CourseDatasetAttachmentTests`, `DatasetAttachedFileDoorTests` and
+`DatasetLibraryInvariantTests` in `APITests`; `DatasetAttachmentProjectionTests`
+and `DatasetDetachProjectionTests` in `CoreTests`.
 
 ### 4.4 The course cohort (slice 4)
 
@@ -580,7 +598,7 @@ own changelog fragment.
 |---|---|---|
 | 1 | `Sources/Core/Models/DatasetSpec.swift`, new `DatasetSeedDerivation.swift`, `DatasetDictionary.swift`, `Models/DatasetColumn.swift`, `DatasetSpecValidation.swift`, `DatasetResolver.swift` | `CoreTests`: codec back-compat, seed derivation fixtures, nested-sample property, refusal of course scope without a source |
 | 2 | new models and migration, `CourseDatasetService.swift` | `APITests`: service suite |
-| 3 | `CourseDatasetService.swift`, `ManifestFileHelpers.swift`, `ContentEditEffects.swift` | attach, detach, promote, newer-version predicate |
+| 3 | `CourseDatasetService+Attachment.swift`, `DatasetSpecCheck.swift`, the support-file doors, the upload, clone, bundle import and restore | attach, update, detach, promote; the invariant at every door |
 | 4 | `APICoursePersonalizationSeed.swift`, `CourseSeedStore.swift`, `SubmissionMaterialization.swift`, the six call sites | the delivery-path suites gain course-scoped cases |
 | 5 | `InstructorTabs.swift`, new `InstructorDatasetsPage.swift`, `SupportFileRow.swift`, `Public/support-files.js`, `DatasetEditHelpers.swift` | page guard tests, `support-files-datasets.test.mjs`, `ui-review` |
 | 6 | new `CourseDataPage.swift`, `SubmitPage.swift`, `NotebookGuide`, new routes | authorization matrix, byte equality with the grader |

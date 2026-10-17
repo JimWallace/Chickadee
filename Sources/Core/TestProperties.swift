@@ -395,6 +395,15 @@ public struct TestProperties: Codable, Equatable, Sendable {
         Dictionary(datasets.map { ($0.file, $0) }, uniquingKeysWith: { first, _ in first })
     }
 
+    /// The spec that attaches `filename` from the course dataset library, or
+    /// nil when the file was not attached from it
+    /// (docs/datasets-course-library.md). An attached file's bytes are a copy
+    /// of one library version, so the doors that write or delete a support
+    /// file refuse it and point at detach instead.
+    public func libraryAttachment(for filename: String) -> DatasetSpec? {
+        datasets.first { $0.file == filename && $0.source != nil }
+    }
+
     /// Filenames the instructor has designated as **grader-only** (option B —
     /// see docs/datasets.md): bundled in the test setup so the native worker's
     /// grading scripts can read them, but withheld from every student-facing

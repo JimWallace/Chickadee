@@ -233,6 +233,15 @@ func applyDatasetsEdit(
         }
     }
 
+    // An attached spec may be edited here but not dropped: dropping it would
+    // end the attachment and give every student the whole file. Detach does
+    // that deliberately and keeps the sample.
+    for (file, spec) in stored where spec.source != nil && !seenFiles.contains(file) {
+        throw Abort(
+            .badRequest,
+            reason: "'\(file)' is attached from the course library. Detach it to remove its dataset settings.")
+    }
+
     try await mutateManifest(setup: setup, on: db) { props in
         props.datasets = datasets
     }
