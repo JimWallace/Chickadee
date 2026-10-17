@@ -158,6 +158,14 @@ struct SetDatasetTool: ContentTool {
             throw MCPToolError.invalidArguments(detail: "filename must be a bare filename with no path components.")
         }
 
+        // An attached file's spec is ended by a detach, which keeps the sample;
+        // a plain remove would give every student the whole file.
+        if remove, setup.decodedManifest()?.libraryAttachment(for: cleaned) != nil {
+            throw MCPToolError.invalidArguments(
+                detail: "\"\(cleaned)\" is attached from the course library. Detach it instead of removing its "
+                    + "dataset mark.")
+        }
+
         // Built once, from the stored spec plus this call's changes, and used
         // for both the validation and the manifest entry — so the thing that is
         // checked is the thing that is stored.

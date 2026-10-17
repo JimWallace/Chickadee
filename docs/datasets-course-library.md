@@ -332,10 +332,12 @@ because each rebuilds the zip or moves the draft into its final course.
 Dropping a source also drops a course scope, so a course-scoped sample is
 dealt again with the assignment seed after a restore or a bundle import.
 
-**Known gaps for later slices.** Removing a dataset mark through the
-`/datasets` PUT or `set_dataset remove:true` ends an attachment without a
-detach, and the file then delivers the pool. Slice 5 makes the panel's
-control a detach for an attached file, and slice 7 does the same for MCP. A
+**Removing an attached spec needs a detach.** The `/datasets` PUTs refuse a
+body that leaves out a stored attached spec, and `set_dataset remove:true`
+refuses an attached file. Either would end the attachment and give every
+student the whole file; detach ends it and keeps the sample.
+
+**Known gaps for later slices.** A
 promote whose manifest write loses three races leaves an unused library
 dataset, which can be deleted. Two suites added in this slice
 (`CourseDatasetAttachmentTests`, `DatasetAttachedFileDoorTests`) have no time
