@@ -3,7 +3,9 @@
 // The student's own bird choices (docs/student-wardrobe.md, W1, and
 // docs/avatar-species.md, A2).
 //
-//   POST /account/avatar           → apply expression / backdrop / border → redirect to /account
+//   POST /account/avatar           → apply expression / backdrop / border → redirect to /account,
+//                                    or a bare status when the request accepts JSON (the
+//                                    result page's Earned toast saves in place)
 //   POST /account/avatar/hatch     → hatch a new bird of another species → ?avatar=hatched#bird,
 //                                    or ?avatar=nohatch#bird when none is left this term
 //   POST /account/avatar/restore   → go back to the bird before the last hatch → ?avatar=restored#bird
@@ -43,6 +45,10 @@ extension AccountRoutes {
     func saveAvatar(req: Request) async throws -> Response {
         let user = try req.auth.require(APIUser.self)
         let form = try await req.decodeContent(AvatarChoiceForm.self)
+        // The Earned toast's Wear it (docs/result-celebration.md, J2) asks
+        // for JSON, and updates the page bird itself instead of following a
+        // redirect to this page.
+        let inPlace = req.headers[.accept].contains { $0.contains("application/json") }
 
         let current = try await AvatarStore.ensureSpec(for: user, on: req.db)
         let isStaff =
@@ -54,11 +60,12 @@ extension AccountRoutes {
                 form.choices, to: current, isStaff: isStaff,
                 unlocked: try await WardrobeUnlockStore.unlocked(for: user.requireID(), on: req.db))
         } catch is AvatarCustomizationError {
-            return req.redirect(to: "/account?avatar=invalid#chickadee")
+            return inPlace
+                ? Response(status: .unprocessableEntity) : req.redirect(to: "/account?avatar=invalid#chickadee")
         }
         user.avatarSpecJSON = AvatarStore.encode(updated)
         try await user.save(on: req.db)
-        return req.redirect(to: "/account?avatar=saved#chickadee")
+        return inPlace ? Response(status: .noContent) : req.redirect(to: "/account?avatar=saved#chickadee")
     }
 
     /// Draws a bird of another species. The backdrop, the ring and the class
@@ -111,9 +118,6 @@ struct AvatarPickerContext: Encodable {
     let rings: [AvatarPickerOption]
     /// The seasonal rings out of their term: shown, never selectable.
     let laterRings: [AvatarPickerOption]
-    /// The items the student has earned, each with how it was earned, in
-    /// wardrobe order. Empty hides the section.
-    let earned: [AvatarEarnedItem]
     /// Course staff wear the staff ring and cannot choose one: the Ring group
     /// becomes a note.
     let isStaff: Bool
@@ -173,10 +177,6 @@ struct AvatarPickerContext: Encodable {
         rings = open.map { Self.ringOption($0, for: spec, isLocked: false) }
         laterRings = values.filter { !open.contains($0) && AvatarBorder(rawValue: $0)?.season != nil }
             .map { Self.ringOption($0, for: spec, isLocked: true) }
-        // Staff cannot choose a ring, so an earned ring is not theirs to read about.
-        earned = WardrobeItem.allCases
-            .filter { unlocked.contains($0) && !(isStaff && $0.slot == .border) }
-            .map(AvatarEarnedItem.init)
     }
 }
 
@@ -205,22 +205,6 @@ extension AvatarPickerContext {
     static func borderLabel(_ border: AvatarBorder, isLocked: Bool) -> String {
         guard isLocked, let season = border.season else { return border.displayName }
         return "\(season.displayName) · opens in \(season.startMonthName)"
-    }
-}
-
-/// One earned item in "How you earned these": "Stitched: earned for a
-/// comeback on three assignments".
-struct AvatarEarnedItem: Encodable {
-    let text: String
-
-    init(_ item: WardrobeItem) {
-        let name: String? =
-            switch item.slot {
-            case .expression: AvatarExpression(rawValue: item.value)?.displayName
-            case .border: AvatarBorder(rawValue: item.value)?.displayName
-            case .backdrop: item.value.capitalized
-            }
-        text = "\(name ?? item.value): earned \(item.howEarned)"
     }
 }
 

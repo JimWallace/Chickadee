@@ -280,6 +280,14 @@ public enum AvatarRing: String, CaseIterable, Sendable {
     case none, solid, rainbow, spectrum, twotone, stitched, staff
     case snowflake, blossom, maple
     case lifering, greenlight, ouroboros, function, binary, pulse
+
+    /// Where the result page's Earned toast starts to draw the ring in,
+    /// clockwise from the top: the ring art's own start. The snake of the
+    /// ouroboros starts at its head, at the lower left
+    /// (docs/result-celebration.md, J2).
+    public var drawStartDegrees: Int {
+        self == .ouroboros ? 186 : 0
+    }
 }
 
 /// A feather tuft on top of the head — the one axis that changes the

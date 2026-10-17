@@ -110,8 +110,6 @@ struct AccountRoutes: RouteCollection {
                         ? "No hatches are left this term."
                         : req.query[String.self, at: "githubError"]
                             .flatMap(GitHubLinkError.init(rawValue:))?.message),
-                username: user.username,
-                preferredName: user.preferredName,
                 identityName: identityName,
                 identitySecondary: accountIdentitySecondary(
                     identityName: identityName, username: user.username),

@@ -2,7 +2,8 @@
 //
 // Grants the wardrobe items a student has earned (Core/WardrobeItem.swift,
 // #2592) and reads the ones already stored. Grants run when the account page
-// loads, never while a result is written, so a cosmetic cannot fail a grade.
+// or a result page loads, never while a result is written, so a cosmetic
+// cannot fail a grade.
 // A stored unlock is never taken back.
 
 import Core
@@ -92,5 +93,17 @@ enum WardrobeUnlockStore {
             try? await APIWardrobeUnlock(userID: userID, item: item).save(on: db)
         }
         return try await unlocked(for: userID, on: db)
+    }
+
+    /// Grants as `grantEarned` does, and returns only the items that this
+    /// call stored, in wardrobe order. The result page's Earned toast shows
+    /// these, so each item shows once, because a grant happens once
+    /// (docs/result-celebration.md, J2). When two pages load at once, one
+    /// may store the item and the other show it, or neither show it: the
+    /// item is still stored, and the account page offers it.
+    static func grantNew(for userID: UUID, on db: any Database) async throws -> [WardrobeItem] {
+        let stored = try await unlocked(for: userID, on: db)
+        let granted = try await grantEarned(for: userID, on: db).subtracting(stored)
+        return WardrobeItem.allCases.filter(granted.contains)
     }
 }

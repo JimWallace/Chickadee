@@ -539,10 +539,8 @@ duplicate.
   already wears is never listed there.  A face or ring that a student earns
   is not shown at all until it is earned: items are surprises, and a list of
   items not earned yet reads as a list of failures (#2615).
-  `.bird-card-earned` is the closed "How you earned these" `<details>` under
-  the card body, with a `.disclosure-summary`: one line per earned item, in
-  the past tense, "Stitched: earned for a comeback on three assignments".
-  It is absent while the student has earned nothing.  The live preview (`avatar-picker.js`)
+  The card does not say how an item was earned: the result page's Earned
+  toast says that once, when the item is earned (`.nb-graded-earned`).  The live preview (`avatar-picker.js`)
   copies the checked option's tokens onto the hero bird and points its ring
   and face layers at the checked symbols; it also keeps Save disabled and "Undo changes"
   hidden until a choice changes.  See [student-wardrobe.md](student-wardrobe.md)
@@ -765,8 +763,15 @@ duplicate.
   three `.nb-graded-star` stars show and the bird hops once, unless the viewer
   reduces motion.  It is not a `.flash`, because it floats over the editor
   instead of pushing it down, and the editor must not move under the student's
-  cursor.  The planned Earned toasts of the results page (`docs/result-celebration.md`,
-  J2 and J3) should take this shape, not a second one.
+  cursor.  **`.nb-graded-earned`** is the same toast as the results page's
+  Earned toast (`EarnedToast`, `earned-toast.js`, `docs/result-celebration.md`,
+  J2): fixed at the bottom right, with a `.chip` ("New ring"), the item's
+  name in `.nb-graded-grade`, how it was earned in a `.card-meta`, and Wear it
+  and Not now.  `.is-ring` draws the new ring in, and the face layers take
+  `.earned-face-new` and `.earned-face-old` for the crossfade.  It floats
+  there, not in the page flow, because it arrives during the celebration and
+  must not move the grade band or the results while they animate.  It is not a
+  general toast idiom.  J3 must take this shape too, not a second one.
 - **`.wb-shell`** — the assignment workbench (`WorkbenchPage`, NB6, design
   frame 18c).  A `.wb-appbar` (`WorkbenchAppBar`: the `.wb-title` with a ✎
   that opens the Details sheet, the due date and the language in a

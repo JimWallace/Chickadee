@@ -311,8 +311,8 @@ extension ElementaryPageFixtures {
             flash: FlashMessages = FlashMessages(), picker: AvatarPickerContext? = nil
         ) -> String {
             AccountPage(
-                page: page(currentUser: signedInAdmin), flash: flash, username: "ada",
-                preferredName: staff ? nil : "Ada", identityName: staff ? "ada" : "Ada Lovelace",
+                page: page(currentUser: signedInAdmin), flash: flash,
+                identityName: staff ? "ada" : "Ada Lovelace",
                 identitySecondary: staff ? nil : "ada",
                 avatarPicker: picker ?? AvatarPickerContext(for: spec, isStaff: staff), avatarInvalid: !staff,
                 studentID: staff ? nil : "20123456", email: staff ? nil : "ada@example.com",

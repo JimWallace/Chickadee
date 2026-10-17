@@ -477,6 +477,12 @@ export async function seed(baseURL) {
 
   const compositeResultsPath = await seedCompositeContribution(stud, compositeSetupID);
 
+  // The first result page a student opens after earning a wardrobe item
+  // grants it and shows the Earned toast (docs/result-celebration.md, J2).
+  // The capture opens each page once per scheme, so only the first capture
+  // would show the toast. The account page grants the items here instead.
+  await expectOK("grant earned items", stud.get("/account"), [200]);
+
   const studentState = await stud.storageState();
   await stud.dispose();
 

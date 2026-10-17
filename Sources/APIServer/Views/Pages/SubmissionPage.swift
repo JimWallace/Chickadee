@@ -56,9 +56,16 @@ struct SubmissionPage: HTML {
                     results
                 }
             }
+            if let earned = result.bird?.earned {
+                EarnedToast(page: page, earned: earned)
+            }
             if result.bird?.celebration != nil {
                 script(.src(page.asset("/celebrate-core.js"))) {}
                 script(.src(page.asset("/celebrate.js"))) {}
+            }
+            // After celebrate.js, so the toast can wait for its pop.
+            if result.bird?.earned != nil {
+                script(.src(page.asset("/earned-toast.js"))) {}
             }
             if result.compositeTile != nil {
                 script(.src(page.asset("/class-composite-core.js"))) {}
