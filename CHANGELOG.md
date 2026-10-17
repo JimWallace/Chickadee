@@ -9,6 +9,13 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.698] - 2026-10-17
+
+### Added
+
+- **The workbench draws each test beside the cell it checks.** A section card sits beside the section heading, and a test card beside the cell that the test links to; a test that fails on the solution is red, and so is the outline of its cell. Select a card to read the result and the script, edit the test, run it again or pin it to another cell. A click on a rail row selects the card. When the editor is narrower than 1100px, the cards fold into one summary strip for each cell. Only a hand-written test can be pinned; the pin is stored on its suite entry and grading never reads it. See `docs/notebook-guide.md`, "The margin cards".
+
+
 ## [0.5.697] - 2026-10-17
 
 ### Changed
