@@ -1014,6 +1014,8 @@ it is *enforced*:
 
 ## See also
 
+- `docs/datasets-course-library.md` — the course dataset library: one library
+  per course, the per-student course cohort, and the student Data page
 - `docs/personalization-phase1.md` — the per-student seed contract
 - `docs/inputs.md` — Global / section inputs and `$name` references
 - `docs/personalization-pattern-families.md` — `expectedVarRef` server

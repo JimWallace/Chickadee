@@ -26,7 +26,10 @@ func bundledFileNames(zipPath: String) async -> Set<String> {
 ///   - a `file` the setup zip does not bundle. A dataset marks an existing
 ///     support file as per-student; it never introduces one.
 ///   - a graded script or a canonical notebook, which is not support data.
-///   - no `sampleSize`, or one below 1.
+///   - a spec that does nothing: no `sampleSize`, no transform and no library
+///     source. A `sampleSize` below 1.
+///   - a course scope on a file that was not attached from the course library
+///     (`DatasetSpecValidation.scopeIssue`).
 ///   - a spec that does not fit its file (`DatasetSpecValidation`): a stratum
 ///     column the file does not have, a sample too small to hold one row of
 ///     every category, or a transform that names a missing column. The
@@ -46,9 +49,16 @@ func datasetSpecRefusal(
     else {
         return "'\(spec.file)' is not a support file. Only a support data file can be a per-student dataset."
     }
-    guard let sampleSize = spec.sampleSize, sampleSize >= 1 else {
+    // A spec must do something: sample the rows, transform them, or record
+    // that the file came from the course library. A library file or a
+    // transformed file may deliver every row, so it may have no sample.
+    if let sampleSize = spec.sampleSize {
+        guard sampleSize >= 1 else { return "sampleSize for '\(spec.file)' must be 1 or more." }
+    } else if spec.source == nil, spec.transforms.isEmpty {
         return "sampleSize for '\(spec.file)' is required and must be 1 or more."
     }
+    // Needs no file, so it runs before the early return below.
+    if let issue = DatasetSpecValidation.scopeIssue(with: spec) { return issue }
     // Reads the file only when the spec claims something checkable against
     // it. A plain row sample needs nothing from the bytes, and these files are
     // course datasets, not small.
@@ -69,4 +79,14 @@ func datasetSpecs(inManifest manifest: String) -> [DatasetSpec] {
         let props = decodeManifest(from: data)
     else { return [] }
     return props.datasets
+}
+
+/// Why the support-file door at hand cannot write or delete `filename`, or
+/// nil. A file attached from the course library is a copy of one library
+/// version; changing its bytes here would make the spec's source untrue
+/// (docs/datasets-course-library.md).
+func libraryAttachmentRefusal(manifest: TestProperties?, filename: String) -> String? {
+    guard let source = manifest?.libraryAttachment(for: filename)?.source else { return nil }
+    return "'\(filename)' is attached from the course library dataset '\(source.slug)' "
+        + "(version \(source.version)). Detach it, or update it to another version, instead."
 }

@@ -138,6 +138,10 @@ struct RestoreAssignmentVersionTool: ContentTool {
         try await Self.materialize(
             target: target, fileMap: fileMap, setup: setup, blobs: blobs,
             testSetupsDirectory: directory)
+        // A library dataset the snapshot named may have been deleted since;
+        // the restored spec must not claim it (docs/datasets-course-library.md).
+        setup.manifest = try await CourseDatasetService.reconciledManifestText(
+            setup.manifest, courseID: setup.courseID, zipPath: setup.zipPath, on: context.mainDB)
         try await setup.save(on: context.db)
 
         // Re-derive everything downstream of the zip: the shared support-file

@@ -160,11 +160,16 @@ struct BrowserResultRoutes: RouteCollection {
         // blank template instead of their latest submitted work.
         // Use the student's own notebook (body.notebook) — not notebookToSave,
         // which contains the instructor's injected hidden-test cells.
+        // Staff submit from the student view, so theirs goes to their
+        // practice copy, never to the authoring copy that a save writes back.
         if let userID = caller.id {
+            let isStaff = (try? await req.cachedIsCourseStaff(caller, inCourse: setup.courseID)) ?? false
             _ = try? await ensureUserNotebookWorkingCopy(
                 setupID: body.testSetupID,
                 userID: userID,
                 fallbackSetup: setup,
+                relativePath: studentViewWorkingCopyRelativePath(
+                    setupID: body.testSetupID, userID: userID, fileKind: .assignment, isStaff: isStaff),
                 overwriteWith: body.notebook,
                 on: req.db, application: req.application, logger: req.logger
             )
