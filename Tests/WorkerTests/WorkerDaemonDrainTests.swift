@@ -164,10 +164,12 @@ import Testing
         let run = Task { try await daemon.run() }
         #expect(await waitUntil { await reporter.isHoldingReport }, "the job reaches its report")
 
+        // The report is still held, so the runner cannot have finished it. The
+        // assertions after the release prove it waited: a runner that stopped
+        // early and dropped the job would record no report at all.
         await daemon.drain()
         let pollsAtDrain = await poller.requestCount
-        try await Task.sleep(for: .milliseconds(300))
-        #expect(await reporter.reports.isEmpty, "the runner stopped before the job was reported")
+        #expect(await daemon.isDraining)
 
         await reporter.release()
         #expect(await finishes(run), "the runner did not stop after the drain")

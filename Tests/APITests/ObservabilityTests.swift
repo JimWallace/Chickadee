@@ -2,6 +2,7 @@ import Fluent
 import Foundation
 import Logging
 import NIOFoundationCompat
+import Synchronization
 import Testing
 import VaporTesting
 
@@ -883,28 +884,23 @@ import VaporTesting
 
 // MARK: - Capturing log handler
 
-private final class CapturedRecordSink: @unchecked Sendable {
-    // @unchecked: every access to `stored` holds `lock`. A LogHandler is a
-    // value type copied into the Logger, so the shared mutable store has to
-    // sit behind a reference the handler captures.
+private final class CapturedRecordSink: Sendable {
+    // A LogHandler is a value type copied into the Logger, so the shared
+    // mutable store has to sit behind a reference the handler captures.
     struct Record {
         let level: Logger.Level
         let metadata: [String: String]
     }
 
-    private let lock = NSLock()
-    private var stored: [Record] = []
+    private let stored = Mutex<[Record]>([])
 
     func append(level: Logger.Level, metadata: Logger.Metadata) {
-        lock.lock()
-        defer { lock.unlock() }
-        stored.append(Record(level: level, metadata: metadata.mapValues { "\($0)" }))
+        let record = Record(level: level, metadata: metadata.mapValues { "\($0)" })
+        stored.withLock { $0.append(record) }
     }
 
     var records: [Record] {
-        lock.lock()
-        defer { lock.unlock() }
-        return stored
+        stored.withLock { $0 }
     }
 }
 

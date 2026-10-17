@@ -10,6 +10,9 @@ set -euo pipefail
 # longer a reason to allow one (#1927): every shared mutable state here is an
 # actor or a `Mutex`, which the compiler can check.
 #
+# The rule covers Tests/ too: a test helper shares state across concurrent
+# tests, which is where an unchecked race is hardest to see.
+#
 # Fluent `Model` classes are exempt. They must be classes, and Fluent's
 # property wrappers are the reason the conformance is unchecked. A model is
 # recognised by `Model` in the conformance list before the attribute.
@@ -32,7 +35,7 @@ while IFS= read -r hit; do
   if printf '%s' "$text" | grep -qE '(^|[:,])[[:space:]]*Model[[:space:]]*,.*@unchecked[[:space:]]+Sendable'; then continue; fi
   checked=$((checked + 1))
   offenders+="  $file:$line"$'\n'
-done < <(grep -rnF --include='*.swift' '@unchecked Sendable' Sources/ || true)
+done < <(grep -rnF --include='*.swift' '@unchecked Sendable' Sources/ Tests/ || true)
 
 if [ -n "$offenders" ]; then
   echo "ERROR: @unchecked Sendable outside a Fluent model, with or without a comment."

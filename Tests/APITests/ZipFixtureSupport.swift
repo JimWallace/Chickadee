@@ -57,6 +57,17 @@ func writeZipFixture(
     entries: [(String, String)],
     sourceLocation: SourceLocation = #_sourceLocation
 ) async throws {
+    try await writeZipFixture(
+        at: zipPath, dataEntries: entries.map { ($0.0, Data($0.1.utf8)) }, sourceLocation: sourceLocation)
+}
+
+/// `writeZipFixture(at:entries:)` for entries whose contents are bytes, such as
+/// a notebook or an image.
+func writeZipFixture(
+    at zipPath: String,
+    dataEntries entries: [(String, Data)],
+    sourceLocation: SourceLocation = #_sourceLocation
+) async throws {
     let root = FileManager.default.temporaryDirectory
         .appendingPathComponent("zip-fixture-\(UUID().uuidString)")
     try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
@@ -65,7 +76,7 @@ func writeZipFixture(
         let fileURL = root.appendingPathComponent(name)
         try FileManager.default.createDirectory(
             at: fileURL.deletingLastPathComponent(), withIntermediateDirectories: true)
-        try Data(contents.utf8).write(to: fileURL)
+        try contents.write(to: fileURL)
     }
     try? FileManager.default.removeItem(atPath: zipPath)
     try await writeZipFixture(of: root, to: zipPath, sourceLocation: sourceLocation)

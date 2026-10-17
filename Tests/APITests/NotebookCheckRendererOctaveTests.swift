@@ -4,6 +4,7 @@
 // both — plus the refusal behaviour for the five unsupported kinds. Runs on
 // the same harness as OctavePatternFamilyExecutionTests.
 
+import ChickadeeTestSupport
 import Core
 import Foundation
 import Testing

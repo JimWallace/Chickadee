@@ -50,7 +50,7 @@ import VaporTesting
         let setup = APITestSetup(
             id: id,
             manifest:
-                #"{"schemaVersion":1,"gradingMode":"worker","requiredFiles":[],"testSuites":[{"tier":"public","script":"tests.py"}],"timeLimitSeconds":10,"makefile":null}"#,
+                TestManifests.workerOnePythonSuite,
             zipPath: app.testSetupsDirectory + "\(id).zip",
             courseID: courseID
         )

@@ -23,7 +23,7 @@ import Vapor
     // assignment whose author chose "None" is refused, and that case has its own
     // test rather than being every test's accidental starting state.
     private let emptyManifest =
-        #"{"schemaVersion":1,"language":"python","languageDeclared":true,"testSuites":[],"timeLimitSeconds":10}"#
+        TestManifests.pythonDeclaredEmpty
 
     /// Course + enrolled instructor + setup with an EMPTY suite + assignment.
     /// Optionally seeds global `=` expressions so personalized cases can resolve.

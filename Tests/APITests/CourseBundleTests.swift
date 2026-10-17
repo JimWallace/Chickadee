@@ -69,7 +69,7 @@ import VaporTesting
         [0x50, 0x4B, 0x05, 0x06] + [UInt8](repeating: 0, count: 18)
 
     private static let workerManifestJSON =
-        #"{"schemaVersion":1,"gradingMode":"worker","requiredFiles":[],"testSuites":[],"timeLimitSeconds":10,"makefile":null}"#
+        TestManifests.workerEmptyExplicit
 
     /// Builds a minimal valid bundle ZIP: one test setup, one assignment, no submissions/results.
     private func makeMinimalBundleZip(

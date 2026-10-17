@@ -23,7 +23,7 @@ import VaporTesting
     }
 
     private static let manifest =
-        #"{"schemaVersion":1,"gradingMode":"worker","requiredFiles":[],"testSuites":[{"tier":"public","script":"tests.py"}],"timeLimitSeconds":10,"makefile":null}"#
+        TestManifests.workerOnePythonSuite
 
     private func candidate(
         id: String, target: String? = nil, queuedSecondsAgo: TimeInterval = 0

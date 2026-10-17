@@ -458,7 +458,7 @@ import VaporTesting
 
             let path = "/api/v1/worker/request"
             let secret = workerSecret  // String — Sendable
-            let testApp = app  // Application — @unchecked Sendable
+            let testApp = app  // Application — Sendable
 
             var responses: [TestResponse] = []
             try await withThrowingTaskGroup(of: TestResponse.self) { group in

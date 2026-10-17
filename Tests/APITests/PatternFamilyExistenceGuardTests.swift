@@ -7,6 +7,7 @@
 // opaque AttributeError tracebacks.  `.variableEquality` keeps self-guarding
 // each case, so it gets no guard.
 
+import ChickadeeTestSupport
 import Core
 import Fluent
 import Foundation

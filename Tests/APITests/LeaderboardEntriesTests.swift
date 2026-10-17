@@ -137,7 +137,7 @@ import VaporTesting
 
     @Test func anOrdinaryAssignmentAccumulatesNothing() async throws {
         try await withAssignmentRoutesApp { app in
-            let plain = #"{"schemaVersion":1,"testSuites":[],"timeLimitSeconds":10}"#
+            let plain = TestManifests.emptySuite
             let fx = try await fixture(app, prefix: "plain", manifest: plain)
             try await record(
                 app, setupID: fx.setupID, user: fx.a, submissionID: "plain_1",

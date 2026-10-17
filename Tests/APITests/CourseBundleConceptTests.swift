@@ -22,7 +22,7 @@ import VaporTesting
     }
 
     private static let workerManifestJSON =
-        #"{"schemaVersion":1,"gradingMode":"worker","requiredFiles":[],"testSuites":[],"timeLimitSeconds":10,"makefile":null}"#
+        TestManifests.workerEmptyExplicit
     private static let dummyZipBytes: [UInt8] = [0x50, 0x4B, 0x05, 0x06] + [UInt8](repeating: 0, count: 18)
 
     /// A course with one assignment tagged with `concept`.

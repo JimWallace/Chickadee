@@ -26,9 +26,9 @@ import Vapor
     }
 
     private let workerManifest =
-        #"{"schemaVersion":1,"gradingMode":"worker","testSuites":[],"timeLimitSeconds":10}"#
+        TestManifests.workerEmpty
     private let browserManifest =
-        #"{"schemaVersion":1,"gradingMode":"browser","testSuites":[],"timeLimitSeconds":10}"#
+        TestManifests.browserEmpty
 
     private func fixture(
         on app: Application, manifest: String, enroll: Bool = true

@@ -11,7 +11,7 @@ import Testing
 @testable import APIServer
 
 @Suite struct GitHubSubmissionManifestTests {
-    static let base = #"{"schemaVersion":1,"testSuites":[],"timeLimitSeconds":10}"#
+    static let base = TestManifests.emptySuite
 
     private func decode(_ json: String) throws -> TestProperties {
         try JSONDecoder().decode(TestProperties.self, from: Data(json.utf8))

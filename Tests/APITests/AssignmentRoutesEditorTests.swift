@@ -60,22 +60,7 @@ import VaporTesting
     /// pattern in ScriptEditRoutesTests so the same skip-on-missing-tooling
     /// guard applies).
     private func makeZipAt(zipPath: String, entries: [(name: String, content: Data)]) async throws {
-        // Missing zip/unzip is platform-expected -> silent skip (the testing
-        // conventions reserve Issue.record for broken setup, not this).
-        guard FileManager.default.fileExists(atPath: "/usr/bin/zip"),
-            FileManager.default.fileExists(atPath: "/usr/bin/unzip")
-        else { return }
-
-        let tempDir = FileManager.default.temporaryDirectory
-            .appendingPathComponent("chickadee-editor-zip-\(UUID().uuidString)")
-        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
-        defer { try? FileManager.default.removeItem(at: tempDir) }
-
-        for entry in entries {
-            try entry.content.write(to: tempDir.appendingPathComponent(entry.name))
-        }
-        let run = try await runTool(["zip", "-q", "-r", zipPath, "."], workingDirectory: tempDir)
-        #expect(run.exitCode == 0, "zip should succeed")
+        try await writeZipFixture(at: zipPath, dataEntries: entries.map { ($0.name, $0.content) })
     }
 
     @discardableResult
