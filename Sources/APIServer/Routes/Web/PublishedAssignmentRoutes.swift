@@ -62,6 +62,9 @@ struct PublishedAssignmentRoutes: RouteCollection {
         // `set_time_limit` MCP tool (no close / re-validate / retest).
         r.put(":assignmentID", "time-limit", use: putTimeLimit)
 
+        // Pins a hand-written test to a notebook cell (NB7). Authoring only.
+        r.put(":assignmentID", "suite-anchor", use: putSuiteAnchor)
+
         // Suite-section CRUD — per-op, form-POST + redirect.
         r.post(":assignmentID", "suite-sections", use: createSuiteSection)
         r.post(":assignmentID", "suite-sections", "reorder", use: reorderSuiteSections)

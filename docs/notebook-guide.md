@@ -17,7 +17,7 @@ The resolver uses the first rule that applies:
 
 | Rule | Anchor |
 |---|---|
-| 1. Pinned | The stored override of the item. NB7 writes it. |
+| 1. Pinned | The stored override of the item: `TestSuiteEntry.anchor`, which the pin writes ("The margin cards" below). |
 | 2. Notebook check | The `variable` field of the check (`function_exists`, `variable_exists`, the three `data_frame_*` kinds, `series_equality`, `numeric_array_close`). |
 | 3. Pattern family | `functionName`. For `variable_equality`, the variable that the case of the script reads. |
 | 4. Script test | The identifiers in the script that the solution defines. One match is that name. If there are more matches, the first one in the notebook is used, and the anchor is `ambiguous`. If there is no match, the next rule applies. |
@@ -153,9 +153,48 @@ draws it, and the margin cards (NB7) read it.
 | `unlinked` | The items that link to no cell, from any section. |
 
 The anchors use the rules in "Anchors" above. They read the solution, or the
-starter when there is no solution yet. `anchor.source` is `auto`; NB7 adds
-`pinned`. The `solution` result comes from the last validation run, and is null
+starter when there is no solution yet. `anchor.source` is `pinned` for a
+pinned item (rule 1), else `auto`. The `solution` result comes from the last validation run, and is null
 before one. NB8 adds the starter run.
+
+## The margin cards
+
+In the workbench (NB7, design frame 18c), the extension draws the suite beside
+the notebook. `Public/workbench-rail.js` sends the outline with
+`chickadee:set-suite`, and sends it again when the editor reloads.
+
+- **A section card** sits beside the section's `## ` heading. It shows the
+  label, the points and the number of checks, and a ⋯ menu: Rename, Add check
+  and Delete. Each one opens the section in the suite sheet and starts that
+  action there. Delete asks before it acts.
+- **A test card** sits beside the cell that the test links to. A card that
+  fails on the solution is red, and its cell has a red outline. Under the
+  cards are "Linked by" with the names, and "+ Add check for this cell".
+- **A selected card** opens. It shows the result detail, the script source for
+  a hand-written test, and Edit test, Run again and Pin to a cell. A click on
+  a rail row selects the card (`chickadee:select-item`), and a click on a card
+  marks the rail row.
+- **Below 1100px** of editor width, the cards fold into one strip for each
+  cell: "3 checks · 3 pts", then "1 fails on the solution" when one does.
+
+### Pin to a cell
+
+Pin to a cell starts a pick mode. The next click on a code cell pins the test
+to the first name that the cell defines. Escape or a click on a cell that
+defines no name stops it. `PUT /instructor/:id/suite-anchor` with
+`{script, anchor}` writes `TestSuiteEntry.anchor`; `anchor: null` clears it.
+The route is for TAs and above.
+
+- Only a **hand-written** test can be pinned. The route refuses a test that a
+  pattern family or a notebook check generates, because the generator writes
+  its anchor (rules 2 and 3), and a regeneration would lose the pin.
+- A suite save keeps each script's pin (`makeWorkerManifestJSON(preserving:…)`
+  in `Sources/APIServer/Helpers/ManifestFileHelpers.swift`).
+- The runner never receives the pin: the `RunnerManifest` init
+  (`Sources/Core/RunnerManifest.swift`) removes it. Grading does not read it.
+
+`Tools/editor-smoke-test/workbench-margin-check.mjs` checks the cards, the
+selection, the fold and the pin in a real browser.
 
 ## When an attempt is graded
 

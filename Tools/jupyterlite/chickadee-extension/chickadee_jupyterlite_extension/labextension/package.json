@@ -37,7 +37,7 @@
     "extension": true,
     "outputDir": "chickadee_jupyterlite_extension/labextension",
     "_build": {
-      "load": "static/remoteEntry.f9e8915770092d58d325.js",
+      "load": "static/remoteEntry.7813a76aaa26e8e8ef1b.js",
       "extension": "./extension",
       "style": "./style"
     }

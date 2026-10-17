@@ -13,7 +13,8 @@ struct InstructorSuiteOutlineBuilder {
     /// The solution's definitions (or the starter's, when there is no
     /// solution yet), which decide each item's anchor.
     let notebook: NotebookDefinitionScan
-    /// The source of each hand-written script, by filename.
+    /// The source of each script, by filename. The anchoring reads only a
+    /// hand-written script's.
     let scriptSources: [String: String]
     /// The assignment's `validationStatus`.
     let validationStatus: String?
@@ -86,7 +87,9 @@ struct InstructorSuiteOutlineBuilder {
             tier: entry.tier.rawValue,
             points: entry.points,
             anchor: anchor(for: entry),
-            solution: outcome.map(runResult))
+            solution: outcome.map(runResult),
+            generatorID: entry.generatedBy ?? entry.generatedByCheck,
+            source: scriptSources[entry.script])
     }
 
     private func checkKind(of entry: TestSuiteEntry) -> String? {
@@ -110,7 +113,9 @@ struct InstructorSuiteOutlineBuilder {
         case .section: kind = "section"
         case .unlinked: return nil
         }
-        return InstructorSuiteOutline.Anchor(kind: kind, name: name, source: "auto", ambiguous: resolved.ambiguous)
+        return InstructorSuiteOutline.Anchor(
+            kind: kind, name: name, source: resolved.rule == .pinned ? "pinned" : "auto",
+            ambiguous: resolved.ambiguous)
     }
 
     private func runResult(_ outcome: TestOutcome) -> InstructorSuiteOutline.RunResult {

@@ -245,7 +245,15 @@ extension TestProperties {
     ) throws {
         // Topologically sorted so the runner can process dependencies with a
         // single linear pass (parents always appear before children).
-        testSuites = try topologicallySorted(entries).map(TestSuiteEntry.init(configured:))
+        // An editor row carries no anchor, so each script keeps the one it
+        // had (NB7): only the pin route sets or clears it.
+        let anchors = Dictionary(
+            testSuites.compactMap { e in e.anchor.map { (e.script, $0) } }, uniquingKeysWith: { first, _ in first })
+        testSuites = try topologicallySorted(entries).map(TestSuiteEntry.init(configured:)).map { entry in
+            var entry = entry
+            entry.anchor = entry.anchor ?? anchors[entry.script]
+            return entry
+        }
         testItems = orderedTestItems(
             testSuites: entries, patternFamilies: patternFamilies, notebookChecks: notebookChecks)
     }

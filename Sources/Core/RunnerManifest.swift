@@ -27,6 +27,8 @@
 //   an older runner predates would fail its decode.
 // - Achievements, awards, GitHub settings and `minimumRunnerVersion`.  These
 //   are server-side.
+// - A suite entry's pinned `anchor`, which only places the test in the
+//   authoring view.
 
 /// The manifest fields that a runner reads to grade a submission.
 public struct RunnerManifest: Codable, Equatable, Sendable {
@@ -58,7 +60,12 @@ public struct RunnerManifest: Codable, Equatable, Sendable {
         gradingMode = manifest.gradingMode
         submissionMode = manifest.submissionMode
         requiredFiles = manifest.requiredFiles
-        testSuites = manifest.testSuites
+        // An entry's pinned `anchor` is authoring UI, not grading.
+        testSuites = manifest.testSuites.map { entry in
+            var entry = entry
+            entry.anchor = nil
+            return entry
+        }
         timeLimitSeconds = manifest.timeLimitSeconds
         makefile = manifest.makefile
         starterNotebook = manifest.starterNotebook

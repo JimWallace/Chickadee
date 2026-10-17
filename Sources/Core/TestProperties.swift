@@ -94,6 +94,10 @@ public struct TestSuiteEntry: Codable, Equatable, Sendable {
     // the pre-feature behaviour; generated entries carry the value resolved
     // from their family / case / check spec.
     public var failureDetail: FailureDetail?
+    // The name of the notebook cell this test is pinned to (notebook views
+    // NB7, docs/notebook-guide.md "Anchors", rule 1). nil = the anchor is
+    // worked out from the test. Authoring UI only: grading never reads it.
+    public var anchor: String?
 
     public init(
         tier: TestTier, script: String, name: String? = nil,
@@ -103,7 +107,8 @@ public struct TestSuiteEntry: Codable, Equatable, Sendable {
         sectionID: String? = nil,
         hint: String? = nil,
         timeLimitSeconds: Int? = nil,
-        failureDetail: FailureDetail? = nil
+        failureDetail: FailureDetail? = nil,
+        anchor: String? = nil
     ) {
         self.tier = tier
         self.script = script
@@ -116,12 +121,13 @@ public struct TestSuiteEntry: Codable, Equatable, Sendable {
         self.hint = hint
         self.timeLimitSeconds = timeLimitSeconds
         self.failureDetail = failureDetail
+        self.anchor = anchor
     }
 
     // Both halves of Codable are written by hand, so the keys are declared.
     private enum CodingKeys: String, CodingKey {
         case tier, script, name, dependsOn, points, generatedBy, generatedByCheck
-        case sectionID, hint, timeLimitSeconds, failureDetail
+        case sectionID, hint, timeLimitSeconds, failureDetail, anchor
     }
 
     public init(from decoder: any Decoder) throws {
@@ -137,6 +143,7 @@ public struct TestSuiteEntry: Codable, Equatable, Sendable {
         hint = try c.decodeIfPresent(String.self, forKey: .hint)
         timeLimitSeconds = try c.decodeIfPresent(Int.self, forKey: .timeLimitSeconds)
         failureDetail = try c.decodeIfPresent(FailureDetail.self, forKey: .failureDetail)
+        anchor = try c.decodeIfPresent(String.self, forKey: .anchor)
     }
 
     /// Writes only what differs from the defaults `init(from:)` fills in, so
@@ -162,6 +169,7 @@ public struct TestSuiteEntry: Codable, Equatable, Sendable {
         if let failureDetail, failureDetail != .full {
             try c.encode(failureDetail, forKey: .failureDetail)
         }
+        try encodeIfNonEmpty(anchor, forKey: .anchor, into: &c)
     }
 
     private func encodeIfNonEmpty(

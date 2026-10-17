@@ -102,12 +102,14 @@ public enum NotebookTestAnchoring {
     /// - Parameters:
     ///   - scriptSource: the entry's script, for a hand-written test. Nil when
     ///     it could not be read, which skips rule 4.
-    ///   - pinned: the entry's stored anchor override, if any.
+    ///   - pinned: an anchor override. When nil, the entry's own stored
+    ///     `anchor` is used.
     public static func request(
         for entry: TestSuiteEntry, in manifest: TestProperties,
         scriptSource: String? = nil, pinned: String? = nil
     ) -> NotebookAnchorRequest {
-        var request = NotebookAnchorRequest(pinned: nonEmpty(pinned))
+        // A pin passed in wins over the entry's own stored pin.
+        var request = NotebookAnchorRequest(pinned: nonEmpty(pinned) ?? nonEmpty(entry.anchor))
         request.sectionName = entry.sectionID.flatMap { id in manifest.sections.first { $0.id == id }?.name }
         if let checkID = entry.generatedByCheck {
             if let check = manifest.notebookChecks.first(where: { $0.id == checkID }) {

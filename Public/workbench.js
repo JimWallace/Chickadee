@@ -203,6 +203,9 @@
         if (close) close.focus();
     }
 
+    // workbench-rail.js opens the suite sheet for a card's Edit test.
+    api.openSheet = function (name) { setRailOpen(false); openSheet(name, null); };
+
     function closeSheet() {
         var sheet = sheetPanel();
         if (!sheet || sheet.hidden) return;

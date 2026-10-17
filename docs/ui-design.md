@@ -819,6 +819,21 @@ duplicate.
   link and a sentence, not one measured value.  `.outline-caption` is the
   small uppercase label of this one component; the kickers of other pages
   belong to their own cards.
+- **`.ck-` margin classes** (the editor extension, not `styles.css`) — the
+  workbench's test cards beside each cell (design frame 18c,
+  `docs/notebook-guide.md` "The margin cards"), styled in
+  `Tools/jupyterlite/chickadee-extension/style/index.css`, because the editor
+  document cannot load this stylesheet.  A `.ck-section-card` sits beside a
+  `## ` heading, with a `.ck-section-menu` (a `<details>` that closes on an
+  outside click and on Escape).  A `.ck-card` sits beside a cell, with a
+  `.ck-glyph`, a `.ck-issue` line and, when selected, `.ck-action` buttons;
+  `.ck-add` follows the cards.  Below 1100px of editor width the cards fold
+  into one `.ck-strip` button for each cell, with `aria-expanded`.  The glyph
+  is the rail's `.outline-glyph` under a second name: the same characters
+  (✓ pass, ✗ fail, ○ none) and the same status words.  The card has no
+  `starter` or `written` state, because a card shows a test's result on the
+  solution, not a student's task.  The strip is a button, not a
+  `<details>`, because it toggles the cards that are already drawn beside it.
 - **`.log-payload`** — the `.detail-grid` inside a log/event row's payload
   disclosure (the audit log, alert firings).  A log row shows when, who, what
   and how it went; everything else — category, target, remote address,
