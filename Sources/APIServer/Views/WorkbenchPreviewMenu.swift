@@ -20,8 +20,6 @@ struct WorkbenchPreviewMenu: HTML {
 
     var body: some HTML {
         details(.class("ext-details popup-anchor js-wb-preview-menu")) {
-            // The title holds the whole name of a long one, which the button
-            // cuts; with no preview open there is nothing more to say.
             // The title holds the whole name of a long one, which the label
             // cuts; with no preview open there is nothing more to say. The
             // caret is hidden from a screen reader, as in the site nav, and

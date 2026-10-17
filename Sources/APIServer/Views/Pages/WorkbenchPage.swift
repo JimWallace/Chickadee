@@ -96,9 +96,6 @@ struct WorkbenchPage: HTML {
         }
     }
 
-    /// The notebook body, or the stand-in when the assignment has no notebook
-    /// yet. One notebook at a time: switching file or view swaps this in place,
-    /// looked up in `data-wb-pane-urls`.
     /// The pane's view key: `template`, `personalized`, or `student:<token>`
     /// for a preview. workbench.js reads it to know what is open.
     private func paneView(_ notebook: NotebookBody) -> String {
@@ -106,6 +103,9 @@ struct WorkbenchPage: HTML {
         return notebook.isTemplateView ? "template" : "personalized"
     }
 
+    /// The notebook body, or the stand-in when the assignment has no notebook
+    /// yet. One notebook at a time: switching file or view swaps this in place,
+    /// looked up in `data-wb-pane-urls`.
     @HTMLBuilder private var notebookPane: some HTML {
         if let notebook {
             div(
