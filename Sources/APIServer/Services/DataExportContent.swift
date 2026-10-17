@@ -54,6 +54,9 @@ struct DataExportProfile: Codable, Sendable {
     /// The wardrobe items the student has earned (docs/student-wardrobe.md,
     /// W3), oldest first; nil when there is none.
     var wardrobeUnlocks: [DataExportWardrobeUnlock]?
+    /// The achievements the student has earned (docs/achievement-rewards.md),
+    /// or nil when there are none.
+    var achievementAwards: [DataExportAchievementAward]?
     /// The linked GitHub account (docs/github-submissions.md slice 2), or nil
     /// when none is linked.
     let githubAccount: DataExportGitHubAccount?
@@ -75,6 +78,18 @@ struct DataExportWardrobeUnlock: Codable, Sendable {
     /// "expression.chirp".
     let item: String
     let unlockedAt: Date?
+}
+
+struct DataExportAchievementAward: Codable, Sendable {
+    /// "assignment".
+    let level: String
+    /// The test setup ID at the assignment level.
+    let owner: String
+    let achievementID: String
+    let submissionID: String?
+    let label: String
+    let detail: String?
+    let earnedAt: Date?
 }
 
 struct DataExportGitHubCourseRepository: Codable, Sendable {
@@ -213,6 +228,12 @@ func gatherDataExportContent(
     let wardrobeUnlocks = try await APIWardrobeUnlock.query(on: db).filter(\.$userID == userID)
         .sort(\.$unlockedAt, .ascending).all()
         .map { DataExportWardrobeUnlock(item: $0.item, unlockedAt: $0.unlockedAt) }
+    let achievementAwards = try await AchievementAwardStore.awards(for: userID, on: db)
+        .map {
+            DataExportAchievementAward(
+                level: $0.level, owner: $0.ownerID, achievementID: $0.achievementID, submissionID: $0.submissionID,
+                label: $0.label, detail: $0.detail, earnedAt: $0.earnedAt)
+        }
     let courseRepositories = try await APIGitHubCourseRepository.query(on: db).filter(\.$userID == userID).all()
         .map {
             DataExportGitHubCourseRepository(
@@ -241,6 +262,7 @@ func gatherDataExportContent(
             previousAvatarHandle: user.avatarPreviousHandle,
             avatarHatches: avatarHatches.isEmpty ? nil : avatarHatches,
             wardrobeUnlocks: wardrobeUnlocks.isEmpty ? nil : wardrobeUnlocks,
+            achievementAwards: achievementAwards.isEmpty ? nil : achievementAwards,
             githubAccount: githubLink.map {
                 DataExportGitHubAccount(githubUserID: $0.githubUserID, login: $0.githubLogin, linkedAt: $0.linkedAt)
             },
@@ -593,8 +615,9 @@ func dataExportReadme(username: String, generatedAt: Date) -> String {
       student ID, sign-in provider, account timestamps, the choices
       behind your generated avatar and its handle, the avatar and handle
       before your last hatch, when you hatched a new one and the
-      species each hatch came from and gave you, and the wardrobe items
-      you have earned and when. Passwords are
+      species each hatch came from and gave you, the wardrobe items
+      you have earned and when, and the achievements you have earned,
+      with the submission that earned each one and when. Passwords are
       stored only as one-way hashes and are never included.
     - `enrollments.json` — the courses you are enrolled in, with each
       course's term, your role in each, when you enrolled, and the

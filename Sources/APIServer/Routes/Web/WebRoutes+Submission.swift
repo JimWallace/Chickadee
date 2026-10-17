@@ -424,7 +424,8 @@ extension WebRoutes {
 
         let badges = try await submissionBadges(
             req: req, submission: submission, displayCollection: displayCollection,
-            setupProps: setupProps, setup: setup, processed: processed)
+            setupProps: setupProps, setup: setup, processed: processed,
+            awardRecipient: awardRecipient(viewer: user, submission: submission, isStaff: isStaff))
 
         let sectionedOutcomes = buildSectionedOutcomes(
             outcomes: processed.outcomes,
@@ -601,19 +602,33 @@ extension WebRoutes {
         processed.earnedPoints = formatPoints(bonused)
     }
 
+    /// The student whose award ledger this page view writes to, or nil. Only
+    /// the student's own view of their own student submission writes
+    /// (docs/achievement-rewards.md, S1): a staff view writes nothing, so
+    /// reading a student's work never changes the student's record.
+    private func awardRecipient(viewer: APIUser, submission: APISubmission, isStaff: Bool) -> UUID? {
+        guard !isStaff, submission.kind == APISubmission.Kind.student,
+            let viewerID = viewer.id, submission.userID == viewerID
+        else { return nil }
+        return viewerID
+    }
+
     /// Assembles the badge strip for one submission: the badges its own
     /// result earns (`badgesEarnedBySubmission`, the same call the dashboard
     /// and the staff per-student page make), then the class-wide record
     /// badges this submission holds.  Individual badges read every tier, so a
     /// secret-test badge works without revealing the test.  A submission with
-    /// no result yet earns none.
+    /// no result yet earns none.  The earned badges are stored in
+    /// `awardRecipient`'s award ledger, when there is one; a failed write
+    /// does not stop the page.
     private func submissionBadges(
         req: Request,
         submission: APISubmission,
         displayCollection: TestOutcomeCollection?,
         setupProps: TestProperties?,
         setup: APITestSetup?,
-        processed: ProcessedCollection
+        processed: ProcessedCollection,
+        awardRecipient: UUID?
     ) async throws -> [AchievementBadge] {
         let subID = try submission.requireID()
         let classAchievements = try await APIClassAchievement.query(on: req.db)
@@ -631,6 +646,11 @@ extension WebRoutes {
         let earned =
             displayCollection == nil
             ? [] : badgesEarnedBySubmission(processed.badgeContext, props: setupProps, standings: standings)
+        if let awardRecipient {
+            await AchievementAwardStore.recordOrLog(
+                earned, earnedBy: awardRecipient, testSetupID: submission.testSetupID, submissionID: subID,
+                on: req.db, logger: req.logger)
+        }
         return earned + classRecordBadges(classAchievements, props: setupProps)
     }
 
