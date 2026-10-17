@@ -9,6 +9,13 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.697] - 2026-10-17
+
+### Changed
+
+- **The assignment workbench is one notebook with the suite beside it.** The two panes and the splitter are gone. An app bar holds the title, the due date and the language, a Solution · Starter switch, the validation state and Save & validate. A rail on the left lists the test suite by section, with each test's result on the solution; a click shows the test's cell in the notebook. The assignment's settings (Details, Files, Inputs, Student options, Activity, Achievements and the full suite table) open in a panel over the notebook, and they save without reloading the notebook. Under 1300px the rail is behind a ☰ Suite button. The standalone edit page is unchanged. See `docs/notebook-guide.md`, "The instructor's suite outline".
+
+
 ## [0.5.696] - 2026-10-17
 
 ### Added
