@@ -9,6 +9,13 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.703] - 2026-10-17
+
+### Changed
+
+- **Staff test-submit from the student view again.** The notebook page as the dashboard links it is now the same for everyone: Submit, the task guide, upload and reset, and no "Save to assignment". Staff work there in a copy of their own, apart from the copy that a save writes back, so a test attempt never reaches the starter. Editing is on the editing view (`?edit=1`, which the instructor area links to) and in the workbench, with Save and no Submit. This replaces the change that took Submit away from staff on the notebook page.
+
+
 ## [0.5.702] - 2026-10-17
 
 ### Changed
