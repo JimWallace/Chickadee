@@ -15,7 +15,7 @@ states what it adds and what proves it.
 | 1 | Core: `DatasetSource` and `DatasetSliceScope` on `DatasetSpec`; `DatasetSeedDerivation`; the data dictionary model | built |
 | 2 | Server: the `course_datasets` and `course_dataset_versions` tables, the blob-backed store, `CourseDatasetService` | built |
 | 3 | Attachment: copy a pinned version into the setup zip and record the source; promote a support file into the library; detect a newer version | built |
-| 4 | Course cohort: the per-(student, course) seed, and `DatasetResolver` choosing the seed per spec at every delivery path | proposed |
+| 4 | Course cohort: the per-(student, course) seed, and `DatasetResolver` choosing the seed per spec at every delivery path | built |
 | 5 | Instructor surfaces: the Datasets tab, the Files-panel picker and the scope control | proposed |
 | 6 | Student surfaces: the course Data page, the assignment-page dataset line, the "my rows" download | proposed |
 | 7 | MCP: `list_datasets`, `get_dataset`, `create_dataset`, `update_dataset`, `add_dataset_version`, `attach_dataset`, `detach_dataset`; `set_dataset` gains `scope` | proposed |
@@ -347,31 +347,56 @@ Tests: `CourseDatasetAttachmentTests`, `DatasetAttachedFileDoorTests` and
 `DatasetLibraryInvariantTests` in `APITests`; `DatasetAttachmentProjectionTests`
 and `DatasetDetachProjectionTests` in `CoreTests`.
 
-### 4.4 The course cohort (slice 4)
+### 4.4 The course cohort (slice 4, built)
 
-`APICoursePersonalizationSeed` (`user_id`, `course_id`, `seed_value`, unique
-on the pair) and `CourseSeedStore.ensureSeed` with the same contract and the
-same "never inside a transaction" rule as `AssignmentSeedStore`.
+`APICoursePersonalizationSeed` (`course_personalization_seeds`: `user_id`,
+`course_id`, `seed_value`, unique on the pair, both keys cascading) and
+`CourseSeedStore`, with the same contract and the same "never inside a
+transaction" rule as `AssignmentSeedStore`. The table is denied to the
+least-privilege MCP role by omission; the MCP preview reads it on the owner
+pool, like the assignment seed.
 
-Every `DatasetResolver` call site passes the course seed. The sites, and where
-each gets the seed:
+`CourseSeedStore.seedIfNeeded(manifest:userID:courseID:on:)` is the one
+question every path asks. It returns nil, and writes no row, unless the
+manifest has a course-scoped spec with a source
+(`TestProperties.hasCourseScopedDatasets`), so an assignment without one never
+touches the table.
 
 | Site | Course seed from |
 |---|---|
-| `WorkerJobRoutes.buildJobPayload` | `CourseSeedStore.ensureSeed` for the submitter; cached on `SubmissionMaterialization` beside `seedHex` as `courseSeedHex` |
-| `BrowserRunnerRoutes` seed endpoint | the same store, the same caching |
-| `NotebookWorkingCopyStore.writeDatasetFiles` | the store; the fingerprint in `DatasetMaterializationCache` folds the course seed in |
-| `PersonalizationSubstitution.resolve` (the overlay) | passed down by the caller that already has the assignment seed |
-| `RunnerValidationService` variants | derived: variant `i` uses `preflightSeed(i)` for both seeds, so a variant stays one synthetic student |
-| `datasetDiagnosticsReports` | the preflight seeds, as today; scope does not change the estimate formulas (overlap is a function of selection) |
+| `WorkerJobRoutes.buildJobPayload` | the materialization's pinned `courseSeedHex` when there is one, else `seedIfNeeded` for the submitter |
+| `BrowserRunnerRoutes` seed endpoint | `seedIfNeeded` for the caller |
+| `NotebookWorkingCopyStore.writeDatasetFiles` and the notebook substitution | `seedIfNeeded` for the student |
+| `materializeValidationGrading` | a synthetic variant uses its variant seed for both seeds; a spare pins the student's own course seed (`variantCourseSeedHex`); a solution run uses the instructor's |
+| MCP `preview_personalization` | a provided seed stands for one synthetic student and is its course seed too; otherwise the acting user's, on the owner pool |
+| `datasetDiagnosticsReports` | unchanged: the preflight seeds, because scope changes which seed picks the rows, not how many rows two students share |
+
+`SubmissionMaterialization` gains `courseSeedHex`, decoded as nil from rows
+written before it.
+
+**The older signatures stay, and nothing in the server uses them.**
+`DatasetResolver.resolve`, `PersonalizationSubstitution.resolve` and
+`gradingInputs` keep a form without the course seed, because existing tests
+call it. `DatasetCourseSeedCallSiteTests` scans `Sources/APIServer` and fails
+when any call omits the `courseSeedHex:` label, since such a call would give
+a course-scoped dataset per-assignment rows without an error.
+
+**The editor fingerprint now folds the whole spec.** It used to fold only the
+kind and the sample size, so a stratum or transform edit left a student's
+editor copy stale until something else changed. It now folds each spec's
+stable encoding and both seeds.
+
+**A dataset-only primary solution run still grades the pool.** Its
+validation submission carries no assignment seed, as before this work, so it
+receives the file as shipped. The synthetic variants are what grade
+per-student material, now including the course cohort.
 
 There is no staff re-seed action today, for the assignment seed or for the
 course seed, and this plan adds none. A seed is issued once and kept.
 
-Tests: `MaterializePersonalizedFilesTests` and the browser-runner route tests
-gain a course-scoped case; two assignments attaching the same slug with the
-same sample give one student the same rows (`PersonalizationDatasetSliceTests`);
-a validation variant under course scope grades the variant's rows.
+Tests: `CourseCohortDeliveryTests` (the store, the editor across two
+assignments, the stratum-edit fingerprint, a claimed variant job) and
+`DatasetCourseSeedCallSiteTests` in `APITests`.
 
 ### 4.5 Instructor surfaces (slice 5)
 

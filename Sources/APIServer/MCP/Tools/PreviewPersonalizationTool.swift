@@ -122,9 +122,11 @@ struct PreviewPersonalizationTool: ContentTool {
             input: input, assignment: assignment, manifest: manifest, context: context)
 
         let supportDir = context.request.application.testSetupsDirectory + "shared/\(assignment.testSetupID)/"
+        let courseSeedHex = try await resolveCourseSeed(
+            input: input, seedHex: seedHex, setup: setup, manifest: manifest, context: context)
         let resolution = await PersonalizationSubstitution.resolve(
-            manifest: manifest, seedHex: seedHex, supportFilesDirectory: supportDir,
-            language: AssignmentLanguage.resolve(manifest: manifest))
+            manifest: manifest, seedHex: seedHex, courseSeedHex: courseSeedHex,
+            supportFilesDirectory: supportDir, language: AssignmentLanguage.resolve(manifest: manifest))
 
         let placeholders = await Self.placeholderAudit(
             manifest: manifest, setup: setup, resolution: resolution)
@@ -165,6 +167,19 @@ struct PreviewPersonalizationTool: ContentTool {
         // this previews is still read through the `.mcp`-backed paths.
         return try await AssignmentSeedStore.ensureSeed(
             userID: userID, assignmentID: assignmentID, on: context.mainDB)
+    }
+
+    /// The course seed for course-scoped datasets: a provided seed stands for
+    /// one synthetic student, so it is their course seed too; otherwise the
+    /// acting user's own, on the owner pool like the assignment seed.
+    private func resolveCourseSeed(
+        input: Input, seedHex: String?, setup: APITestSetup, manifest: TestProperties, context: ToolContext
+    ) async throws -> String? {
+        guard manifest.hasCourseScopedDatasets else { return nil }
+        if input.seedHex != nil { return seedHex }
+        let actingUser = try await context.requireEligibleSubject()
+        return try await CourseSeedStore.seedIfNeeded(
+            manifest: manifest, userID: actingUser.id, courseID: setup.courseID, on: context.mainDB)
     }
 
     private static func placeholderAudit(

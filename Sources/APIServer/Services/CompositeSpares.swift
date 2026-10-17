@@ -58,6 +58,13 @@ enum CompositeSpares {
         else { throw RequestError.inFlight }
 
         let seed = try await AssignmentSeedStore.ensureSeed(userID: userID, assignmentID: assignmentID, on: db)
+        // The student's course cohort seed, pinned beside the assignment seed
+        // so a course-scoped dataset gives the spare the student's own rows.
+        var courseSeed: String?
+        if let manifest = setup.decodedManifest() {
+            courseSeed = try await CourseSeedStore.seedIfNeeded(
+                manifest: manifest, userID: userID, courseID: setup.courseID, on: db)
+        }
         // Two students can choose one hole at the same moment. The loser
         // takes the next hole.
         for _ in 0..<4 {
@@ -66,7 +73,8 @@ enum CompositeSpares {
                     .first
             else { throw RequestError.noHole }
             let job = Job(
-                assignmentID: assignmentID, setupID: setupID, userID: userID, slot: slot, source: source, seed: seed)
+                assignmentID: assignmentID, setupID: setupID, userID: userID, slot: slot, source: source, seed: seed,
+                courseSeed: courseSeed)
             if try await queue(job, app: app, on: db) { return slot }
         }
         throw RequestError.noHole
@@ -109,6 +117,7 @@ enum CompositeSpares {
         let slot: Int
         let source: APISubmission
         let seed: String
+        let courseSeed: String?
     }
 
     /// Queues one spare job for `job.slot`. False when another request took
@@ -123,7 +132,8 @@ enum CompositeSpares {
         // template to substitute, only the seed and the inputs to pin.
         let materialized = await materializeValidationGrading(
             submission: submission, setupID: job.setupID, templateNotebookData: Data(),
-            testSetupsDirectory: app.testSetupsDirectory, app: app, on: db, variantSeedHex: job.seed)
+            testSetupsDirectory: app.testSetupsDirectory, app: app, on: db, variantSeedHex: job.seed,
+            variantCourseSeedHex: job.courseSeed)
         do {
             // With no materialization the job would grade with no seed.
             guard submission.materializationJSON != nil else { throw RequestError.unavailable }

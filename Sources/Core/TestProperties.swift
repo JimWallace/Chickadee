@@ -404,6 +404,12 @@ public struct TestProperties: Codable, Equatable, Sendable {
         datasets.first { $0.file == filename && $0.source != nil }
     }
 
+    /// True when a dataset is keyed to the student's course cohort. Only then
+    /// does a delivery path need the per-(student, course) seed.
+    public var hasCourseScopedDatasets: Bool {
+        datasets.contains { $0.scope == .course && $0.source != nil }
+    }
+
     /// Filenames the instructor has designated as **grader-only** (option B —
     /// see docs/datasets.md): bundled in the test setup so the native worker's
     /// grading scripts can read them, but withheld from every student-facing
