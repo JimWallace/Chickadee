@@ -9,6 +9,13 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.707] - 2026-10-17
+
+### Changed
+
+- **APITests is grouped by feature.** The 475 suites that sat in one flat directory now live in 17 feature folders, such as `Assignments`, `Grading` and `Guards`. The top level holds only the shared helpers, and `APITestsLayoutTests` fails on a suite placed there. No test changed except for its path.
+
+
 ## [0.5.706] - 2026-10-17
 
 ### Security
