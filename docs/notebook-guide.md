@@ -231,6 +231,34 @@ The route is for TAs and above.
 `Tools/editor-smoke-test/workbench-margin-check.mjs` checks the cards, the
 selection, the fold and the pin in a real browser.
 
+## Preview as student
+
+The workbench's view switch has "Preview as student ▾" (NB6b): a menu of the
+course's students. A student opens the assignment notebook as that student
+gets it, with their seed, read-only, with their task headers in the state with
+no attempt. The menu button then names the student.
+
+- **The URL** is the workbench with `&as=<urlToken>`, the opaque token the
+  staff submission pages use, so no username reaches a request log. A token
+  that names no student of the course is a 404. Staff are not in the menu.
+- **The notebook** is the starter, personalized with the student's seed
+  (`personalizedStarterNotebook`), written to a preview file in the viewer's
+  own directory (`users/<viewer>/<setup>/preview-<token>.ipynb`) and opened in
+  its own JupyterLite workspace. It never touches the student's working copy,
+  submissions or participation.
+- **The seed** is the one write for the student: if they have none yet,
+  `AssignmentSeedStore.ensureSeed` creates it. It is the seed they then get
+  when they open the lab, so the preview shows their real values.
+- **The guide** is `GET /instructor/:assignmentID/preview-guide.json?as=<token>`
+  (TA and above): the student's guide with no attempt. The editor draws the
+  task headers and the checks lines; there is no outline beside it, and no
+  test cards.
+- **No Submit and no save.** The notebook is read-only.
+
+`Tools/editor-smoke-test/workbench-preview-check.mjs` checks the menu, the
+student's values, the read-only editor, the task header, and the way back to
+Starter in a real browser.
+
 ## When an attempt is graded
 
 When grading finishes while the student is still in the editor (NB5, design
@@ -277,4 +305,5 @@ path in a real browser. The harness starts no native runner, so
 - **Staff seeds.** A staff member sees the notebook with their own seed
   (`AssignmentSeedStore`, one seed for each user and assignment). The notebook
   page has no "view as a student" mode. MCP `preview_personalization` with a
-  `seedHex` is the nearest feature. NB6 adds the preview.
+  `seedHex` is the nearest feature. The workbench preview (NB6b, "Preview as
+  student" below) shows a student's notebook with that student's seed.

@@ -66,9 +66,27 @@
         return null;
     }
 
+    /// The view a pane says it shows: `template`, `personalized`, or
+    /// `student:<token>` for Preview as student (NB6b). Pure.
+    function paneView(value) {
+        if (value === 'template') return 'template';
+        if (typeof value === 'string' && /^student:[a-z0-9]+$/.test(value)) return value;
+        return 'personalized';
+    }
+
+    /// Whether a view-switch control names what is open. Solution and
+    /// Starter name a file as written; a preview item names one student. Pure.
+    function controlPressed(targetFile, targetView, file, view) {
+        if (targetFile !== file) return false;
+        var preview = /^student:/.test(view || '');
+        return targetView ? targetView === view : !preview;
+    }
+
     // Exported for the unit tests, which exercise the policy without a DOM.
     var api = {
-        resolvePane: resolvePane
+        resolvePane: resolvePane,
+        paneView: paneView,
+        controlPressed: controlPressed
     };
     if (typeof window !== 'undefined') window.ChickadeeWorkbench = api;
     if (typeof module !== 'undefined' && module.exports) module.exports = api;
@@ -100,8 +118,7 @@
     var notebookBody = document.querySelector('.wb-notebook-body');
     var activeFile = (notebookBody && notebookBody.getAttribute('data-wb-file') === 'solution')
         ? 'solution' : 'assignment';
-    var activeView = (notebookBody && notebookBody.getAttribute('data-wb-view') === 'template')
-        ? 'template' : 'personalized';
+    var activeView = paneView(notebookBody && notebookBody.getAttribute('data-wb-view'));
 
     // ── Notebook selection: which file, and which reading of it ────────────
 
@@ -137,6 +154,7 @@
                 window.history.pushState({ file: pane.file, view: pane.view }, '', nextURL);
             } catch (_) { /* history unavailable — the pane is still correct */ }
             syncViewControls();
+            refreshGuide();
         });
     }
 
@@ -144,12 +162,49 @@
     /// app bar, not in the swapped notebook, so it does not come back from
     /// the server with the notebook.
     function syncViewControls() {
+        var shown = null;
         viewButtons.forEach(function (btn) {
-            btn.setAttribute(
-                'aria-pressed',
-                btn.getAttribute('data-wb-target-file') === activeFile ? 'true' : 'false');
+            var pressed = controlPressed(
+                btn.getAttribute('data-wb-target-file'), btn.getAttribute('data-wb-target-view'),
+                activeFile, activeView);
+            // A preview item is a menu radio; Solution and Starter are toggles.
+            var state = btn.getAttribute('data-wb-target-view') ? 'aria-checked' : 'aria-pressed';
+            btn.setAttribute(state, pressed ? 'true' : 'false');
+            if (pressed && btn.getAttribute('data-wb-label')) shown = btn;
         });
+        // The preview menu's own button names the student it shows. Its
+        // labels come from the server, which writes them once.
+        var menu = shell.querySelector('.wb-preview-menu');
+        var summary = menu && menu.querySelector('summary');
+        if (!summary) return;
+        summary.textContent = shown
+            ? shown.getAttribute('data-wb-label') : summary.getAttribute('data-wb-idle-label');
+        summary.title = shown ? shown.textContent : 'Preview as student';
+        menu.open = false;
     }
+
+    /// A swapped-in notebook brings its own guide: a preview's, or none. It
+    /// is fetched when the new editor reports its kernel, because a guide
+    /// sent to an editor that is still booting is lost.
+    var guidePending = false;
+    function refreshGuide() {
+        var frame = document.getElementById('jl-frame');
+        if (frame && frame.getAttribute('data-guide-url')) {
+            guidePending = true;
+            return;
+        }
+        // No guide: drop the last one now, before the new editor's first
+        // `ck:kernel` asks the guide script to send it again.
+        var guide = window.ChickadeeNotebookGuide;
+        if (guide && typeof guide.refresh === 'function') void guide.refresh();
+    }
+    window.addEventListener('message', function (e) {
+        var d = e && e.origin === window.location.origin ? e.data : null;
+        if (!guidePending || !d || d.ck !== 'ck:kernel') return;
+        guidePending = false;
+        var guide = window.ChickadeeNotebookGuide;
+        if (guide && typeof guide.refresh === 'function') void guide.refresh();
+    });
 
     // Back/forward must move between notebooks, not leave the page half-swapped
     // showing one file under the other's URL.
@@ -161,14 +216,20 @@
         if (!url) { window.location.reload(); return; }
         activeFile = st.file;
         activeView = st.view;
-        ChickadeeSurfaceSwap.refreshNotebookSurface(url).then(syncViewControls);
+        ChickadeeSurfaceSwap.refreshNotebookSurface(url).then(function () {
+            syncViewControls();
+            refreshGuide();
+        });
     });
 
     // Solution · Starter: each opens its notebook as written, placeholders
-    // and all (the template view, where the notebook has one).
+    // and all (the template view, where the notebook has one). A preview
+    // item opens the starter as one student gets it (NB6b).
     viewButtons.forEach(function (btn) {
         btn.addEventListener('click', function () {
-            selectPane(btn.getAttribute('data-wb-target-file') === 'solution' ? 'solution' : 'assignment', 'template');
+            var file = btn.getAttribute('data-wb-target-file') === 'solution' ? 'solution' : 'assignment';
+            var target = btn.getAttribute('data-wb-target-view');
+            selectPane(file, target ? paneView(target) : 'template');
         });
     });
 

@@ -188,7 +188,12 @@
 
         var refresh = function () {
             var url = guideURL();
-            if (!url) return Promise.resolve(null);
+            // A swapped-in notebook with no guide (the workbench, after a
+            // preview) must not get the last one again on its next boot.
+            if (!url) {
+                guide = null;
+                return Promise.resolve(null);
+            }
             return fetch(url, { credentials: 'same-origin', headers: { Accept: 'application/json' } })
                 .then(function (res) { return res.ok ? res.json() : null; })
                 .then(function (fetched) {

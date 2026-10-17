@@ -53,6 +53,9 @@ struct NotebookBody: HTML {
     /// (`LanguageDescriptor.definitionLinePatterns`), passed to it by
     /// notebook-toolbar.js.
     var definitionPatterns: [String] = []
+    /// The previewed student's guide (NB6b). It gives the editor the task
+    /// headers, with no outline beside the editor.
+    var previewGuideURL: String?
 
     var body: some HTML {
         // The `.main` override only when this body is the page.
@@ -196,6 +199,13 @@ struct NotebookBody: HTML {
     /// workbench, a template or a solution.
     private var showsGuide: Bool { showSubmit && !embedded }
 
+    /// The guide the editor draws: the student's own, or a previewed
+    /// student's, or none.
+    private var guideURL: String {
+        if let previewGuideURL { return previewGuideURL }
+        return showsGuide ? "/testsetups/\(testSetupID)/notebook-guide.json" : ""
+    }
+
     private var stage: some HTML {
         div(.class("nb-stage")) {
             NotebookBootPanel(kernelLanguage: kernelLanguage, bird: bootBird)
@@ -222,7 +232,7 @@ struct NotebookBody: HTML {
             .data("working-copy-mtime", value: String(workingCopyMtime)),
             .data("read-only", value: String(isReadOnly)),
             .data("definition-patterns", value: definitionPatternsJSON),
-            .data("guide-url", value: showsGuide ? "/testsetups/\(testSetupID)/notebook-guide.json" : ""),
+            .data("guide-url", value: guideURL),
             .src("about:blank"),
             .custom(name: "loading", value: "eager")
         ) {}
@@ -338,7 +348,8 @@ extension NotebookBody {
             assignmentTitle: context.assignmentTitle,
             dueLabel: context.dueLabel,
             csrfToken: csrfToken,
-            definitionPatterns: context.definitionPatterns
+            definitionPatterns: context.definitionPatterns,
+            previewGuideURL: context.previewGuideURL
         )
     }
 }

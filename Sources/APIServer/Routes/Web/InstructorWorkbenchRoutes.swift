@@ -40,6 +40,7 @@ struct InstructorWorkbenchRoutes: RouteCollection {
         let r = routes.grouped("instructor")
         r.get(":assignmentID", "workbench", use: workbenchPage)
         r.get(":assignmentID", "suite-outline.json", use: suiteOutline)
+        r.get(":assignmentID", "preview-guide.json", use: previewGuide)
     }
 
     // MARK: - GET /instructor/:assignmentID/workbench
@@ -93,6 +94,14 @@ struct InstructorWorkbenchRoutes: RouteCollection {
                     assignmentID: assignment.publicID, file: "solution", view: "template")
             }
         }
+        // Preview as student (NB6b): one destination for each student, keyed
+        // `assignment:student:<token>`.
+        let previewStudents = try await Self.previewStudents(courseID: setup.courseID, on: req.db)
+        for student in previewStudents {
+            urls["assignment:student:\(student.token)"] =
+                notebookPaneURL(assignmentID: assignment.publicID, file: "assignment", view: "personalized")
+                + "&as=\(student.token)"
+        }
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys]
         let urlsJSON = String(data: (try? encoder.encode(urls)) ?? Data("{}".utf8), encoding: .utf8) ?? "{}"
@@ -116,15 +125,25 @@ struct InstructorWorkbenchRoutes: RouteCollection {
         // `NotebookLookupError`: a permission or database failure is still an error,
         // not an empty pane.
         var notebookCtx: NotebookContext?
+        // A preview names an enrolled student, or the page is a 404.
+        var previewed: WorkbenchPreviewStudent?
+        if let token = query.as {
+            previewed = try Self.previewStudent(token: token, in: previewStudents)
+        }
         do {
-            notebookCtx = try await WebRoutes().workbenchNotebookContext(
-                req: req,
-                user: user,
-                setup: setup,
-                assignment: assignment,
-                fileKind: fileKind,
-                requestedView: query.view
-            )
+            if let previewed {
+                notebookCtx = try await WebRoutes().workbenchPreviewContext(
+                    req: req, user: user, setup: setup, assignment: assignment, student: previewed)
+            } else {
+                notebookCtx = try await WebRoutes().workbenchNotebookContext(
+                    req: req,
+                    user: user,
+                    setup: setup,
+                    assignment: assignment,
+                    fileKind: fileKind,
+                    requestedView: query.view
+                )
+            }
         } catch let error as NotebookLookupError {
             req.logger.info(
                 "workbench_notebook_unavailable assignment=\(assignment.publicID) file=\(fileKind.rawValue) reason=\(error.reason)"
@@ -146,7 +165,9 @@ struct InstructorWorkbenchRoutes: RouteCollection {
             // The two notebooks, then the support files.
             fileCount: 1 + (hasSolution ? 1 : 0) + editCtx.supportFileRows.count,
             inputCount: editCtx.globalVariableRows.count,
-            achievementCount: manifest?.achievements.count ?? 0)
+            achievementCount: manifest?.achievements.count ?? 0,
+            previewStudents: previewStudents,
+            previewed: previewed)
         return HTMLResponse {
             WorkbenchPage(
                 page: page,
@@ -177,6 +198,8 @@ struct InstructorWorkbenchRoutes: RouteCollection {
     private struct WorkbenchQuery: Content {
         var file: String?
         var view: String?
+        /// The `urlToken` of the student a preview shows (NB6b).
+        var `as`: String?
     }
 
     /// URL of one (file, view) combination — now a *workbench* URL rather than
