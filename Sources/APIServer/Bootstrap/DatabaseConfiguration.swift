@@ -607,4 +607,6 @@ func registerMigrations(on app: Application) {
     app.migrations.add(AddAvatarHatchSpecies())
     // The lab concept on an assignment, for the concept rings.
     app.migrations.add(AddAssignmentConcept())
+    // The course dataset library (docs/datasets-course-library.md, slice 2).
+    app.migrations.add(CreateCourseDatasets())
 }

@@ -268,7 +268,8 @@ enum AssignmentVersionStore {
 // MARK: - Reclamation
 
 extension AssignmentVersionStore {
-    /// Every blob hash referenced by any surviving version row.
+    /// Every blob hash referenced by any surviving version row: assignment
+    /// versions and course dataset versions.
     ///
     /// Deliberately unfiltered and un-paged: garbage collection compares
     /// against this set, so a partial answer would mark live blobs as garbage.
@@ -279,6 +280,11 @@ extension AssignmentVersionStore {
         for row in try await APIAssignmentVersion.query(on: db).all() {
             referenced.formUnion(row.decodedFileMap().values)
             if let notebookHash = row.notebookHash { referenced.insert(notebookHash) }
+        }
+        // The course dataset library keeps its version bytes in the same store
+        // (docs/datasets-course-library.md).
+        for row in try await APICourseDatasetVersion.query(on: db).all() {
+            referenced.insert(row.sha256)
         }
         return referenced
     }
