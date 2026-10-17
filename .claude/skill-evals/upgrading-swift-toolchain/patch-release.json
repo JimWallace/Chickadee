@@ -1,0 +1,10 @@
+{
+  "skills": ["upgrading-swift-toolchain"],
+  "query": "Swift 6.4.1 is out. What do we need to change?",
+  "files": [],
+  "expected_behavior": [
+    "Identifies this as a patch release, with one small pull request and no feature scan",
+    "Says the Docker tags swift:6.4-resolute and swift-ci:6.4-resolute follow the patch on their own",
+    "Names only the sites that carry the patch number, from docs/swift-toolchain-upgrades.md: wasm/wasm-sdk.pin, the swiftly version in runner-wasm-vendor.yml and the SDK identifier in scripts/build-runner-wasm.sh"
+  ]
+}

@@ -1,0 +1,10 @@
+{
+  "skills": ["adding-a-language"],
+  "query": "While adding the new language, a helper renderLiteral(_:) needs a language. Most callers are Python, so can I write language: AssignmentLanguage = .python?",
+  "files": [],
+  "expected_behavior": [
+    "Refuses the default value, because no function may default a language: parameter",
+    "Names scripts/no-language-defaults.sh as the guard that fails on it",
+    "Says each caller must pass the declared language, and that nothing infers a language"
+  ]
+}

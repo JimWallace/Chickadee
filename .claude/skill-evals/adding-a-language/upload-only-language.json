@@ -1,0 +1,11 @@
+{
+  "skills": ["adding-a-language"],
+  "query": "We want Fortran assignments. There is no xeus kernel that works for us. Can students still submit, and how do we add it?",
+  "files": [],
+  "expected_behavior": [
+    "Chooses the upload-only route with submissionMode uploadOnly",
+    "Names Java (docs/java-support.md) or C++ (docs/cpp-support.md) as the model to copy",
+    "Still requires the AssignmentLanguage case, the compiler worklist, the runner interpreter and the done test",
+    "Says the runner must advertise the interpreter so that RunnerLanguageGate routes jobs correctly"
+  ]
+}

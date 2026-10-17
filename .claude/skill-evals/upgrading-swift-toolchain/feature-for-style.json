@@ -1,0 +1,10 @@
+{
+  "skills": ["upgrading-swift-toolchain"],
+  "query": "In the feature scan for the new Swift release, a new shorthand syntax would let us rewrite 19 call sites more concisely. No behaviour changes. Should we adopt it?",
+  "files": [],
+  "expected_behavior": [
+    "Does not adopt it, because it does not correct a defect, delete workaround code, or meet a need",
+    "Records the feature and the reason in the pull request body as a rejected feature",
+    "Makes an exception only for upcoming features of the next language mode"
+  ]
+}

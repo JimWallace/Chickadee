@@ -1,0 +1,12 @@
+{
+  "skills": ["steward"],
+  "query": "CI on my PR is red: api-tests shows cancelled after 25 minutes. My diff only changes a Markdown file in docs/. What do I do?",
+  "files": [],
+  "expected_behavior": [
+    "Does not conclude that the diff caused the failure, and does not start to edit code",
+    "Starts at docs/ci-flakiness.md and reads Family 6 and Family 5, which are the two opposite shapes of a cancelled job",
+    "Uses the [ci-pressure] telemetry to tell a wedge (scopes=0.0/min with self cpu=0.0%) from a collapse that keeps finishing tests, and checks whether api-tests-postgres passed on the same commit",
+    "Does not treat per-test or per-suite durations in the log as evidence of a slow test",
+    "Treats a new occurrence as a finding to record, because Family 5 is closed for monitoring and Family 6 is fixed"
+  ]
+}

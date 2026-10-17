@@ -16,6 +16,9 @@
 # Same rule for agents: .claude/agents/ui-review.md is the brief CI runs on
 # every UI pull request, so it is repository content, not local state.
 !.claude/agents/
+# The skill evaluation scenarios: scripts/check-claude-skills.sh reads them in
+# CI, so a skill without them committed fails format-lint.
+!.claude/skill-evals/
 .venv-jlite/
 .jupyterlite.doit.db
 Tools/jupyterlite/.jupyterlite.doit.db

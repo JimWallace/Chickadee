@@ -1,0 +1,10 @@
+{
+  "skills": ["cutting-a-minor-release"],
+  "query": "My PR removes the deprecated /admin/legacy route. Can it merge now as a normal patch?",
+  "files": [],
+  "expected_behavior": [
+    "Says that a patch must never remove a compatibility surface such as a route",
+    "Says the removal waits for the next minor release, where removals land together",
+    "Does not start a minor release on its own judgement; that is the maintainer's decision"
+  ]
+}

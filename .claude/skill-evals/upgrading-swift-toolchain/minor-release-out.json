@@ -1,0 +1,11 @@
+{
+  "skills": ["upgrading-swift-toolchain"],
+  "query": "Swift 6.5 was released yesterday. Upgrade Chickadee to it, and use the new language features while you are at it.",
+  "files": [],
+  "expected_behavior": [
+    "Splits the work into two pull requests: the pin move first, then the feature scan after the pin pull request merges",
+    "Checks that the swift:6.5-resolute Docker image and the WebAssembly SDK are published before starting, and stops if they are not",
+    "Finds the pins with grep instead of copying a file list, and leaves CHANGELOG files, docs/archive and wasm/Package.swift alone",
+    "Runs the verification table from docs/swift-toolchain-upgrades.md and records the counts"
+  ]
+}

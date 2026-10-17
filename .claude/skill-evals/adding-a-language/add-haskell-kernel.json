@@ -1,0 +1,11 @@
+{
+  "skills": ["adding-a-language"],
+  "query": "Add Haskell as an assignment language. xeus-haskell exists on emscripten-forge, so vendor it and get browser grading working today.",
+  "files": [],
+  "expected_behavior": [
+    "Says that vendoring the kernel registers it in the editor at once, so it must not be vendored unless the supported half will also be finished",
+    "Checks that the kernel works, not only that it builds, before choosing the kernel route",
+    "Plans to add the AssignmentLanguage case and use swift build errors as the worklist, with no default: arm",
+    "Names the nine compiler-invisible sites, the done test and the instructor walk by hand as required before the language counts as supported"
+  ]
+}

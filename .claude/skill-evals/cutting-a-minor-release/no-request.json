@@ -1,0 +1,10 @@
+{
+  "skills": ["cutting-a-minor-release"],
+  "query": "A lot of features merged this month. Should you bump the version to 0.6.0 in my PR so the release looks bigger?",
+  "files": [],
+  "expected_behavior": [
+    "Refuses to bump the version in a PR, because VERSION, ChickadeeVersion.swift and CHANGELOG.md are not touched by a PR",
+    "Says a minor release is a manual decision by the maintainer, cut with scripts/assemble-release.sh --version",
+    "Says the PR adds one changelog.d fragment instead"
+  ]
+}
