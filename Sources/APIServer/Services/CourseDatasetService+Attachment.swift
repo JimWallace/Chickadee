@@ -67,8 +67,8 @@ extension CourseDatasetService {
         try requireValid(spec, bytes: bytes)
 
         try await writeThenRecord(
-            setup: setup, filename: filename, bytes: bytes, previous: nil, dataset: dataset,
-            version: version.version, on: db
+            PinnedWrite(filename: filename, bytes: bytes, previous: nil, dataset: dataset, version: version.version),
+            setup: setup, on: db
         ) { props in
             props.datasets.removeAll { $0.file == filename }
             props.datasets.append(spec)
@@ -147,8 +147,9 @@ extension CourseDatasetService {
             throw CourseDatasetError.unreadableFile(filename)
         }
         try await writeThenRecord(
-            setup: setup, filename: filename, bytes: bytes, previous: previous, dataset: dataset,
-            version: version.version, on: db
+            PinnedWrite(
+                filename: filename, bytes: bytes, previous: previous, dataset: dataset, version: version.version),
+            setup: setup, on: db
         ) { props in
             guard let index = props.datasets.firstIndex(where: { $0.file == filename }) else { return }
             props.datasets[index] = spec
@@ -282,23 +283,34 @@ extension CourseDatasetService {
     /// failed attach never leaves the pool behind as a plain support file and
     /// a failed update never leaves new bytes under an old version's source.
     private static func writeThenRecord(
-        setup: APITestSetup, filename: String, bytes: Data, previous: Data?, dataset: APICourseDataset,
-        version: Int, on db: any Database, _ mutate: (inout TestProperties) throws -> Void
+        _ write: PinnedWrite, setup: APITestSetup, on db: any Database,
+        _ mutate: (inout TestProperties) throws -> Void
     ) async throws {
         // Checked before the write too, so the common race costs no rollback.
-        _ = try await liveVersion(of: dataset, number: version, on: db)
-        try await mutateSetupZip(zipPath: setup.zipPath, writes: [filename: bytes], deletions: [])
+        _ = try await liveVersion(of: write.dataset, number: write.version, on: db)
+        try await mutateSetupZip(zipPath: setup.zipPath, writes: [write.filename: write.bytes], deletions: [])
         do {
-            _ = try await liveVersion(of: dataset, number: version, on: db)
+            _ = try await liveVersion(of: write.dataset, number: write.version, on: db)
             try await mutateManifest(setup: setup, on: db, mutate)
         } catch {
-            if let previous {
-                try? await mutateSetupZip(zipPath: setup.zipPath, writes: [filename: previous], deletions: [])
+            if let previous = write.previous {
+                try? await mutateSetupZip(zipPath: setup.zipPath, writes: [write.filename: previous], deletions: [])
             } else {
-                try? await mutateSetupZip(zipPath: setup.zipPath, writes: [:], deletions: [filename])
+                try? await mutateSetupZip(zipPath: setup.zipPath, writes: [:], deletions: [write.filename])
             }
             throw error
         }
+    }
+
+    /// One file write that pins a dataset version, with the bytes to put back
+    /// when the write cannot be recorded.
+    private struct PinnedWrite {
+        let filename: String
+        let bytes: Data
+        /// The file's bytes before the write, or nil when it is new.
+        let previous: Data?
+        let dataset: APICourseDataset
+        let version: Int
     }
 
     /// The save-time checks of every dataset door, against the bytes the spec
