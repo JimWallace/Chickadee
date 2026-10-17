@@ -208,17 +208,24 @@ func datasetsPanelResponse(req: Request, setup: APITestSetup) async throws -> Da
 /// desired state.
 ///
 /// Each spec must pass `datasetSpecRefusal`, the check MCP `set_dataset` runs
-/// too (#2487). The array must also not name one file twice: two specs for one
-/// file would disagree about how many rows a student gets, and which one wins
-/// is a detail of whichever consumer happens to fold the array. A refusal is
-/// `.badRequest`.
+/// too (#2487), and must keep the library fields the manifest already holds
+/// for its file (`DatasetSpecValidation.libraryFieldIssue`). The array must
+/// also not name one file twice: two specs for one file would disagree about
+/// how many rows a student gets, and which one wins is a detail of whichever
+/// consumer happens to fold the array. A refusal is `.badRequest`.
 func applyDatasetsEdit(
     setup: APITestSetup, datasets: [DatasetSpec], on db: any Database
 ) async throws {
     let bundledFiles = await bundledFileNames(zipPath: setup.zipPath)
+    let stored = setup.decodedManifest()?.datasetSpecsByFile ?? [:]
     var seenFiles: Set<String> = []
     for spec in datasets {
         if let refusal = await datasetSpecRefusal(spec, setup: setup, bundledFiles: bundledFiles) {
+            throw Abort(.badRequest, reason: refusal)
+        }
+        // The library fields are written by the library attach path only; this
+        // door carries them through (docs/datasets-course-library.md).
+        if let refusal = DatasetSpecValidation.libraryFieldIssue(proposed: spec, stored: stored[spec.file]) {
             throw Abort(.badRequest, reason: refusal)
         }
         guard seenFiles.insert(spec.file).inserted else {
