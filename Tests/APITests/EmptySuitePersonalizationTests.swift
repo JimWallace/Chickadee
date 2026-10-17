@@ -54,7 +54,7 @@ import Vapor
             let courseID = try course.requireID()
             let tester = try await makeTestUser(on: app, username: "tester", role: "instructor")
             try await makeTestEnrollment(on: app, userID: tester.requireID(), courseID: courseID)
-            let manifest = #"{"schemaVersion":1,"testSuites":[],"timeLimitSeconds":10}"#
+            let manifest = TestManifests.emptySuite
             try await makeTestSetup(on: app, id: "setup_empty", courseID: courseID, manifest: manifest)
             let assignment = try await makeTestAssignment(
                 on: app, testSetupID: "setup_empty", courseID: courseID, title: "Fresh")

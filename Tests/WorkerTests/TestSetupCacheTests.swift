@@ -1,6 +1,7 @@
 // Tests/WorkerTests/TestSetupCacheTests.swift
 
 import Foundation
+import Synchronization
 import Testing
 
 @testable import chickadee_runner
@@ -290,15 +291,17 @@ private func makeTestStagingDir(name: String = "test_script.sh") throws -> URL {
         await populateStarted.wait()
 
         // Second acquirer joins the in-flight population, then is cancelled.
-        // (If cancellation lands before its waiter registration, the
-        // early-cancel path throws instead — both paths are the fix.)
+        // The cancel waits until the join has registered, so this test takes
+        // the join path every time rather than whichever path a pause allowed.
         let cancelled = Task {
             try await cache.acquire(testSetupID: "setup-cancel-join") {
                 Issue.record("populate must not run twice for one key")
                 return try makeTestStagingDir()
             }
         }
-        try await Task.sleep(for: .milliseconds(100))
+        #expect(
+            await pollUntil { await cache.waiterCount(testSetupID: "setup-cancel-join") == 2 },
+            "the second acquirer joins the population")
         cancelled.cancel()
 
         // The cancelled acquirer must throw promptly — the population gate is
@@ -427,11 +430,12 @@ private func makeTestStagingDir(name: String = "test_script.sh") throws -> URL {
                 return try makeTestStagingDir()
             }
         }
-        // Post-fix the registration decision is synchronous and this pause
-        // decides nothing; it exists so the PRE-fix behaviour (the retry
-        // registering on the dying entry) demonstrably precedes the unwind's
-        // release when the fix is reverted.
-        try await Task.sleep(for: .milliseconds(100))
+        // The retry must start its own population while the old one is still
+        // parked in its unwind. Before the generation fix it joined the dying
+        // entry instead, its populate never ran, and this wait fails.
+        #expect(
+            await pollUntil { secondPopulateRan.value == 1 },
+            "the retry starts a fresh population during the unwind")
         await unwindRelease.open()
 
         let result = try await retry.value
@@ -478,13 +482,9 @@ private actor TestGate {
 // MARK: - Thread-safe counter
 
 /// Thread-safe integer counter for use inside @Sendable closures in tests.
-///
-/// `@unchecked Sendable`: all mutable state is protected by `NSLock`; the
-/// checker cannot verify this statically, but the invariant is upheld manually.
-private final class Counter: @unchecked Sendable {
-    private let lock = NSLock()
-    private var _value = 0
+private final class Counter: Sendable {
+    private let count = Mutex(0)
 
-    var value: Int { lock.withLock { _value } }
-    func increment() { lock.withLock { _value += 1 } }
+    var value: Int { count.withLock { $0 } }
+    func increment() { count.withLock { $0 += 1 } }
 }

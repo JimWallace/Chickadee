@@ -38,7 +38,7 @@ import VaporTesting
         let setupID = "\(prefix)_setup"
         let setup = APITestSetup(
             id: setupID,
-            manifest: #"{"schemaVersion":1,"testSuites":[],"timeLimitSeconds":10}"#,
+            manifest: TestManifests.emptySuite,
             zipPath: app.testSetupsDirectory + "\(setupID).zip",
             courseID: courseID)
         try await setup.save(on: app.db)

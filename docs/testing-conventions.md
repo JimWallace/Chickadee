@@ -53,13 +53,15 @@ keeps the short form and points here.
   PATH, a Python module, CI itself) is a `ConditionTrait` on the test:
   `@Test(.requiresLua)`, `@Test(.ciOnly)`, `@Test(.requiresRscript)`, each a
   `static let` built with `.enabled("requires lua on PATH") { … }`. The
-  traits more than one file needs live in one `HostConditionTraits.swift` per
-  test target (`WorkerTestSkip.swift` in WorkerTests): `.ciOnly` and one
-  `.requires…` per interpreter or tool (`Rscript`, `Octave`, `Gpp`, `Javac`,
-  `Racket`, `Lua`, `Python3`, `ZipTools`, `Sandbox`, `Make`). Add a new one
-  there, not in a suite. The probes behind them
-  (`cachedToolIsAvailable`) are in `ChickadeeTestSupport`, which also holds
-  `IssueRecorded` and `testURL` for all three targets. Swift Testing then
+  shared traits live once, in `Tests/TestSupport/HostConditionTraits.swift`
+  (`ChickadeeTestSupport`): `.ciOnly` and one `.requires…` per interpreter or
+  tool (`Rscript`, `Octave`, `Gpp`, `Javac`, `Racket`, `Lua`, `Python3`,
+  `ZipTools`). The two only the worker needs, `.requiresSandbox` and
+  `.requiresMake`, are in `Tests/WorkerTests/Support/WorkerTestSkip.swift`.
+  Add a new one there, not in a suite. The probes behind them
+  (`cachedToolIsAvailable`) are in the same support target, which also holds
+  `IssueRecorded`, `testURL` and `AsyncPermits` (the one async lock and
+  throttle) for all three targets. Swift Testing then
   reports the test as skipped with that reason, in the log and in the xUnit report, and
   `scripts/check-no-skipped-tests.sh` fails every CI test lane on any skip,
   because the CI image carries every interpreter. That closed the silent-skip

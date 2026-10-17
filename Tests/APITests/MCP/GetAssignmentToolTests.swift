@@ -91,7 +91,7 @@ import Vapor
             try await makeTestSetup(
                 on: app, id: "setup_w", courseID: courseID,
                 manifest:
-                    #"{"schemaVersion":1,"gradingMode":"worker","requiredFiles":[],"testSuites":[],"timeLimitSeconds":10,"makefile":null}"#
+                    TestManifests.workerEmptyExplicit
             )
             let assignment = try await makeTestAssignment(
                 on: app, testSetupID: "setup_w", courseID: courseID, title: "Tasks")

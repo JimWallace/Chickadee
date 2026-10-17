@@ -31,7 +31,7 @@ import VaporTesting
     }
 
     private static let manifest =
-        #"{"schemaVersion":1,"gradingMode":"worker","requiredFiles":[],"testSuites":[{"tier":"public","script":"tests.py"}],"timeLimitSeconds":10,"makefile":null}"#
+        TestManifests.workerOnePythonSuite
 
     /// Builds a candidate triple without going through the database ordering
     /// query — the walk takes the list as an argument, so the order under test

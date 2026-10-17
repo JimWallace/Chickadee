@@ -19,7 +19,7 @@ import Vapor
     }
 
     private let manifest =
-        #"{"schemaVersion":1,"gradingMode":"worker","testSuites":[],"timeLimitSeconds":10}"#
+        TestManifests.workerEmpty
 
     private func fixture(on app: Application, enroll: Bool = true) async throws -> APIAssignment {
         let course = try await makeTestCourse(on: app, code: "CS246", name: "OOP")

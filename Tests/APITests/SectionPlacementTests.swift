@@ -83,7 +83,7 @@ import Vapor
     @Test func aMoveAdoptsTheSectionsGradingMode() async throws {
         try await withApp(app) { app in
             let (setup, section) = try await setupAndSection(
-                manifest: #"{"schemaVersion":1,"gradingMode":"worker","testSuites":[],"timeLimitSeconds":10}"#,
+                manifest: TestManifests.workerEmpty,
                 sectionMode: .browser)
             #expect(try await adoptSectionGradingMode(section, setup: setup, on: app.db) == "browser")
             #expect(setup.decodedManifest()?.gradingMode == .browser)

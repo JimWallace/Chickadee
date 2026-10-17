@@ -14,7 +14,7 @@ import VaporTesting
 @testable import APIServer
 
 private let workerManifestJSON =
-    #"{"schemaVersion":1,"gradingMode":"worker","requiredFiles":[],"testSuites":[],"timeLimitSeconds":10,"makefile":null}"#
+    TestManifests.workerEmptyExplicit
 
 /// A valid empty zip: the 22-byte end-of-central-directory record.
 private let emptyZipBytes: [UInt8] = [0x50, 0x4B, 0x05, 0x06] + [UInt8](repeating: 0, count: 18)
