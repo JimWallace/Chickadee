@@ -303,6 +303,28 @@ struct WorkerJobRoutes: RouteCollection {
             }
         }
 
+        // The per-(student, course) seed for course-scoped datasets
+        // (docs/datasets-course-library.md, slice 4). A pinned run (a solution
+        // variant or a spare) carries its own; a student's run resolves it.
+        // Nil for an assignment with no course-scoped dataset, and for a job
+        // with no student, which then grades the pool like every other
+        // ownerless job.
+        var courseSeed: String?
+        if let materialization {
+            courseSeed = materialization.courseSeedHex
+        } else {
+            do {
+                courseSeed = try await CourseSeedStore.seedIfNeeded(
+                    manifest: claimed.manifest, userID: submission.userID, courseID: setup.courseID, on: req.db)
+            } catch {
+                // Grading on, without it, would grade a course-scoped dataset
+                // on per-assignment rows the student never saw. Failing the
+                // payload leaves the job to the stale-claim sweep instead.
+                req.logger.error("Failed to ensure course seed: \(error)")
+                throw WorkerJobError.internalInconsistency(reason: "Could not resolve the course seed")
+            }
+        }
+
         guard let submissionID = submission.id, let setupID = setup.id else {
             throw WorkerJobError.internalInconsistency(reason: "Claimed submission or test setup missing id")
         }
@@ -335,8 +357,8 @@ struct WorkerJobRoutes: RouteCollection {
         } else {
             let supportDir = req.application.testSetupsDirectory + "shared/\(setupID)/"
             personalizedInputs = await PersonalizationSubstitution.gradingInputs(
-                manifest: claimed.manifest, seedHex: assignmentSeed, supportFilesDirectory: supportDir,
-                language: language)
+                manifest: claimed.manifest, seedHex: assignmentSeed, courseSeedHex: courseSeed,
+                supportFilesDirectory: supportDir, language: language)
         }
         // A class composite's slot travels with the inputs
         // (docs/class-composite.md): slot 0 for a validation run, the
@@ -358,7 +380,8 @@ struct WorkerJobRoutes: RouteCollection {
         // the dataset specs; only the resolved bytes travel, in `personalizedFiles`.
         let datasetSharedDir = req.application.testSetupsDirectory + "shared/\(setupID)/"
         let personalizedFiles = DatasetResolver.resolve(
-            manifest: claimed.manifest, seedHex: assignmentSeed, sourceDirectory: datasetSharedDir)
+            manifest: claimed.manifest, seedHex: assignmentSeed, courseSeedHex: courseSeed,
+            sourceDirectory: datasetSharedDir)
 
         let opponentSet = try await Self.jobOpponentSet(
             manifest: claimed.manifest, submission: submission, base: base, on: req.db)

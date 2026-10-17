@@ -127,7 +127,7 @@ is layered:
    `chickadee_mcp` Postgres role (`deploy/sql/mcp-least-privilege-role.sql`):
    deny-by-omission on every student-data table (`grade_overrides`,
    `client_diagnostics`, `job_execution_metrics`,
-   `assignment_personalization_seeds`, `achievement_results`, `audit_log`,
+   `assignment_personalization_seeds`, `course_personalization_seeds`, `achievement_results`, `audit_log`,
    `brightspace_sync_log`, …) and **row-level security** on
    `submissions`/`results`/`result_collections` restricting SELECT to
    `kind = 'validation'` rows. Even a future filter-omission bug returns zero

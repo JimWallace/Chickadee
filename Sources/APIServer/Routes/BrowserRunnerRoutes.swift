@@ -191,6 +191,10 @@ struct BrowserRunnerRoutes: RouteCollection {
         var language: AssignmentLanguage?
         var opponent: BrowserRunnerOpponent?
         if let manifest = setup.decodedManifest() {
+            // The student's course cohort seed, for course-scoped datasets
+            // (docs/datasets-course-library.md, slice 4), as the worker uses.
+            let courseSeed = try await CourseSeedStore.seedIfNeeded(
+                manifest: manifest, userID: userID, courseID: setup.courseID, on: req.db)
             opponent = manifest.activity?.browserStagedBot.map { BrowserRunnerOpponent(botFile: $0) }
             let sharedDir = req.application.testSetupsDirectory + "shared/\(setupID)/"
             // nil language yields no grading inputs (there is no syntax to
@@ -199,7 +203,7 @@ struct BrowserRunnerRoutes: RouteCollection {
             let resolved = AssignmentLanguage.resolve(manifest: manifest)
             language = resolved
             personalizedInputs = await PersonalizationSubstitution.gradingInputs(
-                manifest: manifest, seedHex: seed,
+                manifest: manifest, seedHex: seed, courseSeedHex: courseSeed,
                 supportFilesDirectory: sharedDir,
                 language: resolved)
             // The class composite's slot, as the worker sends it. Staff get
@@ -213,7 +217,7 @@ struct BrowserRunnerRoutes: RouteCollection {
             // Resolve per-student dataset slices (Phase 1 datasets) — returns nil when
             // the manifest declares no datasets, which is the common case.
             personalizedFiles = DatasetResolver.resolve(
-                manifest: manifest, seedHex: seed, sourceDirectory: sharedDir)
+                manifest: manifest, seedHex: seed, courseSeedHex: courseSeed, sourceDirectory: sharedDir)
         }
         return BrowserRunnerSeedResponse(
             seed: seed, personalizedInputs: personalizedInputs,
