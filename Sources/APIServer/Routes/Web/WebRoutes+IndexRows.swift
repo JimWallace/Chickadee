@@ -22,18 +22,16 @@ struct DashboardGradeData {
     var overridePercentBySetupID: [String: Int] = [:]
     var latestBadgesBySetupID: [String: [AchievementBadge]] = [:]
     /// The badges each setup's latest submission earns by itself, without the
-    /// class records: what the award ledger stores (`recordEarnedAwards`).
+    /// class records: what the award ledger stores (`earnedAwards`).
     var earnedBadgesBySetupID: [String: [AchievementBadge]] = [:]
 
-    /// Stores the badges in `earnedBadgesBySetupID` in `userID`'s award
-    /// ledger (docs/achievement-rewards.md, S1), each against the latest
-    /// submission that earned it. The dashboard calls this only for a viewer
-    /// who is not staff in the course. A failed write does not stop the page.
-    func recordEarnedAwards(for userID: UUID, on db: any Database, logger: Logger) async {
-        for (setupID, badges) in earnedBadgesBySetupID {
-            guard let submissionID = latestSubmissionBySetupID[setupID]?.submissionID else { continue }
-            await AchievementAwardStore.recordOrLog(
-                badges, earnedBy: userID, testSetupID: setupID, submissionID: submissionID, on: db, logger: logger)
+    /// `earnedBadgesBySetupID`, each against the latest submission that
+    /// earned it, for the award ledger (docs/achievement-rewards.md, S1).
+    var earnedAwards: [AchievementAwardStore.Earned] {
+        earnedBadgesBySetupID.compactMap { setupID, badges in
+            latestSubmissionBySetupID[setupID].map {
+                AchievementAwardStore.Earned(testSetupID: setupID, submissionID: $0.submissionID, badges: badges)
+            }
         }
     }
 }

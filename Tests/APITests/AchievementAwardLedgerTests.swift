@@ -138,6 +138,132 @@ import VaporTesting
         }
     }
 
+    @Test func theInstructorsOwnDashboardStoresNothing() async throws {
+        try await withAssignmentRoutesApp { app in
+            let seeded = try await seedHalfPassingSubmission(setupID: "ledger_staff_dash", on: app)
+            let instructorCookie = try await arLoginAsInstructor(on: app)
+            let instructor = try #require(
+                try await APIUser.query(on: app.db).filter(\.$username == "testinstructor").first())
+            // Staff try their own assignment as a student would.
+            _ = try await arInsertSubmission(
+                id: "ledger_staff_dash_own", testSetupID: "ledger_staff_dash", userID: try instructor.requireID(),
+                on: app)
+            _ = try await wrInsertResult(
+                submissionID: "ledger_staff_dash_own",
+                outcomes: [wrMakeOutcome(name: "t1", status: .pass), wrMakeOutcome(name: "t2", status: .fail)],
+                on: app)
+
+            _ = try await getHTML("/", cookie: instructorCookie, on: app)
+            _ = try await getHTML("/submissions/ledger_staff_dash_own", cookie: instructorCookie, on: app)
+            #expect(try await storedAwards(for: instructor, on: app).isEmpty)
+            #expect(try await storedAwards(for: seeded.student, on: app).isEmpty)
+        }
+    }
+
+    @Test func aValidationRunViewedByItsOwnerStoresNothing() async throws {
+        try await withAssignmentRoutesApp { app in
+            let seeded = try await seedHalfPassingSubmission(setupID: "ledger_validation", on: app)
+            let validation = APISubmission(
+                id: "ledger_validation_run", testSetupID: "ledger_validation",
+                zipPath: app.submissionsDirectory + "ledger_validation_run.zip", attemptNumber: 1,
+                status: "complete", filename: nil, userID: try seeded.student.requireID(),
+                kind: APISubmission.Kind.validation)
+            try await validation.save(on: app.db)
+            _ = try await wrInsertResult(
+                submissionID: "ledger_validation_run",
+                outcomes: [wrMakeOutcome(name: "t1", status: .pass), wrMakeOutcome(name: "t2", status: .fail)],
+                on: app)
+
+            let html = try await getHTML("/submissions/ledger_validation_run", cookie: seeded.cookie, on: app)
+            #expect(html.contains(Self.badgeLabel))
+            #expect(try await storedAwards(for: seeded.student, on: app).isEmpty)
+        }
+    }
+
+    @Test func anotherStudentsSubmissionIsRefusedAndStoresNothing() async throws {
+        try await withAssignmentRoutesApp { app in
+            let seeded = try await seedHalfPassingSubmission(setupID: "ledger_other", on: app)
+            let otherCookie = try await loginUser(
+                username: "otherstudent", password: "testpassword", role: "student", on: app)
+            let other = try #require(
+                try await APIUser.query(on: app.db).filter(\.$username == "otherstudent").first())
+
+            _ = try await getHTML(
+                "/submissions/\(seeded.submissionID)", cookie: otherCookie, on: app, expecting: .forbidden)
+            #expect(try await storedAwards(for: other, on: app).isEmpty)
+            #expect(try await storedAwards(for: seeded.student, on: app).isEmpty)
+        }
+    }
+
+    @Test func anAwardStoredAlreadyLeavesThePageWorking() async throws {
+        try await withAssignmentRoutesApp { app in
+            let seeded = try await seedHalfPassingSubmission(setupID: "ledger_stored", on: app)
+            try await APIAchievementAward(
+                userID: seeded.student.requireID(), level: .assignment, ownerID: "ledger_stored",
+                achievementID: "halfway", submissionID: "an_earlier_run", label: "Earlier caption", detail: nil
+            ).create(on: app.db)
+
+            let html = try await getHTML("/submissions/\(seeded.submissionID)", cookie: seeded.cookie, on: app)
+            #expect(html.contains(Self.badgeLabel))
+            let awards = try await storedAwards(for: seeded.student, on: app)
+            #expect(awards.count == 1)
+            #expect(awards.first?.submissionID == "an_earlier_run")
+            #expect(awards.first?.label == "Earlier caption")
+        }
+    }
+
+    @Test func theUniqueIndexRefusesASecondRowForOneAward() async throws {
+        try await withAssignmentRoutesApp { app in
+            let seeded = try await seedHalfPassingSubmission(setupID: "ledger_race", on: app)
+            let userID = try seeded.student.requireID()
+            // Two requests that both read before either writes would both try
+            // to insert. The unique index is what keeps one row, and the store
+            // treats its refusal as a lost race.
+            try await APIAchievementAward(
+                userID: userID, level: .assignment, ownerID: "ledger_race", achievementID: "halfway",
+                submissionID: "the_other_request", label: Self.badgeLabel, detail: nil
+            ).create(on: app.db)
+            let duplicate = APIAchievementAward(
+                userID: userID, level: .assignment, ownerID: "ledger_race", achievementID: "halfway",
+                submissionID: "this_request", label: Self.badgeLabel, detail: nil)
+            await #expect {
+                try await duplicate.create(on: app.db)
+            } throws: { error in
+                isInsertConflict(error)
+            }
+
+            let badge = AchievementBadge(id: "other", label: "Other", tooltip: "Other tooltip")
+            let written = try await AchievementAwardStore.record(
+                [.init(testSetupID: "ledger_race", submissionID: "this_request", badges: [badge])],
+                earnedBy: userID, on: app.db)
+            #expect(written.map(\.achievementID) == ["other"])
+            #expect(try await storedAwards(for: seeded.student, on: app).count == 2)
+        }
+    }
+
+    @Test func deletingTheAccountDeletesItsAwards() async throws {
+        try await withAssignmentRoutesApp { app in
+            let seeded = try await seedHalfPassingSubmission(setupID: "ledger_account", on: app)
+            _ = try await getHTML("/submissions/\(seeded.submissionID)", cookie: seeded.cookie, on: app)
+            let studentID = try seeded.student.requireID()
+            #expect(try await storedAwards(for: seeded.student, on: app).count == 1)
+
+            let adminCookie = try await loginAsAdmin("ledger_admin", on: app)
+            let (token, boundCookie) = try await csrfFields(for: "/admin/users", cookie: adminCookie, on: app)
+            try await app.asyncTest(
+                .POST, "/admin/users/\(studentID.uuidString)/delete",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: boundCookie)
+                    try req.content.encode(["_csrf": token], as: .urlEncodedForm)
+                },
+                afterResponse: { res in #expect(res.status == .seeOther) })
+
+            #expect(try await APIUser.find(studentID, on: app.db) == nil)
+            let remaining = try await APIAchievementAward.query(on: app.db).filter(\.$userID == studentID).count()
+            #expect(remaining == 0)
+        }
+    }
+
     // MARK: - Where the rows go
 
     @Test func deletingTheAssignmentDeletesItsAwards() async throws {
@@ -174,12 +300,12 @@ import VaporTesting
             try await makeTestAssignment(on: app, testSetupID: "setup_awards_delete", courseID: courseID)
             let badge = AchievementBadge(id: "halfway", label: Self.badgeLabel, tooltip: Self.badgeDetail)
             try await AchievementAwardStore.record(
-                [badge], earnedBy: student.requireID(), testSetupID: "setup_awards_delete", submissionID: "sub_a",
-                on: app.db)
+                [.init(testSetupID: "setup_awards_delete", submissionID: "sub_a", badges: [badge])],
+                earnedBy: student.requireID(), on: app.db)
             // An award on another course's setup stays.
             try await AchievementAwardStore.record(
-                [badge], earnedBy: student.requireID(), testSetupID: "setup_elsewhere", submissionID: "sub_b",
-                on: app.db)
+                [.init(testSetupID: "setup_elsewhere", submissionID: "sub_b", badges: [badge])],
+                earnedBy: student.requireID(), on: app.db)
 
             let path = "/admin/courses/\(courseID.uuidString)"
             let (token, boundCookie) = try await csrfFields(for: path, cookie: cookie, on: app)
@@ -225,11 +351,13 @@ import VaporTesting
             let other = AchievementBadge(id: "other", label: "Other", tooltip: "Other tooltip")
 
             let written = try await AchievementAwardStore.record(
-                [first, first], earnedBy: userID, testSetupID: "ledger_store", submissionID: "sub_a", on: app.db)
+                [.init(testSetupID: "ledger_store", submissionID: "sub_a", badges: [first, first])], earnedBy: userID,
+                on: app.db)
             #expect(written.count == 1)
 
             let again = try await AchievementAwardStore.record(
-                [renamed, other], earnedBy: userID, testSetupID: "ledger_store", submissionID: "sub_b", on: app.db)
+                [.init(testSetupID: "ledger_store", submissionID: "sub_b", badges: [renamed, other])], earnedBy: userID,
+                on: app.db)
             #expect(again.map(\.achievementID) == ["other"])
 
             let stored = try await storedAwards(for: seeded.student, on: app)
@@ -247,9 +375,11 @@ import VaporTesting
             let badge = AchievementBadge(id: "halfway", label: Self.badgeLabel, tooltip: Self.badgeDetail)
 
             try await AchievementAwardStore.record(
-                [badge], earnedBy: userID, testSetupID: "ledger_two_a", submissionID: "sub_a", on: app.db)
+                [.init(testSetupID: "ledger_two_a", submissionID: "sub_a", badges: [badge])], earnedBy: userID,
+                on: app.db)
             try await AchievementAwardStore.record(
-                [badge], earnedBy: userID, testSetupID: "ledger_two_b", submissionID: "sub_b", on: app.db)
+                [.init(testSetupID: "ledger_two_b", submissionID: "sub_b", badges: [badge])], earnedBy: userID,
+                on: app.db)
             #expect(try await storedAwards(for: seeded.student, on: app).count == 2)
 
             try await AchievementAwardStore.deleteAwards(forTestSetups: ["ledger_two_a"], on: app.db)

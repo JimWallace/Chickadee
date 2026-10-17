@@ -423,9 +423,8 @@ extension WebRoutes {
             testSetupID: submission.testSetupID, on: req.db)
 
         let badges = try await submissionBadges(
-            req: req, submission: submission, displayCollection: displayCollection,
-            setupProps: setupProps, setup: setup, processed: processed,
-            awardRecipient: awardRecipient(viewer: user, submission: submission, isStaff: isStaff))
+            req: req, submission: submission, displayCollection: displayCollection, setupProps: setupProps,
+            processed: processed, awardRecipient: awardRecipient(user, submission, isStaff: isStaff))
 
         let sectionedOutcomes = buildSectionedOutcomes(
             outcomes: processed.outcomes,
@@ -606,7 +605,7 @@ extension WebRoutes {
     /// the student's own view of their own student submission writes
     /// (docs/achievement-rewards.md, S1): a staff view writes nothing, so
     /// reading a student's work never changes the student's record.
-    private func awardRecipient(viewer: APIUser, submission: APISubmission, isStaff: Bool) -> UUID? {
+    private func awardRecipient(_ viewer: APIUser, _ submission: APISubmission, isStaff: Bool) -> UUID? {
         guard !isStaff, submission.kind == APISubmission.Kind.student,
             let viewerID = viewer.id, submission.userID == viewerID
         else { return nil }
@@ -626,7 +625,6 @@ extension WebRoutes {
         submission: APISubmission,
         displayCollection: TestOutcomeCollection?,
         setupProps: TestProperties?,
-        setup: APITestSetup?,
         processed: ProcessedCollection,
         awardRecipient: UUID?
     ) async throws -> [AchievementBadge] {
@@ -638,8 +636,8 @@ extension WebRoutes {
         // submission — read only on a standings activity, so every other
         // page pays no query.
         var standings: (standing: Int, matchesWon: Int)?
-        if setupProps?.activity?.kind.aggregation == .standings, let userID = submission.userID, let setup {
-            standings = try await standingSignals(testSetupID: setup.id ?? "", userID: userID, on: req.db)
+        if setupProps?.activity?.kind.aggregation == .standings, let userID = submission.userID {
+            standings = try await standingSignals(testSetupID: submission.testSetupID, userID: userID, on: req.db)
         }
         // `badgeContext` holds the raw grade; `processed.gradePercent` may
         // carry a class-goal bonus, which never earns a badge (#2020).
@@ -647,9 +645,10 @@ extension WebRoutes {
             displayCollection == nil
             ? [] : badgesEarnedBySubmission(processed.badgeContext, props: setupProps, standings: standings)
         if let awardRecipient {
+            let recorded = AchievementAwardStore.Earned(
+                testSetupID: submission.testSetupID, submissionID: subID, badges: earned)
             await AchievementAwardStore.recordOrLog(
-                earned, earnedBy: awardRecipient, testSetupID: submission.testSetupID, submissionID: subID,
-                on: req.db, logger: req.logger)
+                [recorded], earnedBy: awardRecipient, on: req.db, logger: req.logger)
         }
         return earned + classRecordBadges(classAchievements, props: setupProps)
     }

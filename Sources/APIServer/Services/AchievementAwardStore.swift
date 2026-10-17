@@ -26,46 +26,71 @@ enum AchievementAwardStore {
             .all()
     }
 
-    /// Stores each of `badges` that `userID` has not stored yet for the
-    /// assignment of `testSetupID`, and returns the rows this call wrote. A
-    /// badge stored already is left as it is, so its first submission and its
-    /// first caption are kept. When two loads write the same badge at once,
-    /// the unique index keeps one row and the other save fails quietly.
+    /// The badges one submission earned by itself on one assignment.
+    struct Earned {
+        let testSetupID: String
+        let submissionID: String
+        let badges: [AchievementBadge]
+    }
+
+    /// Which award a stored row or an earned badge is.
+    private struct AwardKey: Hashable {
+        let ownerID: String
+        let achievementID: String
+    }
+
+    /// Stores each earned badge that `userID` has not stored yet, and returns
+    /// the rows this call wrote. One query reads what is stored for every
+    /// assignment in `earned`, so a dashboard with many assignments costs one
+    /// read, and nothing more once every award is stored.
+    ///
+    /// A badge stored already is left as it is, so its first submission and
+    /// its first caption are kept. When two loads write the same badge at
+    /// once, the unique index keeps one row and the other insert is ignored.
+    /// Every other database error is thrown.
     @discardableResult
     static func record(
-        _ badges: [AchievementBadge], earnedBy userID: UUID, testSetupID: String, submissionID: String,
-        on db: any Database
+        _ earned: [Earned], earnedBy userID: UUID, on db: any Database
     ) async throws -> [APIAchievementAward] {
-        guard !badges.isEmpty else { return [] }
+        let wanted = earned.filter { !$0.badges.isEmpty }
+        guard !wanted.isEmpty else { return [] }
         let level = AchievementLevel.assignment
         let stored = try await APIAchievementAward.query(on: db)
             .filter(\.$userID == userID)
             .filter(\.$level == level.rawValue)
-            .filter(\.$ownerID == testSetupID)
+            .filter(\.$ownerID ~~ Array(Set(wanted.map(\.testSetupID))))
             .all()
-        var seen = Set(stored.map(\.achievementID))
+        var seen = Set(stored.map { AwardKey(ownerID: $0.ownerID, achievementID: $0.achievementID) })
         var written: [APIAchievementAward] = []
-        for badge in badges where seen.insert(badge.id).inserted {
-            let row = APIAchievementAward(
-                userID: userID, level: level, ownerID: testSetupID, achievementID: badge.id,
-                submissionID: submissionID, label: badge.label, detail: badge.tooltip)
-            if (try? await row.save(on: db)) != nil { written.append(row) }
+        for group in wanted {
+            for badge in group.badges
+            where seen.insert(AwardKey(ownerID: group.testSetupID, achievementID: badge.id)).inserted {
+                let row = APIAchievementAward(
+                    userID: userID, level: level, ownerID: group.testSetupID, achievementID: badge.id,
+                    submissionID: group.submissionID, label: badge.label, detail: badge.tooltip)
+                do {
+                    try await row.create(on: db)
+                    written.append(row)
+                } catch  where isInsertConflict(error) {
+                    continue
+                }
+            }
         }
         return written
     }
 
     /// `record`, for a page that must render whatever happens: a failure is
     /// logged and the page goes on. The next load writes again.
-    static func recordOrLog(
-        _ badges: [AchievementBadge], earnedBy userID: UUID, testSetupID: String, submissionID: String,
-        on db: any Database, logger: Logger
-    ) async {
+    static func recordOrLog(_ earned: [Earned], earnedBy userID: UUID, on db: any Database, logger: Logger) async {
         do {
-            try await record(badges, earnedBy: userID, testSetupID: testSetupID, submissionID: submissionID, on: db)
+            try await record(earned, earnedBy: userID, on: db)
         } catch {
             logger.warning(
                 "achievement award write failed",
-                metadata: ["test_setup_id": .string(testSetupID), "error": .string("\(error)")])
+                metadata: [
+                    "test_setup_ids": .string(earned.map(\.testSetupID).joined(separator: ",")),
+                    "error": .string("\(error)"),
+                ])
         }
     }
 

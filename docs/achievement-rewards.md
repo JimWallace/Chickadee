@@ -472,6 +472,11 @@ The page goes through `ui-review`, as every view does.
   deletion above, because both delete student work.
 - **Retention.** A ledger row names an assignment by setup ID. When
   retention deletes a setup, the row's `label` is what the trophy case shows.
+- **One deleted submission.** `submission_id` has no foreign key. When a
+  single submission is deleted and its assignment stays, the award stays and
+  its `submission_id` names a submission that no longer exists. Nothing in S1
+  deletes a single submission. A slice that adds such a path clears the field
+  on the rows that name it.
 
 ---
 
