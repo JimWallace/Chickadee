@@ -164,7 +164,8 @@ username → id → role only), and `APISubmission`/`APIResult` **filtered to
 
 **Never touched by any tool:** student `APISubmission` (non-validation),
 student `APIResult` (grades), `APIGradeOverride`, `APIAssignmentExtension`,
-`APIAssignmentParticipation`, `APIAssignmentPersonalizationSeed` content,
+`APIAssignmentParticipation`, `APIAssignmentPersonalizationSeed` and
+`APICoursePersonalizationSeed` content,
 `APIClientDiagnostic`, `APISubmissionDiagnostics`, `JobExecutionMetric`,
 `APIClassAchievement`, `APIUserActivityEvent`, `APIBrightSpaceSyncLog`,
 `APIPreEnrollment`, `APIUserActivityEvent`.

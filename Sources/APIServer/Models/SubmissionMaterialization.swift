@@ -35,7 +35,7 @@ struct SubmissionMaterialization: Codable, Sendable {
     /// resolved against (docs/datasets-course-library.md, slice 4). Nil when
     /// the manifest has no course-scoped dataset, and for a row written before
     /// the course cohort existed.
-    var courseSeedHex: String?
+    let courseSeedHex: String?
     /// Resolved `=` expression values (Python literals), keyed by name — the
     /// same map `PersonalizationSubstitution.gradingInputs` produces. Empty for
     /// a literal-only assignment.

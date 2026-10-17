@@ -175,7 +175,8 @@ struct PreviewPersonalizationTool: ContentTool {
     private func resolveCourseSeed(
         input: Input, seedHex: String?, setup: APITestSetup, manifest: TestProperties, context: ToolContext
     ) async throws -> String? {
-        guard manifest.hasCourseScopedDatasets else { return nil }
+        // No seed means no expression is evaluated, so no slice is read.
+        guard manifest.hasCourseScopedDatasets, seedHex != nil else { return nil }
         if input.seedHex != nil { return seedHex }
         let actingUser = try await context.requireEligibleSubject()
         return try await CourseSeedStore.seedIfNeeded(

@@ -303,7 +303,7 @@ func materializeValidationGrading(
 /// The seeds a materialization is pinned to instead of the submitter's own:
 /// a synthetic variant's, or a spare's student's. Nil fields mean "resolve
 /// from the submitter".
-struct PinnedSeeds: Sendable {
+private struct PinnedSeeds: Sendable {
     let assignment: String?
     let course: String?
 

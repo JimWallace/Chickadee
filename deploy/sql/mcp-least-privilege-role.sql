@@ -13,7 +13,8 @@
 -- and ToolContext.db). The main app keeps using its own (owner) role, so the
 -- web UI, worker, and migrations are unaffected. The MCP audit row, the
 -- content-edit re-grade, and the acting-user personalization-seed bookkeeping
--- (assignment_personalization_seeds, via ToolContext.mainDB) all run on the
+-- (assignment_personalization_seeds and course_personalization_seeds, via
+-- ToolContext.mainDB) all run on the
 -- main (owner) pool, not this one -- so none of them need a grant here.
 --
 -- IMPORTANT: review and TEST this against your schema before production use.
@@ -160,7 +161,8 @@ CREATE POLICY mcp_ai_feedback_rows ON reflection_feedback
 --    cannot touch any of these student-data tables:
 --      grade_overrides, client_diagnostics, submission_diagnostics,
 --      job_execution_metrics, assignment_extensions, assignment_participations,
---      assignment_personalization_seeds, class_achievements, achievement_results,
+--      assignment_personalization_seeds, course_personalization_seeds,
+--      class_achievements, achievement_results,
 --      user_activity_events, brightspace_sync_log, pre_enrollments, audit_log,
 --      request_metrics, runner_profiles, runner_snapshots, composite_slots,
 --      composite_contributions, composite_references, composite_spares,
@@ -187,6 +189,11 @@ CREATE POLICY mcp_ai_feedback_rows ON reflection_feedback
 --    pool:
 --        REVOKE SELECT, INSERT ON assignment_personalization_seeds FROM chickadee_mcp;
 --    Leaving the grant in place would re-open the very table this wall denies.)
+--
+--    course_personalization_seeds STAYS DENIED for the same reason: it is the
+--    per-(student, course) seed behind a course-scoped dataset
+--    (docs/datasets-course-library.md). preview_personalization ensures the
+--    acting account's own course seed on the MAIN pool via ToolContext.mainDB.
 
 -- 6. Verify (run as chickadee_mcp):
 --      SELECT count(*) FROM submissions;            -- only validation rows, plus
@@ -197,6 +204,8 @@ CREATE POLICY mcp_ai_feedback_rows ON reflection_feedback
 --      SELECT * FROM assignment_personalization_seeds LIMIT 1;
 --                                                   -- must ERROR: permission denied
 --                                                   -- (seed bookkeeping runs on the owner pool)
+--      SELECT * FROM course_personalization_seeds LIMIT 1;
+--                                                   -- must ERROR: permission denied
 --      SELECT * FROM composite_slots LIMIT 1;       -- must ERROR: permission denied
 --                                                   -- (the set_activity lock runs on the owner pool)
 --      SELECT * FROM composite_contributions LIMIT 1;

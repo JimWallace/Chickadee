@@ -317,7 +317,11 @@ struct WorkerJobRoutes: RouteCollection {
                 courseSeed = try await CourseSeedStore.seedIfNeeded(
                     manifest: claimed.manifest, userID: submission.userID, courseID: setup.courseID, on: req.db)
             } catch {
+                // Grading on, without it, would grade a course-scoped dataset
+                // on per-assignment rows the student never saw. Failing the
+                // payload leaves the job to the stale-claim sweep instead.
                 req.logger.error("Failed to ensure course seed: \(error)")
+                throw WorkerJobError.internalInconsistency(reason: "Could not resolve the course seed")
             }
         }
 

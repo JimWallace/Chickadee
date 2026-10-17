@@ -492,10 +492,18 @@ private func applyNotebookSubstitutionsIfNeeded(
 
     // An expression that reads a course-scoped dataset sees the student's
     // cohort rows (docs/datasets-course-library.md, slice 4).
+    // When the course seed cannot be read, expressions are left out rather
+    // than evaluated on per-assignment rows the student does not hold.
     var courseSeedHex: String?
     if manifest.hasExpressions {
-        courseSeedHex = try? await CourseSeedStore.seedIfNeeded(
-            manifest: manifest, userID: userID, courseID: setup.courseID, on: db)
+        do {
+            courseSeedHex = try await CourseSeedStore.seedIfNeeded(
+                manifest: manifest, userID: userID, courseID: setup.courseID, on: db)
+        } catch {
+            logger.warning(
+                "Could not resolve a course seed for setup \(setup.id ?? "?"); substituting literal values only.")
+            seedHex = nil
+        }
     }
     let resolution = await PersonalizationSubstitution.resolve(
         manifest: manifest, seedHex: seedHex, courseSeedHex: courseSeedHex,
@@ -807,8 +815,11 @@ private func datasetMaterializationFingerprint(
         let attrs = try? fm.attributesOfItem(atPath: sharedDir + spec.file)
         let mtime = (attrs?[.modificationDate] as? Date)?.timeIntervalSince1970 ?? -1
         let size = (attrs?[.size] as? Int) ?? -1
+        // A spec that cannot be encoded gets a marker that never matches, so
+        // the copy is made again rather than left stale.
         let encoded =
-            (try? ManifestCodec.stableEncoder.encode(spec)).flatMap { String(bytes: $0, encoding: .utf8) } ?? spec.file
+            (try? ManifestCodec.stableEncoder.encode(spec)).flatMap { String(bytes: $0, encoding: .utf8) }
+            ?? "unencodable-\(UUID().uuidString)"
         parts.append("\(encoded)|\(mtime)|\(size)")
     }
     return parts.joined(separator: "\n")

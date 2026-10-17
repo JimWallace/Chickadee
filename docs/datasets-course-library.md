@@ -394,9 +394,16 @@ per-student material, now including the course cohort.
 There is no staff re-seed action today, for the assignment seed or for the
 course seed, and this plan adds none. A seed is issued once and kept.
 
+**A lost course seed fails loudly.** When the seed cannot be read, the worker
+payload fails and the stale-claim sweep re-queues the job, and the notebook
+substitution evaluates no expression. Either is better than grading or showing
+per-assignment rows the student never received. The editor copy is left as it
+is.
+
 Tests: `CourseCohortDeliveryTests` (the store, the editor across two
-assignments, the stratum-edit fingerprint, a claimed variant job) and
-`DatasetCourseSeedCallSiteTests` in `APITests`.
+assignments, the stratum-edit fingerprint, a claimed variant job),
+`CourseCohortJobPathTests` (a student's own job, a job with no student, a
+spare's pinned seeds) and `DatasetCourseSeedCallSiteTests` in `APITests`.
 
 ### 4.5 Instructor surfaces (slice 5)
 
