@@ -775,7 +775,9 @@ duplicate.
   `.wb-bar-spacer` between) over a `.wb-body`: the `.wb-rail` and the
   `.wb-pane-notebook`, a `.wb-pane` whose `.wb-notebook-body` holds the
   editor.  `.wb-scroll` makes a pane scroll inside the page.  The rail
-  (`WorkbenchRail`, `workbench-rail.js`) holds a `.rail-head`, then one
+  (`WorkbenchRail`, `workbench-rail.js`) holds a `.rail-head` with "+ Section"
+  (`AddSuiteSectionPopup`, the same popup as the suite sheet's: the rail is
+  the quick path, so the two copies are deliberate), then one
   `.rail-group` per section, with a `.rail-group-head` and a `.rail-links`
   list.  Its rows are the student outline's rows (`.outline-row`,
   `.outline-glyph`, `.outline-name` in mono, `.outline-caption`), because they
