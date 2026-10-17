@@ -1174,67 +1174,72 @@
     // server-side for course staff only (NotebookContext.canSaveToAssignment);
     // the endpoint re-checks the same permission, so this is convenience, not
     // the control.
-    if (saveAssignmentBtn) {
+    //
+    // Named, and exposed below, so the assignment workbench's single Save
+    // button can run exactly this — the same request, status line and
+    // error handling — instead of synthesising a click on a hidden button.
+    // Resolves true on success, false on failure; never throws, because the
+    // shell is waiting on it to re-enable its button.
+    //
+    // It reads the button when it runs, not at page load: a workbench swap
+    // (Solution, Starter, a preview) replaces the button, and the file
+    // and view it names. A capture at load saved a swapped-in solution
+    // over the starter. A pane with no button (a preview) saves nothing.
+    async function saveToAssignment() {
+        const saveAssignmentBtn = document.getElementById('nb-save-assignment');
+        if (!saveAssignmentBtn) return true;
         const saveFileKind = saveAssignmentBtn.dataset.fileKind === 'solution' ? 'solution' : 'assignment';
-        // Which working copy the editor is showing. The endpoint writes the
-        // save back to this view's copy and discards the other, so a wrong
-        // value here would leave the author looking at stale bytes.
+        // Which working copy the editor is showing. The endpoint writes
+        // the save back to this view's copy and discards the other, so a
+        // wrong value here would leave the author looking at stale bytes.
         const saveViewMode = saveAssignmentBtn.dataset.viewMode === 'personalized' ? 'personalized' : 'template';
         const saveLabel = saveAssignmentBtn.textContent;
-
-        // Named, and exposed below, so the assignment workbench's single Save
-        // button can run exactly this — the same request, status line and
-        // error handling — instead of synthesising a click on a hidden button.
-        // Resolves true on success, false on failure; never throws, because the
-        // shell is waiting on it to re-enable its button.
-        async function saveToAssignment() {
-            saveAssignmentBtn.disabled = true;
-            saveAssignmentBtn.textContent = 'Saving…';
-            clearResults();
-            setStatus('loading', 'Capturing notebook…');
-            try {
-                // Same capture chain the Submit button uses (live frame →
-                // server snapshot → visible DOM → contents API), so a save
-                // never silently stores stale bytes when the editor is slow.
-                const notebook = await loadNotebookForSubmit();
-                setStatus('loading', 'Saving to the assignment…');
-                const res = await fetch(
-                    `/testsetups/${encodeURIComponent(setupID)}/notebook/save?file=${saveFileKind}&view=${saveViewMode}`,
-                    {
-                        method: 'POST',
-                        headers: {
-                            'content-type': 'application/json',
-                            'x-csrf-token': ChickadeeUI.getCsrfToken()
-                        },
-                        body: JSON.stringify(notebook)
-                    });
-                if (!res.ok) {
-                    let reason = '';
-                    try { reason = (await res.json()).reason || ''; } catch (_) { /* non-JSON error */ }
-                    throw new Error(reason || `Save failed (${res.status})`);
-                }
-                const payload = await res.json();
-                setStatus('ok', payload.message || 'Saved to the assignment.');
-                // In an assignment-workbench pane, tell the shell: the save
-                // changed the files list and validation status that the edit
-                // pane beside us is rendering, so it is now stale.  No-op on
-                // the standalone page, which has no parent.
-                ChickadeeUI.notifyWorkbench('notebook-saved');
-                return true;
-            } catch (err) {
-                const msg = (err instanceof Error && err.message) ? err.message : String(err);
-                console.error('[notebook] Save-to-assignment error:', err);
-                setStatus('error', `Could not save: ${msg}`);
-                return false;
-            } finally {
-                saveAssignmentBtn.disabled = false;
-                saveAssignmentBtn.textContent = saveLabel;
+        saveAssignmentBtn.disabled = true;
+        saveAssignmentBtn.textContent = 'Saving…';
+        clearResults();
+        setStatus('loading', 'Capturing notebook…');
+        try {
+            // Same capture chain the Submit button uses (live frame →
+            // server snapshot → visible DOM → contents API), so a save
+            // never silently stores stale bytes when the editor is slow.
+            const notebook = await loadNotebookForSubmit();
+            setStatus('loading', 'Saving to the assignment…');
+            const res = await fetch(
+                `/testsetups/${encodeURIComponent(setupID)}/notebook/save?file=${saveFileKind}&view=${saveViewMode}`,
+                {
+                    method: 'POST',
+                    headers: {
+                        'content-type': 'application/json',
+                        'x-csrf-token': ChickadeeUI.getCsrfToken()
+                    },
+                    body: JSON.stringify(notebook)
+                });
+            if (!res.ok) {
+                let reason = '';
+                try { reason = (await res.json()).reason || ''; } catch (_) { /* non-JSON error */ }
+                throw new Error(reason || `Save failed (${res.status})`);
             }
+            const payload = await res.json();
+            setStatus('ok', payload.message || 'Saved to the assignment.');
+            // In an assignment-workbench pane, tell the shell: the save
+            // changed the files list and validation status that the edit
+            // pane beside us is rendering, so it is now stale.  No-op on
+            // the standalone page, which has no parent.
+            ChickadeeUI.notifyWorkbench('notebook-saved');
+            return true;
+        } catch (err) {
+            const msg = (err instanceof Error && err.message) ? err.message : String(err);
+            console.error('[notebook] Save-to-assignment error:', err);
+            setStatus('error', `Could not save: ${msg}`);
+            return false;
+        } finally {
+            saveAssignmentBtn.disabled = false;
+            saveAssignmentBtn.textContent = saveLabel;
         }
-
-        saveAssignmentBtn.addEventListener('click', saveToAssignment);
-        window.chickadeeSaveToAssignment = saveToAssignment;
     }
+
+    if (saveAssignmentBtn) saveAssignmentBtn.addEventListener('click', saveToAssignment);
+    window.chickadeeSaveToAssignment = saveToAssignment;
 
     // ── Editor command bridge (jupyter-iframe-commands) ──────────────
     // Preferred channel for driving JupyterLab commands in the editor iframe.
