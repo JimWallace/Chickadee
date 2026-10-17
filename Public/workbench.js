@@ -179,7 +179,8 @@
         if (!summary) return;
         summary.textContent = shown
             ? shown.getAttribute('data-wb-label') : summary.getAttribute('data-wb-idle-label');
-        summary.title = shown ? shown.textContent : 'Preview as student';
+        if (shown) summary.title = shown.textContent;
+        else summary.removeAttribute('title');
         menu.open = false;
     }
 

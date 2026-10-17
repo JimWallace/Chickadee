@@ -20,12 +20,12 @@ struct WorkbenchPreviewMenu: HTML {
 
     var body: some HTML {
         details(.class("ext-details popup-anchor wb-preview-menu")) {
-            summary(
-                .class("btn action-btn ext-summary"), .title(previewed?.name ?? "Preview as student"),
-                .data("wb-idle-label", value: Self.idleLabel)
-            ) {
+            // The title holds the whole name of a long one, which the button
+            // cuts; with no preview open there is nothing more to say.
+            summary(.class("btn action-btn ext-summary"), .data("wb-idle-label", value: Self.idleLabel)) {
                 previewed.map { Self.label(for: $0.name) } ?? Self.idleLabel
             }
+            .attributes(.title(previewed?.name ?? ""), when: previewed != nil)
             div(.class("popover-panel wb-preview-panel"), .role("menu")) {
                 for student in students {
                     button(
