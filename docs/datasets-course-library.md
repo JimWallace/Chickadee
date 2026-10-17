@@ -6,14 +6,14 @@ of datasets per course, attached to many assignments, with a per-student cohort
 that stays the same from the first lab to the final assignment, and a page
 where students can read about the data they work with.
 
-Status: **proposed**. Nothing in this document is built. Each slice below
+Status: **in progress**. The decisions in §8 are settled. Each slice below
 states what it adds and what proves it.
 
 | slice | what | state |
 |---|---|---|
-| 0 | This design note | proposed |
-| 1 | Core: `DatasetSource` and `DatasetSliceScope` on `DatasetSpec`; `DatasetSeedDerivation`; the data dictionary model | proposed |
-| 2 | Server: the `course_datasets` and `course_dataset_versions` tables, the blob-backed store, `CourseDatasetService` | proposed |
+| 0 | This design note | shipped |
+| 1 | Core: `DatasetSource` and `DatasetSliceScope` on `DatasetSpec`; `DatasetSeedDerivation`; the data dictionary model | built |
+| 2 | Server: the `course_datasets` and `course_dataset_versions` tables, the blob-backed store, `CourseDatasetService` | built |
 | 3 | Attachment: copy a pinned version into the setup zip and record the source; promote a support file into the library; detect a newer version | proposed |
 | 4 | Course cohort: the per-(student, course) seed, and `DatasetResolver` choosing the seed per spec at every delivery path | proposed |
 | 5 | Instructor surfaces: the Datasets tab, the Files-panel picker and the scope control | proposed |
@@ -178,74 +178,76 @@ and a test asserts that a cloned course's assignments resolve their
 
 ## 4. Design
 
-### 4.1 Core (slice 1)
+### 4.1 Core (slice 1, built)
 
-`Sources/Core/Models/DatasetSpec.swift` gains two optional fields. Both decode
-with `decodeIfPresent`, so every stored manifest decodes unchanged.
+`DatasetSpec` has two library fields. Both decode with defaults, so every
+stored manifest decodes unchanged.
 
-```swift
-/// Where an attached dataset's bytes came from. Nil for a file the
-/// instructor uploaded into this assignment by hand.
-public struct DatasetSource: Codable, Sendable, Equatable {
-    public let slug: String      // per-course unique
-    public let version: Int      // the pinned version
-}
+- `source: DatasetSource?` names the library slug and the pinned version
+  (`Sources/Core/Models/DatasetSource.swift`). Nil means the instructor
+  uploaded the file into this assignment by hand.
+- `scope: DatasetSliceScope` is `assignment` (the default) or `course`
+  (`Sources/Core/Models/DatasetSliceScope.swift`).
 
-/// Which seed selects the student's rows.
-public enum DatasetSliceScope: String, Codable, Sendable, CaseIterable {
-    case assignment   // the per-(student, assignment) seed; the default
-    case course       // the per-(student, course) seed, derived per slug
-}
-```
+**The bytes of a stored manifest do not change.** `DatasetSpec` has its own
+encoder. It writes the keys the synthesized encoder wrote before, and it
+writes `source` and `scope` only when they differ from their defaults. The
+manifest hash gates the retest fan-out and the runner cache, so a re-encoded
+manifest must give the same bytes. A test pins the old bytes.
 
-`DatasetSpec` adds `source: DatasetSource?` and `scope: DatasetSliceScope`
-(default `.assignment`). A `scope` of `.course` without a `source` is refused
-at save by `DatasetSpecValidation`: a hand-uploaded file has no slug to derive
-a seed from.
+**Seed derivation** (`Sources/Core/DatasetSeedDerivation.swift`).
+`effectiveSeed(spec:assignmentSeedHex:courseSeedHex:)` returns the assignment
+seed for an `assignment` scope. For a `course` scope it returns
+`sha256(courseSeedHex + ":" + slug)` as 64 lowercase hex characters.
 
-`Sources/Core/DatasetSeedDerivation.swift`:
+The build changed one rule of the plan. A `course` scope with no course seed,
+or with no source, falls back to the assignment seed. The first draft skipped
+the spec, which delivers the file as shipped: the pool. A fallback to the
+assignment seed gives a per-assignment slice instead, so a missing course seed
+can never show a student the pool (D9). Slice 4 must pass the course seed at
+every student-facing delivery path, or a course-scoped spec silently gives
+per-assignment rows.
 
-```swift
-public enum DatasetSeedDerivation {
-    /// The seed `DatasetMaterializer` uses for `spec`.
-    public static func effectiveSeed(
-        spec: DatasetSpec, assignmentSeedHex: String, courseSeedHex: String?
-    ) -> String?
-}
-```
+`DatasetResolver.resolve` has an overload with `courseSeedHex`. The old
+signature calls it with nil, so every existing call site and test is
+unchanged until slice 4 passes the seed.
 
-For `.assignment` it returns the assignment seed. For `.course` it returns
-`sha256(courseSeedHex + ":" + slug)` as 64 hex characters, or nil when no
-course seed was supplied. A nil result means the spec is skipped, and the
-student gets the file as shipped, which is the existing "cannot resolve"
-behaviour. `Hashing.swift` already holds a SHA-256 helper.
+**Save-time checks** (`DatasetSpecValidation`).
 
-`DatasetResolver.resolve` gains a `courseSeedHex: String?` parameter and calls
-the derivation per spec. Every call site passes it (slice 4).
+- `scopeIssue` refuses a `course` scope without a source. It is the loud half
+  of the fallback above, and `datasetSpecRefusal` runs it at every door.
+- `libraryFieldIssue` refuses a change to `source` or `scope` through a door
+  that is not the library attach path. The published and draft
+  `/datasets` PUTs run it. MCP `set_dataset` carries the stored fields through
+  every edit. This is the "enforce before you can author" order the grader-only
+  work used: nothing can write a source until slice 3 adds the attach path.
+  Slices 5 and 7 lift the `scope` half when the scope control ships.
 
-`Sources/Core/Models/DatasetDictionary.swift`: the column list a version
-carries.
+**The data dictionary** (`Sources/Core/Models/DatasetColumn.swift`,
+`Sources/Core/DatasetDictionary.swift`). A `DatasetColumn` holds a name, a
+`valueType` (`integer`, `number`, `boolean`, `date`, `text`), and the
+instructor's `description` and `unit`.
 
-```swift
-public struct DatasetColumn: Codable, Sendable, Equatable {
-    public let name: String
-    public let inferredType: DatasetColumnType  // integer, number, text, date, boolean
-    public var description: String?
-    public var unit: String?
-}
-```
+- `profile(csv:)` reads the header and counts the data rows. It infers each
+  column's type from the first 1000 rows, the narrowest type every value
+  fits. Common missing tokens (`NA`, `null`, an empty cell) do not count. It
+  refuses a file with no header, a blank column name or a repeated column
+  name, with a message for each.
+- `carried(from:onto:)` lays the previous version's prose onto a new
+  version's columns by name. The new header's order and types win. It names
+  the columns whose prose had nowhere to go.
+- `editIssue(_:header:)` refuses an entry for a column the file does not
+  have, and an entry named twice.
 
-The type is inferred from a bounded sample of rows at upload. It is a hint for
-the dictionary, not a contract the grader enforces.
+Tests: `DatasetLibraryFieldsTests`, `DatasetCohortTests`
+(derivation pinned, two slugs give two seeds, nested samples, version
+stability) and `DatasetDictionaryTests` in `CoreTests`;
+`DatasetLibraryFieldDoorTests` in `APITests`.
 
-Tests: `DatasetSpec` round-trip with and without the new fields; a stored
-manifest from before this slice decodes with `scope == .assignment` and
-`source == nil`; `effectiveSeed` is pure and pinned by fixture; two slugs on
-one course seed give two seeds; nested samples (D6) pinned.
+### 4.2 The library (slice 2, built)
 
-### 4.2 The library (slice 2)
-
-Two tables, two Fluent models, one service.
+One migration (`CreateCourseDatasets`) makes two tables. Both foreign keys
+cascade, so a course delete removes its library rows.
 
 `course_datasets`: `id`, `course_id`, `slug`, `name`, `description`,
 `provenance`, `licence`, `is_published`, `current_version`, `created_at`,
@@ -255,22 +257,28 @@ Two tables, two Fluent models, one service.
 `sha256`, `size_bytes`, `row_count`, `columns_json` (the dictionary), `note`,
 `created_at`. Unique on `(dataset_id, version)`.
 
-Bytes live in the content-addressed blob store
-(`AssignmentVersionBlobStore`, keyed by SHA-256). A version that has the same
-bytes as an earlier one is refused with a message naming that version. A new
-version copies the previous dictionary and re-checks it against the new
-header; a column that disappeared is dropped from the dictionary and named in
-the response.
+**Bytes** live in the content-addressed blob store that assignment versions use
+(`AssignmentVersionBlobStore`). The blob is written before its row, which is
+the order the collector's grace window expects. The collector's reference set
+(`AssignmentVersionStore.referencedBlobHashes`) counts dataset versions, so a
+course purge does not delete library bytes that a surviving course still
+uses. This was not in the first draft of the plan; without it, the first
+course purge after slice 2 would have deleted every library version.
 
-`CourseDatasetService` owns create, update metadata, add version, publish and
-unpublish, delete, and the usage query (which assignments pin which version).
-Delete is refused while any assignment's manifest names the slug. Size ceiling
-for a version: 16 MB, the same order as the bundle and the divergence
-ceiling's reasoning.
+**`CourseDatasetService`** owns the rules about the data. Authorization stays
+with the callers of later slices.
 
-Tests: a `.serialized` DB suite in the `with*App` pattern for the service;
-slug uniqueness per course; refusal of a duplicate version; dictionary carry
-and column drop on a new version.
+| Operation | Rules |
+|---|---|
+| `create` | slug of 1 to 64 lowercase letters, digits and hyphens, unique per course; a name of 1 to 200 characters; a bare `.csv` filename; at most 16 MB; UTF-8; a usable header. Starts unpublished at version 1. |
+| `addVersion` | the same file rules; refused when the bytes equal an earlier version, naming it; the dictionary prose carried by column name, with the dropped columns named. A lost race for a version number retries. |
+| `updateMetadata` | a nil field is left alone and a blank field clears it; a published dataset keeps its provenance and licence. |
+| `updateDictionary` | prose only; the inferred types stay. |
+| `setPublished` | publishing needs a provenance and a licence (D8). |
+| `usage` | every assignment and draft in the course whose manifest names the slug as a source. |
+| `delete` | refused while `usage` is not empty, naming the users. The blobs stay until the next collection. |
+
+Tests: `CourseDatasetServiceTests` in `APITests`.
 
 ### 4.3 Attachment and promotion (slice 3)
 
@@ -298,6 +306,24 @@ what it was validated against, which is the manifest-hash rule from
 
 A file that is attached from the library cannot be deleted through the
 support-file delete controls; the row says to detach it instead.
+
+Three facts from slices 1 and 2 that this slice must handle:
+
+- **The whole-file attachment needs its own door.** `datasetSpecRefusal`
+  refuses a nil `sampleSize` at the `/datasets` PUTs and `set_dataset`. An
+  attachment of the whole file is therefore written by the attach path, which
+  runs the same file checks without the sample rule. Once attached, a panel
+  edit that sets a sample goes through the existing doors as usual.
+- **Other doors take a whole manifest.** The zip upload with
+  `test.properties.json`, the bundle import and a v2 manifest import can carry
+  `source` and `scope` without `libraryFieldIssue`. Before this slice ships,
+  each of them must check that a `source` names a dataset and a version that
+  exist in the course, and refuse it or drop it with a message otherwise.
+  Slice 8 does the same for the bundle import of a library.
+- **Attach re-reads the dataset.** `delete` checks `usage` and then deletes,
+  so an attach that runs between the two would pin a version that is gone.
+  The attach path reads the dataset and the version inside its own write, and
+  fails when either is missing.
 
 Tests: attach writes the bytes and the spec; the diagnostics chips read the
 attached file; detach keeps or removes the file as asked; promote on a live
@@ -552,7 +578,7 @@ own changelog fragment.
 
 | Slice | Files it touches (main) | Proof |
 |---|---|---|
-| 1 | `Sources/Core/Models/DatasetSpec.swift`, new `DatasetSeedDerivation.swift`, `DatasetDictionary.swift`, `DatasetSpecValidation.swift`, `DatasetResolver.swift` | `CoreTests`: codec back-compat, seed derivation fixtures, nested-sample property, refusal of course scope without a source |
+| 1 | `Sources/Core/Models/DatasetSpec.swift`, new `DatasetSeedDerivation.swift`, `DatasetDictionary.swift`, `Models/DatasetColumn.swift`, `DatasetSpecValidation.swift`, `DatasetResolver.swift` | `CoreTests`: codec back-compat, seed derivation fixtures, nested-sample property, refusal of course scope without a source |
 | 2 | new models and migration, `CourseDatasetService.swift` | `APITests`: service suite |
 | 3 | `CourseDatasetService.swift`, `ManifestFileHelpers.swift`, `ContentEditEffects.swift` | attach, detach, promote, newer-version predicate |
 | 4 | `APICoursePersonalizationSeed.swift`, `CourseSeedStore.swift`, `SubmissionMaterialization.swift`, the six call sites | the delivery-path suites gain course-scoped cases |
@@ -584,29 +610,22 @@ PR and no version bump.
 
 ---
 
-## 8. Questions for the maintainer
+## 8. Decisions by the maintainer
 
-The plan proceeds on the recommended answers. A different answer changes the
-slice it names.
+The maintainer accepted the recommended answers on 2026-10-17. Two questions
+had no recommendation, and they stay open until their slice comes up.
 
-1. **Scope default (D5).** `assignment` keeps every existing spec unchanged.
-   Should a dataset attached from the library default to `course` instead,
-   since the cohort is the point of the library? Recommended: keep
-   `assignment` as the decoded default, but make the Files-panel picker and
+1. **Scope default (D5). Decided.** `assignment` is the decoded default, so
+   every existing spec is unchanged. The Files-panel picker and
    `attach_dataset` default to `course` for a new attachment.
-2. **Student download of the pool (D9).** Never for students is the
-   recommendation. A course where every student gets the whole file is the
-   one case where the pool is the slice, and the download then serves it.
-3. **Published by default (D8).** A promoted dataset starts unpublished until
-   provenance and licence are filled. The two live datasets would be
-   invisible on the Data page until that is done. Fine for a closed term;
-   confirm.
-4. **Tab name.** "Datasets" on the instructor bar and "Data" on the student
-   side. Confirm the words.
-5. **Slice 10.** In or out of this arc.
-6. **The ranked-activity refusal (§4.11).** A refusal is the recommendation,
-   on the same footing as the kind lock. A warning on the row instead would let
-   an instructor rank on personal data on purpose, for example a leaderboard
-   on a stratified sample where every student has every category. Refusal or
-   warning.
-7. **Slice 11.** In this arc, or after the cohort work has run for a term.
+2. **Student download of the pool (D9). Decided.** Students never download
+   the pool. When every student gets the whole file, the pool is the slice,
+   and the download serves it.
+3. **Published by default (D8). Decided.** A promoted dataset starts
+   unpublished until provenance and licence are filled.
+4. **Tab names. Decided.** "Datasets" on the instructor bar and "Data" on the
+   student side.
+5. **Slice 10 (`formatNoise`). Open.** Decide before slice 9 ships.
+6. **The ranked-activity refusal (§4.11). Decided.** A refusal, on the same
+   footing as the kind lock.
+7. **Slice 11. Open.** Decide after slice 6 ships.

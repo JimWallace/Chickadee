@@ -629,7 +629,7 @@ One line per document. Each document holds its own rules and evidence.
 - `docs/course-terms.md` — course year and term, the two course-code resolvers, cloning for a new term
 - `docs/solution-visibility.md` — the post-deadline solution reveal and its slip-day ceiling
 - `docs/datasets.md` — per-student datasets (#1083)
-- `docs/datasets-course-library.md` — proposed: a per-course dataset library, the course cohort seed, the student Data page; opens with a Status table
+- `docs/datasets-course-library.md` — in progress: a per-course dataset library, the course cohort seed, the student Data page; opens with a Status table
 - `docs/admin-mcp.md` — the read-only admin diagnostics MCP surface
 - `docs/ai-assisted-feedback.md` — an instructor's own AI agent drafts feedback on written reasoning through MCP, behind two opt-in gates and staff review
 - `docs/compliance/` — the UW approval package: student-data audits, tool and data-flow inventories
