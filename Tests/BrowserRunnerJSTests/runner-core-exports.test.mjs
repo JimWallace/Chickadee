@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 
+import { loadRunnerWasm } from './support/runner-wasm.mjs';
+
 // The typed BridgeJS surface of the vendored RunnerCore wasm, and the legacy
 // `globalThis.runner*` adapters the loader registers over it.
 //
@@ -18,20 +20,8 @@ import path from 'node:path';
 //     browser-runner.js documents).
 
 const RUNNER_DIR = path.resolve('Public/runner-wasm');
-const RUNNER_CORE = path.join(RUNNER_DIR, 'runner-core.js');
 
-let _ready;
-async function ensureWasm() {
-  if (!_ready) {
-    _ready = (async () => {
-      const { init } = await import(RUNNER_CORE);
-      const wasmName = (await fs.readdir(RUNNER_DIR)).find(f => /^RunnerWasm\..*\.wasm$/.test(f));
-      const module = await WebAssembly.compile(await fs.readFile(path.join(RUNNER_DIR, wasmName)));
-      return init({ module });
-    })();
-  }
-  return _ready;
-}
+const ensureWasm = loadRunnerWasm;
 
 const rCells = [
   { cellType: 'markdown', source: 'notes' },
