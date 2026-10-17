@@ -1,7 +1,8 @@
 # Achievements and rewards across the site
 
-**Status: proposed.** Nothing in this note is built. It is a plan for the
-maintainer to argue with before any slice starts. It continues
+**Status: decided; S1 in progress.** The maintainer took the six open
+decisions on 2026-10-17 (see "Decisions taken" at the end). Each took the
+recommended answer. It continues
 [achievements-unification.md](achievements-unification.md) (one editor for
 every assignment achievement), [student-wardrobe.md](student-wardrobe.md)
 (what a bird can earn) and [result-celebration.md](result-celebration.md)
@@ -11,7 +12,7 @@ wardrobe item?), and it gives #2617 (one toast for everything earned) and
 
 | Slice | Content | Issue | State |
 |---|---|---|---|
-| S1 | The award ledger: one stored row for each achievement a student earns | — | proposed |
+| S1 | The award ledger: one stored row for each achievement a student earns | — | in progress |
 | S2 | A wardrobe item as an achievement reward, on an assignment | — | proposed |
 | S3 | Course achievements: the model, the course signals and the evaluator | — | proposed |
 | S4 | The course Achievements tab in the instructor area | — | proposed |
@@ -53,8 +54,8 @@ student may submit. An achievement never does. This note does not change
 
 ## Decisions
 
-Each decision names the alternative it rejects. The ones marked **(ask)**
-need the maintainer's word before the slice that depends on them starts.
+Each decision names the alternative it rejects. The ones that were marked
+**(ask)** are decided; "Decisions taken" at the end records the answers.
 
 ### 1. One definition type, three levels
 
@@ -91,14 +92,19 @@ student has earned:
 | `id` | UUID | PK |
 | `user_id` | UUID | FK users, cascade delete |
 | `level` | string | `assignment`, `course`, `site` |
-| `owner_id` | string NULL | the test setup ID, the course ID, or NULL for the site |
+| `owner_id` | string | the test setup ID, the course ID, or `site` |
 | `achievement_id` | string | `Achievement.id` within its owner |
 | `submission_id` | string NULL | the submission that earned it, when one did |
-| `label` | string | the name at the time it was earned, for the trophy case after the definition changes or goes away |
+| `label` | string | the badge caption at the time it was earned, for the trophy case after the definition changes or goes away |
+| `detail` | string NULL | the badge tooltip at the time it was earned |
 | `earned_at` | datetime | |
 
 Unique on `(user_id, level, owner_id, achievement_id)`. The write is an
 upsert that tolerates a unique violation, like `wardrobe_unlocks`.
+
+`owner_id` is required. A unique index treats two NULLs as different values
+on both SQLite and Postgres, so a NULL owner for the site level would let one
+site award be stored twice. The site level uses the owner `site`.
 
 Today an individual badge is computed on every view (`earnedIndividualBadges`)
 and stored nowhere. That is why J3 (#2617) plans a `localStorage` key for each
@@ -106,7 +112,7 @@ badge the browser has shown, and why W5 (#2621) asks what to store. A ledger
 answers both. It is also what a course achievement reads for "earned the Ace
 badge three times".
 
-**Sticky (ask).** Once a row is written, a regrade does not remove it. This is
+**Sticky (decided).** Once a row is written, a regrade does not remove it. This is
 the rule for wardrobe items and for lab unlocks, and the reasons are the same:
 a suite edit that retests the class must not take back what a student saw
 on their result page. The alternative is to recompute badges as today, so a
@@ -157,7 +163,7 @@ the students know about.
 `gradeFloor` and `achievementRef` are two new optional fields on
 `AchievementCondition`, `decodeIfPresent`. Old manifests decode unchanged.
 
-**Scope at the course level (ask).** Slice S3 ships `individual` only. A
+**Scope at the course level (decided).** Slice S3 ships `individual` only. A
 `classWide` course goal ("80% of the class finishes every lab") is the same
 sweep as today over a different count, and a `record` ("first to finish every
 lab") is the same holder table. Both can come later on this model. Shipping
@@ -196,7 +202,7 @@ that issue:
    duck join it when W4 (#2620) gives them a slot. A built-in-rule item is
    never grantable: the editor does not offer it, and the validator refuses
    it.
-2. **Course items are account-wide (ask).** An item one course grants shows
+2. **Course items are account-wide (decided).** An item one course grants shows
    in every course. This is decision 5 of student-avatars.md, and a
    per-course wardrobe would be a second spec per enrollment. The cost is
    that the pool is shared: a student who already has spectrum from one
@@ -298,8 +304,8 @@ atLeast 100` already express. At the site level it becomes
 Ace badge, once Ace is in the ledger (S1). The catch is that Ace reads the
 points-weighted grade and `sly` reads every-test-passed; on a suite with
 unequal points these differ at the edge. Keep `sly` on its own
-`WardrobeProgress.hasFirstTryFullMarks` flag until the maintainer decides
-whether the two should be one rule.
+`WardrobeProgress.hasFirstTryFullMarks` flag: the maintainer decided that the
+two stay two rules.
 
 E9 still holds: there are no switches on the site rules. They are a registry,
 not a course row. An instructor sees them, read-only, on the course tab, so
@@ -313,7 +319,7 @@ the trophy case and the toast read one ledger instead of two tables.
 | Surface | Read | Write |
 |---|---|---|
 | assignment Achievements table | course staff | `ta` and above, as today (`putAchievements`) |
-| course Achievements tab | course staff | `ta` and above **(ask)** |
+| course Achievements tab | course staff | `ta` and above (decided) |
 | the site registry | course staff, read-only | nobody |
 
 A course achievement is content, like an assignment achievement, and it
@@ -460,6 +466,10 @@ The page goes through `ui-review`, as every view does.
   cascades on `user_id`.
 - **Course deletion** deletes the course's ledger rows with the course.
   Wardrobe unlocks stay, with their stored label (decision 2).
+- **Assignment deletion** deletes that assignment's ledger rows, with its
+  submissions. Nothing else of the assignment remains, so a trophy for it
+  would name work that no longer exists. S1 does this, and the course
+  deletion above, because both delete student work.
 - **Retention.** A ledger row names an assignment by setup ID. When
   retention deletes a setup, the row's `label` is what the trophy case shows.
 
@@ -489,7 +499,7 @@ and bird as it is.
 
 | Slice | Content | Depends on | Decision it needs |
 |---|---|---|---|
-| S1 | `achievement_awards`, `APIAchievementAward`, `AchievementAwardStore` for assignment-level individual badges, written when the result page and the dashboard rows load. Submission pages keep computing badges for display. Tests: a regrade keeps the row; two loads write one row. | — | 2 (sticky) |
+| S1 | `achievement_awards`, `APIAchievementAward`, `AchievementAwardStore` for assignment-level individual badges, written when the student's own result page and dashboard rows load. Submission pages keep computing badges for display. The rows go with the user, the course and the assignment, and are in the account export. Tests: a regrade keeps the row; two loads write one row; staff views write nothing. | — | 2 (sticky) |
 | S2 | `RewardType.wardrobe`, `AchievementReward.item`, `WardrobeItem.grantable` with spectrum, `wardrobe_unlocks.source` and `label`, the grant on read, the account page's "how you earned it" from the label, the Reward control in the assignment editor, the MCP row fields and the derived prose. Closes #2619. | S1 | 4 (account-wide) |
 | S3 | `AchievementLevel`, the course signals, the course targets, `CourseProgress`, `courses.achievements`, `AchievementsEditing` over a course source, the evaluator in `AchievementAwardStore`. No UI. Tests: each signal over a synthetic course; a signal at the wrong level is refused. | S1 | 3 (individual only) |
 | S4 | The course Achievements tab, the two routes, Earned so far, Built in, Recompute. `ui-review`. | S3 | 9 (the gate) |
@@ -505,18 +515,16 @@ S6 and S8 as they fit.
 
 ---
 
-## Open questions for the maintainer
+## Decisions taken
 
-1. **Sticky badges** (decision 2). A stored badge stays after a regrade. Yes?
-2. **Account-wide grants** (decision 4.2). An item one course grants shows in
-   every course. Yes?
-3. **Course scope** (decision 3). S3 ships `individual` course achievements
-   only. Yes?
-4. **The course tab's gate** (decision 9). `ta` and above, as the assignment
-   table is. Yes?
-5. **`sly` and Ace** (decision 8). Keep them two rules, or make Ace the rule?
-6. **Which items are grantable after spectrum.** The gradcap for course
-   completion is the obvious second, once W4 gives it a slot. Is a
-   "completion" default course achievement (every visible lab graded, and
-   the gradcap) worth seeding on every course, the way the eight built-ins
-   are seeded on every assignment?
+The maintainer answered the six open questions on 2026-10-17. Each took the
+recommended answer.
+
+| Question | Decision |
+|---|---|
+| Sticky badges (decision 2) | Sticky. A stored award stays after a regrade. |
+| Account-wide grants (decision 4.2) | Account-wide. An item one course grants shows in every course. |
+| Course scope (decision 3) | S3 ships `individual` course achievements only. |
+| The course tab's gate (decision 9) | `ta` and above, as the assignment table is. |
+| `sly` and Ace (decision 8) | Two rules. `sly` keeps its own every-test-passed check. |
+| A seeded completion achievement | Not yet. Spectrum stays the only grantable item until W4 gives the gradcap a slot. |
