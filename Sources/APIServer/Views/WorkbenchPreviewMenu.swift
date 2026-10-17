@@ -13,17 +13,23 @@ struct WorkbenchPreviewMenu: HTML {
     /// The student the notebook shows now, or nil.
     let previewed: WorkbenchPreviewStudent?
 
-    static let idleLabel = "Preview as student ▾"
+    static let idleLabel = "Preview as student"
 
     /// The menu button's label while `name`'s notebook is open.
-    static func label(for name: String) -> String { "Preview: \(name) ▾" }
+    static func label(for name: String) -> String { "Preview: \(name)" }
 
     var body: some HTML {
-        details(.class("ext-details popup-anchor wb-preview-menu")) {
+        details(.class("ext-details popup-anchor js-wb-preview-menu")) {
             // The title holds the whole name of a long one, which the button
             // cuts; with no preview open there is nothing more to say.
+            // The title holds the whole name of a long one, which the label
+            // cuts; with no preview open there is nothing more to say. The
+            // caret is hidden from a screen reader, as in the site nav, and
+            // workbench.js replaces only the label.
             summary(.class("btn action-btn ext-summary"), .data("wb-idle-label", value: Self.idleLabel)) {
-                previewed.map { Self.label(for: $0.name) } ?? Self.idleLabel
+                span(.class("wb-preview-label")) { previewed.map { Self.label(for: $0.name) } ?? Self.idleLabel }
+                " "
+                span(.class("nav-dropdown-caret"), .ariaHidden) { "▾" }
             }
             .attributes(.title(previewed?.name ?? ""), when: previewed != nil)
             div(.class("popover-panel wb-preview-panel"), .role("menu")) {

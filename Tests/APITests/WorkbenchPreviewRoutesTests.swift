@@ -72,7 +72,7 @@ import VaporTesting
                 afterResponse: { res in
                     #expect(res.status == .ok)
                     let html = res.body.string
-                    #expect(html.contains("Preview as student ▾"))
+                    #expect(html.contains(">Preview as student<"))
                     #expect(html.contains("data-wb-target-view=\"student:\(fx.token)\""))
                     #expect(html.contains("assignment:student:\(fx.token)"))
                     // Staff are not students.
@@ -94,7 +94,7 @@ import VaporTesting
                     #expect(html.contains("data-read-only=\"true\""))
                     #expect(html.contains("data-wb-view=\"student:\(fx.token)\""))
                     #expect(html.contains("/instructor/\(fx.assignment.publicID)/preview-guide.json?as=\(fx.token)"))
-                    #expect(html.contains("Preview: teststudent ▾"))
+                    #expect(html.contains(">Preview: teststudent<"))
                     #expect(!html.contains("id=\"nb-submit\""))
                 })
 

@@ -113,7 +113,7 @@ async function main() {
   const editor = () => page.frameLocator("#jl-frame");
   const editorText = () => editor().locator(".jp-Notebook").innerText().catch(() => "");
   const readOnly = () => page.locator("#jl-frame").getAttribute("data-read-only");
-  const summary = page.locator(".wb-preview-menu > summary");
+  const summary = page.locator(".js-wb-preview-menu > summary .wb-preview-label");
 
   try {
     await page.goto(`${baseURL}/instructor/${seeded.assignmentID}/workbench?file=assignment&view=template`, {
@@ -137,7 +137,7 @@ async function main() {
     if ((await readOnly()) !== "true") return fail("the preview is not read-only");
     if (!page.url().includes("&as=")) return fail(`the address does not name the preview: ${page.url()}`);
     const label = (await summary.textContent()) || "";
-    if (label !== `Preview: ${username} ▾`) return fail(`the menu button says "${label}"`);
+    if (label !== `Preview: ${username}`) return fail(`the menu button says "${label}"`);
 
     // (3) The student's task header, and no test cards.
     await waitFor("the task header", async () => (await editor().locator(".ck-task-header").count()) > 0);
@@ -162,7 +162,7 @@ async function main() {
     await waitFor("the starter kernel idle", async () => (await idleCount()) > beforeBack, KERNEL_BOOT_MS);
     await waitFor("the template again", async () => (await editorText()).includes("{{greeting}}"));
     if ((await readOnly()) !== "false") return fail("the starter is read-only after the preview");
-    if (((await summary.textContent()) || "") !== "Preview as student ▾") return fail("the menu button still names the student");
+    if (((await summary.textContent()) || "") !== "Preview as student") return fail("the menu button still names the student");
     await waitFor("no task header", async () => (await editor().locator(".ck-task-header").count()) === 0);
     await shot("back");
 

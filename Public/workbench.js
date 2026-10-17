@@ -174,11 +174,14 @@
         });
         // The preview menu's own button names the student it shows. Its
         // labels come from the server, which writes them once.
-        var menu = shell.querySelector('.wb-preview-menu');
+        var menu = shell.querySelector('.js-wb-preview-menu');
         var summary = menu && menu.querySelector('summary');
         if (!summary) return;
-        summary.textContent = shown
-            ? shown.getAttribute('data-wb-label') : summary.getAttribute('data-wb-idle-label');
+        var label = summary.querySelector('.wb-preview-label');
+        if (label) {
+            label.textContent = shown
+                ? shown.getAttribute('data-wb-label') : summary.getAttribute('data-wb-idle-label');
+        }
         if (shown) summary.title = shown.textContent;
         else summary.removeAttribute('title');
         menu.open = false;

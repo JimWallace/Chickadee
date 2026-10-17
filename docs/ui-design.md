@@ -771,8 +771,9 @@ duplicate.
   frame 18c).  A `.wb-appbar` (`WorkbenchAppBar`: the `.wb-title` with a ✎
   that opens the Details sheet, the due date and the language in a
   `.nb-title-block`, the `.wb-viewswitch` of `.wb-view` buttons and the
-  `.wb-preview-menu` (Preview as student, NB6b: an `ext-details` popup whose
-  `.wb-preview-panel` lists the students as `row-menu-item` buttons; it is not
+  preview menu (Preview as student, NB6b: an `ext-details` popup whose
+  `.wb-preview-panel` lists the students as `row-menu-item` buttons, and whose
+  button has a `.wb-preview-label` and the site nav's `.nav-dropdown-caret`; it is not
   a `RowMenu`, because it is a view switch, not a row's actions), the
   validation `.chip` (or, with issues, the `.wb-issues` button that steps
   through them, NB8, then a `.field-note` that says what the pill counts),
