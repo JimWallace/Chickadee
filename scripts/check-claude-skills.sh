@@ -19,8 +19,9 @@ set -uo pipefail
 #   * Each relative Markdown link in SKILL.md names a file that exists.
 #   * .claude/skill-evals/<name>/ holds at least three evaluation scenarios.
 #     Each is a .json file with "skills", "query" and "expected_behavior", and
-#     its "skills" names this skill. The scenarios live outside the skill
-#     directory so that an agent under test does not read the expected answers.
+#     its "skills" array, written on one line, names this skill. The
+#     scenarios live outside the skill directory so that an agent under test
+#     does not read the expected answers.
 #
 # An evaluation directory with no skill is an error too, so the set cannot go
 # stale.
@@ -49,8 +50,8 @@ frontmatter() {
 }
 
 # Prints the value of top-level key $2 in frontmatter text $1. A folded or
-# literal block value (`key: >` or `key: |`) is its indented lines joined
-# with single spaces.
+# literal block value (`key: >` or `key: |`), or a plain value that goes on in
+# indented lines, is its lines joined with single spaces.
 frontmatter_value() {
     awk -v key="$2" '
         found && /^[^[:space:]]/ { exit }
@@ -58,12 +59,18 @@ frontmatter_value() {
         index($0, key ":") == 1 {
             rest = substr($0, length(key) + 2)
             sub(/^[[:space:]]+/, "", rest)
-            if (rest ~ /^[>|][-+]?$/) { found = 1; next }
-            print rest
-            exit
+            found = 1
+            if (rest !~ /^[>|][-+]?$/) value = rest
+            next
         }
         END { if (found) print value }
     ' <<<"$1"
+}
+
+# Prints the target of each Markdown link in $1, outside fenced code blocks.
+link_targets() {
+    awk '/^[[:space:]]*```/ { fenced = !fenced; next } !fenced { print }' "$1" |
+        grep -oE '\]\([^) ]+\)' | sed -E 's/^\]\((.*)\)$/\1/'
 }
 
 checked=0
@@ -117,7 +124,7 @@ for skill_md in "$skills_dir"/*/SKILL.md; do
         if [ ! -e "$skill_dir/$path" ]; then
             fail "$skill_md: link target '$target' does not exist."
         fi
-    done < <(grep -oE '\]\([^) ]+\)' "$skill_md" | sed -E 's/^\]\((.*)\)$/\1/')
+    done < <(link_targets "$skill_md")
 
     eval_count=0
     for eval_file in "$evals_dir/$dir_name"/*.json; do
@@ -128,7 +135,7 @@ for skill_md in "$skills_dir"/*/SKILL.md; do
                 fail "$eval_file: no \"$key\" key."
             fi
         done
-        if ! grep -q "\"$dir_name\"" "$eval_file"; then
+        if ! grep -qE "\"skills\"[[:space:]]*:[[:space:]]*\[[^]]*\"$dir_name\"" "$eval_file"; then
             fail "$eval_file: \"skills\" does not name '$dir_name'."
         fi
     done

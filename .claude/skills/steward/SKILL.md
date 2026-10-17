@@ -3,9 +3,9 @@ name: steward
 description: >
   Repo-specific guidance for an agent that drives a Chickadee pull request to a
   mergeable state. Read it on every CI failure, red or cancelled check, merge
-  conflict, review comment and PR check-in. It covers the CI flake families,
-  the guards to run before a push, how to verify a fix in production, and how
-  proactive to be.
+  conflict, review comment and PR check-in, and when a merged fix does not
+  show in production. It covers the CI flake families, the guards to run
+  before a push, how to verify a deploy-script fix, and how proactive to be.
 ---
 
 # Stewarding a Chickadee pull request
@@ -38,15 +38,18 @@ PR wake:
 
 ## Read a red check before believing it
 
-**`api-tests` reporting `cancelled` at its 25-minute ceiling is usually not
-your diff.** `docs/ci-flakiness.md` Family 5 describes it: a throughput
-collapse that looks identical to a wedge. Three tells decide it, and all three
-are cheap:
+Start at `docs/ci-flakiness.md` before you diagnose a red check on a PR that
+did not touch the failing area. Its header says which families are open and
+which are closed.
 
-- Were tests still *completing* at the tail of the log? A wedge stops; a
-  collapse keeps finishing tests slowly.
-- Did **`api-tests-postgres`** pass? Same target, same commit, different lane.
-- What do the `[ci-pressure]` telemetry lines say?
+**A job `cancelled` at its ceiling has two opposite shapes.** Read Family 6,
+then Family 5. A wedge (Family 6) stops: nothing finishes after the first
+minute. A collapse (Family 5) runs slowly and keeps finishing tests. One
+`[ci-pressure]` telemetry line in the job log separates them: `scopes=0.0/min`
+with `self cpu=0.0%` is the wedge. Also look at the other lane on the same
+commit: if `api-tests` is cancelled, did `api-tests-postgres` pass? Family 6 is
+fixed, and Family 5 is closed for monitoring, so a new occurrence of either is
+a finding. Record it in that doc with the telemetry.
 
 **Do not read anything into per-test or per-suite durations in that log.**
 Swift Testing starts a test's clock when it is *scheduled*, not when it gets a
@@ -54,11 +57,9 @@ parallelization slot, so a healthy run's median test already reports ~80 s and
 every suite ends at about the run's total. Chasing a "slow test" there is
 chasing an artifact.
 
-Start at `docs/ci-flakiness.md` before diagnosing any red check on a PR that
-did not touch the failing area. Its header says which families are open. One
-of them is not a test at all: a `build` job that exits 139 at `[Planning 1 /
-N]` before any compile is Family 7, an upstream SwiftPM crash, and the answer
-is one `/rerun-failed`, never a read of the diff.
+**A `build` job that exits 139 at `[Planning 1 / N]`** before any compile is
+Family 7, an upstream SwiftPM crash. The answer is one `/rerun-failed`, never a
+read of the diff.
 
 ## Confirm the version files did not move
 
@@ -98,6 +99,13 @@ and fails on a `changes requested` verdict. Its findings are bot findings, so
 verify each one and push the fix. If the agent cannot run in your session, the
 workflow is the review; no note in the PR is needed.
 
+## Never change an existing test to get green
+
+Ask the maintainer before you change an existing test. Adding a test is always
+fine. Altering an assertion someone else wrote is a question, not a judgement
+call, and this outranks any urge to get a red check green. The
+`ask-before-test-edit.py` hook asks too, but obey the rule without it.
+
 ## A new check needs a fixture
 
 `scripts/check-guards.sh` applies each fixture's defect and fails the build if
@@ -128,13 +136,17 @@ second PR for the cleanup it revealed.
 
 Two facts that have each cost a day:
 
-**The deploy scripts run from a git clone on the host, and nothing in the
-pipeline updates it.** `bluegreen-deploy.sh`, `chickadee-deployer.sh`,
-`snapshot.sh` and `restore.sh` all execute from that checkout. A merged fix to
-any of them does **not** reach production through the image. The script that
-ran may not be the script in this repository — so never conclude a deploy
-script is buggy from reading `main`; reproduce it, or check what the host
-actually has.
+**The deploy scripts run from a git clone on the host, not from the image.**
+`bluegreen-deploy.sh`, `chickadee-deployer.sh`, `snapshot.sh` and `restore.sh`
+all execute from that checkout. The daemon moves the clone to a release's
+commit only after it stages that release's image. A merge with no
+`changelog.d/` fragment cuts no release, so it never reaches the clone. A clone
+with local changes is left alone (`deployer-update skipped`), and a failed
+fetch keeps the old scripts (`deployer-update failed`). So the script that ran
+may not be the script on `main`. Never conclude that a deploy script is buggy
+from reading `main`: compare `scriptsRevision` from
+`Chickadee_Admin:get_deploy_status` with your merge commit, and read
+`Chickadee_Admin:get_deploy_history` for the update events.
 
 **`:latest` lags a release tag.** The deployer targets a GitHub release while
 pulling `:latest`, and the image build takes ~15 minutes. A deployer log saying
@@ -144,8 +156,8 @@ not evidence of a failed swap.
 `docs/zero-downtime-deploy.md` is the runbook. The read-only admin MCP server
 is how to confirm a fix is live and behaving. Use its tools by their full
 names: `Chickadee_Admin:get_deployment_info`,
-`Chickadee_Admin:get_deploy_status`, `Chickadee_Admin:get_health_alerts` and
-`Chickadee_Admin:query_logs`.
+`Chickadee_Admin:get_deploy_status`, `Chickadee_Admin:get_deploy_history`,
+`Chickadee_Admin:get_health_alerts` and `Chickadee_Admin:query_logs`.
 
 ## When a fallback is the bug
 

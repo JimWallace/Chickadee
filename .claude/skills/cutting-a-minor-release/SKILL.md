@@ -2,9 +2,11 @@
 name: cutting-a-minor-release
 description: >
   Cuts a minor (0.y.0) or major Chickadee release by hand with
-  scripts/assemble-release.sh --version. Use only when the maintainer asks
-  for a minor or major release, an era boundary, or a batch of compatibility
-  removals. Patch releases are automatic on merge and do not use this skill.
+  scripts/assemble-release.sh --version, and says which changes must wait for
+  one. Use when the maintainer asks for a minor or major release, or when a
+  pull request removes a compatibility surface (a route, an environment
+  variable, a wire field) or asks to bump the version. Patch releases are
+  automatic on merge.
 ---
 
 # Cutting a minor release
@@ -25,6 +27,13 @@ request that retires one of those waits for the next minor, where the removals
 land together. A major release is reserved, and the deployer holds it for an
 operator's approval.
 
+For such a pull request: keep the surface on patches, with a deprecation
+warning, and tell the maintainer that the removal waits for the next minor. Do
+not merge the removal as a patch, and do not start the minor yourself.
+
+A pull request never bumps the version itself. It adds one `changelog.d/`
+fragment (`CLAUDE.md` §"Versioning").
+
 ## Workflow
 
 Copy this checklist and complete it in order:
@@ -38,7 +47,7 @@ Release progress:
 - [ ] 5. Run: scripts/assemble-release.sh --version X.Y.0
 - [ ] 6. Review the diff: VERSION, ChickadeeVersion.swift, CHANGELOG.md
 - [ ] 7. Commit with the exact message prefix chore(release): vX.Y.0
-- [ ] 8. Tag vX.Y.0, then give the push to the maintainer
+- [ ] 8. Make an annotated tag, then give the push to the maintainer
 ```
 
 **Step 3.** The script refuses an empty fragment set, with `--version` or
@@ -49,11 +58,11 @@ cutting a redundant `X.Y.1` on the same push. Any other message cuts one.
 
 **Step 8.** A tag that a workflow pushes with `GITHUB_TOKEN` does not start
 `release.yml` or the Docker tag build. The maintainer pushes `main` and the tag
-from their own account. Give them the commands, one plain command per line:
+from their own account. Make the tag, then give them the push:
 
 ```
-git push origin main
-git push origin vX.Y.0
+git tag -a vX.Y.0 -m "Chickadee vX.Y.0"
+git push origin main vX.Y.0
 ```
 
 After the push, the deployer deploys a minor release with no approval, and

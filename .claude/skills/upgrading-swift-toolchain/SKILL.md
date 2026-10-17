@@ -2,10 +2,10 @@
 name: upgrading-swift-toolchain
 description: >
   Moves Chickadee to a new Swift release: the Docker images, the workflow
-  images, Package.swift, the swiftly pin and the WebAssembly SDK, then a scan
-  of the new language features. Use when a new Swift minor or patch release is
-  out, when the semi-annual toolchain Routine fires, or when asked to bump,
-  upgrade or pin the Swift version.
+  images, Package.swift, the toolchain version that swiftly installs and the
+  WebAssembly SDK, then a scan of the new language features. Use when a new
+  Swift minor or patch release is out, when the semi-annual toolchain Routine
+  fires, or when asked to bump, upgrade or pin the Swift version.
 ---
 
 # Upgrading the Swift toolchain
@@ -20,12 +20,30 @@ prompts. The Swift 6.3 to 6.4 upgrade is the model: #1541 moved the pins and
 | Release | Work |
 |---|---|
 | minor (6.4 to 6.5, or 6.x to 7.0) | two pull requests: move the pins, then scan the features |
-| patch (6.4.0 to 6.4.1) | one small pull request: only the sites that name the patch number |
+| patch (6.4.0 to 6.4.1) | one small pull request: only the three sites that name the patch number (below) |
 | none | stop, and open no pull request |
 
 Keep the two pull requests separate. A red check on a mixed pull request
 cannot tell you which half caused it. Start the feature scan only after the pin
 pull request merges.
+
+## Workflow for a patch release
+
+The `swift:<X.Y>-resolute` and `swift-ci:<X.Y>-resolute` tags follow the patch
+on their own, and `Package.swift` does not change. Copy this checklist:
+
+```
+Patch progress:
+- [ ] 1. The release and its WebAssembly SDK bundle are published
+- [ ] 2. wasm/wasm-sdk.pin: the bundle URL, and a checksum from the download
+- [ ] 3. runner-wasm-vendor.yml: the Swift version that swiftly installs
+- [ ] 4. scripts/build-runner-wasm.sh: the default SDK identifier
+- [ ] 5. Run the verification table, and add one changelog.d fragment
+```
+
+In step 3, change the toolchain version only. The swiftly installer itself
+(`swiftly-<version>-<arch>.tar.gz` and its SHA-256) is a separate pin, which a
+toolchain upgrade does not change.
 
 ## Workflow for a minor release
 
@@ -52,7 +70,10 @@ arrived five days after the toolchain.
 **Step 5.** Do not copy the file list from the runbook. Search for the current
 version in the tree, as §"Find every pin" shows. Leave `CHANGELOG*.md`,
 `docs/archive/` and `wasm/Package.swift` alone: they are records, not pins.
-Then read §"Traps that cost a day" before you push.
+Then read §"Traps that cost a day" before you push. Three of them catch
+everyone: vendor the browser wasm inside the same pull request, expect the
+first CI run to fail until the image mirror publishes, and keep `format-lint`
+on the noble tag.
 
 **Step 7.** Every row of §"Verification" must pass on the new toolchain. A test
 count that moves without a reason is a finding.

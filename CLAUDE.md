@@ -445,7 +445,8 @@ when a task fits. A skill links its runbook in `docs/` and does not copy it.
 Each skill follows Anthropic's skill authoring rules and has at least three
 evaluation scenarios in `.claude/skill-evals/<name>/`.
 `scripts/check-claude-skills.sh` enforces both in `format-lint`. Do not rename
-`steward`: the PR harness looks for that directory by name.
+`steward`: the Claude Code cloud harness that drives a pull request reads
+`.claude/skills/steward/SKILL.md` by that path.
 
 The hooks in `.claude/hooks/` do three jobs, so you need not:
 - `format-swift.py` runs `swift-format` on each Swift file that you edit.

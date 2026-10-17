@@ -29,8 +29,13 @@ disagree with the text above them, they are the measurement.
 
 | The language has | Route | Model to copy |
 |---|---|---|
+| a course that only needs grading now | no new language: declare "none" and write `.sh` scripts that compile and run it | nothing to add |
 | a xeus kernel that works on emscripten-forge | editor kernel and browser grading | Lua, Octave |
 | no usable kernel, or a kernel we decided against | upload-only (`submissionMode: "uploadOnly"`) | Java ([docs/java-support.md](../../../docs/java-support.md)), C++ ([docs/cpp-support.md](../../../docs/cpp-support.md)) |
+
+The first row needs no code: a suite of hand-written scripts grades any
+language that the runner image has. Ask whether the course needs generated
+tests, personalization and notebook checks before you add a case.
 
 A kernel that builds for wasm is not proof that it works. Read §"Availability
 is not the same as working" in the runbook before you choose.
@@ -65,12 +70,13 @@ and shows the next. Never add a `default:` arm to a `switch` over
 `AssignmentLanguage`. The exhaustive switch is what makes the compiler name the
 work.
 
-**Step 5.** The runbook section "What the compiler will *not* tell you" lists
-nine sites. Each one has shipped broken at least once. Do all nine.
+**Step 5.** The runbook section "What the compiler will *not* tell you" (find
+it with `grep -n "compiler will" docs/adding-a-xeus-kernel.md`) lists nine
+sites. Each one has shipped broken at least once. Do all nine.
 
 **Steps 8 to 10.** The runbook sections "The done test", "Parity: what
 supported is not the same as" and "The last step: walk an instructor's path by
-hand" hold the lists. Lua shipped resolving to Python with 3,143 tests green.
+hand" hold the lists. Find each one with `grep -n` on its title. Lua shipped resolving to Python with 3,143 tests green.
 Only the walk by hand found it.
 
 ## Rules that apply on every step
