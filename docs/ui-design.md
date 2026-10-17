@@ -755,6 +755,18 @@ duplicate.
   amber while the kernel starts or is busy, teal when it is ready or idle, and
   the danger colour when it has stopped, and the words always say the state.  It
   is not a `.chip`, because it carries a status colour.
+- **`.nb-graded`** — the graded toast on the notebook page (design frame
+  18f, `NotebookGradedToast`).  `notebook-graded.js` shows it under Submit when
+  an attempt is graded while the student is in the editor.  It holds the
+  viewer's bird (`.nb-graded-bird`, 72px), an `.nb-graded-caption`
+  ("Attempt 3 graded"), the `.nb-graded-grade`, a `.card-meta` summary and a
+  `.toolbar` with See results and Keep editing, in `.nb-graded-text`.  It is a
+  `role="status"` region and never closes by itself.  At 100% (`.is-perfect`)
+  three `.nb-graded-star` stars show and the bird hops once, unless the viewer
+  reduces motion.  It is not a `.flash`, because it floats over the editor
+  instead of pushing it down, and the editor must not move under the student's
+  cursor.  The planned Earned toasts of the results page (`docs/result-celebration.md`,
+  J2 and J3) should take this shape, not a second one.
 - **`NewTabLink`** — a link that opens in a new tab: `target="_blank"`, the
   `i-external` icon and a `.visually-hidden` "(opens in a new tab)".  Write a
   new one with this view, not by hand.  One exception remains:
@@ -769,7 +781,9 @@ duplicate.
   `.outline-tasks` list of `.outline-row` buttons.  Each row has an
   `.outline-glyph`, an `.outline-name` and its points; `data-status` colours the
   glyph, and the glyph character and the editor's pill always say the status
-  too.  `aria-current` marks the task under the cursor.  A Reflection row,
+  too.  The `starter` glyph ("Still the starter code") reuses the amber
+  `--preview-bg` / `--preview-fg` pair on purpose: it is the one "attention,
+  not failure" pair, and `--amber-bg` has no matching foreground.  `aria-current` marks the task under the cursor.  A Reflection row,
   `written` or `empty`, follows the tasks.  A task row carries an
   `.outline-wide` name and an `.outline-short` label: below 1100px the same nodes
   become a row of chips at least 44px tall, and below 640px the outline is

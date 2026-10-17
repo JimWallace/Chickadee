@@ -136,6 +136,38 @@ Rules that keep the editor fast and safe:
 `Tools/editor-smoke-test/notebook-guide-check.mjs` checks all of this in a real
 browser. CI runs it in `browser-probes.yml`.
 
+## When an attempt is graded
+
+When grading finishes while the student is still in the editor (NB5, design
+frame 18f), the page fetches the guide again and sends it to the extension. The
+headers, the checks lines and the outline update in place. The page does not
+reload, and the kernel does not restart. Then a toast under Submit says the
+grade (`NotebookGradedToast`, `Public/notebook-graded.js`).
+
+- **Browser-graded.** `notebook.js` calls `ChickadeeGraded.graded()` when the
+  browser runner has posted the results.
+- **Worker-graded.** `notebook.js` no longer opens the results page. It calls
+  `ChickadeeGraded.watch(submissionID)`, which polls
+  `/api/v1/submissions/:id` as `app.js` does: after 1 second, then each wait
+  half as long again, up to 10 seconds, for at most 5 minutes.
+- **A page opened while its attempt grades** watches that attempt with no
+  toast, so the statuses become current.
+
+The toast has the bird, "Attempt 3 graded", the grade, "All 10 checks passed."
+or "7 of 10 checks passed." (the public checks), See results and Keep editing.
+It never closes by itself. At 100% three stars show and the bird hops once,
+unless the student reduces motion. Below 100% the bird stays calm. The toast
+does not write `ck-celebrated:<submissionID>`, so the results page still plays
+the full celebration (`docs/result-celebration.md`).
+
+Without the extension, the page keeps its old flow: the inline results panel
+(`#nb-results`) for a browser-graded attempt, and the results page for a
+worker-graded one. With the extension, that panel stays hidden.
+
+`Tools/editor-smoke-test/notebook-graded-check.mjs` checks the browser-graded
+path in a real browser. The harness starts no native runner, so
+`Tests/BrowserRunnerJSTests/notebook-graded.test.mjs` checks the poll.
+
 ## What NB3 found
 
 - **Cell ids.** Stored notebooks do not always have nbformat 4.5 cell `id`s. No

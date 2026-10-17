@@ -1123,6 +1123,7 @@
                 // Worker-graded assignment: enqueue for native runner.
                 setStatus('loading', 'Submitting…');
                 const response = await postRunnerSubmission(notebook, setupID);
+                if (watchInPlace(response.submissionID)) return;
                 setStatus('loading', 'Submission queued. Opening grade details…');
                 window.location.assign(`/submissions/${response.submissionID}`);
                 return;
@@ -1940,6 +1941,7 @@
                     setupID,
                     file.name || 'submission.ipynb'
                 );
+                if (watchInPlace(response.submissionID)) return;
 
                 setStatus('loading', 'Submission queued. Opening grade details…');
                 window.location.assign(`/submissions/${response.submissionID}`);
@@ -2012,8 +2014,31 @@
         disarmGradingFailover();
 
         const { outcomes, response, sections, sectionIDs } = result;
-        renderResults(outcomes, response, sections, sectionIDs);
+        const toast = gradedToast();
+        if (toast) {
+            void toast.graded(response && response.submissionID);
+        } else {
+            renderResults(outcomes, response, sections, sectionIDs);
+        }
         return { outcomes, response };
+    }
+
+    // NB5 (notebook-graded.js): with the editor extension, the graded toast
+    // and the guide replace the inline results panel, and the student stays
+    // in the notebook. Without it, the old flow stays.
+    function gradedToast() {
+        const graded = window.ChickadeeGraded;
+        return graded && typeof graded.active === 'function' && graded.active() ? graded : null;
+    }
+
+    // A worker-graded submission: watch it here instead of opening the
+    // results page, when the toast can say the grade.
+    function watchInPlace(submissionID) {
+        const toast = gradedToast();
+        if (!toast || !submissionID) return false;
+        toast.watch(submissionID);
+        setStatus('ok', 'Submitted; grading continues while you edit.');
+        return true;
     }
 
     // -------------------------------------------------------------------------
@@ -2025,6 +2050,8 @@
             resultsEl.hidden = true;
             resultsEl.innerHTML = '';
         }
+        // A new submission closes the last attempt's graded toast.
+        if (window.ChickadeeGraded) window.ChickadeeGraded.hide();
     }
 
     // Pattern that identifies a dependency-skip shortResult.

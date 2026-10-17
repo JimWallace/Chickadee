@@ -16,7 +16,8 @@
 //
 // It reads results that already exist and runs nothing. Without the
 // extension the outline still shows the server's statuses.
-// `window.ChickadeeNotebookGuide.refresh()` fetches the guide again (NB5).
+// `window.ChickadeeNotebookGuide.refresh()` fetches the guide again, and
+// `inEditor()` says whether the extension draws it (notebook-graded.js, NB5).
 
 (function (global) {
     'use strict';
@@ -78,6 +79,7 @@
     if (typeof document !== 'undefined' && typeof window !== 'undefined') {
         var guide = null;
         var sentToEditor = false;
+        var extensionUp = false;
         var statuses = {};
         var reflectionStatuses = {};
         var activeSection = null;
@@ -195,6 +197,10 @@
                     statuses = {};
                     draw();
                     sendToEditor();
+                    // notebook-graded.js watches an attempt that still grades.
+                    if (typeof window.dispatchEvent === 'function' && typeof CustomEvent === 'function') {
+                        window.dispatchEvent(new CustomEvent('chickadee:guide', { detail: guide }));
+                    }
                     return guide;
                 })
                 .catch(function () { return null; });
@@ -207,8 +213,10 @@
                 if (!d || typeof d.ck !== 'string') return;
                 if (d.ck === 'kernel-diag' && d.kind === 'kernel_phase' && d.source === 'boot_start') {
                     sentToEditor = false;
+                    extensionUp = false;
                 } else if (d.ck === 'ck:kernel') {
                     // The extension is up in this editor document.
+                    extensionUp = true;
                     if (!sentToEditor) sendToEditor();
                 } else if (d.ck === 'ck:tasks' && Array.isArray(d.tasks)) {
                     // In the guide's task order: a task has no sectionID
@@ -223,7 +231,11 @@
         });
 
         if (guideURL()) void refresh();
-        global.ChickadeeNotebookGuide = { refresh: refresh };
+        global.ChickadeeNotebookGuide = {
+            refresh: refresh,
+            /// True once the extension is up in the editor and has the guide.
+            inEditor: function () { return extensionUp; },
+        };
     }
 
     // Node export for the .mjs unit tests (Tests/BrowserRunnerJSTests).
