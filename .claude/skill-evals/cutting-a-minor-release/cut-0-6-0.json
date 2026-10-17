@@ -1,0 +1,11 @@
+{
+  "skills": ["cutting-a-minor-release"],
+  "query": "The maintainer says: cut 0.6.0, the term is over.",
+  "files": [],
+  "expected_behavior": [
+    "Makes sure at least one changelog.d fragment exists, and writes a milestone note if none does",
+    "Runs scripts/assemble-release.sh --version 0.6.0 on an up-to-date main",
+    "Commits with the exact prefix chore(release): v0.6.0 so that auto-release does not cut 0.6.1",
+    "Leaves the push of main and the v0.6.0 tag to the maintainer's own account, because a tag pushed with GITHUB_TOKEN does not start release.yml"
+  ]
+}

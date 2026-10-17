@@ -177,6 +177,9 @@ jobs:
       - name: Every guard has a fixture or a stated exemption
         run: scripts/check-guard-coverage.sh
 
+      - name: Claude Code skills follow the authoring rules and have evaluations
+        run: scripts/check-claude-skills.sh
+
       - name: Require a reason on every unchecked Sendable
         run: scripts/check-unchecked-sendable.sh
       - name: Shared code does not call up into the routes

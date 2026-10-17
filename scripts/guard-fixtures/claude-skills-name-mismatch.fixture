@@ -1,0 +1,9 @@
+# Claude Code finds a project skill by its directory, and a `name` that differs
+# from it is a second name for the same skill.
+guard="scripts/check-claude-skills.sh"
+files=".claude/skills/steward/SKILL.md"
+description="a skill whose name is not its directory name"
+expect="is not the directory name"
+apply() {
+    sed -i 's/^name: steward$/name: stewards/' .claude/skills/steward/SKILL.md
+}

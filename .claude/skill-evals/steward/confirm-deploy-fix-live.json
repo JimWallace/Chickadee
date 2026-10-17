@@ -1,0 +1,11 @@
+{
+  "skills": ["steward"],
+  "query": "My fix to scripts/bluegreen-deploy.sh merged an hour ago. The deployer log on production still shows the old behaviour. Is the fix broken?",
+  "files": [],
+  "expected_behavior": [
+    "Explains that the deploy scripts run from a git clone on the host, not from the image, and that the daemon moves the clone only when it stages a release",
+    "Checks that the merge cut a release at all, because a merge with no changelog.d fragment cuts none",
+    "Compares scriptsRevision from Chickadee_Admin:get_deploy_status with the merge commit, and reads Chickadee_Admin:get_deploy_history for deployer-update skipped or failed",
+    "Does not conclude the fix is broken from reading main"
+  ]
+}

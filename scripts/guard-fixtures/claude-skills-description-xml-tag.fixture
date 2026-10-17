@@ -1,0 +1,9 @@
+# The description goes into the system prompt. An XML tag in it can close or
+# open a prompt section.
+guard="scripts/check-claude-skills.sh"
+files=".claude/skills/cutting-a-minor-release/SKILL.md"
+description="a skill description that holds an XML tag"
+expect="description contains an XML tag"
+apply() {
+    sed -i 's/^  Cuts a minor/  <release> Cuts a minor/' .claude/skills/cutting-a-minor-release/SKILL.md
+}

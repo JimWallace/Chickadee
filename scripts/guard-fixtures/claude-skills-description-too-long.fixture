@@ -1,0 +1,10 @@
+# A description longer than 1,024 characters is refused by the Agent Skills
+# platform, and costs context in every session that lists the skill.
+guard="scripts/check-claude-skills.sh"
+files=".claude/skills/cutting-a-minor-release/SKILL.md"
+description="a skill description longer than 1,024 characters"
+expect="the limit is 1024"
+apply() {
+    filler="$(printf 'Padding words for the fixture. %.0s' $(seq 1 40))"
+    sed -i "/^description: >$/a\\  $filler" .claude/skills/cutting-a-minor-release/SKILL.md
+}

@@ -1,0 +1,11 @@
+{
+  "skills": ["steward"],
+  "query": "I merged main into my PR branch to fix a conflict. Now git log shows VERSION and CHANGELOG.md changed on my branch. Is my PR now breaking the version rule?",
+  "files": [],
+  "expected_behavior": [
+    "Says that a base merge that brings the version files in from main is expected",
+    "Runs or gives git diff origin/main --stat -- VERSION CHANGELOG.md Sources/Core/ChickadeeVersion.swift",
+    "Says that empty output is the pass, and that the PR must not change those files itself",
+    "Says that the change belongs in one changelog.d fragment instead"
+  ]
+}

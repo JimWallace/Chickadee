@@ -1,0 +1,9 @@
+# A SKILL.md body over 500 lines belongs in linked reference files, which
+# Claude reads only when the task needs them.
+guard="scripts/check-claude-skills.sh"
+files=".claude/skills/cutting-a-minor-release/SKILL.md"
+description="a skill body longer than 500 lines"
+expect="Move detail to a linked file"
+apply() {
+    for _ in $(seq 1 500); do echo "Padding line."; done >>.claude/skills/cutting-a-minor-release/SKILL.md
+}

@@ -1,0 +1,9 @@
+# A scenario filed under one skill but written for another tests nothing about
+# the skill it is filed under.
+guard="scripts/check-claude-skills.sh"
+files=".claude/skill-evals/steward/version-files-after-merge.json"
+description="an evaluation scenario whose skills array names another skill"
+expect="does not name 'steward'"
+apply() {
+    sed -i 's/"skills": \["steward"\]/"skills": ["adding-a-language"]/' .claude/skill-evals/steward/version-files-after-merge.json
+}
