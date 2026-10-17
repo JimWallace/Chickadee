@@ -42,6 +42,8 @@ POST /testsetups/:id/notebook/save      — Write the notebook open in JupyterLi
 # The student guide beside each task in the editor (docs/notebook-guide.md)
 GET  /testsetups/:id/notebook-guide.json — The viewer's own guide: public
                                           results only, anchors, starter sources
+GET  /instructor/:assignmentID/suite-outline.json — Staff only: the suite by
+                                          section, anchors, solution results
 ```
 
 Web routes (Elementary views, session auth required) live under `/` and handle

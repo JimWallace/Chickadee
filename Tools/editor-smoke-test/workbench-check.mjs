@@ -400,73 +400,28 @@ async function main() {
       return fail("embedded-activity.js is still loaded; #1266 deleted it");
     }
 
-    // 6a. The view switch, asserted while the ASSIGNMENT is selected.
-    //
-    //     Order matters and cost me a run: the seeded solution has no
-    //     placeholders, so checking this after selecting Solution finds the
-    //     control correctly hidden and proves nothing. The seeded assignment
-    //     carries `{{dataset_name}}` precisely so this path is live.
-    const viewSwitchVisible = await page.evaluate(() => {
+    // 6a. The view switch (notebook views NB6): Solution · Starter, with the
+    //     open notebook pressed. It replaced the With values / Template switch
+    //     and, as the way to choose a notebook, the Files table's Edit links.
+    const viewSwitch = await page.evaluate(() => {
       const v = document.getElementById("wb-viewswitch");
       return {
         present: !!v,
-        visible: !!v && !v.hidden,
-        flag: v ? v.getAttribute("data-assignment-has-template") : null,
+        buttons: v ? Array.from(v.querySelectorAll(".wb-view")).map(
+          (b) => `${b.textContent.trim()}=${b.getAttribute("aria-pressed")}`) : [],
       };
     });
-    console.log(
-      `view switch: present=${viewSwitchVisible.present} visible=${viewSwitchVisible.visible} ` +
-      `assignmentHasTemplate=${viewSwitchVisible.flag}`);
-    if (!viewSwitchVisible.visible) {
-      return fail(
-        "the view switch is not showing on an assignment whose notebook carries " +
-        "{{dataset_name}}. Either the server did not detect the placeholder " +
-        "(assignmentHasTemplateView) or workbench.js is not un-hiding the control."
-      );
+    console.log(`view switch: ${JSON.stringify(viewSwitch)}`);
+    if (!viewSwitch.present || viewSwitch.buttons.join(",") !== "Solution=false,Starter=true") {
+      return fail(`the view switch should offer Solution and Starter, with Starter open: ${JSON.stringify(viewSwitch)}`);
     }
-    // Marked before the switch: #1268 makes switching an in-place swap of the
-    // notebook half, so THIS document must survive it. If it does not, the URL
-    // and the notebook would both still look right while the edit half had
-    // silently been rebuilt from scratch.
     await page.evaluate(() => { window.__ckSwitchProbe = "alive"; });
-    // Click the view that is NOT open. The server defaults course staff to the
-    // template on a notebook with placeholders, so clicking "template" here was
-    // a no-op — selectPane correctly returns early — and the assertion below
-    // would have been testing nothing.
-    const openView = await page.evaluate(
-      () => (document.querySelector(".wb-notebook-body") || {}).dataset?.wbView || "personalized");
-    const targetView = openView === "template" ? "personalized" : "template";
-    console.log(`view switch: open=${openView} clicking=${targetView}`);
-    await page.click(`#wb-viewswitch .wb-view[data-wb-view="${targetView}"]`);
-    await page.waitForTimeout(1500);
-    const afterView = { url: page.url() };
-    const diag = await page.evaluate(() => ({
-      paneURLs: document.getElementById("wb-shell").getAttribute("data-wb-pane-urls"),
-      bodyFile: (document.querySelector(".wb-notebook-body") || {}).dataset?.wbFile,
-      bodyView: (document.querySelector(".wb-notebook-body") || {}).dataset?.wbView,
-      pressed: Array.from(document.querySelectorAll(".wb-view")).map(
-        (b) => b.getAttribute("data-wb-view") + "=" + b.getAttribute("aria-pressed")),
-      hasRemount: typeof window.chickadeeRemountNotebook,
-      hasRefresh: typeof (window.ChickadeeUI || {}).refreshNotebookSurface,
-    }));
-    console.log(`after view switch: url=${afterView.url}`);
-    console.log(`  DIAG ${JSON.stringify(diag)}`);
-    if (!afterView.url.includes("view=" + targetView)) {
-      return fail(
-        `the view switch did not reach view=${targetView} (url=${afterView.url})`,
-        consoleErrors.join("\n") || "(no console errors)");
-    }
-    if (!afterView.url.includes("/workbench")) {
-      return fail(
-        `the view switch left the workbench entirely (url=${afterView.url}). It must ` +
-        `stay on this route — landing on the bare notebook page loses the edit half.`);
-    }
 
-    // 6b. The Files table drives which notebook is open.
+    // 6b. The view switch's Solution opens the solution in place.
     //
-    //     Two things are asserted, and the second is the one that was a live
-    //     bug: those Edit links used to be able to navigate the LEFT pane into
-    //     a fully-chromed notebook page, and the assignment editor vanished.
+    //     The second assertion is the one that was a live bug: switching used
+    //     to be able to navigate the page into a fully-chromed notebook page,
+    //     and the assignment editor vanished.
     const hasSolutionEdit = await page.evaluate(
       () => !!document.getElementById("solution-notebook-edit-btn"));
     // Asserted, not assumed: the seed creates a solution, so a missing button
@@ -477,6 +432,15 @@ async function main() {
         "below would silently skip. The seed creates a solution.");
     }
     {
+      // The settings are in a sheet now (NB6): open the suite sheet, which is
+      // tall enough to scroll.
+      // Under 1300px the rail is folded behind ☰ Suite.
+      if (!(await page.locator("#wb-rail").isVisible())) await page.click("#wb-rail-toggle");
+      await page.click('#wb-rail [data-wb-open-sheet="suite"]');
+      await page.waitForSelector("#wb-sheet:not([hidden])", { timeout: 5000 });
+      if (await page.locator("#wb-rail").isVisible() && (await page.viewportSize()).width <= 1300) {
+        return fail("opening a sheet from the folded rail left the rail open over it");
+      }
       // Dirty the edit half and scroll it, so the assertions below have
       // something real to lose. Typing into a field the server has not seen is
       // exactly the state a navigation used to discard.
@@ -496,21 +460,19 @@ async function main() {
         };
       });
       console.log(`primed edit half: ${JSON.stringify(primed)}`);
-      if (primed.scroll !== 250) {
-        return fail(
-          `could not scroll the edit half (scrollTop=${primed.scroll}, ` +
-          `scrollHeight=${primed.scrollHeight}, clientHeight=${primed.clientHeight}). ` +
-          `The survival assertion below would prove nothing.`);
-      }
+      // Scroll survival is not asserted below (see the note there), and the
+      // sheet scrolls only when its block is taller than the page, so a short
+      // seeded suite leaves nothing to scroll. Printed, not failed.
+      if (primed.scroll !== 250) console.log("the sheet is too short to scroll; scroll survival unmeasured");
 
-      await page.click("#solution-notebook-edit-btn");
+      await page.click('#wb-viewswitch .wb-view[data-wb-target-file="solution"]');
       await page.waitForTimeout(1500);
 
       const afterOpen = { url: page.url() };
       console.log(`after Files-table open: url=${afterOpen.url}`);
       if (!afterOpen.url.includes("file=solution")) {
         return fail(
-          `clicking the Files table's solution Edit did not open the solution ` +
+          `clicking Solution in the view switch did not open the solution ` +
           `(url=${afterOpen.url})`);
       }
 
@@ -617,6 +579,13 @@ async function main() {
       await page.evaluate(() => { window.__ckPageProbe = "alive"; });
 
       const sectionName = "Probe Section";
+      // The suite table is in the suite sheet (NB6).
+      await page.evaluate(() => {
+        const sheet = document.getElementById("wb-sheet");
+        if (sheet && (sheet.hidden || sheet.getAttribute("data-wb-sheet") !== "suite")) {
+          document.querySelector('[data-wb-open-sheet="suite"]').click();
+        }
+      });
       await page.evaluate(() => {
         document.getElementById("add-suite-section-details").open = true;
       });
@@ -702,8 +671,7 @@ async function main() {
     //    the `visual` job owns regression diffing. It exists because layout
     //    defects in this feature have repeatedly passed every assertion and
     //    been obvious in one image (#1263's collapsed pane did). The widths
-    //    bracket the single-pane breakpoint at 1140px, so the third shot is the
-    //    stacked fallback rather than a narrower split.
+    //    bracket the 1300px point where the rail folds behind ☰ Suite.
     if (process.env.SMOKE_SHOTS) {
       const dir = process.env.SMOKE_SHOTS;
       await fsp.mkdir(dir, { recursive: true });

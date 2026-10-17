@@ -197,6 +197,10 @@ async function main() {
     // (5) The reflection row.
     if ((await rows().nth(2).getAttribute("data-status")) !== "empty") return fail("the reflection row is not Empty");
     await rows().nth(2).click();
+    // The reveal is a command round trip: wait until the editor has selected
+    // the reflection cell, or Enter and the text go to another cell.
+    await waitFor("reflection cell selected", async () =>
+      (await editor().locator(".jp-Notebook .jp-Cell.jp-mod-active.jp-MarkdownCell").count()) === 1);
     await page.keyboard.press("Enter");
     await page.keyboard.type("I chose the median.");
     await waitFor("reflection written", async () => (await rows().nth(2).getAttribute("data-status")) === "written");

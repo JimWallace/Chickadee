@@ -40,19 +40,27 @@ struct AssignmentEditBody: HTML {
             .enctype(.multipartFormData), .novalidate, .dataFlag("ck-inplace")
         ) {
             CSRFField(token: csrfToken)
-            EditTitlebar(edit: edit)
-            EditFilesBlock(edit: edit, csrfToken: csrfToken)
+            // `data-wb-block` names each block for the workbench's sheets
+            // (NB6), which show one at a time. Here it changes nothing.
+            div(.data("wb-block", value: "details")) { EditTitlebar(edit: edit) }
+            div(.data("wb-block", value: "files")) { EditFilesBlock(edit: edit, csrfToken: csrfToken) }
         }
         if edit.activity.isSet {
-            EditActivityBlock(assignmentID: edit.assignmentID, activity: edit.activity, csrfToken: csrfToken)
+            div(.data("wb-block", value: "activity")) {
+                EditActivityBlock(assignmentID: edit.assignmentID, activity: edit.activity, csrfToken: csrfToken)
+            }
         }
-        EditStudentOptionsBlock(edit: edit, csrfToken: csrfToken)
-        EditGlobalInputsBlock(assignmentID: edit.assignmentID, rows: edit.globalVariableRows)
-        label(.class("visually-hidden"), .for("suite-files-input")) { "Add test suite files" }
-        " "
-        input(.class("form-input"), .id("suite-files-input"), .type(.file), .multiple, .hidden)
-        EditSuiteBlock(edit: edit, csrfToken: csrfToken)
-        EditAchievementsBlock(edit: edit)
+        div(.data("wb-block", value: "options")) { EditStudentOptionsBlock(edit: edit, csrfToken: csrfToken) }
+        div(.data("wb-block", value: "inputs")) {
+            EditGlobalInputsBlock(assignmentID: edit.assignmentID, rows: edit.globalVariableRows)
+        }
+        div(.data("wb-block", value: "suite")) {
+            label(.class("visually-hidden"), .for("suite-files-input")) { "Add test suite files" }
+            " "
+            input(.class("form-input"), .id("suite-files-input"), .type(.file), .multiple, .hidden)
+            EditSuiteBlock(edit: edit, csrfToken: csrfToken)
+        }
+        div(.data("wb-block", value: "achievements")) { EditAchievementsBlock(edit: edit) }
         // The editor scripts parse these once at page load.
         JSONIsland(id: "suite-state-seed", json: edit.suiteStateJSON)
         JSONIsland(id: "pattern-families-seed", json: edit.patternFamiliesJSON)
@@ -797,27 +805,8 @@ private struct EditSuiteBlock: HTML {
                         ) {}
                         " "
                     }
-                    details(.class("add-section-details popup-anchor"), .id("add-suite-section-details")) {
-                        summary(.class("btn action-btn summary-btn")) { "+ Section" }
-                        div(.class("add-section-popup card suite-section-popup")) {
-                            form(
-                                .method(.post), .action("/instructor/\(edit.assignmentID)/suite-sections"),
-                                .class("form popup-form"), .dataFlag("ck-inplace")
-                            ) {
-                                CSRFField(token: csrfToken)
-                                " "
-                                label(.class("form-label")) {
-                                    "Section name "
-                                    input(
-                                        .class("form-input editor-input"), .type(.text), .name("name"),
-                                        .placeholder("e.g. Question 1"), .required)
-                                    " "
-                                }
-                                " "
-                                button(.class("btn btn-primary btn-compact"), .type(.submit)) { "Create section" }
-                            }
-                        }
-                    }
+                    AddSuiteSectionPopup(
+                        assignmentID: edit.assignmentID, csrfToken: csrfToken, id: "add-suite-section-details")
                     // The file-input trigger suite-table.js wires; tests are
                     // added per section now.
                     button(.class("btn action-btn"), .type(.button), .id("add-test-btn"), .hidden) { "Upload" }

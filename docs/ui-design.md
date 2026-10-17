@@ -758,7 +758,7 @@ duplicate.
 - **`.nb-graded`** — the graded toast on the notebook page (design frame
   18f, `NotebookGradedToast`).  `notebook-graded.js` shows it under Submit when
   an attempt is graded while the student is in the editor.  It holds the
-  viewer's bird (`.nb-graded-bird`, 72px), an `.nb-graded-caption`
+  viewer's bird (`.nb-graded-bird`, 72px), an `.outline-caption`
   ("Attempt 3 graded"), the `.nb-graded-grade`, a `.card-meta` summary and a
   `.toolbar` with See results and Keep editing, in `.nb-graded-text`.  It is a
   `role="status"` region and never closes by itself.  At 100% (`.is-perfect`)
@@ -767,6 +767,30 @@ duplicate.
   instead of pushing it down, and the editor must not move under the student's
   cursor.  The planned Earned toasts of the results page (`docs/result-celebration.md`,
   J2 and J3) should take this shape, not a second one.
+- **`.wb-shell`** — the assignment workbench (`WorkbenchPage`, NB6, design
+  frame 18c).  A `.wb-appbar` (`WorkbenchAppBar`: the `.wb-title` with a ✎
+  that opens the Details sheet, the due date and the language in a
+  `.nb-title-block`, the `.wb-viewswitch` of `.wb-view` buttons, the
+  validation `.chip`, the `.wb-save-status` and Save & validate, with a
+  `.wb-bar-spacer` between) over a `.wb-body`: the `.wb-rail` and the
+  `.wb-pane-notebook`, a `.wb-pane` whose `.wb-notebook-body` holds the
+  editor.  `.wb-scroll` makes a pane scroll inside the page.  The rail
+  (`WorkbenchRail`, `workbench-rail.js`) holds a `.rail-head` with "+ Section"
+  (`AddSuiteSectionPopup`, the same popup as the suite sheet's: the rail is
+  the quick path, so the two copies are deliberate), then one
+  `.rail-group` per section, with a `.rail-group-head` and a `.rail-links`
+  list.  Its rows are the student outline's rows (`.outline-row`,
+  `.outline-glyph`, `.outline-name` in mono, `.outline-caption`), because they
+  are the same thing: a button that moves the editor to a task, with its
+  status.  The narrow chip layout of `.nb-outline` does not apply in the rail.
+  The Assignment links open the
+  `.wb-sheet`, a 480px panel over the notebook with a sticky `.sheet-head`,
+  which shows one `data-wb-block` of `AssignmentEditBody` unchanged.  The
+  sheet keeps `.wb-pane-edit`, because `surface-swap.js` refreshes it in
+  place.  Under 1300px the rail is hidden and `.wb-rail-toggle` (☰ Suite)
+  opens it over the notebook.  The sheet is a labelled region, not a
+  `<dialog>`, because the notebook beside it stays live.  `[data-wb-block]`
+  is `display: contents` outside the sheet, so the edit page is unchanged.
 - **`NewTabLink`** — a link that opens in a new tab: `target="_blank"`, the
   `i-external` icon and a `.visually-hidden` "(opens in a new tab)".  Write a
   new one with this view, not by hand.  One exception remains:
@@ -897,7 +921,7 @@ The affordances that say an element is interactive are a **closed registry**,
 enforced by `scripts/check-ui-vocabulary.sh`:
 
 - `cursor` — `pointer` (activates), `not-allowed` (disabled), `grab` /
-  `grabbing` (drag to reorder), `col-resize` (the workbench splitter),
+  `grabbing` (drag to reorder), `col-resize` (an edge that resizes a pane),
   `default` (deliberately not interactive).
 - `text-decoration` — `underline` (a link), `line-through` (superseded),
   `none`.
