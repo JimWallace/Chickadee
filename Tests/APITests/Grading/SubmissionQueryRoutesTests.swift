@@ -1,0 +1,1085 @@
+// Tests/APITests/Grading/SubmissionQueryRoutesTests.swift
+//
+// Phase 3: tests for student-facing read endpoints.
+//
+//   GET /api/v1/submissions
+//   GET /api/v1/submissions/:id
+//   GET /api/v1/submissions/:id/results
+
+import Fluent
+import Foundation
+import Testing
+import VaporTesting
+
+@testable import APIServer
+@testable import Core
+
+@Suite(.serialized) final class SubmissionQueryRoutesTests {
+
+    let app: Application
+
+    init() async throws {
+        self.app = try await makeTestApp(prefix: "chickadee-sqr")
+    }
+
+    // MARK: - Helpers
+
+    @discardableResult
+    private func ensureSetup(id: String) async throws -> APITestSetup {
+        if let existing = try await APITestSetup.find(id, on: app.db) {
+            return existing
+        }
+        let courseID = try await app.testCourseID()
+        let setup = APITestSetup(
+            id: id,
+            manifest:
+                TestManifests.workerOnePythonSuite,
+            zipPath: app.testSetupsDirectory + "\(id).zip",
+            courseID: courseID
+        )
+        try await setup.save(on: app.db)
+        return setup
+    }
+
+    @discardableResult
+    private func insertSubmission(
+        id: String,
+        testSetupID: String = "setup_001",
+        status: String = "pending",
+        attemptNumber: Int = 1,
+        userID: UUID? = nil
+    ) async throws -> APISubmission {
+        _ = try await ensureSetup(id: testSetupID)
+
+        let sub = APISubmission(
+            id: id,
+            testSetupID: testSetupID,
+            zipPath: app.submissionsDirectory + "\(id).zip",
+            attemptNumber: attemptNumber,
+            status: status,
+            userID: userID
+        )
+        try await sub.save(on: app.db)
+        return sub
+    }
+
+    private func insertResult(
+        submissionID: String,
+        collection: TestOutcomeCollection
+    ) async throws {
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        let json = try #require(String(data: encoder.encode(collection), encoding: .utf8))
+        let result = APIResult(
+            id: "res_\(UUID().uuidString.lowercased().prefix(8))",
+            submissionID: submissionID
+        )
+        try await result.saveWithCollection(json: json, on: app.db)
+    }
+
+    private func makeCollection(
+        submissionID: String,
+        outcomes: [TestOutcome] = [],
+        warnings: [String] = []
+    ) -> TestOutcomeCollection {
+        TestOutcomeCollection(
+            submissionID: submissionID,
+            testSetupID: "setup_001",
+            attemptNumber: 1,
+            buildStatus: .passed,
+            compilerOutput: nil,
+            outcomes: outcomes,
+            totalTests: outcomes.count,
+            passCount: outcomes.filter { $0.status == .pass }.count,
+            failCount: outcomes.filter { $0.status == .fail }.count,
+            errorCount: outcomes.filter { $0.status == .error }.count,
+            timeoutCount: outcomes.filter { $0.status == .timeout }.count,
+            executionTimeMs: 100,
+            warnings: warnings,
+            runnerVersion: "shell-runner/1.0",
+            timestamp: Date(timeIntervalSince1970: 0)
+        )
+    }
+
+    private func makeOutcome(
+        name: String,
+        tier: TestTier = .pub,
+        status: TestStatus = .pass
+    ) -> TestOutcome {
+        TestOutcome(
+            testName: name,
+            testClass: nil,
+            tier: tier,
+            status: status,
+            shortResult: status == .pass ? "passed" : "failed",
+            longResult: nil,
+            executionTimeMs: 10,
+            memoryUsageBytes: nil,
+            attemptNumber: 1,
+            isFirstPassSuccess: status == .pass
+        )
+    }
+
+    private func decodeCollection(from body: ByteBuffer) throws -> TestOutcomeCollection {
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let data = Data(body.readableBytesView)
+        return try decoder.decode(TestOutcomeCollection.self, from: data)
+    }
+
+    // MARK: - GET /api/v1/submissions
+
+    @Test func listSubmissionsEmpty() async throws {
+        try await withApp(app) { _ in
+            let cookie = try await loginAsAdmin("testadmin", on: app)
+
+            try await app.asyncTest(
+                .GET, "/api/v1/submissions",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: cookie)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    let body = try res.content.decode(SubmissionListResponse.self)
+                    #expect(body.submissions.isEmpty)
+                })
+
+        }
+    }
+
+    @Test func listSubmissionsReturnsAll() async throws {
+        try await withApp(app) { _ in
+            let cookie = try await loginAsAdmin("testadmin", on: app)
+            try await insertSubmission(id: "sub_ls1", testSetupID: "setup_001")
+            try await insertSubmission(id: "sub_ls2", testSetupID: "setup_002")
+
+            try await app.asyncTest(
+                .GET, "/api/v1/submissions",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: cookie)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    let body = try res.content.decode(SubmissionListResponse.self)
+                    #expect(body.submissions.count == 2)
+                })
+
+        }
+    }
+
+    /// A non-staff student listing submissions sees ONLY their own — never
+    /// another student's — both with no filter and with a `testSetupID` filter
+    /// for a course they don't staff (#417; the list scopes non-staff callers to
+    /// `userID == caller.id`).
+    @Test func listSubmissionsScopesStudentToOwnSubmissions() async throws {
+        try await withApp(app) { _ in
+            let cookieA = try await loginAsStudent("stu_scope_a", on: app)
+            let studentA = try #require(
+                try await APIUser.query(on: app.db).filter(\.$username == "stu_scope_a").first())
+            let studentB = try await makeTestUser(on: app, username: "stu_scope_b", role: "student")
+
+            try await insertSubmission(
+                id: "sub_scope_a", testSetupID: "setup_scope", userID: try studentA.requireID())
+            try await insertSubmission(
+                id: "sub_scope_b", testSetupID: "setup_scope", userID: try studentB.requireID())
+
+            // No filter: student A sees only their own submission.
+            try await app.asyncTest(
+                .GET, "/api/v1/submissions",
+                beforeRequest: { req in req.headers.add(name: .cookie, value: cookieA) },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    let body = try res.content.decode(SubmissionListResponse.self)
+                    #expect(body.submissions.count == 1)
+                    #expect(body.submissions.first?.submissionID == "sub_scope_a")
+                    #expect(body.submissions.contains { $0.submissionID == "sub_scope_b" } == false)
+                })
+
+            // Even filtering by a setup they don't staff, a student never sees
+            // another student's submission for it.
+            try await app.asyncTest(
+                .GET, "/api/v1/submissions?testSetupID=setup_scope",
+                beforeRequest: { req in req.headers.add(name: .cookie, value: cookieA) },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    let body = try res.content.decode(SubmissionListResponse.self)
+                    #expect(body.submissions.map(\.submissionID) == ["sub_scope_a"])
+                })
+        }
+    }
+
+    @Test func listSubmissionsFilterByTestSetupID() async throws {
+        try await withApp(app) { _ in
+            let cookie = try await loginAsAdmin("testadmin", on: app)
+            try await insertSubmission(id: "sub_f1", testSetupID: "setup_AAA")
+            try await insertSubmission(id: "sub_f2", testSetupID: "setup_BBB")
+            try await insertSubmission(id: "sub_f3", testSetupID: "setup_AAA")
+
+            try await app.asyncTest(
+                .GET, "/api/v1/submissions?testSetupID=setup_AAA",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: cookie)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    let body = try res.content.decode(SubmissionListResponse.self)
+                    #expect(body.submissions.count == 2)
+                    #expect(body.submissions.allSatisfy { $0.testSetupID == "setup_AAA" })
+                })
+
+        }
+    }
+
+    @Test func listSubmissionsIncludesExpectedFields() async throws {
+        try await withApp(app) { _ in
+            let cookie = try await loginAsAdmin("testadmin", on: app)
+            try await insertSubmission(
+                id: "sub_fields",
+                testSetupID: "setup_001",
+                status: "complete",
+                attemptNumber: 3
+            )
+
+            try await app.asyncTest(
+                .GET, "/api/v1/submissions",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: cookie)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    let body = try res.content.decode(SubmissionListResponse.self)
+                    let sub = try #require(body.submissions.first { $0.submissionID == "sub_fields" })
+                    #expect(sub.testSetupID == "setup_001")
+                    #expect(sub.status == "complete")
+                    #expect(sub.attemptNumber == 3)
+                })
+
+        }
+    }
+
+    @Test func listSubmissionsHonorsLimitAndOffset() async throws {
+        try await withApp(app) { _ in
+            let cookie = try await loginAsAdmin("testadmin", on: app)
+            try await insertSubmission(id: "sub_pg1", testSetupID: "setup_001")
+            try await insertSubmission(id: "sub_pg2", testSetupID: "setup_001")
+            try await insertSubmission(id: "sub_pg3", testSetupID: "setup_001")
+
+            try await app.asyncTest(
+                .GET, "/api/v1/submissions?limit=2",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: cookie)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    let body = try res.content.decode(SubmissionListResponse.self)
+                    #expect(body.submissions.count == 2)
+                })
+
+            try await app.asyncTest(
+                .GET, "/api/v1/submissions?limit=2&offset=2",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: cookie)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    let body = try res.content.decode(SubmissionListResponse.self)
+                    #expect(body.submissions.count == 1)
+                })
+
+        }
+    }
+
+    // MARK: - GET /api/v1/submissions/:id
+
+    @Test func getSubmissionReturnsStatus() async throws {
+        try await withApp(app) { _ in
+            let cookie = try await loginAsAdmin("testadmin", on: app)
+            try await insertSubmission(
+                id: "sub_gs1",
+                testSetupID: "setup_001",
+                status: "assigned",
+                attemptNumber: 2
+            )
+
+            try await app.asyncTest(
+                .GET, "/api/v1/submissions/sub_gs1",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: cookie)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    let body = try res.content.decode(SubmissionStatusResponse.self)
+                    #expect(body.submissionID == "sub_gs1")
+                    #expect(body.testSetupID == "setup_001")
+                    #expect(body.status == "assigned")
+                    #expect(body.attemptNumber == 2)
+                })
+
+        }
+    }
+
+    @Test func getSubmissionReturnsSubmittedAt() async throws {
+        try await withApp(app) { _ in
+            let cookie = try await loginAsAdmin("testadmin", on: app)
+            try await insertSubmission(id: "sub_ts1")
+
+            try await app.asyncTest(
+                .GET, "/api/v1/submissions/sub_ts1",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: cookie)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    let body = try res.content.decode(SubmissionStatusResponse.self)
+                    #expect(body.submittedAt != nil)
+                })
+
+        }
+    }
+
+    @Test func getSubmissionNotFound() async throws {
+        try await withApp(app) { _ in
+            let cookie = try await loginAsAdmin("testadmin", on: app)
+
+            try await app.asyncTest(
+                .GET, "/api/v1/submissions/nonexistent",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: cookie)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .notFound)
+                })
+
+        }
+    }
+
+    // MARK: - GET /api/v1/submissions/:id/results
+
+    @Test func getResultsNotFoundForUnknownSubmission() async throws {
+        try await withApp(app) { _ in
+            let cookie = try await loginAsAdmin("testadmin", on: app)
+
+            try await app.asyncTest(
+                .GET, "/api/v1/submissions/no_such_sub/results",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: cookie)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .notFound)
+                })
+
+        }
+    }
+
+    @Test func getResultsNotFoundWhenNoneStored() async throws {
+        try await withApp(app) { _ in
+            let cookie = try await loginAsAdmin("testadmin", on: app)
+            try await insertSubmission(id: "sub_pending")
+
+            try await app.asyncTest(
+                .GET, "/api/v1/submissions/sub_pending/results",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: cookie)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .notFound)
+                })
+
+        }
+    }
+
+    @Test func getResultsReturnsCollection() async throws {
+        try await withApp(app) { _ in
+            let cookie = try await loginAsAdmin("testadmin", on: app)
+            try await insertSubmission(id: "sub_res1")
+            let collection = makeCollection(
+                submissionID: "sub_res1",
+                outcomes: [makeOutcome(name: "test_alpha", tier: .pub, status: .pass)]
+            )
+            try await insertResult(submissionID: "sub_res1", collection: collection)
+
+            try await app.asyncTest(
+                .GET, "/api/v1/submissions/sub_res1/results",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: cookie)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    let body = try self.decodeCollection(from: res.body)
+                    #expect(body.submissionID == "sub_res1")
+                    #expect(body.buildStatus == .passed)
+                    #expect(body.outcomes.count == 1)
+                    #expect(body.warnings.isEmpty)
+                    #expect(body.outcomes[0].testName == "test_alpha")
+                    #expect(body.passCount == 1)
+                    #expect(body.failCount == 0)
+                })
+
+        }
+    }
+
+    @Test func getResultsReturnsWarnings() async throws {
+        try await withApp(app) { _ in
+            let cookie = try await loginAsAdmin("testadmin", on: app)
+            try await insertSubmission(id: "sub_res_warn")
+            let collection = makeCollection(
+                submissionID: "sub_res_warn",
+                outcomes: [makeOutcome(name: "test_alpha", tier: .pub, status: .pass)],
+                warnings: ["Notebook submission.py was normalized before grading."]
+            )
+            try await insertResult(submissionID: "sub_res_warn", collection: collection)
+
+            try await app.asyncTest(
+                .GET, "/api/v1/submissions/sub_res_warn/results",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: cookie)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    let body = try self.decodeCollection(from: res.body)
+                    #expect(body.warnings == ["Notebook submission.py was normalized before grading."])
+                })
+
+        }
+    }
+
+    @Test func getResultsWithFailedBuild() async throws {
+        try await withApp(app) { _ in
+            let cookie = try await loginAsAdmin("testadmin", on: app)
+            try await insertSubmission(id: "sub_fail")
+            let collection = TestOutcomeCollection(
+                submissionID: "sub_fail",
+                testSetupID: "setup_001",
+                attemptNumber: 1,
+                buildStatus: .failed,
+                compilerOutput: "make: *** [all] Error 1",
+                outcomes: [],
+                totalTests: 0,
+                passCount: 0,
+                failCount: 0,
+                errorCount: 0,
+                timeoutCount: 0,
+                executionTimeMs: 50,
+                runnerVersion: "shell-runner/1.0",
+                timestamp: Date(timeIntervalSince1970: 0)
+            )
+            try await insertResult(submissionID: "sub_fail", collection: collection)
+
+            try await app.asyncTest(
+                .GET, "/api/v1/submissions/sub_fail/results",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: cookie)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    let body = try self.decodeCollection(from: res.body)
+                    #expect(body.buildStatus == .failed)
+                    #expect(body.outcomes.isEmpty)
+                    #expect(body.compilerOutput == "make: *** [all] Error 1")
+                })
+
+        }
+    }
+
+    @Test func getResultsFiltersBySingleTier() async throws {
+        try await withApp(app) { _ in
+            let cookie = try await loginAsAdmin("testadmin", on: app)
+            try await insertSubmission(id: "sub_tier1")
+            let collection = makeCollection(
+                submissionID: "sub_tier1",
+                outcomes: [
+                    makeOutcome(name: "test_pub", tier: .pub, status: .pass),
+                    makeOutcome(name: "test_release", tier: .release, status: .fail),
+                    makeOutcome(name: "test_secret", tier: .secret, status: .pass),
+                ]
+            )
+            try await insertResult(submissionID: "sub_tier1", collection: collection)
+
+            try await app.asyncTest(
+                .GET, "/api/v1/submissions/sub_tier1/results?tiers=public",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: cookie)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    let body = try self.decodeCollection(from: res.body)
+                    #expect(body.outcomes.count == 1)
+                    #expect(body.outcomes[0].testName == "test_pub")
+                    #expect(body.totalTests == 1)
+                    #expect(body.passCount == 1)
+                    #expect(body.failCount == 0)
+                    #expect(body.errorCount == 0)
+                })
+
+        }
+    }
+
+    @Test func getResultsFiltersByMultipleTiers() async throws {
+        try await withApp(app) { _ in
+            let cookie = try await loginAsAdmin("testadmin", on: app)
+            try await insertSubmission(id: "sub_tier2")
+            let collection = makeCollection(
+                submissionID: "sub_tier2",
+                outcomes: [
+                    makeOutcome(name: "test_pub", tier: .pub, status: .pass),
+                    makeOutcome(name: "test_release", tier: .release, status: .fail),
+                    makeOutcome(name: "test_secret", tier: .secret, status: .pass),
+                ]
+            )
+            try await insertResult(submissionID: "sub_tier2", collection: collection)
+
+            try await app.asyncTest(
+                .GET, "/api/v1/submissions/sub_tier2/results?tiers=public,release",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: cookie)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    let body = try self.decodeCollection(from: res.body)
+                    #expect(body.outcomes.count == 2)
+                    #expect(body.totalTests == 2)
+                    #expect(body.passCount == 1)
+                    #expect(body.failCount == 1)
+                    #expect(body.outcomes.contains { $0.tier == .secret } == false)
+                })
+
+        }
+    }
+
+    @Test func getResultsNoTierFilterReturnsAll() async throws {
+        try await withApp(app) { _ in
+            let cookie = try await loginAsAdmin("testadmin", on: app)
+            try await insertSubmission(id: "sub_all")
+            let collection = makeCollection(
+                submissionID: "sub_all",
+                outcomes: [
+                    makeOutcome(name: "test_pub", tier: .pub, status: .pass),
+                    makeOutcome(name: "test_release", tier: .release, status: .pass),
+                    makeOutcome(name: "test_secret", tier: .secret, status: .pass),
+                ]
+            )
+            try await insertResult(submissionID: "sub_all", collection: collection)
+
+            try await app.asyncTest(
+                .GET, "/api/v1/submissions/sub_all/results",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: cookie)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    let body = try self.decodeCollection(from: res.body)
+                    #expect(body.outcomes.count == 3)
+                    #expect(body.totalTests == 3)
+                })
+
+        }
+    }
+
+    // MARK: - Deadline-based tier visibility
+
+    /// Creates (or reuses) a test setup AND an assignment with the given dueAt for it.
+    @discardableResult
+    private func ensureAssignment(
+        setupID: String,
+        dueAt: Date?
+    ) async throws -> APIAssignment {
+        _ = try await ensureSetup(id: setupID)
+        if let existing = try await APIAssignment.query(on: app.db)
+            .filter(\.$testSetupID == setupID).first()
+        {
+            return existing
+        }
+        let courseID = try await app.testCourseID()
+        let assignment = APIAssignment(
+            testSetupID: setupID,
+            title: "Test Assignment",
+            dueAt: dueAt,
+            courseID: courseID
+        )
+        try await assignment.save(on: app.db)
+        return assignment
+    }
+
+    /// Student cannot see `release` or `secret` outcomes before the deadline.
+    @Test func getResultsHidesReleaseAndSecretBeforeDeadline() async throws {
+        try await withApp(app) { _ in
+            let setupID = "setup_deadline_before"
+            let username = "student_db1"
+            let cookie = try await loginAsStudent(username, on: app)
+            let studentOpt = try await APIUser.query(on: app.db).filter(\.$username == username).first()
+            let student = try #require(studentOpt)
+            try await ensureAssignment(
+                setupID: setupID,
+                dueAt: Date().addingTimeInterval(3600))  // 1 hr from now
+            try await insertSubmission(
+                id: "sub_db1", testSetupID: setupID,
+                userID: student.id)
+            let collection = makeCollection(
+                submissionID: "sub_db1",
+                outcomes: [
+                    makeOutcome(name: "test_pub", tier: .pub, status: .pass),
+                    makeOutcome(name: "test_release", tier: .release, status: .fail),
+                    makeOutcome(name: "test_secret", tier: .secret, status: .pass),
+                ]
+            )
+            try await insertResult(submissionID: "sub_db1", collection: collection)
+
+            try await app.asyncTest(
+                .GET, "/api/v1/submissions/sub_db1/results",
+                beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    let body = try self.decodeCollection(from: res.body)
+                    #expect(body.outcomes.count == 1, "before deadline, student should see only public outcomes")
+                    #expect(body.outcomes[0].testName == "test_pub")
+                    #expect(body.outcomes.contains { $0.tier == .release } == false)
+                    #expect(body.outcomes.contains { $0.tier == .secret } == false)
+                })
+
+        }
+    }
+
+    /// Student can see `release` outcomes after the deadline has passed,
+    /// but `secret` outcomes remain hidden.
+    @Test func getResultsShowsReleaseAfterDeadline() async throws {
+        try await withApp(app) { _ in
+            let setupID = "setup_deadline_after"
+            let username = "student_da1"
+            let cookie = try await loginAsStudent(username, on: app)
+            let studentOpt = try await APIUser.query(on: app.db).filter(\.$username == username).first()
+            let student = try #require(studentOpt)
+            try await ensureAssignment(
+                setupID: setupID,
+                dueAt: Date().addingTimeInterval(-3600))  // 1 hr ago
+            try await insertSubmission(
+                id: "sub_da1", testSetupID: setupID,
+                userID: student.id)
+            let collection = makeCollection(
+                submissionID: "sub_da1",
+                outcomes: [
+                    makeOutcome(name: "test_pub", tier: .pub, status: .pass),
+                    makeOutcome(name: "test_release", tier: .release, status: .fail),
+                    makeOutcome(name: "test_secret", tier: .secret, status: .pass),
+                ]
+            )
+            try await insertResult(submissionID: "sub_da1", collection: collection)
+
+            try await app.asyncTest(
+                .GET, "/api/v1/submissions/sub_da1/results",
+                beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    let body = try self.decodeCollection(from: res.body)
+                    #expect(
+                        body.outcomes.count == 2, "after deadline, student should see public + release but not secret")
+                    #expect(body.outcomes.contains { $0.tier == .pub })
+                    #expect(body.outcomes.contains { $0.tier == .release })
+                    #expect(body.outcomes.contains { $0.tier == .secret } == false)
+                })
+
+        }
+    }
+
+    /// A student with an *active* per-student extension keeps `release` output
+    /// hidden even after the class-wide deadline has passed — release is gated on
+    /// their *effective* (extended) deadline, so they cannot read the hidden
+    /// tests early while their own submission window is still open.
+    @Test func getResultsHidesReleaseForStudentWithActiveExtension() async throws {
+        try await withApp(app) { _ in
+            let setupID = "setup_ext_active"
+            let username = "student_ext_active"
+            let cookie = try await loginAsStudent(username, on: app)
+            let student = try #require(
+                try await APIUser.query(on: app.db).filter(\.$username == username).first())
+            // Class deadline already passed…
+            let assignment = try await ensureAssignment(
+                setupID: setupID,
+                dueAt: Date().addingTimeInterval(-3600))  // 1 hr ago
+            // …but this student's extension is still in the future.
+            try await APIAssignmentExtension(
+                assignmentID: try assignment.requireID(),
+                userID: try student.requireID(),
+                extendedDueAt: Date().addingTimeInterval(86_400)  // 1 day out
+            ).save(on: app.db)
+            try await insertSubmission(
+                id: "sub_ext_active", testSetupID: setupID,
+                userID: student.id)
+            let collection = makeCollection(
+                submissionID: "sub_ext_active",
+                outcomes: [
+                    makeOutcome(name: "test_pub", tier: .pub, status: .pass),
+                    makeOutcome(name: "test_release", tier: .release, status: .fail),
+                    makeOutcome(name: "test_secret", tier: .secret, status: .pass),
+                ]
+            )
+            try await insertResult(submissionID: "sub_ext_active", collection: collection)
+
+            try await app.asyncTest(
+                .GET, "/api/v1/submissions/sub_ext_active/results",
+                beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    let body = try self.decodeCollection(from: res.body)
+                    #expect(
+                        body.outcomes.count == 1,
+                        "an active extension keeps release hidden past the class deadline")
+                    #expect(body.outcomes[0].testName == "test_pub")
+                    #expect(body.outcomes.contains { $0.tier == .release } == false)
+                    #expect(body.outcomes.contains { $0.tier == .secret } == false)
+                })
+
+        }
+    }
+
+    /// Once a student's extension has *also* lapsed, `release` is revealed just
+    /// like any other student past the deadline — the extension only postpones
+    /// the reveal, it does not suppress it forever.
+    @Test func getResultsShowsReleaseAfterLapsedExtension() async throws {
+        try await withApp(app) { _ in
+            let setupID = "setup_ext_lapsed"
+            let username = "student_ext_lapsed"
+            let cookie = try await loginAsStudent(username, on: app)
+            let student = try #require(
+                try await APIUser.query(on: app.db).filter(\.$username == username).first())
+            let assignment = try await ensureAssignment(
+                setupID: setupID,
+                dueAt: Date().addingTimeInterval(-7200))  // 2 hr ago
+            // Extension granted but already in the past.
+            try await APIAssignmentExtension(
+                assignmentID: try assignment.requireID(),
+                userID: try student.requireID(),
+                extendedDueAt: Date().addingTimeInterval(-3600)  // 1 hr ago
+            ).save(on: app.db)
+            try await insertSubmission(
+                id: "sub_ext_lapsed", testSetupID: setupID,
+                userID: student.id)
+            let collection = makeCollection(
+                submissionID: "sub_ext_lapsed",
+                outcomes: [
+                    makeOutcome(name: "test_pub", tier: .pub, status: .pass),
+                    makeOutcome(name: "test_release", tier: .release, status: .fail),
+                    makeOutcome(name: "test_secret", tier: .secret, status: .pass),
+                ]
+            )
+            try await insertResult(submissionID: "sub_ext_lapsed", collection: collection)
+
+            try await app.asyncTest(
+                .GET, "/api/v1/submissions/sub_ext_lapsed/results",
+                beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    let body = try self.decodeCollection(from: res.body)
+                    #expect(
+                        body.outcomes.count == 2,
+                        "a lapsed extension behaves like any past-deadline student")
+                    #expect(body.outcomes.contains { $0.tier == .release })
+                    #expect(body.outcomes.contains { $0.tier == .secret } == false)
+                })
+
+        }
+    }
+
+    /// `secret` outcomes are never visible to students, even after the deadline.
+    @Test func getResultsAlwaysHidesSecretFromStudent() async throws {
+        try await withApp(app) { _ in
+            let setupID = "setup_secret_hide"
+            let username = "student_sh1"
+            let cookie = try await loginAsStudent(username, on: app)
+            let studentOpt = try await APIUser.query(on: app.db).filter(\.$username == username).first()
+            let student = try #require(studentOpt)
+            try await ensureAssignment(
+                setupID: setupID,
+                dueAt: Date().addingTimeInterval(-7200))  // well past
+            try await insertSubmission(
+                id: "sub_sh1", testSetupID: setupID,
+                userID: student.id)
+            let collection = makeCollection(
+                submissionID: "sub_sh1",
+                outcomes: [
+                    makeOutcome(name: "test_secret", tier: .secret, status: .pass)
+                ]
+            )
+            try await insertResult(submissionID: "sub_sh1", collection: collection)
+
+            try await app.asyncTest(
+                .GET, "/api/v1/submissions/sub_sh1/results",
+                beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    let body = try self.decodeCollection(from: res.body)
+                    #expect(
+                        body.outcomes.isEmpty,
+                        "secret outcomes must never be visible to students")
+                })
+
+        }
+    }
+
+    /// Instructors always see all tiers regardless of deadline.
+    @Test func getResultsInstructorSeesAllTiersRegardlessOfDeadline() async throws {
+        try await withApp(app) { _ in
+            let setupID = "setup_instr_all"
+            let cookie = try await loginUser(
+                username: "instructor_tier", password: "testpassword", role: "instructor", on: app)
+            // All-tier visibility is per-course staff now (#417 Slice G); enrol
+            // the instructor in the setup's course (shared TEST101).
+            try await enrollAsTestInstructor(username: "instructor_tier", on: app)
+            try await ensureAssignment(
+                setupID: setupID,
+                dueAt: Date().addingTimeInterval(3600))  // future deadline
+            try await insertSubmission(id: "sub_ia1", testSetupID: setupID)
+            let collection = makeCollection(
+                submissionID: "sub_ia1",
+                outcomes: [
+                    makeOutcome(name: "test_pub", tier: .pub, status: .pass),
+                    makeOutcome(name: "test_release", tier: .release, status: .fail),
+                    makeOutcome(name: "test_secret", tier: .secret, status: .pass),
+                ]
+            )
+            try await insertResult(submissionID: "sub_ia1", collection: collection)
+
+            try await app.asyncTest(
+                .GET, "/api/v1/submissions/sub_ia1/results",
+                beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    let body = try self.decodeCollection(from: res.body)
+                    #expect(body.outcomes.count == 3, "instructors must see all tiers regardless of deadline")
+                })
+
+        }
+    }
+
+    /// Default response: the grade aggregates span EVERY tier (the real grade,
+    /// matching the dashboard / submission page), while `outcomes` lists only
+    /// the results the student may inspect.  The counts intentionally exceed
+    /// `outcomes.count` — this is the fix for the API re-introducing the
+    /// visible-only-grade drift.
+    @Test func getResultsGradeSpansAllTiersWhileHidingOutcomes() async throws {
+        try await withApp(app) { _ in
+            let setupID = "setup_alltier_grade"
+            let username = "student_atg"
+            let cookie = try await loginAsStudent(username, on: app)
+            let student = try #require(
+                try await APIUser.query(on: app.db).filter(\.$username == username).first())
+            try await ensureAssignment(setupID: setupID, dueAt: Date().addingTimeInterval(3600))  // future
+            try await insertSubmission(id: "sub_atg", testSetupID: setupID, userID: student.id)
+            let collection = makeCollection(
+                submissionID: "sub_atg",
+                outcomes: [
+                    makeOutcome(name: "test_pub", tier: .pub, status: .pass),
+                    makeOutcome(name: "test_release", tier: .release, status: .fail),
+                    makeOutcome(name: "test_secret", tier: .secret, status: .fail),
+                ]
+            )
+            try await insertResult(submissionID: "sub_atg", collection: collection)
+
+            try await app.asyncTest(
+                .GET, "/api/v1/submissions/sub_atg/results",
+                beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    let body = try self.decodeCollection(from: res.body)
+                    // Grade aggregates span every tier (the real grade).
+                    #expect(body.totalTests == 3)
+                    #expect(body.passCount == 1)
+                    #expect(body.failCount == 2)
+                    #expect(body.totalPoints == 3)
+                    #expect(body.earnedPoints == 1)
+                    // …but only the public outcome is listed (release hidden
+                    // before the deadline, secret never).
+                    #expect(body.outcomes.count == 1)
+                    #expect(body.outcomes[0].testName == "test_pub")
+                    #expect(body.outcomes.contains { $0.tier == .release } == false)
+                    #expect(body.outcomes.contains { $0.tier == .secret } == false)
+                })
+
+        }
+    }
+
+    /// An explicit `?tiers=` slice still returns a self-consistent
+    /// sub-collection (aggregates recomputed over the requested ∩ visible
+    /// tiers), so power-user slicing is unaffected by the all-tier default.
+    @Test func getResultsExplicitTierSliceIsSelfConsistent() async throws {
+        try await withApp(app) { _ in
+            let setupID = "setup_slice"
+            let username = "student_slice"
+            let cookie = try await loginAsStudent(username, on: app)
+            let student = try #require(
+                try await APIUser.query(on: app.db).filter(\.$username == username).first())
+            try await ensureAssignment(setupID: setupID, dueAt: Date().addingTimeInterval(3600))
+            try await insertSubmission(id: "sub_slice", testSetupID: setupID, userID: student.id)
+            let collection = makeCollection(
+                submissionID: "sub_slice",
+                outcomes: [
+                    makeOutcome(name: "test_pub", tier: .pub, status: .pass),
+                    makeOutcome(name: "test_release", tier: .release, status: .fail),
+                    makeOutcome(name: "test_secret", tier: .secret, status: .fail),
+                ]
+            )
+            try await insertResult(submissionID: "sub_slice", collection: collection)
+
+            try await app.asyncTest(
+                .GET, "/api/v1/submissions/sub_slice/results?tiers=public",
+                beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    let body = try self.decodeCollection(from: res.body)
+                    #expect(body.outcomes.count == 1)
+                    #expect(body.totalTests == 1)
+                    #expect(body.passCount == 1)
+                    #expect(body.failCount == 0)
+                })
+
+        }
+    }
+
+    // MARK: - GET /api/v1/submissions/:id — owner fast path (2026-07 audit)
+
+    /// The status endpoint is the 2 s student poll; the owner check must
+    /// grant access without requiring course-staff authority.
+    @Test func getSubmissionOwnerCanPollOwnSubmission() async throws {
+        try await withApp(app) { _ in
+            let username = "student_owner_poll"
+            let cookie = try await loginAsStudent(username, on: app)
+            let owner = try #require(
+                try await APIUser.query(on: app.db).filter(\.$username == username).first())
+            try await insertSubmission(
+                id: "sub_owner_poll", testSetupID: "setup_owner_poll", userID: owner.id)
+
+            try await app.asyncTest(
+                .GET, "/api/v1/submissions/sub_owner_poll",
+                beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    let body = try res.content.decode(SubmissionStatusResponse.self)
+                    #expect(body.submissionID == "sub_owner_poll")
+                })
+        }
+    }
+
+    /// A non-owner without course-staff authority still falls through to the
+    /// staff check and is rejected — the owner fast path must not widen access.
+    @Test func getSubmissionForbiddenForNonOwnerNonStaff() async throws {
+        try await withApp(app) { _ in
+            let cookie = try await loginAsStudent("student_poll_intruder", on: app)
+            let other = try await makeTestUser(
+                on: app, username: "student_poll_victim", role: "student")
+            try await insertSubmission(
+                id: "sub_poll_other", testSetupID: "setup_poll_other",
+                userID: try other.requireID())
+
+            try await app.asyncTest(
+                .GET, "/api/v1/submissions/sub_poll_other",
+                beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
+                afterResponse: { res in
+                    #expect(res.status == .forbidden)
+                })
+        }
+    }
+
+    // MARK: - GET /api/v1/submissions/:id/results — ETag (2026-07 audit)
+
+    /// Results are immutable, so a repeat view with the returned ETag gets a
+    /// 304 without the server re-decoding the stored collection.
+    @Test func getResultsEmitsETagAndReturns304OnMatch() async throws {
+        try await withApp(app) { _ in
+            let cookie = try await loginAsAdmin("testadmin", on: app)
+            try await insertSubmission(id: "sub_etag1", testSetupID: "setup_etag1")
+            let collection = makeCollection(
+                submissionID: "sub_etag1",
+                outcomes: [makeOutcome(name: "test_a")]
+            )
+            try await insertResult(submissionID: "sub_etag1", collection: collection)
+
+            var etag = ""
+            try await app.asyncTest(
+                .GET, "/api/v1/submissions/sub_etag1/results",
+                beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    etag = try #require(res.headers.first(name: .eTag))
+                    #expect(etag.hasPrefix("\"") && etag.hasSuffix("\""))
+                })
+
+            try await app.asyncTest(
+                .GET, "/api/v1/submissions/sub_etag1/results",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: cookie)
+                    req.headers.add(name: .ifNoneMatch, value: etag)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .notModified)
+                    #expect(res.body.readableBytes == 0)
+                    #expect(res.headers.first(name: .eTag) == etag)
+                })
+
+            // A non-matching validator still gets the full representation.
+            try await app.asyncTest(
+                .GET, "/api/v1/submissions/sub_etag1/results",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: cookie)
+                    req.headers.add(name: .ifNoneMatch, value: "\"deadbeef\"")
+                },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                })
+        }
+    }
+
+    /// The ETag embeds the caller's visible tier set, so a validator cached
+    /// before the release deadline must NOT produce a 304 after the deadline
+    /// passes — a stale 304 would hide the newly-released outcomes.
+    @Test func getResultsStaleETagRefreshesWhenReleaseBecomesVisible() async throws {
+        try await withApp(app) { _ in
+            let setupID = "setup_etag_deadline"
+            let username = "student_etag_dl"
+            let cookie = try await loginAsStudent(username, on: app)
+            let student = try #require(
+                try await APIUser.query(on: app.db).filter(\.$username == username).first())
+            let assignment = try await ensureAssignment(
+                setupID: setupID,
+                dueAt: Date().addingTimeInterval(3600))
+            try await insertSubmission(
+                id: "sub_etag_dl", testSetupID: setupID, userID: student.id)
+            let collection = makeCollection(
+                submissionID: "sub_etag_dl",
+                outcomes: [
+                    makeOutcome(name: "test_pub", tier: .pub, status: .pass),
+                    makeOutcome(name: "test_release", tier: .release, status: .fail),
+                ]
+            )
+            try await insertResult(submissionID: "sub_etag_dl", collection: collection)
+
+            var preDeadlineETag = ""
+            try await app.asyncTest(
+                .GET, "/api/v1/submissions/sub_etag_dl/results",
+                beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    preDeadlineETag = try #require(res.headers.first(name: .eTag))
+                    let body = try self.decodeCollection(from: res.body)
+                    #expect(body.outcomes.contains { $0.tier == .release } == false)
+                })
+
+            // Deadline passes: the pre-deadline validator must miss, and the
+            // fresh response must include the release outcome.
+            assignment.dueAt = Date().addingTimeInterval(-3600)
+            try await assignment.save(on: app.db)
+
+            try await app.asyncTest(
+                .GET, "/api/v1/submissions/sub_etag_dl/results",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: cookie)
+                    req.headers.add(name: .ifNoneMatch, value: preDeadlineETag)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    let freshETag = try #require(res.headers.first(name: .eTag))
+                    #expect(freshETag != preDeadlineETag)
+                    let body = try self.decodeCollection(from: res.body)
+                    #expect(body.outcomes.contains { $0.tier == .release })
+                })
+        }
+    }
+}

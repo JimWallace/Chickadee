@@ -1,0 +1,910 @@
+// Tests/APITests/Pages/WebRoutesIndexTests.swift
+//
+// Split from WebRoutesTests.swift.  See WebRoutesHelpers.swift for the
+// `withWebRoutesApp` lifecycle wrapper and free-function helpers.
+
+import Core
+import Fluent
+import Foundation
+import Testing
+import VaporTesting
+
+@testable import APIServer
+
+@Suite struct WebRoutesIndexTests {
+
+    // MARK: - GET / (index page)
+
+    @Test func indexRedirectsToEnrollWhenNotEnrolled() async throws {
+        try await withWebRoutesApp { app in
+            let cookie = try await wrLoginAsStudent(on: app)
+            // Create two courses so auto-enroll (single-course shortcut) doesn't kick in.
+            _ = try await wrMakeCourse(on: app)
+            let c2 = APICourse(code: "CS102", name: "Algorithms")
+            try await c2.save(on: app.db)
+
+            try await app.asyncTest(
+                .GET, "/",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: cookie)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .seeOther)
+                    #expect(res.headers.first(name: .location)?.contains("/enroll") ?? false)
+                })
+        }
+    }
+
+    @Test func indexRendersWhenNoCourses() async throws {
+        try await withWebRoutesApp { app in
+            let cookie = try await wrLoginAsStudent(on: app)
+
+            try await app.asyncTest(
+                .GET, "/",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: cookie)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                })
+        }
+    }
+
+    /// Regression for the Lab 6 incident: a `.preview` assignment whose
+    /// scheduled open date has arrived (validation passed) must be published by
+    /// the dashboard load itself — the lazy safety net under the periodic
+    /// sweep. Pre-fix, a dead sweep meant the lab stayed staff-only preview
+    /// forever and every dashboard load just observed the stuck state.
+    @Test func indexLazilyOpensScheduledAssignment() async throws {
+        try await withWebRoutesApp { app in
+            let cookie = try await wrLoginAsStudent(on: app)
+            let user = try await wrStudentUser(on: app)
+            try await wrEnrollUser(user, on: app)
+            try await wrInsertSetup(id: "setup_sched_open", on: app)
+            let assignment = try await wrInsertAssignment(
+                testSetupID: "setup_sched_open", title: "Scheduled Lab", isOpen: false,
+                dueAt: Date().addingTimeInterval(86_400), on: app)
+            assignment.visibility = .preview
+            assignment.startsAt = Date().addingTimeInterval(-60)
+            assignment.validationStatus = "passed"
+            try await assignment.save(on: app.db)
+
+            try await app.asyncTest(
+                .GET, "/",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: cookie)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    // The dashboard load repaired the missed scheduled open, so
+                    // the student sees the lab on this very render.
+                    #expect(res.body.string.contains("Scheduled Lab"))
+                })
+
+            let reloaded = try #require(try await APIAssignment.find(assignment.id, on: app.db))
+            #expect(reloaded.visibility == .open, "Dashboard load publishes a due scheduled assignment")
+            #expect(reloaded.startsAt == nil, "Open date is consumed once it fires")
+        }
+    }
+
+    @Test func indexShowsOpenAssignmentForStudent() async throws {
+        try await withWebRoutesApp { app in
+            let cookie = try await wrLoginAsStudent(on: app)
+            let user = try await wrStudentUser(on: app)
+            try await wrEnrollUser(user, on: app)
+            try await wrInsertSetup(id: "setup_vis", on: app)
+            try await wrInsertAssignment(testSetupID: "setup_vis", title: "Visible Assignment", isOpen: true, on: app)
+
+            try await app.asyncTest(
+                .GET, "/",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: cookie)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    let html = res.body.string
+                    #expect(html.contains("Visible Assignment"), "Should show open assignment title")
+                })
+        }
+    }
+
+    @Test func indexShowsAutoClosedAssignmentToStudentWithActiveExtension() async throws {
+        try await withWebRoutesApp { app in
+            let cookie = try await wrLoginAsStudent(on: app)
+            let user = try await wrStudentUser(on: app)
+            try await wrEnrollUser(user, on: app)
+            try await wrInsertSetup(id: "setup_ext_vis", on: app)
+            // Auto-closed at its deadline: isOpen=false, due date in the past.
+            let assignment = try await wrInsertAssignment(
+                testSetupID: "setup_ext_vis",
+                title: "Extended Lab",
+                isOpen: false,
+                dueAt: Date().addingTimeInterval(-3_600),
+                on: app
+            )
+            try await APIAssignmentExtension(
+                assignmentID: try assignment.requireID(),
+                userID: try user.requireID(),
+                extendedDueAt: Date().addingTimeInterval(86_400)
+            ).save(on: app.db)
+
+            try await app.asyncTest(
+                .GET, "/",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: cookie)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    let html = res.body.string
+                    #expect(
+                        html.contains("Extended Lab"),
+                        "Auto-closed assignment must stay visible to a student with an active extension")
+                    #expect(
+                        html.contains("(extension)"),
+                        "Due column should annotate the personal extension")
+                    #expect(
+                        html.contains("tier-extended"),
+                        "Status badge should read as 'extended' (open-styled), not the misleading class-wide 'closed'")
+                    #expect(
+                        html.contains(">extended</span>"),
+                        "Extended badge label should be visible (the only status cue on phones, where the due column is hidden)"
+                    )
+                })
+        }
+    }
+
+    @Test func indexShowsBrowserEditActionBeforeStudentHasAnyNotebookWork() async throws {
+        try await withWebRoutesApp { app in
+            let cookie = try await wrLoginAsStudent(on: app)
+            let user = try await wrStudentUser(on: app)
+            try await wrEnrollUser(user, on: app)
+
+            let setupID = "setup_browser_first_open"
+            let course = try await wrMakeCourse(on: app)
+            let courseID = try course.requireID()
+            let notebookPath = app.testSetupsDirectory + "\(setupID).ipynb"
+            let notebookJSON = """
+                {"cells":[{"cell_type":"markdown","metadata":{},"source":["Browser starter"]}],"metadata":{"kernelspec":{"display_name":"Python 3","language":"python","name":"python3"},"language_info":{"name":"python"}},"nbformat":4,"nbformat_minor":5}
+                """
+            try Data(notebookJSON.utf8).write(to: URL(fileURLWithPath: notebookPath))
+
+            let manifest = """
+                {"schemaVersion":1,"gradingMode":"browser","requiredFiles":[],"testSuites":[{"tier":"public","script":"test_browser.py"}],"timeLimitSeconds":10}
+                """
+            let setup = APITestSetup(
+                id: setupID,
+                manifest: manifest,
+                zipPath: app.testSetupsDirectory + "\(setupID).zip",
+                notebookPath: notebookPath,
+                courseID: courseID
+            )
+            try await setup.save(on: app.db)
+            try await wrInsertAssignment(testSetupID: setupID, title: "Browser Lab", isOpen: true, on: app)
+
+            try await app.asyncTest(
+                .GET, "/",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: cookie)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    let html = res.body.string
+                    #expect(html.contains("Browser Lab"))
+                    #expect(
+                        html.contains("/CS101/browser-lab"),
+                        "Browser-graded assignments should expose the notebook action even before any student edits"
+                    )
+                })
+        }
+    }
+
+    @Test func indexShowsClosedAssignmentWithEditLinkWhenPreviouslyOpened() async throws {
+        try await withWebRoutesApp { app in
+            let cookie = try await wrLoginAsStudent(on: app)
+            let user = try await wrStudentUser(on: app)
+            try await wrEnrollUser(user, on: app)
+
+            let setupID = "setup_closed_opened"
+            let courseID = try await wrMakeCourse(on: app).requireID()
+            let notebookPath = app.testSetupsDirectory + "\(setupID).ipynb"
+            let notebookJSON = """
+                {"cells":[],"metadata":{"kernelspec":{"display_name":"Python 3","language":"python","name":"python3"},"language_info":{"name":"python"}},"nbformat":4,"nbformat_minor":5}
+                """
+            try Data(notebookJSON.utf8).write(to: URL(fileURLWithPath: notebookPath))
+            let manifest = """
+                {"schemaVersion":1,"gradingMode":"browser","requiredFiles":[],"testSuites":[{"tier":"public","script":"test_browser.py"}],"timeLimitSeconds":10}
+                """
+            let setup = APITestSetup(
+                id: setupID,
+                manifest: manifest,
+                zipPath: app.testSetupsDirectory + "\(setupID).zip",
+                notebookPath: notebookPath,
+                courseID: courseID
+            )
+            try await setup.save(on: app.db)
+            // Deliberately closed (isOpen=false), but the student already
+            // opened it — modelled here by a prior submission.
+            try await wrInsertAssignment(testSetupID: setupID, title: "Past Lab", isOpen: false, on: app)
+            try await wrInsertSubmission(
+                id: "sub_closed_opened", testSetupID: setupID, userID: try user.requireID(), on: app)
+
+            try await app.asyncTest(
+                .GET, "/",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: cookie)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    let html = res.body.string
+                    #expect(
+                        html.contains("Past Lab"),
+                        "A closed assignment the student opened must stay on the dashboard")
+                    #expect(
+                        html.contains(#"title="Edit""#),
+                        "The Edit link must show for a previously-opened closed assignment")
+                })
+        }
+    }
+
+    @Test func indexShowsClosedPublishedAssignmentToEnrolledStudentEvenWithoutEngagement() async throws {
+        try await withWebRoutesApp { app in
+            // A published assignment that has since closed at its deadline stays
+            // on every enrolled student's dashboard (read-only), even one who
+            // never opened it and holds no extension — recent labs must not
+            // silently disappear just because a student missed the window.
+            let cookie = try await wrLoginAsStudent(on: app)
+            let user = try await wrStudentUser(on: app)
+            try await wrEnrollUser(user, on: app)
+
+            // A browser-graded notebook assignment (like the real Lab 4), closed
+            // at a past deadline, with no submission or participation for this
+            // student.
+            let setupID = "setup_closed_published"
+            let courseID = try await wrMakeCourse(on: app).requireID()
+            let notebookPath = app.testSetupsDirectory + "\(setupID).ipynb"
+            try Data(
+                #"{"cells":[],"metadata":{"kernelspec":{"display_name":"Python 3","language":"python","name":"python3"}},"nbformat":4,"nbformat_minor":5}"#
+                    .utf8
+            ).write(to: URL(fileURLWithPath: notebookPath))
+            let setup = APITestSetup(
+                id: setupID,
+                manifest:
+                    #"{"schemaVersion":1,"gradingMode":"browser","requiredFiles":[],"testSuites":[{"tier":"public","script":"t.py"}],"timeLimitSeconds":10}"#,
+                zipPath: app.testSetupsDirectory + "\(setupID).zip",
+                notebookPath: notebookPath,
+                courseID: courseID
+            )
+            try await setup.save(on: app.db)
+            try await wrInsertAssignment(
+                testSetupID: setupID, title: "Closed Published Lab",
+                isOpen: false, dueAt: Date().addingTimeInterval(-3_600), on: app)
+
+            try await app.asyncTest(
+                .GET, "/",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: cookie)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    let html = res.body.string
+                    #expect(
+                        html.contains("Closed Published Lab"),
+                        "A published-then-closed assignment must stay visible to every enrolled student")
+                    #expect(
+                        html.contains(#"title="Edit""#),
+                        "The closed published assignment must be openable (read-only), not a dead-end row")
+                })
+        }
+    }
+
+    @Test func indexHidesUnpublishedClosedDraftFromStudent() async throws {
+        try await withWebRoutesApp { app in
+            // A closed assignment with NO due date is an unpublished draft (the
+            // freshly-created / authoring-in-progress state), not a lab that ran
+            // and closed — it must stay hidden from students who never engaged.
+            let cookie = try await wrLoginAsStudent(on: app)
+            let user = try await wrStudentUser(on: app)
+            try await wrEnrollUser(user, on: app)
+
+            try await wrInsertSetup(id: "setup_closed_unopened", on: app)
+            try await wrInsertAssignment(
+                testSetupID: "setup_closed_unopened", title: "Secret Lab", isOpen: false, on: app)
+
+            try await app.asyncTest(
+                .GET, "/",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: cookie)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    #expect(
+                        res.body.string.contains("Secret Lab") == false,
+                        "An unpublished closed draft (no due date) must not appear on the dashboard")
+                })
+        }
+    }
+
+    @Test func indexHidesUnpublishedSetupsFromStudent() async throws {
+        try await withWebRoutesApp { app in
+            let cookie = try await wrLoginAsStudent(on: app)
+            let user = try await wrStudentUser(on: app)
+            try await wrEnrollUser(user, on: app)
+            try await wrInsertSetup(id: "setup_hidden", on: app)
+            // No assignment created → unpublished
+
+            try await app.asyncTest(
+                .GET, "/",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: cookie)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    let html = res.body.string
+                    #expect(!html.contains("setup_hidden"), "Unpublished setup should be hidden from students")
+                })
+        }
+    }
+
+    @Test func indexShowsAllSetupsForInstructor() async throws {
+        try await withWebRoutesApp { app in
+            let cookie = try await wrLoginAsInstructor(on: app)
+            let instructor = try #require(
+                try await APIUser.query(on: app.db).filter(\.$username == "instructor1").first()
+            )
+            try await wrEnrollUser(instructor, on: app)
+            try await wrInsertSetup(id: "setup_unpub", on: app)
+
+            try await app.asyncTest(
+                .GET, "/",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: cookie)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    let html = res.body.string
+                    // Unpublished setups appear in links (e.g. /testsetups/setup_unpub/submit)
+                    // and show "unpublished" status badge.
+                    #expect(html.contains("unpublished"), "Instructor should see unpublished status")
+                })
+        }
+    }
+
+    @Test func indexShowsBestGrade() async throws {
+        try await withWebRoutesApp { app in
+            let cookie = try await wrLoginAsStudent(on: app)
+            let user = try await wrStudentUser(on: app)
+            let userID = try user.requireID()
+            try await wrEnrollUser(user, on: app)
+            try await wrInsertSetup(id: "setup_grade", on: app)
+            try await wrInsertAssignment(testSetupID: "setup_grade", title: "Graded", isOpen: true, on: app)
+            try await wrInsertSubmission(id: "sub_g1", testSetupID: "setup_grade", userID: userID, on: app)
+            // 4 out of 5 pass = 80%
+            try await wrInsertResult(
+                submissionID: "sub_g1",
+                outcomes: [
+                    wrMakeOutcome(name: "t1", status: .pass),
+                    wrMakeOutcome(name: "t2", status: .pass),
+                    wrMakeOutcome(name: "t3", status: .pass),
+                    wrMakeOutcome(name: "t4", status: .pass),
+                    wrMakeOutcome(name: "t5", status: .fail),
+                ],
+                on: app)
+
+            try await app.asyncTest(
+                .GET, "/",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: cookie)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    let html = res.body.string
+                    #expect(html.contains("80%"), "Should show best grade of 80%")
+                })
+        }
+    }
+
+    /// Regression for the dashboard-vs-submission inconsistency: before the
+    /// deadline both surfaces must show the SAME all-tier grade.  Previously the
+    /// dashboard showed the all-tier grade (33%) while the submission page
+    /// showed a public-only 100%.
+    @Test func dashboardAndSubmissionPageAgreeOnAllTierGrade() async throws {
+        try await withWebRoutesApp { app in
+            let cookie = try await wrLoginAsStudent(on: app)
+            let user = try await wrStudentUser(on: app)
+            let userID = try user.requireID()
+            try await wrEnrollUser(user, on: app)
+            try await wrInsertSetup(id: "setup_consistency", on: app)
+            try await wrInsertAssignment(
+                testSetupID: "setup_consistency", title: "Consistency", isOpen: true,
+                dueAt: Date().addingTimeInterval(86400 * 30), on: app
+            )
+            try await wrInsertSubmission(
+                id: "sub_consistency", testSetupID: "setup_consistency", userID: userID, on: app)
+            // 1 of 3 across all tiers → 33% everywhere.
+            try await wrInsertResult(
+                submissionID: "sub_consistency",
+                outcomes: [
+                    wrMakeOutcome(name: "pub_ok", tier: .pub, status: .pass),
+                    wrMakeOutcome(name: "rel_bad", tier: .release, status: .fail),
+                    wrMakeOutcome(name: "sec_bad", tier: .secret, status: .fail),
+                ], on: app)
+
+            try await app.asyncTest(
+                .GET, "/",
+                beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    #expect(res.body.string.contains("33%"), "Dashboard should show the all-tier grade 33%")
+                })
+
+            try await app.asyncTest(
+                .GET, "/submissions/sub_consistency",
+                beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    #expect(
+                        res.body.string.contains("33%"),
+                        "Submission page should show the SAME all-tier grade as the dashboard")
+                })
+        }
+    }
+
+    @Test func indexShowsFirstTryPerfectBadgeForLatestPerfectFirstSubmission() async throws {
+        try await withWebRoutesApp { app in
+            let cookie = try await wrLoginAsStudent(on: app)
+            let user = try await wrStudentUser(on: app)
+            let userID = try user.requireID()
+            try await wrEnrollUser(user, on: app)
+            try await wrInsertSetup(id: "setup_badge_latest", on: app)
+            try await wrInsertAssignment(testSetupID: "setup_badge_latest", title: "Badge Lab", isOpen: true, on: app)
+            try await wrInsertSubmission(
+                id: "sub_badge_latest", testSetupID: "setup_badge_latest", userID: userID, attemptNumber: 1, on: app)
+            try await wrInsertResult(
+                submissionID: "sub_badge_latest",
+                outcomes: [
+                    wrMakeOutcome(name: "t1", status: .pass),
+                    wrMakeOutcome(name: "t2", status: .pass),
+                ],
+                on: app)
+
+            try await app.asyncTest(
+                .GET, "/",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: cookie)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    #expect(res.body.string.contains("Ace"))
+                })
+        }
+    }
+
+    @Test func indexDoesNotShowFirstTryPerfectBadgeForSecondAttemptPerfectSubmission() async throws {
+        try await withWebRoutesApp { app in
+            let cookie = try await wrLoginAsStudent(on: app)
+            let user = try await wrStudentUser(on: app)
+            let userID = try user.requireID()
+            try await wrEnrollUser(user, on: app)
+            try await wrInsertSetup(id: "setup_badge_attempt2", on: app)
+            try await wrInsertAssignment(testSetupID: "setup_badge_attempt2", title: "Retry Lab", isOpen: true, on: app)
+            try await wrInsertSubmission(
+                id: "sub_badge_attempt2", testSetupID: "setup_badge_attempt2", userID: userID, attemptNumber: 2, on: app
+            )
+            try await wrInsertResult(
+                submissionID: "sub_badge_attempt2",
+                outcomes: [
+                    wrMakeOutcome(name: "t1", status: .pass),
+                    wrMakeOutcome(name: "t2", status: .pass),
+                ],
+                on: app)
+
+            try await app.asyncTest(
+                .GET, "/",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: cookie)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    #expect(!res.body.string.contains("First-Try Perfect"))
+                })
+        }
+    }
+
+    @Test func indexDoesNotShowFirstTryPerfectBadgeForImperfectFirstSubmission() async throws {
+        try await withWebRoutesApp { app in
+            let cookie = try await wrLoginAsStudent(on: app)
+            let user = try await wrStudentUser(on: app)
+            let userID = try user.requireID()
+            try await wrEnrollUser(user, on: app)
+            try await wrInsertSetup(id: "setup_badge_notperfect", on: app)
+            try await wrInsertAssignment(
+                testSetupID: "setup_badge_notperfect", title: "Almost Lab", isOpen: true, on: app)
+            try await wrInsertSubmission(
+                id: "sub_badge_notperfect", testSetupID: "setup_badge_notperfect", userID: userID,
+                attemptNumber: 1, on: app)
+            try await wrInsertResult(
+                submissionID: "sub_badge_notperfect",
+                outcomes: [
+                    wrMakeOutcome(name: "t1", status: .pass),
+                    wrMakeOutcome(name: "t2", status: .fail),
+                ],
+                on: app)
+
+            try await app.asyncTest(
+                .GET, "/",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: cookie)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    #expect(!res.body.string.contains("First-Try Perfect"))
+                })
+        }
+    }
+
+    // MARK: - Grade-data fold pins (#1382 item 2)
+    //
+    // These pin the VALUES the dashboard derives from submissions + results —
+    // best-across-attempts, best-across-sources, the latest-submission pick,
+    // the history count, the weighted-grade rounding, and the prior-attempt
+    // badge input — so a rewrite of `loadStudentDashboardGradeData` cannot
+    // change a fold's meaning without a test noticing.
+
+    @Test func indexShowsBestGradeAcrossAttemptsWithLatestLinkAndCount() async throws {
+        try await withWebRoutesApp { app in
+            let cookie = try await wrLoginAsStudent(on: app)
+            let user = try await wrStudentUser(on: app)
+            let userID = try user.requireID()
+            try await wrEnrollUser(user, on: app)
+            try await wrInsertSetup(id: "setup_multi", on: app)
+            try await wrInsertAssignment(
+                testSetupID: "setup_multi", title: "Multi Attempt", isOpen: true, on: app)
+            // Attempt 1: 3/5 = 60%.  Attempt 2 (the best): 4/5 = 80%.
+            // Attempt 3 (the latest): 1/5 = 20%.
+            try await wrInsertSubmission(
+                id: "sub_ma1", testSetupID: "setup_multi", userID: userID, attemptNumber: 1, on: app)
+            try await wrInsertResult(
+                submissionID: "sub_ma1",
+                outcomes: [
+                    wrMakeOutcome(name: "t1", status: .pass),
+                    wrMakeOutcome(name: "t2", status: .pass),
+                    wrMakeOutcome(name: "t3", status: .pass),
+                    wrMakeOutcome(name: "t4", status: .fail),
+                    wrMakeOutcome(name: "t5", status: .fail),
+                ], on: app)
+            try await wrInsertSubmission(
+                id: "sub_ma2", testSetupID: "setup_multi", userID: userID, attemptNumber: 2, on: app)
+            try await wrInsertResult(
+                submissionID: "sub_ma2",
+                outcomes: [
+                    wrMakeOutcome(name: "t1", status: .pass),
+                    wrMakeOutcome(name: "t2", status: .pass),
+                    wrMakeOutcome(name: "t3", status: .pass),
+                    wrMakeOutcome(name: "t4", status: .pass),
+                    wrMakeOutcome(name: "t5", status: .fail),
+                ], on: app)
+            try await wrInsertSubmission(
+                id: "sub_ma3", testSetupID: "setup_multi", userID: userID, attemptNumber: 3, on: app)
+            try await wrInsertResult(
+                submissionID: "sub_ma3",
+                outcomes: [
+                    wrMakeOutcome(name: "t1", status: .pass),
+                    wrMakeOutcome(name: "t2", status: .fail),
+                    wrMakeOutcome(name: "t3", status: .fail),
+                    wrMakeOutcome(name: "t4", status: .fail),
+                    wrMakeOutcome(name: "t5", status: .fail),
+                ], on: app)
+
+            try await app.asyncTest(
+                .GET, "/",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: cookie)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    let html = res.body.string
+                    #expect(
+                        html.contains("<strong>80%</strong>"),
+                        "Best grade is the max across ALL attempts, not the latest one")
+                    #expect(
+                        !html.contains("<strong>20%</strong>"),
+                        "The latest attempt's lower grade must not displace the best")
+                    #expect(
+                        html.contains("3 submissions</a>"),
+                        "The details line links to the history page and counts every attempt")
+                })
+        }
+    }
+
+    @Test func indexShowsBestGradeAcrossSourcesWithinOneSubmission() async throws {
+        try await withWebRoutesApp { app in
+            let cookie = try await wrLoginAsStudent(on: app)
+            let user = try await wrStudentUser(on: app)
+            let userID = try user.requireID()
+            try await wrEnrollUser(user, on: app)
+            try await wrInsertSetup(id: "setup_sources", on: app)
+            try await wrInsertAssignment(
+                testSetupID: "setup_sources", title: "Sourced", isOpen: true, on: app)
+            try await wrInsertSubmission(
+                id: "sub_src", testSetupID: "setup_sources", userID: userID, on: app)
+            // Worker regrade at 50% must not displace the browser 75% —
+            // "highest grade wins" across every result source (#1111).
+            try await wrInsertResult(
+                submissionID: "sub_src",
+                outcomes: [
+                    wrMakeOutcome(name: "t1", status: .pass),
+                    wrMakeOutcome(name: "t2", status: .pass),
+                    wrMakeOutcome(name: "t3", status: .pass),
+                    wrMakeOutcome(name: "t4", status: .fail),
+                ],
+                source: "browser", on: app)
+            try await wrInsertResult(
+                submissionID: "sub_src",
+                outcomes: [
+                    wrMakeOutcome(name: "t1", status: .pass),
+                    wrMakeOutcome(name: "t2", status: .pass),
+                    wrMakeOutcome(name: "t3", status: .fail),
+                    wrMakeOutcome(name: "t4", status: .fail),
+                ],
+                source: "worker", on: app)
+
+            try await app.asyncTest(
+                .GET, "/",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: cookie)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    #expect(
+                        res.body.string.contains("<strong>75%</strong>"),
+                        "A browser result's higher grade survives a lower worker regrade")
+                })
+        }
+    }
+
+    @Test func indexShowsWeightedGradeRoundedHalfAwayFromZero() async throws {
+        try await withWebRoutesApp { app in
+            let cookie = try await wrLoginAsStudent(on: app)
+            let user = try await wrStudentUser(on: app)
+            let userID = try user.requireID()
+            try await wrEnrollUser(user, on: app)
+            try await wrInsertSetup(id: "setup_weighted", on: app)
+            try await wrInsertAssignment(
+                testSetupID: "setup_weighted", title: "Weighted", isOpen: true, on: app)
+            try await wrInsertSubmission(
+                id: "sub_w1", testSetupID: "setup_weighted", userID: userID, on: app)
+            // Weighted branch, on a rounding boundary: 7/8 points = 87.5 → 88%.
+            let result = APIResult(id: "res_weighted", submissionID: "sub_w1", source: "worker")
+            try await result.saveWithCollection(
+                json: #"{"submissionID":"sub_w1","earnedPoints":7,"totalPoints":8}"#, on: app.db)
+
+            try await app.asyncTest(
+                .GET, "/",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: cookie)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    #expect(
+                        res.body.string.contains("<strong>88%</strong>"),
+                        "Weighted grades round half away from zero: 87.5 → 88")
+                })
+        }
+    }
+
+    @Test func indexShowsNoGradeForAllFailSubmission() async throws {
+        try await withWebRoutesApp { app in
+            let cookie = try await wrLoginAsStudent(on: app)
+            let user = try await wrStudentUser(on: app)
+            let userID = try user.requireID()
+            try await wrEnrollUser(user, on: app)
+            try await wrInsertSetup(id: "setup_zero", on: app)
+            try await wrInsertAssignment(
+                testSetupID: "setup_zero", title: "Zero Lab", isOpen: true, on: app)
+            try await wrInsertSubmission(
+                id: "sub_zero", testSetupID: "setup_zero", userID: userID, on: app)
+            try await wrInsertResult(
+                submissionID: "sub_zero",
+                outcomes: [
+                    wrMakeOutcome(name: "t1", status: .fail),
+                    wrMakeOutcome(name: "t2", status: .fail),
+                ], on: app)
+
+            try await app.asyncTest(
+                .GET, "/",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: cookie)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    #expect(
+                        !res.body.string.contains("<strong>0%</strong>"),
+                        "A best grade of exactly 0 renders no grade, not \"0%\" — the fold only admits a grade above the 0 sentinel"
+                    )
+                })
+        }
+    }
+
+    @Test func indexShowsRallyBadgeForGradeJumpOverPriorAttempt() async throws {
+        try await withWebRoutesApp { app in
+            let cookie = try await wrLoginAsStudent(on: app)
+            let user = try await wrStudentUser(on: app)
+            let userID = try user.requireID()
+            try await wrEnrollUser(user, on: app)
+            try await wrInsertSetup(id: "setup_rally", on: app)
+            try await wrInsertAssignment(
+                testSetupID: "setup_rally", title: "Rally Lab", isOpen: true, on: app)
+            // Attempt 1 at 40%, attempt 2 at 100%: a 60-point jump earns Rally,
+            // which reads the PRIOR attempt's preferred result.
+            try await wrInsertSubmission(
+                id: "sub_rally1", testSetupID: "setup_rally", userID: userID, attemptNumber: 1, on: app)
+            try await wrInsertResult(
+                submissionID: "sub_rally1",
+                outcomes: [
+                    wrMakeOutcome(name: "t1", status: .pass),
+                    wrMakeOutcome(name: "t2", status: .pass),
+                    wrMakeOutcome(name: "t3", status: .fail),
+                    wrMakeOutcome(name: "t4", status: .fail),
+                    wrMakeOutcome(name: "t5", status: .fail),
+                ], on: app)
+            try await wrInsertSubmission(
+                id: "sub_rally2", testSetupID: "setup_rally", userID: userID, attemptNumber: 2, on: app)
+            try await wrInsertResult(
+                submissionID: "sub_rally2",
+                outcomes: [
+                    wrMakeOutcome(name: "t1", status: .pass),
+                    wrMakeOutcome(name: "t2", status: .pass),
+                    wrMakeOutcome(name: "t3", status: .pass),
+                    wrMakeOutcome(name: "t4", status: .pass),
+                    wrMakeOutcome(name: "t5", status: .pass),
+                ], on: app)
+
+            try await app.asyncTest(
+                .GET, "/",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: cookie)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    #expect(
+                        res.body.string.contains("Rally"),
+                        "A ≥50-point jump over the prior attempt earns the Rally badge")
+                })
+        }
+    }
+
+    // MARK: - Unenrolled admin scoping
+
+    /// An admin who is not enrolled in any course is an *administrator*, not a
+    /// course participant. The home dashboard must not fall through to a
+    /// deployment-wide assignment list for them, and the course-scoped
+    /// "Instructor" nav tab must not appear (their global admin role still gives
+    /// them the Admin tab + /admin). Regression for the unenrolled-admin leak:
+    /// the index `else` branches queried every assignment/setup in the
+    /// deployment, and `isInstructor` (admin-implies-instructor) rendered the tab.
+    @Test func unenrolledAdminSeesNoInstructorTabAndNoOtherCourseAssignments() async throws {
+        try await withWebRoutesApp { app in
+            let cookie = try await loginUser(
+                username: "admin1", password: "pass", role: "admin", on: app)
+
+            // A closed-enrollment course (so the unenrolled admin is neither
+            // auto-enrolled nor redirected to /enroll) with a published assignment.
+            let course = APICourse(code: "CS200", name: "Other Course", enrollmentMode: .closed)
+            try await course.save(on: app.db)
+            let courseID = try course.requireID()
+            let setupID = "setup_other_course"
+            let manifest = """
+                {"schemaVersion":1,"requiredFiles":[],"testSuites":[{"tier":"public","script":"test.sh"}],"timeLimitSeconds":10}
+                """
+            try await APITestSetup(
+                id: setupID, manifest: manifest,
+                zipPath: app.testSetupsDirectory + "\(setupID).zip", courseID: courseID
+            ).save(on: app.db)
+            try await APIAssignment(
+                testSetupID: setupID, title: "Other Course Lab", dueAt: nil, isOpen: true, courseID: courseID
+            ).save(on: app.db)
+
+            try await app.asyncTest(
+                .GET, "/",
+                beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    let html = res.body.string
+                    #expect(
+                        !html.contains("Other Course Lab"),
+                        "An unenrolled admin must not see assignments from a course they're not in")
+                    #expect(
+                        html.contains("not enrolled in any courses"),
+                        "The dashboard should show the empty not-enrolled state")
+                    #expect(
+                        !html.contains(#"value="/instructor""#),
+                        "The Instructor nav entry must not render for an unenrolled admin")
+                    #expect(
+                        html.contains(#"href="/admin""#),
+                        "The admin keeps their deployment-wide Admin tab")
+                })
+        }
+    }
+
+    /// The other side of the unenrolled-admin fix: an instructor enrolled in a
+    /// single course gets a direct Instructor link (the one-course case renders
+    /// a single "Instructor" entry rather than the multi-course strip).
+    @Test func enrolledInstructorSeesCourseScopedInstructorTab() async throws {
+        try await withWebRoutesApp { app in
+            let cookie = try await wrLoginAsInstructor(on: app)
+            let instructor = try #require(
+                try await APIUser.query(on: app.db).filter(\.$username == "instructor1").first())
+            try await wrEnrollUser(instructor, on: app)
+
+            try await app.asyncTest(
+                .GET, "/",
+                beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    let html = res.body.string
+                    #expect(
+                        html.contains(#"value="/instructor""#),
+                        "An enrolled instructor must still see the Instructor entry")
+                    #expect(
+                        html.contains(">Instructor</button>"),
+                        "The single-course Instructor entry is one direct link, not a per-course strip")
+                })
+        }
+    }
+
+    /// The nav (Instructor link + course tabs) must persist on pages whose
+    /// handler only builds a course-free `req.currentUserContext` — the bug the
+    /// `NavCourseContextMiddleware` fixes.  `/account` is such a page; an
+    /// enrolled instructor must still see the Instructor link there.
+    @Test func instructorNavPersistsOnCourseFreePage() async throws {
+        try await withWebRoutesApp { app in
+            let cookie = try await wrLoginAsInstructor(on: app)
+            let instructor = try #require(
+                try await APIUser.query(on: app.db).filter(\.$username == "instructor1").first())
+            try await wrEnrollUser(instructor, on: app)
+
+            try await app.asyncTest(
+                .GET, "/account",
+                beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    #expect(
+                        res.body.string.contains(#"value="/instructor""#),
+                        "The Instructor nav link must persist on a course-free page like /account")
+                })
+        }
+    }
+
+    /// Phase 2 wiring, end-to-end: the nav's Instructor tab keys off the
+    /// *per-course* role. A global `student` whose enrollment in the active
+    /// course carries `.instructor` sees the Instructor tab there — the
+    /// "instructor here, student elsewhere" case the per-course role exists for.
+    @Test func studentWithPerCourseInstructorRoleSeesInstructorTab() async throws {
+        try await withWebRoutesApp { app in
+            let cookie = try await loginUser(
+                username: "student_ic", password: "pass", role: "student", on: app)
+            let user = try #require(
+                try await APIUser.query(on: app.db).filter(\.$username == "student_ic").first())
+
+            let course = APICourse(code: "CS301", name: "Lab", enrollmentMode: .closed)
+            try await course.save(on: app.db)
+            try await APICourseEnrollment(
+                userID: try user.requireID(), courseID: try course.requireID(), role: .instructor
+            ).save(on: app.db)
+
+            try await app.asyncTest(
+                .GET, "/",
+                beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    let html = res.body.string
+                    #expect(
+                        html.contains(#"value="/instructor""#),
+                        "A per-course instructor (global student) must see the Instructor entry")
+                    #expect(
+                        html.contains(">Instructor</button>"),
+                        "The single-course Instructor entry is one direct link")
+                })
+        }
+    }
+}

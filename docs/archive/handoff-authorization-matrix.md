@@ -1,7 +1,7 @@
 # Handoff — derive the authorization matrix over `CourseRole.allCases`
 
 **Status: DONE (2026-08). Archived — kept for the reasoning, not as a work
-item.** The guard lives in `Tests/APITests/RouteAuthorizationMatrixTests.swift`,
+item.** The guard lives in `Tests/APITests/Guards/RouteAuthorizationMatrixTests.swift`,
 whose header carries the durable version of everything below. The finding this
 came from is in [../fitness-functions.md](../fitness-functions.md), now marked
 closed.
@@ -49,7 +49,7 @@ replaced.*
 
 ## The defect
 
-`Tests/APITests/RouteAuthorizationMatrixTests.swift` walks the **live route
+`Tests/APITests/Guards/RouteAuthorizationMatrixTests.swift` walks the **live route
 table** (`app.routes.all`), takes every parameterized route under `/instructor`
 and `/courses`, substitutes real fixture IDs, and asserts each route denies:
 
@@ -64,7 +64,7 @@ The role dimension is not. `CourseRole` is `student < ta < instructor`, and
 **`.ta` appears zero times in that file.** The TA boundary — a TA may author
 content and grade, but may **not** manage enrollment, deadlines, archival or
 staff — rests on **eight hand-written spot tests** in
-`Tests/APITests/TARoleRouteTests.swift`.
+`Tests/APITests/Courses/TARoleRouteTests.swift`.
 
 So an instructor-only route that forgets its `.instructor` floor passes both:
 

@@ -343,7 +343,7 @@
     // per-language), so only the list wrapper is built here.  MUST stay
     // byte-identical to AssignmentLanguage.renderInputsFile(.r) in
     // Sources/Core/AssignmentLanguage.swift — pinned by
-    // Tests/APITests/BrowserRunnerSeedLanguageTests.swift, which renders the
+    // Tests/APITests/Grading/BrowserRunnerSeedLanguageTests.swift, which renders the
     // same inputs through the Swift path and compares.
     function personalizationInputsSourceR(personalizedInputs) {
         const header = '# Auto-generated per-student grading inputs (issue #461). Do not edit.';
