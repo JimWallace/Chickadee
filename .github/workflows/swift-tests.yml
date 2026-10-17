@@ -541,6 +541,22 @@ jobs:
       - name: Run browser runner execution tests
         run: node --test Tests/BrowserRunnerJSTests/*.mjs
 
+      # The wasm contract tests above run against the VENDORED artifact. When
+      # this tree changes a wasm input, that artifact is the one from before
+      # the change, because runner-wasm-vendor.yml rebuilds it only after the
+      # merge. This step does not fail: it says so on the run, so a green
+      # contract test is not read as proof for the new source.
+      - name: Say whether the vendored wasm matches this tree
+        run: |
+          if ! current="$(scripts/runnercore-source-hash.sh 2>/dev/null)"; then
+            echo "::notice::Could not hash the wasm inputs, so wasm freshness is unknown."
+            exit 0
+          fi
+          recorded="$(cat Public/runner-wasm/source.sha)"
+          if [ "$current" != "$recorded" ]; then
+            echo "::warning title=Vendored wasm is older than this tree::The browser contract tests ran against the wasm built from $recorded. This tree hashes to $current. The re-vendor runs after the merge."
+          fi
+
   worker-tests:
     runs-on: ubuntu-latest
     needs: build

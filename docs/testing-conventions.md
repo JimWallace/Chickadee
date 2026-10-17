@@ -8,7 +8,7 @@ keeps the short form and points here.
   been on Swift Testing since the migration completed (PRs #597–#608). `scripts/no-new-xctest.sh`
   blocks any new `import XCTest` under `Tests/`. The nightly
   `test-coverage.yml` run measures line coverage over all four targets
-  (87 % on 2026-09-20) against an 80 % floor.
+  (91.7 % on 2026-10-17) against an 80 % floor.
 - **Approved Swift Testing vocabulary.** `@Suite`, `@Test`, `#expect`,
   `#require`, `.serialized`, `.tags(...)`, `.enabled(if:)` / `.enabled { }` /
   `.disabled(if:)`, `@Test(arguments:)`, `#expect(processExitsWith:)` (an exit
@@ -69,6 +69,14 @@ keeps the short form and points here.
   parameterized test, or a body whose first half runs without the tool — and
   each such site says so in a comment. "Test setup is broken" is still
   `throw IssueRecorded("...")`, which fails with a clear message.
+- **Shared JavaScript test support.** Helpers that more than one `.mjs`
+  file needs go in `Tests/BrowserRunnerJSTests/support/`. `node --test` does
+  not run that directory, and ESLint lints it. `support/runner-wasm.mjs` loads
+  the vendored RunnerCore wasm once per test file (`node --test` runs each
+  file in its own process). `support/dom-stub.mjs` gives a
+  small DOM built on Node's `EventTarget`, and a fake clock that drives
+  `Date.now`, `setInterval` and `setTimeout`. A selector that the stub does not
+  support throws. Use these in a new test file instead of writing a new stub.
 - **Pattern references.**
   - Standalone struct suite:
     [Tests/APITests/COEPMiddlewareTests.swift](../Tests/APITests/COEPMiddlewareTests.swift)
