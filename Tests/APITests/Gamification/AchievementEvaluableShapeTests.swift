@@ -119,4 +119,73 @@ import Testing
         let encoded = try #require(String(bytes: try JSONEncoder().encode(decoded), encoding: .utf8))
         #expect(!encoded.contains("sectionID"))
     }
+
+    // MARK: A4: class-wide condition shapes
+
+    @Test func classWideRejectsNonGradeConditions() {
+        let row = AchievementRow(
+            name: "Goal", scope: "classWide",
+            conditions: [ConditionRow(signal: "attempts", comparator: "atMost", value: 3)],
+            classPercent: 80, points: 1)
+        #expect(throws: WebAssignmentError.self) {
+            _ = try AchievementsEditing.achievement(from: row)
+        }
+        let multi = AchievementRow(
+            name: "Goal", scope: "classWide",
+            conditions: [
+                ConditionRow(signal: "grade", comparator: "atLeast", value: 80),
+                ConditionRow(signal: "grade", comparator: "atLeast", value: 90),
+            ],
+            classPercent: 80, points: 1)
+        #expect(throws: WebAssignmentError.self) {
+            _ = try AchievementsEditing.achievement(from: multi)
+        }
+        let atMost = AchievementRow(
+            name: "Goal", scope: "classWide",
+            conditions: [ConditionRow(signal: "grade", comparator: "atMost", value: 80)],
+            classPercent: 80, points: 1)
+        #expect(throws: WebAssignmentError.self) {
+            _ = try AchievementsEditing.achievement(from: atMost)
+        }
+        // The supported shapes still author fine.
+        let single = AchievementRow(
+            name: "Goal", scope: "classWide",
+            conditions: [ConditionRow(signal: "grade", comparator: "atLeast", value: 80)],
+            classPercent: 80, points: 1)
+        #expect((try? AchievementsEditing.achievement(from: single)) != nil)
+        let empty = AchievementRow(
+            name: "Goal", scope: "classWide", conditions: [], classPercent: 80, points: 1)
+        #expect((try? AchievementsEditing.achievement(from: empty)) != nil)
+    }
+
+    // MARK: A1 and A17: identifiers and test references
+
+    @Test func validateRejectsDuplicateIDsAndUnknownRefs() throws {
+        let props = TestProperties(
+            testSuites: [TestSuiteEntry(tier: .pub, script: "test_a.sh")], language: nil)
+        let manifest = try #require(String(bytes: try JSONEncoder().encode(props), encoding: .utf8))
+        func badge(_ id: String, ref: String? = nil) -> Achievement {
+            Achievement(
+                id: id, name: id, scope: .individual,
+                conditions: ref.map {
+                    [
+                        AchievementCondition(
+                            signal: .testPass, comparator: .atLeast, value: 1,
+                            target: AchievementTarget(kind: .testPass, ref: $0))
+                    ]
+                } ?? [],
+                reward: AchievementReward(type: .badge, label: id))
+        }
+        #expect(throws: WebAssignmentError.self) {
+            try AchievementsEditing.validate(
+                [badge("dup"), badge("dup")], againstManifest: manifest)
+        }
+        #expect(throws: WebAssignmentError.self) {
+            try AchievementsEditing.validate(
+                [badge("b", ref: "no_such_test.py")], againstManifest: manifest)
+        }
+        // Filename and stem both resolve.
+        try AchievementsEditing.validate([badge("b", ref: "test_a.sh")], againstManifest: manifest)
+        try AchievementsEditing.validate([badge("b", ref: "test_a")], againstManifest: manifest)
+    }
 }
