@@ -103,7 +103,9 @@ import VaporTesting
             let html = try await getHTML("/account", cookie: cookie, on: app)
             #expect(try await storedUnlocks(on: app).contains("border.ouroboros"))
             #expect(html.contains(#"name="border" value="ouroboros""#))
-            #expect(html.contains("Ouroboros: earned when every test passed on a loops lab"))
+            // How it was earned is the result page's Earned toast to say
+            // (EarnedToastRoutesTests), not the account page's.
+            #expect(!html.contains("when every test passed on a loops lab"))
             #expect(!html.contains(#"name="border" value="pulse""#))
         }
     }
