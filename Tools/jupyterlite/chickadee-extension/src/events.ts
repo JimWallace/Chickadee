@@ -4,6 +4,7 @@
 // same-origin messages with a `ck` it knows.
 //
 //   ck:kernel       { status: 'starting' | 'idle' | 'busy' | 'dead' }
+//   ck:notebook-open {}, once the notebook's cells are drawn
 //   ck:active-cell  { cellId, index, names }
 //   ck:cell-ran     { cellId, status: 'ok' | 'error' }
 //   ck:saved        { state: 'started' | 'completed' | 'failed' }, which the
