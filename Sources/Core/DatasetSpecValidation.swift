@@ -36,8 +36,42 @@ public enum DatasetSpecValidation {
     /// that too, because the instructor cannot see the file from the form they
     /// are typing into.
     public static func issue(with spec: DatasetSpec, sourceCSV: String?) -> String? {
+        if let issue = scopeIssue(with: spec) { return issue }
         if let issue = transformIssue(with: spec, sourceCSV: sourceCSV) { return issue }
         return selectionIssue(with: spec, sourceCSV: sourceCSV)
+    }
+
+    /// Why `spec`'s slice scope cannot be saved, or nil. Needs no file.
+    ///
+    /// A course scope derives the student's seed from the library slug, so a
+    /// spec with no source has nothing to derive it from. Delivery would fall
+    /// back to the assignment seed (`DatasetSeedDerivation.effectiveSeed`),
+    /// which is the quiet half of this pair.
+    public static func scopeIssue(with spec: DatasetSpec) -> String? {
+        guard spec.scope == .course, spec.source == nil else { return nil }
+        return "'\(spec.file)': the same rows in every assignment needs a dataset from the course "
+            + "library, and this file was not attached from it."
+    }
+
+    /// Why a door other than the library attach path cannot store `proposed`
+    /// over `stored`, or nil.
+    ///
+    /// The library fields (`source` and `scope`) record where a file came from
+    /// and which seed keys it. The attach path writes them. Every other door
+    /// (the two `/datasets` PUTs and MCP `set_dataset`) edits the sample and the
+    /// transforms, and must carry the stored library fields through unchanged.
+    /// A door that let a caller set a source would let a hand-uploaded file
+    /// claim to be a library version it is not.
+    public static func libraryFieldIssue(proposed: DatasetSpec, stored: DatasetSpec?) -> String? {
+        if proposed.source != stored?.source {
+            return "'\(proposed.file)': the library source is set when a dataset is attached from the "
+                + "course library, and cannot be changed here."
+        }
+        if proposed.scope != (stored?.scope ?? .assignment) {
+            return "'\(proposed.file)': whether a dataset gives the same rows in every assignment "
+                + "cannot be changed here."
+        }
+        return nil
     }
 
     /// Why `spec`'s transform list cannot be saved, or nil.

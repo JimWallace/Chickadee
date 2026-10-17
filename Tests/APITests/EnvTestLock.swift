@@ -26,6 +26,7 @@
 // in the lock doesn't deadlock callers that are already inside a
 // `withTestEnvironment` block.
 
+import ChickadeeTestSupport
 import Foundation
 
 @testable import APIServer
@@ -63,7 +64,7 @@ func withAsyncEnvLock<R: Sendable>(_ body: @Sendable () async throws -> R) async
     if AsyncEnvLockHolding.isHeld {
         return try await body()
     }
-    return try await AsyncEnvLock.shared.run {
+    return try await asyncEnvLock.run {
         try await AsyncEnvLockHolding.$isHeld.withValue(true) {
             try await body()
         }
@@ -113,33 +114,5 @@ func withTestEnvironment<R: Sendable>(
     }
 }
 
-private actor AsyncEnvLock {
-    static let shared = AsyncEnvLock()
-    private var locked = false
-    private var waiters: [CheckedContinuation<Void, Never>] = []
-
-    func run<R: Sendable>(_ body: @Sendable () async throws -> R) async rethrows -> R {
-        await acquire()
-        defer { release() }
-        return try await body()
-    }
-
-    private func acquire() async {
-        if !locked {
-            locked = true
-            return
-        }
-        await withCheckedContinuation { continuation in
-            waiters.append(continuation)
-        }
-    }
-
-    private func release() {
-        if let next = waiters.first {
-            waiters.removeFirst()
-            next.resume()
-        } else {
-            locked = false
-        }
-    }
-}
+/// One permit: one `withAsyncEnvLock` body at a time, process-wide.
+private let asyncEnvLock = AsyncPermits(limit: 1)

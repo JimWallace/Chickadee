@@ -13,14 +13,13 @@ import Testing
 // unsupported in the browser while the worker ran them fine (#754) — and this
 // fixture is what pins the worker half against regressing.
 //
-// IT IS NOT A CROSS-RUNNER CONTRACT ANY MORE, whatever this header used to say.
-// It claimed the browser side was pinned to the same fixture by
-// Tests/BrowserRunnerJSTests/script-dispatch-contract.test.mjs; that file no
-// longer exists, and nothing outside this suite reads
-// Tests/Fixtures/script-dispatch-cases.json. Restoring a browser twin is worth
-// doing — the browser now routes four substrates off the same classification —
-// but a comment asserting a guard that is not there is worse than no comment,
-// so this says what is actually true.
+// It is a cross-runner contract. The browser half is
+// Tests/BrowserRunnerJSTests/script-dispatch-contract.test.mjs: it drives every
+// row of Tests/Fixtures/script-dispatch-cases.json through the REAL vendored
+// RunnerCore wasm and through the browser router, which routes four
+// substrates off the same classification. That twin was missing for a time,
+// and this header said so; it was restored with the test-suite audit of
+// 2026-10-17.
 //
 // The rows are hand-written, which is fine for the shapes that have no language
 // (extensionless, shebang-only, content-sniffed). It is NOT fine for the one

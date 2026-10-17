@@ -109,6 +109,10 @@ func deleteScriptFromSetup(setup: APITestSetup, filename: String, on db: any Dat
         )
     }
 
+    if let refusal = libraryAttachmentRefusal(manifest: setup.decodedManifest(), filename: filename) {
+        throw WebAssignmentError.conflict(reason: refusal)
+    }
+
     let dependents = manifestDependents(manifestJSON: setup.manifest, filename: filename)
     guard dependents.isEmpty else {
         throw WebAssignmentError.conflict(

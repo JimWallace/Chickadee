@@ -490,9 +490,24 @@ private func applyNotebookSubstitutionsIfNeeded(
         }
     }
 
+    // An expression that reads a course-scoped dataset sees the student's
+    // cohort rows (docs/datasets-course-library.md, slice 4).
+    // When the course seed cannot be read, expressions are left out rather
+    // than evaluated on per-assignment rows the student does not hold.
+    var courseSeedHex: String?
+    if manifest.hasExpressions {
+        do {
+            courseSeedHex = try await CourseSeedStore.seedIfNeeded(
+                manifest: manifest, userID: userID, courseID: setup.courseID, on: db)
+        } catch {
+            logger.warning(
+                "Could not resolve a course seed for setup \(setup.id ?? "?"); substituting literal values only.")
+            seedHex = nil
+        }
+    }
     let resolution = await PersonalizationSubstitution.resolve(
-        manifest: manifest, seedHex: seedHex, supportFilesDirectory: supportFilesDirectory,
-        language: AssignmentLanguage.resolve(manifest: manifest))
+        manifest: manifest, seedHex: seedHex, courseSeedHex: courseSeedHex,
+        supportFilesDirectory: supportFilesDirectory, language: AssignmentLanguage.resolve(manifest: manifest))
     if let evalError = resolution.evaluationError {
         logger.warning(
             Logger.Message(
@@ -725,6 +740,16 @@ func writeDatasetFiles(
         let seedHex = try? await AssignmentSeedStore.ensureSeed(
             userID: userID, assignmentID: assignmentID, on: db)
     else { return }
+    // The course cohort seed for course-scoped datasets
+    // (docs/datasets-course-library.md, slice 4). A lookup failure leaves the
+    // editor copy as it is rather than writing per-assignment rows.
+    let courseSeedHex: String?
+    do {
+        courseSeedHex = try await CourseSeedStore.seedIfNeeded(
+            manifest: props, userID: userID, courseID: setup.courseID, on: db)
+    } catch {
+        return
+    }
 
     let sharedDir = application.testSetupsDirectory + "shared/\(setupID)/"
 
@@ -734,7 +759,7 @@ func writeDatasetFiles(
     let state: (fingerprint: String, targetsPresent: Bool)? = try? await runBlocking {
         (
             fingerprint: datasetMaterializationFingerprint(
-                props: props, seedHex: seedHex, sharedDir: sharedDir),
+                props: props, seeds: [seedHex, courseSeedHex ?? "-"], sharedDir: sharedDir),
             targetsPresent: props.datasets.allSatisfy {
                 FileManager.default.fileExists(atPath: studentDir + "/" + $0.file)
             }
@@ -754,7 +779,7 @@ func writeDatasetFiles(
         (try? await runBlocking {
             guard
                 let files = DatasetResolver.resolve(
-                    manifest: props, seedHex: seedHex, sourceDirectory: sharedDir)
+                    manifest: props, seedHex: seedHex, courseSeedHex: courseSeedHex, sourceDirectory: sharedDir)
             else { return false }
 
             for (filename, content) in files {
@@ -773,20 +798,29 @@ func writeDatasetFiles(
 }
 
 /// Everything that determines the bytes `writeDatasetFiles` produces, folded
-/// into one comparable string: the per-student seed, each dataset spec, and
-/// each source file's (mtime, size) identity. A missing source contributes a
-/// sentinel, so its later appearance also invalidates.
+/// into one comparable string: the student's seeds, each whole dataset spec,
+/// and each source file's (mtime, size) identity. A missing source contributes
+/// a sentinel, so its later appearance also invalidates.
+///
+/// The spec is folded in whole, as its stable encoding, so a change to any
+/// field — the stratum, a transform, the library source or the scope — makes
+/// the editor copy again. The kind and the sample size alone used to be all it
+/// folded, so a stratum or transform edit left a student's editor copy stale.
 private func datasetMaterializationFingerprint(
-    props: TestProperties, seedHex: String, sharedDir: String
+    props: TestProperties, seeds: [String], sharedDir: String
 ) -> String {
-    var parts: [String] = [seedHex]
+    var parts: [String] = seeds
     let fm = FileManager.default
     for spec in props.datasets {
         let attrs = try? fm.attributesOfItem(atPath: sharedDir + spec.file)
         let mtime = (attrs?[.modificationDate] as? Date)?.timeIntervalSince1970 ?? -1
         let size = (attrs?[.size] as? Int) ?? -1
-        let sample = spec.sampleSize.map(String.init) ?? "-"
-        parts.append("\(spec.file)|\(spec.kind.rawValue)|\(sample)|\(mtime)|\(size)")
+        // A spec that cannot be encoded gets a marker that never matches, so
+        // the copy is made again rather than left stale.
+        let encoded =
+            (try? ManifestCodec.stableEncoder.encode(spec)).flatMap { String(bytes: $0, encoding: .utf8) }
+            ?? "unencodable-\(UUID().uuidString)"
+        parts.append("\(encoded)|\(mtime)|\(size)")
     }
     return parts.joined(separator: "\n")
 }

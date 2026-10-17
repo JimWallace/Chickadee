@@ -203,9 +203,13 @@ struct AccountRoutes: RouteCollection {
         struct JoinBody: Content { var courseID: String }
         let body = try await req.decodeContent(JoinBody.self)
 
+        // Self-enrollment is for open courses only, the same rule as `/enroll`.
+        // A closed course is instructor-managed, so a student who knows its ID
+        // must not be able to join it from here.
         guard let courseID = UUID(uuidString: body.courseID),
             let course = try await APICourse.find(courseID, on: req.db),
-            !course.isArchived
+            !course.isArchived,
+            course.enrollmentMode == .open
         else {
             return req.redirect(to: "/account?error=invalid")
         }

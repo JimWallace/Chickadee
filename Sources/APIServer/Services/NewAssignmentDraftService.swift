@@ -337,6 +337,10 @@ struct NewAssignmentDraftService {
             sectionGradingMode: sectionGradingMode,
             starterNotebook: starterNotebook
         )
+        // The zip was rebuilt from the upload, so a library source may no
+        // longer name the file's bytes (docs/datasets-course-library.md).
+        setup.manifest = try await CourseDatasetService.reconciledManifestText(
+            setup.manifest, courseID: courseID, zipPath: setup.zipPath, on: db)
         try await setup.save(on: db)
         await extractSupportFilesToSharedDirectory(
             zipPath: setup.zipPath,
@@ -361,6 +365,8 @@ struct NewAssignmentDraftService {
                 courseID: courseID, sectionIDRaw: payload.sectionIDRaw, on: db),
             starterNotebook: starterNotebook
         )
+        setup.manifest = try await CourseDatasetService.reconciledManifestText(
+            setup.manifest, courseID: courseID, zipPath: setup.zipPath, on: db)
         try await setup.save(on: db)
     }
 }

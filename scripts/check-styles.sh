@@ -482,7 +482,7 @@ fi
 #
 # The rest of the contract (a .filter-group wrapper, type=search, no markup
 # autocomplete, live-or-GET-form) is structural, so it is asserted by walking the
-# tags in Tests/APITests/ListFilterMarkupTests.swift rather than counted here —
+# tags in Tests/APITests/Guards/ListFilterMarkupTests.swift rather than counted here —
 # a count is a weak proxy for containment, and this file's own rule is to parse
 # structure rather than search the document.
 # The rule generalizes past the filter, because the filter was the SECOND

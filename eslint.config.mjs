@@ -160,7 +160,8 @@ export default [
       globals: {
         process: 'readonly', console: 'readonly', Buffer: 'readonly',
         URL: 'readonly', TextDecoder: 'readonly', TextEncoder: 'readonly',
-        setTimeout: 'readonly', clearTimeout: 'readonly',
+        setTimeout: 'readonly', clearTimeout: 'readonly', setImmediate: 'readonly',
+        Event: 'readonly', EventTarget: 'readonly',
         structuredClone: 'readonly', fetch: 'readonly',
         Blob: 'readonly', FormData: 'readonly', WebAssembly: 'readonly',
         __dirname: 'readonly', global: 'writable',

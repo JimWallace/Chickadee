@@ -137,7 +137,7 @@ conventions in `CLAUDE.md` and run `scripts/check-styles.sh`.
 Swift Testing only. `@Suite` / `@Test` / `#expect` / `try #require`. **No force
 unwraps, including in tests** — `Tests/.swiftlint.yml` no longer exempts them.
 Use `.serialized` on anything touching the DB or the filesystem, and the
-`with*App` helpers for app fixtures (see `Tests/APITests/AdminRoutesTests.swift`
+`with*App` helpers for app fixtures (see `Tests/APITests/Admin/AdminRoutesTests.swift`
 for the stored-`app` + per-test `withApp` pattern).
 
 Cover at minimum:

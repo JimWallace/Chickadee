@@ -13,8 +13,9 @@
 //   • Audit entries where the user is the *actor* include their own
 //     IP / user-agent; entries where they are only the *subject* omit
 //     those fields (they belong to whoever performed the action).
-//   • `passwordHash` and per-assignment personalization seeds are never
-//     exported (credentials and server-side grading secrets).
+//   • `passwordHash`, per-assignment personalization seeds and per-course
+//     cohort seeds are never exported (credentials and server-side grading
+//     secrets).
 
 import Core
 import Fluent

@@ -9,6 +9,67 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.709] - 2026-10-17
+
+### Added
+
+- **Course dataset library, slice 4: the course cohort.** A library dataset attached with course scope now gives a student the same rows in every assignment of the course. A per-(student, course) seed is issued the first time such a dataset is delivered, and the worker job, the browser seed endpoint, the editor copy, the notebook substitution, validation variants, composite spares and the MCP personalization preview all use it. A source scan fails the build if a server call resolves dataset slices without it.
+
+### Fixed
+
+- **A student's editor copy of a dataset follows a stratum or transform edit.** The editor's materialization cache keyed only on the sample kind and size, so those edits left the old rows in place until something else changed.
+
+
+## [0.5.708] - 2026-10-17
+
+### Changed
+
+- **No test file is named after an audit or a fix.** The 13 tests in `AchievementFixRegressionTests`, `AuditTockRegressionTests`, `AdminPortFixesTests` and `CreateSweepAndPollIndexesListTests` now live in the suites for the features they cover. No assertion changed.
+
+
+## [0.5.707] - 2026-10-17
+
+### Changed
+
+- **APITests is grouped by feature.** The 475 suites that sat in one flat directory now live in 17 feature folders, such as `Assignments`, `Grading` and `Guards`. The top level holds only the shared helpers, and `APITestsLayoutTests` fails on a suite placed there. No test changed except for its path.
+
+
+## [0.5.706] - 2026-10-17
+
+### Security
+
+- **A student can no longer join a closed course from the account page.** `POST /account/enroll` accepted any course that was not archived. It now accepts an open course only, the same rule as `/enroll`. A closed course is instructor-managed.
+- **A very large `offset` no longer stops the server.** `GET /api/v1/submissions?offset=` added the offset to the page size without an overflow check, so an offset near the integer limit trapped the process. The end of the page now saturates, and such a request returns an empty page.
+
+### Added
+
+- **Tests for paths that had none.** The branches of a BrightSpace grade removal that keep a grade in LEARN, the override helpers that queue and cancel a removal, the class-activity window on each submission door, the admin BrightSpace credential and test-alert routes, the MCP account enroll and unenroll routes, the GitHub course unbind, the account join, pagination and tier-slice limits, and the idle-logout page script.
+- **The browser half of the script-dispatch contract.** The vendored wasm and the browser router are tested against `Tests/Fixtures/script-dispatch-cases.json` again, beside the native worker.
+- **A stricter wasm output contract.** The browser test of `Tests/Fixtures/output-contract.json` now requires `score`, `metric` and `composite` on every outcome. Before, it checked each one only when the vendored wasm returned it, so a stale artifact passed. The three wasm tests share one loader in `Tests/BrowserRunnerJSTests/support/`.
+- **A warning when the vendored wasm is older than the tree.** The browser test job says so on the run when a PR changes a wasm input, because its contract tests then ran against the previous build.
+
+### Changed
+
+- **One copy of each shared test helper.** The host-condition traits, the async lock and the subprocess throttle now live once in `ChickadeeTestSupport`, not once per test target. Six manifests that many suites build a setup from are named in `TestManifests`. Three zip helpers that spawned Python, or skipped silently without `zip`, now use the shared zip fixture.
+- **No test waits on a fixed pause to order events.** Three sleeps decided which code path a test took. Each now waits for the condition it needs, with a read-only waiter count on `TestSetupCache` for the one that needed it.
+- **The native output contract runs in the core lane.** `OutputContractTests` moved from WorkerTests to CoreTests, beside the RunnerCore code it pins.
+- **No `@unchecked Sendable` in tests either.** Three test helpers now hold their state in a `Mutex`, and `scripts/check-unchecked-sendable.sh` scans `Tests/` as well as `Sources/`.
+
+
+## [0.5.705] - 2026-10-17
+
+### Added
+
+- **Course dataset library, slice 3: attachments.** A library dataset version can be attached to an assignment, updated to another version, detached and promoted from an existing support file. An attached file is a copy of its version, so the support-file edit and delete doors refuse it, the test-setup upload refuses a source that does not match, and clone, bundle import and version restore drop a source that does not resolve in the target course. Detaching keeps the student's sample. Nothing in the interface uses attachments yet.
+
+
+## [0.5.704] - 2026-10-17
+
+### Added
+
+- **Course dataset library, slices 1 and 2.** A dataset spec can now record the library version it came from and whether its rows are the same in every assignment, and stored manifests encode to the same bytes as before. The server gains the `course_datasets` and `course_dataset_versions` tables and a service that creates, versions, describes, publishes and deletes library datasets, with a data dictionary inferred from each upload. The blob collector counts library versions as references. Nothing in the interface uses the library yet. The plan is `docs/datasets-course-library.md`.
+
+
 ## [0.5.703] - 2026-10-17
 
 ### Changed

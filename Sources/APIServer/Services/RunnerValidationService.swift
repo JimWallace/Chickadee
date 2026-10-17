@@ -286,7 +286,8 @@ func materializeValidationGrading(
     testSetupsDirectory: String,
     app: Application,
     on db: any Database,
-    variantSeedHex: String? = nil
+    variantSeedHex: String? = nil,
+    variantCourseSeedHex: String? = nil
 ) async -> MaterializedValidationSubmission {
     await resolveAndCacheValidationMaterialization(
         submission: submission,
@@ -295,8 +296,19 @@ func materializeValidationGrading(
         testSetupsDirectory: testSetupsDirectory,
         app: app,
         on: db,
-        variantSeedHex: variantSeedHex)
+        seeds: PinnedSeeds(assignment: variantSeedHex, course: variantCourseSeedHex))
     return MaterializedValidationSubmission(submission: submission)
+}
+
+/// The seeds a materialization is pinned to instead of the submitter's own:
+/// a synthetic variant's, or a spare's student's. Nil fields mean "resolve
+/// from the submitter".
+private struct PinnedSeeds: Sendable {
+    let assignment: String?
+    let course: String?
+
+    /// Nothing pinned: both seeds come from the submitter.
+    static let fromSubmitter = PinnedSeeds(assignment: nil, course: nil)
 }
 
 /// Best-effort body of `materializeValidationGrading`: any early exit leaves
@@ -309,8 +321,9 @@ private func resolveAndCacheValidationMaterialization(
     testSetupsDirectory: String,
     app: Application,
     on db: any Database,
-    variantSeedHex: String? = nil
+    seeds: PinnedSeeds = .fromSubmitter
 ) async {
+    let variantSeedHex = seeds.assignment
     do {
         guard let setup = try await APITestSetup.find(setupID, on: db),
             let manifestData = setup.manifest.data(using: .utf8),
@@ -342,10 +355,24 @@ private func resolveAndCacheValidationMaterialization(
             seedHex = resolved
         }
 
+        // The course seed (docs/datasets-course-library.md, slice 4). A
+        // synthetic variant is one synthetic student, so its course seed is
+        // its variant seed; a spare pins the student's own; a solution run
+        // uses the instructor's.
+        let courseSeedHex: String?
+        if let pinned = seeds.course {
+            courseSeedHex = pinned
+        } else if let variantSeedHex {
+            courseSeedHex = manifest.hasCourseScopedDatasets ? variantSeedHex : nil
+        } else {
+            courseSeedHex = try await CourseSeedStore.seedIfNeeded(
+                manifest: manifest, userID: submission.userID, courseID: setup.courseID, on: db)
+        }
+
         let supportDir = testSetupsDirectory + "shared/\(setupID)/"
         let language = AssignmentLanguage.resolve(manifest: manifest)
         let resolution = await PersonalizationSubstitution.resolve(
-            manifest: manifest, seedHex: seedHex, supportFilesDirectory: supportDir,
+            manifest: manifest, seedHex: seedHex, courseSeedHex: courseSeedHex, supportFilesDirectory: supportDir,
             language: language)
 
         // Expression-only value map (identical to `gradingInputs`) → _ck_inputs.py.
@@ -373,6 +400,7 @@ private func resolveAndCacheValidationMaterialization(
         let materialization = SubmissionMaterialization(
             key: manifestHash((seedHex ?? "") + "|" + manifestTextAsV1(setup.manifest)),
             seedHex: seedHex,
+            courseSeedHex: courseSeedHex,
             inputs: inputs)
         if let encoded = try? JSONEncoder().encode(materialization),
             let json = String(data: encoded, encoding: .utf8)

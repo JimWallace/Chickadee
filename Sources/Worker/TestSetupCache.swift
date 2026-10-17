@@ -334,6 +334,13 @@ actor TestSetupCache {
         }
     }
 
+    /// The number of acquirers awaiting the in-flight population of
+    /// `testSetupID`, or zero when none is in flight. Read-only. Tests use it
+    /// to wait for a join to register instead of sleeping and hoping.
+    func waiterCount(testSetupID: String) -> Int {
+        inProgress[testSetupID]?.waiters.count ?? 0
+    }
+
     // MARK: - LRU helpers
 
     /// Move `key` to the most-recently-used position (append to end).

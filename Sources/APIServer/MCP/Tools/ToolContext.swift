@@ -70,8 +70,9 @@ struct ToolContext {
     /// never the least-privilege `.mcp` pool. Use this for acting-user
     /// bookkeeping that is a *side effect* of an MCP call but is NOT
     /// agent-facing content access — e.g. ensuring the acting account's own
-    /// per-assignment personalization seed (`assignment_personalization_seeds`,
-    /// a table the `chickadee_mcp` role is deliberately denied). This mirrors
+    /// per-assignment personalization seed (`assignment_personalization_seeds`)
+    /// or course cohort seed (`course_personalization_seeds`), tables the
+    /// `chickadee_mcp` role is deliberately denied. This mirrors
     /// the content-edit re-grade in `ContentEditClose.swift`, which likewise
     /// runs its student-row regrade on `request.db`. All *content* reads and
     /// writes stay on `db` (the `.mcp` pool when configured) so the

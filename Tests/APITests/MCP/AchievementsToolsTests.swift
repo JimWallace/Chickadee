@@ -20,7 +20,7 @@ import Vapor
             grantedScopes: scopes)
     }
 
-    private let emptyManifest = #"{"schemaVersion":1,"testSuites":[],"timeLimitSeconds":10}"#
+    private let emptyManifest = TestManifests.emptySuite
 
     /// Course + enrolled instructor + setup (empty manifest) + assignment.
     private func fixture(on app: Application) async throws -> APIAssignment {

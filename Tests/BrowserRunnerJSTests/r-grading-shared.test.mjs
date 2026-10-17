@@ -149,7 +149,7 @@ test('the seed is delivered through the environment, as the native runner does i
 test('_ck_inputs.R renders a .ck_inputs list with sorted, back-quoted names', () => {
   // Must stay byte-identical to AssignmentLanguage.renderInputsFile(.r); the
   // parity is asserted against the Swift implementation in
-  // Tests/APITests/BrowserRunnerSeedLanguageTests.swift.
+  // Tests/APITests/Grading/BrowserRunnerSeedLanguageTests.swift.
   assert.equal(
     shared.personalizationInputsSourceR({ threshold: '42', alpha: 'c(1, 2)' }),
     '# Auto-generated per-student grading inputs (issue #461). Do not edit.\n'

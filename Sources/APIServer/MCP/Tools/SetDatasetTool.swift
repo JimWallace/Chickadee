@@ -23,7 +23,8 @@ struct SetDatasetTool: ContentTool {
         let assignmentPublicID: String
         /// A bundled support filename (bare name, as listed by get_support_files).
         let filename: String
-        /// Rows each student receives. Required unless `remove` is true.
+        /// Rows each student receives. Omitted keeps the stored sample. A file
+        /// with no sample yet needs one, unless `remove` is true.
         let sampleSize: Int?
         /// A column name to balance the sample across; omitted for a plain
         /// row sample.
@@ -100,7 +101,8 @@ struct SetDatasetTool: ContentTool {
                 "type": .string("integer"),
                 "description": .string(
                     "Data rows each student receives (>= 1; the header row is always kept). "
-                        + "Required unless remove is true."),
+                        + "Omitted keeps the stored sample. Required for a file that has no sample yet, "
+                        + "unless remove is true."),
             ]),
             "stratumColumn": .object([
                 "type": .string("string"),
@@ -156,6 +158,14 @@ struct SetDatasetTool: ContentTool {
             throw MCPToolError.invalidArguments(detail: "filename must be a bare filename with no path components.")
         }
 
+        // An attached file's spec is ended by a detach, which keeps the sample;
+        // a plain remove would give every student the whole file.
+        if remove, setup.decodedManifest()?.libraryAttachment(for: cleaned) != nil {
+            throw MCPToolError.invalidArguments(
+                detail: "\"\(cleaned)\" is attached from the course library. Detach it instead of removing its "
+                    + "dataset mark.")
+        }
+
         // Built once, from the stored spec plus this call's changes, and used
         // for both the validation and the manifest entry — so the thing that is
         // checked is the thing that is stored.
@@ -206,13 +216,20 @@ struct SetDatasetTool: ContentTool {
         return DatasetSpec(
             file: filename,
             kind: stratum == nil ? .rowSample : .stratifiedSample,
-            sampleSize: input.sampleSize,
+            // Omitted means "keep the stored sample", as for `transforms`: an
+            // agent changing only the stratum must not turn a sample into the
+            // whole file.
+            sampleSize: input.sampleSize ?? existing?.sampleSize,
             stratumColumn: stratum,
             // Omitted means "leave them alone". Rebuilding a spec from only the
             // fields a caller mentioned is how this surface twice came within a
             // release of downgrading data it did not understand; a field is
             // dropped here only when the caller says so, by sending [].
-            transforms: input.transforms.map(Self.transforms(from:)) ?? existing?.transforms ?? [])
+            transforms: input.transforms.map(Self.transforms(from:)) ?? existing?.transforms ?? [],
+            // The library fields are not this tool's to change: the library
+            // attach path writes them, and every other door carries them.
+            source: existing?.source,
+            scope: existing?.scope ?? .assignment)
     }
 
     /// Maps the wire shape to the model. An unrecognised kind is dropped rather

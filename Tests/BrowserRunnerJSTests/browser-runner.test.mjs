@@ -1682,7 +1682,7 @@ test('omits _ck_inputs.py when the seed endpoint returns no personalizedInputs',
 // view (SubmissionPage).  The runner supplies the data — the ordered section
 // list plus a sectionID parallel to the outcomes — and the shared
 // BrowserRunner.groupBySection buckets them, mirroring the server's
-// groupOutcomesBySection (Tests/APITests/SectionsTests.swift).
+// groupOutcomesBySection (Tests/APITests/Assignments/SectionsTests.swift).
 
 test('runScripts surfaces ordered sections + a sectionID parallel to outcomes; outcomes stay canonical', async () => {
   const passing = exit => ({ stdout: '', stderr: '', exitCode: exit });

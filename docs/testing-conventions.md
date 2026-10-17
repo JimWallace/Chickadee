@@ -8,7 +8,7 @@ keeps the short form and points here.
   been on Swift Testing since the migration completed (PRs #597–#608). `scripts/no-new-xctest.sh`
   blocks any new `import XCTest` under `Tests/`. The nightly
   `test-coverage.yml` run measures line coverage over all four targets
-  (87 % on 2026-09-20) against an 80 % floor.
+  (91.7 % on 2026-10-17) against an 80 % floor.
 - **Approved Swift Testing vocabulary.** `@Suite`, `@Test`, `#expect`,
   `#require`, `.serialized`, `.tags(...)`, `.enabled(if:)` / `.enabled { }` /
   `.disabled(if:)`, `@Test(arguments:)`, `#expect(processExitsWith:)` (an exit
@@ -53,13 +53,15 @@ keeps the short form and points here.
   PATH, a Python module, CI itself) is a `ConditionTrait` on the test:
   `@Test(.requiresLua)`, `@Test(.ciOnly)`, `@Test(.requiresRscript)`, each a
   `static let` built with `.enabled("requires lua on PATH") { … }`. The
-  traits more than one file needs live in one `HostConditionTraits.swift` per
-  test target (`WorkerTestSkip.swift` in WorkerTests): `.ciOnly` and one
-  `.requires…` per interpreter or tool (`Rscript`, `Octave`, `Gpp`, `Javac`,
-  `Racket`, `Lua`, `Python3`, `ZipTools`, `Sandbox`, `Make`). Add a new one
-  there, not in a suite. The probes behind them
-  (`cachedToolIsAvailable`) are in `ChickadeeTestSupport`, which also holds
-  `IssueRecorded` and `testURL` for all three targets. Swift Testing then
+  shared traits live once, in `Tests/TestSupport/HostConditionTraits.swift`
+  (`ChickadeeTestSupport`): `.ciOnly` and one `.requires…` per interpreter or
+  tool (`Rscript`, `Octave`, `Gpp`, `Javac`, `Racket`, `Lua`, `Python3`,
+  `ZipTools`). The two only the worker needs, `.requiresSandbox` and
+  `.requiresMake`, are in `Tests/WorkerTests/Support/WorkerTestSkip.swift`.
+  Add a new one there, not in a suite. The probes behind them
+  (`cachedToolIsAvailable`) are in the same support target, which also holds
+  `IssueRecorded`, `testURL` and `AsyncPermits` (the one async lock and
+  throttle) for all three targets. Swift Testing then
   reports the test as skipped with that reason, in the log and in the xUnit report, and
   `scripts/check-no-skipped-tests.sh` fails every CI test lane on any skip,
   because the CI image carries every interpreter. That closed the silent-skip
@@ -69,15 +71,30 @@ keeps the short form and points here.
   parameterized test, or a body whose first half runs without the tool — and
   each such site says so in a comment. "Test setup is broken" is still
   `throw IssueRecorded("...")`, which fails with a clear message.
+- **APITests is grouped by feature.** Each suite lives in a folder named for
+  the feature it covers: `Admin`, `Assignments`, `Auth`, `BrightSpace`,
+  `Courses`, `Gamification`, `GitHub`, `Grading`, `Guards`, `Infrastructure`,
+  `Languages`, `LTI`, `MCP`, `Notebooks`, `Pages`, `PatternFamilies` and
+  `Personalization`. `Guards` holds the tests that scan source or docs for a
+  rule. The top level holds only the helpers that every folder shares, and
+  `APITestsLayoutTests` fails on a suite placed there.
+- **Shared JavaScript test support.** Helpers that more than one `.mjs`
+  file needs go in `Tests/BrowserRunnerJSTests/support/`. `node --test` does
+  not run that directory, and ESLint lints it. `support/runner-wasm.mjs` loads
+  the vendored RunnerCore wasm once per test file (`node --test` runs each
+  file in its own process). `support/dom-stub.mjs` gives a
+  small DOM built on Node's `EventTarget`, and a fake clock that drives
+  `Date.now`, `setInterval` and `setTimeout`. A selector that the stub does not
+  support throws. Use these in a new test file instead of writing a new stub.
 - **Pattern references.**
   - Standalone struct suite:
-    [Tests/APITests/COEPMiddlewareTests.swift](../Tests/APITests/COEPMiddlewareTests.swift)
+    [Tests/APITests/Infrastructure/COEPMiddlewareTests.swift](../Tests/APITests/Infrastructure/COEPMiddlewareTests.swift)
   - Class suite with sync `init`/`deinit`:
-    [Tests/APITests/ZipArchiverTests.swift](../Tests/APITests/ZipArchiverTests.swift)
+    [Tests/APITests/Infrastructure/ZipArchiverTests.swift](../Tests/APITests/Infrastructure/ZipArchiverTests.swift)
   - Class suite with stored `app` + per-test `withApp`:
-    [Tests/APITests/AdminRoutesTests.swift](../Tests/APITests/AdminRoutesTests.swift)
+    [Tests/APITests/Admin/AdminRoutesTests.swift](../Tests/APITests/Admin/AdminRoutesTests.swift)
   - `with*App` helper-driven suite:
-    [Tests/APITests/WebRoutesIndexTests.swift](../Tests/APITests/WebRoutesIndexTests.swift)
+    [Tests/APITests/Pages/WebRoutesIndexTests.swift](../Tests/APITests/Pages/WebRoutesIndexTests.swift)
   - Parameterized + `try #require`:
     [Tests/APITests/MCP/MCPModeScopeContractTests.swift](../Tests/APITests/MCP/MCPModeScopeContractTests.swift)
   - Worker-side class suite:

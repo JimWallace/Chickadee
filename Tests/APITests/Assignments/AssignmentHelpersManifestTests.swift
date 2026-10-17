@@ -1,0 +1,869 @@
+// Tests/APITests/Assignments/AssignmentHelpersManifestTests.swift
+//
+// Split from AssignmentHelpersTests.swift.  See AssignmentHelpersTestCase.swift
+// for shared helpers (makeFile, makeZip, notebookData).
+
+import Core
+import Fluent
+import Testing
+import Vapor
+
+@testable import APIServer
+
+final class AssignmentHelpersManifestTests {
+
+    @Test func sanitizedAssignmentReturnPathAcceptsOnlyInstructorScopedPaths() {
+        #expect(
+            sanitizedAssignmentReturnPath(
+                "/instructor/asg123",
+                assignmentIDRaw: "asg123",
+                fallbackPath: "/instructor/asg123/edit"
+            ) == "/instructor/asg123")
+
+        #expect(
+            sanitizedAssignmentReturnPath(
+                "/instructor/asg123/submissions",
+                assignmentIDRaw: "asg123",
+                fallbackPath: "/instructor/asg123/edit"
+            ) == "/instructor/asg123/submissions")
+
+        #expect(
+            sanitizedAssignmentReturnPath(
+                "/instructor/other/submissions",
+                assignmentIDRaw: "asg123",
+                fallbackPath: "/instructor/asg123/edit"
+            ) == "/instructor/asg123/edit")
+
+        #expect(
+            sanitizedAssignmentReturnPath(
+                "https://example.com/escape",
+                assignmentIDRaw: "asg123",
+                fallbackPath: "/instructor/asg123/edit"
+            ) == "/instructor/asg123/edit")
+    }
+
+    @Test func notebookFilenameForStorageSanitizesAndNormalizesExtension() {
+        #expect(
+            notebookFilenameForStorage(uploadedName: "../Unit 1: Intro", fallback: "assignment.ipynb")
+                == "Unit 1  Intro.ipynb")
+
+        #expect(
+            notebookFilenameForStorage(uploadedName: "lesson.ipynb", fallback: "assignment.ipynb") == "lesson.ipynb")
+
+        #expect(notebookFilenameForStorage(uploadedName: "   ", fallback: "starter.ipynb") == "starter.ipynb")
+    }
+
+    @Test func submissionFilenameForStorageSanitizesAndPreservesExtension() {
+        #expect(
+            submissionFilenameForStorage(uploadedName: "../Assignment 0 Solution.ipynb", fallback: "solution.ipynb")
+                == "Assignment 0 Solution.ipynb")
+
+        #expect(
+            submissionFilenameForStorage(uploadedName: "C:\\\\fakepath\\\\dna.py", fallback: "solution.ipynb")
+                == "C   fakepath  dna.py")
+
+        #expect(submissionFilenameForStorage(uploadedName: "   ", fallback: "solution.ipynb") == "solution.ipynb")
+    }
+
+    @Test func manifestDependentsReturnsScriptsThatReferenceDependency() throws {
+        let manifest = try makeWorkerManifestJSON(
+            testSuites: [
+                ConfiguredSuiteEntry(
+                    script: "01_public.py",
+                    tier: "public",
+                    order: 1,
+                    dependsOn: [],
+                    points: 1,
+                    displayName: nil
+                ),
+                ConfiguredSuiteEntry(
+                    script: "02_release.py",
+                    tier: "release",
+                    order: 2,
+                    dependsOn: ["01_public.py"],
+                    points: 2,
+                    displayName: "Release"
+                ),
+                ConfiguredSuiteEntry(
+                    script: "03_secret.py",
+                    tier: "secret",
+                    order: 3,
+                    dependsOn: ["01_public.py"],
+                    points: 3,
+                    displayName: nil
+                ),
+            ],
+            includeMakefile: false, language: nil
+        )
+
+        #expect(
+            manifestDependents(manifestJSON: manifest, filename: "01_public.py") == ["02_release.py", "03_secret.py"])
+        #expect(manifestDependents(manifestJSON: manifest, filename: "missing.py").isEmpty)
+    }
+
+    @Test func updateManifestAddingScriptPreservesMetadataAndAppendsEntry() throws {
+        let original = """
+            {
+              "schemaVersion": 1,
+              "gradingMode": "browser",
+              "requiredFiles": [],
+              "testSuites": [
+                {"tier": "public", "script": "01_public.py"}
+              ],
+              "timeLimitSeconds": 10,
+              "makefile": {"target": null},
+              "starterNotebook": "starter.ipynb"
+            }
+            """
+
+        let updated = try #require(
+            updateManifestAddingScript(
+                manifestJSON: original,
+                entry: ConfiguredSuiteEntry(
+                    script: "02_release.py",
+                    tier: "release",
+                    order: 99,
+                    dependsOn: ["01_public.py"],
+                    points: 2,
+                    displayName: "Release tests"
+                )
+            )
+        )
+
+        let props = try JSONDecoder().decode(TestProperties.self, from: Data(updated.utf8))
+        #expect(props.gradingMode == .browser)
+        #expect(props.starterNotebook == "starter.ipynb")
+        #expect(props.makefile != nil)
+        #expect(props.testSuites.map(\.script) == ["01_public.py", "02_release.py"])
+        #expect(props.testSuites.last?.dependsOn == ["01_public.py"])
+        #expect(props.testSuites.last?.points == 2)
+        #expect(props.testSuites.last?.name == "Release tests")
+    }
+
+    @Test func updateManifestAddingScriptCarriesEveryFieldOfTheEntry() throws {
+        let original = try makeWorkerManifestJSON(
+            testSuites: [
+                ConfiguredSuiteEntry(
+                    script: "01_public.py", tier: "public", order: 1,
+                    dependsOn: [], points: 1, displayName: nil)
+            ],
+            includeMakefile: false, language: nil
+        )
+
+        let updated = try #require(
+            updateManifestAddingScript(
+                manifestJSON: original,
+                entry: ConfiguredSuiteEntry(
+                    script: "02_release.py", tier: "release", order: 99,
+                    dependsOn: ["01_public.py"], points: 3, displayName: "Release",
+                    sectionID: "sec-1", hint: "Read the spec.", timeLimitSeconds: 42,
+                    failureDetail: .actualOnly)
+            )
+        )
+
+        let props = try JSONDecoder().decode(TestProperties.self, from: Data(updated.utf8))
+        let added = try #require(props.testSuites.last)
+        #expect(added.script == "02_release.py")
+        #expect(added.tier == .release)
+        #expect(added.dependsOn == ["01_public.py"])
+        #expect(added.points == 3)
+        #expect(added.name == "Release")
+        #expect(added.sectionID == "sec-1")
+        #expect(added.hint == "Read the spec.")
+        #expect(added.timeLimitSeconds == 42)
+        #expect(added.failureDetail == .actualOnly)
+    }
+
+    @Test func updateManifestRemovingScriptClearsDependencyReferences() throws {
+        let original = try makeWorkerManifestJSON(
+            testSuites: [
+                ConfiguredSuiteEntry(
+                    script: "01_public.py",
+                    tier: "public",
+                    order: 1,
+                    dependsOn: [],
+                    points: 1,
+                    displayName: nil
+                ),
+                ConfiguredSuiteEntry(
+                    script: "02_release.py",
+                    tier: "release",
+                    order: 2,
+                    dependsOn: ["01_public.py"],
+                    points: 1,
+                    displayName: nil
+                ),
+            ],
+            includeMakefile: false, language: nil
+        )
+
+        let updated = try #require(
+            updateManifestRemovingScript(manifestJSON: original, filename: "01_public.py")
+        )
+
+        let props = try JSONDecoder().decode(TestProperties.self, from: Data(updated.utf8))
+        #expect(props.testSuites.map(\.script) == ["02_release.py"])
+        #expect(props.testSuites.first?.dependsOn.isEmpty ?? true)
+    }
+
+    // Regression: deleting one script must never wipe the manifest's
+    // sections list, the surviving entries' sectionID membership, or the
+    // assignment-scope globals.  Previously `updateManifestRemovingScript`
+    // rebuilt the manifest without forwarding any of these, so a single
+    // delete dropped every section.
+    @Test func updateManifestRemovingScriptPreservesSectionsAndMembership() throws {
+        let original = try makeWorkerManifestJSON(
+            testSuites: [
+                ConfiguredSuiteEntry(
+                    script: "01_public.py", tier: "public", order: 1,
+                    dependsOn: [], points: 1, displayName: nil, sectionID: "sec-1"),
+                ConfiguredSuiteEntry(
+                    script: "02_release.py", tier: "release", order: 2,
+                    dependsOn: [], points: 1, displayName: nil, sectionID: "sec-2"),
+            ],
+            includeMakefile: false,
+            sections: [
+                TestSuiteSection(id: "sec-1", name: "Question 1"),
+                TestSuiteSection(id: "sec-2", name: "Question 2"),
+            ],
+            globalVariables: [FamilyVariable(name: "limit", value: .int(5))], language: nil
+        )
+
+        let updated = try #require(
+            updateManifestRemovingScript(manifestJSON: original, filename: "01_public.py")
+        )
+
+        let props = try JSONDecoder().decode(TestProperties.self, from: Data(updated.utf8))
+        #expect(props.testSuites.map(\.script) == ["02_release.py"])
+        // Both sections survive even though one was emptied by the delete.
+        #expect(props.sections.map(\.id) == ["sec-1", "sec-2"])
+        // The surviving entry keeps its section membership.
+        #expect(props.testSuites.first?.sectionID == "sec-2")
+        // Assignment-scope globals are untouched.
+        #expect(props.globalVariables.map(\.name) == ["limit"])
+    }
+
+    @Test func updateManifestAddingScriptPreservesSections() throws {
+        let original = try makeWorkerManifestJSON(
+            testSuites: [
+                ConfiguredSuiteEntry(
+                    script: "01_public.py", tier: "public", order: 1,
+                    dependsOn: [], points: 1, displayName: nil, sectionID: "sec-1")
+            ],
+            includeMakefile: false,
+            sections: [TestSuiteSection(id: "sec-1", name: "Question 1")], language: nil
+        )
+
+        let updated = try #require(
+            updateManifestAddingScript(
+                manifestJSON: original,
+                entry: ConfiguredSuiteEntry(
+                    script: "02_public.py", tier: "public", order: 99,
+                    dependsOn: [], points: 1, displayName: nil)
+            )
+        )
+
+        let props = try JSONDecoder().decode(TestProperties.self, from: Data(updated.utf8))
+        #expect(props.testSuites.map(\.script).sorted() == ["01_public.py", "02_public.py"])
+        #expect(props.sections.map(\.id) == ["sec-1"])
+        #expect(props.testSuites.first(where: { $0.script == "01_public.py" })?.sectionID == "sec-1")
+    }
+
+    // Regression: rebuilding the manifest to add or remove a script must preserve
+    // the optional minimumRunnerVersion gate. makeWorkerManifestJSON builds a
+    // fresh dict, so an un-threaded field would silently un-gate the assignment
+    // on the next script edit.
+    @Test func updateManifestScriptEditsPreserveMinimumRunnerVersion() throws {
+        let original = try makeWorkerManifestJSON(
+            testSuites: [
+                ConfiguredSuiteEntry(
+                    script: "01_public.py", tier: "public", order: 1,
+                    dependsOn: [], points: 1, displayName: nil)
+            ],
+            includeMakefile: false,
+            language: nil,
+            minimumRunnerVersion: "0.5.0"
+        )
+        // Sanity: the builder emitted the gate.
+        #expect(
+            try JSONDecoder().decode(TestProperties.self, from: Data(original.utf8))
+                .minimumRunnerVersion == "0.5.0")
+
+        let added = try #require(
+            updateManifestAddingScript(
+                manifestJSON: original,
+                entry: ConfiguredSuiteEntry(
+                    script: "02_public.py", tier: "public", order: 99,
+                    dependsOn: [], points: 1, displayName: nil)))
+        #expect(
+            try JSONDecoder().decode(TestProperties.self, from: Data(added.utf8))
+                .minimumRunnerVersion == "0.5.0")
+
+        let removed = try #require(
+            updateManifestRemovingScript(manifestJSON: added, filename: "02_public.py"))
+        #expect(
+            try JSONDecoder().decode(TestProperties.self, from: Data(removed.utf8))
+                .minimumRunnerVersion == "0.5.0")
+    }
+
+    // Regression: rebuilding the manifest to add or remove a script must
+    // preserve the class-activity block. makeWorkerManifestJSON used to build
+    // a fresh dict, so an un-threaded block turned a leaderboard challenge
+    // back into an ordinary lab on the next script edit — the
+    // `languageDeclared` trap, one field later. It copies the decoded manifest
+    // now (#1655); this pins that the block rides along.
+    @Test func updateManifestScriptEditsPreserveActivity() throws {
+        let activity = ClassActivity(kind: .bestMetric, leaderboardVisibility: .visible)
+        let original = try makeWorkerManifestJSON(
+            testSuites: [
+                ConfiguredSuiteEntry(
+                    script: "01_public.py", tier: "public", order: 1,
+                    dependsOn: [], points: 1, displayName: nil)
+            ],
+            includeMakefile: false,
+            language: nil,
+            activity: activity
+        )
+        // Sanity: the builder emitted the block.
+        #expect(
+            try JSONDecoder().decode(TestProperties.self, from: Data(original.utf8))
+                .activity == activity)
+
+        let added = try #require(
+            updateManifestAddingScript(
+                manifestJSON: original,
+                entry: ConfiguredSuiteEntry(
+                    script: "02_public.py", tier: "public", order: 99,
+                    dependsOn: [], points: 1, displayName: nil)))
+        #expect(
+            try JSONDecoder().decode(TestProperties.self, from: Data(added.utf8))
+                .activity == activity)
+
+        let removed = try #require(
+            updateManifestRemovingScript(manifestJSON: added, filename: "02_public.py"))
+        #expect(
+            try JSONDecoder().decode(TestProperties.self, from: Data(removed.utf8))
+                .activity == activity)
+    }
+
+    // An ordinary assignment's manifest must not grow an `activity` key.
+    @Test func makeWorkerManifestJSONOmitsActivityWhenNil() throws {
+        let json = try makeWorkerManifestJSON(testSuites: [], includeMakefile: false, language: nil)
+        #expect(!json.contains("activity"))
+    }
+
+    // Regression: rebuilding the manifest to add or remove a script must
+    // preserve `languageDeclared` alongside `language`.  makeWorkerManifestJSON
+    // builds a fresh dict, so an un-threaded flag was dropped on every script
+    // edit — turning a deliberate "None" declaration (languageDeclared with no
+    // language key, the case where `language` alone carries no evidence) back
+    // into "nobody has been asked".
+    @Test func updateManifestScriptEditsPreserveLanguageDeclaration() throws {
+        let declaredNone = try makeWorkerManifestJSON(
+            testSuites: [
+                ConfiguredSuiteEntry(
+                    script: "01_public.sh", tier: "public", order: 1,
+                    dependsOn: [], points: 1, displayName: nil)
+            ],
+            includeMakefile: false,
+            language: nil,
+            languageDeclared: true
+        )
+        // Sanity: the builder recorded the declaration.
+        #expect(
+            try JSONDecoder().decode(TestProperties.self, from: Data(declaredNone.utf8))
+                .languageDeclared == true)
+
+        let added = try #require(
+            updateManifestAddingScript(
+                manifestJSON: declaredNone,
+                entry: ConfiguredSuiteEntry(
+                    script: "02_public.sh", tier: "public", order: 99,
+                    dependsOn: [], points: 1, displayName: nil)))
+        let addedProps = try JSONDecoder().decode(TestProperties.self, from: Data(added.utf8))
+        #expect(addedProps.language == nil)
+        #expect(addedProps.languageDeclared == true)
+
+        let removed = try #require(
+            updateManifestRemovingScript(manifestJSON: added, filename: "02_public.sh"))
+        let removedProps = try JSONDecoder().decode(TestProperties.self, from: Data(removed.utf8))
+        #expect(removedProps.languageDeclared == true)
+
+        // A declared language survives the same round-trip: the two fields
+        // travel together.
+        let declaredR = try makeWorkerManifestJSON(
+            testSuites: [
+                ConfiguredSuiteEntry(
+                    script: "01_public.R", tier: "public", order: 1,
+                    dependsOn: [], points: 1, displayName: nil)
+            ],
+            includeMakefile: false,
+            language: .r,
+            languageDeclared: true
+        )
+        let addedR = try #require(
+            updateManifestAddingScript(
+                manifestJSON: declaredR,
+                entry: ConfiguredSuiteEntry(
+                    script: "02_public.R", tier: "public", order: 99,
+                    dependsOn: [], points: 1, displayName: nil)))
+        let addedRProps = try JSONDecoder().decode(TestProperties.self, from: Data(addedR.utf8))
+        #expect(addedRProps.language == .r)
+        #expect(addedRProps.languageDeclared == true)
+    }
+
+    @Test func detectRequirementSuggestionsIgnoresSolutionNotebookImports() async throws {
+        let zipPath = FileManager.default.temporaryDirectory
+            .appendingPathComponent("detect-requirements-\(UUID().uuidString).zip")
+            .path
+        try await ahMakeZip(
+            at: zipPath,
+            entries: [
+                (name: "tests/run.sh", content: "#!/bin/bash\necho ok\n")
+            ])
+
+        let setup = APITestSetup(
+            id: "setup_detect_requirements",
+            manifest: "{}",
+            zipPath: zipPath,
+            notebookPath: "/tmp/assignment.ipynb",
+            courseID: UUID()
+        )
+
+        let suggestions = await detectRequirementSuggestions(
+            assignmentNotebookData: try ahNotebookData(source: "import pandas\n"),
+            solutionNotebookData: try ahNotebookData(source: "import scipy\nimport matplotlib\n"),
+            setup: setup
+        )
+
+        #expect(suggestions.languages == ["python"])
+        #expect(suggestions.capabilities == ["pandas", "shell-bash"])
+    }
+
+    @Test func makeWorkerManifestJSONTopologicallySortsSuitesAndOmitsDefaults() throws {
+        let manifest = try makeWorkerManifestJSON(
+            testSuites: [
+                ConfiguredSuiteEntry(
+                    script: "03_secret.py",
+                    tier: "secret",
+                    order: 3,
+                    dependsOn: ["02_release.py"],
+                    points: 1,
+                    displayName: nil
+                ),
+                ConfiguredSuiteEntry(
+                    script: "01_public.py",
+                    tier: "public",
+                    order: 1,
+                    dependsOn: [],
+                    points: 1,
+                    displayName: nil
+                ),
+                ConfiguredSuiteEntry(
+                    script: "02_release.py",
+                    tier: "release",
+                    order: 2,
+                    dependsOn: ["01_public.py"],
+                    points: 4,
+                    displayName: "Release tests"
+                ),
+            ],
+            includeMakefile: true,
+            gradingMode: "worker",
+            starterNotebook: nil, language: nil
+        )
+
+        let object = try #require(
+            JSONSerialization.jsonObject(with: Data(manifest.utf8)) as? [String: Any]
+        )
+        let suites = try #require(object["testSuites"] as? [[String: Any]])
+
+        #expect(suites.map { $0["script"] as? String } == ["01_public.py", "02_release.py", "03_secret.py"])
+        #expect(object["starterNotebook"] == nil)
+        #expect(object["makefile"] != nil)
+        #expect(suites[0]["points"] == nil, "Default weight should be omitted")
+        #expect(suites[0]["dependsOn"] == nil, "Empty dependencies should be omitted")
+        #expect(suites[1]["points"] as? Int == 4)
+        #expect(suites[1]["name"] as? String == "Release tests")
+    }
+
+    // PR4: a raw script's instructor hint persists onto its `TestSuiteEntry`
+    // (emitted only when non-empty) and round-trips through the manifest, so
+    // the PR2 display-time join surfaces it on failure.
+    @Test func makeWorkerManifestJSONEmitsRawScriptHintAndRoundTrips() throws {
+        let manifest = try makeWorkerManifestJSON(
+            testSuites: [
+                ConfiguredSuiteEntry(
+                    script: "publictest_a.py", tier: "public", order: 1,
+                    dependsOn: [], points: 1, displayName: nil, hint: "read the docstring"),
+                ConfiguredSuiteEntry(
+                    script: "publictest_b.py", tier: "public", order: 2,
+                    dependsOn: [], points: 1, displayName: nil, hint: nil),
+            ],
+            includeMakefile: false, language: nil
+        )
+
+        let object = try #require(
+            JSONSerialization.jsonObject(with: Data(manifest.utf8)) as? [String: Any])
+        let suites = try #require(object["testSuites"] as? [[String: Any]])
+        let byScript = Dictionary(uniqueKeysWithValues: suites.map { ($0["script"] as? String ?? "", $0) })
+        #expect(byScript["publictest_a.py"]?["hint"] as? String == "read the docstring")
+        #expect(byScript["publictest_b.py"]?["hint"] == nil, "Absent hint must be omitted from the entry")
+
+        let props = try JSONDecoder().decode(TestProperties.self, from: Data(manifest.utf8))
+        let entryByScript = Dictionary(uniqueKeysWithValues: props.testSuites.map { ($0.script, $0) })
+        #expect(entryByScript["publictest_a.py"]?.hint == "read the docstring")
+        #expect(entryByScript["publictest_b.py"]?.hint == nil)
+    }
+
+    // PR4: `GET /suite` (buildSuitePayload) reads a raw script's hint back off
+    // the manifest so the editor round-trips it.
+    @Test func buildSuitePayloadPopulatesScriptHintFromManifest() async throws {
+        let manifest = """
+            {
+              "schemaVersion": 1,
+              "testSuites": [
+                { "tier": "public", "script": "publictest_a.py", "hint": "mind the boundary" },
+                { "tier": "public", "script": "publictest_b.py" }
+              ]
+            }
+            """
+        let payload = await buildSuitePayload(fromManifest: manifest)
+        #expect(payload.items.count == 2)
+        #expect(payload.items[0].script?.hint == "mind the boundary")
+        #expect(payload.items[1].script?.hint == nil)
+    }
+
+    @Test func buildSuiteEntriesUsesExplicitSuiteConfigOrderingAndMetadata() throws {
+        let suiteFiles = [
+            ahMakeFile(named: "01_public.py", contents: "print('public')"),
+            ahMakeFile(named: "notes.txt", contents: "support"),
+            ahMakeFile(named: "02_secret.py", contents: "print('secret')"),
+        ]
+
+        let configJSON = """
+            [
+              {"index":2,"isTest":true,"tier":"secret","order":7,"dependsOn":["01_public.py"],"points":3,"displayName":"Secret"},
+              {"index":1,"isTest":false,"tier":"support","order":2},
+              {"index":0,"isTest":true,"tier":"public","order":1}
+            ]
+            """
+
+        let entries = try buildSuiteEntries(
+            suiteFiles: suiteFiles,
+            storedNameByIndex: [
+                0: "01_public.py",
+                1: "notes.txt",
+                2: "02_secret.py",
+            ],
+            suiteConfigJSON: configJSON
+        )
+
+        #expect(entries.map(\.script) == ["01_public.py", "02_secret.py"])
+        #expect(entries[1].tier == "secret")
+        #expect(entries[1].dependsOn == ["01_public.py"])
+        #expect(entries[1].points == 3)
+        #expect(entries[1].displayName == "Secret")
+    }
+
+    @Test func buildSuiteEntriesFallsBackToLikelyTestFilesAndInferredOrder() throws {
+        let suiteFiles = [
+            ahMakeFile(named: "20_hidden.py", contents: "print('b')"),
+            ahMakeFile(named: "readme.txt", contents: "ignore"),
+            ahMakeFile(named: "01_public.sh", contents: "echo test"),
+        ]
+
+        let entries = try buildSuiteEntries(
+            suiteFiles: suiteFiles,
+            storedNameByIndex: [
+                0: "20_hidden.py",
+                1: "readme.txt",
+                2: "01_public.sh",
+            ],
+            suiteConfigJSON: nil
+        )
+
+        #expect(entries.map(\.script) == ["01_public.sh", "20_hidden.py"])
+        #expect(entries.allSatisfy { $0.tier == "public" })
+    }
+
+    @Test func buildSuiteEntriesFallsBackToExtensionlessShebangScripts() throws {
+        let suiteFiles = [
+            ahMakeFile(named: "01_shell", contents: "#!/bin/sh\necho ok\n"),
+            ahMakeFile(named: "02_bash", contents: "#!/usr/bin/env bash\necho ok\n"),
+            ahMakeFile(named: "03_notes", contents: "echo support but no shebang\n"),
+            ahMakeFile(named: "04_python.py", contents: "print('ok')\n"),
+            ahMakeFile(named: "BMI Boundary Cases", contents: "#!/usr/bin/env python3\nprint('ok')\n"),
+        ]
+
+        let entries = try buildSuiteEntries(
+            suiteFiles: suiteFiles,
+            storedNameByIndex: [
+                0: "01_shell",
+                1: "02_bash",
+                2: "03_notes",
+                3: "04_python.py",
+                4: "BMI Boundary Cases",
+            ],
+            suiteConfigJSON: nil
+        )
+
+        #expect(entries.map(\.script) == ["01_shell", "02_bash", "04_python.py", "BMI Boundary Cases"])
+        #expect(entries.allSatisfy { $0.tier == "public" })
+    }
+
+    @Test func buildSuiteEntriesTreatsAnyNonSupportTierAsATestWhenIsTestIsMissing() throws {
+        let suiteFiles = [
+            ahMakeFile(named: "assignment.ipynb", contents: "{}"),
+            ahMakeFile(named: "test_q1.py", contents: "print('q1')"),
+            ahMakeFile(named: "notes.txt", contents: "support"),
+        ]
+
+        let configJSON = """
+            [
+              {"index":0,"tier":"support","order":1},
+              {"index":1,"tier":"release","order":2,"points":2},
+              {"index":2,"tier":"support","order":3}
+            ]
+            """
+
+        let entries = try buildSuiteEntries(
+            suiteFiles: suiteFiles,
+            storedNameByIndex: [
+                0: "assignment.ipynb",
+                1: "test_q1.py",
+                2: "notes.txt",
+            ],
+            suiteConfigJSON: configJSON
+        )
+
+        #expect(entries.map(\.script) == ["test_q1.py"])
+        #expect(entries.first?.tier == "release")
+        #expect(entries.first?.points == 2)
+    }
+
+    @Test func createRunnerSetupZipDeduplicatesStoredNamesAndDetectsMakefile() async throws {
+        let tempRoot = FileManager.default.temporaryDirectory
+            .appendingPathComponent("runner-setup-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: tempRoot, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempRoot) }
+
+        let zipPath = tempRoot.appendingPathComponent("setup.zip").path
+        let suiteFiles = [
+            ahMakeFile(named: "tests.py", contents: "print('one')"),
+            ahMakeFile(named: "nested/tests.py", contents: "print('two')"),
+            ahMakeFile(named: "Makefile", contents: "all:\n\t@echo hi\n"),
+        ]
+        let configJSON = """
+            [
+              {"index":0,"isTest":true,"tier":"public","order":1},
+              {"index":1,"isTest":true,"tier":"secret","order":2},
+              {"index":2,"isTest":false,"tier":"support","order":3}
+            ]
+            """
+
+        let package = try await createRunnerSetupZip(
+            suiteFiles: suiteFiles,
+            suiteConfigJSON: configJSON,
+            zipPath: zipPath
+        )
+
+        #expect(package.hasMakefile)
+        #expect(package.testSuites.map(\.script) == ["tests.py", "tests-2.py"])
+        #expect(package.testSuites.map(\.tier) == ["public", "secret"])
+
+        let zipEntries = await Set(listZipEntries(zipPath: zipPath))
+        #expect(zipEntries.contains("tests.py"))
+        #expect(zipEntries.contains("tests-2.py"))
+        #expect(zipEntries.contains("Makefile"))
+    }
+
+    @Test func extractSupportFilesToSharedDirectoryRefreshesAndFiltersReservedEntries() async throws {
+        let tempRoot = FileManager.default.temporaryDirectory
+            .appendingPathComponent("support-files-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: tempRoot, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempRoot) }
+
+        let zipPath = tempRoot.appendingPathComponent("setup.zip").path
+        try await ahMakeZip(
+            at: zipPath,
+            entries: [
+                ("assignment.ipynb", "{}"),
+                ("solution.ipynb", "{}"),
+                ("tests.py", "print('test')"),
+                ("data/sample.csv", "a,b\n1,2\n"),
+                ("notes.txt", "hello"),
+            ])
+
+        let testSetupsDirectory = tempRoot.appendingPathComponent("testsetups").path + "/"
+        let sharedDir = testSetupsDirectory + "shared/setup_123/"
+        try FileManager.default.createDirectory(atPath: sharedDir, withIntermediateDirectories: true)
+        try "stale".write(toFile: sharedDir + "stale.txt", atomically: true, encoding: .utf8)
+
+        await extractSupportFilesToSharedDirectory(
+            zipPath: zipPath,
+            setupID: "setup_123",
+            testSuiteScripts: ["tests.py"],
+            testSetupsDirectory: testSetupsDirectory
+        )
+
+        let extracted = Set(try FileManager.default.subpathsOfDirectory(atPath: sharedDir))
+        #expect(extracted.contains("data/sample.csv"))
+        #expect(extracted.contains("notes.txt"))
+        #expect(extracted.contains("tests.py") == false)
+        #expect(extracted.contains("assignment.ipynb") == false)
+        #expect(extracted.contains("solution.ipynb") == false)
+        #expect(extracted.contains("stale.txt") == false)
+    }
+
+    @Test func extractSupportFiles_preservesServerSideSolutionPyAcrossRebuild() async throws {
+        let tempRoot = FileManager.default.temporaryDirectory
+            .appendingPathComponent("preserve-solpy-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: tempRoot, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempRoot) }
+
+        // A zip WITHOUT solution.ipynb / solution.py — like a draft/MCP-created
+        // setup whose reference solution lives only as a validation submission.
+        let zipPath = tempRoot.appendingPathComponent("setup.zip").path
+        try await ahMakeZip(
+            at: zipPath,
+            entries: [
+                ("tests.py", "print('t')"),
+                ("dbgen.py", "def gen():\n    return 1\n"),
+            ])
+
+        let testSetupsDirectory = tempRoot.appendingPathComponent("testsetups").path + "/"
+        let sharedDir = testSetupsDirectory + "shared/setup_sol/"
+        try FileManager.default.createDirectory(atPath: sharedDir, withIntermediateDirectories: true)
+        // The solution-save path wrote this server-side-only file.
+        try "def answer():\n    return 42\n".write(
+            toFile: sharedDir + "solution.py", atomically: true, encoding: .utf8)
+
+        // An edit triggers a shared-dir rebuild (wipe + re-extract). solution.py
+        // is not in the zip, so without preservation the wipe would drop it.
+        await extractSupportFilesToSharedDirectory(
+            zipPath: zipPath,
+            setupID: "setup_sol",
+            testSuiteScripts: ["tests.py"],
+            testSetupsDirectory: testSetupsDirectory
+        )
+
+        let onDisk = try? String(contentsOfFile: sharedDir + "solution.py", encoding: .utf8)
+        #expect(onDisk?.contains("def answer():") == true)
+        // Ordinary support files still extract; the test script does not.
+        #expect(FileManager.default.fileExists(atPath: sharedDir + "dbgen.py"))
+        #expect(FileManager.default.fileExists(atPath: sharedDir + "tests.py") == false)
+    }
+
+    @Test func applyScriptChanges_filtersGraderOnlyEntryFromZipCopy() async throws {
+        // The browser-runner download withholds grader-only files by streaming a
+        // COPY of the stored zip with those entries deleted (via
+        // applyScriptChangesToZip(deletions:)). Pin that primitive: it removes
+        // exactly the named entries, keeps the rest, and leaves the original
+        // (which the trusted worker download streams) untouched.
+        let tempRoot = FileManager.default.temporaryDirectory
+            .appendingPathComponent("graderonly-filter-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: tempRoot, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempRoot) }
+
+        let zipPath = tempRoot.appendingPathComponent("setup.zip").path
+        try await ahMakeZip(
+            at: zipPath,
+            entries: [
+                ("tests.py", "print('t')"),
+                ("dbgen.py", "ANSWER = 42\n"),
+                ("data.csv", "a,b\n1,2\n"),
+            ])
+
+        let copyPath = tempRoot.appendingPathComponent("filtered.zip").path
+        try FileManager.default.copyItem(atPath: zipPath, toPath: copyPath)
+        try await applyScriptChangesToZip(zipPath: copyPath, writes: [:], deletions: ["dbgen.py"])
+
+        let remaining = await Set(listZipEntries(zipPath: copyPath))
+        #expect(remaining.contains("dbgen.py") == false)  // grader-only entry removed
+        #expect(remaining.contains("tests.py"))  // others kept
+        #expect(remaining.contains("data.csv"))
+        // The stored zip (what the trusted worker download streams) is untouched.
+        await #expect(Set(listZipEntries(zipPath: zipPath)).contains("dbgen.py"))
+    }
+
+    @Test func removeMaterializedNotebookFilesDeletesLegacyNotebookArtifactsForSetup() async throws {
+        let tempRoot = FileManager.default.temporaryDirectory
+            .appendingPathComponent("materialized-files-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: tempRoot, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempRoot) }
+
+        let publicDirectory = tempRoot.appendingPathComponent("public").path + "/"
+        let roots = [
+            "files/",
+            "jupyterlite/files/",
+            "jupyterlite/lab/files/",
+            "jupyterlite/notebooks/files/",
+        ]
+        for root in roots {
+            try FileManager.default.createDirectory(
+                atPath: publicDirectory + root,
+                withIntermediateDirectories: true
+            )
+            try "{}".write(
+                toFile: publicDirectory + root + "setup_123-work.ipynb",
+                atomically: true,
+                encoding: .utf8
+            )
+            try "{}".write(
+                toFile: publicDirectory + root + "other-work.ipynb",
+                atomically: true,
+                encoding: .utf8
+            )
+            try "keep".write(
+                toFile: publicDirectory + root + "setup_123.txt",
+                atomically: true,
+                encoding: .utf8
+            )
+        }
+
+        try await withApp(try await Application.make(.testing)) { app in
+            app.directory.publicDirectory = publicDirectory
+
+            let req = makeTestRequest(on: app)
+            removeMaterializedNotebookFiles(req: req, setupID: "setup_123")
+
+            for root in roots {
+                #expect(
+                    FileManager.default.fileExists(atPath: publicDirectory + root + "setup_123-work.ipynb") == false)
+                #expect(
+                    FileManager.default.fileExists(atPath: publicDirectory + root + "other-work.ipynb")
+                )
+                #expect(
+                    FileManager.default.fileExists(atPath: publicDirectory + root + "setup_123.txt")
+                )
+            }
+        }
+    }
+
+    // The opponent file rides the block through a rebuild: it is spliced as
+    // the encoded `ClassActivity`, so a field added to the block is carried
+    // without the rebuild callers learning its name.
+    @Test func updateManifestScriptEditsPreserveTheOpponentFile() throws {
+        let activity = ClassActivity(kind: .beatTheInstructor, opponentFile: "bot.py")
+        let original = try makeWorkerManifestJSON(
+            testSuites: [
+                ConfiguredSuiteEntry(
+                    script: "match.sh", tier: "public", order: 1,
+                    dependsOn: [], points: 1, displayName: nil)
+            ],
+            includeMakefile: false,
+            language: nil,
+            activity: activity
+        )
+        let added = try #require(
+            updateManifestAddingScript(
+                manifestJSON: original,
+                entry: ConfiguredSuiteEntry(
+                    script: "02_public.py", tier: "public", order: 99,
+                    dependsOn: [], points: 1, displayName: nil)))
+        #expect(
+            try JSONDecoder().decode(TestProperties.self, from: Data(added.utf8))
+                .activity == activity)
+    }
+}

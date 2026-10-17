@@ -51,7 +51,10 @@ struct SubmissionQueryRoutes: RouteCollection {
             query = query.filter(\.$userID == caller.id)
         }
 
-        let submissions = try await query.range(offset..<(offset + limit)).all()
+        // Saturate rather than add: `offset` comes from the caller, and an
+        // overflowing `offset + limit` traps and stops the whole process.
+        let (end, overflowed) = offset.addingReportingOverflow(limit)
+        let submissions = try await query.range(offset..<(overflowed ? Int.max : end)).all()
         return SubmissionListResponse(
             submissions: submissions.map(SubmissionSummary.init)
         )

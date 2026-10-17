@@ -22,7 +22,7 @@ import Vapor
         )
     }
 
-    private let emptyManifest = #"{"schemaVersion":1,"testSuites":[],"timeLimitSeconds":10}"#
+    private let emptyManifest = TestManifests.emptySuite
 
     /// Course + enrolled instructor + setup + assignment, with `support` written
     /// into the zip as non-graded files and `seedScript` (if given) as a graded

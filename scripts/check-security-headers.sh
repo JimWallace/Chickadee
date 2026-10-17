@@ -19,7 +19,7 @@ set -uo pipefail
 # so accepting one finding costs nothing in coverage of its neighbours.
 #
 # The per-directive policy itself is pinned by
-# Tests/APITests/ContentSecurityPolicyInlineScriptTests.swift, which needs no
+# Tests/APITests/Guards/ContentSecurityPolicyInlineScriptTests.swift, which needs no
 # running server. This script is the end-to-end half: it reads what a client
 # actually receives from a booted container, which is the layer a DAST scanner
 # sees and the layer a proxy or middleware-ordering mistake can change.
