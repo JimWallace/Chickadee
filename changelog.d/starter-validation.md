@@ -1,3 +1,0 @@
-### Added
-
-- **Validation also runs the starter notebook.** Each Save & validate grades the assignment notebook that students open against the suite, with the same seed as the solution run. A test worth points that the starter already passes earns those points for no work, so the workbench marks it amber in the rail and on its card, and the app bar pill counts it ("! 3 issues"), with a note that says how many fail on the solution and how many pass on the starter. Click the pill to step through the issues. The starter run never blocks opening; only the solution run does. MCP `get_suite` returns the starter run's outcomes. See `docs/notebook-guide.md`, "The starter run".
