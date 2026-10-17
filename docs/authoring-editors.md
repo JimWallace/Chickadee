@@ -35,6 +35,13 @@ tools, it never changes visibility, so fixing a typo mid-lab does not close the
 assignment out from under students. Re-validation still runs (debounced for the
 starter, always for a solution, since the new solution *is* what validates).
 
+Staff do not get Submit on the notebook page. Beside "Save to assignment" it
+reads as a second save, but it grades the notebook as the staff member's own
+attempt and saves nothing for students. The task guide, "Upload .ipynb" and
+"Reset to starter" belong to a student's own notebook, so staff do not get them
+there either. To see what a student gets, use "Preview as student" in the
+workbench.
+
 **The authoring UI reads the assignment's language from ONE seed (v0.5.36).**
 The browser editors had no notion of language at all: `pattern-family-editor.js`
 contained the string "language" zero times, and `inputs-editor-core.js` had the
