@@ -621,7 +621,7 @@ import VaporTesting
             )
 
             try await app.asyncTest(
-                .GET, "/testsetups/\(setupID)/notebook",
+                .GET, "/testsetups/\(setupID)/notebook?edit=1",
                 beforeRequest: { req in
                     req.headers.add(name: .cookie, value: cookie)
                 },
@@ -671,7 +671,7 @@ import VaporTesting
             )
 
             try await app.asyncTest(
-                .GET, "/testsetups/\(setupID)/notebook?file=solution",
+                .GET, "/testsetups/\(setupID)/notebook?file=solution&edit=1",
                 beforeRequest: { req in
                     req.headers.add(name: .cookie, value: cookie)
                 },
@@ -1011,7 +1011,7 @@ import VaporTesting
 
             let staffLogin = try await staffCookie(username: "notebook_view_staff")
             try await app.asyncTest(
-                .GET, "/testsetups/\(setupID)/notebook/source",
+                .GET, "/testsetups/\(setupID)/notebook/source?edit=1",
                 beforeRequest: { req in req.headers.add(name: .cookie, value: staffLogin) },
                 afterResponse: { res in
                     #expect(res.status == .ok)
@@ -1118,7 +1118,7 @@ import VaporTesting
             }
 
             try await app.asyncTest(
-                .GET, "/testsetups/\(personalizedID)/notebook",
+                .GET, "/testsetups/\(personalizedID)/notebook?edit=1",
                 beforeRequest: { req in req.headers.add(name: .cookie, value: staffLogin) },
                 afterResponse: { res in
                     #expect(res.body.string.contains(toggleHref(personalizedID, to: "personalized")))
@@ -1140,7 +1140,7 @@ import VaporTesting
             _ = try await insertAssignment(testSetupID: plainID, title: "Plain Lab", isOpen: true)
 
             try await app.asyncTest(
-                .GET, "/testsetups/\(plainID)/notebook",
+                .GET, "/testsetups/\(plainID)/notebook?edit=1",
                 beforeRequest: { req in req.headers.add(name: .cookie, value: staffLogin) },
                 afterResponse: { res in
                     #expect(res.body.string.contains(toggleHref(plainID, to: "template")) == false)
@@ -1150,13 +1150,13 @@ import VaporTesting
         }
     }
 
-    @Test func staffOnAnOpenAssignmentGetSaveAndNoSubmit() async throws {
+    @Test func staffGetSubmitOnTheStudentViewAndSaveOnTheEditingView() async throws {
         try await withApp(app) { _ in
-            // "Save to assignment" and Submit side by side read as two saves,
-            // so staff get Save only. A student keeps Submit
-            // (notebookPageOpenAssignmentRendersSubmitAndEditableIframe).
-            let staffLogin = try await staffCookie(username: "notebook_staff_no_submit")
-            let setupID = "setup_nb_staff_no_submit"
+            // The student view is the same for everyone, so staff test-submit
+            // there as a student does. "Save to assignment" is on the editing
+            // view only, and the two never show together.
+            let staffLogin = try await staffCookie(username: "notebook_staff_views")
+            let setupID = "setup_nb_staff_views"
             _ = try await insertSetup(id: setupID, notebookJSON: notebookJSON(markdown: "Open"))
             _ = try await insertAssignment(testSetupID: setupID, title: "Staff Lab", isOpen: true)
 
@@ -1166,10 +1166,74 @@ import VaporTesting
                 afterResponse: { res in
                     #expect(res.status == .ok)
                     let html = res.body.string
+                    #expect(html.contains(#"id="nb-submit""#))
+                    #expect(html.contains("nb-menu-upload-file"))
+                    #expect(html.contains(#"id="nb-save-assignment""#) == false)
+                })
+
+            try await app.asyncTest(
+                .GET, "/testsetups/\(setupID)/notebook?edit=1",
+                beforeRequest: { req in req.headers.add(name: .cookie, value: staffLogin) },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    let html = res.body.string
                     #expect(html.contains(#"id="nb-save-assignment""#))
                     #expect(html.contains(#"id="nb-submit""#) == false)
                     #expect(html.contains("nb-menu-upload-file") == false)
                 })
+        }
+    }
+
+    @Test func staffOnTheStudentViewWorkInACopyApartFromTheAuthoringCopy() async throws {
+        try await withApp(app) { _ in
+            // A test attempt must never reach a save: the authoring copy is
+            // what "Save to assignment" writes back for every student.
+            let staffLogin = try await staffCookie(username: "notebook_staff_practice")
+            let staff = try #require(
+                try await APIUser.query(on: app.db).filter(\.$username == "notebook_staff_practice").first())
+            let userID = try staff.requireID()
+            let setupID = "setup_nb_staff_practice"
+            _ = try await insertSetup(id: setupID, notebookJSON: notebookJSON(markdown: "Starter text"))
+            _ = try await insertAssignment(testSetupID: setupID, title: "Practice Lab", isOpen: true)
+
+            let practicePath =
+                publicDir + "jupyterlite/files/"
+                + staffPracticeWorkingCopyRelativePath(setupID: setupID, userID: userID, fileKind: .assignment)
+            try await app.asyncTest(
+                .GET, "/testsetups/\(setupID)/notebook",
+                beforeRequest: { req in req.headers.add(name: .cookie, value: staffLogin) },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    #expect(res.body.string.contains("-practice.ipynb"))
+                })
+            #expect(FileManager.default.fileExists(atPath: practicePath))
+
+            // A test attempt in the practice copy stays out of the authoring copy.
+            try Data(notebookJSON(markdown: "My test answer").utf8).write(to: URL(fileURLWithPath: practicePath))
+            try await app.asyncTest(
+                .GET, "/testsetups/\(setupID)/notebook/source?edit=1",
+                beforeRequest: { req in req.headers.add(name: .cookie, value: staffLogin) },
+                afterResponse: { res in
+                    #expect(res.body.string.contains("Starter text"))
+                    #expect(res.body.string.contains("My test answer") == false)
+                })
+            try await app.asyncTest(
+                .GET, "/testsetups/\(setupID)/notebook/source",
+                beforeRequest: { req in req.headers.add(name: .cookie, value: staffLogin) },
+                afterResponse: { res in #expect(res.body.string.contains("My test answer")) })
+
+            // Reset on the student view restores the practice copy only.
+            let (csrf, sessionCookie) = try await csrfFields(for: "/account", cookie: staffLogin, on: app)
+            try await app.asyncTest(
+                .POST, "/testsetups/\(setupID)/reset-notebook",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: sessionCookie)
+                    try req.content.encode(["_csrf": csrf], as: .urlEncodedForm)
+                },
+                afterResponse: { res in #expect(res.status == .seeOther) })
+            let restored = try String(contentsOf: URL(fileURLWithPath: practicePath), encoding: .utf8)
+            #expect(restored.contains("Starter text"))
+            #expect(restored.contains("My test answer") == false)
         }
     }
 
@@ -1229,7 +1293,7 @@ import VaporTesting
 
             // Seed the rendered copy, so there is a stale file to invalidate.
             try await app.asyncTest(
-                .GET, "/testsetups/\(setupID)/notebook/source?view=personalized",
+                .GET, "/testsetups/\(setupID)/notebook/source?view=personalized&edit=1",
                 beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
                 afterResponse: { res in #expect(res.body.string.contains("Maria")) })
 
@@ -1253,7 +1317,7 @@ import VaporTesting
                 "The stale rendered copy must be dropped so it reseeds from the saved template")
 
             try await app.asyncTest(
-                .GET, "/testsetups/\(setupID)/notebook/source?view=personalized",
+                .GET, "/testsetups/\(setupID)/notebook/source?view=personalized&edit=1",
                 beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
                 afterResponse: { res in
                     #expect(res.body.string.contains("cohort = "))
@@ -1276,7 +1340,7 @@ import VaporTesting
             _ = try await insertAssignment(testSetupID: setupID, title: "Follow Lab", isOpen: false)
 
             try await app.asyncTest(
-                .GET, "/testsetups/\(setupID)/notebook/source",
+                .GET, "/testsetups/\(setupID)/notebook/source?edit=1",
                 beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
                 afterResponse: { res in #expect(res.body.string.contains("First starter")) })
 
@@ -1284,7 +1348,7 @@ import VaporTesting
             try Data(notebookJSON(markdown: "Second starter").utf8).write(to: URL(fileURLWithPath: notebookPath))
 
             try await app.asyncTest(
-                .GET, "/testsetups/\(setupID)/notebook/source",
+                .GET, "/testsetups/\(setupID)/notebook/source?edit=1",
                 beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
                 afterResponse: { res in
                     #expect(res.body.string.contains("Second starter"))
@@ -1312,7 +1376,7 @@ import VaporTesting
             }
 
             try await app.asyncTest(
-                .GET, "/testsetups/\(setupID)/notebook/source?file=solution",
+                .GET, "/testsetups/\(setupID)/notebook/source?file=solution&edit=1",
                 beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
                 afterResponse: { res in #expect(res.body.string.contains("First solution")) })
 
@@ -1324,7 +1388,7 @@ import VaporTesting
             }
 
             try await app.asyncTest(
-                .GET, "/testsetups/\(setupID)/notebook/source?file=solution",
+                .GET, "/testsetups/\(setupID)/notebook/source?file=solution&edit=1",
                 beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
                 afterResponse: { res in
                     #expect(res.body.string.contains("Second solution"))
@@ -1348,7 +1412,7 @@ import VaporTesting
             _ = try await insertAssignment(testSetupID: setupID, title: "Mtime Lab", isOpen: false)
 
             try await app.asyncTest(
-                .GET, "/testsetups/\(setupID)/notebook/source",
+                .GET, "/testsetups/\(setupID)/notebook/source?edit=1",
                 beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
                 afterResponse: { res in #expect(res.status == .ok) })
 
@@ -1357,7 +1421,7 @@ import VaporTesting
             try FileManager.default.setAttributes([.modificationDate: earlier], ofItemAtPath: copyPath)
 
             try await app.asyncTest(
-                .GET, "/testsetups/\(setupID)/notebook/source",
+                .GET, "/testsetups/\(setupID)/notebook/source?edit=1",
                 beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
                 afterResponse: { res in #expect(res.body.string.contains("Stable starter")) })
 
@@ -1419,7 +1483,7 @@ import VaporTesting
             _ = try await insertAssignment(testSetupID: setupID, title: "Rendered Lab", isOpen: false)
 
             try await app.asyncTest(
-                .GET, "/testsetups/\(setupID)/notebook/source?view=personalized",
+                .GET, "/testsetups/\(setupID)/notebook/source?view=personalized&edit=1",
                 beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
                 afterResponse: { res in #expect(res.body.string.contains("Maria")) })
 
@@ -1431,7 +1495,7 @@ import VaporTesting
             try FileManager.default.setAttributes([.modificationDate: earlier], ofItemAtPath: copyPath)
 
             try await app.asyncTest(
-                .GET, "/testsetups/\(setupID)/notebook/source?view=personalized",
+                .GET, "/testsetups/\(setupID)/notebook/source?view=personalized&edit=1",
                 beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
                 afterResponse: { res in #expect(res.body.string.contains("Maria")) })
 
@@ -1449,7 +1513,7 @@ import VaporTesting
             _ = try await insertAssignment(testSetupID: setupID, title: "Button Lab", isOpen: true)
 
             try await app.asyncTest(
-                .GET, "/testsetups/\(setupID)/notebook",
+                .GET, "/testsetups/\(setupID)/notebook?edit=1",
                 beforeRequest: { req in req.headers.add(name: .cookie, value: staffLogin) },
                 afterResponse: { res in
                     #expect(res.body.string.contains(#"id="nb-save-assignment""#))

@@ -30,7 +30,7 @@ extension DraftAssignmentRoutes {
         let titleParam = storedState.assignmentName.isEmpty ? "Assignment Notebook" : storedState.assignmentName
         return NewAssignmentNotebookContext(
             name: name,
-            editURL: "/testsetups/\(setupID)/notebook?title=\(urlEncode(titleParam))"
+            editURL: "/testsetups/\(setupID)/notebook?edit=1&title=\(urlEncode(titleParam))"
         )
     }
 
@@ -61,7 +61,7 @@ extension DraftAssignmentRoutes {
             ?? URL(fileURLWithPath: draftPath).lastPathComponent
         return NewAssignmentNotebookContext(
             name: name,
-            editURL: "/testsetups/\(setupID)/notebook?file=solution&title=\(urlEncode("Solution Notebook"))"
+            editURL: "/testsetups/\(setupID)/notebook?file=solution&edit=1&title=\(urlEncode("Solution Notebook"))"
         )
     }
 

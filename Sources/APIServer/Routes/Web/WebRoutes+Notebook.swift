@@ -27,6 +27,8 @@ extension WebRoutes {
             /// Vapor's form decoder already accepts `1` / `true` — so there is
             /// no truthiness helper to keep in sync.
             var embedded: Bool?
+            /// `?edit=1` from the instructor area: the editing view.
+            var edit: Bool?
         }
         let user = try req.auth.require(APIUser.self)
         guard let userID = user.id else { throw Abort(.unauthorized) }
@@ -45,6 +47,12 @@ extension WebRoutes {
         // reference solution before its reveal, and who keeps an editable
         // editor on a closed assignment.
         let isStaff = try await req.cachedIsCourseStaff(user, inCourse: setup.courseID)
+        // This page is the student view, the same for everyone: staff
+        // test-submit here as a student does. Staff edit the notebooks only
+        // in the editing view (`?edit=1`, linked from the instructor area)
+        // and in the workbench pane. `?view=` is the editing view's own
+        // template switch, so it names the editing view too.
+        let isAuthor = isStaff && (query.edit == true || query.view != nil)
         let assignment = try await assignmentByTestSetupID(setupID, on: req.db)
         // The reference solution is staff-only until the assignment's reveal
         // policy and this student's own gate admit them
@@ -61,11 +69,10 @@ extension WebRoutes {
         // the upload form instead of scaffolding an empty editor (the vanity
         // URL lands on this page, so this redirect is what makes a shared
         // assignment link work for upload labs).  The mirror of `submitForm`'s
-        // browser-mode redirect in the other direction.  Staff keep the page —
-        // the workbench hosts its authoring panes in it — and past-submission
-        // views (`?submissionID=`) stay reachable so an uploaded `.ipynb` can
-        // still be reviewed read-only.
-        if !isStaff,
+        // browser-mode redirect in the other direction.  The editing view
+        // keeps the page, and past-submission views (`?submissionID=`) stay
+        // reachable so an uploaded `.ipynb` can still be reviewed read-only.
+        if !isAuthor,
             (query.submissionID ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
             let manifest = decodeManifest(from: Data(setup.manifest.utf8)),
             // `effectiveSubmissionMode`, not the stored value: an assignment in
@@ -79,7 +86,7 @@ extension WebRoutes {
         let queryTitle = (query.title ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         let viewMode = try await resolveNotebookViewMode(
             req: req, setup: setup, assignment: assignment,
-            fileKind: fileKind, isStaff: isStaff, requested: query.view)
+            fileKind: fileKind, isStaff: isAuthor, requested: query.view)
         // Treat an assignment as closed for read-only display whenever it is
         // not effectively open *for this user* — the per-user check honors a
         // deadline extension granted to the current student, so an extended
@@ -135,7 +142,8 @@ extension WebRoutes {
             assignment: assignment,
             assignmentTitle: assignmentTitle,
             isClosed: isClosed,
-            isStaff: isStaff,
+            isAuthor: isAuthor,
+            isPractice: isStaff && !isAuthor,
             viewMode: viewMode,
             // `?embedded=1` is a rendering hint from the workbench shell, not a
             // permission: every gate above (solution-is-staff-only, the closed
@@ -198,10 +206,14 @@ extension WebRoutes {
             throw Abort(.badRequest, reason: "This assignment has no starter notebook to reset to.")
         }
 
+        // Staff reset their copy on the student view, never their authoring copy.
+        let isStaff = try await req.cachedIsCourseStaff(user, inCourse: setup.courseID)
         _ = try await overwriteUserNotebookWithPersonalizedStarter(
             setup: setup,
             userID: userID,
             starter: starter,
+            relativePath: studentViewWorkingCopyRelativePath(
+                setupID: setupID, userID: userID, fileKind: .assignment, isStaff: isStaff),
             on: req.db, application: req.application, logger: req.logger
         )
 
@@ -276,7 +288,7 @@ extension WebRoutes {
                 currentUser: req.currentUserContext,
                 embedded: args.embedded,
                 kernelLanguage: NotebookBootFacts.kernelLanguage(manifestJSON: setup.manifest),
-                bootBird: NotebookBootFacts.bird(avatarSpecJSON: args.user.avatarSpecJSON, isStaff: args.isStaff),
+                bootBird: NotebookBootFacts.bird(avatarSpecJSON: args.user.avatarSpecJSON, isStaff: args.isAuthor),
                 dueLabel: args.assignment?.dueAt.map { waterlooDateTimeFormatter().string(from: $0) },
                 definitionPatterns: NotebookBootFacts.definitionPatterns(manifestJSON: setup.manifest)
             ))
@@ -322,10 +334,14 @@ extension WebRoutes {
         let assignment = args.assignment
         let userSlug = userID.uuidString.lowercased()
         let viewMode = args.viewMode
-        let workingCopyPath = userNotebookWorkingCopyRelativePath(
-            setupID: setupID, userID: userID, fileKind: fileKind, viewMode: viewMode)
+        let workingCopyPath =
+            args.isAuthor
+            ? userNotebookWorkingCopyRelativePath(
+                setupID: setupID, userID: userID, fileKind: fileKind, viewMode: viewMode)
+            : studentViewWorkingCopyRelativePath(
+                setupID: setupID, userID: userID, fileKind: fileKind, isStaff: args.isPractice)
         let seed = try await workingCopySeed(
-            req: req, setup: setup, assignment: assignment, fileKind: fileKind, isStaff: args.isStaff)
+            req: req, setup: setup, assignment: assignment, fileKind: fileKind, isStaff: args.isAuthor)
         _ = try await ensureUserNotebookWorkingCopy(
             setupID: setupID,
             userID: userID,
@@ -343,11 +359,13 @@ extension WebRoutes {
         // The workspace id carries the view mode so JupyterLite keeps a
         // separate layout (and IndexedDB copy) per view — switching to the
         // template must not surface the rendered copy from cache.
-        let workspaceID = "\(setupID)-\(userSlug)-\(fileKind.rawValue)-\(viewMode.rawValue)"
+        let workspaceID =
+            "\(setupID)-\(userSlug)-\(fileKind.rawValue)-\(viewMode.rawValue)" + (args.isPractice ? "-practice" : "")
         let editorURL = "/jupyterlite/notebooks/index.html?workspace=\(workspaceID)&reset=&path=\(encodedPath)"
+        // `edit=1` keeps the content fetch on the same copy as the frame.
         let notebookURL =
             "/testsetups/\(setupID)/notebook/source"
-            + "?file=\(fileKind.rawValue)&view=\(viewMode.rawValue)"
+            + "?file=\(fileKind.rawValue)&view=\(viewMode.rawValue)" + (args.isAuthor ? "&edit=1" : "")
         let links = try await notebookFileLinks(req: req, args: args, fileKind: fileKind)
 
         let workingCopyAbsPath =
@@ -359,14 +377,14 @@ extension WebRoutes {
         // cloned assignment starts closed, so the old blanket lock made the
         // starter and solution notebooks uneditable for exactly the window in
         // which they are being written.  Submission is gated separately:
-        // `showSubmit` follows `isClosed`, and staff never get it.
-        let isReadOnly = args.isClosed && !args.isStaff
+        // `showSubmit` follows `isClosed`, and the editing view never has it.
+        let isReadOnly = args.isClosed && !args.isAuthor
         // Staff can write the open notebook back to the assignment
         // (`POST /testsetups/:id/notebook/save`).  Mirrors that endpoint's own
         // gate — TA+ on a course that isn't archived — so the button is absent
         // rather than failing when the course is read-only.
         var canSaveToAssignment = false
-        if args.isStaff {
+        if args.isAuthor {
             let denial = try await evaluateCourseWrite(
                 user: args.user, courseID: setup.courseID, atLeast: .ta, db: req.db)
             canSaveToAssignment = denial == nil
@@ -380,7 +398,7 @@ extension WebRoutes {
         let canSwitchViews: Bool
         if viewMode == .template {
             canSwitchViews = true
-        } else if args.isStaff {
+        } else if args.isAuthor {
             canSwitchViews = await notebookHasPlaceholders(
                 req: req, setup: setup, assignment: assignment, fileKind: fileKind)
         } else {
@@ -388,7 +406,7 @@ extension WebRoutes {
         }
         let otherView: NotebookViewMode = viewMode == .template ? .personalized : .template
         var aiFeedbackNotice = false
-        if !args.isStaff, fileKind == .assignment, let assignment {
+        if !args.isAuthor, fileKind == .assignment, let assignment {
             aiFeedbackNotice = try await ReflectionFeedbackService.gatesOpen(assignment, on: req.db)
         }
         let viewToggleURL: String? =
@@ -405,10 +423,10 @@ extension WebRoutes {
             browserUnsupported: SupportedBrowserMatrix.assess(req).tier == .unsupported,
             // A template still holds `{{name}}`, which does not run and
             // would fail every test, so Submit belongs to the rendered
-            // view only.  Staff never get Submit here: beside "Save to
-            // assignment" it reads as a second save.  Staff see what a
-            // student gets through the workbench's "Preview as student".
-            showSubmit: fileKind == .assignment && !args.isClosed && viewMode == .personalized && !args.isStaff,
+            // view only.  The editing view has no Submit: beside "Save to
+            // assignment" it reads as a second save.  Staff test-submit from
+            // the student view, as a student does.
+            showSubmit: fileKind == .assignment && !args.isClosed && viewMode == .personalized && !args.isAuthor,
             isClosed: args.isClosed,
             isReadOnly: isReadOnly,
             canSaveToAssignment: canSaveToAssignment,
@@ -416,13 +434,13 @@ extension WebRoutes {
             isTemplateView: viewMode == .template,
             viewToggleURL: viewToggleURL,
             solutionViewURL: links.solutionViewURL,
-            isStudentSolutionView: fileKind == .solution && !args.isStaff,
+            isStudentSolutionView: fileKind == .solution && !args.isAuthor,
             workingCopyMtime: workingCopyMtimeEpoch(absolutePath: workingCopyAbsPath),
             currentUser: req.currentUserContext,
             embedded: args.embedded,
             aiFeedbackNotice: aiFeedbackNotice,
             kernelLanguage: NotebookBootFacts.kernelLanguage(manifestJSON: setup.manifest),
-            bootBird: NotebookBootFacts.bird(avatarSpecJSON: args.user.avatarSpecJSON, isStaff: args.isStaff),
+            bootBird: NotebookBootFacts.bird(avatarSpecJSON: args.user.avatarSpecJSON, isStaff: args.isAuthor),
             dueLabel: args.assignment?.dueAt.map { waterlooDateTimeFormatter().string(from: $0) },
             definitionPatterns: NotebookBootFacts.definitionPatterns(manifestJSON: setup.manifest)
         )
@@ -478,7 +496,8 @@ extension WebRoutes {
             assignment: assignment,
             assignmentTitle: dbTitle.isEmpty ? "Assignment" : dbTitle,
             isClosed: isClosed,
-            isStaff: isStaff,
+            isAuthor: isStaff,
+            isPractice: false,
             viewMode: viewMode,
             embedded: true
         )
@@ -496,10 +515,16 @@ extension WebRoutes {
         let assignment: APIAssignment?
         let assignmentTitle: String
         let isClosed: Bool
-        /// Whether the viewer is staff (TA+ or admin) of this setup's course.
-        /// Staff author content in this editor, so they are never locked out
-        /// of the assignment / solution notebook by the closed state.
-        let isStaff: Bool
+        /// Whether the viewer is staff (TA+ or admin) of this setup's course
+        /// and opened the editing view or a workbench pane. Authors are never
+        /// locked out of the assignment / solution notebook by the closed
+        /// state, and only they can save it back to the assignment.
+        let isAuthor: Bool
+        /// Staff on the student view: they work in a copy of their own
+        /// (`staffPracticeWorkingCopyRelativePath`), apart from the authoring
+        /// copy that a save writes back, so a test attempt never reaches a
+        /// save.
+        let isPractice: Bool
         /// Which reading of the notebook to put in the editor — the author's
         /// template or a per-viewer rendering.  Always `.personalized` for
         /// students and for the submission-history view.
@@ -529,13 +554,13 @@ extension WebRoutes {
             return switch fileKind {
             case .assignment: "/api/v1/testsetups/\(args.setupID)/assignment/download"
             case .solution:
-                args.isStaff
+                args.isAuthor
                     ? "/instructor/\(assignment.publicID)/files/solution"
                     : "/testsetups/\(args.setupID)/solution/download"
             }
         }()
         var solutionViewURL: String?
-        if !args.isStaff, fileKind == .assignment, let assignment = args.assignment,
+        if !args.isAuthor, fileKind == .assignment, let assignment = args.assignment,
             try await solutionVisibleToStudent(assignment: assignment, user: args.user, on: req.db)
         {
             solutionViewURL = "/testsetups/\(args.setupID)/notebook?file=solution"
@@ -658,6 +683,7 @@ extension WebRoutes {
             var file: String?
             var view: String?
             var submissionID: String?
+            var edit: Bool?
         }
         let user = try req.auth.require(APIUser.self)
         guard let userID = user.id else { throw Abort(.unauthorized) }
@@ -717,18 +743,24 @@ extension WebRoutes {
         // Same resolution as the page, so the editor's frame and its content
         // fetch never disagree about which copy is open — and so a student
         // asking for `?view=template` by hand still gets their rendering.
+        // Only `edit=1`, not `view=`: the page adds `edit=1` to every
+        // content URL it builds for the editing view.
+        let isAuthor = isStaff && query.edit == true
         let viewMode = try await resolveNotebookViewMode(
             req: req, setup: setup, assignment: assignment,
-            fileKind: fileKind, isStaff: isStaff, requested: query.view)
+            fileKind: fileKind, isStaff: isAuthor, requested: query.view)
         let seed = try await workingCopySeed(
-            req: req, setup: setup, assignment: assignment, fileKind: fileKind, isStaff: isStaff)
+            req: req, setup: setup, assignment: assignment, fileKind: fileKind, isStaff: isAuthor)
 
         let payload = try await ensureUserNotebookWorkingCopy(
             setupID: setupID,
             userID: userID,
             fallbackSetup: setup,
-            relativePath: userNotebookWorkingCopyRelativePath(
-                setupID: setupID, userID: userID, fileKind: fileKind, viewMode: viewMode),
+            relativePath: isAuthor
+                ? userNotebookWorkingCopyRelativePath(
+                    setupID: setupID, userID: userID, fileKind: fileKind, viewMode: viewMode)
+                : studentViewWorkingCopyRelativePath(
+                    setupID: setupID, userID: userID, fileKind: fileKind, isStaff: isStaff),
             defaultData: seed.data,
             refreshFromSeed: seed.refresh,
             viewMode: viewMode,

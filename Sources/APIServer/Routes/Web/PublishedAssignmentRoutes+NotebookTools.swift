@@ -203,6 +203,8 @@ extension PublishedAssignmentRoutes {
             overwriteWith: normalized, on: req.db, application: req.application, logger: req.logger)
 
         return req.redirect(
-            to: "/testsetups/\(assignment.testSetupID)/notebook?file=solution&title=\(urlEncode("Solution Notebook"))")
+            to:
+                "/testsetups/\(assignment.testSetupID)/notebook?file=solution&edit=1&title=\(urlEncode("Solution Notebook"))"
+        )
     }
 }

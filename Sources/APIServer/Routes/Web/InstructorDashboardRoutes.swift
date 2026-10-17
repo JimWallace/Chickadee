@@ -609,11 +609,11 @@ struct InstructorDashboardRoutes: RouteCollection {
             currentAssignmentFile: currentFiles.assignmentFile.name,
             currentAssignmentURL: currentFiles.assignmentFile.url,
             assignmentNotebookEditURL:
-                "/testsetups/\(assignment.testSetupID)/notebook?title=\(urlEncode(assignment.title))",
+                "/testsetups/\(assignment.testSetupID)/notebook?edit=1&title=\(urlEncode(assignment.title))",
             currentSolutionFile: currentFiles.solutionFile?.name,
             currentSolutionURL: currentFiles.solutionFile?.url,
             solutionNotebookEditURL: currentFiles.solutionFile != nil
-                ? "/testsetups/\(assignment.testSetupID)/notebook?file=solution&title=\(urlEncode("Solution Notebook"))"
+                ? "/testsetups/\(assignment.testSetupID)/notebook?file=solution&edit=1&title=\(urlEncode("Solution Notebook"))"
                 : nil,
             existingSuiteRows: currentFiles.existingSuiteRows.filter { $0.tier != "support" },
             supportFileRows: currentFiles.existingSuiteRows.filter { $0.tier == "support" },
