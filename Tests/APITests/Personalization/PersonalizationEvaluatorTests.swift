@@ -10,7 +10,7 @@ import Testing
 
 @testable import APIServer
 
-@Suite struct PersonalizationEvaluatorTests {
+@Suite(.timeLimit(.minutes(2))) struct PersonalizationEvaluatorTests {
 
     // MARK: - Driver-script rendering
 
@@ -176,6 +176,37 @@ import Testing
             """#.utf8)
         let decoded = try JSONDecoder().decode(TestProperties.self, from: json)
         #expect(decoded.globalExpressions.isEmpty)
+    }
+
+    // MARK: - The evaluator does not leak the server's environment
+
+    @Test func evaluator_doesNotLeakServerEnvironmentSecrets() async throws {
+        // The secret is supplied through `EnvironmentSource`, not `setenv`, and
+        // the test is exactly as strong for it: `spawnAndCapture` builds the
+        // child's environment from `EnvironmentSource.all` and an allowlist, so
+        // a variable injected here reaches the same code path a real parent
+        // variable would, and must still be excluded from the child.
+        try await withTestEnvironment(["CHICKADEE_AUDIT_FAKE_SECRET": "super-secret-value"]) {
+            let result = try await PersonalizationEvaluator.evaluate(
+                seedHex: "00ff",
+                staticVariables: [],
+                expressions: [
+                    PersonalizationExpression(
+                        name: "leaked",
+                        expression:
+                            "__import__('os').environ.get('CHICKADEE_AUDIT_FAKE_SECRET', 'LEAK_BLOCKED')"),
+                    PersonalizationExpression(name: "shift", expression: "seed % 7"),
+                ], language: .python
+            )
+
+            // The instructor expression cannot read the server's secret env var:
+            // the subprocess gets an allowlisted env, not the inherited one.
+            #expect(result["leaked"] == "'LEAK_BLOCKED'")
+            #expect(result["leaked"]?.contains("super-secret-value") == false)
+            // The interpreter still starts (PATH is allowlisted), so the
+            // seed-derived expression still evaluates (0x00ff % 7 == 3).
+            #expect(result["shift"] == "3")
+        }
     }
 }
 

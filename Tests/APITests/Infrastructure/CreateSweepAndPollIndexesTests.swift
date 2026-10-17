@@ -1,9 +1,12 @@
+// Tests/APITests/Infrastructure/CreateSweepAndPollIndexesTests.swift
+
 import Testing
 
 @testable import APIServer
 
-/// The list names every table the five issues named, and nothing else.
-@Suite struct CreateSweepAndPollIndexesListTests {
+/// `CreateSweepAndPollIndexes` indexes every sweep and poll table that the
+/// five issues behind it named, and nothing else.
+@Suite struct CreateSweepAndPollIndexesTests {
     @Test func theListCoversEveryTableTheIssuesNamed() {
         let tables = Set(CreateSweepAndPollIndexes.indexes.map { $0.on.prefix { $0 != "(" } })
         #expect(

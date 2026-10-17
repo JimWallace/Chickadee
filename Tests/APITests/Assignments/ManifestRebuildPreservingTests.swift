@@ -6,6 +6,7 @@
 // eventually forgot one. This pins the fields that were each lost once.
 
 import Core
+import Foundation
 import Testing
 
 @testable import APIServer
@@ -120,5 +121,52 @@ import Testing
                 ],
                 language: nil)
         }
+    }
+
+    // MARK: - Script add and delete keep the achievements
+
+    /// A manifest carrying one authored badge, one disabled built-in award and
+    /// the curated flag: the fields the suite-rebuild wrappers once dropped
+    /// (achievements audit A3).
+    private func manifestWithAchievements() throws -> String {
+        let props = TestProperties(
+            testSuites: [TestSuiteEntry(tier: .pub, script: "test_a.sh")],
+            language: nil,
+            achievements: [
+                Achievement(
+                    id: "custom_badge", name: "Custom", scope: .individual,
+                    conditions: [
+                        AchievementCondition(signal: .grade, comparator: .atLeast, value: 90)
+                    ],
+                    reward: AchievementReward(type: .badge, label: "Custom"))
+            ],
+            disabledBuiltInAwardIDs: ["speed_demon"],
+            builtInAchievementsSeeded: true)
+        let data = try JSONEncoder().encode(props)
+        return try #require(String(bytes: data, encoding: .utf8))
+    }
+
+    @Test func addingScriptPreservesAchievementsAndToggles() throws {
+        let entry = ConfiguredSuiteEntry(
+            script: "test_b.sh", tier: "public", order: 2,
+            dependsOn: [], points: 1, displayName: nil)
+        let updated = try #require(
+            updateManifestAddingScript(manifestJSON: manifestWithAchievements(), entry: entry))
+        let props = try JSONDecoder().decode(TestProperties.self, from: Data(updated.utf8))
+        #expect(props.testSuites.count == 2)
+        #expect(props.achievements.map(\.id) == ["custom_badge"])
+        #expect(props.disabledBuiltInAwardIDs == ["speed_demon"])
+        #expect(props.builtInAchievementsSeeded)
+    }
+
+    @Test func removingScriptPreservesAchievementsAndToggles() throws {
+        let updated = try #require(
+            updateManifestRemovingScript(
+                manifestJSON: try manifestWithAchievements(), filename: "test_a.sh"))
+        let props = try JSONDecoder().decode(TestProperties.self, from: Data(updated.utf8))
+        #expect(props.testSuites.isEmpty)
+        #expect(props.achievements.map(\.id) == ["custom_badge"])
+        #expect(props.disabledBuiltInAwardIDs == ["speed_demon"])
+        #expect(props.builtInAchievementsSeeded)
     }
 }

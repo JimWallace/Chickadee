@@ -375,4 +375,32 @@ import Testing
         #expect(sanitized.globalVariables.count == 1)
         #expect(sanitized.globalVariables[0].name == "x")
     }
+
+    // MARK: - A pattern-family argument may reference a global input
+
+    @Test func validator_acceptsGlobalVariableArgRef() throws {
+        let family = PatternFamily(
+            id: "greet", name: "Greeting", kind: .boundaryEquality,
+            functionName: "greet", paramNames: ["name"],
+            defaults: PatternDefaults(tier: .pub, points: 1, hint: nil),
+            cases: [
+                PatternCase(
+                    key: "01", label: "uses global roster name",
+                    args: [.string("placeholder")], expected: .string("hi"),
+                    argVarRefs: ["roster_name"])
+            ]
+        )
+
+        // Rejected when the referenced name is not a known family, section or
+        // global variable.
+        #expect(throws: (any Error).self) {
+            try validatePatternFamilies([family], testSuites: [], language: .python)
+        }
+        // Accepted once it is declared as an assignment-scope global input,
+        // which is what the renderer actually puts in scope.
+        #expect(throws: Never.self) {
+            try validatePatternFamilies(
+                [family], testSuites: [], language: .python, globalVariableNames: ["roster_name"])
+        }
+    }
 }

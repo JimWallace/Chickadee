@@ -6,6 +6,7 @@
 // the exact legacy conditions + id→record mapping.
 
 import Core
+import Foundation
 import Testing
 
 @testable import APIServer
@@ -99,5 +100,63 @@ import Testing
         #expect(AchievementBadge.forClassAchievement("minimalist")?.label == "Minimalist")
         #expect(AchievementBadge.forClassAchievement("pathfinder")?.label == "Pathfinder")
         #expect(AchievementBadge.forClassAchievement("not_a_record") == nil)
+    }
+
+    // MARK: - A curated manifest suppresses the registry fallback
+
+    private func setup(withProps props: TestProperties) throws -> APITestSetup {
+        let data = try JSONEncoder().encode(props)
+        return APITestSetup(
+            id: "afr_setup",
+            manifest: try #require(String(bytes: data, encoding: .utf8)),
+            zipPath: "/tmp/afr.zip",
+            courseID: UUID())
+    }
+
+    /// A seeded manifest with no per-submission badges or records awards no
+    /// built-in (achievements audit A5).
+    @Test func curatedEmptyManifestAwardsNoBuiltIns() throws {
+        let curated = TestProperties(language: nil, achievements: [], builtInAchievementsSeeded: true)
+        // Must be a non-nil empty list — nil would mean "fall back to the registry".
+        let perSubmission = BuiltInAchievements.manifestPerSubmission(props: curated)
+        #expect(perSubmission?.isEmpty == true)
+        let curatedSetup = try setup(withProps: curated)
+        #expect(BuiltInAchievements.classRecordsForAward(in: curatedSetup, disabled: []).isEmpty)
+    }
+
+    @Test func unseededManifestStillFallsBackToRegistry() throws {
+        let unseeded = TestProperties(language: nil)
+        #expect(BuiltInAchievements.manifestPerSubmission(props: unseeded) == nil)
+        let unseededSetup = try setup(withProps: unseeded)
+        let records = BuiltInAchievements.classRecordsForAward(in: unseededSetup, disabled: [])
+        #expect(records.map(\.id).contains("trailblazer"))
+    }
+
+    // MARK: - A manifest-authored record resolves to its badge
+
+    /// Achievements audit A6.
+    @Test func customRecordResolvesToItsAuthoredBadge() {
+        let custom = Achievement(
+            id: "first_diagnosis", name: "First Diagnosis",
+            detail: "First to a working classifier.",
+            scope: .record,
+            reward: AchievementReward(type: .title, label: "First Diagnosis"),
+            recordDimension: .firstToSolve)
+        let badge = AchievementBadge.forClassAchievement(
+            "first_diagnosis", manifestAchievements: [custom])
+        #expect(badge?.label == "First Diagnosis")
+        #expect(badge?.tooltip == "First to a working classifier.")
+        // A renamed built-in id shows the instructor's name, not the registry's.
+        let renamed = Achievement(
+            id: "trailblazer", name: "First Course",
+            scope: .record,
+            reward: AchievementReward(type: .title, label: "First Course"),
+            recordDimension: .firstToSolve)
+        #expect(
+            AchievementBadge.forClassAchievement(
+                "trailblazer", manifestAchievements: [renamed])?.label == "First Course")
+        // Registry fallback still works, unknown IDs still return nil.
+        #expect(AchievementBadge.forClassAchievement("trailblazer")?.label == "Trailblazer")
+        #expect(AchievementBadge.forClassAchievement("no_such_id") == nil)
     }
 }
