@@ -1,8 +1,8 @@
 // APIServer/Views/WorkbenchAppBar.swift
 //
 // The workbench's app bar (notebook views NB6, design frame 18c): the title
-// and its ✎, the due date and the language, the view switch, the validation
-// pill, the save state and Save & validate.
+// and its ✎, the due date and the language, the view switch (with Preview as
+// student, NB6b), the validation pill, the save state and Save & validate.
 
 import Elementary
 
@@ -73,13 +73,19 @@ struct WorkbenchAppBar: HTML {
             }
             " "
             fileButton("Starter", file: "assignment")
+            if !facts.previewStudents.isEmpty {
+                " "
+                WorkbenchPreviewMenu(students: facts.previewStudents, previewed: facts.previewed)
+            }
         }
     }
 
+    /// Pressed when its notebook is open as written. A preview is the
+    /// starter as one student gets it, so it presses neither.
     private func fileButton(_ label: String, file: String) -> some HTML {
         button(
             .class("btn action-btn wb-view"), .type(.button), .data("wb-target-file", value: file),
-            .custom(name: "aria-pressed", value: openFile == file ? "true" : "false")
+            .custom(name: "aria-pressed", value: openFile == file && facts.previewed == nil ? "true" : "false")
         ) { label }
     }
 

@@ -79,8 +79,10 @@ extension WebRoutes {
     }
 
     /// What the builder reads from disk: the solution's definitions, this
-    /// student's personalized starter and the hand-written scripts.
-    private func guideInputs(
+    /// student's personalized starter and the hand-written scripts. The
+    /// workbench preview (NB6b) reads the same inputs for the student it
+    /// shows.
+    func guideInputs(
         req: Request, setup: APITestSetup, manifest: TestProperties, userID: UUID
     ) async throws -> (solution: NotebookDefinitionScan, starter: Data?, scripts: [String: String]) {
         let language = AssignmentLanguage.resolve(manifest: manifest)

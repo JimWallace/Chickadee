@@ -179,3 +179,22 @@ export async function seedInstructorAssignment(baseURL, { notebook, files, manif
   await instr.dispose();
   return { setupID, assignmentID, storageState };
 }
+
+/// Registers a student and signs them in once, so the auto-enrolling course
+/// that `seedInstructorAssignment` made enrolls them. Returns their username.
+export async function registerStudent(baseURL) {
+  const student = { username: `e2e_pv_${Date.now().toString(36)}`, password: "student-pw-123" };
+  const stud = await pwRequest.newContext({ baseURL });
+  let csrf = await csrfFrom(stud, "/register");
+  await expectOK(
+    "register student",
+    stud.post("/register", { form: { ...student, _csrf: csrf }, maxRedirects: 0 }),
+    [200, 302, 303]);
+  csrf = await csrfFrom(stud, "/login");
+  await expectOK(
+    "login student",
+    stud.post("/login", { form: { ...student, _csrf: csrf }, maxRedirects: 0 }),
+    [200, 302, 303]);
+  await stud.dispose();
+  return student.username;
+}

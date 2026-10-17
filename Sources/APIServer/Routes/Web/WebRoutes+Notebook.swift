@@ -640,7 +640,7 @@ extension WebRoutes {
     /// assignment must never boot the browser runner, whatever an imported
     /// manifest claims.  Falls back to `.browser` whenever the manifest can't
     /// be decoded.
-    private func decodeManifestGradingMode(_ setup: APITestSetup) -> String {
+    func decodeManifestGradingMode(_ setup: APITestSetup) -> String {
         let data = Data(setup.manifest.utf8)
         guard let manifest = decodeManifest(from: data) else {
             return GradingMode.browser.rawValue

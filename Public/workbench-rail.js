@@ -147,8 +147,17 @@
         var outline = null;
         var sentToEditor = false;
 
+        // A preview of a student's notebook (NB6b) shows what the student
+        // sees, so it gets no test cards. Its editor frame names the
+        // preview's guide.
+        var isPreview = function () {
+            var frame = document.getElementById('jl-frame');
+            var url = frame && frame.getAttribute('data-guide-url');
+            return !!url && url.indexOf('/preview-guide.json') !== -1;
+        };
+
         var sendSuite = function () {
-            if (!outline) return;
+            if (!outline || isPreview()) return;
             sentToEditor = true;
             void execute('chickadee:set-suite', { suite: outline });
         };

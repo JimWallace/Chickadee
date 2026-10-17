@@ -1544,7 +1544,20 @@ body:has(.notebook-header .nb-title-block) .nav {
 .wb-save-status { font-size: var(--text-sm); color: var(--text-secondary); }
 .wb-issues[data-tone="err"] { background: var(--danger-bg); color: var(--danger-fg); }
 .wb-issues[data-tone="warn"] { background: var(--preview-bg); color: var(--preview-fg); }
-.wb-view[aria-pressed="true"] { background: var(--health-teal); color: var(--surface); }
+.wb-view[aria-pressed="true"],
+.wb-view[aria-checked="true"] { background: var(--health-teal); color: var(--surface); }
+/* Preview as student (NB6b): a class can be long, so the list scrolls, and a
+   long name is cut in the menu button's label (its title holds the whole
+   name). */
+.wb-preview-panel { max-height: 60vh; overflow-y: auto; }
+.wb-preview-label {
+    display: inline-block;
+    max-width: 14rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    vertical-align: bottom;
+}
 .wb-rail-toggle { display: none; }
 .wb-body {
     position: relative;

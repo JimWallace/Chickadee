@@ -287,6 +287,7 @@ import VaporTesting
         "PUT /instructor/:assignmentID/suite": .ta,
         "GET /instructor/:assignmentID/suite-outline.json": .ta,
         "PUT /instructor/:assignmentID/suite-anchor": .ta,
+        "GET /instructor/:assignmentID/preview-guide.json": .ta,
         "PUT /instructor/:assignmentID/time-limit": .ta,
         "POST /instructor/:assignmentID/suite-sections": .ta,
         "POST /instructor/:assignmentID/suite-sections/reorder": .ta,

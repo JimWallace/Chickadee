@@ -46,6 +46,8 @@ GET  /instructor/:assignmentID/suite-outline.json — Staff only: the suite by
                                           section, anchors, solution results
 PUT  /instructor/:assignmentID/suite-anchor — TA and above: pin a hand-written
                                           test to a cell name ({script, anchor|null})
+GET  /instructor/:assignmentID/preview-guide.json?as=<token> — TA and above:
+                                          a student's guide with no attempt (NB6b)
 ```
 
 Web routes (Elementary views, session auth required) live under `/` and handle

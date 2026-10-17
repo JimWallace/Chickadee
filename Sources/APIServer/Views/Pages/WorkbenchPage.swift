@@ -47,6 +47,10 @@ struct WorkbenchPage: HTML {
         var fileCount: Int
         var inputCount: Int
         var achievementCount: Int
+        /// The students Preview as student lists (NB6b).
+        var previewStudents: [WorkbenchPreviewStudent] = []
+        /// The student the notebook shows, or nil for the author's notebooks.
+        var previewed: WorkbenchPreviewStudent?
     }
 
     var body: some HTML {
@@ -92,6 +96,13 @@ struct WorkbenchPage: HTML {
         }
     }
 
+    /// The pane's view key: `template`, `personalized`, or `student:<token>`
+    /// for a preview. workbench.js reads it to know what is open.
+    private func paneView(_ notebook: NotebookBody) -> String {
+        if let previewed = facts.previewed { return "student:\(previewed.token)" }
+        return notebook.isTemplateView ? "template" : "personalized"
+    }
+
     /// The notebook body, or the stand-in when the assignment has no notebook
     /// yet. One notebook at a time: switching file or view swaps this in place,
     /// looked up in `data-wb-pane-urls`.
@@ -99,7 +110,7 @@ struct WorkbenchPage: HTML {
         if let notebook {
             div(
                 .class("wb-notebook-body wb-scroll"), .data("wb-file", value: notebook.fileKind),
-                .data("wb-view", value: notebook.isTemplateView ? "template" : "personalized")
+                .data("wb-view", value: paneView(notebook))
             ) {
                 notebook
             }

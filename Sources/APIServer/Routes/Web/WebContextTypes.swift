@@ -360,6 +360,10 @@ struct NotebookContext: Encodable {
     var dueLabel: String?
     /// The patterns the editor extension reads defined names with.
     var definitionPatterns: [String] = []
+    /// The guide of the student whose notebook a workbench preview shows
+    /// (notebook views NB6b), or nil. A student's own notebook reads its
+    /// guide from `/testsetups/:id/notebook-guide.json` instead.
+    var previewGuideURL: String?
 }
 
 // MARK: - Submission history page
