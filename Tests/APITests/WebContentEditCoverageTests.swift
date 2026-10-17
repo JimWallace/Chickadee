@@ -73,6 +73,8 @@ import Testing
         "retestAllSubmissions",
         // Computes a value for the editor and writes nothing.
         "computeExpectedValue",
+        // Pins a test to a cell; grading never reads the pin (notebook views NB7).
+        "putSuiteAnchor",
         // Scaffolds a draft solution in the author's working copy.
         "createSolutionFromAssignment",
         // The copy lands closed and unvalidated; mirrors `clone_assignment`.
