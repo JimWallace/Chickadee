@@ -415,6 +415,7 @@ body[data-ck-theme] .ck-add { align-self: flex-start; color: var(--jp-brand-colo
 body[data-ck-theme] [data-status="pass"] > .ck-glyph,
 body[data-ck-theme] .ck-glyph[data-status="pass"] { background: var(--ck-pass-bg); color: var(--ck-pass-fg); }
 body[data-ck-theme] .ck-glyph[data-status="fail"] { background: var(--ck-fail-bg); color: var(--ck-fail-fg); }
+body[data-ck-theme] .ck-glyph[data-status="starter"] { background: var(--ck-starter-bg); color: var(--ck-starter-fg); }
 /* The selected test fails on the solution: its cell is outlined. */
 body[data-ck-theme] .ck-cell-failing .jp-InputArea-editor { outline: 2px solid var(--ck-fail-fg); outline-offset: 1px; }
 /* Pin to a cell: the next click on a code cell is the pick. */

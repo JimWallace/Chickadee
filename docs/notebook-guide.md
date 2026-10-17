@@ -146,16 +146,51 @@ draws it, and the margin cards (NB7) read it.
 
 | Field | Contents |
 |---|---|
-| `validation` | The assignment's `validationStatus`, the time of the last solution run, and the `issues`: one `failsOnSolution` for each item that does not pass on the solution. |
+| `validation` | The assignment's `validationStatus`, the time of the last solution run, and the `issues`: one `failsOnSolution` for each item that does not pass on the solution, then one `passesOnStarter` for each item worth points that passes on the solution and on the starter. Also `starterRunAt` and, when the starter did not run, `starterError`. |
 | `totals` | The number of suite items and their points. |
 | `sections` | One section for each suite section, in order, then the items in no section (`id` null). Each has its `title`, `label` and `points`, and the items that link to a cell. |
-| `sections[].items` | Each item: its `id` (the script filename), `name`, `kind` (`check`, `family` or `script`), `checkKind`, `tier`, `points`, `anchor` and `solution` result. |
+| `sections[].items` | Each item: its `id` (the script filename), `name`, `kind` (`check`, `family` or `script`), `checkKind`, `tier`, `points`, `anchor`, and its `solution` and `starter` results. A generated item has its `generatorID`, and a hand-written one its `source`. |
 | `unlinked` | The items that link to no cell, from any section. |
 
 The anchors use the rules in "Anchors" above. They read the solution, or the
 starter when there is no solution yet. `anchor.source` is `pinned` for a
-pinned item (rule 1), else `auto`. The `solution` result comes from the last validation run, and is null
-before one. NB8 adds the starter run.
+pinned item (rule 1), else `auto`. The `solution` result comes from the last
+validation run, and the `starter` result from the last starter run. Each is
+null before its run.
+
+## The starter run
+
+Validation runs the solution against the suite. From NB8 it also runs the
+**starter**, the assignment notebook that a student opens, with the same seed
+(`StarterValidationRun`). A test worth points that passes on the starter gives
+those points for no work, so the workbench flags it.
+
+- **When.** Each validation queues a starter run after the solution run: Save
+  & validate, a suite edit, and the MCP tools that validate. A runner claims it
+  after every solution run. A later save replaces a starter run that no runner
+  holds yet, so a series of saves leaves one run in the queue.
+- **The gate does not change.** `validationStatus` is the solution run's
+  verdict, and only that verdict blocks opening. The starter run only warns.
+- **Issues.** A test that fails on the solution is red. A test worth points
+  that passes on the solution and on the starter is amber: "Passes on the
+  starter too, so it earns its point with no work". A test worth no points is
+  not flagged. "Not linked to a cell" is information, not an issue.
+- **A starter that did not run** flags nothing. It did not run when it does not
+  build, when no test ran, or when every test errors (a syntax error in the
+  starter, for example). The note beside the pill then says "Starter didn't
+  run: {reason}", cut to 60 characters.
+- **No notebook.** An assignment with no assignment notebook (an upload-only
+  language, or a suite of hand-written scripts) queues no starter run.
+- **The pill.** The app bar says "! 3 issues", "✓ Validated" or
+  "Validating…", and a note beside it says what the pill counts: "1 fails on
+  the solution · 2 pass on the starter", or "Every test passes on the
+  solution; none earns points on the starter". The brief put both in the
+  pill, and its wording claimed that every test fails on the starter, which a
+  test worth no points need not do. The
+  note keeps the pill at house length. With issues, the pill is a button, and
+  each click selects the next issue in the rail and the notebook.
+- **MCP.** `get_suite` returns `starterRun`: `ranAt`, `didNotRun` and each
+  test's status.
 
 ## The margin cards
 

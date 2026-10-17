@@ -93,6 +93,25 @@ struct GetSuiteTool: ContentTool {
         /// Optional minimum native-runner version required to grade this
         /// assignment (semver, e.g. "0.5.0"); null when ungated. Worker path only.
         let minimumRunnerVersion: String?
+        /// The last starter run (notebook views NB8), or null before one.
+        let starterRun: StarterRun?
+
+        /// The assignment notebook graded against the suite. A test that
+        /// passes here earns its points with no work.
+        struct StarterRun: Encodable, Sendable {
+            let ranAt: Date
+            /// Why the starter did not run (for example a syntax error), or
+            /// null when it ran. A run that did not run flags nothing.
+            let didNotRun: String?
+            let outcomes: [StarterOutcome]
+        }
+
+        /// One test's status on the starter.
+        struct StarterOutcome: Encodable, Sendable {
+            let testName: String
+            /// `pass`, `fail`, `error` or `timeout`.
+            let status: String
+        }
     }
 
     static let name = "get_suite"
@@ -110,7 +129,9 @@ struct GetSuiteTool: ContentTool {
         + "top level), any per-script override (`timeLimitSeconds` on a script item), each item's "
         + "student-facing `failureDetail` (\(MCPFailureDetailProse.slashAlternatives); null means full), "
         + "and the optional "
-        + "minimum native-runner version gate (`minimumRunnerVersion`, null when ungated). Read-only — "
+        + "minimum native-runner version gate (`minimumRunnerVersion`, null when ungated), and the last "
+        + "starter run (`starterRun`: each test's status on the starter notebook; a test worth points "
+        + "that passes there earns them with no work; null before a run). Read-only — "
         + "use this to inspect exactly what each test checks (e.g. to explain why a submission lost "
         + "points) before editing the suite."
     static let inputSchema: JSONValue = MCPSchema.assignmentPublicIDOnlyInput
@@ -129,6 +150,13 @@ struct GetSuiteTool: ContentTool {
                 "description": .string(
                     "Optional minimum native-runner version (semver) required to grade this "
                         + "assignment; null when ungated."),
+            ]),
+            "starterRun": .object([
+                "type": .array([.string("object"), .string("null")]),
+                "description": .string(
+                    "The last run of the starter notebook against the suite: `ranAt`, `didNotRun` "
+                        + "(why it did not run, or null) and `outcomes` ({testName, status}). Null "
+                        + "before a run."),
             ]),
             "sections": .object([
                 "type": .string("array"),
@@ -268,7 +296,15 @@ struct GetSuiteTool: ContentTool {
         return Output(
             assignmentPublicID: assignment.publicID, sections: sections, items: items,
             timeLimitSeconds: defaultTimeLimit,
-            minimumRunnerVersion: manifest?.minimumRunnerVersion)
+            minimumRunnerVersion: manifest?.minimumRunnerVersion,
+            starterRun: try await Self.starterRun(setupID: setup.requireID(), on: context.db))
+    }
+
+    private static func starterRun(setupID: String, on db: any Database) async throws -> Output.StarterRun? {
+        guard let run = try await MCPStudentDataBoundary.starterRun(setupID: setupID, on: db) else { return nil }
+        return Output.StarterRun(
+            ranAt: run.timestamp, didNotRun: StarterValidationRun.failure(of: run),
+            outcomes: run.outcomes.map { .init(testName: $0.testName, status: $0.status.rawValue) })
     }
 
     private static func item(

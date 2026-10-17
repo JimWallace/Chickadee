@@ -279,7 +279,14 @@ export class MarginView {
   private strip(margin: CellMargin, box: HTMLElement): HTMLElement {
     const strip = button('ck-strip', '');
     const failing = margin.items.some(item => itemIssue(item) === 'failsOnSolution');
-    strip.dataset.status = failing ? 'fail' : margin.items.every(i => itemState(i) === 'pass') ? 'pass' : 'none';
+    const states = margin.items.map(itemState);
+    strip.dataset.status = failing
+      ? 'fail'
+      : states.includes('starter')
+        ? 'starter'
+        : states.every(state => state === 'pass')
+          ? 'pass'
+          : 'none';
     strip.setAttribute('aria-expanded', 'false');
     strip.appendChild(glyphNode(strip.dataset.status));
     for (const part of stripSummary(margin.items)) {
@@ -419,7 +426,11 @@ function button(className: string, text: string): HTMLButtonElement {
 }
 
 function glyphNode(state: string): HTMLElement {
-  const node = el('span', 'ck-glyph', state === 'pass' ? '✓' : state === 'fail' ? '✗' : '○');
+  const node = el(
+    'span',
+    'ck-glyph',
+    state === 'pass' ? '✓' : state === 'fail' ? '✗' : state === 'starter' ? '!' : '○'
+  );
   node.dataset.status = state;
   node.setAttribute('aria-hidden', 'true');
   return node;

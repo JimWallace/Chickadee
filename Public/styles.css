@@ -1542,6 +1542,8 @@ body:has(.notebook-header .nb-title-block) .nav {
 .wb-title { font-size: var(--text-lg); }
 .wb-bar-spacer { flex: 1; }
 .wb-save-status { font-size: var(--text-sm); color: var(--text-secondary); }
+.wb-issues[data-tone="err"] { background: var(--danger-bg); color: var(--danger-fg); }
+.wb-issues[data-tone="warn"] { background: var(--preview-bg); color: var(--preview-fg); }
 .wb-view[aria-pressed="true"] { background: var(--health-teal); color: var(--surface); }
 .wb-rail-toggle { display: none; }
 .wb-body {

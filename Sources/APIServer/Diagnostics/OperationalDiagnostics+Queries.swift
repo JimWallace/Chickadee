@@ -93,9 +93,10 @@ extension OperationalDiagnosticsService {
     /// direction under pressure, and unbounded after a retest fan-out flips
     /// tens of thousands of rows back to pending (#1361).
     func pendingQueueDepth(on db: any Database) async throws -> Int {
+        // A starter run (NB8) is a runner job like a solution run.
         let pendingValidation = try await APISubmission.query(on: db)
             .filter(\.$status == SubmissionStatus.pending.rawValue)
-            .filter(\.$kind == APISubmission.Kind.validation)
+            .filter(\.$kind ~~ [APISubmission.Kind.validation, APISubmission.Kind.starterValidation])
             .count()
 
         let distinctSetupIDs = Set(
@@ -183,6 +184,7 @@ extension OperationalDiagnosticsService {
         for submission in relevantSubmissions.values {
             let isWorkerEligible =
                 submission.kind == APISubmission.Kind.validation
+                || submission.kind == APISubmission.Kind.starterValidation
                 || (submission.kind == APISubmission.Kind.student
                     && workerModeSetupIDs.contains(submission.testSetupID))
             guard isWorkerEligible, let submittedAt = submission.submittedAt else { continue }

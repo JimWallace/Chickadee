@@ -43,7 +43,8 @@ extension InstructorWorkbenchRoutes {
         let outline = InstructorSuiteOutlineBuilder(
             manifest: manifest, notebook: notebook, scriptSources: scripts,
             validationStatus: assignment.validationStatus,
-            solutionRun: try await latestSolutionRun(for: assignment, on: req.db)
+            solutionRun: try await latestSolutionRun(for: assignment, on: req.db),
+            starterRun: try await StarterValidationRun.latest(setupID: setup.requireID(), on: req.db)
         ).build()
 
         let encoder = JSONEncoder()

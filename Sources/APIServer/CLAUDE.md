@@ -202,6 +202,13 @@ the runner. See `docs/personalization-eval-runtime.md`.
 Instructor validation is a `kind == .validation` submission, graded by the
 **native worker** (`WorkerJobRoutes.collectClaimCandidates`). It never runs a
 kernel. There is no `assignment-validate.js`.
+Each validation also queues a **starter run**, a `kind == .starterValidation`
+submission that grades the assignment notebook with the same seed
+(`StarterValidationRun`, NB8). A runner claims it after every solution run. It
+never sets `validationStatus`, so it never blocks opening; it only feeds the
+workbench's "passes on the starter" warnings. Do not treat it as a solution
+run: every "newest validation row is the solution" lookup filters on
+`.validation`.
 
 ---
 

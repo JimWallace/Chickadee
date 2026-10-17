@@ -2,7 +2,7 @@
 //
 // Builds the instructor's suite outline (`InstructorSuiteOutline`) from the
 // manifest, the notebook that decides the anchors, and the last validation
-// run on the solution. Pure, so the tests build it from fixed inputs; the
+// runs on the solution and on the starter. Pure, so the tests build it from fixed inputs; the
 // route only gathers them.
 
 import Core
@@ -20,9 +20,14 @@ struct InstructorSuiteOutlineBuilder {
     let validationStatus: String?
     /// The last validation run on the solution, or nil before one.
     let solutionRun: TestOutcomeCollection?
+    /// The last starter run (NB8), or nil before one.
+    var starterRun: TestOutcomeCollection?
 
     func build() -> InstructorSuiteOutline {
-        let outcomes = outcomesByScript()
+        let outcomes = outcomesByScript(solutionRun)
+        let starterError = starterRun.flatMap(StarterValidationRun.failure)
+        // A starter run that did not run says nothing about the tests.
+        let starterOutcomes = starterError == nil ? outcomesByScript(starterRun) : [:]
         var sections: [InstructorSuiteOutline.Section] = []
         var unlinked: [InstructorSuiteOutline.Item] = []
         for (sectionID, title) in groups() {
@@ -30,7 +35,8 @@ struct InstructorSuiteOutlineBuilder {
             guard !entries.isEmpty || sectionID != nil else { continue }
             var items: [InstructorSuiteOutline.Item] = []
             for entry in entries {
-                let item = self.item(for: entry, outcome: outcomes[entry.script])
+                var item = self.item(for: entry, outcome: outcomes[entry.script])
+                item.starter = starterOutcomes[entry.script].map(runResult)
                 if item.anchor == nil {
                     unlinked.append(item)
                 } else {
@@ -44,13 +50,23 @@ struct InstructorSuiteOutlineBuilder {
                     points: entries.reduce(0) { $0 + $1.points }, items: items))
         }
         let all = sections.flatMap(\.items) + unlinked
-        let issues = all.compactMap { item -> InstructorSuiteOutline.Issue? in
+        let failing = all.compactMap { item -> InstructorSuiteOutline.Issue? in
             guard let result = item.solution?.result, result != TestStatus.pass.rawValue else { return nil }
             return InstructorSuiteOutline.Issue(itemID: item.id, kind: "failsOnSolution")
         }
+        // A test that fails on the solution is already an issue, and a test
+        // worth no points earns nothing for no work.
+        let free = all.compactMap { item -> InstructorSuiteOutline.Issue? in
+            guard item.starter?.result == TestStatus.pass.rawValue, item.points > 0,
+                item.solution?.result == TestStatus.pass.rawValue
+            else { return nil }
+            return InstructorSuiteOutline.Issue(itemID: item.id, kind: "passesOnStarter")
+        }
         return InstructorSuiteOutline(
             version: InstructorSuiteOutline.currentVersion,
-            validation: .init(status: validationStatus, solutionRunAt: solutionRun?.timestamp, issues: issues),
+            validation: .init(
+                status: validationStatus, solutionRunAt: solutionRun?.timestamp, issues: failing + free,
+                starterRunAt: starterRun?.timestamp, starterError: starterError),
             totals: .init(checks: manifest.testSuites.count, points: manifest.testSuites.reduce(0) { $0 + $1.points }),
             sections: sections,
             unlinked: unlinked)
@@ -126,10 +142,10 @@ struct InstructorSuiteOutlineBuilder {
 
     /// The run's outcomes, by script filename. The worker names an outcome by
     /// the script's stem and the browser by its filename, so both are matched.
-    private func outcomesByScript() -> [String: TestOutcome] {
-        guard let solutionRun else { return [:] }
+    private func outcomesByScript(_ run: TestOutcomeCollection?) -> [String: TestOutcome] {
+        guard let run else { return [:] }
         let byName = Dictionary(
-            solutionRun.outcomes.map { ($0.testName, $0) }, uniquingKeysWith: { first, _ in first })
+            run.outcomes.map { ($0.testName, $0) }, uniquingKeysWith: { first, _ in first })
         var result: [String: TestOutcome] = [:]
         for entry in manifest.testSuites {
             result[entry.script] = byName[entry.script] ?? byName[runnerScriptStem(entry.script)]

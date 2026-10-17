@@ -31,9 +31,10 @@ struct WorkerArtifactRoutes: RouteCollection {
         // When no sidecar exists (non-personalized assignment, or materialization
         // didn't run) we stream the stored file verbatim, exactly as before.
         // A class composite's reference job is a copy of the reference
-        // solution, and a spare job a copy of a student's submission, both
-        // materialized the same way.
+        // solution, a spare job a copy of a student's submission, and a
+        // starter run the assignment notebook, all materialized the same way.
         if submission.kind == APISubmission.Kind.validation
+            || submission.kind == APISubmission.Kind.starterValidation
             || submission.kind == APISubmission.Kind.compositeReference
             || submission.kind == APISubmission.Kind.compositeSpare
         {

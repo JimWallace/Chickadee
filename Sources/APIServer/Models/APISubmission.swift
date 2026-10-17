@@ -53,6 +53,12 @@ final class APISubmission: Model, Content, @unchecked Sendable {
         /// empty slot's inputs. Owned by no student, so no listing or grade
         /// sees it; its `composite_spares` row names the student it credits.
         static let compositeSpare = "compositeSpare"
+        /// The starter run of a validation (notebook views NB8): the
+        /// assignment notebook graded against the suite, to find a test that
+        /// passes with no work. It carries the solution run's submitter, for
+        /// the seed, but no grade or listing sees it: they filter on
+        /// `student`. See `StarterValidationRun`.
+        static let starterValidation = "starterValidation"
     }
 
     @ID(custom: "id", generatedBy: .user)
