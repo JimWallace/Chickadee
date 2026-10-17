@@ -438,6 +438,15 @@ The subagents are in `.claude/agents/`. Each one reports and does not edit.
   month (`.github/workflows/docs-audit.yml`) and files the report as an issue.
 - Before a commit, run `diff-reviewer` on the uncommitted diff.
 
+The skills are in `.claude/skills/`: `steward`, `adding-a-language`,
+`upgrading-swift-toolchain` and `cutting-a-minor-release`. Claude Code reads
+the description of each skill in every session, and it loads the body only
+when a task fits. A skill links its runbook in `docs/` and does not copy it.
+Each skill follows Anthropic's skill authoring rules and has at least three
+evaluation scenarios in `.claude/skill-evals/<name>/`.
+`scripts/check-claude-skills.sh` enforces both in `format-lint`. Do not rename
+`steward`: the PR harness looks for that directory by name.
+
 The hooks in `.claude/hooks/` do three jobs, so you need not:
 - `format-swift.py` runs `swift-format` on each Swift file that you edit.
 - `pre-push-format-lint.py` runs `scripts/format-lint.sh` (every step of the CI

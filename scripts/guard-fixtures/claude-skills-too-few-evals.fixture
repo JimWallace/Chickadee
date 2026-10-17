@@ -1,0 +1,9 @@
+# A skill with fewer than three evaluation scenarios has no record of what it
+# must make an agent do.
+guard="scripts/check-claude-skills.sh"
+files=".claude/skill-evals/steward/version-files-after-merge.json"
+description="a skill with fewer than three evaluation scenarios"
+expect="at least 3 are required"
+apply() {
+    rm .claude/skill-evals/steward/version-files-after-merge.json
+}

@@ -1,0 +1,8 @@
+# A skill that links a moved or renamed document sends the agent to nothing.
+guard="scripts/check-claude-skills.sh"
+files=".claude/skills/adding-a-language/SKILL.md"
+description="a skill that links a file that does not exist"
+expect="does not exist"
+apply() {
+    sed -i 's|docs/adding-a-xeus-kernel.md)|docs/adding-a-kernel-renamed.md)|' .claude/skills/adding-a-language/SKILL.md
+}

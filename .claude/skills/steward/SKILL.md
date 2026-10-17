@@ -1,8 +1,11 @@
 ---
 name: steward
 description: >
-  Repo-specific guidance for an agent driving a Chickadee pull request to a
-  mergeable state. Read on every CI failure, review comment and check-in.
+  Repo-specific guidance for an agent that drives a Chickadee pull request to a
+  mergeable state. Read it on every CI failure, red or cancelled check, merge
+  conflict, review comment and PR check-in. It covers the CI flake families,
+  the guards to run before a push, how to verify a fix in production, and how
+  proactive to be.
 ---
 
 # Stewarding a Chickadee pull request
@@ -12,6 +15,26 @@ Chickadee PR. It covers what this repository does differently, and how
 proactive to be. It does not grant anything: the harness rules it sits under
 still forbid skipping or quarantining a test, pushing an empty commit to kick
 CI, rewriting history on someone else's branch, and approving or merging.
+
+This file assumes that `CLAUDE.md` is loaded, and it does not repeat it. The
+rules on versions, environment variables, tests, shell snippets and the
+authoring voice are there. Obey them on every push.
+
+## On each wake
+
+Copy this checklist and complete it in order:
+
+```
+PR wake:
+- [ ] 1. Read the PR head: merge state, CI on the latest commit, open threads
+- [ ] 2. Merge conflict: merge the base branch in and resolve it
+- [ ] 3. Red check: apply "Read a red check" below before you believe it
+- [ ] 4. Review threads: fix each one, or reply with the reason you do not
+- [ ] 5. Before a push: run the guards for each layer you touched
+- [ ] 6. Before a push: confirm the version files do not diverge from main
+- [ ] 7. UI files touched: run the ui-review agent
+- [ ] 8. Push, then read CI on the new head
+```
 
 ## Read a red check before believing it
 
@@ -37,18 +60,11 @@ of them is not a test at all: a `build` job that exits 139 at `[Planning 1 /
 N]` before any compile is Family 7, an upstream SwiftPM crash, and the answer
 is one `/rerun-failed`, never a read of the diff.
 
-## Never bump the version
+## Confirm the version files did not move
 
-A PR **must not touch** `VERSION`, `Sources/Core/ChickadeeVersion.swift`, or
-`CHANGELOG.md`. Hand-editing those to a hardcoded next number is what used to
-make every concurrent PR conflict.
-
-Add **one** fragment under `changelog.d/` instead — see `changelog.d/README.md`
-— and preview with `scripts/assemble-release.sh --dry-run`. The merge-time
-`auto-release` workflow computes the version, folds the fragments in, and tags.
-
-If a base merge brings those three files in from `main`, that is fine and
-expected. Confirm your branch does not *diverge* from main on them:
+`CLAUDE.md` §"Versioning" has the rule. If a base merge brings `VERSION`,
+`CHANGELOG.md` or `Sources/Core/ChickadeeVersion.swift` in from `main`, that is
+expected. Confirm that your branch does not *diverge* from main on them:
 
 ```
 git diff origin/main --stat -- VERSION CHANGELOG.md Sources/Core/ChickadeeVersion.swift
@@ -68,78 +84,31 @@ mechanical. At minimum, for the layers you touched:
 | `Public/styles.css`, page JS | `scripts/check-styles.sh` |
 | `Sources/APIServer/Views/` | `swift test --filter ElementaryPageGuardTests`, `scripts/swiftlint.sh` |
 | a guard script itself | `scripts/check-guards.sh` |
+| `.claude/skills/`, `.claude/skill-evals/` | `scripts/check-claude-skills.sh` |
 | `docker-compose.yml`, `Dockerfile`, `deploy/` | `scripts/check-docker-build-context.sh`, `scripts/ci-compose-env.sh --check` |
 
-`scripts/swiftlint.sh` passes `--strict`: every warning fails the build. If a
-structural threshold (say `function_body_length`) starts causing legitimate
-friction, raise it in `.swiftlint.yml` rather than dropping `--strict`.
+`scripts/format-lint.sh` runs every step of the job at once.
 
-## The UI review is not optional
+## The UI review is in CI too
 
-Any change touching `Sources/APIServer/Views/`,
-`Public/styles.css`, or a page-wiring
-`Public/*.js` gets the **`ui-review` agent**, unconditionally and without
-asking. The guards prove a value is on the palette and a class has a rule;
-they cannot see a component that duplicates the vocabulary under a new name,
-an idiom heavier than the situation needs, or copy that runs past house
-length. Every style regression so far has been mechanically legal.
-
-The agent is checked in at `.claude/agents/ui-review.md`, and CI runs the same
-brief on every pull request that touches those paths
+`CLAUDE.md` makes the `ui-review` agent unconditional for a UI change. CI runs
+the same brief on every pull request that touches those paths
 (`.github/workflows/ui-review.yml`). The workflow posts its report on the PR
-and fails on a `changes requested` verdict; its findings are bot findings, so
+and fails on a `changes requested` verdict. Its findings are bot findings, so
 verify each one and push the fix. If the agent cannot run in your session, the
 workflow is the review; no note in the PR is needed.
 
-## Do not add an environment variable
+## A new check needs a fixture
 
-Standing rule, server (`AppConfig`) and runner (`RunnerDaemonConfig`) alike. A
-new variable has to be set correctly in `.env.example`, `docker-compose.yml`,
-the systemd units, the deploy runbook and the operator's head — and is
-silently absent everywhere it was not added, which is the failure mode env
-vars are worst at surfacing.
+`scripts/check-guards.sh` applies each fixture's defect and fails the build if
+the guard *passes*. The house rule is that a check never seen to fail is not a
+check, and it has been paid for four times. This generalises beyond guards:
+when adding any check, break the thing it watches and confirm it goes red.
 
-Use a CLI flag on `chickadee-runner` (as `--sandbox` and `--max-jobs` do),
-derive the value from something already known, or detect the condition at
-runtime. If one looks genuinely unavoidable, ask — do not add it and mention
-it afterwards.
-
-## Tests
-
-- **Swift Testing only.** `scripts/no-new-xctest.sh` blocks a new
-  `import XCTest`.
-- **Never change an existing test without asking the maintainer first.** Adding
-  tests is always fine; altering an assertion someone else wrote is a question,
-  not a judgement call. This outranks any urge to get a red check green.
-- **No force unwraps**, in tests either. Use `try #require(value)`.
-- **A new guard needs a fixture.** `scripts/check-guards.sh` applies each
-  fixture's defect and fails the build if the guard *passes*. The house rule is
-  that a check never seen to fail is not a check, and it has been paid for four
-  times. This generalises beyond guards: when adding any check, break the thing
-  it watches and confirm it goes red.
-
-## Prose
-
-Instructional text in assignment content follows the authoring-voice guide in
-`CLAUDE.md`: imperative and declarative, no exclamation marks, no emoji, no
-second-person emotional narration. It is duplicated verbatim in
-`MCPServerInstructions.authoringVoice` — edit both or neither.
+## Repository prose
 
 Repository prose, including PR bodies and commit messages, is written in
 ASD-STE100 English: short sentences, one idea each, plain vocabulary.
-
-Every page is an Elementary view; nothing renders Leaf. A new page type needs
-a fixture in `ElementaryPageFixtures`, or `ElementaryPageGuardTests` fails.
-The view traps are in `docs/elementary-spike.md` §"Traps found".
-
-## Shell snippets
-
-The maintainer runs zsh with `interactive_comments` off. In anything meant to
-be pasted into a terminal — chat, a PR body, a `docs/` runbook:
-
-- No inline `#` comments on a command line.
-- No apostrophes in explanatory text inside a code block.
-- One plain command per line, with the explanation in prose outside the block.
 
 ## How proactive to be
 
@@ -172,9 +141,11 @@ pulling `:latest`, and the image build takes ~15 minutes. A deployer log saying
 "running version now X (target release Y)" is normal during that window and is
 not evidence of a failed swap.
 
-`docs/zero-downtime-deploy.md` is the runbook. The read-only admin MCP
-(`get_deployment_info`, `get_deploy_status`, `get_health_alerts`, `query_logs`)
-is how to confirm a fix is live and behaving.
+`docs/zero-downtime-deploy.md` is the runbook. The read-only admin MCP server
+is how to confirm a fix is live and behaving. Use its tools by their full
+names: `Chickadee_Admin:get_deployment_info`,
+`Chickadee_Admin:get_deploy_status`, `Chickadee_Admin:get_health_alerts` and
+`Chickadee_Admin:query_logs`.
 
 ## When a fallback is the bug
 
