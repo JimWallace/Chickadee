@@ -9,6 +9,13 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.708] - 2026-10-17
+
+### Changed
+
+- **No test file is named after an audit or a fix.** The 13 tests in `AchievementFixRegressionTests`, `AuditTockRegressionTests`, `AdminPortFixesTests` and `CreateSweepAndPollIndexesListTests` now live in the suites for the features they cover. No assertion changed.
+
+
 ## [0.5.707] - 2026-10-17
 
 ### Changed
