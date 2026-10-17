@@ -128,6 +128,22 @@ import Testing
         #expect(outline.validation.solutionRunAt == Date(timeIntervalSince1970: 100))
     }
 
+    @Test func anItemCarriesItsSourceItsGeneratorAndItsPin() throws {
+        var pinned = manifest
+        pinned.testSuites[1].anchor = "average_heart_rate"
+        let outline = InstructorSuiteOutlineBuilder(
+            manifest: pinned, notebook: try solution(), scriptSources: scripts, validationStatus: nil, solutionRun: nil
+        ).build()
+        let check = outline.sections[0].items[0]
+        #expect(check.generatorID == "c1")
+        #expect(check.source == nil)
+        // The pin wins over the name the script uses.
+        let count = try #require(outline.sections.flatMap(\.items).first { $0.id == "test_count.py" })
+        #expect(count.generatorID == nil)
+        #expect(count.source == "assert count_active_days([1], 0) == 1")
+        #expect(count.anchor == .init(kind: "function", name: "average_heart_rate", source: "pinned", ambiguous: false))
+    }
+
     @Test func beforeAnyRunThereAreNoResultsAndNoIssues() throws {
         let outline = try build(run: nil)
         #expect(outline.sections.flatMap(\.items).allSatisfy { $0.solution == nil })

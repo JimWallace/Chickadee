@@ -36,7 +36,7 @@ extension InstructorWorkbenchRoutes {
             ?? NotebookDefinitionScan(definitions: [], sections: [], codeCellIndices: [])
 
         var scripts: [String: String] = [:]
-        for entry in manifest.testSuites where !entry.isGenerated {
+        for entry in manifest.testSuites {
             scripts[entry.script] = await readScriptFromZip(zipPath: setup.zipPath, filename: entry.script)
         }
 

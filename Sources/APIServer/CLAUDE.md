@@ -44,6 +44,8 @@ GET  /testsetups/:id/notebook-guide.json — The viewer's own guide: public
                                           results only, anchors, starter sources
 GET  /instructor/:assignmentID/suite-outline.json — Staff only: the suite by
                                           section, anchors, solution results
+PUT  /instructor/:assignmentID/suite-anchor — TA and above: pin a hand-written
+                                          test to a cell name ({script, anchor|null})
 ```
 
 Web routes (Elementary views, session auth required) live under `/` and handle

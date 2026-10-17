@@ -63,13 +63,17 @@ struct InstructorSuiteOutline: Codable, Sendable, Equatable {
         var points: Int
         var anchor: Anchor?
         var solution: RunResult?
+        /// The family or check id of a generated item, or nil.
+        var generatorID: String?
+        /// The test's script, shown when its card opens (NB7).
+        var source: String?
     }
 
     struct Anchor: Codable, Sendable, Equatable {
         /// `function`, `variable`, `name` or `section`.
         var kind: String
         var name: String
-        /// `auto` (NB3 resolution). NB7 adds `pinned`.
+        /// `pinned` when the author pinned the test to this cell, else `auto`.
         var source: String
         var ambiguous: Bool
     }

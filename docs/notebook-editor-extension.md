@@ -35,7 +35,8 @@ is the bridge-first command channel of `notebook.js`.
 | `chickadee:set-theme` | `{theme: "light" \| "dark"}` | Selects "Chickadee" or "Chickadee dark". |
 | `chickadee:configure` | `{patterns: [String]}` | Sets the definition patterns that `ck:active-cell` and `chickadee:reveal` use. |
 | `chickadee:set-guide` | `{guide}` | Draws the student guide (`docs/notebook-guide.md`, "In the editor"): the task headers and the checks lines. |
-| `chickadee:set-suite` | `{suite}` | Stores the instructor suite. NB7 draws from it. |
+| `chickadee:set-suite` | `{suite}` | Draws the instructor suite as margin cards (`docs/notebook-guide.md`, "The margin cards"). |
+| `chickadee:select-item` | `{itemID}` (null clears) | Selects the test's card, opens it, and scrolls to the cell that the test links to. Returns false when the test links to no cell. |
 | `chickadee:reveal` | `{cellId}`, `{index}`, `{name}`, `{section}` or `{tag}` | Selects the cell and scrolls to it. A `name` finds the last cell that defines the name. A `section` finds the first code cell after the `## ` heading. A `tag` finds the first cell with that tag. |
 
 `notebook-toolbar.js` sends `chickadee:configure` and `chickadee:set-theme` on
@@ -54,6 +55,13 @@ Each event is a `postMessage` to the parent window, for this origin only. The
 | `ck:tasks` | `tasks`: `[{sectionID, status}]`, `reflections`: `[{tag, status}]` | The outline. Sent after each redraw of the guide, in the guide's task order, with the status that the editor shows (`starter` included). A reflection is `written` or `empty`. |
 | `ck:cell-ran` | `cellId`, `status`: `ok` or `error` | NB4 (the "ran without errors" signal). |
 | `ck:saved` | `state`: `started`, `completed` or `failed` | The save state in the toolbar. |
+| `ck:item-selected` | `itemID` (null when a card closes) | The workbench rail marks the row. |
+| `ck:edit-test` | `itemID` | The workbench opens the suite sheet on the test's editor. |
+| `ck:run-again` | `itemID` | The workbench saves the whole assignment and validates it again (the Save button). It does not run one test alone. |
+| `ck:pin` | `itemID`, `anchor` | The workbench pins the test (`PUT /instructor/:id/suite-anchor`), then fetches the outline again. |
+| `ck:pin-refused` | `itemID` | The workbench says that the clicked cell defines no name. |
+| `ck:section-action` | `sectionID`, `action`: `rename`, `add-check` or `delete` | The workbench opens the section in the suite sheet and starts the action there. |
+| `ck:add-check` | `sectionID`, `anchor` | The workbench opens the section's Add check. It does not use `anchor` yet. |
 
 `ck:saved` is not in the brief. The page has no other save state to show,
 because a student's work saves in the browser through the autosave of

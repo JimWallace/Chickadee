@@ -51,6 +51,9 @@ function element(tag) {
     getAttribute(name) { return this.attributes[name] ?? null; },
     addEventListener(type, fn) { (this.listeners[type] ??= []).push(fn); },
     all() { return [this, ...this.children.flatMap((c) => c.all())]; },
+    querySelectorAll(selector) { return this.all().filter((n) => `.${n.className}` === selector); },
+    removeAttribute(name) { delete this.attributes[name]; },
+    click() { this.clicked = (this.clicked || 0) + 1; },
   };
 }
 
@@ -70,27 +73,42 @@ const OUTLINE = {
   unlinked: [{ id: 'test_c.py', name: 'test_c', anchor: null, solution: null }],
 };
 
+const ORIGIN = 'https://chickadee.test';
+
 async function loadPage(outlines) {
   const executed = [];
   const listeners = {};
   const suite = element('div');
   const totals = element('p');
-  const shell = { getAttribute: (name) => (name === 'data-suite-url' ? '/instructor/abc/suite-outline.json' : null) };
-  const elements = { 'wb-shell': shell, 'wb-rail-suite': suite, 'wb-rail-totals': totals };
+  const save = element('button');
+  const saveStatus = element('span');
+  const shell = {
+    getAttribute: (name) => ({ 'data-suite-url': '/instructor/abc/suite-outline.json', 'data-assignment-id': 'abc' })[name] ?? null,
+  };
+  const elements = { 'wb-shell': shell, 'wb-rail-suite': suite, 'wb-rail-totals': totals, 'wb-save': save, 'wb-save-status': saveStatus };
   const fetched = [];
   const context = {
     window: {
+      location: { origin: ORIGIN },
       addEventListener: (type, fn) => (listeners[type] = fn),
       chickadeeEditorCommand: async (command, args) => { executed.push([command, args]); return true; },
     },
-    document: { getElementById: (id) => elements[id] ?? null, createElement: element },
-    fetch: async (url) => { fetched.push(url); return { ok: true, json: async () => outlines.shift() }; },
+    document: {
+      getElementById: (id) => elements[id] ?? null,
+      createElement: element,
+      querySelector: (selector) => (selector === 'meta[name="csrf-token"]' ? { getAttribute: () => 'tok' } : null),
+    },
+    fetch: async (url, init) => {
+      fetched.push(init && init.method ? [init.method, url, init.headers['x-csrf-token'], init.body] : url);
+      return { ok: true, json: async () => outlines.shift() };
+    },
   };
   context.self = context;
   vm.runInNewContext(source, context);
   await new Promise((resolve) => setTimeout(resolve, 0));
   const items = () => suite.all().filter((n) => n.className === 'outline-row');
-  return { suite, totals, items, executed, fetched, listeners, api: context.ChickadeeWorkbenchRail };
+  const message = (data, origin = ORIGIN) => listeners.message({ origin, data });
+  return { suite, totals, save, saveStatus, items, executed, fetched, listeners, message, api: context.ChickadeeWorkbenchRail };
 }
 
 test('the rail draws each section, then the unlinked items', async () => {
@@ -106,14 +124,45 @@ test('the rail draws each section, then the unlinked items', async () => {
   assert.equal(items[2].disabled, true);
 });
 
-test('an item reveals its cell', async () => {
+test('the outline goes to the editor, and an item selects its card', async () => {
   const page = await loadPage([OUTLINE]);
-  page.items()[0].listeners.click.forEach((fn) => fn());
+  assert.equal(page.executed[0][0], 'chickadee:set-suite');
+  assert.equal(page.executed[0][1].suite.totals.checks, 3);
   page.items()[1].listeners.click.forEach((fn) => fn());
-  assert.equal(JSON.stringify(page.executed), JSON.stringify([
-    ['chickadee:reveal', { name: 'count' }],
-    ['chickadee:reveal', { section: 'Task 1: Count' }],
-  ]));
+  assert.equal(JSON.stringify(page.executed.at(-1)), JSON.stringify(['chickadee:select-item', { itemID: 'test_b.py' }]));
+  assert.equal(page.items()[1].getAttribute('aria-current'), 'true');
+  assert.equal(page.items()[0].getAttribute('aria-current'), null);
+});
+
+test('a new editor document gets the outline again on its first ck:kernel', async () => {
+  const page = await loadPage([OUTLINE]);
+  page.message({ ck: 'ck:kernel', status: 'idle' });
+  assert.equal(page.executed.filter(([c]) => c === 'chickadee:set-suite').length, 1);
+  page.message({ ck: 'kernel-diag', kind: 'kernel_phase', source: 'boot_start' });
+  page.message({ ck: 'ck:kernel', status: 'idle' });
+  assert.equal(page.executed.filter(([c]) => c === 'chickadee:set-suite').length, 2);
+});
+
+test('a card asks the page: Run again saves, and Pin saves the pin', async () => {
+  const page = await loadPage([OUTLINE, OUTLINE]);
+  page.message({ ck: 'ck:run-again', itemID: 'test_b.py' });
+  assert.equal(page.save.clicked, 1);
+  page.message({ ck: 'ck:pin', itemID: 'test_b.py', anchor: 'total' });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.deepEqual(page.fetched[1], ['PUT', '/instructor/abc/suite-anchor', 'tok', '{"script":"test_b.py","anchor":"total"}']);
+  assert.equal(page.saveStatus.textContent, 'Pinned to total');
+  assert.equal(page.fetched.length, 3);
+  page.message({ ck: 'ck:pin-refused', itemID: 'test_b.py' });
+  assert.equal(page.saveStatus.textContent, 'That cell defines no name to pin to');
+  page.message({ ck: 'ck:run-again' }, 'https://evil.test');
+  assert.equal(page.save.clicked, 1);
+});
+
+test('findItem and cssEscape', () => {
+  assert.equal(Rail.findItem(OUTLINE, 'test_c.py').name, 'test_c');
+  assert.equal(Rail.findItem(OUTLINE, 'nope'), null);
+  assert.equal(Rail.cssEscape('a"b'), 'a\\"b');
 });
 
 test('a workbench event draws the rail again', async () => {

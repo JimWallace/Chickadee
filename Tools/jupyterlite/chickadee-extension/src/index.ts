@@ -5,9 +5,9 @@
 //   light and dark themes. The variable map is style/index.css.
 // - Commands the notebook page calls through the jupyter-iframe-commands
 //   bridge: chickadee:set-theme, chickadee:configure, chickadee:set-guide,
-//   chickadee:set-suite and chickadee:reveal.
+//   chickadee:set-suite, chickadee:select-item and chickadee:reveal.
 // - Events it posts up to the page: ck:kernel, ck:active-cell, ck:cell-ran
-//   (events.ts).
+//   and the rest in docs/notebook-editor-extension.md (events.ts).
 //
 // It writes nothing into a notebook: no cell source, metadata or output. It
 // reads no layout, so it adds no reflow to the editor.
@@ -20,6 +20,8 @@ import { compilePatterns, definedNames, sectionHeading } from './definitions.js'
 import { kernelState, post } from './events.js';
 import { Guide } from './guide.js';
 import { GuideView } from './guideView.js';
+import { Suite, findItem } from './margin.js';
+import { MarginView } from './marginView.js';
 
 const LIGHT = 'Chickadee';
 const DARK = 'Chickadee dark';
@@ -55,8 +57,11 @@ const themePlugin: JupyterFrontEndPlugin<void> = {
 /** What the page has told the extension so far. NB4 and NB7 render from it. */
 class PageState {
   patterns: RegExp[] = [];
-  suite: unknown = null;
-  constructor(readonly view: GuideView) {}
+  suite: Suite | null = null;
+  constructor(
+    readonly view: GuideView,
+    readonly margin: MarginView
+  ) {}
 }
 
 /** The bridge commands and the events. */
@@ -66,7 +71,8 @@ const bridgePlugin: JupyterFrontEndPlugin<void> = {
   autoStart: true,
   requires: [INotebookTracker, IThemeManager],
   activate: (app: JupyterFrontEnd, tracker: INotebookTracker, manager: IThemeManager) => {
-    const state = new PageState(new GuideView(() => tracker.currentWidget?.content ?? null));
+    const notebook = () => tracker.currentWidget?.content ?? null;
+    const state = new PageState(new GuideView(notebook), new MarginView(notebook));
 
     app.commands.addCommand('chickadee:set-theme', {
       label: 'Set the Chickadee theme',
@@ -86,6 +92,7 @@ const bridgePlugin: JupyterFrontEndPlugin<void> = {
           ? compilePatterns(patterns.filter((p): p is string => typeof p === 'string'))
           : [];
         state.view.setPatterns(state.patterns);
+        state.margin.setPatterns(state.patterns);
         postActiveCell(tracker, state);
       }
     });
@@ -101,7 +108,23 @@ const bridgePlugin: JupyterFrontEndPlugin<void> = {
     app.commands.addCommand('chickadee:set-suite', {
       label: 'Set the instructor suite',
       execute: args => {
-        state.suite = args['suite'] ?? null;
+        const suite = args['suite'];
+        state.suite = isSuite(suite) ? suite : null;
+        state.margin.setSuite(state.suite);
+      }
+    });
+
+    app.commands.addCommand('chickadee:select-item', {
+      label: 'Select a test',
+      execute: async args => {
+        const id = typeof args['itemID'] === 'string' ? args['itemID'] : null;
+        state.margin.select(id);
+        const anchor = id && state.suite ? findItem(state.suite, id)?.anchor : null;
+        if (!anchor) {
+          return false;
+        }
+        const target = anchor.kind === 'section' ? { section: anchor.name } : { name: anchor.name };
+        return app.commands.execute('chickadee:reveal', target);
       }
     });
 
@@ -128,7 +151,8 @@ const bridgePlugin: JupyterFrontEndPlugin<void> = {
     hideNotebookChrome(app, tracker);
     watchKernel(tracker);
     watchSaves(tracker);
-    watchEdits(tracker, state.view);
+    watchEdits(tracker, [state.view, state.margin]);
+    watchPinning(tracker, state.margin);
     tracker.activeCellChanged.connect(() => postActiveCell(tracker, state));
     NotebookActions.executed.connect((_, { cell, success }) => {
       post({ ck: 'ck:cell-ran', cellId: cell.model.id, status: success ? 'ok' : 'error' });
@@ -193,10 +217,11 @@ function watchSaves(tracker: INotebookTracker): void {
   tracker.widgetAdded.connect((_, panel) => watch(panel));
 }
 
-/** An edit or a cell added, moved or removed redraws the guide, after quiet. */
-function watchEdits(tracker: INotebookTracker, view: GuideView): void {
+/** An edit or a cell added, moved or removed redraws the guide and the
+ * margin, after quiet. */
+function watchEdits(tracker: INotebookTracker, views: { edited(): void; schedule(): void }[]): void {
   const watch = (panel: NotebookPanel) => {
-    const connect = () => panel.model?.contentChanged.connect(() => view.edited());
+    const connect = () => panel.model?.contentChanged.connect(() => views.forEach(v => v.edited()));
     if (panel.model) {
       connect();
     } else {
@@ -205,7 +230,43 @@ function watchEdits(tracker: INotebookTracker, view: GuideView): void {
   };
   tracker.forEach(watch);
   tracker.widgetAdded.connect((_, panel) => watch(panel));
-  tracker.currentChanged.connect(() => view.schedule());
+  tracker.currentChanged.connect(() => views.forEach(v => v.schedule()));
+}
+
+/** Pin to a cell: while the margin picks, a click on a cell is the pick, not
+ * an edit, and Escape leaves the pick mode. */
+function watchPinning(tracker: INotebookTracker, margin: MarginView): void {
+  document.addEventListener(
+    'click',
+    event => {
+      const target = event.target as Element | null;
+      const node = target?.closest('.jp-Cell');
+      if (!node || target?.closest('.ck-margin')) {
+        return;
+      }
+      const cell = tracker.currentWidget?.content.widgets.find(w => w.node === node) ?? null;
+      if (margin.pick(cell)) {
+        event.preventDefault();
+        event.stopPropagation();
+      }
+    },
+    true
+  );
+  document.addEventListener(
+    'keydown',
+    event => {
+      if (event.key === 'Escape' && margin.cancelPinning()) {
+        event.stopPropagation();
+      }
+    },
+    true
+  );
+}
+
+/** The suite's shape, checked once at the door. */
+function isSuite(value: unknown): value is Suite {
+  const suite = value as Suite | null;
+  return !!suite && typeof suite === 'object' && Array.isArray(suite.sections) && Array.isArray(suite.unlinked);
 }
 
 /** The payload's shape, checked once at the door. */

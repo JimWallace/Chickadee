@@ -20,6 +20,10 @@
 //      slice — the thing that was actually running.
 //
 // Usage:  SMOKE_CHECK=freeze-trace-check.mjs ./run-smoke.sh
+// FREEZE_WORKBENCH=1 instead opens the instructor's workbench on a notebook
+// of 40 cells in 10 sections with 30 tests, so the test cards beside the
+// cells (notebook views NB7) are drawn while the notebook runs.
+//
 // Knobs:  FREEZE_THROTTLE (default 3), FREEZE_WATCH_MS (default 150000),
 //         FREEZE_PROFILE_OUT (default /tmp/freeze-trace.cpuprofile),
 //         SMOKE_BROWSER_PATH (pre-installed Chromium executable).
@@ -31,6 +35,7 @@ import { chromium } from "playwright";
 import { request as pwRequest } from "playwright";
 import JSZip from "jszip";
 import fs from "node:fs/promises";
+import { seedInstructorAssignment } from "./seed.mjs";
 
 const baseURL = (process.argv[2] || process.env.BASE_URL || "http://127.0.0.1:8099").replace(/\/$/, "");
 const THROTTLE = parseFloat(process.env.FREEZE_THROTTLE || "3");
@@ -296,17 +301,55 @@ function stackOf(nodeId, nodeById, parentOf, depth = 10) {
   return frames;
 }
 
+// FREEZE_WORKBENCH=1: 10 sections of a heading and three functions, and three
+// tests for each section, one per function.
+async function seedWorkbench() {
+  const cells = [];
+  const sections = [];
+  const testSuites = [];
+  const files = {};
+  for (let s = 0; s < 10; s++) {
+    sections.push({ id: `s${s}`, name: `Task ${s + 1}: Part ${s + 1}`, variables: [] });
+    cells.push({ cell_type: "markdown", source: [`## Task ${s + 1}: Part ${s + 1}\n`], metadata: {} });
+    for (let f = 0; f < 3; f++) {
+      const name = `f_${s}_${f}`;
+      cells.push({
+        cell_type: "code", metadata: {}, outputs: [], execution_count: null,
+        source: [`def ${name}(x):\n`, `    return x + ${f}\n`, `print(${name}(${s}))\n`],
+      });
+      testSuites.push({ tier: f === 2 ? "secret" : "public", script: `test_${name}.py`, sectionID: `s${s}`, points: 1 });
+      files[`test_${name}.py`] = `assert ${name}(1) == ${1 + f}\n`;
+    }
+  }
+  return seedInstructorAssignment(baseURL, {
+    notebook: {
+      nbformat: 4, nbformat_minor: 5,
+      metadata: { kernelspec: { name: "xpython", display_name: "Python (xeus-python)", language: "python" } },
+      cells,
+    },
+    files,
+    manifest: {
+      schemaVersion: 1, gradingMode: "browser", language: "python", requiredFiles: [],
+      sections, testSuites, timeLimitSeconds: 10, makefile: null,
+    },
+    title: "Freeze Workbench",
+  });
+}
+
 // ---- main -----------------------------------------------------------------
 
 async function main() {
   console.log(`freeze-trace: seeding via ${baseURL} (throttle=${THROTTLE}x, watch=${WATCH_MS}ms)`);
   let seeded;
+  const workbench = process.env.FREEZE_WORKBENCH === "1";
   try {
-    seeded = await seed();
+    seeded = workbench ? await seedWorkbench() : await seed();
   } catch (e) {
     return fail(`seeding failed: ${(e && e.message) || e}`);
   }
-  const notebookURL = `${baseURL}/testsetups/${seeded.setupID}/notebook`;
+  const notebookURL = workbench
+    ? `${baseURL}/instructor/${seeded.assignmentID}/workbench?file=assignment&view=personalized`
+    : `${baseURL}/testsetups/${seeded.setupID}/notebook`;
   console.log(`freeze-trace: opening ${notebookURL}`);
 
   const launchOptions = { headless: true, args: ["--no-sandbox"], chromiumSandbox: false };
