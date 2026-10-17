@@ -27,6 +27,8 @@ func bundledFileNames(zipPath: String) async -> Set<String> {
 ///     support file as per-student; it never introduces one.
 ///   - a graded script or a canonical notebook, which is not support data.
 ///   - no `sampleSize`, or one below 1.
+///   - a course scope on a file that was not attached from the course library
+///     (`DatasetSpecValidation.scopeIssue`).
 ///   - a spec that does not fit its file (`DatasetSpecValidation`): a stratum
 ///     column the file does not have, a sample too small to hold one row of
 ///     every category, or a transform that names a missing column. The
@@ -49,6 +51,8 @@ func datasetSpecRefusal(
     guard let sampleSize = spec.sampleSize, sampleSize >= 1 else {
         return "sampleSize for '\(spec.file)' is required and must be 1 or more."
     }
+    // Needs no file, so it runs before the early return below.
+    if let issue = DatasetSpecValidation.scopeIssue(with: spec) { return issue }
     // Reads the file only when the spec claims something checkable against
     // it. A plain row sample needs nothing from the bytes, and these files are
     // course datasets, not small.

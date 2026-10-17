@@ -212,7 +212,11 @@ struct SetDatasetTool: ContentTool {
             // fields a caller mentioned is how this surface twice came within a
             // release of downgrading data it did not understand; a field is
             // dropped here only when the caller says so, by sending [].
-            transforms: input.transforms.map(Self.transforms(from:)) ?? existing?.transforms ?? [])
+            transforms: input.transforms.map(Self.transforms(from:)) ?? existing?.transforms ?? [],
+            // The library fields are not this tool's to change: the library
+            // attach path writes them, and every other door carries them.
+            source: existing?.source,
+            scope: existing?.scope ?? .assignment)
     }
 
     /// Maps the wire shape to the model. An unrecognised kind is dropped rather
