@@ -66,11 +66,10 @@ extension CourseDatasetService {
             scope: request.scope)
         try requireValid(spec, bytes: bytes)
 
-        try await mutateSetupZip(zipPath: setup.zipPath, writes: [filename: bytes], deletions: [])
-        // The dataset could have been deleted while the zip was written; a
-        // spec must not pin a version that is gone.
-        _ = try await liveVersion(of: dataset, number: version.version, on: db)
-        try await mutateManifest(setup: setup, on: db) { props in
+        try await writeThenRecord(
+            setup: setup, filename: filename, bytes: bytes, previous: nil, dataset: dataset,
+            version: version.version, on: db
+        ) { props in
             props.datasets.removeAll { $0.file == filename }
             props.datasets.append(spec)
         }
@@ -102,6 +101,11 @@ extension CourseDatasetService {
         }
         let kept = removeFile ? nil : attached.withoutLibraryFields()
         try await mutateManifest(setup: setup, on: db) { props in
+            if removeFile {
+                // The file is gone, so every mark that named it goes too.
+                _ = clearFileMarks(filename, in: &props)
+                return
+            }
             guard let index = props.datasets.firstIndex(where: { $0.file == filename }) else { return }
             if let kept {
                 props.datasets[index] = kept
@@ -139,9 +143,13 @@ extension CourseDatasetService {
             source: DatasetSource(slug: dataset.slug, version: version.version), scope: attached.scope)
         try requireValid(spec, bytes: bytes)
 
-        try await mutateSetupZip(zipPath: setup.zipPath, writes: [filename: bytes], deletions: [])
-        _ = try await liveVersion(of: dataset, number: version.version, on: db)
-        try await mutateManifest(setup: setup, on: db) { props in
+        guard let previous = await extractZipEntry(zipPath: setup.zipPath, entryName: filename) else {
+            throw CourseDatasetError.unreadableFile(filename)
+        }
+        try await writeThenRecord(
+            setup: setup, filename: filename, bytes: bytes, previous: previous, dataset: dataset,
+            version: version.version, on: db
+        ) { props in
             guard let index = props.datasets.firstIndex(where: { $0.file == filename }) else { return }
             props.datasets[index] = spec
         }
@@ -216,9 +224,12 @@ extension CourseDatasetService {
 
     /// `props` with every library source that fails `sourceIssue` removed, and
     /// the files whose source was removed. For the doors that copy a whole
-    /// manifest into a course (clone, bundle import, version restore): the
-    /// file and its sample stay, so no student's delivery changes, but the
-    /// spec stops claiming a library version the course does not have.
+    /// manifest into a course or rebuild a zip (clone, bundle import, version
+    /// restore, the draft suite-file upload and the draft publish): the file
+    /// and its sample stay, so no student starts to receive the pool, and the
+    /// spec stops claiming a library version the course does not have. A
+    /// course scope goes with the source, so a course-scoped sample is dealt
+    /// again with the assignment seed.
     static func reconciledLibraryFields(
         _ props: TestProperties, courseID: UUID, zipPath: String, on db: any Database
     ) async throws -> (props: TestProperties, dropped: [String]) {
@@ -265,11 +276,40 @@ extension CourseDatasetService {
         else { throw CourseDatasetError.notASupportFile(filename) }
     }
 
+    /// Writes `bytes` into the zip, re-reads the dataset, then records the
+    /// manifest change. When anything after the zip write fails, the zip goes
+    /// back to `previous` (or loses the new entry when there was none), so a
+    /// failed attach never leaves the pool behind as a plain support file and
+    /// a failed update never leaves new bytes under an old version's source.
+    private static func writeThenRecord(
+        setup: APITestSetup, filename: String, bytes: Data, previous: Data?, dataset: APICourseDataset,
+        version: Int, on db: any Database, _ mutate: (inout TestProperties) throws -> Void
+    ) async throws {
+        // Checked before the write too, so the common race costs no rollback.
+        _ = try await liveVersion(of: dataset, number: version, on: db)
+        try await mutateSetupZip(zipPath: setup.zipPath, writes: [filename: bytes], deletions: [])
+        do {
+            _ = try await liveVersion(of: dataset, number: version, on: db)
+            try await mutateManifest(setup: setup, on: db, mutate)
+        } catch {
+            if let previous {
+                try? await mutateSetupZip(zipPath: setup.zipPath, writes: [filename: previous], deletions: [])
+            } else {
+                try? await mutateSetupZip(zipPath: setup.zipPath, writes: [:], deletions: [filename])
+            }
+            throw error
+        }
+    }
+
     /// The save-time checks of every dataset door, against the bytes the spec
     /// will deliver from.
     private static func requireValid(_ spec: DatasetSpec, bytes: Data) throws {
         if let size = spec.sampleSize, size < 1 {
             throw CourseDatasetError.attachmentIssue("A sample needs at least 1 row per student.")
+        }
+        if spec.sampleSize == nil, spec.stratumColumn != nil {
+            throw CourseDatasetError.attachmentIssue(
+                "'\(spec.file)': balancing across a column needs a sample size. The whole file has every category.")
         }
         if let issue = DatasetSpecValidation.issue(with: spec, sourceCSV: String(data: bytes, encoding: .utf8)) {
             throw CourseDatasetError.attachmentIssue(issue)

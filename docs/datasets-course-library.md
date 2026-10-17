@@ -316,10 +316,34 @@ file in the zip. The operations above keep it, and the other doors defend it:
 **A spec must do something.** The `/datasets` PUTs and `set_dataset` used to
 require a sample. They now require a sample, a transform or a library source,
 because an attached file or a transformed file may deliver every row. A spec
-with none of the three is still refused.
+with none of the three is still refused. `set_dataset` keeps the stored
+sample when a call omits it, as it already did for transforms, so an agent
+that changes only the stratum cannot turn a sample into the whole file. An
+attach refuses a stratum with no sample.
 
-Tests: `CourseDatasetAttachmentTests` and `DatasetAttachedFileDoorTests` in
-`APITests`; `DatasetAttachmentProjectionTests` in `CoreTests`.
+**A failed write rolls the zip back.** Attach and update re-read the dataset
+before and after the zip write. When the manifest write or the second read
+fails, the zip goes back to what it held, so a failed attach never leaves the
+pool behind as a plain support file.
+
+**The doors list, as reviewed.** Besides the doors above, the draft suite-file
+upload, the draft suite clear and the draft publish reconcile the manifest,
+because each rebuilds the zip or moves the draft into its final course.
+Dropping a source also drops a course scope, so a course-scoped sample is
+dealt again with the assignment seed after a restore or a bundle import.
+
+**Known gaps for later slices.** Removing a dataset mark through the
+`/datasets` PUT or `set_dataset remove:true` ends an attachment without a
+detach, and the file then delivers the pool. Slice 5 makes the panel's
+control a detach for an attached file, and slice 7 does the same for MCP. A
+promote whose manifest write loses three races leaves an unused library
+dataset, which can be deleted. Two suites added in this slice
+(`CourseDatasetAttachmentTests`, `DatasetAttachedFileDoorTests`) have no time
+limit; changing them needs the maintainer, so the gap is recorded here.
+
+Tests: `CourseDatasetAttachmentTests`, `DatasetAttachedFileDoorTests` and
+`DatasetLibraryInvariantTests` in `APITests`; `DatasetAttachmentProjectionTests`
+and `DatasetDetachProjectionTests` in `CoreTests`.
 
 ### 4.4 The course cohort (slice 4)
 
