@@ -1,65 +1,27 @@
 // Public/workbench.js
 //
-// The assignment workbench: the instructor edit page on the left, the notebook
-// editor on the right, a draggable splitter between them.
+// The assignment workbench (#1266, notebook views NB6): a full-width notebook
+// with the test suite in a rail on its left (workbench-rail.js), an app bar
+// above, and the assignment's settings in sheets that slide over the notebook.
 //
-// **One document** since #1266.  Both halves are rendered inline by
-// `WorkbenchPage` (`AssignmentEditBody` and `NotebookBody`, each built from
-// its own context), so this file owns layout and coordination, not
-// composition.  The cross-frame protocol it used to carry — postMessage, origin
-// checks, an activity forwarder — is gone with the frames.
+// **One document.** `WorkbenchPage` renders the notebook (`NotebookBody`) and
+// the settings (`AssignmentEditBody`, in the sheet) inline, so this file owns
+// layout and coordination, not composition.
 //
-// Three things are load-bearing and easy to get wrong:
+// Two things are load-bearing and easy to get wrong:
 //
-//   * **Pane floors.** The notebook body hides its own editor below 640px and
-//     shows "open on a larger screen".  A too-narrow notebook pane would
-//     therefore render that notice instead of the editor — so the splitter
-//     clamps the notebook pane at 720px and the edit pane at 380px, and below a
-//     viewport that can hold both the layout drops to one pane at a time.
+//   * **One notebook open, always.** Each (file, view) is a separate notebook
+//     with its own kernel, so switching costs a kernel boot.
 //
-//   * **One notebook open, always.** Four (file, view) combinations exist, and
-//     a live document per combination would mean a Pyodide kernel per
-//     combination; bounding that needs an eviction policy, a lot of machinery
-//     for a secondary interaction.  So switching costs a kernel boot.
-//
-//   * **Nothing here navigates.** The edit form and a live kernel share this
-//     document, so a navigation — or a `location.reload()` — costs a 10-30s
-//     kernel boot and any unsaved cells.  Writes go through `inplace-forms.js`
-//     and refresh the edit half by DOM swap (`refreshEditSurface`); switching
-//     notebooks swaps the *other* half (`refreshNotebookSurface`) and moves the
-//     URL with `pushState`.  The kernel still reboots on a switch — it belongs
-//     to the open notebook — but the edit half's scroll, open editors, and
-//     unsaved metadata no longer go with it.
+//   * **Nothing here navigates.** The settings forms and a live kernel share
+//     this document, so a navigation (or a `location.reload()`) costs a 10-30s
+//     kernel boot and any unsaved cells. Writes go through `inplace-forms.js`
+//     and refresh the sheet by DOM swap (`refreshEditSurface`); switching
+//     notebooks swaps the notebook (`refreshNotebookSurface`) and moves the
+//     URL with `pushState`.
 
 (function () {
     'use strict';
-
-    // Minimum widths, in px.  NOTEBOOK_MIN sits deliberately clear of the
-    // notebook page's own 640px small-screen cutoff.
-    var NOTEBOOK_MIN = 720;
-    var EDIT_MIN = 380;
-    // Splitter column width (.5rem) — kept in sync with .wb-splitter in
-    // WorkbenchPage.swift.  Only used for arithmetic, never for styling.
-    var SPLITTER_PX = 8;
-    // Below this the split is not honest: 720 + 380 + splitter.  Matches the
-    // media query in WorkbenchPage.swift.
-    var SINGLE_PANE_MAX = 1140;
-    var KEY_STEP_PX = 24;
-
-    /// Clamp a desired left-pane width so neither pane drops below its floor.
-    /// Pure arithmetic, exported for test: this is the rule that keeps the
-    /// notebook pane from rendering "open on a larger screen".
-    ///
-    /// When the viewport cannot satisfy both floors at once the edit pane
-    /// yields — the notebook is the pane with the hard rendering cliff, so it
-    /// is the one that must keep its width.
-    function clampLeftWidth(desiredPx, totalPx) {
-        var maxLeft = totalPx - SPLITTER_PX - NOTEBOOK_MIN;
-        if (maxLeft < EDIT_MIN) return Math.max(0, maxLeft);
-        if (desiredPx < EDIT_MIN) return EDIT_MIN;
-        if (desiredPx > maxLeft) return maxLeft;
-        return desiredPx;
-    }
 
     /// The only URL shape this page is ever allowed to send itself to: a
     /// same-origin absolute path to this same workbench route.
@@ -104,10 +66,8 @@
         return null;
     }
 
-    // Exported for the unit tests, which exercise the arithmetic and the
-    // policy without a DOM.
+    // Exported for the unit tests, which exercise the policy without a DOM.
     var api = {
-        clampLeftWidth: clampLeftWidth,
         resolvePane: resolvePane
     };
     if (typeof window !== 'undefined') window.ChickadeeWorkbench = api;
@@ -117,17 +77,10 @@
     var shell = document.getElementById('wb-shell');
     if (!shell) return;
 
-    var body = shell.querySelector('.wb-body');
-    var splitter = document.getElementById('wb-splitter');
     var staleChip = document.getElementById('wb-stale-chip');
-    var singleEditBtn = document.getElementById('wb-single-edit');
-    var assignmentID = shell.getAttribute('data-assignment-id') || '';
-    var storageKey = 'chickadee-workbench-split:' + assignmentID;
-
     var viewButtons = Array.prototype.slice.call(shell.querySelectorAll('.wb-view'));
-    var viewSwitch = document.getElementById('wb-viewswitch');
 
-    // Every destination the notebook half can be sent to.  There is one
+    // Every destination the notebook can be switched to.  There is one
     // notebook open at a time, so there is one kernel — switching costs a boot,
     // and nothing here has to manage a pool.
     // Carried on a data-attribute rather than a <script> island: it is a small
@@ -150,94 +103,14 @@
     var activeView = (notebookBody && notebookBody.getAttribute('data-wb-view') === 'template')
         ? 'template' : 'personalized';
 
-    function hasTemplate(file) {
-        if (!viewSwitch) return false;
-        return viewSwitch.getAttribute('data-' + file + '-has-template') === '1';
-    }
-
-    // ── Splitter ──────────────────────────────────────────────────────────
-
-    function applyLeftWidth(px) {
-        var total = body ? body.clientWidth : 0;
-        if (!total) return;
-        var clamped = clampLeftWidth(px, total);
-        shell.style.setProperty('--wb-left-width', clamped + 'px');
-        if (splitter) {
-            splitter.setAttribute('aria-valuenow', String(Math.round((clamped / total) * 100)));
-        }
-        return clamped;
-    }
-
-    function currentLeftWidth() {
-        var pane = shell.querySelector('.wb-pane-edit');
-        return pane ? pane.getBoundingClientRect().width : EDIT_MIN;
-    }
-
-    function persist(px) {
-        try { window.localStorage.setItem(storageKey, String(Math.round(px))); } catch (_) { /* private mode */ }
-    }
-
-    function restore() {
-        var saved = null;
-        try { saved = window.localStorage.getItem(storageKey); } catch (_) { /* private mode */ }
-        var px = saved ? parseInt(saved, 10) : NaN;
-        if (!isNaN(px) && px > 0) applyLeftWidth(px);
-    }
-
-    if (splitter && body) {
-        var dragging = false;
-
-        splitter.addEventListener('pointerdown', function (e) {
-            dragging = true;
-            try { splitter.setPointerCapture(e.pointerId); } catch (_) { /* not supported */ }
-            e.preventDefault();
-        });
-
-        splitter.addEventListener('pointermove', function (e) {
-            if (!dragging) return;
-            applyLeftWidth(e.clientX - body.getBoundingClientRect().left);
-        });
-
-        function endDrag() {
-            if (!dragging) return;
-            dragging = false;
-            persist(currentLeftWidth());
-        }
-        splitter.addEventListener('pointerup', endDrag);
-        splitter.addEventListener('pointercancel', endDrag);
-
-        // Keyboard: the splitter is a real control, not a mouse-only affordance.
-        splitter.addEventListener('keydown', function (e) {
-            var width = currentLeftWidth();
-            var total = body.clientWidth;
-            var next = null;
-            if (e.key === 'ArrowLeft') next = width - KEY_STEP_PX;
-            else if (e.key === 'ArrowRight') next = width + KEY_STEP_PX;
-            else if (e.key === 'Home') next = EDIT_MIN;
-            else if (e.key === 'End') next = total - SPLITTER_PX - NOTEBOOK_MIN;
-            if (next === null) return;
-            e.preventDefault();
-            persist(applyLeftWidth(next));
-        });
-
-        // A window resize can invalidate a stored width — re-clamp against the
-        // new viewport rather than leaving a pane under its floor.
-        window.addEventListener('resize', function () {
-            applyLeftWidth(currentLeftWidth());
-        });
-
-        restore();
-    }
-
     // ── Notebook selection: which file, and which reading of it ────────────
 
-    /// Switch which notebook the right half holds.
+    /// Switch which notebook is open.
     ///
-    /// Swaps the notebook half in place; the edit half is not touched. The
-    /// Pyodide kernel restarts either way — it belongs to whichever notebook is
-    /// open — but the author's *other* half does not have to pay for that: its
-    /// scroll position, expanded editors, and any metadata typed but not yet
-    /// saved all survive, where a navigation took them along.
+    /// Swaps the notebook in place; the sheet is not touched. The kernel
+    /// restarts either way, because it belongs to the open notebook, but the
+    /// sheet's scroll position, open editors and unsaved settings survive,
+    /// where a navigation took them along.
     ///
     /// The URL still changes, via `pushState`, so the address bar names what is
     /// actually open, a reload lands in the same place, and Back returns to the
@@ -267,20 +140,15 @@
         });
     }
 
-    /// Point the view control at whatever is open now.
-    ///
-    /// Its markup lives in the workbench bar, not in the swapped half, so it
-    /// does not come back from the server with the notebook — without this it
-    /// would keep showing the previous file's state.
+    /// Point the view switch at whatever is open now. Its markup is in the
+    /// app bar, not in the swapped notebook, so it does not come back from
+    /// the server with the notebook.
     function syncViewControls() {
         viewButtons.forEach(function (btn) {
             btn.setAttribute(
                 'aria-pressed',
-                btn.getAttribute('data-wb-view') === activeView ? 'true' : 'false');
+                btn.getAttribute('data-wb-target-file') === activeFile ? 'true' : 'false');
         });
-        if (viewSwitch) viewSwitch.hidden = !hasTemplate(activeFile);
-        var label = document.getElementById('wb-openfile');
-        if (label) label.textContent = activeFile === 'solution' ? 'Solution' : 'Assignment';
     }
 
     // Back/forward must move between notebooks, not leave the page half-swapped
@@ -296,33 +164,98 @@
         ChickadeeSurfaceSwap.refreshNotebookSurface(url).then(syncViewControls);
     });
 
+    // Solution · Starter: each opens its notebook as written, placeholders
+    // and all (the template view, where the notebook has one).
     viewButtons.forEach(function (btn) {
         btn.addEventListener('click', function () {
-            selectPane(activeFile, btn.getAttribute('data-wb-view'));
+            selectPane(btn.getAttribute('data-wb-target-file') === 'solution' ? 'solution' : 'assignment', 'template');
         });
     });
 
-    // The template already loaded the assignment's rendered view, so only the
-    // view control needs syncing — show it when this notebook has a template
-    // worth switching to.
-    if (viewSwitch) viewSwitch.hidden = !hasTemplate(activeFile);
+    // ── Sheets ────────────────────────────────────────────────────────────
+    //
+    // The settings (`AssignmentEditBody`, unchanged) sit in one panel that
+    // slides over the notebook. `data-wb-sheet` names the block it shows. Focus
+    // moves into the panel when it opens and back to the opener when it closes.
 
-    // ── Single-pane fallback (narrow desktop windows) ──────────────────────
+    var SHEET_TITLES = {
+        details: 'Details', files: 'Files', inputs: 'Inputs', options: 'Student options',
+        activity: 'Activity', achievements: 'Achievements', suite: 'Test suite'
+    };
+    var sheetOpener = null;
 
-    function syncSinglePane() {
-        var single = window.innerWidth <= SINGLE_PANE_MAX;
-        if (singleEditBtn) singleEditBtn.hidden = !single;
-        if (!single) shell.setAttribute('data-wb-single', 'notebook');
+    function sheetPanel() { return document.getElementById('wb-sheet'); }
+
+    function openSheet(name, opener) {
+        var sheet = sheetPanel();
+        if (!sheet || !SHEET_TITLES[name]) return;
+        sheet.setAttribute('data-wb-sheet', name);
+        sheet.setAttribute('aria-label', SHEET_TITLES[name]);
+        sheet.hidden = false;
+        sheetOpener = opener || null;
+        // The Details block keeps its fields behind its own pencil.
+        if (name === 'details') {
+            var fields = document.getElementById('assign-header-edit');
+            var toggle = document.getElementById('assign-edit-toggle');
+            if (fields && toggle && fields.style.display === 'none') toggle.click();
+        }
+        var close = document.getElementById('wb-sheet-close');
+        if (close) close.focus();
     }
-    if (singleEditBtn) {
-        singleEditBtn.addEventListener('click', function () {
-            var showingEdit = shell.getAttribute('data-wb-single') === 'edit';
-            shell.setAttribute('data-wb-single', showingEdit ? 'notebook' : 'edit');
-            singleEditBtn.textContent = showingEdit ? 'Editor' : 'Notebook';
+
+    function closeSheet() {
+        var sheet = sheetPanel();
+        if (!sheet || sheet.hidden) return;
+        sheet.hidden = true;
+        if (sheetOpener && document.contains(sheetOpener)) sheetOpener.focus();
+        sheetOpener = null;
+    }
+
+    // ── The rail under 1300px ─────────────────────────────────────────────
+
+    var railToggle = document.getElementById('wb-rail-toggle');
+
+    function setRailOpen(open) {
+        shell.toggleAttribute('data-rail-open', open);
+        if (railToggle) railToggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+    }
+
+    if (railToggle) {
+        railToggle.addEventListener('click', function () {
+            setRailOpen(!shell.hasAttribute('data-rail-open'));
         });
     }
-    window.addEventListener('resize', syncSinglePane);
-    syncSinglePane();
+
+    // Delegated, because a save swaps the sheet's content.
+    document.addEventListener('click', function (e) {
+        var target = e.target;
+        if (!target || !target.closest) return;
+        var opener = target.closest('[data-wb-open-sheet]');
+        if (opener) {
+            e.preventDefault();
+            setRailOpen(false);
+            openSheet(opener.getAttribute('data-wb-open-sheet'), opener);
+            return;
+        }
+        if (target.closest('#wb-sheet-close')) {
+            closeSheet();
+            return;
+        }
+        // An item in the overlaid rail moves the notebook; the overlay goes.
+        if (target.closest('#wb-rail .outline-row')) setRailOpen(false);
+    });
+
+    document.addEventListener('keydown', function (e) {
+        if (e.key !== 'Escape' || e.defaultPrevented) return;
+        // A dialog over the sheet (the test editor) closes first.
+        if (document.querySelector('dialog[open]')) return;
+        if (shell.hasAttribute('data-rail-open')) {
+            setRailOpen(false);
+            if (railToggle) railToggle.focus();
+            return;
+        }
+        closeSheet();
+    });
 
     // ── Cross-half notes ──────────────────────────────────────────────────
     //
@@ -344,7 +277,8 @@
             // restarts the kernel and drops the author's live state, so the
             // author decides when to pay that.
             if (staleChip) {
-                staleChip.textContent = 'Inputs changed — reload the notebook to see new values';
+                staleChip.textContent = 'Notebook out of date';
+                staleChip.title = 'The inputs changed. Reopen the notebook to see the new values.';
                 staleChip.hidden = false;
             }
             return;
@@ -431,6 +365,8 @@
                     saveStatus.textContent = ok ? 'Saved' : 'Save failed — see the form for details';
                 }
                 if (ok) formDirty = false;
+                // A save re-validates: the rail's results change.
+                if (window.ChickadeeWorkbenchRail) void window.ChickadeeWorkbenchRail.refresh();
             });
         });
     }

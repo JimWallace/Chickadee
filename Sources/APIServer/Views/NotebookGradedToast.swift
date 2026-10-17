@@ -26,7 +26,7 @@ struct NotebookGradedToast: HTML {
             }
             div(.class("nb-graded-text")) {
                 // notebook-graded.js writes these three lines.
-                p(.class("nb-graded-caption js-nb-graded-caption")) {}
+                p(.class("outline-caption js-nb-graded-caption")) {}
                 p(.class("nb-graded-grade js-nb-graded-grade")) {}
                 p(.class("card-meta js-nb-graded-summary")) {}
                 div(.class("toolbar")) {

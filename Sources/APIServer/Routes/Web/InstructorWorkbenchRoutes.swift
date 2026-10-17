@@ -39,6 +39,7 @@ struct InstructorWorkbenchRoutes: RouteCollection {
         // each handler.
         let r = routes.grouped("instructor")
         r.get(":assignmentID", "workbench", use: workbenchPage)
+        r.get(":assignmentID", "suite-outline.json", use: suiteOutline)
     }
 
     // MARK: - GET /instructor/:assignmentID/workbench
@@ -135,6 +136,17 @@ struct InstructorWorkbenchRoutes: RouteCollection {
 
         let title = assignment.title.trimmingCharacters(in: .whitespacesAndNewlines)
         let page = PageRequestContext(request: req)
+        let notebook = notebookCtx.map { NotebookBody($0, appVersion: page.appVersion, csrfToken: page.csrfToken) }
+        let manifest = decodeManifest(fromJSON: setup.manifest)
+        let facts = WorkbenchPage.Facts(
+            dueLabel: notebook?.dueLabel,
+            languageName: manifest.flatMap { AssignmentLanguage.resolve(manifest: $0) }?.displayName,
+            validationStatus: assignment.validationStatus,
+            hasSolution: hasSolution,
+            // The two notebooks, then the support files.
+            fileCount: 1 + (hasSolution ? 1 : 0) + editCtx.supportFileRows.count,
+            inputCount: editCtx.globalVariableRows.count,
+            achievementCount: manifest?.achievements.count ?? 0)
         return HTMLResponse {
             WorkbenchPage(
                 page: page,
@@ -142,10 +154,9 @@ struct InstructorWorkbenchRoutes: RouteCollection {
                 testSetupID: setupID,
                 assignmentTitle: title.isEmpty ? "Assignment" : title,
                 edit: editCtx,
-                notebook: notebookCtx.map { NotebookBody($0, appVersion: page.appVersion, csrfToken: page.csrfToken) },
+                notebook: notebook,
                 notebookPaneURLsJSON: urlsJSON,
-                assignmentHasTemplateView: assignmentHasTemplate,
-                solutionHasTemplateView: solutionHasTemplate
+                facts: facts
             )
         }
     }

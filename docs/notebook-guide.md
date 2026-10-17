@@ -136,6 +136,27 @@ Rules that keep the editor fast and safe:
 `Tools/editor-smoke-test/notebook-guide-check.mjs` checks all of this in a real
 browser. CI runs it in `browser-probes.yml`.
 
+## The instructor's suite outline
+
+`GET /instructor/:assignmentID/suite-outline.json` returns
+`InstructorSuiteOutline` (`Sources/APIServer/Models/InstructorSuiteOutline.swift`).
+`InstructorSuiteOutlineBuilder` builds it. It is for course staff only, because
+it names hidden tests and the solution's results. The workbench rail (NB6)
+draws it, and the margin cards (NB7) read it.
+
+| Field | Contents |
+|---|---|
+| `validation` | The assignment's `validationStatus`, the time of the last solution run, and the `issues`: one `failsOnSolution` for each item that does not pass on the solution. |
+| `totals` | The number of suite items and their points. |
+| `sections` | One section for each suite section, in order, then the items in no section (`id` null). Each has its `title`, `label` and `points`, and the items that link to a cell. |
+| `sections[].items` | Each item: its `id` (the script filename), `name`, `kind` (`check`, `family` or `script`), `checkKind`, `tier`, `points`, `anchor` and `solution` result. |
+| `unlinked` | The items that link to no cell, from any section. |
+
+The anchors use the rules in "Anchors" above. They read the solution, or the
+starter when there is no solution yet. `anchor.source` is `auto`; NB7 adds
+`pinned`. The `solution` result comes from the last validation run, and is null
+before one. NB8 adds the starter run.
+
 ## When an attempt is graded
 
 When grading finishes while the student is still in the editor (NB5, design

@@ -27,7 +27,10 @@ extension ElementaryPageFixtures {
                 notebook: item.notebook,
                 notebookPaneURLsJSON:
                     #"{"assignment:personalized":"/instructor/abc123/workbench?file=assignment&view=personalized"}"#,
-                assignmentHasTemplateView: item.templates, solutionHasTemplateView: item.templates
+                facts: .init(
+                    dueLabel: item.rich ? "Thu Oct 23, 23:59" : nil, languageName: item.rich ? "Python" : nil,
+                    validationStatus: item.templates ? "passed" : nil, hasSolution: item.templates, fileCount: 2,
+                    inputCount: 0, achievementCount: 0)
             ).render()
         }
         /// The two panes' bodies, rendered on their own.
