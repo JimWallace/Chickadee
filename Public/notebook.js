@@ -540,6 +540,10 @@
     /// `get_browser_diagnostics`. Re-reading the config and re-mounting touches
     /// only what actually differs between two notebooks.
     function remountNotebook() {
+        // The cached command bridge talks to the editor document that is
+        // going away; a command sent through it after the swap never
+        // returns. The next command builds a bridge to the new document.
+        _commandBridgePromise = null;
         readFrameConfig();
         readEditorURLs();
         mountEditor();
