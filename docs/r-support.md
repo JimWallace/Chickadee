@@ -537,7 +537,7 @@ every R test into a pass.
   `AssignmentLanguageTests.swift`, `AssignmentLanguageStrategyTests.swift` —
   `rLiteral`, resolution, the strategy methods, and the byte-exact
   `_ck_inputs.{py,R}` bodies.
-- `Tests/APITests/PersonalizationEvaluatorRTests.swift` — the R driver's byte
+- `Tests/APITests/Personalization/PersonalizationEvaluatorRTests.swift` — the R driver's byte
   shape (CI-safe) and a real `Rscript` round-trip (seed math, `rLiteral`
   binding, `deparse` → JSON → decode). The round-trip is silently skipped where
   `Rscript` is absent; it runs in the r-base container and locally.
@@ -547,7 +547,7 @@ every R test into a pass.
 - `Tests/BrowserRunnerJSTests/browser-runner.test.mjs` — substrate routing: an R
   script reaches `/r-grading-worker.js` and Pyodide is never spawned, and the
   reverse for Python.
-- `Tests/APITests/BrowserRunnerSeedLanguageTests.swift` — pins the browser's
+- `Tests/APITests/Grading/BrowserRunnerSeedLanguageTests.swift` — pins the browser's
   `_ck_inputs.R` rendering against `AssignmentLanguage.renderInputsFile(.r)`.
 - `Tools/browser-grading-smoke/smoke.mjs` — the only check that boots a kernel; see
   "Verifying it" above.

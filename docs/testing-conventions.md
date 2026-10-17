@@ -71,6 +71,13 @@ keeps the short form and points here.
   parameterized test, or a body whose first half runs without the tool — and
   each such site says so in a comment. "Test setup is broken" is still
   `throw IssueRecorded("...")`, which fails with a clear message.
+- **APITests is grouped by feature.** Each suite lives in a folder named for
+  the feature it covers: `Admin`, `Assignments`, `Auth`, `BrightSpace`,
+  `Courses`, `Gamification`, `GitHub`, `Grading`, `Guards`, `Infrastructure`,
+  `Languages`, `LTI`, `MCP`, `Notebooks`, `Pages`, `PatternFamilies` and
+  `Personalization`. `Guards` holds the tests that scan source or docs for a
+  rule. The top level holds only the helpers that every folder shares, and
+  `APITestsLayoutTests` fails on a suite placed there.
 - **Shared JavaScript test support.** Helpers that more than one `.mjs`
   file needs go in `Tests/BrowserRunnerJSTests/support/`. `node --test` does
   not run that directory, and ESLint lints it. `support/runner-wasm.mjs` loads
@@ -81,13 +88,13 @@ keeps the short form and points here.
   support throws. Use these in a new test file instead of writing a new stub.
 - **Pattern references.**
   - Standalone struct suite:
-    [Tests/APITests/COEPMiddlewareTests.swift](../Tests/APITests/COEPMiddlewareTests.swift)
+    [Tests/APITests/Infrastructure/COEPMiddlewareTests.swift](../Tests/APITests/Infrastructure/COEPMiddlewareTests.swift)
   - Class suite with sync `init`/`deinit`:
-    [Tests/APITests/ZipArchiverTests.swift](../Tests/APITests/ZipArchiverTests.swift)
+    [Tests/APITests/Infrastructure/ZipArchiverTests.swift](../Tests/APITests/Infrastructure/ZipArchiverTests.swift)
   - Class suite with stored `app` + per-test `withApp`:
-    [Tests/APITests/AdminRoutesTests.swift](../Tests/APITests/AdminRoutesTests.swift)
+    [Tests/APITests/Admin/AdminRoutesTests.swift](../Tests/APITests/Admin/AdminRoutesTests.swift)
   - `with*App` helper-driven suite:
-    [Tests/APITests/WebRoutesIndexTests.swift](../Tests/APITests/WebRoutesIndexTests.swift)
+    [Tests/APITests/Pages/WebRoutesIndexTests.swift](../Tests/APITests/Pages/WebRoutesIndexTests.swift)
   - Parameterized + `try #require`:
     [Tests/APITests/MCP/MCPModeScopeContractTests.swift](../Tests/APITests/MCP/MCPModeScopeContractTests.swift)
   - Worker-side class suite:
