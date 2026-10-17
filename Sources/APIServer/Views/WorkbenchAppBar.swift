@@ -26,7 +26,7 @@ struct WorkbenchAppBar: HTML {
                     strong(.class("wb-title")) { title }
                     button(
                         .class("btn-link icon-btn-text"), .type(.button), .data("wb-open-sheet", value: "details"),
-                        .ariaLabel("Edit the assignment details")
+                        .title("Edit details"), .ariaLabel("Edit the assignment details")
                     ) { "✎" }
                 }
                 if let meta = metaLine {
