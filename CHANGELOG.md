@@ -9,6 +9,13 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.716] - 2026-10-18
+
+### Added
+
+- **Lab groups design note.** `docs/lab-groups.md` proposes lab groups and in-lab sessions: a group set per course, a session per (activity, group) started from the present page, a join code for the room, and every class activity (leaderboard, hill, round robin, tournament, composite, class goal) running once per group. Design only; no behaviour changes.
+
+
 ## [0.5.715] - 2026-10-18
 
 ### Added
