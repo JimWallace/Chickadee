@@ -147,7 +147,7 @@ private struct DatasetFacts: HTML {
                         .class("form-input"), .type(.text), .name("licence"), .value(dataset.licence ?? ""),
                         .placeholder("The licence or the terms of use"))
                     span(.class("field-note field-note--muted")) {
-                        "Students see a dataset only when it has a provenance and a licence."
+                        "Publishing needs both a provenance and a licence."
                     }
                 }
                 div(.class("toolbar")) {
@@ -249,6 +249,11 @@ private struct DatasetVersionsSection: HTML {
                 page: page, panelID: "dataset-version-panel", action: "/instructor/datasets/versions",
                 slug: dataset.slug, submitLabel: "Upload version", maxUploadText: maxUploadText)
             table(.class("results-table section-items")) {
+                colgroup {
+                    col()
+                    col(.class("section-items-seen col-hide-phone"))
+                    col(.class("section-items-actions"))
+                }
                 thead(.class("visually-hidden")) {
                     tr {
                         th(.custom(name: "scope", value: "col")) { "Version" }
@@ -266,7 +271,7 @@ private struct DatasetVersionsSection: HTML {
                                     div(.class("item-details")) { note }
                                 }
                             }
-                            td(.class("item-status js-relative-time"), .data("iso", value: version.createdISO)) {
+                            td(.class("col-hide-phone js-relative-time"), .data("iso", value: version.createdISO)) {
                                 version.createdText
                             }
                             td(.class("item-actions-td")) {
