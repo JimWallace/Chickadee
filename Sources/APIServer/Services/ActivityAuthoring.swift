@@ -35,6 +35,19 @@ enum ActivityAuthoring {
         "This assignment already has student submissions, so its activity kind is locked. "
         + "Clone the assignment to run it as a different kind of activity."
 
+    /// The refusal for personal data on an activity that ranks or matches
+    /// students (`ActivityKind.comparesStudents`). One message for every door
+    /// that saves a dataset spec or an activity. It names the file and not
+    /// the kind, so a change between two ranked kinds is not refused for a
+    /// file that was already there (`ManifestCoherence.violation(introducedBy:in:)`).
+    static func personalDataMessage(file: String) -> String {
+        "This class activity ranks or matches students against each other, so every student must "
+            + "grade on the same data. The dataset \"\(file)\" gives each student their own rows. To give "
+            + "every student the whole file, remove its dataset settings, or, for a file attached from "
+            + "the course library, clear its sample and its transforms. Or make the activity a class "
+            + "composite."
+    }
+
     /// The refusal for an opponent file that is not a support file of the
     /// setup. Names the file, not the list: the picker beside the web banner
     /// already shows the list, and an agent has get_support_files.
@@ -132,6 +145,9 @@ enum ActivityAuthoring {
             try await validateOpponent(of: activity, setup: setup)
             try validateWindow(of: activity)
             try await validateComposite(of: activity, current: current, setup: setup, on: lockDB)
+        }
+        if let violation = ManifestCoherence.violation(introducedBy: { $0.activity = activity }, in: setup.manifest) {
+            throw AppError.badRequest(reason: violation)
         }
         try await setManifestActivity(setup: setup, to: activity, on: db)
         if let activity, activity.kind.aggregation == .leaderboard {

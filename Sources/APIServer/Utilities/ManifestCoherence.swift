@@ -34,6 +34,14 @@ enum ManifestCoherence {
         {
             found.append(requiresUploadOnlyMessage(language))
         }
+        // An activity that ranks or matches students needs every student on
+        // the same data. One message per file, so an edit that adds a second
+        // personal file is refused although the first one is inherited.
+        if manifest.activity?.kind.comparesStudents == true {
+            for spec in manifest.datasets where !spec.isShared {
+                found.append(ActivityAuthoring.personalDataMessage(file: spec.file))
+            }
+        }
         return found
     }
 

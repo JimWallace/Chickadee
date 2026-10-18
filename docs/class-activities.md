@@ -753,6 +753,7 @@ projects it.
 | Bundle export | The manifest travels as an opaque string. A bundle carrying a kind an older server does not know fails to decode on that server; note it in the term-clone runbook when the first such kind ships beyond slice 1. |
 | UI | The Activity section renders only when the block is set. Built from the component vocabulary; `PAGE_STYLE_BASELINE` unchanged. |
 | MCP | `set_activity` (kind locked once submitted) and `activityKinds` on `get_server_info`; every kind list derives from `ActivityKind.allCases` via `MCPActivityProse` (`MCPActivityCoverageTests`). |
+| Datasets | An activity whose kind compares students (`ActivityKind.comparesStudents`: every kind but a class composite) accepts only shared data: a dataset spec with no sample and no transforms (`DatasetSpec.isShared`). It is one `ManifestCoherence` rule, so the zip upload, `set_activity`, the edit page, both `/datasets` PUTs, `set_dataset` and the library attach all refuse the pair, and an edit is refused only for a personal file it adds. A bundle import, a version restore, a clone and a draft publish copy the manifest as it is. A class composite accepts personal data. See `docs/datasets-course-library.md` §4.11. |
 | Versions | No edits to `VERSION`, `ChickadeeVersion.swift` or `CHANGELOG.md`; one fragment under `changelog.d/` per PR. |
 
 ## Authoring an activity

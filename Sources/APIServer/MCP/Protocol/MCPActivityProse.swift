@@ -22,6 +22,16 @@ enum MCPActivityProse {
     /// `"\"beatTheInstructor\" | \"bestMetric\""` — a field description's union.
     static var quotedTokenAlternatives: String { MCPEnumProse<ActivityKind>.quotedUnion }
 
+    /// The shared-data rule of an activity that compares students
+    /// (`ActivityKind.comparesStudents`), in one sentence. The kinds it exempts
+    /// are derived, so a new kind cannot be left out of the sentence.
+    static var sharedDataRule: String {
+        let exempt = ActivityKind.allCases.filter { !$0.comparesStudents }.map { "\"\($0.rawValue)\"" }
+        return "An activity whose kind ranks or matches students (every kind but "
+            + LanguageProse.list(exempt) + ") accepts only a dataset that gives every student the whole "
+            + "file, with no sample and no transforms: the pair is refused from either side."
+    }
+
     /// One clause per kind: `"beatTheInstructor — …; bestMetric — …"`.
     static var summaries: String {
         ActivityKind.allCases.map { "\($0.rawValue) — \($0.summary)" }.joined(separator: "; ")
