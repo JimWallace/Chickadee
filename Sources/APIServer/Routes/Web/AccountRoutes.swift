@@ -113,6 +113,8 @@ struct AccountRoutes: RouteCollection {
                 identityName: identityName,
                 identitySecondary: accountIdentitySecondary(
                     identityName: identityName, username: user.username),
+                preferredName: accountPreferredNameRow(
+                    preferredName: user.preferredName, identityName: identityName),
                 avatarPicker: avatarPicker,
                 avatarInvalid: avatarNotice == "invalid",
                 studentID: user.studentID,
@@ -272,6 +274,15 @@ func accountIdentityName(displayName: String?, preferredName: String?, username:
 /// identity.
 func accountIdentitySecondary(identityName: String, username: String) -> String? {
     identityName == username ? nil : username
+}
+
+/// The preferred name for its own row on the account page, or nil when none
+/// is on file or the heading already shows it (a user with no full name on
+/// file sees the preferred name as the heading).
+func accountPreferredNameRow(preferredName: String?, identityName: String) -> String? {
+    guard let name = preferredName?.trimmingCharacters(in: .whitespaces), !name.isEmpty, name != identityName
+    else { return nil }
+    return name
 }
 
 /// The account page's GitHub section.

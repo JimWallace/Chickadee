@@ -15,6 +15,9 @@ struct AccountPage: HTML {
     let identityName: String
     /// The username under the heading, nil when the heading already is it.
     let identitySecondary: String?
+    /// The preferred name, for its own row, nil when the heading already
+    /// shows it. See `accountPreferredNameRow`.
+    var preferredName: String? = nil
     let avatarPicker: AvatarPickerContext
     /// A posted avatar choice was refused.
     let avatarInvalid: Bool
@@ -98,7 +101,7 @@ struct AccountPage: HTML {
                 }
                 // The name and username above say who this is, so the
                 // grid holds only what they do not.
-                if studentID != nil || email != nil {
+                if preferredName != nil || studentID != nil || email != nil {
                     dl(.class("detail-grid")) {
                         detailRows
                     }
@@ -108,6 +111,12 @@ struct AccountPage: HTML {
     }
 
     @HTMLBuilder private var detailRows: some HTML {
+        if let preferredName {
+            div {
+                dt { "Preferred name" }
+                dd { preferredName }
+            }
+        }
         if let studentID {
             div {
                 dt { "Student ID" }
