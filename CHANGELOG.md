@@ -9,6 +9,20 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.711] - 2026-10-18
+
+### Added
+
+- **The award ledger.** A student's own result page and dashboard now store each individual badge they show in a new `achievement_awards` table, once per assignment, and a regrade does not take a stored badge back (docs/achievement-rewards.md, S1). Staff views store nothing. The rows go with the account, the course and the assignment, and the account export carries them. Nothing a student sees changes yet: the trophy case and the one toast will read the ledger.
+
+
+## [0.5.710] - 2026-10-18
+
+### Added
+
+- **Achievements and rewards: the plan.** `docs/achievement-rewards.md` proposes achievements at the assignment, course and site levels, one stored award ledger, and a wardrobe item as an achievement reward. Nothing is built yet.
+
+
 ## [0.5.709] - 2026-10-17
 
 ### Added

@@ -410,6 +410,9 @@ Achievements and badges stay a separate system for now. The result-page toast
 Whether an achievement can grant a wardrobe item is still open. One rule is
 already fixed: an item that an achievement grants has no built-in rule, so the
 "how you earned it" text is always true.
+[achievement-rewards.md](achievement-rewards.md) proposes the answer: yes, as
+a `wardrobe` reward type, from a pool of items that have no built-in rule.
+The decision is still the maintainer's.
 
 ### E8. Per account
 

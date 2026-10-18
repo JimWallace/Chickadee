@@ -496,6 +496,8 @@ struct InstructorDashboardRoutes: RouteCollection {
                 .filter(\.$id ~~ submissionIDs)
                 .delete()
         }
+        // The awards this assignment's work earned go with that work.
+        try await AchievementAwardStore.deleteAwards(forTestSetups: [setupID], on: req.db)
 
         // Delete setup artifacts and setup row so it disappears from the assignments list.
         if let setup = try await APITestSetup.find(setupID, on: req.db) {

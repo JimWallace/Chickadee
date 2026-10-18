@@ -388,6 +388,9 @@ extension AdminRoutes {
                 // removes it.
                 try await APIClassItemCoverage.query(on: db)
                     .filter(\.$testSetupID ~~ setupIDs).delete()
+                // The award ledger names the student and the work that earned
+                // the award, keyed by setup with no foreign key.
+                try await AchievementAwardStore.deleteAwards(forTestSetups: setupIDs, on: db)
                 try await APISubmission.query(on: db)
                     .filter(\.$testSetupID ~~ setupIDs).delete()
             }
