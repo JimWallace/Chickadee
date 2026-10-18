@@ -34,15 +34,29 @@ extension DatasetMaterializer {
         switch transform.kind {
         case .missingValues:
             return blankCells(transform, at: index, in: csv, seedHex: seedHex)
+        case .formatNoise:
+            return editCells(transform, at: index, in: csv, seedHex: seedHex) { cell, rng in
+                noisy(cell, variant: rng.next(upperBound: 3))
+            }
         }
     }
 
     /// Blanks `rate` of the rows in each named column.
+    static func blankCells(
+        _ transform: DatasetTransform, at index: Int, in csv: String, seedHex: String
+    ) -> String {
+        editCells(transform, at: index, in: csv, seedHex: seedHex) { _, _ in "" }
+    }
+
+    /// Replaces the cell of `rate` of the rows in each named column with
+    /// `edit(cell, rng)`, where `rng` is that column's stream, after it chose
+    /// the rows.
     ///
     /// Returns `csv` untouched when the step cannot apply — no rate, a
     /// non-positive rate, no data rows, or a column the file does not have.
-    static func blankCells(
-        _ transform: DatasetTransform, at index: Int, in csv: String, seedHex: String
+    private static func editCells(
+        _ transform: DatasetTransform, at index: Int, in csv: String, seedHex: String,
+        edit: (Substring, inout SplitMix64) -> String
     ) -> String {
         guard let permille = permille(of: transform.rate), permille > 0 else { return csv }
         let (lines, hadTrailingNewline) = normalizedLines(of: csv)
@@ -64,7 +78,7 @@ extension DatasetMaterializer {
                 seed: fnv1a64(
                     "\(seedHex)|\(index)|\(transform.kind.rawValue)|\(column)"))
             for row in chooseRows(count: affected, of: rowCount, using: &rng) {
-                rows[row] = blanking(field: columnIndex, in: rows[row])
+                rows[row] = replacing(field: columnIndex, in: rows[row]) { edit($0, &rng) }
             }
         }
 
@@ -95,16 +109,39 @@ extension DatasetMaterializer {
         return indices.prefix(take).sorted()
     }
 
-    /// `line` with field `index` replaced by an empty value.
+    /// `line` with the raw text of field `index` replaced by `edit(text)`.
     ///
     /// Edits the raw text in place rather than splitting and re-joining: a
     /// rebuild would re-quote every OTHER field by this file's rules rather than
     /// the source's, changing bytes in cells the transform was never asked to
     /// touch.  A short row (fewer fields than the header) is returned unchanged.
-    private static func blanking(field index: Int, in line: String) -> String {
+    private static func replacing(
+        field index: Int, in line: String, with edit: (Substring) -> String
+    ) -> String {
         let ranges = fieldRanges(of: Substring(line))
         guard index < ranges.count else { return line }
-        return line.replacingCharacters(in: ranges[index], with: "")
+        return line.replacingCharacters(in: ranges[index], with: edit(line[ranges[index]]))
+    }
+
+    /// `raw` written another way: `variant` 0 adds a space on each side, 1 is
+    /// upper case, 2 is lower case.  A case change that changes nothing (a
+    /// number, or a cell already in that case) adds the spaces instead, so a
+    /// chosen cell always changes.  A quoted cell keeps its quotes outside the
+    /// change, so it stays one field.  An empty cell stays empty: a hole is
+    /// `missingValues`' to make, not this step's.
+    static func noisy(_ raw: Substring, variant: UInt64) -> String {
+        let quoted = raw.count >= 2 && raw.first == "\"" && raw.last == "\""
+        let value = quoted ? raw.dropFirst().dropLast() : raw
+        guard !value.isEmpty else { return String(raw) }
+        let padded = " \(value) "
+        var written: String
+        switch variant {
+        case 1: written = value.uppercased()
+        case 2: written = value.lowercased()
+        default: written = padded
+        }
+        if written == value { written = padded }
+        return quoted ? "\"\(written)\"" : written
     }
 
     /// The raw span of each comma-separated field in `line`, using the same

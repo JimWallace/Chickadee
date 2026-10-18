@@ -79,13 +79,19 @@ extension DatasetDiagnostics {
     public static func divergence(
         spec: DatasetSpec, sourceCSV: String, seedCount: Int = defaultSeedCount
     ) -> [DatasetColumnDivergence] {
-        guard seedCount > 0, let pool = ParsedColumns(csv: sourceCSV) else { return [] }
+        // Format noise changes how a value is written, not the value, so its
+        // cells are compared as trimmed, case-folded text; otherwise "Ward A"
+        // and "ward a" would read as two categories and inflate the measure.
+        let foldsFormat = spec.transforms.contains { $0.kind == .formatNoise }
+        guard seedCount > 0, let pool = ParsedColumns(csv: sourceCSV, foldingFormat: foldsFormat) else {
+            return []
+        }
 
         var samples: [[Double]] = Array(repeating: [], count: pool.names.count)
         for seed in 0..<seedCount {
             let materialized = DatasetMaterializer.materialize(
                 source: sourceCSV, spec: spec, seedHex: preflightSeed(seed))
-            guard let slice = ParsedColumns(csv: materialized) else { continue }
+            guard let slice = ParsedColumns(csv: materialized, foldingFormat: foldsFormat) else { continue }
             for index in pool.names.indices where index < slice.observed.count {
                 let observed = slice.observed[index]
                 guard !observed.isEmpty, !pool.observed[index].isEmpty else { continue }
@@ -222,7 +228,8 @@ private struct ParsedColumns {
     /// Population standard deviation per column (0 for categorical).
     let standardDeviation: [Double]
 
-    init?(csv: String) {
+    /// With `foldingFormat`, each value is trimmed and lower-cased first.
+    init?(csv: String, foldingFormat: Bool) {
         let (lines, _) = DatasetMaterializer.normalizedLines(of: csv)
         guard lines.count > 1 else { return nil }
         let names = DatasetMaterializer.splitCSVLine(lines[0])
@@ -232,7 +239,8 @@ private struct ParsedColumns {
         for index in 1..<lines.count {
             let fields = DatasetMaterializer.splitCSVLine(lines[index])
             for column in names.indices where column < fields.count {
-                let value = fields[column]
+                let raw = fields[column]
+                let value = foldingFormat ? raw.trimmingCharacters(in: .whitespaces).lowercased() : raw
                 if !value.isEmpty { observed[column].append(value) }
             }
         }

@@ -654,15 +654,33 @@ honours it for every repaint after a save — omitting the `transforms` key
 entirely when its fields are disabled, so the merge carries the stored steps
 through.
 
-### What is NOT built yet
+### `formatNoise`
 
-`formatNoise` — inconsistent representations of the same value (stray
-whitespace, letter case, `2024-01-02` vs `02/01/2024`) — is the natural next
-transform, and the most pedagogically honest of the set: real health data
-arrives like this, and it is **answer-preserving**, so correct parsing yields
-the same result the pool would. (It was once the only transform safe to author
-without multi-variant validation, for that reason; that gate exists now — see
-below — so the ordering constraint is gone.)
+The second derivation. It writes a deterministic subset of cells in the named
+columns another way: with a space on each side, in upper case or in lower
+case. Real health data arrives like this, and the step is
+**answer-preserving**: trimming and case-folding a cell gives the pool's cell
+back, so correct cleaning yields the result the pool would. It is
+distribution-preserving for the same reason.
+
+- **A chosen cell always changes.** Each cell draws its variant from the
+  column's stream. A case change that changes nothing, as on a number or a
+  cell already in that case, adds the spaces instead.
+- **An empty cell stays empty.** A hole is `missingValues`' to make, so a
+  noise step after a blanking step leaves the holes where they are.
+- **A quoted cell stays one field.** The change goes inside the quotes.
+- **The divergence diagnostic compares folded text** for a spec with a noise
+  step, so "Ward A" and "ward a" do not read as two categories.
+- **The rules above hold unchanged:** the rate, the explicit columns, the
+  sub-seeded stream per step and column, the edit in place, and the save-time
+  refusals. The Files panel edits only a single `missingValues` step, so a
+  spec with a noise step renders disabled there and is authored through MCP
+  `set_dataset`.
+
+Dates are not reformatted. `2024-01-02` against `02/01/2024` is not
+answer-preserving: a reader cannot tell day-first from month-first, so the
+cleaned value would depend on a guess. A date variant needs a declared format
+per column, which is a later decision.
 
 ### `numericJitter` is decided against — do not propose it again
 

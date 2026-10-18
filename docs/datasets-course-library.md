@@ -21,7 +21,7 @@ states what it adds and what proves it.
 | 7 | MCP: `list_datasets`, `get_dataset`, `create_dataset`, `update_dataset`, `add_dataset_version`, `attach_dataset`, `detach_dataset` | built |
 | 8 | Lifecycle: course clone, bundle export and import, storage page, purge | built |
 | 9 | Migration of HLTH 230: promote the two live datasets; docs and CLAUDE.md | docs built; the promotion is the maintainer's, in the UI |
-| 10 | Optional: the `formatNoise` transform | proposed |
+| 10 | Optional: the `formatNoise` transform | built |
 | 11 | Class-wide data: the `partition` kind dealt by slot, the ranked-activity refusal, and the rule for jobs with no student | proposed |
 
 ---
@@ -629,13 +629,18 @@ Docs, as built: `datasets.md` points here; the `CLAUDE.md` reference line;
 one paragraph in `docs/architecture.md`; the `docs/mcp-authoring-roadmap.md`
 rows (slice 7).
 
-### 4.10 Optional: `formatNoise` (slice 10)
+### 4.10 `formatNoise` (slice 10, as built)
 
-Already designed in `datasets.md` §"What is NOT built yet". It is
-answer-preserving and schema-preserving, so it fits the transform rules and
-the row-set theorem. It is independent of the library and can land before or
-after it. It is in this plan so the "clean your cohort" lab in the arc below
-has a second kind of dirt.
+`DatasetTransform.Kind.formatNoise` writes a chosen cell with a space on each
+side, in upper case or in lower case, and never as another value; the rules
+are in `datasets.md` §"formatNoise". It is answer-preserving and
+schema-preserving, so it fits the transform rules and the row-set theorem
+(`DatasetDiagnosticsTests` holds every kind to it). Dates are not reformatted,
+because day-first against month-first is not answer-preserving. It gives the
+"clean your cohort" lab in the arc below a second kind of dirt.
+
+Tests: `DatasetFormatNoiseTests` (the byte pin, the fold back to the pool,
+empty and quoted cells, the order with `missingValues`, the divergence fold).
 
 ### 4.11 Class-wide data: activities and the dealt partition (slice 11)
 
