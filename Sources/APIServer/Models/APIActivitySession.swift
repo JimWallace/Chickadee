@@ -38,6 +38,11 @@ final class APIActivitySession: Model, @unchecked Sendable {
     @OptionalField(key: "opened_by")
     var openedBy: UUID?
 
+    /// The network the presenter's screen is on (`ClientNetwork.prefix`),
+    /// kept current by the join box's refresh. Nil when unknown.
+    @OptionalField(key: "presenter_network")
+    var presenterNetwork: String?
+
     init() {}
 
     init(assignmentID: UUID, groupID: UUID, codeSecret: String, openedAt: Date, openedBy: UUID?) {

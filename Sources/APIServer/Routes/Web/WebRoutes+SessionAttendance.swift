@@ -53,7 +53,9 @@ extension WebRoutes {
                 + "&removed=1")
     }
 
-    /// The current run's joins, with each student's name and username.
+    /// The current run's joins, with each student's name and username, and
+    /// whether the join came from another network than the room
+    /// (`SessionNetworkCheck`).
     private func attendeeRows(
         of session: APIActivitySession?, on db: any Database
     ) async throws
@@ -65,11 +67,14 @@ extension WebRoutes {
         let users = try await APIUser.query(on: db).filter(\.$id ~~ attendance.map(\.userID)).all()
         let userByID = Dictionary(users.compactMap { u in u.id.map { ($0, u) } }, uniquingKeysWith: { a, _ in a })
         let formatter = waterlooDateTimeFormatter()
+        let room = SessionNetworkCheck.roomNetworks(
+            presenter: session.presenterNetwork, joins: attendance.filter { $0.removedAt == nil }.map(\.joinNetwork))
         return attendance.compactMap { row in
             guard let user = userByID[row.userID] else { return nil }
             return SessionAttendeeRow(
                 userID: row.userID.uuidString, name: user.displayName ?? user.username, username: user.username,
-                joinedAtText: formatter.string(from: row.joinedAt), isRemoved: row.removedAt != nil)
+                joinedAtText: formatter.string(from: row.joinedAt), isRemoved: row.removedAt != nil,
+                isOtherNetwork: SessionNetworkCheck.isOtherNetwork(row.joinNetwork, room: room))
         }
     }
 }

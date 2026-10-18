@@ -483,6 +483,9 @@ because line numbers go out of date.
     never stored. A reopen draws a new secret.
   - Remove undoes a group placement that the student's join made
     (`placed_in_group`), and only while that is still their group.
+  - The network columns (`presenter_network`, `join_network`) hold the
+    network part of an address (`ClientNetwork.prefix`), never the address.
+    The "Other network" mark is a flag for staff; no gate reads it.
   - Sessions read the course's first group set only.
   - Staff are never gated, as with the window.
   - Every write that turns `runsPerGroup` off ends the open sessions:

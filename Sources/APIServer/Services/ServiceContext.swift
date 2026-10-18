@@ -38,4 +38,8 @@ extension Request: AuditContext {
         clientIPAddress(from: self, trustForwardedFor: application.securityConfiguration.trustForwardedProto)
     }
     var auditUserAgent: String? { headers.first(name: "User-Agent") }
+
+    /// The network part of the client's address (`ClientNetwork.prefix`),
+    /// under the same proxy trust rules. Nil when unknown.
+    var clientNetwork: String? { auditRemoteAddress.flatMap(ClientNetwork.prefix(of:)) }
 }

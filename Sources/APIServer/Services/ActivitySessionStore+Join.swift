@@ -20,10 +20,12 @@ extension ActivitySessionStore {
 
     /// Joins `userID` to the open session whose code at `now` (or just
     /// before) is `code`. A second join moves the student back to this
-    /// session from any other they joined since.
+    /// session from any other they joined since. `network` is the network
+    /// part of the student's address (`ClientNetwork.prefix`), nil when
+    /// unknown.
     @discardableResult
     static func join(
-        code: String, userID: UUID, now: Date = Date(), on db: any Database
+        code: String, userID: UUID, network: String? = nil, now: Date = Date(), on db: any Database
     ) async throws
         -> APIActivitySession
     {
@@ -84,6 +86,7 @@ extension ActivitySessionStore {
                 .set(\.$joinedAt, to: now)
                 .set(\.$removedAt, to: nil)
                 .set(\.$placedInGroup, to: existing.placedInGroup || placed)
+                .set(\.$joinNetwork, to: network)
                 .update()
             if let removedAt = try await APIActivitySessionAttendance.find(rowID, on: db)?.removedAt,
                 removedAt >= session.openedAt
@@ -94,6 +97,7 @@ extension ActivitySessionStore {
             // Two joins at once leave one row.
             let row = APIActivitySessionAttendance(sessionID: sessionID, userID: userID, joinedAt: now)
             row.placedInGroup = placed
+            row.joinNetwork = network
             try await row.createIgnoringConflict(on: db)
         }
         return session

@@ -2,8 +2,9 @@
 //
 // GET /testsetups/:id/sessions/attendance?group=: who joined a lab group's
 // session, for course staff (docs/lab-groups.md, "Presence"). It shows names,
-// so the present page opens it in a new tab, off the projector. Remove takes
-// a student who is not in the room out of the session.
+// so the present page opens it in a new tab, off the projector. A join from
+// another network than the room is marked "Other network", for staff to
+// check; Remove takes a student who is not in the room out of the session.
 
 import Elementary
 
@@ -65,6 +66,9 @@ struct SessionAttendeeRow: Sendable {
     let username: String
     let joinedAtText: String
     let isRemoved: Bool
+    /// The join came from another network than the room
+    /// (`SessionNetworkCheck`). A flag to check, not proof.
+    var isOtherNetwork = false
 }
 
 /// One joined student, muted once removed, with the Remove action while the
@@ -80,7 +84,13 @@ struct SessionAttendeeTableRow: HTML {
         tr {
             td { row.name }
             td { row.username }
-            td { row.joinedAtText }
+            td {
+                row.joinedAtText
+                if row.isOtherNetwork {
+                    " "
+                    span(.class("tier")) { "Other network" }
+                }
+            }
             if showsActions { actions }
         }
         .attributes(.class("row-muted"), when: row.isRemoved)
