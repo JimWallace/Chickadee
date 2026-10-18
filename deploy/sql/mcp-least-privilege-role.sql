@@ -36,7 +36,8 @@ GRANT USAGE ON SCHEMA public TO chickadee_mcp;
 
 -- 2. Authoring tables — full DML (the MCP tools create/edit this content).
 GRANT SELECT, INSERT, UPDATE, DELETE ON
-    courses, course_sections, assignments, test_setups, assignment_requirements
+    courses, course_sections, assignments, test_setups, assignment_requirements,
+    course_datasets, course_dataset_versions
     TO chickadee_mcp;
 
 -- 3. Identity / enrolment — SELECT only, needed for authorization

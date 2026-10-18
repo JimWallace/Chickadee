@@ -47,6 +47,12 @@ struct GetSupportFilesTool: ContentTool {
         /// cannot read a mark back cannot preserve it, and the Files panel
         /// shows both.
         let datasetStratumColumn: String?
+        /// The course library dataset and version the file was copied from;
+        /// nil for a file that is not attached from the library.
+        var datasetSource: DatasetSource?
+        /// "course" or "assignment" for a dataset: whose seed picks a
+        /// student's rows. Nil otherwise.
+        var datasetScope: String?
     }
 
     struct Output: Encodable, Sendable {
@@ -72,7 +78,8 @@ struct GetSupportFilesTool: ContentTool {
         + "UTF-8 content, capped at maxBytes (default \(MCPContentByteCap.defaultBytes)) with truncated:true when the file is "
         + "larger — so a big dataset returns a useful head. Listed entries report per-student "
         + "dataset marks (isDataset / datasetSampleSize / datasetKind / datasetStratumColumn — set "
-        + "them with set_dataset). Write "
+        + "them with set_dataset), and for a file attached from the course dataset library its "
+        + "datasetSource ({slug, version}) and datasetScope. Write "
         + "support files with "
         + "author_script(tier:\"support\"). Read-only, instructor-authored content only; use it to "
         + "confirm a data file is actually bundled (and what its columns/rows look like) before "
@@ -136,7 +143,9 @@ struct GetSupportFilesTool: ContentTool {
                         datasetSampleSize: datasetSpecs[name]?.sampleSize,
                         isDataset: datasetSpecs[name] != nil,
                         datasetKind: datasetSpecs[name]?.kind.rawValue,
-                        datasetStratumColumn: datasetSpecs[name]?.stratumColumn))
+                        datasetStratumColumn: datasetSpecs[name]?.stratumColumn,
+                        datasetSource: datasetSpecs[name]?.source,
+                        datasetScope: datasetSpecs[name]?.scope.rawValue))
             }
             return Output(
                 assignmentPublicID: assignment.publicID,
