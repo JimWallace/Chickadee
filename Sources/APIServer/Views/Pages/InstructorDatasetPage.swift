@@ -146,9 +146,6 @@ private struct DatasetFacts: HTML {
                     input(
                         .class("form-input"), .type(.text), .name("licence"), .value(dataset.licence ?? ""),
                         .placeholder("The licence or the terms of use"))
-                    span(.class("field-note field-note--muted")) {
-                        "Publishing needs both a provenance and a licence."
-                    }
                 }
                 div(.class("toolbar")) {
                     button(.class("btn btn-primary"), .type(.submit)) { "Save" }
