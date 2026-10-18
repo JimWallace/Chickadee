@@ -60,10 +60,12 @@ enum ActivitySessionStore {
 
     /// Starts the group's session, or reopens an ended one with a new code
     /// secret. An open session is returned as it is, so a second Start keeps
-    /// the code on the screen.
+    /// the code on the screen. `network` is the presenter's
+    /// (`ClientNetwork.prefix`).
     @discardableResult
     static func open(
-        assignmentID: UUID, groupID: UUID, by userID: UUID?, now: Date = Date(), on db: any Database
+        assignmentID: UUID, groupID: UUID, by userID: UUID?, network: String? = nil, now: Date = Date(),
+        on db: any Database
     ) async throws -> APIActivitySession {
         if let existing = try await session(assignmentID: assignmentID, groupID: groupID, on: db) {
             guard !existing.isOpen(at: now) else { return existing }
@@ -71,12 +73,14 @@ enum ActivitySessionStore {
             existing.openedAt = now
             existing.closedAt = nil
             existing.openedBy = userID
+            existing.presenterNetwork = network
             try await existing.save(on: db)
             return existing
         }
         let session = APIActivitySession(
             assignmentID: assignmentID, groupID: groupID, codeSecret: ActivitySessionCode.newSecret(),
             openedAt: now, openedBy: userID)
+        session.presenterNetwork = network
         do {
             try await session.create(on: db)
             return session
@@ -109,6 +113,16 @@ enum ActivitySessionStore {
             .filter(\.$closedAt == nil)
             .set(\.$closedAt, to: now)
             .update()
+    }
+
+    /// Records the network the presenter's screen is on now, when it changed:
+    /// the projector may not be the device that pressed Start.
+    static func notePresenterNetwork(
+        _ network: String?, for session: APIActivitySession, on db: any Database
+    ) async throws {
+        guard let network, network != session.presenterNetwork else { return }
+        session.presenterNetwork = network
+        try await session.save(on: db)
     }
 
     /// Whether the assignment's activity runs once per lab group.

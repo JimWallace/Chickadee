@@ -490,6 +490,9 @@ because line numbers go out of date.
     never stored. A reopen draws a new secret.
   - Remove undoes a group placement that the student's join made
     (`placed_in_group`), and only while that is still their group.
+  - The network columns (`presenter_network`, `join_network`) hold the
+    network part of an address (`ClientNetwork.prefix`), never the address.
+    The "Other network" mark is a flag for staff; no gate reads it.
   - Sessions read the course's first group set only.
   - Staff are never gated, as with the window.
   - Every write that turns `runsPerGroup` off ends the open sessions:
@@ -499,6 +502,21 @@ because line numbers go out of date.
   - A clone and a bundle import clear the flag (see Cloning).
 - **Gap:** `POST /api/v1/submissions` checks enrollment only, so it skips
   this gate, as it skips the window.
+
+### The client address: `clientIPAddress` and `Request.clientNetwork`
+
+- **Readers:** the login rate limit (`ip` key), the MCP OAuth rate limit,
+  the audit log's `remote_addr` (`auditRemoteAddress`), and the lab-group
+  session networks (`Request.clientNetwork`).
+- **Rules:**
+  - `X-Forwarded-For` is read only when `trustForwardedProto` is set.
+  - `clientIPAddress` takes the FIRST entry, which the client can choose:
+    the deployment's nginx appends the real peer
+    (`$proxy_add_x_forwarded_for`) after what the client sent.
+  - `Request.clientNetwork` takes the LAST entry, the one nginx appended,
+    because a session network is evidence that staff read.
+  - A change to either reading changes every reader of it. A front proxy
+    other than the repository's nginx can change which entry is real.
 
 ### Rate-limit rows: `login_attempts`
 

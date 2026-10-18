@@ -567,6 +567,9 @@ func registerMigrations(on app: Application) {
     app.migrations.add(CreateCourseGroups())
     // Lab groups, slice 2: per-group activity sessions and their attendance.
     app.migrations.add(CreateActivitySessions())
+    // The network part of the presenter's and each join's address
+    // (docs/lab-groups.md, "Presence").
+    app.migrations.add(AddActivitySessionNetworks())
 
     // ---------------------------------------------------------------------
     // DATA MIGRATIONS. Keep these at the end, and add every new schema
