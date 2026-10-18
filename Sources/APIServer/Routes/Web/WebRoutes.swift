@@ -171,6 +171,12 @@ struct WebRoutes: RouteCollection {
 
         let gradeData = try await Self.loadStudentDashboardGradeData(
             req: req, user: user, setups: setups, fmt: fmt)
+        // A student's own dashboard stores what their latest submissions
+        // earned (docs/achievement-rewards.md, S1). Staff write nothing.
+        if !isActiveCourseStaff, let userID = user.id {
+            await AchievementAwardStore.recordOrLog(
+                gradeData.earnedAwards, earnedBy: userID, on: req.db, logger: req.logger)
+        }
 
         let sortedSetups = setups.sorted { lhs, rhs in
             let lhsID = lhs.id ?? ""

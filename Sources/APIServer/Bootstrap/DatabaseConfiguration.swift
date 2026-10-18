@@ -611,4 +611,7 @@ func registerMigrations(on app: Application) {
     app.migrations.add(CreateCourseDatasets())
     // The per-student course cohort seed (docs/datasets-course-library.md, slice 4).
     app.migrations.add(CreateCoursePersonalizationSeeds())
+    // The award ledger (docs/achievement-rewards.md, S1): the achievements a
+    // student has earned, kept for good.
+    app.migrations.add(CreateAchievementAwards())
 }

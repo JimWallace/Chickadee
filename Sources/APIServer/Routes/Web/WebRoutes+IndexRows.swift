@@ -21,6 +21,19 @@ struct DashboardGradeData {
     var bestGradePercentBySetupID: [String: Int] = [:]
     var overridePercentBySetupID: [String: Int] = [:]
     var latestBadgesBySetupID: [String: [AchievementBadge]] = [:]
+    /// The badges each setup's latest submission earns by itself, without the
+    /// class records: what the award ledger stores (`earnedAwards`).
+    var earnedBadgesBySetupID: [String: [AchievementBadge]] = [:]
+
+    /// `earnedBadgesBySetupID`, each against the latest submission that
+    /// earned it, for the award ledger (docs/achievement-rewards.md, S1).
+    var earnedAwards: [AchievementAwardStore.Earned] {
+        earnedBadgesBySetupID.compactMap { setupID, badges in
+            latestSubmissionBySetupID[setupID].map {
+                AchievementAwardStore.Earned(testSetupID: setupID, submissionID: $0.submissionID, badges: badges)
+            }
+        }
+    }
 }
 
 /// The viewer's slip-day state for the active course (#1228), loaded once per
@@ -241,6 +254,7 @@ extension WebRoutes {
                 standings: standings[setupID])
             {
                 data.latestBadgesBySetupID[setupID] = badges
+                data.earnedBadgesBySetupID[setupID] = badges
             }
         }
 

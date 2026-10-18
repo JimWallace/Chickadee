@@ -1,4 +1,4 @@
-// Tests/APITests/CourseCohortDeliveryTests.swift
+// Tests/APITests/Personalization/CourseCohortDeliveryTests.swift
 //
 // The course cohort reaches every delivery path
 // (docs/datasets-course-library.md, slice 4). A course-scoped dataset gives
