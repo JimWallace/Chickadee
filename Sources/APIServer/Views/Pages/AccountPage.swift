@@ -17,7 +17,7 @@ struct AccountPage: HTML {
     let identitySecondary: String?
     /// The preferred name, for its own row, nil when the heading already
     /// shows it. See `accountPreferredNameRow`.
-    var preferredName: String? = nil
+    var preferredName: String?
     let avatarPicker: AvatarPickerContext
     /// A posted avatar choice was refused.
     let avatarInvalid: Bool

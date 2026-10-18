@@ -344,7 +344,10 @@ duplicate.
   `.bird-card` just below.  The name
   and username are element selectors inside the row, not classes of their own.
   The name resolves display name → preferred name → username, and the username
-  line is omitted when it would merely repeat the name.
+  line is omitted when it would merely repeat the name.  The card's
+  `.detail-grid` under it holds only what the header does not say: a
+  "Preferred name" row when the preferred name is not the header name, then
+  Student ID and Email.
 - **`.avatar`** and the `.av-*` part classes — the generated student bird.
   The browser tab icon also reads the `.av-*` rules and the light `:root`
   palette, at boot. A missing rule or token stops the server
