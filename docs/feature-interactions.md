@@ -459,7 +459,9 @@ because line numbers go out of date.
     `ActivitySessionStore.sessionAtSubmission` the same way, or
     `ActivityKind.canRunPerGroup` must stay false for its kind. Every
     reader of the per-group behaviour reads `ClassActivity.isPerGroup`, never
-    the raw `runsPerGroup` flag.
+    the raw `runsPerGroup` flag. The `highestMetric` class record stays
+    course-wide on purpose: a per-group result can take it from a student in
+    another lab.
 
 ### Lab groups and per-group sessions: `runsPerGroup`, `activity_sessions`
 
