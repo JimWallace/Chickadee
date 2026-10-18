@@ -462,6 +462,12 @@ because line numbers go out of date.
     the raw `runsPerGroup` flag. The `highestMetric` class record stays
     course-wide on purpose: a per-group result can take it from a student in
     another lab.
+  - The hill of a per-group activity is the group's
+    (`group_activity_champions`, slice 3b). The claim and the result path
+    both resolve it with `Hill.of`, from the same submission, so the champion
+    check reads the row the claim staged. A new reader or writer of a hill
+    goes through `Hill`, never straight to `activity_champions`. A per-group
+    hill awards no champion class record.
   - An activity whose kind compares students (`ActivityKind.comparesStudents`)
     accepts only shared data (`DatasetSpec.isShared`). The rule is in
     `ManifestCoherence`. A new door that writes an activity or a dataset spec

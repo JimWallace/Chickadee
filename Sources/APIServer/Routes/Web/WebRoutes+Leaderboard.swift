@@ -64,7 +64,8 @@ extension WebRoutes {
             ? try await buildStandingsBoard(setup: setup, reader: reader, showAll: showingAll, on: req.db)
             : StandingsBoard.empty
         let champion = try await buildChampionPresentation(
-            setup: setup, activity: activity, viewerID: user.id, includeNames: isStaff, on: req.db)
+            setup: setup, activity: activity, groupID: groupScope?.groupID, viewerID: user.id,
+            includeNames: isStaff, on: req.db)
         let tournament =
             showsBracket
             ? try await buildTournamentPresentation(setup: setup, viewerID: user.id, includeNames: isStaff, on: req.db)
@@ -370,13 +371,19 @@ func buildTournamentPresentation(
 }
 
 /// The hill's holder for the page, or nil when the activity has no hill or
-/// no student holds it yet (the bot, or nobody, does). Same handle-and-bird
-/// identity as a ranking row; staff also see the name.
+/// no student holds it yet (the bot, or nobody, does). For an activity that
+/// runs per group, the hill of `groupID`, and none without a group. Same
+/// handle-and-bird identity as a ranking row; staff also see the name.
 func buildChampionPresentation(
-    setup: APITestSetup, activity: ClassActivity, viewerID: UUID?, includeNames: Bool, on db: any Database
+    setup: APITestSetup, activity: ClassActivity, groupID: UUID?, viewerID: UUID?, includeNames: Bool,
+    on db: any Database
 ) async throws -> ChampionPresentation? {
-    guard activity.kind.opponentSource == .champion,
-        let champion = try await currentChampion(testSetupID: setup.id ?? "", on: db),
+    let setupID = setup.id ?? ""
+    let hill: Hill? =
+        activity.isPerGroup
+        ? groupID.map { .group(testSetupID: setupID, groupID: $0) } : .course(testSetupID: setupID)
+    guard activity.kind.opponentSource == .champion, let hill,
+        let champion = try await hill.holder(on: db),
         let user = try await APIUser.find(champion.userID, on: db),
         let enrollment = try await APICourseEnrollment.query(on: db)
             .filter(\.$course.$id == setup.courseID)
