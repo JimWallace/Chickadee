@@ -9,6 +9,13 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.714] - 2026-10-18
+
+### Added
+
+- **Course dataset library, slice 5b: the library in the assignment Files panel.** On the edit page, an instructor attaches a library dataset to the assignment, updates an attached file to the newest version, sets whether it gives each student the same rows in every assignment, detaches it, or moves a CSV support file into the library. Attach, update, detach and a scope change re-grade and re-validate the assignment.
+
+
 ## [0.5.713] - 2026-10-18
 
 ### Added
