@@ -340,7 +340,8 @@ struct AddDatasetVersionTool: ContentTool {
                 on: context.db)
         }
         return Output(
-            courseKey: course.urlKey, courseTerm: course.term?.displayName, version: added.version.version, droppedColumns: added.droppedColumns,
+            courseKey: course.urlKey, courseTerm: course.term?.displayName, version: added.version.version,
+            droppedColumns: added.droppedColumns,
             dataset: try await datasetDTO(dataset, context: context))
     }
 }

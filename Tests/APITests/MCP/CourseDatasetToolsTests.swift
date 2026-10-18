@@ -257,8 +257,9 @@ import Vapor
                         provenance: nil, licence: nil, isPublished: true, columns: nil),
                     self.context())
             }
+            let courseID = try await self.courseID("CDT1")
             let stored = try #require(
-                try await CourseDatasetService.find(courseID: try await self.courseID("CDT1"), slug: "ward-cases", on: app.db))
+                try await CourseDatasetService.find(courseID: courseID, slug: "ward-cases", on: app.db))
             #expect(stored.name == "Ward cases")
         }
     }
