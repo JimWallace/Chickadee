@@ -623,12 +623,18 @@ conclusion string.
 
 **Do not shortcut that check.** An earlier revision of this paragraph said
 `main` never cancels for concurrency, so `cancelled` there could only be a
-job timeout. That is false: with `cancel-in-progress: false` GitHub keeps only
+job timeout. Before 2026-10-18 (see the note below) that was false: with
+`cancel-in-progress: false` GitHub keeps only
 the newest PENDING run in a group and cancels older ones, which the
 auto-release commit landing seconds after a merge produces constantly — 39 of
 the 117 runs in the acceptance window below are exactly that, cancelled with
 **no job ever started**. A ceiling kill is a run with a cancelled JOB whose
 step ran to the budget; anything else is bookkeeping.
+
+**Changed 2026-10-18.** A push to `main` now keys its concurrency group on the
+commit SHA (see the `concurrency` comment in `swift-tests.yml`), so a run on
+`main` from that date on is no longer cancelled by a newer push. The check
+above still holds for runs before that date, and for a run cancelled by hand.
 
 | date | ref | `Run APITests` | conclusion |
 |---|---|---|---|
