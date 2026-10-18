@@ -88,6 +88,19 @@ import VaporTesting
         return try #require(response)
     }
 
+    /// Whether `html` shows the session's code. The code can change between
+    /// the request and this check, so the code before it counts too.
+    private func shows(_ html: String, codeOf session: APIActivitySession) -> Bool {
+        let now = Date()
+        return [now, now.addingTimeInterval(-ActivitySessionCode.period)].contains {
+            html.contains(ActivitySessionCode.code(secret: session.codeSecret, at: $0))
+        }
+    }
+
+    private func code(_ session: APIActivitySession) -> String {
+        ActivitySessionCode.code(secret: session.codeSecret, at: Date())
+    }
+
     private func session(_ f: Fixture) async throws -> APIActivitySession? {
         try await ActivitySessionStore.session(assignmentID: f.assignment.requireID(), groupID: f.labA, on: app.db)
     }
@@ -112,11 +125,15 @@ import VaporTesting
             try await post(
                 "/testsetups/\(f.setupID)/sessions/start", as: ta, fields: ["groupID": f.labA.uuidString],
                 expecting: .seeOther)
-            #expect(try await session(f)?.joinCode == open.joinCode, "a second Start keeps the code")
+            #expect(try await session(f)?.codeSecret == open.codeSecret, "a second Start keeps the code")
 
             let during = try await getHTML(present, cookie: ta.cookie, on: app)
-            #expect(during.contains(open.joinCode), "the projector shows the code")
+            #expect(shows(during, codeOf: open), "the projector shows the code")
             #expect(during.contains("End session"))
+            let fragment = try await getHTML(
+                "\(present)&fragment=join&group=\(f.labA.uuidString)", cookie: ta.cookie, on: app)
+            #expect(shows(fragment, codeOf: open), "the join box refreshes alone")
+            #expect(fragment.contains("0 joined"))
 
             try await post(
                 "/testsetups/\(f.setupID)/sessions/end", as: ta, fields: ["groupID": f.labA.uuidString],
@@ -124,7 +141,7 @@ import VaporTesting
             #expect(try await session(f)?.closedAt != nil)
             let after = try await getHTML(present, cookie: ta.cookie, on: app)
             #expect(after.contains("Reopen session"))
-            #expect(!after.contains(open.joinCode), "an ended session's code leaves the wall")
+            #expect(!after.contains("present-join-code"), "an ended session's code leaves the wall")
 
             let audited = try await APIAuditLogEntry.query(on: app.db)
                 .filter(\.$action == AuditAction.activityGroupSessionChanged.rawValue)
@@ -197,10 +214,10 @@ import VaporTesting
             #expect(page.contains("Enter the code on the screen in your lab."))
 
             let wrong = try await post("/join", as: student, fields: ["code": "QQQQQ"], expecting: .ok)
-            #expect(wrong.body.string.contains("No session has that code"))
+            #expect(wrong.body.string.contains(ActivitySessionError.unknownCode.description))
 
             let joined = try await post(
-                "/join", as: student, fields: ["code": open.joinCode.lowercased()], expecting: .seeOther)
+                "/join", as: student, fields: ["code": code(open).lowercased()], expecting: .seeOther)
             #expect(
                 joined.headers.first(name: .location)
                     == VanityURLRoutes.vanityPath(courseCode: f.course.urlKey, assignmentSlug: f.assignment.slug))
@@ -215,10 +232,49 @@ import VaporTesting
                 assignmentID: f.assignment.requireID(), groupID: f.labA, by: nil, on: app.db)
             f.course.isArchived = true
             try await f.course.save(on: app.db)
-            let refused = try await post("/join", as: student, fields: ["code": open.joinCode], expecting: .ok)
+            let refused = try await post("/join", as: student, fields: ["code": code(open)], expecting: .ok)
             #expect(refused.body.string.contains(ActivitySessionError.sessionClosed.description))
             let attended = try await APIActivitySessionAttendance.query(on: app.db).count()
             #expect(attended == 0)
+        }
+    }
+
+    // MARK: - Who joined
+
+    @Test func aTASeesWhoJoinedAndRemovesAStudent() async throws {
+        try await withApp(app) { app in
+            let f = try await fixture("SES10")
+            let ta = try await actor("ses_ta10", role: .ta, courseID: f.courseID)
+            let student = try await actor("ses_student10", role: .student, courseID: f.courseID)
+            let open = try await ActivitySessionStore.open(
+                assignmentID: f.assignment.requireID(), groupID: f.labA, by: nil, on: app.db)
+            try await post("/join", as: student, fields: ["code": code(open)], expecting: .seeOther)
+            let studentID = try #require(
+                try await APIUser.query(on: app.db).filter(\.$username == "ses_student10").first()?.requireID())
+
+            let attendance = "/testsetups/\(f.setupID)/sessions/attendance?group=\(f.labA.uuidString)"
+            let list = try await getHTML(attendance, cookie: ta.cookie, on: app)
+            #expect(list.contains("ses_student10"))
+            #expect(list.contains("1 joined"))
+            _ = try await getHTML(attendance, cookie: student.cookie, on: app, expecting: .forbidden)
+
+            try await post(
+                "/testsetups/\(f.setupID)/sessions/remove", as: ta,
+                fields: ["groupID": f.labA.uuidString, "userID": studentID.uuidString], expecting: .seeOther)
+            let after = try await getHTML(attendance, cookie: ta.cookie, on: app)
+            #expect(after.contains("Removed"))
+            #expect(after.contains("0 joined"))
+            try await post(
+                "/testsetups/\(f.setupID)/sessions/remove", as: ta,
+                fields: ["groupID": f.labA.uuidString, "userID": studentID.uuidString], expecting: .notFound)
+            let again = try await post("/join", as: student, fields: ["code": code(open)], expecting: .ok)
+            #expect(again.body.string.contains(ActivitySessionError.removed.description))
+
+            let removal = try await APIAuditLogEntry.query(on: app.db)
+                .filter(\.$action == AuditAction.activityGroupSessionChanged.rawValue)
+                .all()
+                .filter { $0.metadataDictionary["change"] == "removed" }
+            #expect(removal.count == 1 && removal.first?.metadataDictionary["student"] == studentID.uuidString)
         }
     }
 

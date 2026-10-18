@@ -14,7 +14,7 @@ extension ElementaryPageFixtures {
     static var groupPages: [ElementaryPageFixture] {
         [
             instructorGroupsPage, instructorStudentsPageWithGroups, joinSessionPage,
-            leaderboardPresentPageWithSession,
+            leaderboardPresentPageWithSession, sessionAttendancePage,
         ]
     }
 

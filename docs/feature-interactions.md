@@ -442,19 +442,27 @@ because line numbers go out of date.
   - `ActivitySessionStore.open` and `close`, from the present page's Start
     and End (`WebRoutes+Sessions.swift`).
   - `ActivitySessionStore.join` (`/join`) writes attendance, and places a
-    student in no group of a manual set in the session's group.
+    student in no group of a manual set in the session's group. A wrong code
+    writes a `login_attempts` row (scope `join_failure`).
+  - `ActivitySessionStore.remove`, from the staff attendance page, sets
+    `removed_at` on an attendance row.
   - `ActivityAuthoring.setActivity` sets `ClassActivity.runsPerGroup`.
 - **Readers:**
   - `requireOpenActivityWindow` in `Routes/StudentAssignmentRequestGates.swift`,
     through `ActivitySessionStore.currentSession`.
-  - `GroupSessionPanel` on the present page.
+  - `GroupSessionPanel` on the present page, and `SessionAttendancePage`.
   - The data export (`gatherGroups`, `gatherSessionJoins`).
 - **Rules** (`docs/lab-groups.md`):
   - A per-group activity has no session window: each group's session is its
     clock. `ActivityAuthoring` refuses both together, and refuses a class
     composite.
-  - Attendance beats membership. A join from before a session's latest
-    start does not count.
+  - Only attendance counts: membership does not let a student submit. A
+    join from before a session's latest start, or a removed one, does not
+    count.
+  - The join code is derived from the session's secret and the time; it is
+    never stored. A reopen draws a new secret.
+  - Remove undoes a group placement that the student's join made
+    (`placed_in_group`), and only while that is still their group.
   - Sessions read the course's first group set only.
   - Staff are never gated, as with the window.
   - Every write that turns `runsPerGroup` off ends the open sessions:
@@ -464,6 +472,21 @@ because line numbers go out of date.
   - A clone and a bundle import clear the flag (see Cloning).
 - **Gap:** `POST /api/v1/submissions` checks enrollment only, so it skips
   this gate, as it skips the window.
+
+### Rate-limit rows: `login_attempts`
+
+- **Writers:** the login rate limit (`LoginRateLimitMiddleware`: scopes `ip`
+  and `user_failure`) and `/join` (`ActivitySessionStore`: scope
+  `join_failure`, keyed by user id).
+- **Readers:** each writer reads its own scope only.
+- **Rules:**
+  - Every reader filters by `scope`. A new scope is a new string constant in
+    `LoginAttempt.Scope`, never a reuse of another feature's.
+  - `purgeStale` removes rows of every scope by age (an hour or the lockout
+    window, whichever is longer). A window longer than that needs a change
+    to the sweep.
+  - No row has a foreign key, so a deleted user's rows stay until the sweep
+    (`docs/operational-diagnostics.md`).
 
 ### Notebook-check kind support
 

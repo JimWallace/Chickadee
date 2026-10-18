@@ -3,13 +3,13 @@
 // One lab group running one per-group class activity (docs/lab-groups.md,
 // slice 2). The session is the activity's clock for that group: course staff
 // start it on the present page when the room is ready and end it when the lab
-// ends. A reopen keeps the row and draws a new join code. One row per
-// (assignment, group), and a join code names one row.
+// ends. A reopen keeps the row and draws a new code secret. One row per
+// (assignment, group).
 
 import Fluent
-import Vapor
+import Foundation
 
-final class APIActivitySession: Model, Content, @unchecked Sendable {
+final class APIActivitySession: Model, @unchecked Sendable {
     // @unchecked Sendable: mutated only within Vapor's request context.
     static let schema = "activity_sessions"
 
@@ -22,10 +22,10 @@ final class APIActivitySession: Model, Content, @unchecked Sendable {
     @Field(key: "group_id")
     var groupID: UUID
 
-    /// Five characters from `ActivitySessionStore.codeAlphabet`, shown on the
-    /// projector and typed on `/join`.
-    @Field(key: "join_code")
-    var joinCode: String
+    /// The secret the changing join code comes from (`ActivitySessionCode`).
+    /// Never shown: the projector shows the code.
+    @Field(key: "code_secret")
+    var codeSecret: String
 
     @Field(key: "opened_at")
     var openedAt: Date
@@ -40,10 +40,10 @@ final class APIActivitySession: Model, Content, @unchecked Sendable {
 
     init() {}
 
-    init(assignmentID: UUID, groupID: UUID, joinCode: String, openedAt: Date, openedBy: UUID?) {
+    init(assignmentID: UUID, groupID: UUID, codeSecret: String, openedAt: Date, openedBy: UUID?) {
         self.assignmentID = assignmentID
         self.groupID = groupID
-        self.joinCode = joinCode
+        self.codeSecret = codeSecret
         self.openedAt = openedAt
         self.openedBy = openedBy
     }

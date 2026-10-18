@@ -1,10 +1,11 @@
 // Tests/APITests/Groups/GroupSessionGateTests.swift
 //
 // A per-group activity's submission gate and its authoring rules
-// (docs/lab-groups.md, slice 2). The gate table: a member of an open session,
-// a member of a session not open, a student who joined another group's
-// session by code, a student in no group with no code, and staff. Then the
-// two refusals at save, on the web path and through set_activity.
+// (docs/lab-groups.md, slice 2 and "Presence"). The gate: no student submits
+// before joining an open session by code, a member of the group included;
+// any student who joined does, whatever their group; staff are never gated.
+// Then the refusals at save, on the web path and through set_activity, and
+// what a clone and an import keep.
 
 import Core
 import Fluent
@@ -84,29 +85,27 @@ import VaporTesting
 
     // MARK: - The gate
 
-    @Test func theGateFollowsTheStudentsSession() async throws {
+    @Test func onlyAStudentWhoJoinedMaySubmit() async throws {
         try await withAssignmentRoutesApp { app in
             let f = try await fixture(app, prefix: "gate")
             let assignmentID = try f.assignment.requireID()
 
-            #expect(
-                await refusal(app, f, f.member) == .groupSessionNotOpen(groupName: "Lab 101"),
-                "before the session starts, the refusal names the group")
-            #expect(await refusal(app, f, f.loner) == .groupSessionNotOpen(groupName: nil))
+            #expect(await refusal(app, f, f.member) == .notInGroupSession)
+            #expect(await refusal(app, f, f.loner) == .notInGroupSession)
             try await gate(app, f, f.staff)  // staff are never gated
 
             let session = try await ActivitySessionStore.open(
                 assignmentID: assignmentID, groupID: f.labA, by: nil, on: app.db)
-            try await gate(app, f, f.member)
-            #expect(await refusal(app, f, f.other) != nil, "Lab 102's session has not started")
+            #expect(await refusal(app, f, f.member) == .notInGroupSession, "a member types the code too")
 
-            try await ActivitySessionStore.join(code: session.joinCode, userID: f.other.requireID(), on: app.db)
-            try await ActivitySessionStore.join(code: session.joinCode, userID: f.loner.requireID(), on: app.db)
-            try await gate(app, f, f.other)
-            try await gate(app, f, f.loner)
+            let code = ActivitySessionCode.code(secret: session.codeSecret, at: Date())
+            for student in [f.member, f.other, f.loner] {
+                try await ActivitySessionStore.join(code: code, userID: student.requireID(), on: app.db)
+                try await gate(app, f, student)
+            }
 
             try await ActivitySessionStore.close(session, now: Date().addingTimeInterval(-1), on: app.db)
-            #expect(await refusal(app, f, f.member) == .groupSessionNotOpen(groupName: "Lab 101"))
+            #expect(await refusal(app, f, f.member) == .notInGroupSession)
         }
     }
 

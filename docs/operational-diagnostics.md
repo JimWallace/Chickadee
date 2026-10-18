@@ -459,6 +459,7 @@ the user row is hard-deleted via `POST /admin/users/:userID/delete`.
 | `brightspace_credentials`, `brightspace_sync_log`, `courses` | `user_id`, `captured_by_user_id`, `brightspace_sync_user_id` | **preserved** | A BrightSpace binding and its sync history outlive the instructor who made them. No FK on either backend. |
 | `activity_champions`, `activity_standings` | `user_id` | CASCADE | Class-activity rows for the user; go with the user. |
 | `activity_session_attendance` | `user_id` | CASCADE | Who joined a lab group's session by code (docs/lab-groups.md); goes with the user. DB-level cascade on both engines (the FK is declared at create time). |
+| `login_attempts` (scope `join_failure`) | `attempt_key` (user id as text) | **preserved, then swept** | A wrong join code (docs/lab-groups.md, "Presence"). No FK; the login-attempt sweep removes every row after an hour. |
 | `activity_sessions` | `opened_by` | SET NULL | The session row is the group's clock and stays; who started it drops. DB-level on both engines. |
 | `course_group_memberships` | `user_id` | CASCADE | The student's lab-group memberships (docs/lab-groups.md); go with the user. DB-level cascade on both engines (the FK is declared at create time). |
 | `wardrobe_unlocks`, `achievement_awards` | `user_id` | CASCADE | The wardrobe items and the achievements the student has earned (docs/student-wardrobe.md, docs/achievement-rewards.md); go with the user. DB-level cascade on both engines (the FK is declared at create time). |

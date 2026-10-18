@@ -17,14 +17,13 @@ enum AssignmentSubmissionGateError: AbortError, Equatable {
     /// false and would send a student looking for an extension that is not
     /// the thing standing in their way.
     case activityClosed(closedAtText: String)
-    /// A per-group activity (docs/lab-groups.md) whose student is in no open
-    /// session. Carries the student's group name, nil for a student in no
-    /// group, so the refusal says whose session to wait for or where to join.
-    case groupSessionNotOpen(groupName: String?)
+    /// A per-group activity (docs/lab-groups.md) whose student has joined no
+    /// open session. Every student joins by the code on the screen.
+    case notInGroupSession
 
     var status: HTTPResponseStatus {
         switch self {
-        case .closed, .activityNotYetOpen, .activityClosed, .groupSessionNotOpen:
+        case .closed, .activityNotYetOpen, .activityClosed, .notInGroupSession:
             return .forbidden
         }
     }
@@ -37,10 +36,8 @@ enum AssignmentSubmissionGateError: AbortError, Equatable {
             return "This class activity opens at \(opensAtText)."
         case .activityClosed(let closedAtText):
             return "This class activity closed at \(closedAtText)."
-        case .groupSessionNotOpen(let groupName?):
-            return "The session for \(groupName) is not open. In another lab, enter the code on the screen at /join."
-        case .groupSessionNotOpen(nil):
-            return "Enter the code on the screen at /join."
+        case .notInGroupSession:
+            return "This activity runs in your lab. Enter the code on the screen at /join to take part."
         }
     }
 }

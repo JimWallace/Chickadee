@@ -18,12 +18,11 @@ struct CreateActivitySessions: ChickadeeMigration {
                 "group_id", .uuid, .required,
                 .references(APICourseGroup.schema, "id", onDelete: .cascade)
             )
-            .field("join_code", .string, .required)
+            .field("code_secret", .string, .required)
             .field("opened_at", .datetime, .required)
             .field("closed_at", .datetime)
             .field("opened_by", .uuid, .references("users", "id", onDelete: .setNull))
             .unique(on: "assignment_id", "group_id")
-            .unique(on: "join_code")
             .create()
 
         try await database.schema(APIActivitySessionAttendance.schema)
@@ -34,6 +33,8 @@ struct CreateActivitySessions: ChickadeeMigration {
             )
             .field("user_id", .uuid, .required, .references("users", "id", onDelete: .cascade))
             .field("joined_at", .datetime, .required)
+            .field("removed_at", .datetime)
+            .field("placed_in_group", .bool, .required)
             .unique(on: "session_id", "user_id")
             .create()
     }

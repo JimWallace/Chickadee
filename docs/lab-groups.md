@@ -18,7 +18,7 @@ today.
 |---|---|---|
 | 0 | This design note | draft |
 | 1 | Groups: group sets, groups, memberships; the Groups tab; the CSV import; the Group column on the roster; groups in the data export | built |
-| 2 | Sessions: a session per (activity, group), started and ended from the present page; the submission gate reads the session; attendance by join code at `/join` | built |
+| 2 | Sessions: a session per (activity, group), started and ended from the present page; the submission gate reads the session; attendance by join code at `/join`; presence: a code for every student that changes every 30 seconds, the staff list of who joined, a limit on wrong codes | built |
 | 3 | Rankings per group: leaderboard, standings, the hill, round-robin opponents, tournament runs, the present page per group | not started |
 | 4 | The composite per group, and the course gallery of every group's image | not started |
 | 5 | Group goals: the union and the corpus percent per group; a group achievement | not started |
@@ -111,11 +111,11 @@ course_group_memberships
   UNIQUE(set_id, user_id)
 
 activity_sessions
-  id, assignment_id, group_id, join_code, opened_at, closed_at, opened_by
-  UNIQUE(assignment_id, group_id); UNIQUE(join_code) while open
+  id, assignment_id, group_id, code_secret, opened_at, closed_at, opened_by
+  UNIQUE(assignment_id, group_id)
 
 activity_session_attendance
-  id, session_id, user_id, joined_at
+  id, session_id, user_id, joined_at, removed_at, placed_in_group
   UNIQUE(session_id, user_id)
 ```
 
@@ -140,7 +140,9 @@ Nil means course-wide, which is what every existing row is.
    in Lab 103, even if LEARN puts them in Lab 101. The join code is the one
    thing a TA can control from the front of the room. It also fills a group
    with no source at all: a student with no group who joins a session becomes a
-   member of that group. That is the manual source that needs no form.
+   member of that group. That is the manual source that needs no form. Since
+   Presence, only attendance counts: a member who has not typed the code
+   does not play.
 4. **The group is written at ingest and never recomputed.** A ranking row
    carries the group it was played in. A student who moves groups later keeps
    their place in the room they played in. This is the house pattern (every
@@ -183,7 +185,7 @@ Nil means course-wide, which is what every existing row is.
 
 | Surface | Today | With `runsPerGroup` |
 |---|---|---|
-| Submission gate | `activity.window` | The student's open session. No session: refused as `.activityNotYetOpen`, with the group's name. |
+| Submission gate | `activity.window` | The open session the student joined by code. No join: refused, with the join prompt. |
 | Leaderboard | One board, course-wide | One board per group. `?group=` on the page; a student lands on their own. |
 | King of the hill | One champion per assignment | One champion per group; the job stages the group's champion. |
 | Round robin | Every classmate in the course | Every participant in the group. |
@@ -256,24 +258,22 @@ the Sections reader.
   `set_activity` takes and reports `runsPerGroup`, keeping the stored value
   when the field is absent, and `get_assignment` reports it.
 - `CreateActivitySessions` makes `activity_sessions` (unique on assignment and
-  group, and on the join code) and `activity_session_attendance` (unique on
-  session and student). `ActivitySessionStore` starts, ends and reopens a
-  session, joins by code, and answers which session a student plays in now:
-  the open session they most recently joined by code, else their own group's.
-  A join from before the session's latest start does not count. Start on an
-  open session changes nothing, so the code on the screen stays. A reopen
-  keeps the row and draws a new code. The code is five characters from an
-  alphabet with no look-alike pair, and it is unique across the deployment,
-  so `/join` takes the code alone. Sessions use the course's first group set,
-  which in slice 2 is its only one; a start that names a group of another set
-  is a 404. `/join` has no rate limit: 25 to the fifth is about 9.7 million
-  codes, and a session is open for one lab.
+  group, with a code secret) and `activity_session_attendance` (unique on
+  session and student, with `removed_at`). `ActivitySessionStore` starts, ends
+  and reopens a session, joins by code, and answers which session a student
+  plays in now: the open session they most recently joined by code, or none.
+  Membership alone is not enough (see "Presence" below). A join from before
+  the session's latest start does not count. Start on an open session changes
+  nothing. A reopen keeps the row and draws a new code secret. Sessions use
+  the course's first group set, which in slice 2 is its only one; a start
+  that names a group of another set is a 404.
 - Joining records attendance, or moves its time to now on a second join.
   A student in no group of a manual set becomes a member of the session's
   group; a member of another group stays where they are and plays in the
   session they joined. A removed group's session, and a session of an
   activity that no longer runs per group, or of an archived course, refuse a
-  join. Removing a group ends its open sessions, and so does turning
+  join (an ended session shows no code to type). Removing a group ends its
+  open sessions, and so does turning
   `runsPerGroup` off (the edit page, `set_activity` or a version restore), so
   turning it on again never brings back an earlier lab's code.
 - A clone and a bundle import clear `runsPerGroup`, because neither copies
@@ -281,9 +281,8 @@ the Sections reader.
   refused while staff see nothing wrong (the #2189 trap).
 - `requireOpenStudentAssignment(gate: .submission)` reads the student's
   session when the activity runs per group. The refusal
-  (`AssignmentSubmissionGateError.groupSessionNotOpen`) names the student's
-  group, or sends a student in no group to `/join`. Staff are never gated, and
-  reading is not gated. Until slice 3, a closed session refuses a
+  (`AssignmentSubmissionGateError.notInGroupSession`) sends the student to
+  `/join`. Staff are never gated, and reading is not gated. Until slice 3, a closed session refuses a
   submission, as a closed window does. Decision 1 lets a submission after the
   close grade without ranking, and that needs the ingest check of slice 3, so
   slice 3 relaxes the gate when it adds the check. The gate covers the web
@@ -291,33 +290,74 @@ the Sections reader.
   door, `POST /api/v1/submissions`, checks enrollment only, so it skips the
   session gate and the window gate today. That gap is older than groups and
   is not closed here.
-- The present page gains `PresentSessionControls` (the group select and Start,
-  End or Reopen, in the presenter's corner) and, while the session is open,
-  `PresentJoinCode` above the board. Both sit outside the polled region. The
-  controls are in the presenter's toolbar, which full screen hides, so the
-  presenter leaves full screen to end the session; the code stays on the
+- The present page gains `PresentSessionControls` (the group select, Start,
+  End or Reopen, and "Who joined", in the presenter's corner) and, while the
+  session is open, `PresentJoinCode` above the board: the address, the code,
+  the seconds until it changes and how many joined. The join box is its own
+  polled region (`?fragment=join`, every two seconds), outside the board's.
+  The controls are in the presenter's toolbar, which full screen hides, so
+  the presenter leaves full screen to end the session; the code stays on the
   wall in full screen.
-  `POST /testsetups/:testSetupID/sessions/start` and `/end` are floored at
-  `.ta` on the activity's course, in a course that is not archived. The
-  caller is authorized before the activity is read. Each start and end is
-  audited as `activity_group_session.changed` and shows on the course's
-  Activity tab.
+  `POST /testsetups/:testSetupID/sessions/start`, `/end` and `/remove` are
+  floored at `.ta` on the activity's course, in a course that is not
+  archived; `GET .../sessions/attendance` is floored at `.ta` and reads an
+  archived course too. The caller is authorized before the activity is read.
+  Each start, end and removal is audited as `activity_group_session.changed`
+  and shows on the course's Activity tab.
 - `GET /join` and `POST /join` (`JoinSessionPage`) take a code and send the
   student to the assignment's vanity path.
 - A student's personal data export lists the sessions they joined.
-- Tests: `ClassActivityRunsPerGroupTests`, `ActivitySessionStoreTests`,
-  `GroupSessionGateTests`, `GroupSessionRoutesTests`, and the fixtures in
+- Tests: `ClassActivityRunsPerGroupTests`, `ActivitySessionCodeTests`,
+  `ActivitySessionStoreTests`, `GroupSessionGateTests`,
+  `GroupSessionRoutesTests`, and the fixtures in
   `ElementaryPageFixtures+Sessions.swift`.
+
+### Presence (built, in slice 2)
+
+The goal is best effort, not proof: a student who is not in the room should
+need a friend in the room who relays each code as it changes, and staff
+should be able to see it. The maintainer chose best effort on 2026-10-18.
+
+- **Every student types the code.** Membership decides which group a student
+  in no group joins. It does not let a student submit. A member of the
+  session's own group joins too.
+- **The code changes every 30 seconds** (`ActivitySessionCode`), so a code
+  works for 30 to 60 seconds. The session
+  keeps a random secret, and the code for a 30-second step is an HMAC of the
+  step under it, so nothing is written when the code changes. A join takes
+  the current code and the one before it, so a student who is typing when it
+  changes is not refused. `/join` matches the code against every open
+  session; two open sessions showing one code at once is a chance of a few
+  in ten million, and the student then types the next code.
+- **Staff see who joined.** "Who joined" on the present page opens
+  `SessionAttendancePage` in a new tab, because it shows names and the
+  present page is on the projector. The projector shows only the count. A
+  presenter whose screen is mirrored to the projector opens it on another
+  device.
+  Remove asks first, then takes a student out of the current run: they stop
+  playing and cannot join again until the session starts again. If their
+  join had placed them in the group (they were in no group of a manual set),
+  Remove takes them out of the group too. A join that races a Remove does
+  not undo it. A student's data export lists a removal with its time.
+- **Wrong codes are limited.** About ten wrong codes in ten minutes stop a
+  student's joins until the oldest leaves the window (the check and the
+  write are separate, so a burst of parallel requests can pass a few more).
+  The failures are rows in `login_attempts` (scope `join_failure`, keyed by
+  user id), which the login attempt sweep removes after an hour.
+- **Not done:** a check of the student's IP address. Campus Wi-Fi covers all
+  of campus, so a campus address does not place a student in the room, and
+  the university VPN gives a campus address off campus. It could come later
+  as an optional list of lab subnets per course, stored in the database (no
+  environment variable).
 
 ### Slice 3: rankings per group
 
 - `group_id` on `leaderboard_entries`, `activity_standings`,
   `activity_champions`, `match_results` and `tournament_runs`. The ingest
   writers resolve the student's session group once and stamp it.
-- The submission gate refuses only a student with no session at all (no
-  group's session has started for them). After their session closes, a
-  submission grades, as decision 1 says, and the ingest writers skip its
-  ranking rows.
+- The submission gate refuses only a student who never joined a run of the
+  activity's sessions. After the session they joined closes, a submission
+  grades, as decision 1 says, and the ingest writers skip its ranking rows.
 - The hill's unique key becomes (assignment, group). `jobOpponent` stages the
   group's champion. `jobOpponentSet` lists the group's participants.
 - The leaderboard, standings and bracket pages filter by group. The present
@@ -399,7 +439,9 @@ The three questions the first draft left open are settled.
    Valence reference.
 3. **A student in no group, with no code, cannot submit** when the activity
    runs per group. The refusal shows the join prompt. An unattributed result
-   would rank nowhere, and the room is where the activity happens.
+   would rank nowhere, and the room is where the activity happens. Presence
+   (2026-10-18) widens this: no student submits without the code, a member
+   of the group included.
 
 One consequence of decision 1 to carry into slice 2: because each session is
 the lab's assigned slot, a session may later take a planned open and close

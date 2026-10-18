@@ -1,8 +1,8 @@
 // Tests/APITests/ElementaryPageFixtures+Sessions.swift
 //
 // The pages of per-group activity sessions (docs/lab-groups.md, slice 2): the
-// student's join page, and the present page with a lab group's session panel,
-// rendered for ElementaryPageGuardTests.
+// student's join page, the present page with a lab group's session panel, and
+// the staff list of who joined, rendered for ElementaryPageGuardTests.
 
 import Core
 import Elementary
@@ -33,7 +33,8 @@ extension ElementaryPageFixtures {
         func panel(isOpen: Bool, hasStarted: Bool) -> GroupSessionPanel {
             GroupSessionPanel(
                 testSetupID: "ts1", groups: groups, selectedGroupID: "g1", groupName: "Lab 101", isOpen: isOpen,
-                hasStarted: hasStarted, joinCode: isOpen ? "KM7QX" : nil, joinAddress: "chickadee.example.ca/join")
+                hasStarted: hasStarted, joinCode: isOpen ? "KM7QX" : nil, secondsLeft: 24, joinedCount: 23,
+                joinAddress: "chickadee.example.ca/join")
         }
         let board = LeaderboardSamples.present(places: 5)
         return ElementaryPageFixture(
@@ -46,6 +47,40 @@ extension ElementaryPageFixtures {
                     page: page(), board: board, groupSession: panel(isOpen: isOpen, hasStarted: hasStarted)
                 ).render()
             }
+        )
+    }
+
+    /// Who joined: none yet, an open session with a removed student, and an
+    /// ended session read by a TA of an archived course.
+    static var sessionAttendancePage: ElementaryPageFixture {
+        let rows = [
+            SessionAttendeeRow(
+                userID: "u1", name: "Ada Lovelace", username: "alovelace", joinedAtText: "Oct 18, 2026 at 2:31 PM",
+                isRemoved: false),
+            SessionAttendeeRow(
+                userID: "u2", name: "Alan Turing", username: "aturing", joinedAtText: "Oct 18, 2026 at 2:33 PM",
+                isRemoved: true),
+        ]
+        func render(
+            isOpen: Bool, canRemove: Bool, rows: [SessionAttendeeRow], flash: FlashMessages = FlashMessages()
+        )
+            -> String
+        {
+            SessionAttendancePage(
+                page: page(currentUser: signedInAdmin), flash: flash, assignmentTitle: "Lab 4: sorting",
+                groupName: "Lab 101", testSetupID: "ts1", groupID: "g1", isOpen: isOpen, canRemove: canRemove,
+                rows: rows
+            ).render()
+        }
+        return ElementaryPageFixture(
+            typeName: "SessionAttendancePage",
+            archetype: .titlebarPage,
+            renders: [
+                render(isOpen: true, canRemove: true, rows: []),
+                render(
+                    isOpen: true, canRemove: true, rows: rows, flash: FlashMessages(success: "Student removed.")),
+                render(isOpen: false, canRemove: false, rows: rows),
+            ]
         )
     }
 }

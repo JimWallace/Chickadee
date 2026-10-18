@@ -1,8 +1,8 @@
 // APIServer/Routes/Web/GroupSessionPanel.swift
 //
 // What the present page shows for a per-group activity (docs/lab-groups.md,
-// slice 2): the group the projector is for, its session's state, and the
-// join code while the session is open.
+// slice 2): the group the projector is for, its session's state, and, while
+// the session is open, the join code, how long it shows and how many joined.
 
 import Core
 import Fluent
@@ -21,8 +21,17 @@ struct GroupSessionPanel: Sendable {
     let hasStarted: Bool
     /// The code to project; nil unless the session is open.
     let joinCode: String?
+    /// Whole seconds until the code changes.
+    let secondsLeft: Int
+    /// Students in the session's current run.
+    let joinedCount: Int
     /// Where students type the code, as the room reads it: "host/join".
     let joinAddress: String
+
+    var boardURL: String { "/testsetups/\(testSetupID)/leaderboard" }
+    /// The join code box's own refresh.
+    var joinPollURL: String { "\(boardURL)?present=1&fragment=join&group=\(selectedGroupID)" }
+    var attendanceURL: String { "/testsetups/\(testSetupID)/sessions/attendance?group=\(selectedGroupID)" }
 
     /// The panel for a per-group activity, or nil for any other activity or
     /// a course with no groups. The group is `?group=` when it names one of
@@ -44,12 +53,20 @@ struct GroupSessionPanel: Sendable {
         else { return nil }
         let session = try await ActivitySessionStore.session(
             assignmentID: assignmentID, groupID: groupID, on: req.db)
-        let isOpen = session?.isOpen(at: Date()) == true
+        let now = Date()
+        let openSession = session.flatMap { $0.isOpen(at: now) ? $0 : nil }
+        var joinedCount = 0
+        if let openSession {
+            joinedCount = try await ActivitySessionStore.joinedCount(of: openSession, on: req.db)
+        }
         return GroupSessionPanel(
             testSetupID: assignment?.testSetupID ?? "",
             groups: groups.compactMap { group in group.id.map { GroupOption(id: $0.uuidString, name: group.name) } },
-            selectedGroupID: groupID.uuidString, groupName: selected.name, isOpen: isOpen,
-            hasStarted: session != nil, joinCode: isOpen ? session?.joinCode : nil,
+            selectedGroupID: groupID.uuidString, groupName: selected.name, isOpen: openSession != nil,
+            hasStarted: session != nil,
+            joinCode: openSession.map { ActivitySessionCode.code(secret: $0.codeSecret, at: now) },
+            secondsLeft: ActivitySessionCode.secondsLeft(at: now),
+            joinedCount: joinedCount,
             joinAddress: joinAddress(req))
     }
 

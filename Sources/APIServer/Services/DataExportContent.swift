@@ -136,12 +136,13 @@ struct DataExportGroup: Codable, Sendable, Equatable {
     let group: String
 }
 
-/// One join of a lab session by code: the activity, the session's group and
-/// the time of the latest join.
+/// One join of a lab session by code: the activity, the session's group, the
+/// time of the latest join, and when staff removed the student, if they did.
 struct DataExportSessionJoin: Codable, Sendable, Equatable {
     let assignment: String
     let group: String
     let joinedAt: Date
+    var removedAt: Date?
 }
 
 struct DataExportSubmission: Codable, Sendable {
@@ -362,7 +363,8 @@ private func gatherSessionJoins(
             let group = groupByID[session.groupID]
         else { continue }
         result[assignment.courseID, default: []].append(
-            DataExportSessionJoin(assignment: assignment.title, group: group.name, joinedAt: row.joinedAt))
+            DataExportSessionJoin(
+                assignment: assignment.title, group: group.name, joinedAt: row.joinedAt, removedAt: row.removedAt))
     }
     return result.mapValues { $0.sorted { $0.joinedAt < $1.joinedAt } }
 }

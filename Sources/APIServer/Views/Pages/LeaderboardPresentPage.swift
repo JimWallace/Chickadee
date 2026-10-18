@@ -37,8 +37,15 @@ struct LeaderboardPresentPage: HTML {
                     }
                 }
                 .attributes(.data("arena-setup-id", value: board.arenaSetupID ?? ""), when: board.arenaSetupID != nil)
-                if let groupSession, let code = groupSession.joinCode {
-                    PresentJoinCode(groupName: groupSession.groupName, address: groupSession.joinAddress, code: code)
+                if let groupSession, groupSession.isOpen {
+                    // Refreshes alone, faster than the board: the code
+                    // changes every thirty seconds.
+                    div(.id("present-join")) {
+                        if let join = PresentJoinCode(panel: groupSession) { join }
+                    }
+                    .attributes(
+                        .data("poll-swap", value: "region"), .data("poll-url", value: groupSession.joinPollURL),
+                        .data("poll-interval", value: "2000"))
                 }
                 div(.id("present-results")) {
                     LeaderboardPresentBody(board: board)

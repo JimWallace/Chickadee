@@ -7,12 +7,18 @@ enum ActivitySessionError: Error, Sendable, Equatable, CustomStringConvertible {
     case unknownCode
     case sessionClosed
     case notAStudent
+    /// Course staff removed the student from this run of the session.
+    case removed
+    /// Too many wrong codes in `ActivitySessionStore.joinFailureWindow`.
+    case tooManyAttempts
 
     var description: String {
         switch self {
-        case .unknownCode: return "No session has that code, so check it against the screen."
+        case .unknownCode: return "That code is not on the screen now."
         case .sessionClosed: return "That session has ended."
         case .notAStudent: return "Only a student of this course can join its sessions."
+        case .removed: return "Course staff removed you from this session."
+        case .tooManyAttempts: return "Too many wrong codes. Try again later."
         }
     }
 }

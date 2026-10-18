@@ -112,20 +112,17 @@ private func requireOpenActivityWindow(
 }
 
 /// Refuses a submission to a per-group activity (docs/lab-groups.md) from a
-/// student in no open session: their own group's, or one they joined by code.
-/// In place of the window, not beside it: a per-group activity carries none.
-/// Course staff are not gated, for the window's reason.
+/// student who has joined no open session by code. In place of the window,
+/// not beside it: a per-group activity carries none. Course staff are not
+/// gated, for the window's reason.
 private func requireOpenGroupSession(
     assignment: APIAssignment, user: APIUser, on req: Request, now: Date
 ) async throws {
     if try await isCourseStaff(user, inCourse: assignment.courseID, db: req.db) { return }
-    let assignmentID = try assignment.requireID()
-    let userID = try user.requireID()
     let session = try await ActivitySessionStore.currentSession(
-        assignmentID: assignmentID, courseID: assignment.courseID, userID: userID, now: now, on: req.db)
+        assignmentID: assignment.requireID(), userID: user.requireID(), now: now, on: req.db)
     guard session == nil else { return }
-    let group = try await ActivitySessionStore.group(of: userID, courseID: assignment.courseID, on: req.db)
-    throw AssignmentSubmissionGateError.groupSessionNotOpen(groupName: group?.name)
+    throw AssignmentSubmissionGateError.notInGroupSession
 }
 
 extension Request {

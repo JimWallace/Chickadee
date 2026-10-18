@@ -425,7 +425,7 @@ enum AuditAction: String, Sendable, CaseIterable {
         case .activityOpponentFileChanged: return "Activity opponent file changed"
         case .activityWindowChanged: return "Activity session window changed"
         case .activityCompositeChanged: return "Class composite settings changed"
-        case .activityGroupSessionChanged: return "Lab group session started or ended"
+        case .activityGroupSessionChanged: return "Lab group session started, ended or student removed"
         case .tournamentStarted: return "Tournament started"
         case .slipDaySpent: return "Slip day spent"
         case .slipDayRefunded: return "Slip day refunded"
