@@ -101,8 +101,8 @@ struct CourseBundleRoutes: RouteCollection {
                 setupCopies: setupCopies,
                 submissionPaths: submissionPaths,
                 contentFileCopies: contentFileCopies,
-                datasetFileCopies: datasetFileCopies,
                 logger: logger)
+            try writeDatasetStaging(stagingDir: stagingDir, copies: datasetFileCopies)
         }
 
         let dateStr = iso8601String(Date()).prefix(10)
@@ -323,18 +323,7 @@ struct CourseBundleRoutes: RouteCollection {
             )
         }
 
-        let bundledSections = data.sections.compactMap { sec -> BundledSection? in
-            guard let secID = sec.id, let bid = bundleIDs.sectionBundleIDByUUID[secID] else {
-                return nil
-            }
-            return BundledSection(
-                bundleID: bid,
-                name: sec.name,
-                defaultGradingMode: sec.defaultGradingMode,
-                sortOrder: sec.sortOrder
-            )
-        }
-
+        let bundledSections = buildBundledSections(data: data, bundleIDs: bundleIDs)
         let bundledContentItems = buildBundledContentItems(data: data, bundleIDs: bundleIDs)
 
         let bundledAssignments = data.assignments.compactMap { a -> BundledAssignment? in
@@ -430,6 +419,20 @@ struct CourseBundleRoutes: RouteCollection {
             mcpInstructions: course.mcpInstructions)
     }
 
+    private func buildBundledSections(data: ExportData, bundleIDs: ExportBundleIDs) -> [BundledSection] {
+        data.sections.compactMap { sec -> BundledSection? in
+            guard let secID = sec.id, let bid = bundleIDs.sectionBundleIDByUUID[secID] else {
+                return nil
+            }
+            return BundledSection(
+                bundleID: bid,
+                name: sec.name,
+                defaultGradingMode: sec.defaultGradingMode,
+                sortOrder: sec.sortOrder
+            )
+        }
+    }
+
     private func buildBundledContentItems(
         data: ExportData,
         bundleIDs: ExportBundleIDs
@@ -473,7 +476,6 @@ private func writeExportStaging(
     setupCopies: [(id: String, zipPath: String, notebookPath: String?)],
     submissionPaths: [String],
     contentFileCopies: [(src: String, bundleName: String)],
-    datasetFileCopies: [(src: String, bundleName: String)],
     logger: Logger
 ) throws {
     try FileManager.default.createDirectory(at: stagingDir, withIntermediateDirectories: true)
@@ -486,23 +488,7 @@ private func writeExportStaging(
             at: stagingDir.appendingPathComponent("content"), withIntermediateDirectories: true)
     }
 
-    if !datasetFileCopies.isEmpty {
-        try FileManager.default.createDirectory(
-            at: stagingDir.appendingPathComponent("datasets"), withIntermediateDirectories: true)
-    }
-
     try manifestData.write(to: stagingDir.appendingPathComponent("bundle.json"))
-
-    // A dataset version is library content, as a setup zip is: without its
-    // bytes the import would refuse the bundle, so a missing blob fails the
-    // export and names it.
-    for copy in datasetFileCopies {
-        guard FileManager.default.fileExists(atPath: copy.src) else {
-            throw Abort(.internalServerError, reason: "Export: dataset version bytes missing at \(copy.src)")
-        }
-        try FileManager.default.copyItem(
-            at: URL(fileURLWithPath: copy.src), to: stagingDir.appendingPathComponent(copy.bundleName))
-    }
 
     for copy in contentFileCopies {
         let src = URL(fileURLWithPath: copy.src)
@@ -540,6 +526,23 @@ private func writeExportStaging(
         } else {
             logger.warning("Export: submission file missing at \(src.path), skipping")
         }
+    }
+}
+
+/// Copies the dataset library's version files into `datasets/`. A version is
+/// library content, as a setup zip is: without its bytes the import would
+/// refuse the bundle, so a missing blob fails the export and names it.
+private func writeDatasetStaging(stagingDir: URL, copies: [(src: String, bundleName: String)]) throws {
+    guard !copies.isEmpty else { return }
+    try FileManager.default.createDirectory(
+        at: stagingDir.appendingPathComponent("datasets"), withIntermediateDirectories: true)
+    for copy in copies {
+        guard FileManager.default.fileExists(atPath: copy.src) else {
+            throw Abort(
+                .internalServerError, reason: "Export: the bytes of dataset version \(copy.bundleName) are missing")
+        }
+        try FileManager.default.copyItem(
+            at: URL(fileURLWithPath: copy.src), to: stagingDir.appendingPathComponent(copy.bundleName))
     }
 }
 

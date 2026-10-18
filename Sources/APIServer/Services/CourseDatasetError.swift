@@ -34,6 +34,7 @@ enum CourseDatasetError: Error, Sendable, Equatable, CustomStringConvertible {
     case fileInUse(String, by: [String])
     case bundledDatasetEmpty(String)
     case bundledVersionMismatch(slug: String, version: Int)
+    case bundledVersionNumbers(String)
 
     var description: String {
         switch self {
@@ -93,6 +94,8 @@ enum CourseDatasetError: Error, Sendable, Equatable, CustomStringConvertible {
             return "'\(name)' is used by \(users.joined(separator: ", ")). Remove that use first, or keep the file."
         case .bundledDatasetEmpty(let slug):
             return "The bundle's dataset '\(slug)' has no version."
+        case .bundledVersionNumbers(let slug):
+            return "The bundle's dataset '\(slug)' has a version number twice, or one below 1."
         case .bundledVersionMismatch(let slug, let version):
             return "The bundle's file for version \(version) of dataset '\(slug)' is not the file the bundle names."
         }

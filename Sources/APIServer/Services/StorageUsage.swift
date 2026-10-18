@@ -141,7 +141,13 @@ enum StorageUsage {
             dbBackend: app.appConfig.database.backend.rawValue,
             assignments: assignmentRows,
             totalBytes: total,
-            libraries: try await courseLibraryRows(codeByCourse: codeByCourse, on: app.db)
+            // The course key, not the bare code: a clone for a new term has
+            // its source's code (docs/course-terms.md).
+            libraries: try await courseLibraryRows(
+                keyByCourse: Dictionary(
+                    courses.compactMap { course in course.id.map { ($0, course.urlKey) } },
+                    uniquingKeysWith: { first, _ in first }),
+                on: app.db)
         )
     }
 
@@ -151,7 +157,7 @@ enum StorageUsage {
     /// the hashes it shares with its source again, because each course's row
     /// is what that course would free.
     static func courseLibraryRows(
-        codeByCourse: [UUID: String], on db: any Database
+        keyByCourse: [UUID: String], on db: any Database
     ) async throws -> [AdminCourseLibraryStorageRow] {
         let datasets = try await APICourseDataset.query(on: db).all()
         guard !datasets.isEmpty else { return [] }
@@ -170,17 +176,19 @@ enum StorageUsage {
         return datasetCount.map { courseID, count in
             let bytes = bytesByHash[courseID, default: [:]].values.reduce(0, +)
             return AdminCourseLibraryStorageRow(
-                courseCode: codeByCourse[courseID] ?? "—", datasetCount: count,
+                courseKey: keyByCourse[courseID] ?? "—", datasetCount: count,
                 versionCount: versionCount[courseID] ?? 0, bytes: bytes, formatted: humanReadableBytes(bytes))
         }
-        .sorted { ($0.bytes, $1.courseCode) > ($1.bytes, $0.courseCode) }
+        // Bytes descending, then the key ascending.
+        .sorted { ($0.bytes, $1.courseKey) > ($1.bytes, $0.courseKey) }
     }
 }
 
 /// One course's dataset library on disk: its datasets and versions, and the
 /// bytes of its distinct version files.
 struct AdminCourseLibraryStorageRow: Encodable, Sendable, Equatable {
-    let courseCode: String
+    /// The course key ("CS135-F26"), which names one offering.
+    let courseKey: String
     let datasetCount: Int
     let versionCount: Int
     let bytes: Int

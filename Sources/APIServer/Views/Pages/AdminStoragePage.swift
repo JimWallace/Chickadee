@@ -84,7 +84,12 @@ private struct StorageLibrariesSection: HTML {
                     span(.class("text-muted")) { "Part of Test Setups" }
                 }
             }
+            // No tile column: a course library has no content kind.
             table(.class("results-table section-items")) {
+                colgroup {
+                    col()
+                    col(.class("section-items-count"))
+                }
                 thead(.class("visually-hidden")) {
                     tr {
                         for heading in ["Course", "Total"] {
@@ -96,7 +101,7 @@ private struct StorageLibrariesSection: HTML {
                     for library in libraries {
                         tr {
                             td(.class("item-main")) {
-                                div(.class("item-title")) { library.courseCode }
+                                div(.class("item-title")) { library.courseKey }
                                 div(.class("item-details")) { library.detailsText }
                             }
                             td(.class("item-status item-grade")) { strong { library.formatted } }

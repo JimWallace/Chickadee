@@ -68,31 +68,42 @@ extension CourseDatasetService {
     /// version from `bytes(_:)`, and returns how many datasets it created.
     ///
     /// Each version's bytes must hash to the hash the bundle names, so a
-    /// bundle cannot claim a version it does not carry. The blobs are written
-    /// before the rows; a failed import leaves them for the collector, as a
-    /// failed upload does. A course bundle import runs this before it creates
-    /// the test setups, whose manifests it reconciles against the library.
+    /// bundle cannot claim a version it does not carry. Slugs, version
+    /// numbers and sizes are checked before any row is written, so a malformed
+    /// bundle is refused by name and not by a unique index. The blobs are
+    /// written before the rows; a failed import leaves them for the collector,
+    /// as a failed upload does. A course bundle import runs this before it
+    /// creates the test setups, whose manifests it reconciles against the
+    /// library.
     @discardableResult
     static func importBundledLibrary(
-        _ datasets: [BundledDataset], courseID: UUID, bytes: (BundledDatasetVersion) throws -> Data,
+        _ datasets: [BundledDataset], courseID: UUID,
+        bytes: @escaping @Sendable (BundledDatasetVersion) throws -> Data,
         blobs: AssignmentVersionBlobStore, on db: any Database
     ) async throws -> Int {
-        for bundled in datasets {
-            let slug = try validatedSlug(bundled.slug)
-            let name = try validatedName(bundled.name)
-            guard !bundled.versions.isEmpty else { throw CourseDatasetError.bundledDatasetEmpty(slug) }
+        let checked = try checkedBundledLibrary(datasets)
+        for (bundled, slug, _) in checked {
             for version in bundled.versions {
-                let data = try bytes(version)
-                guard sha256HexDigest(data) == version.sha256, data.count == version.sizeBytes else {
+                // Reading, hashing and storing a version is file work, so it
+                // runs off the cooperative pool.
+                let matches = try await runBlocking {
+                    let data = try bytes(version)
+                    guard sha256HexDigest(data) == version.sha256, data.count == version.sizeBytes else {
+                        return false
+                    }
+                    try blobs.put(data)
+                    return true
+                }
+                guard matches else {
                     throw CourseDatasetError.bundledVersionMismatch(slug: slug, version: version.version)
                 }
-                try blobs.put(data)
             }
-            let currentVersion = bundled.versions.map(\.version).max() ?? bundled.currentVersion
+        }
+        for (bundled, slug, name) in checked {
             let dataset = APICourseDataset(
                 courseID: courseID, slug: slug, name: name, datasetDescription: cleaned(bundled.description),
                 provenance: cleaned(bundled.provenance), licence: cleaned(bundled.licence),
-                isPublished: bundled.isPublished, currentVersion: currentVersion)
+                isPublished: bundled.isPublished, currentVersion: bundled.versions.map(\.version).max() ?? 1)
             try await dataset.create(on: db)
             let datasetID = try dataset.requireID()
             for version in bundled.versions {
@@ -103,6 +114,30 @@ extension CourseDatasetService {
                 ).create(on: db)
             }
         }
-        return datasets.count
+        return checked.count
+    }
+
+    /// Each bundled dataset with its checked slug and name, or the refusal
+    /// of the first one that cannot be stored: a repeated slug, no version, a
+    /// repeated or non-positive version number, or a version over the size
+    /// limit.
+    private static func checkedBundledLibrary(
+        _ datasets: [BundledDataset]
+    ) throws -> [(bundled: BundledDataset, slug: String, name: String)] {
+        var slugs: Set<String> = []
+        return try datasets.map { bundled in
+            let slug = try validatedSlug(bundled.slug)
+            let name = try validatedName(bundled.name)
+            guard slugs.insert(slug).inserted else { throw CourseDatasetError.slugTaken(slug) }
+            let numbers = bundled.versions.map(\.version)
+            guard !numbers.isEmpty else { throw CourseDatasetError.bundledDatasetEmpty(slug) }
+            guard Set(numbers).count == numbers.count, numbers.allSatisfy({ $0 >= 1 }) else {
+                throw CourseDatasetError.bundledVersionNumbers(slug)
+            }
+            for version in bundled.versions where version.sizeBytes > maxVersionBytes {
+                throw CourseDatasetError.tooLarge(sizeBytes: version.sizeBytes, limitBytes: maxVersionBytes)
+            }
+            return (bundled, slug, name)
+        }
     }
 }

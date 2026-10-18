@@ -80,7 +80,7 @@ extension ElementaryPageFixtures {
         ]
         let libraries = [
             AdminCourseLibraryStorageRow(
-                courseCode: "HLTH230", datasetCount: 2, versionCount: 3, bytes: 90_000, formatted: "90 KB")
+                courseKey: "HLTH230-W27", datasetCount: 2, versionCount: 3, bytes: 90_000, formatted: "90 KB")
         ]
         func render(
             _ assignments: [AdminAssignmentStorageRow], disk: DiskSpace?,

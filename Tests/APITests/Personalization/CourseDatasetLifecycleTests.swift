@@ -150,15 +150,17 @@ import Vapor
     // MARK: - Storage
 
     /// Each course's row counts its datasets, its versions and the bytes of
-    /// its distinct version files; a clone's row counts the same bytes.
+    /// its distinct version files; a clone's row counts the same bytes. A
+    /// clone for a new term keeps the code, so the rows are named by key.
     @Test func theStoragePageCountsEachCoursesLibrary() async throws {
         try await withApp(app) { app in
             let (source, _) = try await makeSource(code: "LCT1")
-            let copy = try await clone(source, code: "LCT1C")
-            let codes = [try source.requireID(): "LCT1", try copy.requireID(): "LCT1C"]
-            let rows = try await StorageUsage.courseLibraryRows(codeByCourse: codes, on: app.db)
+            let copy = try await clone(source, code: "LCT1")
+            let keys = [try source.requireID(): source.urlKey, try copy.requireID(): copy.urlKey]
+            #expect(source.urlKey != copy.urlKey)
+            let rows = try await StorageUsage.courseLibraryRows(keyByCourse: keys, on: app.db)
             let bytes = self.versionOne.utf8.count + self.versionTwo.utf8.count
-            #expect(rows.map(\.courseCode) == ["LCT1", "LCT1C"])
+            #expect(Set(rows.map(\.courseKey)) == [source.urlKey, copy.urlKey])
             #expect(rows.allSatisfy { $0.datasetCount == 1 && $0.versionCount == 2 && $0.bytes == bytes })
             #expect(rows.first?.detailsText == "1 dataset · 2 versions")
         }

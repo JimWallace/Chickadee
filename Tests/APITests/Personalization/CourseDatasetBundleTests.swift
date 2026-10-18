@@ -216,6 +216,34 @@ import VaporTesting
         }
     }
 
+    /// A malformed library is refused by name before any row is written,
+    /// not by a unique index.
+    @Test func aBundledLibraryWithARepeatedSlugOrVersionIsRefused() async throws {
+        try await withApp(app) { app in
+            let courseID = try await makeTestCourse(on: app, code: "BDI4").requireID()
+            let bytes = Data(pool.utf8)
+            let version = BundledDatasetVersion(
+                version: 1, filename: "cases.csv", sha256: sha256HexDigest(bytes), sizeBytes: bytes.count,
+                rowCount: 5, columns: [], note: nil)
+            func dataset(_ versions: [BundledDatasetVersion]) -> BundledDataset {
+                BundledDataset(
+                    slug: "ward-cases", name: "Ward cases", description: nil, provenance: nil, licence: nil,
+                    isPublished: false, currentVersion: 1, versions: versions)
+            }
+            let blobs = AssignmentVersionBlobStore(testSetupsDirectory: app.testSetupsDirectory)
+            for (library, error) in [
+                ([dataset([version]), dataset([version])], CourseDatasetError.slugTaken("ward-cases")),
+                ([dataset([version, version])], CourseDatasetError.bundledVersionNumbers("ward-cases")),
+            ] {
+                await #expect(throws: error) {
+                    try await CourseDatasetService.importBundledLibrary(
+                        library, courseID: courseID, bytes: { _ in bytes }, blobs: blobs, on: app.db)
+                }
+            }
+            #expect(try await CourseDatasetService.list(courseID: courseID, on: app.db).isEmpty)
+        }
+    }
+
     @Test func anImportRefusesAMissingDatasetFile() async throws {
         try await withApp(app) { app in
             let cookie = try await loginAsAdmin("bd_admin", on: app)

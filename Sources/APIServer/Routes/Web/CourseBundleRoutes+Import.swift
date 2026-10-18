@@ -162,7 +162,7 @@ extension CourseBundleRoutes {
                     reason: "Bundle is missing or has an invalid submission file: \(sub.submissionFilename)")
             }
         }
-        for dataset in manifest.datasets ?? [] {
+        for dataset in bundledDatasets(of: manifest) {
             for version in dataset.versions {
                 guard AssignmentVersionBlobStore.isValidHash(version.sha256),
                     let path = bundleEntryURL(
@@ -472,13 +472,20 @@ struct BundleImportDirectories: Sendable {
     let contentFilesDir: String
 }
 
-/// Creates the bundled dataset library. A version 1 bundle carries none.
-/// The files were checked by `validateBundleFiles`; their bytes are checked
-/// against their hashes here.
+/// The datasets a bundle carries: none below version 2, whatever its
+/// manifest holds.
+func bundledDatasets(of manifest: CourseBundleManifest) -> [BundledDataset] {
+    manifest.schemaVersion >= CourseBundleManifest.datasetsSchemaVersion ? manifest.datasets ?? [] : []
+}
+
+/// Creates the bundled dataset library. A version 1 bundle carries none, and
+/// a `datasets` key in one is ignored. The files were checked by
+/// `validateBundleFiles`; their bytes are checked against their hashes here.
 private func importBundledDatasets(
     manifest: CourseBundleManifest, courseID: UUID, dirs: BundleImportDirectories, db: any Database
 ) async throws -> Int {
-    guard let datasets = manifest.datasets, !datasets.isEmpty else { return 0 }
+    let datasets = bundledDatasets(of: manifest)
+    guard !datasets.isEmpty else { return 0 }
     let directory = dirs.extractDir.appendingPathComponent("datasets")
     do {
         return try await CourseDatasetService.importBundledLibrary(
@@ -545,9 +552,10 @@ private func importBundledTestSetups(
             notebookPath = nbPath
         }
 
-        // A library source names a dataset in the exporting course. The
-        // imported course's library does not have it, so the source goes and
-        // the file keeps its sample (docs/datasets-course-library.md).
+        // A library source names a dataset version. The library was imported
+        // first (6e-ter), so a source keeps when the bundle carried its
+        // version; otherwise, as from a version 1 bundle, the source goes and
+        // the file keeps its sample (docs/datasets-course-library.md §4.8).
         let importedManifest = try await CourseDatasetService.reconciledManifestText(
             try storableImportedManifest(bundledSetup.manifest), courseID: courseID, zipPath: newZipPath, on: db)
         let setup = APITestSetup(
