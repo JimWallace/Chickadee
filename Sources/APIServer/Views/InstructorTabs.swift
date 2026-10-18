@@ -11,6 +11,7 @@ import Elementary
 enum InstructorTab: String, CaseIterable, Sendable {
     case overview, activity, students
     case slipDays = "slip-days"
+    case datasets
     case brightspace, mcp, github
     case newTerm = "new-term"
 
@@ -21,6 +22,7 @@ enum InstructorTab: String, CaseIterable, Sendable {
         case .activity: "Activity"
         case .students: "Students"
         case .slipDays: "Slip days"
+        case .datasets: "Datasets"
         case .brightspace: "LEARN"
         case .mcp: "AI agents"
         case .github: "GitHub"
@@ -30,7 +32,9 @@ enum InstructorTab: String, CaseIterable, Sendable {
 
     /// The tabs the bar shows, in order. GitHub has a page and a heading but
     /// no tab: the assignment editor links to it.
-    static let shown: [InstructorTab] = [.overview, .activity, .students, .slipDays, .brightspace, .mcp, .newTerm]
+    static let shown: [InstructorTab] = [
+        .overview, .activity, .students, .slipDays, .datasets, .brightspace, .mcp, .newTerm,
+    ]
 
     fileprivate var href: String {
         self == .overview ? "/instructor" : "/instructor/\(rawValue)"
