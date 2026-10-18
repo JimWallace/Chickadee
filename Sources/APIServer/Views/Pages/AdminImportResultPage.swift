@@ -38,6 +38,8 @@ struct AdminImportResultPage: HTML {
                         dd { "\(tally.testSetupsImported)" }
                         dt { "Assignments" }
                         dd { "\(tally.assignmentsImported)" }
+                        dt { "Datasets" }
+                        dd { "\(tally.datasetsImported)" }
                         dt { "Users matched" }
                         dd { "\(tally.usersMatched)" }
                         dt { "Users created" }

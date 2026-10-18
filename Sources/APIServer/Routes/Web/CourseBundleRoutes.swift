@@ -7,11 +7,12 @@
 //
 // Both routes require admin role (enforced in routes.swift).
 //
-// Bundle format (schemaVersion 1):
+// Bundle format (schemaVersion 1, or 2 when it carries the dataset library):
 //   bundle.json              — CourseBundleManifest (ISO8601 dates)
 //   testsetups/<id>.zip      — instructor test-setup archives
 //   submissions/<id>.<ext>   — student submission files
 //   content/<attachmentID>   — content-item hosted file attachments
+//   datasets/<sha256>        — course dataset library versions
 //
 // This file holds boot + the export pipeline; the import handler and its
 // phase helpers live in CourseBundleRoutes+Import.swift.
@@ -54,8 +55,9 @@ struct CourseBundleRoutes: RouteCollection {
 
         let data = try await loadExportData(courseUUID: courseUUID, on: req.db, logger: req.logger)
         let bundleIDs = assignExportBundleIDs(data: data)
+        let library = try await CourseDatasetService.bundledLibrary(courseID: courseUUID, on: req.db)
         let manifest = buildExportManifest(
-            course: course, caller: caller, data: data, bundleIDs: bundleIDs)
+            course: course, caller: caller, data: data, bundleIDs: bundleIDs, library: library)
 
         let stagingDir = FileManager.default.temporaryDirectory
             .appendingPathComponent("chickadee-export-\(UUID().uuidString)", isDirectory: true)
@@ -86,6 +88,11 @@ struct CourseBundleRoutes: RouteCollection {
                 )
             }
         }
+        // One file per distinct hash: two versions with the same bytes share it.
+        let blobs = AssignmentVersionBlobStore(testSetupsDirectory: app.testSetupsDirectory)
+        let datasetFileCopies: [(src: String, bundleName: String)] = try Set(
+            library.flatMap(\.versions).map(\.sha256)
+        ).sorted().map { hash in (src: try blobs.path(for: hash), bundleName: "datasets/\(hash)") }
         let logger = req.logger
         try await runBlocking {
             try writeExportStaging(
@@ -95,6 +102,7 @@ struct CourseBundleRoutes: RouteCollection {
                 submissionPaths: submissionPaths,
                 contentFileCopies: contentFileCopies,
                 logger: logger)
+            try writeDatasetStaging(stagingDir: stagingDir, copies: datasetFileCopies)
         }
 
         let dateStr = iso8601String(Date()).prefix(10)
@@ -286,7 +294,8 @@ struct CourseBundleRoutes: RouteCollection {
         course: APICourse,
         caller: APIUser,
         data: ExportData,
-        bundleIDs: ExportBundleIDs
+        bundleIDs: ExportBundleIDs,
+        library: [BundledDataset]
     ) -> CourseBundleManifest {
         let bundledUsers = data.allUsers.compactMap { u -> BundledUser? in
             guard let uid = u.id, let bid = bundleIDs.userBundleIDByUUID[uid] else { return nil }
@@ -314,18 +323,7 @@ struct CourseBundleRoutes: RouteCollection {
             )
         }
 
-        let bundledSections = data.sections.compactMap { sec -> BundledSection? in
-            guard let secID = sec.id, let bid = bundleIDs.sectionBundleIDByUUID[secID] else {
-                return nil
-            }
-            return BundledSection(
-                bundleID: bid,
-                name: sec.name,
-                defaultGradingMode: sec.defaultGradingMode,
-                sortOrder: sec.sortOrder
-            )
-        }
-
+        let bundledSections = buildBundledSections(data: data, bundleIDs: bundleIDs)
         let bundledContentItems = buildBundledContentItems(data: data, bundleIDs: bundleIDs)
 
         let bundledAssignments = data.assignments.compactMap { a -> BundledAssignment? in
@@ -382,7 +380,10 @@ struct CourseBundleRoutes: RouteCollection {
             )
         }
 
+        // Version 2 only for a bundle that carries the library, so one without
+        // stays readable by a server that knows only version 1.
         return CourseBundleManifest(
+            schemaVersion: library.isEmpty ? 1 : CourseBundleManifest.datasetsSchemaVersion,
             exportedAt: Date(),
             exportedBy: caller.username,
             chickadeeVersion: ChickadeeVersion.current,
@@ -395,7 +396,8 @@ struct CourseBundleRoutes: RouteCollection {
             assignments: bundledAssignments,
             testSetups: bundledSetups,
             submissions: bundledSubmissions,
-            results: bundledResults
+            results: bundledResults,
+            datasets: library.isEmpty ? nil : library
         )
     }
 
@@ -415,6 +417,20 @@ struct CourseBundleRoutes: RouteCollection {
             slipDayReleaseRevealHold: course.slipDayReleaseRevealHold,
             term: course.term,
             mcpInstructions: course.mcpInstructions)
+    }
+
+    private func buildBundledSections(data: ExportData, bundleIDs: ExportBundleIDs) -> [BundledSection] {
+        data.sections.compactMap { sec -> BundledSection? in
+            guard let secID = sec.id, let bid = bundleIDs.sectionBundleIDByUUID[secID] else {
+                return nil
+            }
+            return BundledSection(
+                bundleID: bid,
+                name: sec.name,
+                defaultGradingMode: sec.defaultGradingMode,
+                sortOrder: sec.sortOrder
+            )
+        }
     }
 
     private func buildBundledContentItems(
@@ -510,6 +526,23 @@ private func writeExportStaging(
         } else {
             logger.warning("Export: submission file missing at \(src.path), skipping")
         }
+    }
+}
+
+/// Copies the dataset library's version files into `datasets/`. A version is
+/// library content, as a setup zip is: without its bytes the import would
+/// refuse the bundle, so a missing blob fails the export and names it.
+private func writeDatasetStaging(stagingDir: URL, copies: [(src: String, bundleName: String)]) throws {
+    guard !copies.isEmpty else { return }
+    try FileManager.default.createDirectory(
+        at: stagingDir.appendingPathComponent("datasets"), withIntermediateDirectories: true)
+    for copy in copies {
+        guard FileManager.default.fileExists(atPath: copy.src) else {
+            throw Abort(
+                .internalServerError, reason: "Export: the bytes of dataset version \(copy.bundleName) are missing")
+        }
+        try FileManager.default.copyItem(
+            at: URL(fileURLWithPath: copy.src), to: stagingDir.appendingPathComponent(copy.bundleName))
     }
 }
 

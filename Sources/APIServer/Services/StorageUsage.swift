@@ -140,8 +140,65 @@ enum StorageUsage {
             totalFormatted: humanReadableBytes(total),
             dbBackend: app.appConfig.database.backend.rawValue,
             assignments: assignmentRows,
-            totalBytes: total
+            totalBytes: total,
+            // The course key, not the bare code: a clone for a new term has
+            // its source's code (docs/course-terms.md).
+            libraries: try await courseLibraryRows(
+                keyByCourse: Dictionary(
+                    courses.compactMap { course in course.id.map { ($0, course.urlKey) } },
+                    uniquingKeysWith: { first, _ in first }),
+                on: app.db)
         )
+    }
+
+    /// One row per course with a dataset library, largest first. The sizes
+    /// come from the version rows, so no disk walk is needed. Within a course
+    /// a hash counts once, as its blob is stored once; a cloned course counts
+    /// the hashes it shares with its source again, because each course's row
+    /// is what that course would free.
+    static func courseLibraryRows(
+        keyByCourse: [UUID: String], on db: any Database
+    ) async throws -> [AdminCourseLibraryStorageRow] {
+        let datasets = try await APICourseDataset.query(on: db).all()
+        guard !datasets.isEmpty else { return [] }
+        let courseByDataset = Dictionary(
+            datasets.compactMap { dataset in dataset.id.map { ($0, dataset.courseID) } },
+            uniquingKeysWith: { first, _ in first })
+        var datasetCount: [UUID: Int] = [:]
+        for dataset in datasets { datasetCount[dataset.courseID, default: 0] += 1 }
+        var versionCount: [UUID: Int] = [:]
+        var bytesByHash: [UUID: [String: Int]] = [:]
+        for version in try await APICourseDatasetVersion.query(on: db).all() {
+            guard let courseID = courseByDataset[version.datasetID] else { continue }
+            versionCount[courseID, default: 0] += 1
+            bytesByHash[courseID, default: [:]][version.sha256] = version.sizeBytes
+        }
+        return datasetCount.map { courseID, count in
+            let bytes = bytesByHash[courseID, default: [:]].values.reduce(0, +)
+            return AdminCourseLibraryStorageRow(
+                courseKey: keyByCourse[courseID] ?? "—", datasetCount: count,
+                versionCount: versionCount[courseID] ?? 0, bytes: bytes, formatted: humanReadableBytes(bytes))
+        }
+        // Bytes descending, then the key ascending.
+        .sorted { ($0.bytes, $1.courseKey) > ($1.bytes, $0.courseKey) }
+    }
+}
+
+/// One course's dataset library on disk: its datasets and versions, and the
+/// bytes of its distinct version files.
+struct AdminCourseLibraryStorageRow: Encodable, Sendable, Equatable {
+    /// The course key ("CS135-F26"), which names one offering.
+    let courseKey: String
+    let datasetCount: Int
+    let versionCount: Int
+    let bytes: Int
+    let formatted: String
+
+    /// "2 datasets · 5 versions"
+    var detailsText: String {
+        let datasets = datasetCount == 1 ? "1 dataset" : "\(datasetCount) datasets"
+        let versions = versionCount == 1 ? "1 version" : "\(versionCount) versions"
+        return "\(datasets) · \(versions)"
     }
 }
 
@@ -180,9 +237,12 @@ struct AdminStorageContext: Encodable, Sendable {
     var disk: DiskSpace?
     /// `disk` as the page's "Disk free" tile shows it.
     var diskText: String { disk?.freeOfTotalText ?? "unknown" }
+    /// The course dataset libraries, largest first. Their bytes are inside
+    /// the "Test Setups" total, as blobs under its directory.
+    var libraries: [AdminCourseLibraryStorageRow] = []
 
     private enum CodingKeys: String, CodingKey {
-        case rows, totalFormatted, dbBackend, assignments, totalBytes, disk, diskText
+        case rows, totalFormatted, dbBackend, assignments, totalBytes, disk, diskText, libraries
     }
 
     func encode(to encoder: any Encoder) throws {
@@ -194,5 +254,6 @@ struct AdminStorageContext: Encodable, Sendable {
         try container.encode(totalBytes, forKey: .totalBytes)
         try container.encodeIfPresent(disk, forKey: .disk)
         try container.encode(diskText, forKey: .diskText)
+        try container.encode(libraries, forKey: .libraries)
     }
 }
