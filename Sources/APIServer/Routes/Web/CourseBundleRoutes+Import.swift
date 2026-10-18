@@ -124,10 +124,12 @@ extension CourseBundleRoutes {
             throw AppError.invalidParameter(name: "bundle.json", reason: "\(error)")
         }
 
-        guard manifest.schemaVersion == 1 else {
+        let supported = CourseBundleManifest.supportedSchemaVersions
+        guard supported.contains(manifest.schemaVersion) else {
             throw Abort(
                 .badRequest,
-                reason: "Unsupported bundle schemaVersion \(manifest.schemaVersion); expected 1")
+                reason: "Unsupported bundle schemaVersion \(manifest.schemaVersion); expected "
+                    + "\(supported.lowerBound) to \(supported.upperBound)")
         }
 
         return manifest
@@ -158,6 +160,19 @@ extension CourseBundleRoutes {
                 throw Abort(
                     .badRequest,
                     reason: "Bundle is missing or has an invalid submission file: \(sub.submissionFilename)")
+            }
+        }
+        for dataset in manifest.datasets ?? [] {
+            for version in dataset.versions {
+                guard AssignmentVersionBlobStore.isValidHash(version.sha256),
+                    let path = bundleEntryURL(
+                        extractDir: extractDir, path: version.bundleFilename, directory: "datasets"),
+                    FileManager.default.fileExists(atPath: path.path)
+                else {
+                    throw Abort(
+                        .badRequest,
+                        reason: "Bundle is missing or has an invalid dataset file: \(version.bundleFilename)")
+                }
             }
         }
         for item in manifest.contentItems ?? [] {
@@ -282,6 +297,12 @@ extension CourseBundleRoutes {
                     manifest: manifest, sectionIDMap: sectionIDMap, courseID: t.courseID,
                     dirs: dirs, db: db, tally: &t)
 
+                // 6e-ter. The course dataset library, before the setups: their
+                // manifests keep a library source only when the library holds
+                // its version (docs/datasets-course-library.md §4.8).
+                t.datasetsImported = try await importBundledDatasets(
+                    manifest: manifest, courseID: t.courseID, dirs: dirs, db: db)
+
                 // 6f. Create test setups → setupIDMap[bundleID] = new live ID
                 let setupIDMap = try await importBundledTestSetups(
                     manifest: manifest, dirs: dirs, courseID: t.courseID,
@@ -362,6 +383,7 @@ struct ImportTally: Sendable {
     var assignmentsImported: Int = 0
     var submissionsImported: Int = 0
     var resultsImported: Int = 0
+    var datasetsImported: Int = 0
     /// Every file and directory the import wrote, recorded before the
     /// write, so a failed transaction can remove them (#2164).
     var createdPaths: [String] = []
@@ -448,6 +470,24 @@ struct BundleImportDirectories: Sendable {
     let setupsDir: String
     let subsDir: String
     let contentFilesDir: String
+}
+
+/// Creates the bundled dataset library. A version 1 bundle carries none.
+/// The files were checked by `validateBundleFiles`; their bytes are checked
+/// against their hashes here.
+private func importBundledDatasets(
+    manifest: CourseBundleManifest, courseID: UUID, dirs: BundleImportDirectories, db: any Database
+) async throws -> Int {
+    guard let datasets = manifest.datasets, !datasets.isEmpty else { return 0 }
+    let directory = dirs.extractDir.appendingPathComponent("datasets")
+    do {
+        return try await CourseDatasetService.importBundledLibrary(
+            datasets, courseID: courseID,
+            bytes: { try Data(contentsOf: directory.appendingPathComponent($0.sha256)) },
+            blobs: AssignmentVersionBlobStore(testSetupsDirectory: dirs.setupsDir), on: db)
+    } catch let error as CourseDatasetError {
+        throw Abort(.badRequest, reason: error.description)
+    }
 }
 
 private func importBundledTestSetups(
