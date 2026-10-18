@@ -1,8 +1,8 @@
 # Result-page celebration — design note
 
-**Status:** J1 (the bird and the celebration) shipped in #2608. J1b (the
-reduced-motion banner, #2618), J2 (the Earned toast for wardrobe items,
-#2616) and J3 (one toast for everything earned, #2617) are planned. The
+**Status:** J1 (the bird and the celebration) shipped in #2608, and J2 (the
+Earned toast for wardrobe items, #2616) has shipped. J1b (the reduced-motion
+banner, #2618) and J3 (one toast for everything earned, #2617) are planned. The
 design came from a design handoff ("The 100% moment", round 17); this note
 records it as it applies to this codebase. The earning rules are in
 [student-wardrobe.md](student-wardrobe.md), "Earning: the design pass".
@@ -114,21 +114,38 @@ the live region still reads its sentence once.
 
 ## J2: the Earned toast (wardrobe)
 
-- **Server:** when the result page loads (off the grading path), it grants
-  what the student has earned, with the same store write as the account page
-  (`WardrobeUnlockStore.grantEarned`). The items that this load grants go to
-  the toast. An item shows in the toast once, because a grant happens once.
-- **Toast:** fixed at the bottom right, `role="status"`, not a dialog. It
-  holds the bird at 72px wearing the new item, a "New ring" or "New face"
-  chip, the item's name, how the student earned it, and **Wear it** and
-  **Not now** buttons. It never closes by itself.
-- **Motion:** it slides in at pop + 450 ms. A new ring draws in on the toast's
-  bird from pop + 800 to pop + 1600 ms. A new face crossfades over 300 ms.
-  The page bird changes only when the student presses **Wear it**.
-- **Wear it** posts to the existing avatar-save route and updates the page
-  bird in place.
-- If two items are new at once, the toast shows the first, and the account
-  page shows the rest, until J3.
+- **Server:** when the student's own result page loads with a graded result
+  (off the grading path), it grants what the student has earned, with the
+  same store write as the account page (`WardrobeUnlockStore.grantNew`). The
+  first item that this load grants goes to the toast (`SubmissionEarnedItem`,
+  `EarnedToast`). An item shows in the toast once, because a grant happens
+  once. A pending result grants nothing. Course staff cannot choose a ring,
+  so a ring never shows in their toast.
+- **Toast:** the notebook page's graded toast in shape (`.nb-graded`, with
+  `.nb-graded-earned`), fixed at the bottom right, `role="status"`, not a
+  dialog. It holds the student's bird at 72px wearing the new item, a "New
+  ring" or "New face" chip, the item's name, how the student earned it
+  ("Earned by a first graded submission."), and **Wear it** and **Not now**
+  buttons. It never closes by itself. **Not now** and Escape close it.
+  Nothing takes focus.
+- **Motion:** it slides in at pop + 450 ms (`celebrate.js` sends
+  `chickadee:celebrate-pop` on the document). With no celebration on this
+  load, it shows at once. A new ring draws in on the toast's bird from pop +
+  800 to pop + 1600 ms, through a conic mask that starts at the ring art's own
+  start (`AvatarRing.drawStartDegrees`: 186° for the ouroboros, 0° for the
+  others). A new face crossfades from the bird's current face over 300 ms.
+  Under reduced motion the toast shows in place, with the item complete.
+- **Live region:** when the toast shows, it says "New ring earned: <name>." in
+  its own polite region, after the celebration's sentence.
+- **Wear it** is an ordinary form to `POST /account/avatar`. `earned-toast.js`
+  posts it with `Accept: application/json`; the route then answers 204 (or
+  422 for a refused choice) instead of a redirect, and the script points the
+  page bird's layers at the new item, with no reload. When the save fails,
+  the form submits as usual and lands on the account page. The toast renders
+  hidden and only the script shows it, so without the script no toast shows;
+  the item is still a choice on the account page.
+- If two items are new at once, the toast shows the first. The others are
+  choices on the account page, until J3.
 
 ## J3: one toast for everything earned
 

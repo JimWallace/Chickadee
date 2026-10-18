@@ -78,7 +78,9 @@ import VaporTesting
             #expect(try await storedUnlocks(on: app) == ["expression.chirp"])
             #expect(html.contains(#"name="expression" value="chirp""#))
             #expect(!html.contains("Chirp · earned"))
-            #expect(html.contains("Chirp: earned by a first graded submission"))
+            // How it was earned is the result page's Earned toast to say
+            // (EarnedToastRoutesTests), not the account page's.
+            #expect(!html.contains("by a first graded submission"))
             #expect(!html.contains(#"name="expression" value="sly""#))
 
             #expect(

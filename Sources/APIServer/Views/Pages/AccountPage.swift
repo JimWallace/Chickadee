@@ -11,12 +11,13 @@ import Elementary
 struct AccountPage: HTML {
     let page: PageRequestContext
     var flash = FlashMessages()
-    let username: String
-    let preferredName: String?
     /// The heading beside the avatar. See `accountIdentityName`.
     let identityName: String
     /// The username under the heading, nil when the heading already is it.
     let identitySecondary: String?
+    /// The preferred name, for its own row, nil when the heading already
+    /// shows it. See `accountPreferredNameRow`.
+    var preferredName: String?
     let avatarPicker: AvatarPickerContext
     /// A posted avatar choice was refused.
     let avatarInvalid: Bool
@@ -98,30 +99,34 @@ struct AccountPage: HTML {
                         }
                     }
                 }
-                dl(.class("detail-grid")) {
-                    div {
-                        dt { "Username" }
-                        dd { strong { username } }
-                    }
-                    if let preferredName {
-                        div {
-                            dt { "Preferred name" }
-                            dd { preferredName }
-                        }
-                    }
-                    if let studentID {
-                        div {
-                            dt { "Student ID" }
-                            dd { studentID }
-                        }
-                    }
-                    if let email {
-                        div {
-                            dt { "Email" }
-                            dd { email }
-                        }
+                // The name and username above say who this is, so the
+                // grid holds only what they do not.
+                if preferredName != nil || studentID != nil || email != nil {
+                    dl(.class("detail-grid")) {
+                        detailRows
                     }
                 }
+            }
+        }
+    }
+
+    @HTMLBuilder private var detailRows: some HTML {
+        if let preferredName {
+            div {
+                dt { "Preferred name" }
+                dd { preferredName }
+            }
+        }
+        if let studentID {
+            div {
+                dt { "Student ID" }
+                dd { studentID }
+            }
+        }
+        if let email {
+            div {
+                dt { "Email" }
+                dd { email }
             }
         }
     }
@@ -236,32 +241,8 @@ private struct AccountBirdCard: HTML {
                     AccountBirdHero(page: page, picker: picker)
                     AccountBirdForm(page: page, picker: picker)
                 }
-                if !picker.earned.isEmpty {
-                    AccountEarnedItems(earned: picker.earned)
-                }
             }
             script(.src(page.asset("/avatar-picker.js"))) {}
-        }
-    }
-}
-
-/// "How you earned these" (#2615): closed by default, so the card stays
-/// clean. Each earned item says how it was earned, in the past tense. Nothing
-/// says what is left to earn.
-private struct AccountEarnedItems: HTML {
-    let earned: [AvatarEarnedItem]
-
-    var body: some HTML {
-        details(.class("bird-card-earned")) {
-            summary(.class("disclosure-summary")) {
-                span(.class("accordion-caret"), .ariaHidden) { Icon("i-chevron-right") }
-                "How you earned these"
-            }
-            ul {
-                for item in earned {
-                    li { item.text }
-                }
-            }
         }
     }
 }

@@ -311,9 +311,9 @@ extension ElementaryPageFixtures {
             flash: FlashMessages = FlashMessages(), picker: AvatarPickerContext? = nil
         ) -> String {
             AccountPage(
-                page: page(currentUser: signedInAdmin), flash: flash, username: "ada",
-                preferredName: staff ? nil : "Ada", identityName: staff ? "ada" : "Ada Lovelace",
-                identitySecondary: staff ? nil : "ada",
+                page: page(currentUser: signedInAdmin), flash: flash,
+                identityName: staff ? "ada" : "Ada Lovelace",
+                identitySecondary: staff ? nil : "ada", preferredName: staff ? nil : "Ada",
                 avatarPicker: picker ?? AvatarPickerContext(for: spec, isStaff: staff), avatarInvalid: !staff,
                 studentID: staff ? nil : "20123456", email: staff ? nil : "ada@example.com",
                 enrolledCourses: enrolled, availableCourses: available, error: notices.0, exportStatus: status,
@@ -390,8 +390,21 @@ extension ElementaryPageFixtures {
                         revealActive: true)),
                 compositeTileRender(passed: true),
                 compositeTileRender(passed: false),
+                earnedToastRender(.chirpFace),
+                earnedToastRender(.ouroborosRing),
             ]
         )
+    }
+
+    /// The student's own result with the Earned toast for a new item
+    /// (docs/result-celebration.md, J2).
+    static func earnedToastRender(_ item: WardrobeItem) -> String {
+        var result = submissionResult()
+        let spec = AvatarSpec.drawn(fromSeed: 3)
+        result.bird = SubmissionBird(
+            avatar: AvatarPresentation(for: spec, size: .result, accessibility: .decorative, isStaff: false),
+            reaction: .none, isOwn: true, earned: SubmissionEarnedItem(item, wearing: spec, isStaff: false))
+        return SubmissionPage(page: page(currentUser: signedInAdmin), result: result).render()
     }
 
     /// A class composite's own-tile section (docs/class-composite.md).

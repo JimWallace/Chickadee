@@ -1518,6 +1518,42 @@ body:has(.notebook-header .nb-title-block) .nav {
 .nb-graded-grade { font-size: var(--text-2xl); font-weight: 700; }
 .nb-graded-text .toolbar { margin-top: .5rem; }
 
+/* The Earned toast (J2, EarnedToast, earned-toast.js): the graded toast on
+   the result page, fixed at the bottom right. It slides in; a new ring draws
+   in on its bird, clockwise from the ring art's own start
+   (--earned-ring-start), from .35s to 1.15s after it shows (pop + 800 to
+   pop + 1600 ms); a new face crossfades from the bird's current face over
+   .3s. Under reduced motion it shows in place, with the item complete. */
+.nb-graded-earned {
+    /* EarnedToast sets the ring's own start inline. */
+    --earned-ring-start: 0deg;
+    position: fixed;
+    top: auto;
+    right: 1rem;
+    bottom: 1rem;
+    width: min(23rem, calc(100% - 2rem));
+}
+@property --earned-ring-sweep {
+    syntax: '<angle>';
+    inherits: false;
+    initial-value: 360deg;
+}
+@keyframes earned-toast-in { from { opacity: 0; transform: translateY(1rem); } }
+@keyframes earned-ring-draw { from { --earned-ring-sweep: 0deg; } }
+@keyframes earned-fade-in { from { opacity: 0; } }
+@keyframes earned-fade-out { to { opacity: 0; } }
+@media (prefers-reduced-motion: no-preference) {
+    .nb-graded-earned { animation: earned-toast-in .3s ease-out; }
+    /* The mask reads only alpha: the colour stop is any opaque token. */
+    .nb-graded-earned.is-ring [data-av-ring] {
+        mask-image: conic-gradient(
+            from var(--earned-ring-start), var(--surface) var(--earned-ring-sweep), transparent 0);
+        animation: earned-ring-draw .8s ease-in-out .35s both;
+    }
+    .nb-graded-earned .earned-face-new { animation: earned-fade-in .3s ease-in-out .35s both; }
+    .nb-graded-earned .earned-face-old { animation: earned-fade-out .3s ease-in-out .35s both; }
+}
+
 /* The assignment workbench (NB6, frame 18c; WorkbenchPage): an app bar over a
    252px rail and a full-width notebook. The page owns the viewport, and the
    rail, the notebook and the sheet each scroll inside it. Under 1300px the
@@ -4235,8 +4271,10 @@ tr.drop-adopt  { outline: 2px solid var(--blue); outline-offset: -2px; }
     margin: 0 0 1rem;
 }
 
-/* Inside a card the name lines up with the detail grid under it. */
+/* Inside a card the name lines up with the detail grid under it. With no
+   grid under it (no student ID or email on file), it closes the card. */
 .card > .account-identity { margin: 0; padding: 1rem 1.25rem 0; }
+.card > .account-identity:last-child { padding-bottom: 1rem; }
 
 .account-identity > div {
     display: flex;
@@ -4608,17 +4646,6 @@ tr.drop-adopt  { outline: 2px solid var(--blue); outline-offset: -2px; }
     width: 1.5rem;
     height: 1.5rem;
     opacity: .5;
-}
-
-/* "How you earned these" (#2615): one closed section under the choices,
-   with how each earned item was earned. */
-.bird-card-earned { padding: 0 1.25rem 1.25rem; }
-
-.bird-card-earned ul {
-    margin: .5rem 0 0;
-    padding-left: 1.25rem;
-    font-size: var(--text-sm);
-    color: var(--muted);
 }
 
 /* The leaderboard's "you" card bird (6rem) and the Present-mode podium bird

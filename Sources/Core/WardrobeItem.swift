@@ -9,8 +9,10 @@
 // The rules read what a student's own graded work already records. The
 // concept rings also read the concept an instructor tagged an assignment with
 // (`AssignmentConcept`), the one rule that needs instructor setup. The rules
-// are checked away from the grading path (when the account page loads), so a
-// cosmetic can never fail a grade.
+// are checked away from the grading path (when the account page or a result
+// page loads), so a cosmetic can never fail a grade.
+
+import Foundation
 
 /// One earnable option of one customizable slot. The raw value is stored, so
 /// it is append-only: never rename or reorder a case.
@@ -70,9 +72,18 @@ public enum WardrobeItem: String, CaseIterable, Codable, Sendable {
         self = item
     }
 
-    /// How the student earned the item, in the past tense, as the account
-    /// page says it after "earned" once the item is earned: "Chirp: earned by
-    /// a first graded submission" (docs/student-wardrobe.md, E2).
+    /// The name a student reads in the picker: "Chirp", "Two-tone".
+    public var displayName: String {
+        switch slot {
+        case .expression: AvatarExpression(rawValue: value)?.displayName ?? value
+        case .border: AvatarBorder(rawValue: value)?.displayName ?? value
+        case .backdrop: value.capitalized
+        }
+    }
+
+    /// How the student earned the item, in the past tense, as the result
+    /// page's Earned toast says it after "Earned": "Earned by a first graded
+    /// submission." (docs/student-wardrobe.md, E2).
     public var howEarned: String {
         switch self {
         case .chirpFace: "by a first graded submission"

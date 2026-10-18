@@ -11,6 +11,9 @@
 // for a reader who asked for reduced motion: they see the final page and
 // hear its one sentence in the live region.
 //
+// At the pop it sends `chickadee:celebrate-pop` on the document, once, so the
+// Earned toast (earned-toast.js) can slide in after it.
+//
 // It makes no styling decision. It sets custom properties that styles.css
 // reads, toggles classes, and draws particles in colours it reads from
 // custom properties, so the palette stays in the stylesheet.
@@ -184,6 +187,9 @@
     }
 
     var announced = false;
+    function signalPop() {
+        document.dispatchEvent(new CustomEvent('chickadee:celebrate-pop'));
+    }
     function applyFrame(t) {
         if (plan.cascade) {
             marks.forEach(function (mark, i) {
@@ -209,6 +215,7 @@
         if (f.popped && !announced) {
             announced = true;
             if (live) { live.textContent = group.dataset.announce || ''; }
+            signalPop();
             startParticles();
         }
     }
@@ -228,7 +235,11 @@
             ['--celebrate-chip-opacity', '--celebrate-chip-y', '--celebrate-chip-scale']
                 .forEach(function (name) { chip.style.removeProperty(name); });
         }
-        if (live && !announced) { live.textContent = group.dataset.announce || ''; }
+        if (!announced) {
+            announced = true;
+            if (live) { live.textContent = group.dataset.announce || ''; }
+            signalPop();
+        }
         group.classList.remove('is-celebrating');
         root.classList.remove('is-celebrating');
         if (canvas) {

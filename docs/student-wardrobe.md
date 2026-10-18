@@ -163,9 +163,9 @@ ring.
 
 A locked earned or special ring does not show on the account page at all
 (#2615; see "Earning: the design pass", E1 to E3). After the student earns
-it, it is a choice like any other, and the closed "How you earned these"
-section says how it was earned ("Two-tone: earned when every test passed on
-three assignments"). `AvatarCustomization` refuses a locked ring, so a
+it, it is a choice like any other. The result page's Earned toast says how
+it was earned, once, when it is earned ("Earned when every test passed on
+three assignments."). `AvatarCustomization` refuses a locked ring, so a
 hand-made request cannot choose one.
 
 **Concept rings.** Six earned rings, one for each lab concept. They are
@@ -218,7 +218,8 @@ instructor setup: the concept tag on an assignment.
 | stitched ring | a comeback (every test passing after an attempt that did not) on three assignments (#2603) |
 | a concept ring | every test passing on an assignment tagged with its concept |
 
-- **Granted on the account page, never while grading.** `WardrobeUnlockStore`
+- **Granted when the account page or a result page loads, never while
+  grading.** `WardrobeUnlockStore`
   reads the student's own student-kind submissions that have a result, and
   stores what they earn in `wardrobe_unlocks` (user, item, time; unique per
   user and item). A cosmetic cannot fail a grade.
@@ -301,9 +302,9 @@ One page section on the account page, "Your bird", one card:
   with the keyboard and with no JavaScript. A ring's sample is the ring
   itself, drawn from the sprite on the student's backdrop. A face or ring not
   earned yet does not show. The seasonal rings out of their term follow under
-  "Not open yet" as plain items, not inputs. Under the groups, a closed "How
-  you earned these" section lists each earned item and how it was earned.
-  Staff see the staff ring and a note in place of the Ring group.
+  "Not open yet" as plain items, not inputs. The card does not say how an
+  item was earned: the result page's Earned toast says it when the item is
+  earned. Staff see the staff ring and a note in place of the Ring group.
 - One **Save** button. The form posts to `POST /account/avatar`.
 
 There is no species or colour group. The species, the colours and the
@@ -350,11 +351,12 @@ The reasons:
   that.
 - The account page must not fill with text.
 
-### E2. After a student earns an item, the page says how
+### E2. When a student earns an item, the result page says how
 
-An earned item says how the student earned it, in the past tense: "Stitched:
-earned for a comeback on three assignments". Before the student earns it,
-nothing says that the item exists. This rewards the student, and it gives
+The Earned toast on the result page (E11) says how the student earned the
+item, in the past tense: "Earned for a comeback on three assignments." It
+says so once, when the item is earned; the account page does not repeat it.
+Before the student earns it, nothing says that the item exists. This rewards the student, and it gives
 students a reason to talk to each other about their birds.
 
 ### E3. Every item that can show has a rule
@@ -541,7 +543,7 @@ wardrobe must work first. What we learned is kept here for when it comes back:
 | E-a | Hide locked items; say how an item was earned after it is earned (E1 to E3) | shipped (#2615) |
 | C1, C2 | Concept rings, and the instructor's concept link on an assignment (E6) | #2605, #2607 |
 | J1b | The reduced-motion banner for a 100% result | #2618 |
-| J2 | The Earned toast for wardrobe items (E11) | #2616 |
+| J2 | The Earned toast for wardrobe items (E11) | shipped (#2616) |
 | J3 | One toast for everything earned, achievements included | #2617 |
 | E7 | Design: can an achievement grant a wardrobe item? | #2619 |
 | W4 | Slots and the first earned accessories (gradcap for completion, rubber duck) | #2620 |

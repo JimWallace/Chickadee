@@ -544,11 +544,33 @@ extension WebRoutes {
                     passCount: context.passCount, totalTests: context.totalTests)
             }
         }
+        let earned =
+            context.isPending ? nil : try await earnedItem(for: user, wearing: spec, isStaff: isStaff, on: db)
         return SubmissionBird(
             avatar: AvatarPresentation(
                 for: reaction.applied(to: spec), size: .result, accessibility: .decorative, isStaff: isStaff),
             reaction: reaction, isOwn: true, celebration: celebration,
-            isFullMarks: percent == 100 && !gradeIsOverridden)
+            isFullMarks: percent == 100 && !gradeIsOverridden, earned: earned)
+    }
+
+    /// The first item that this page load grants, for the Earned toast
+    /// (docs/result-celebration.md, J2). The grant runs here, off the grading
+    /// path, as on the account page. A cosmetic never fails the page: when a
+    /// lookup fails, the page shows no toast, and a failed grant grants again
+    /// on the next load. Course staff cannot choose a ring, so a ring is
+    /// never theirs to wear.
+    private func earnedItem(
+        for user: APIUser, wearing spec: AvatarSpec, isStaff: Bool, on db: any Database
+    ) async throws -> SubmissionEarnedItem? {
+        let userID = try user.requireID()
+        guard let staff = try? await AvatarStore.courseStaff(among: [userID], on: db),
+            let granted = try? await WardrobeUnlockStore.grantNew(for: userID, on: db), !granted.isEmpty
+        else {
+            return nil
+        }
+        let isCourseStaff = !staff.isEmpty
+        guard let item = granted.first(where: { !(isCourseStaff && $0.slot == .border) }) else { return nil }
+        return SubmissionEarnedItem(item, wearing: spec, isStaff: isStaff)
     }
 
     // MARK: - submissionPage helpers

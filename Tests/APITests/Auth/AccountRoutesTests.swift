@@ -208,7 +208,7 @@ import VaporTesting
     /// email arrive from SSO claims, and no HTTP route sets them, so the
     /// visual-regression fixture (which speaks only HTTP) renders a bare local
     /// account. This asserts the populated rendering end to end instead.
-    @Test func populatedIdentityRendersNameUsernameAndEveryDetailRow() async throws {
+    @Test func populatedIdentityRendersNameUsernameAndTheOtherDetailsOnce() async throws {
         try await withApp(app) { _ in
             let hash = try testPasswordHash("pw")
             let user = APIUser(
@@ -229,9 +229,10 @@ import VaporTesting
                     // Heading is the display name; the username sits under it.
                     #expect(html.contains("<strong>Avery Sandoval</strong>"))
                     #expect(html.contains(#"<span class="text-muted">a4student</span>"#))
-                    // All four detail rows.
-                    #expect(html.contains("Preferred name"))
-                    #expect(html.contains("Avery"))
+                    // The rows hold only what the heading does not say: the
+                    // preferred name differs from the display name, so it shows.
+                    #expect(!html.contains("<dt>Username</dt>"))
+                    #expect(html.contains("<dt>Preferred name</dt><dd>Avery</dd>"))
                     #expect(html.contains("Student ID"))
                     #expect(html.contains("20824417"))
                     #expect(html.contains("a4student@uwaterloo.ca"))

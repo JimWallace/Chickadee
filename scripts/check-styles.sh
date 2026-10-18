@@ -514,7 +514,12 @@ fi
 # aspect ratio come from the assignment's composite block, which the
 # instructor sets, so they differ per assignment and no stylesheet can hold
 # them (docs/class-composite.md).
-PER_DATUM_INLINE_PROPS="--bar-h --share --av-cap --av-wing --av-body --av-bib --av-beak --av-mark --av-accent --av-backdrop --av-border --composite-cols --composite-rows --composite-aspect"
+#
+# The Earned toast's ring start is the fourth case (the avatar's nine props
+# above are one case): it is the start of the art of
+# the ring that the student earned (AvatarRing.drawStartDegrees), so it
+# follows the item, as --av-border does (docs/result-celebration.md, J2).
+PER_DATUM_INLINE_PROPS="--bar-h --share --av-cap --av-wing --av-body --av-bib --av-beak --av-mark --av-accent --av-backdrop --av-border --composite-cols --composite-rows --composite-aspect --earned-ring-start"
 # Every custom property in the attribute is checked, wherever it sits: the
 # first one only, in an attribute that starts with `--`, let a second one or
 # one after `display:none;` through (#2404).

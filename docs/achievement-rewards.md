@@ -425,8 +425,8 @@ The page goes through `ui-review`, as every view does.
   shows once.
 - **The trophy case** (W5, #2621) is the ledger, grouped by course, on the
   account page, under "Your bird". Rows with a `wardrobe` reward are not in
-  the case: the item is on the bird, and the "How you earned these" section
-  already names it. Rows with a `title` reward show the title and the
+  the case: the item is on the bird, and the result page's Earned toast
+  already named it when it was earned. Rows with a `title` reward show the title and the
   assignment. Nothing locked shows (E1).
 - **The course dashboard** shows a visible course achievement (decision 5) as
   one line under the section list: its name and a count, "2 of 3 labs". A
