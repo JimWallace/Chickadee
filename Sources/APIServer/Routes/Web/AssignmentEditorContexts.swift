@@ -37,7 +37,7 @@ struct EditAssignmentContext: Encodable {
     /// fixtures bundled with the assignment without scrolling through
     /// the test suite.  Same `EditableSuiteRow` shape as the test rows;
     /// rendered with no tier/points columns.
-    let supportFileRows: [EditableSuiteRow]
+    var supportFileRows: [EditableSuiteRow]
     /// Pattern-family rows shown alongside raw scripts in the suite table.
     /// Generated `.py` entries they produce are filtered out of
     /// `existingSuiteRows` — the family row represents them collectively.
@@ -148,6 +148,9 @@ struct EditAssignmentContext: Encodable {
     /// "Open workbench" link (the workbench must not link to itself).
     /// `nil` on the standalone `/edit` render.
     let embedded: Bool?
+    /// The course library's datasets, for the Files panel's attach control.
+    /// Empty when the course has none, which hides the control.
+    var datasetLibraryOptions: [DatasetLibraryOption] = []
 }
 
 /// The edit page's Language select. Each value is an `AssignmentLanguage`

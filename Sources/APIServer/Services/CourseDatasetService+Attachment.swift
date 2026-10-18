@@ -164,6 +164,35 @@ extension CourseDatasetService {
         return source.version < dataset.currentVersion
     }
 
+    // MARK: - Scope
+
+    /// Sets whether the attached file `filename` gives a student the same rows
+    /// in every assignment (`.course`) or rows of this assignment's own
+    /// (`.assignment`). The bytes and the sample do not change.
+    @discardableResult
+    static func setAttachmentScope(
+        file filename: String, in setup: APITestSetup, to scope: DatasetSliceScope, on db: any Database
+    ) async throws -> DatasetSpec {
+        guard let manifest = setup.decodedManifest() else { throw CourseDatasetError.unreadableManifest }
+        guard let attached = manifest.libraryAttachment(for: filename) else {
+            throw CourseDatasetError.notAttached(filename)
+        }
+        if let issue = DatasetSpecValidation.scopeIssue(with: attached.withScope(scope)) {
+            throw CourseDatasetError.attachmentIssue(issue)
+        }
+        // The new spec is made from the manifest being written, not from the
+        // one read above: a lost race re-applies this closure to a newer
+        // manifest, whose spec may name another version or another sample.
+        // A spec that is no longer attached is left alone.
+        try await mutateManifest(setup: setup, on: db) { props in
+            guard let index = props.datasets.firstIndex(where: { $0.file == filename }),
+                props.datasets[index].source != nil
+            else { return }
+            props.datasets[index] = props.datasets[index].withScope(scope)
+        }
+        return attached.withScope(scope)
+    }
+
     // MARK: - Promote
 
     /// Creates a library dataset whose version 1 is the support file
@@ -345,5 +374,14 @@ extension CourseDatasetService {
             props, courseID: courseID, zipPath: zipPath, on: db)
         guard !dropped.isEmpty else { return manifestText }
         return try encodeManifest(reconciled)
+    }
+}
+
+extension DatasetSpec {
+    /// This spec with `scope` in place of its own.
+    fileprivate func withScope(_ scope: DatasetSliceScope) -> DatasetSpec {
+        DatasetSpec(
+            file: file, kind: kind, sampleSize: sampleSize, stratumColumn: stratumColumn, transforms: transforms,
+            source: source, scope: scope)
     }
 }

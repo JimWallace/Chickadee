@@ -33,6 +33,12 @@ import Testing
         "updateScript",
         "createScript",
         "deleteScript",
+        // Course library attachments: each changes the files in the zip or
+        // the rows a student gets (the scope decides which seed picks them).
+        "attachLibraryDataset",
+        "updateLibraryAttachment",
+        "detachLibraryDataset",
+        "setLibraryDatasetScope",
     ]
 
     /// Handlers that manage the steps after their edit themselves. Adding a
@@ -51,6 +57,8 @@ import Testing
         "putTimeLimit",
         // Dataset marks change delivery, not the graded suite.
         "putDatasets",
+        // A promote keeps the bytes, the sample and the scope.
+        "promoteSupportFileToLibrary",
         // Display-only awards.
         "putAchievements",
         // Shared inputs re-inline in place; mirrors `update_global_inputs`.

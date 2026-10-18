@@ -16,7 +16,7 @@ states what it adds and what proves it.
 | 2 | Server: the `course_datasets` and `course_dataset_versions` tables, the blob-backed store, `CourseDatasetService` | built |
 | 3 | Attachment: copy a pinned version into the setup zip and record the source; promote a support file into the library; detect a newer version | built |
 | 4 | Course cohort: the per-(student, course) seed, and `DatasetResolver` choosing the seed per spec at every delivery path | built |
-| 5 | Instructor surfaces: the Datasets tab (5a), the Files-panel picker and the scope control (5b) | 5a built; 5b proposed |
+| 5 | Instructor surfaces: the Datasets tab (5a), the Files-panel picker and the scope control (5b) | built |
 | 6 | Student surfaces: the course Data page, the assignment-page dataset line, the "my rows" download | proposed |
 | 7 | MCP: `list_datasets`, `get_dataset`, `create_dataset`, `update_dataset`, `add_dataset_version`, `attach_dataset`, `detach_dataset`; `set_dataset` gains `scope` | proposed |
 | 8 | Lifecycle: course clone, bundle export and import, storage page, purge | proposed |
@@ -442,16 +442,47 @@ as `<slug>-v<n>.csv`.
 Tests: `InstructorDatasetsTabTests`, and the two fixtures in
 `ElementaryPageFixtures+Datasets.swift`.
 
-**The Files panel (5b).** It gains one control beside the upload: "Attach from the
-course library", a select of published and unpublished datasets. An attached
-row shows the source (`from VitalDB cases v2`), a "v3 available: update"
-action when behind, and a "same rows in every assignment" checkbox for the
-scope. The existing sample, stratum and blanking fields stay as they are. The
-behaviour lives in `Public/support-files.js`; the markup in `SupportFileRow`.
+**The Files panel (5b, built).** The edit page's Files panel reaches the
+library through five JSON routes, each answering with the panel state as the
+datasets PUT does (`PublishedAssignmentRoutes+DatasetLibrary.swift`):
 
-A promote action on a plain support-file row: "Move to the course library".
+| Control | Route | Does |
+|---|---|---|
+| A select and Attach, beside the upload (only when the course has datasets) | `POST …/datasets/library/attach` `{slug}` | Attaches the newest version under its own filename, with course scope and no sample (decision 1). The instructor then sets the sample as for any dataset. |
+| "Update to v3", on an attached row that pins an older version | `…/update` `{file}` | Moves to the newest version. |
+| "Course-wide rows" | `…/scope` `{file, courseScoped}` | Sets the scope (`setAttachmentScope`). |
+| Detach | `…/detach` `{file}` | Ends the attachment and keeps the file and its sample. No confirm, because it is easy to undo. |
+| Remove, on an attached row | `…/detach` `{file, removeFile: true}` | The support-file delete refuses an attached file, so Remove detaches and removes in one step. |
+| "Move to course library", on a CSV that is not attached | `…/promote` `{file}` | Creates an unpublished dataset named after the file (decision 3). The instructor renames it on the Datasets tab. |
 
-Every page change runs `ui-guard` and `ui-review`.
+- **Attach, update, detach and a scope change re-grade and re-validate**
+  (`applyContentEditEffects(.gradeAffecting)`). Attach and update change the
+  bytes, and a detach with `removeFile` removes a file. The scope decides which
+  seed picks a student's rows, so a scope change and a detach that keeps the
+  file change the rows too. A promote keeps the bytes, the sample and the
+  scope, so it does neither; `WebContentEditCoverageTests` lists it.
+- **The scope write is made from the manifest being saved.** A lost race
+  re-applies it to the newer manifest, so it cannot bring back a source that a
+  concurrent update or detach replaced. The scope route takes its own body,
+  and a body without `courseScoped` is refused.
+- **A promote picks a free slug** from the file name: the plain slug, else
+  `-2`, `-3` and on. A grader-only CSV offers no promote, because the service
+  refuses one.
+- **Known gap: attach uses the version's own filename.** When the assignment
+  already has a file with that name, the attach is refused with that reason.
+  The panel has no field for another name yet; the route accepts `filename`.
+- **An attached row's per-student checkbox is disabled,** with a one-line note
+  that says to detach first. An attached file always has a spec, and
+  unchecking it would be refused.
+- **The create page has no library controls.** Its endpoints are draft
+  endpoints, so a dataset is attached after the assignment exists.
+- A refusal from the service is a 400 with its reason, which the panel shows
+  as an action error. A refused scope change puts the box back. A control is
+  disabled while its request runs.
+
+Tests: `DatasetLibraryPanelRoutesTests`, `support-files-library.test.mjs`, the
+five route floors in `RouteAuthorizationMatrixTests`, and an edit-page fixture
+with the library controls in `ElementaryPageFixtures+Datasets.swift`.
 
 ### 4.6 Student surfaces (slice 6)
 
