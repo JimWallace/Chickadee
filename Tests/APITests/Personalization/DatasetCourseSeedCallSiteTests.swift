@@ -1,4 +1,4 @@
-// Tests/APITests/DatasetCourseSeedCallSiteTests.swift
+// Tests/APITests/Personalization/DatasetCourseSeedCallSiteTests.swift
 //
 // Every server call that resolves dataset slices names the course seed
 // (docs/datasets-course-library.md, slice 4). The resolver and the
