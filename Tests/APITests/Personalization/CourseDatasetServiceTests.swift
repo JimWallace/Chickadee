@@ -247,6 +247,24 @@ import VaporTesting
         }
     }
 
+    /// The dashboard and the upload page link to the Data page only when
+    /// this is true.
+    @Test func hasPublishedSeesOnlyPublishedDatasetsOfTheNamedSlugs() async throws {
+        try await withApp(app) { app in
+            let courseID = try await course("CDS30")
+            let dataset = try await create(courseID: courseID)
+            #expect(try await !CourseDatasetService.hasPublished(courseID: courseID, on: app.db))
+            try await CourseDatasetService.updateMetadata(
+                dataset, edit: .init(provenance: "VitalDB open dataset", licence: "CC BY 4.0"), on: app.db)
+            try await CourseDatasetService.setPublished(dataset, true, on: app.db)
+            #expect(try await CourseDatasetService.hasPublished(courseID: courseID, on: app.db))
+            #expect(
+                try await CourseDatasetService.hasPublished(courseID: courseID, slugs: ["vitaldb-cases"], on: app.db))
+            #expect(try await !CourseDatasetService.hasPublished(courseID: courseID, slugs: ["other"], on: app.db))
+            #expect(try await !CourseDatasetService.hasPublished(courseID: try await course("CDS31"), on: app.db))
+        }
+    }
+
     @Test func aRefusedMetadataEditLeavesTheModelAsItWas() async throws {
         try await withApp(app) { app in
             let dataset = try await create(courseID: try await course("CDS13B"))

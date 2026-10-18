@@ -21,6 +21,11 @@ struct SubmitPage: HTML {
     let githubSubmitURL: String?
     /// True when both AI-assisted feedback gates are on.
     let aiFeedbackNotice: Bool
+    /// The dataset files of this assignment, each a download of the
+    /// student's own rows.
+    var datasets: [SubmitDatasetLink] = []
+    /// The course Data page, when a dataset here is in the course library.
+    var dataPageHref: String?
 
     var body: some HTML {
         BaseLayout(title: "Submit Code", page: page) {
@@ -50,6 +55,9 @@ struct SubmitPage: HTML {
                     ". Upload a single file, or a .zip that contains all of them."
                 }
             }
+            if !datasets.isEmpty {
+                datasetLine
+            }
             uploadForm
             if let githubSubmitURL {
                 p(.class("section-note")) {
@@ -57,6 +65,24 @@ struct SubmitPage: HTML {
                     a(.href(githubSubmitURL)) { "submit a commit from GitHub" }
                     "."
                 }
+            }
+        }
+    }
+
+    private var datasetLine: some HTML {
+        p(.class("fine-print")) {
+            "Your data: "
+            for (index, dataset) in datasets.enumerated() {
+                if index > 0 { ", " }
+                a(.href(dataset.href), .ariaLabel("Download your rows of \(dataset.filename)")) {
+                    code { dataset.filename }
+                }
+                " (\(dataset.rowsText))"
+            }
+            "."
+            if let dataPageHref {
+                " "
+                a(.href(dataPageHref)) { "Course data" }
             }
         }
     }

@@ -16,6 +16,8 @@ struct IndexPage: HTML {
     let hasAny: Bool
     /// "Slip days: 1 of 2 remaining." under the heading; nil hides the line.
     let slipDaySummary: String?
+    /// The course Data page, when the active course has a published dataset.
+    var dataPageHref: String?
 
     private var heading: String {
         if let activeCourse { "\(activeCourse.code) — \(activeCourse.name)" } else { "Assignments" }
@@ -28,6 +30,9 @@ struct IndexPage: HTML {
                 div(.class("chip-row")) {
                     span(.class("chip")) { slipDaySummary }
                 }
+            }
+            if let dataPageHref {
+                p { a(.href(dataPageHref)) { "Course data" } }
             }
             if !hasAny {
                 if activeCourse != nil {

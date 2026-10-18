@@ -135,6 +135,20 @@ func studentHasOpenedAssignment(
         .count() > 0
 }
 
+/// Whether a student may view `assignment` although it is closed for them:
+/// it is visible to students by its state (published, then closed at its
+/// deadline), or they engaged with it before. The one rule of
+/// `closedAssignmentGate` and of the student dataset downloads
+/// (`StudentDataRoutes`); it records nothing.
+func studentMayViewClosedAssignment(
+    _ assignment: APIAssignment,
+    userID: UUID,
+    on db: any Database
+) async throws -> Bool {
+    if assignmentVisibleToStudentByState(assignment) { return true }
+    return try await studentHasOpenedAssignment(assignment: assignment, userID: userID, on: db)
+}
+
 /// What the closed-assignment gate decided. The route turns
 /// `.redirectToDashboard` into a redirect to `/`.
 enum ClosedAssignmentGate: Equatable, Sendable {
@@ -171,12 +185,7 @@ func closedAssignmentGate(
         // (a preview, a not-yet-opened scheduled assignment, or an unpublished
         // draft) and that they have never engaged with. Submission stays gated
         // separately by requireOpenStudentAssignment, so this view is read-only.
-        var mayView = assignmentVisibleToStudentByState(assignment)
-        if !mayView {
-            mayView = try await studentHasOpenedAssignment(
-                assignment: assignment, userID: userID, on: db)
-        }
-        if !mayView {
+        if try await !studentMayViewClosedAssignment(assignment, userID: userID, on: db) {
             return .redirectToDashboard
         }
     }
