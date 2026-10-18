@@ -1,4 +1,4 @@
-// Tests/APITests/CourseCohortJobPathTests.swift
+// Tests/APITests/Personalization/CourseCohortJobPathTests.swift
 //
 // The course cohort on the worker's job paths
 // (docs/datasets-course-library.md, slices 4 and 11): a student's own job
