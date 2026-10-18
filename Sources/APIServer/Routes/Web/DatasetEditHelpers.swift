@@ -242,6 +242,11 @@ func applyDatasetsEdit(
             reason: "'\(file)' is attached from the course library. Detach it to remove its dataset settings.")
     }
 
+    // An activity that ranks or matches students refuses personal data.
+    if let violation = ManifestCoherence.violation(introducedBy: { $0.datasets = datasets }, in: setup.manifest) {
+        throw Abort(.badRequest, reason: violation)
+    }
+
     try await mutateManifest(setup: setup, on: db) { props in
         props.datasets = datasets
     }

@@ -58,7 +58,8 @@ struct AttachDatasetTool: ContentTool {
         + "assignment's own. Called on a file that is already attached from the dataset, it moves the file "
         + "to the version asked for (the newest by default) and sets scope when given; the sample stays, "
         + "and set_dataset changes it. A change re-grades the assignment's submissions and re-validates; it "
-        + "does not close the assignment. detach_dataset ends an attachment."
+        + "does not close the assignment. detach_dataset ends an attachment. "
+        + MCPActivityProse.sharedDataRule
     static let inputSchema: JSONValue = MCPSchema.object(
         properties: [
             "assignmentPublicID": MCPSchema.assignmentPublicID, "slug": DatasetToolSchema.slug,

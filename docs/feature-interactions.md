@@ -462,6 +462,13 @@ because line numbers go out of date.
     the raw `runsPerGroup` flag. The `highestMetric` class record stays
     course-wide on purpose: a per-group result can take it from a student in
     another lab.
+  - An activity whose kind compares students (`ActivityKind.comparesStudents`)
+    accepts only shared data (`DatasetSpec.isShared`). The rule is in
+    `ManifestCoherence`. A new door that writes an activity or a dataset spec
+    must call `ManifestCoherence.violation(introducedBy:in:)`
+    (`docs/datasets-course-library.md` §4.11). The bundle import, the
+    version restore, the clone and the draft publish copy a whole manifest
+    and run no coherence rule, so an existing pair passes through them.
 
 ### Lab groups and per-group sessions: `runsPerGroup`, `activity_sessions`
 

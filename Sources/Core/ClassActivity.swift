@@ -251,6 +251,22 @@ public enum ActivityKind: String, Codable, CaseIterable, Sendable {
     public var canRunPerGroup: Bool {
         aggregation == .leaderboard && opponentSource != .champion
     }
+
+    /// True when the kind ranks or matches students against each other, so
+    /// every student must grade on the same data. A ranking of a metric that
+    /// each student computed on different rows compares nothing
+    /// (docs/datasets-course-library.md §4.11). Exhaustive on purpose: a kind
+    /// added without an answer does not compile. It is not derived from
+    /// `aggregation` and `opponentSource`, because a new kind can combine them
+    /// in a way that no rule over the two axes foresees.
+    public var comparesStudents: Bool {
+        switch self {
+        case .beatTheInstructor, .bestMetric, .kingOfTheHill, .roundRobin, .elimination,
+            .testsVersusImplementations:
+            return true
+        case .classComposite: return false
+        }
+    }
 }
 
 /// Where a live session stands relative to its window.

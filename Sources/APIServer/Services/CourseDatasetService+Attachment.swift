@@ -65,14 +65,18 @@ extension CourseDatasetService {
             stratumColumn: stratum, source: DatasetSource(slug: dataset.slug, version: version.version),
             scope: request.scope)
         try requireValid(spec, bytes: bytes)
-
-        try await writeThenRecord(
-            PinnedWrite(filename: filename, bytes: bytes, previous: nil, dataset: dataset, version: version.version),
-            setup: setup, on: db
-        ) { props in
+        let change: (inout TestProperties) -> Void = { props in
             props.datasets.removeAll { $0.file == filename }
             props.datasets.append(spec)
         }
+        // An activity that ranks or matches students refuses personal data.
+        if let violation = ManifestCoherence.violation(introducedBy: change, in: setup.manifest) {
+            throw CourseDatasetError.attachmentIssue(violation)
+        }
+
+        try await writeThenRecord(
+            PinnedWrite(filename: filename, bytes: bytes, previous: nil, dataset: dataset, version: version.version),
+            setup: setup, on: db, change)
         await extractSupportFilesToSharedDirectory(for: setup, testSetupsDirectory: testSetupsDirectory)
         return spec
     }

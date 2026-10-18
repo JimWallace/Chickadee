@@ -108,7 +108,8 @@ struct SetActivityTool: ContentTool {
         + "\(MCPActivityProse.aggregationSummaries). The kind is LOCKED once any student has submitted — clone the assignment "
         + "instead — but leaderboardVisibility (\"hidden\" or \"visible\"; absent keeps the stored value "
         + "while the kind is unchanged, else \"hidden\") and "
-        + "opponentFile may change at any time. A kind whose opponent source is \"supportFile\" "
+        + "opponentFile may change at any time. " + MCPActivityProse.sharedDataRule
+        + " A kind whose opponent source is \"supportFile\" "
         + "plays each submission against a bot: upload the bot as a support file, name it in "
         + "opponentFile, and the grader (the native worker or the browser runner) stages it in the "
         + "directory the match script reads from CHICKADEE_OPPONENT_DIR, with a per-match seed in "

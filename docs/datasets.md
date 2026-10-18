@@ -164,6 +164,13 @@ Deterministic and server-side, exactly like today's personalization.
 **MCP surface:** built as the course dataset library tools; see
 [datasets-course-library.md](datasets-course-library.md) §4.7.
 
+**Class activities.** An activity that ranks or matches students accepts only
+a dataset that gives every student the same bytes: no sample and no
+transforms. Every authoring door that saves a dataset spec or an activity
+refuses the pair. A bundle import, a version restore and a clone copy the
+manifest as it is. A class composite accepts personal data. See
+[datasets-course-library.md](datasets-course-library.md) §4.11.
+
 ### Migration
 
 Support-file CSVs are the v0 of this. Assignment 4 is the first consumer:
