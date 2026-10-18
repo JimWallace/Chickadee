@@ -1,12 +1,15 @@
-# Lab Groups
+# Lab Groups and In-Lab Sessions
 
-Design note for student groups inside a course: lab groups of about 25
-students, the staff who run them, and the things that differ per group. The
-first use is lab sections that meet on different days. The model is written so
-that project teams can use it later without a second model.
+Design note for student groups inside a course, built for the lab room: a
+section of about 25 students, one TA, one projector, one time slot. The goal is
+that every class activity Chickadee already has (docs/class-activities.md,
+docs/class-composite.md, docs/collaborative-class-assignments.md) can run
+once per lab group, in that group's room, on that group's clock, with that
+group's board on the projector. Grades, deadlines and roster scoping are not
+the goal. They are listed at the end as things the same model can carry later.
 
-Read **What exists today** and **Decisions** before you touch code. Each slice
-is one PR. Every slice leaves a course with no groups on the code path it runs
+Read **The model** and **Decisions** before you touch code. Each slice is one
+PR. Every slice leaves an assignment with no groups on the code path it runs
 today.
 
 ## Status
@@ -14,273 +17,309 @@ today.
 | slice | what | state |
 |---|---|---|
 | 0 | This design note | draft |
-| 1 | The model and the manual source: group sets, groups, memberships, the Groups tab, CSV import, the roster column and filter, the export column | not started |
-| 2 | The LEARN source: the existing group-category sweep writes the new tables, the category picker on the BrightSpace tab, a D2L Sections reader, tests with a fake client | not started |
-| 3 | Per-group schedules: a due date and an open date per group, one deadline resolver for every student-facing read, the reveal rule | not started |
-| 4 | Staff in groups: a TA assigned to groups, the Students tab and the submissions list filtered to their groups by default | not started |
-| 5 | Later: a group as the scope of a class activity or a composite; a `team` kind with a shared submission | not planned |
+| 1 | Groups: group sets, groups, memberships; the Groups tab; the join code; the CSV import; the Group column on the roster | not started |
+| 2 | Sessions: a session per (activity, group), started and ended from the present page; the submission gate reads the session; attendance by join code | not started |
+| 3 | Rankings per group: leaderboard, standings, the hill, round-robin opponents, tournament runs, the present page per group | not started |
+| 4 | The composite per group, and the course gallery of every group's image | not started |
+| 5 | Group goals: the union and the corpus percent per group; a group achievement | not started |
+| 6 | The LEARN source: the existing group-category sweep writes the new tables; a D2L Sections reader; the category picker | not started |
+| later | Per-group deadlines; a TA's roster filtered to their groups; a `team` kind with a shared submission | not planned |
 
 ## The problem
 
-A large course runs its labs in sections of about 25 students. Each section
-has a day, a room and a TA. Today Chickadee knows none of this:
+A course runs its labs in nine sections. Each section meets at a different
+time, in its own room, with its own TA. Every class activity today is
+course-wide:
 
-- The roster is one flat list. A TA who runs Lab 103 scrolls past the other
-  eight sections to find their students.
-- An assignment has one due date for the whole course. A lab that meets on
-  Tuesday and a lab that meets on Thursday cannot have different deadlines.
-  The only tool is the per-student extension (`APIAssignmentExtension`), one
-  row per student, granted by hand.
-- The grades CSV carries a `learnSection` column, but nothing writes it in
-  production (see below), so it is always empty.
-- Issue #544 asked for a TA role "scoped to sections". The role shipped
-  (`CourseRole.ta`, docs/multi-course-roles.md). The scoping half did not.
+- The live-session window (`activity.window`) is one pair of instants on the
+  assignment. Nine labs cannot each have their fifty minutes.
+- The leaderboard, the standings and the hill rank the whole course. A
+  student in the Tuesday lab competes against people who played on Thursday.
+- A round robin plays every classmate in the course. For 225 students that is
+  224 matches per submission. In a lab of 25 it is 24.
+- A tournament snapshots the whole course's entrants. A bracket of 225 does
+  not fit a lab. A bracket of 25 is five rounds.
+- The composite deals slots across the course. The first lab fills the first
+  48 slots and the second lab starts a second round on the same image. Each
+  lab should make its own image.
+- A class goal counts the course roster. "Your lab found all 15 bugs" is a
+  better goal in the room than "the course found 12 of 15".
+- The present page is one board for one course. A TA cannot project "Lab 103".
 
-LEARN already holds the lab groups. The ideal is to read them from there. The
-sources are mixed, so the model must not depend on any one of them.
+LEARN knows the lab sections. Reading them is useful but not sufficient: the
+Valence grade sync still waits for UW IST production credentials (root
+`CLAUDE.md`, "Current State"), LTI sends no groups, and a student who comes to
+the wrong lab this week still has to play in the room they are in. So the room
+itself must be able to make and fill a group.
 
 ## What exists today
 
-A backend for one source shipped in 0.4 (`CHANGELOG-0.4.md`, "LEARN section
-sync (backend)") and its UI follow-up never landed:
-
-| Piece | Where | State |
+| Piece | Where | What it does |
 |---|---|---|
-| The D2L group category to read | `APICourse.brightspaceSectionCategoryID` | A column. No form sets it. |
-| The student's group name | `APICourseEnrollment.brightspaceSection` | A free-text string, for example "Lab 3". |
-| The sweep | `LearnSectionSyncService.swift`, every 10 minutes | Runs only when a course has both the org unit and the category. |
-| The D2L reads | `BrightSpaceAPIClient.fetchGroupCategories`, `fetchGroups` | Paged, with clock-skew retry. |
-| Readers of the name | `DataExportContent` (`learnSection`) | The only reader. No page shows it. |
-| Tests | none | No test references the sweep or the two fetchers. |
+| The activity block | `TestProperties.activity` (`Sources/Core/ClassActivity.swift`) | `kind`, `leaderboardVisibility`, `opponentFile`, `window`, `composite`. All course-wide. |
+| The window gate | `requireOpenStudentAssignment(gate: .submission)` | Refuses a submission outside `activity.window`. Staff are never gated. |
+| The ranking rows | `leaderboard_entries`, `activity_standings`, `activity_champions`, `match_results`, `tournament_runs`, `composite_slots` | Keyed by assignment and student. Unique on (assignment, student); the hill is unique on the assignment alone. |
+| The opponents | `WorkerJobRoutes.jobOpponentSet` / `jobOpponents` | Every classmate's latest submission in the course. |
+| The present page | `GET /testsetups/:id/leaderboard?present=1`, `LeaderboardPresentPage` | One board per assignment, polled by the projector. |
+| The arena | `WebRoutes+TournamentArena.swift` | Plays a browser-graded tournament in the presenter's browser. |
+| A LEARN section sync | `LearnSectionSyncService`, `APICourse.brightspaceSectionCategoryID`, `APICourseEnrollment.brightspaceSection` | Writes a free-text group name per enrollment every ten minutes. No form sets the category, no page reads the name, no test covers it. |
 
-Two facts limit this backend:
+The ranking rows are all materialised at ingest (`recordLeaderboardEntry`,
+`recordClassItemCoverage` and their siblings, wired at both ingest paths). That
+is the pattern this design extends: a row learns its group when it is written.
 
-- A string on the enrollment cannot carry anything else. A deadline, a TA
-  assignment or a leaderboard cannot point at "Lab 3". A rename in LEARN
-  silently makes a new group.
-- The Valence grade sync still waits for UW IST production credentials (root
-  `CLAUDE.md`, "Current State"). Until they arrive, nothing on the Valence path
-  runs in production. A design that only works through Valence is a design
-  that does not work this term.
+## The model
 
-## Where LEARN can supply groups
+Three concepts.
 
-| Source | What it gives | State |
-|---|---|---|
-| D2L Groups (a group category) | Group names and the D2L user ID of each member, through `lp/(v)/(orgUnit)/groupcategories/(cat)/groups/` | Reader exists (`fetchGroups`). Blocked on production credentials. |
-| D2L Sections | The registrar-fed sections of a course offering, each with a name and a member list, through `lp/(v)/(orgUnit)/sections/` | No reader. The same shape as a group. Verify the route and the `Enrollments` field against the Valence reference before slice 2; the public search did not reach the page. |
-| LTI 1.3 NRPS | The membership of the context: subject, roles, status, student number (`LTIMember`) | No group or section per member. |
-| LTI Course Groups Service | A 1EdTech extension that lists a context's groups and their members | D2L's LTI Advantage page lists AGS, NRPS and Deep Linking only. Treat as unsupported until D2L says otherwise. |
-| A LEARN export file | The Groups tool exports group name, username and org-defined ID per member. The Grades export can be filtered to one section or group. | Always available to an instructor. Needs a parser. |
+- **Group.** A named set of students in a course, inside a **group set** that
+  mirrors a LEARN group category ("Lab sections"). A student is in at most one
+  group per set. A TA can be a member too; that is how the present page knows
+  which group is theirs.
+- **Session.** One group running one activity: a row per (assignment, group)
+  with `opened_at`, `closed_at`, `opened_by` and a short **join code**. The
+  session is the clock. The TA starts it from the present page when the room
+  is ready and ends it when the lab ends. It can be reopened.
+- **Participant.** A student who played in a session: a member of the group,
+  or anyone who entered the session's join code. A participant's results are
+  attributed to that session's group, whatever group LEARN says they are in.
 
-Before slice 2, check in the LEARN site whether the lab sections appear under
-Course Admin as **Sections** or as a **Group category**. UW registrar feeds
-usually make Sections. The existing reader only handles group categories.
+The activity block gains one field, `runsPerGroup` (nil = false = today's
+behaviour on every branch). When it is true for an assignment:
 
-So: a LEARN-bound course can sync through Valence once the credentials exist;
-an LTI-bound course cannot read groups from the LMS at all; every course can
-import a file. The model treats each as a *source* of one group set, and the
-rest of Chickadee never asks which source a set came from.
+- A student submits only while their session is open. Their session is the
+  open session they joined by code, else the open session of their group.
+- Every ranking row written at ingest carries the student's `group_id`.
+- Every board, bracket, hill, matrix and composite is read per group.
+- The present page takes a group and shows that group's board, clock and join
+  code.
 
-## Decisions
-
-1. **The word is "group".** LEARN calls them groups. "Section" is taken twice
-   in Chickadee: a course section groups assignments, and a suite section
-   groups tests. "Cohort" names the per-student dataset seed. A page may say
-   "lab group" where the kind is known.
-2. **A group set per course, mirroring a D2L group category.** A set has a
-   name ("Lab sections"), a source, and the rule that a student is in at most
-   one of its groups. A course may hold several sets later (lab sections and
-   project teams). Slice 1 builds the tables for several and the UI for one.
-3. **Tables, not the string column.** `course_group_sets`, `course_groups`
-   and `course_group_memberships`. A deadline, a TA assignment and a
-   leaderboard point at a group row with a stable ID. The existing string
-   column becomes legacy: the sweep stops writing it, nothing reads it, and a
-   later cleanup drops it (the `legacyAvatarHandle` pattern).
-4. **Membership is one table for students and staff.** A row is
-   (group, user). The user's role in the group is their enrollment role in the
-   course. A TA in Lab 103 is a membership row for a user whose enrollment
-   says `ta`. There is no second role system.
-5. **Each set has one source, and a synced set is read-only in the UI.**
-   `manual` (the Groups tab and a CSV import), `learnGroups` (a D2L group
-   category) or `learnSections` (D2L Sections). An instructor who wants to
-   hand-edit a synced set makes a manual copy. This avoids a merge rule
-   between LEARN and local edits, which is where group sync tools go wrong.
-6. **The sweep upserts by external ID.** A rename in LEARN renames the group.
-   A group that leaves LEARN is kept and marked removed, so its schedule rows
-   and history stay. Memberships are replaced per run. Students match through
-   the existing `BrightSpaceIdentityIndex`, the same rule as the grade push.
-7. **Per-group schedules are additive.** `assignment_group_schedules` carries
-   an optional `opens_at` and an optional `due_at` per (assignment, group). A
-   student's effective deadline is their group's `due_at` when one exists,
-   else the assignment's `dueAt`, and the per-student extension folds on top
-   through `laterDeadline` as today. An assignment with no schedule rows
-   behaves exactly as today.
-8. **The reveal waits for the last group.** Release-tier output and the
-   solution reveal for a student gate on the latest `due_at` across the
-   assignment's groups, not on the student's own. A Tuesday group that sees
-   the solution while the Thursday group still works is a 25-student leak,
-   not the one-student leak the extension already accepts. The slip-day
-   ceiling and the per-student extension still fold on top of that moment.
-   This is the one place where a group changes behaviour for a student who is
-   not in it. **Maintainer decision needed.** The alternative is the student's
-   own deadline, as extensions do today.
-9. **Staff scoping is soft in slice 4.** A TA assigned to groups gets the
-   Students tab and the submissions list filtered to those groups by default,
-   with a control to show the whole course. The per-course gates
-   (`requireCourseRole(atLeast:)`) do not change. Hard scoping, where a TA
-   cannot open another group's submission, touches every staff read gate and
-   breaks the small course where two TAs grade everything. Decide it after a
-   term of use.
-10. **Groups never cross the MCP wall.** Membership is enrollment data. No MCP
-    tool reads or writes a set, a group or a membership
-    (`Sources/APIServer/MCP/CLAUDE.md`). Group names and schedules are
-    instructor lifecycle data, and the lifecycle tools stay off MCP as they are
-    today. Add the three tables to the "never touches" list in
-    `docs/compliance/data-flow-inventory.md`.
-11. **A team with a shared submission is a different feature.** The model
-    leaves room for it: a set of kind `team` and a submission that belongs to
-    a group. The hook is `APISubmission` ownership, and nothing in slices 1 to
-    4 touches it.
-
-## Model
+When it is false, nothing reads a group, and the manifest window stays the
+clock, as today.
 
 ```text
 course_group_sets
-  id, course_id, name, kind (lab | team), source (manual | learnGroups | learnSections),
-  external_id (the D2L category or null), created_at, last_synced_at
+  id, course_id, name, source (manual | learnGroups | learnSections),
+  external_id, created_at, last_synced_at
 
 course_groups
-  id, set_id, name, external_id (the D2L group or section id, or null),
-  sort_order, removed_at (set when the source no longer lists it)
+  id, set_id, name, external_id, sort_order, removed_at
   UNIQUE(set_id, external_id) where external_id is not null
 
 course_group_memberships
   id, group_id, user_id, created_at
   UNIQUE(group_id, user_id)
-  (a student is in at most one group per set; the app enforces it, and the
-  sweep replaces a student's row rather than adding one)
 
-assignment_group_schedules   (slice 3)
-  id, assignment_id, group_id, opens_at (nullable), due_at (nullable)
-  UNIQUE(assignment_id, group_id)
+activity_sessions
+  id, assignment_id, group_id, join_code, opened_at, closed_at, opened_by
+  UNIQUE(assignment_id, group_id); UNIQUE(join_code) while open
+
+activity_session_attendance
+  id, session_id, user_id, joined_at
+  UNIQUE(session_id, user_id)
 ```
 
-Models follow the house rules: Fluent `Model` classes under
-`Sources/APIServer/Models/`, `@unchecked Sendable` only there, raw columns read
-through typed accessors, migrations folded into the create migrations as the
-enrollment columns were. `APICourse` gains a `groupSets` children relation.
-Deleting a course cascades through all four tables.
+And one nullable `group_id` column on each ranking table:
+`leaderboard_entries`, `activity_standings`, `activity_champions`,
+`match_results`, `tournament_runs`, `composite_slots`,
+`composite_contributions`, `class_item_coverage`, `class_coverage_runs`.
+Nil means course-wide, which is what every existing row is.
 
-## Slice 1: the model and the manual source
+## Decisions
 
-- The tables above (without schedules), and `CourseGroupStore`, one place for
-  the reads and writes: the sets of a course, the groups of a set, the group of
-  a student in a set, the students of a group, and `replaceMemberships(set:
-  assignments:)`, which both the Groups tab and the sweep call.
-- An instructor **Groups** tab under `/instructor/groups`, per-course
-  `instructor` only (membership is enrollment management, like the roster).
-  Create a set, add a group, move a student between groups with a select on
-  the roster row, and import a CSV of `username,group` (also the LEARN Groups
-  export, whose columns are detected the way `parseUsernamesFromCSV` detects
-  the gradebook export). A TA reads the tab and changes nothing.
-- The Students tab gets a **Group** column and the Filter box matches on it.
-  `EnrolledStudentRow` gains `groupName`.
-- The student's course page shows their group under the course title.
-- The grades CSV column `learnSection` becomes `group`, filled from the
-  membership rather than the legacy string.
-- Tests: `CourseGroupStoreTests` (the one-group-per-set rule, a replace that
-  moves a student, a removed group keeps its rows), `GroupsCSVImportTests`
-  (the two file shapes, an unknown username, a student in two groups in one
-  file is refused), and a route test per form.
+1. **The word is "group".** LEARN calls them groups. "Section" is taken twice
+   in Chickadee (a course section groups assignments, a suite section groups
+   tests) and "cohort" names the dataset seed. A page may say "lab group".
+2. **The session is a row, not a manifest field.** The manifest's
+   `activity.window` is authored content: two ISO strings set before the day.
+   A session is operational: a TA presses Start at 14:05 because the room is
+   ready. Content is versioned, exported in a course bundle and authored by
+   MCP. A session is none of those. Keeping them apart is the same reason the
+   window is not the deadline (docs/class-activities.md, slice 8).
+3. **Attendance beats membership.** A student who enters Lab 103's code plays
+   in Lab 103, even if LEARN puts them in Lab 101. The join code is the one
+   thing a TA can control from the front of the room. It also fills a group
+   with no source at all: a student with no group who joins a session becomes a
+   member of that group. That is the manual source that needs no form.
+4. **The group is written at ingest and never recomputed.** A ranking row
+   carries the group it was played in. A student who moves groups later keeps
+   their place in the room they played in. This is the house pattern (every
+   accumulator is materialised at ingest, docs/class-activities.md decision
+   7), and it is why the ranking pages need no join on memberships.
+5. **One unique key changes.** `activity_champions` is unique on the
+   assignment alone today. One hill per group needs (assignment, group). That
+   is the one non-additive migration in the plan, and the reason the hill is
+   in slice 3 rather than a later one: the rest of the ranking tables keep
+   their (assignment, student) keys, since a student has one group per set.
+6. **Opponents come from the group.** A round robin plays the group's
+   classmates. The hill's champion is the group's champion. A tournament's
+   entrants are the group's participants. The bundled bot still stands in
+   when a group has nobody yet.
+7. **Each group makes its own composite.** Slots are dealt per (assignment,
+   group, round, slot). A 6 × 8 starter grid suits a lab of 25 with spares
+   for the fast students. The course page gains a gallery of every group's
+   image, which is the end-of-term artefact.
+8. **A group goal is the same goal, counted per group.** The union and the
+   corpus percent read their rows filtered by group; breadth is the fraction
+   of the group's current members. The achievement is awarded to the group's
+   participants. The sweep stays blob-free and reconciles per group.
+9. **Staff are never gated and may run any group's session.** A TA assigned
+   to a group gets that group's present page by default. Any staff member can
+   open any group's board, because the instructor walks between rooms.
+10. **Each group set has one source, and a synced set is read-only in the
+    UI.** `manual`, `learnGroups` (a D2L group category) or `learnSections`
+    (D2L Sections). The join code adds members to a manual set only; on a
+    synced set it records attendance and leaves membership to LEARN.
+11. **Groups never cross the MCP wall.** Membership and attendance are
+    student data. No MCP tool reads or writes a set, a group, a session or an
+    attendance row (`Sources/APIServer/MCP/CLAUDE.md`). `set_activity` may
+    set `runsPerGroup`, because that is content. Add the five tables to the
+    "never touches" list in `docs/compliance/data-flow-inventory.md`.
+12. **Grades do not change.** A submission's grade, its LEARN push and the
+    assignment's deadline read nothing here. Only ranking, aggregation and the
+    live clock become per group.
 
-Nothing in this slice needs LEARN. A course can run its whole term on a file.
+## What changes on each surface
 
-## Slice 2: the LEARN source
+| Surface | Today | With `runsPerGroup` |
+|---|---|---|
+| Submission gate | `activity.window` | The student's open session. No session: refused as `.activityNotYetOpen`, with the group's name. |
+| Leaderboard | One board, course-wide | One board per group. `?group=` on the page; a student lands on their own. |
+| King of the hill | One champion per assignment | One champion per group; the job stages the group's champion. |
+| Round robin | Every classmate in the course | Every participant in the group. |
+| Tournament | One run per assignment, started from the present page | One run per (assignment, group), started from the group's present page. The arena plays that group's bracket. |
+| Composite | One image, slots dealt course-wide | One image per group; a gallery on the course page. |
+| Class goal | The course roster | The group's members; the award goes to the group's participants. |
+| Present page | One board | A group picker for staff; the TA's own group by default; the join code and the session clock on the board. |
+| Students with no group | n/a | See the join prompt and the code's entry field on the assignment page. |
 
-- `LearnSectionSyncService` becomes `LearnGroupSyncService`. It reads the
-  source from the set rather than from `brightspaceSectionCategoryID`, writes
-  through `CourseGroupStore`, and stops writing `brightspaceSection`. A
-  migration makes one `learnGroups` set from a non-null category ID so an
-  existing binding keeps working.
-- The BrightSpace tab gets the picker the 0.4 change deferred: a list from
-  `fetchGroupCategories` and, new, from `fetchSections`; choosing one creates
-  the set. A "Sync now" button runs one course's sync in the request, so an
-  instructor does not wait ten minutes to see the result.
-- `BrightSpaceAPIClient.fetchSections` reads
-  `lp/(v)/(orgUnit)/sections/`. Verify the field names against the Valence
-  reference first. `BrightSpaceGrading` gains the method and the no-op client
-  returns `[]`, as for groups.
+## Where the groups come from
+
+| Source | When it fills a group | State |
+|---|---|---|
+| The join code on the projector | During the session, by the students in the room | Slice 1 and 2. Needs nothing outside Chickadee. |
+| A CSV of `username,group` | Before the term, by the instructor; also the LEARN Groups export (group name, username, org-defined ID) | Slice 1. |
+| The Groups tab | Any time, by an instructor | Slice 1. |
+| A D2L group category through Valence | Every ten minutes | The reader exists (`fetchGroups`). Blocked on production credentials. Slice 6. |
+| D2L Sections through Valence | Every ten minutes | No reader. Verify the route and the member field against the Valence reference first; the public search did not reach the page. Slice 6. |
+| LTI 1.3 | never | NRPS sends no group per member. D2L lists AGS, NRPS and Deep Linking as its LTI Advantage services, not the Course Groups Service. |
+
+Before slice 6, check in the LEARN site whether the lab sections are D2L
+**Sections** or a **Group category**. The existing reader handles categories
+only.
+
+## Slices
+
+### Slice 1: groups
+
+- The three group tables and `CourseGroupStore`: the sets of a course, the
+  groups of a set, a student's group in a set, a group's members, and
+  `replaceMemberships(set:assignments:)`, which the Groups tab, the CSV import
+  and the sweep all call.
+- The instructor **Groups** tab, per-course `instructor` only. Create a set,
+  add a group, move a student with a select on the roster row, import a CSV.
+  A TA reads it.
+- The Students tab gets a Group column and the Filter box matches on it.
+- Tests: the one-group-per-set rule, a replace that moves a student, a removed
+  group keeps its rows, the two CSV shapes, a student in two groups in one
+  file is refused.
+
+### Slice 2: sessions
+
+- `runsPerGroup` on the activity block, with `withRunsPerGroup` rebuilding the
+  block as the three existing edit forms do (docs/class-activities.md,
+  "Compatibility rules"). The edit page and `set_activity` set it. It is
+  refused when the course has no group set.
+- `activity_sessions` and `activity_session_attendance`, and
+  `ActivitySessionStore`: open, close, reopen, join by code, the session for a
+  student now.
+- The present page gains Start, End and the join code. The code is five
+  characters from an alphabet with no look-alike glyphs, and it is shown large.
+- The assignment page shows a student the join field when their activity runs
+  per group and they are in no open session.
+- `requireOpenStudentAssignment(gate: .submission)` reads the session when
+  `runsPerGroup` is set, else the manifest window as today. The refusal names
+  the group.
+- Tests: the gate table (member of an open session, member of a closed one,
+  joined by code into another group's session, no group and no code, staff),
+  the code's uniqueness while open, a reopen.
+
+### Slice 3: rankings per group
+
+- `group_id` on `leaderboard_entries`, `activity_standings`,
+  `activity_champions`, `match_results` and `tournament_runs`. The ingest
+  writers resolve the student's session group once and stamp it.
+- The hill's unique key becomes (assignment, group). `jobOpponent` stages the
+  group's champion. `jobOpponentSet` lists the group's participants.
+- The leaderboard, standings and bracket pages filter by group. The present
+  page takes a group; a TA with a group membership lands on it.
+- "Run tournament" and the arena routes take the group. `run_tournament` on
+  MCP refuses a `runsPerGroup` assignment, because choosing a group is choosing
+  students.
+- Tests: an entry stamped with the right group, the hill per group, a round
+  robin that plays only the group, two groups' tournaments running at once.
+
+### Slice 4: the composite per group
+
+- `group_id` on `composite_slots` and `composite_contributions`; the slot key
+  becomes (assignment, group, round, slot). `CompositeSlots` deals within the
+  student's session group.
+- The composite view takes a group. The course page shows a gallery of every
+  group's image once their sessions have closed.
+- Tests: two groups dealt the same slot numbers, a student who joined another
+  group's session dealt there, the gallery order.
+
+### Slice 5: group goals
+
+- `group_id` on `class_item_coverage` and `class_coverage_runs`. The sweep
+  evaluates a class goal once per group when the assignment runs per group,
+  and awards it to that group's participants.
+- The corpus run becomes one `classAggregate` submission per group.
+- Tests: coverage per group, breadth over the group's members, an award that
+  reaches only the group.
+
+### Slice 6: the LEARN source
+
+- `LearnSectionSyncService` becomes `LearnGroupSyncService`, writes through
+  `CourseGroupStore`, upserts by external ID, marks a vanished group removed,
+  and stops writing `brightspaceSection`. A migration makes one `learnGroups`
+  set from a non-null `brightspaceSectionCategoryID`.
+- The BrightSpace tab gets the category and section picker and a "Sync now"
+  button.
+- `BrightSpaceAPIClient.fetchSections`, after the route is verified.
 - Tests with a fake `BrightSpaceGrading`: a first sync, a rename, a member who
-  moves, a group that disappears, a student the classlist cannot match.
-  Today the sweep has no tests at all.
+  moves, a group that disappears, a student the classlist cannot match. Today
+  the sweep has no tests at all.
 
-## Slice 3: per-group schedules
+## Deferred: what the same model can carry later
 
-This is the slice with the largest blast radius, and the reason to build the
-model first.
+These were the first draft of this note. They are not the goal, and none of
+them is needed for a session in a room. They are listed so the model is not
+redesigned when one of them is wanted.
 
-- The table and `APIAssignmentGroupSchedule`.
-- One resolver. `AssignmentDeadlineService` already has `effectiveDueAt(for:
-  user:on:)` and `laterDeadline`. The group lookup goes inside
-  `effectiveDueAt`, and every student-facing read of `assignment.dueAt` goes
-  through it. Today `assignment.dueAt` is read in 29 files under
-  `Sources/APIServer/` and `effectiveDueAt` at 3 sites. The student-facing
-  readers to move: `WebRoutes+IndexRows`, `CourseItemRow`,
-  `StudentCourseRoutes+History`, `WebRoutes+Notebook`,
-  `WebRoutes+NotebookPreview`, `GitHubSubmitContext`, `WebRoutes+SlipDay`,
-  `SlipDayStore`, `AchievementEvaluationService`, and the two gate functions in
-  `AssignmentDeadlineService`. Staff and MCP readers keep the assignment value
-  and say "course deadline" where a group may differ.
-- `postDeadlineRevealDeadline` takes the latest group `due_at` as its baseline
-  (decision 8).
-- `opens_at` folds into `assignmentVisibleToStudentByState`: a student in a
-  group whose window has not opened sees the row greyed with the open time,
-  the way a locked lab shows its prerequisite (docs/unlockable-labs.md).
-- The edit page gets one row per group under the due date: open, due, each
-  optional, instructor only (the same floor as the due date). A schedule for a
-  removed group is shown struck through and can be deleted.
-- A deadline is a `dueAt` to the BrightSpace and AGS grade push only through
-  the grade, so the push does not change.
-- Tests: the resolver table (no schedule, a group due, a group due plus a
-  later extension, a group due plus an earlier extension that is still active,
-  a student in no group), the reveal rule, and the open window.
-
-## Slice 4: staff in groups
-
-- The Groups tab lets an instructor put a TA in a group. The membership table
-  is the same; the row's user has role `ta`.
-- `InstructorDashboardRoutes+Students` and the per-assignment submissions list
-  read the viewer's groups. When the viewer is a TA with at least one group,
-  the default filter is "my groups" and a control shows "all". An instructor
-  sees all by default.
-- The audit log already records grading actions with the actor. No change.
-
-## What this does not do
-
-- It does not hard-scope a TA (decision 9).
-- It does not make a group the scope of a leaderboard, a round robin or a
-  class composite. Each of those reads "the course" today
-  (docs/class-activities.md, docs/class-composite.md). A group of 25 is the
-  natural size for all three, and slice 5 would add an optional group set to
-  the `activity` block. The leaderboard page would then render one table per
-  group.
-- It does not give a group a shared dataset seed. The course cohort
-  (docs/datasets-course-library.md) stays per student.
-- It does not create groups in LEARN. The direction is read-only, as the
-  classlist is.
+- **Per-group deadlines.** A table of (assignment, group, opens_at, due_at)
+  folded into `effectiveDueAt`. The blast radius is every student-facing read
+  of `assignment.dueAt` (29 files today), and the post-deadline reveal would
+  need a rule for which group's deadline it waits for.
+- **A TA's roster filtered to their groups.** Soft: a default filter on the
+  Students tab and the submissions list. The per-course gates do not change.
+- **A `team` kind with a shared submission.** A set of kind `team` and a
+  submission that belongs to a group. The hook is `APISubmission` ownership.
+  The in-lab version is pairs formed in the room by a second join code, and
+  it is a separate design.
 
 ## Open questions for the maintainer
 
-1. Decision 8: does the reveal wait for the last group, or for the student's
-   own group?
-2. In the UW LEARN site, are the lab groups D2L Sections or a Group category?
-   This decides whether slice 2 needs `fetchSections` first or at all.
-3. Should a student who is in no group see the assignment's course deadline
-   (the proposal), or should an instructor be warned at save time that a
-   scheduled assignment has unassigned students? The proposal does both: the
-   course deadline applies, and the edit page counts the unassigned students
-   beside the schedule rows.
+1. When a group's session closes, is the group's board frozen, or does a
+   student who submits later from home (the assignment is still open) move
+   it? The proposal: the board is frozen at close, since the session is the
+   contest, and a later submission still grades but does not rank. This is
+   the one place the session changes what a result does.
+2. In the UW LEARN site, are the lab sections D2L Sections or a Group
+   category? This decides whether slice 6 needs `fetchSections`.
+3. Should a student in no group, with no code, be able to submit at all when
+   the activity runs per group? The proposal: no, with the join prompt as the
+   answer, because an unattributed result ranks nowhere.
 
 ## Sources
 
@@ -294,5 +333,3 @@ model first.
   <https://docs.valence.desire2learn.com/res/groups.html>
 - Minnesota State, what the Groups tool export contains:
   <https://servicedesk.minnstate.edu/TDClient/30/Portal/KB/PrintArticle?ID=411>
-- University of Arizona, exporting grades for one section or group:
-  <https://help.intech.arizona.edu/article/557-useful-classlist-features>
