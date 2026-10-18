@@ -637,6 +637,7 @@ One line per document. Each document holds its own rules and evidence.
 - `docs/class-activities.md` — leaderboards, bots, round robins, hills and brackets (#1508); opens with a Status table
 - `docs/class-composite.md` — shipped: each student renders one slot of a shared image, composed live on the projector; opens with a Status table
 - `docs/unlockable-labs.md` — assignment prerequisites and sticky per-student unlocks
+- `docs/lab-groups.md` — proposed: lab groups of about 25, one model fed by LEARN or a file, per-group deadlines, TAs in groups; opens with a Status table
 - `docs/achievement-rewards.md` — proposed: achievements at the assignment, course and site levels, one award ledger, and a wardrobe item as a reward
 - `docs/student-wardrobe.md` — cosmetic choices for the avatar, kept apart from earned status
 - `docs/result-celebration.md` — the result-page celebration: the 100% moment, the bird, and the Earned toast
