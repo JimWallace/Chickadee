@@ -74,8 +74,8 @@ import Testing
 
     // MARK: - What it preserves
 
-    /// Every cell, trimmed and case-folded, is the pool's cell: the step
-    /// changes how a value is written, never the value.
+    /// Every cell, trimmed and lower-cased, is the pool's cell lower-cased:
+    /// the step changes how a value is written, never the value.
     @Test func trimmingAndCaseFoldingGiveThePoolBack() {
         let noisy = materialize([noise(["ward", "systolic"], rate: 1)])
         #expect(noisy != pool)
@@ -85,11 +85,30 @@ import Testing
     /// At rate 1 every chosen cell changes: a case change that would change
     /// nothing, as on a number, adds the spaces instead.
     @Test func everyChosenCellChanges() {
-        let noisy = folded(materialize([noise(["systolic"], rate: 1)]))
-        let raw = DatasetMaterializer.normalizedLines(of: materialize([noise(["systolic"], rate: 1)])).lines
+        let cells = DatasetMaterializer.normalizedLines(of: materialize([noise(["systolic"], rate: 1)])).lines
             .dropFirst().map { DatasetMaterializer.splitCSVLine($0)[2] }
-        #expect(raw.allSatisfy { $0.hasPrefix(" ") && $0.hasSuffix(" ") })
-        #expect(noisy.map { $0[2] } == folded(pool).map { $0[2] })
+        #expect(cells.allSatisfy { $0.hasPrefix(" ") && $0.hasSuffix(" ") })
+    }
+
+    /// Text whose upper case does not fold back to its own lower case gets
+    /// the spaces, so the fold still recovers it.
+    @Test func textThatDoesNotRoundTripGetsTheSpaces() {
+        let source = "id,street\n1,Straße\n2,οδός\n3,ﬁeld\n"
+        let noisy = materialize([noise(["street"], rate: 1)], source: source)
+        #expect(folded(noisy) == folded(source))
+    }
+
+    /// Adding a column to a step leaves the cells of the column already there
+    /// as they were: each column draws from its own stream.
+    @Test func addingAColumnLeavesTheOtherColumnUntouched() {
+        let column = { (csv: String) in
+            DatasetMaterializer.normalizedLines(of: csv).lines.dropFirst().map {
+                DatasetMaterializer.splitCSVLine($0)[1]
+            }
+        }
+        #expect(
+            column(materialize([noise(["ward"], rate: 0.5)]))
+                == column(materialize([noise(["ward", "systolic"], rate: 0.5)])))
     }
 
     @Test func theRowsTheHeaderAndTheRowCountStay() {
@@ -107,6 +126,13 @@ import Testing
         #expect(materialize([noise(["ward"], rate: 1)], source: source) == source)
     }
 
+    /// R and pandas read `NA` and `na` differently, so a missing-value marker
+    /// stays as it is.
+    @Test func aMissingValueMarkerStaysAsItIs() {
+        let source = "id,ward\n1,NA\n2,N/A\n3,NaN\n4,null\n5,None\n6,#N/A\n"
+        #expect(materialize([noise(["ward"], rate: 1)], source: source) == source)
+    }
+
     /// A quoted cell keeps its quotes outside the change, so it stays one
     /// field with its comma.
     @Test func aQuotedCellStaysOneField() {
@@ -118,8 +144,10 @@ import Testing
         #expect(fields[1] != "Ward A, east")
     }
 
-    @Test(arguments: [("Ward A", 0, " Ward A "), ("Ward A", 1, "WARD A"), ("Ward A", 2, "ward a"),
-        ("120", 1, " 120 "), ("\"A, b\"", 2, "\"a, b\""), ("", 1, "")])
+    @Test(arguments: [
+        ("Ward A", 0, " Ward A "), ("Ward A", 1, "WARD A"), ("Ward A", 2, "ward a"),
+        ("120", 1, " 120 "), ("\"A, b\"", 2, "\"a, b\""), ("", 1, ""),
+    ])
     func noisyWritesTheVariantItIsGiven(raw: String, variant: UInt64, written: String) {
         #expect(DatasetMaterializer.noisy(Substring(raw), variant: variant) == written)
     }

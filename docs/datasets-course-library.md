@@ -35,7 +35,7 @@ is **a support file in one assignment's zip, with a per-student sample**.
 - `DatasetSpec` (`Sources/Core/Models/DatasetSpec.swift`) marks one support
   file in one assignment. It holds the selection (`rowSample` or
   `stratifiedSample`, `sampleSize`, `stratumColumn`) and the derivation
-  (`transforms`, one kind: `missingValues`).
+  (`transforms`, two kinds: `missingValues` and `formatNoise`).
 - `DatasetMaterializer` makes the student's bytes from `(source, spec, seed)`.
   The seed is the per-(student, assignment) seed
   (`APIAssignmentPersonalizationSeed`).

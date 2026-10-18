@@ -124,15 +124,24 @@ extension DatasetMaterializer {
     }
 
     /// `raw` written another way: `variant` 0 adds a space on each side, 1 is
-    /// upper case, 2 is lower case.  A case change that changes nothing (a
-    /// number, or a cell already in that case) adds the spaces instead, so a
-    /// chosen cell always changes.  A quoted cell keeps its quotes outside the
-    /// change, so it stays one field.  An empty cell stays empty: a hole is
-    /// `missingValues`' to make, not this step's.
+    /// upper case, 2 is lower case.
+    ///
+    /// The written cell, trimmed and lower-cased, is always the source cell
+    /// lower-cased, so a student who cleans it recovers the value:
+    ///
+    /// - A case change that changes nothing (a number, or a cell already in
+    ///   that case) adds the spaces instead, so a chosen cell always changes.
+    /// - A case change that would not lower-case back to the source's lower
+    ///   case ("Straße" upper-cases to "STRASSE") adds the spaces instead.
+    /// - A missing-value marker such as `NA` stays as it is, as an empty cell
+    ///   does: a reader treats `NA` and `na` differently, and a hole is
+    ///   `missingValues`' to make, not this step's.
+    /// - A quoted cell keeps its quotes outside the change, so it stays one
+    ///   field.
     static func noisy(_ raw: Substring, variant: UInt64) -> String {
         let quoted = raw.count >= 2 && raw.first == "\"" && raw.last == "\""
         let value = quoted ? raw.dropFirst().dropLast() : raw
-        guard !value.isEmpty else { return String(raw) }
+        guard !value.isEmpty, !missingMarkers.contains(value.lowercased()) else { return String(raw) }
         let padded = " \(value) "
         var written: String
         switch variant {
@@ -140,9 +149,13 @@ extension DatasetMaterializer {
         case 2: written = value.lowercased()
         default: written = padded
         }
-        if written == value { written = padded }
+        if written == value || written.lowercased() != value.lowercased() { written = padded }
         return quoted ? "\"\(written)\"" : written
     }
+
+    /// Cell values that common CSV readers (R `read.csv`, pandas) read as
+    /// missing, lower-cased. A noise step leaves them as they are.
+    static let missingMarkers: Set<String> = ["na", "n/a", "nan", "null", "none", "#n/a", "-nan"]
 
     /// The raw span of each comma-separated field in `line`, using the same
     /// quoting rules as `splitCSVLine` — a comma inside quotes is data, and a

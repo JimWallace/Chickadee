@@ -658,16 +658,26 @@ through.
 
 The second derivation. It writes a deterministic subset of cells in the named
 columns another way: with a space on each side, in upper case or in lower
-case. Real health data arrives like this, and the step is
-**answer-preserving**: trimming and case-folding a cell gives the pool's cell
-back, so correct cleaning yields the result the pool would. It is
-distribution-preserving for the same reason.
+case. Real health data arrives like this. A written cell, trimmed and
+lower-cased, is always the pool's cell lower-cased, so the step is
+**answer-preserving where the grader compares trimmed, case-insensitive
+text**, and distribution-preserving under the same fold. A check keyed on the
+pool's exact case, such as a count of rows equal to `Ward A`, is not
+preserved: write such checks, and the expected values of per-student
+expressions, against the folded value. A per-student expression reads the
+cells as the student receives them.
 
-- **A chosen cell always changes.** Each cell draws its variant from the
-  column's stream. A case change that changes nothing, as on a number or a
-  cell already in that case, adds the spaces instead.
-- **An empty cell stays empty.** A hole is `missingValues`' to make, so a
-  noise step after a blanking step leaves the holes where they are.
+- **A chosen cell changes, within the fold.** Each cell draws its variant from
+  the column's stream. A case change that changes nothing, as on a number or a
+  cell already in that case, adds the spaces instead. So does a case change
+  that would not lower-case back to the cell's own lower case: `Straße`
+  upper-cases to `STRASSE`, and Greek final sigma does not round-trip.
+- **An empty cell and a missing-value marker stay as they are.** `NA`, `N/A`,
+  `NaN`, `null`, `None` and `#N/A`, in any case, are left alone: R and pandas
+  read `NA` and `na` differently, and a hole is `missingValues`' to make. So a
+  noise step after a blanking step leaves the holes where they are. A noise
+  step picks its rows without regard to blanks, so on a column that was
+  blanked first, fewer cells change than the rate says.
 - **A quoted cell stays one field.** The change goes inside the quotes.
 - **The divergence diagnostic compares folded text** for a spec with a noise
   step, so "Ward A" and "ward a" do not read as two categories.
@@ -895,7 +905,10 @@ alone — transforms alter values inside a student's rows and never change which
 rows they hold — so it is closed-form per kind and a new selection kind must
 answer a formula (the `allCases` completeness test fails until it does, and an
 analytic-vs-Monte-Carlo test checks the formula is *right*, not merely
-present). Divergence has no per-kind logic at all. The row-set theorem that
+present). Divergence has one per-kind rule: it compares the columns a
+`formatNoise` step names as trimmed, lower-cased text, so a written-another-way
+value is not read as a new category. A new kind that changes how a value is
+written, not the value, adds its columns to that fold. The row-set theorem that
 licenses this split is itself a test (`transformsNeverChangeTheRowSet`); a
 future row-dropping transform fails it, at which point the decomposition — not
 the test — needs revisiting.
