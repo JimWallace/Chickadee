@@ -273,12 +273,21 @@ the Sections reader.
   group; a member of another group stays where they are and plays in the
   session they joined. A removed group's session, and a session of an
   activity that no longer runs per group, or of an archived course, refuse a
-  join. Removing a group ends its open sessions.
+  join. Removing a group ends its open sessions, and so does turning
+  `runsPerGroup` off (the edit page, `set_activity` or a version restore), so
+  turning it on again never brings back an earlier lab's code.
+- A clone and a bundle import clear `runsPerGroup`, because neither copies
+  group sets: with no group there is no session, and every student would be
+  refused while staff see nothing wrong (the #2189 trap).
 - `requireOpenStudentAssignment(gate: .submission)` reads the student's
   session when the activity runs per group. The refusal
   (`AssignmentSubmissionGateError.groupSessionNotOpen`) names the student's
   group, or sends a student in no group to `/join`. Staff are never gated, and
-  reading is not gated. The gate covers the web submission doors. The JSON
+  reading is not gated. Until slice 3, a closed session refuses a
+  submission, as a closed window does. Decision 1 lets a submission after the
+  close grade without ranking, and that needs the ingest check of slice 3, so
+  slice 3 relaxes the gate when it adds the check. The gate covers the web
+  submission doors. The JSON
   door, `POST /api/v1/submissions`, checks enrollment only, so it skips the
   session gate and the window gate today. That gap is older than groups and
   is not closed here.
@@ -291,7 +300,8 @@ the Sections reader.
   `POST /testsetups/:testSetupID/sessions/start` and `/end` are floored at
   `.ta` on the activity's course, in a course that is not archived. The
   caller is authorized before the activity is read. Each start and end is
-  audited as `activity_group_session.changed`.
+  audited as `activity_group_session.changed` and shows on the course's
+  Activity tab.
 - `GET /join` and `POST /join` (`JoinSessionPage`) take a code and send the
   student to the assignment's vanity path.
 - A student's personal data export lists the sessions they joined.
@@ -304,6 +314,10 @@ the Sections reader.
 - `group_id` on `leaderboard_entries`, `activity_standings`,
   `activity_champions`, `match_results` and `tournament_runs`. The ingest
   writers resolve the student's session group once and stamp it.
+- The submission gate refuses only a student with no session at all (no
+  group's session has started for them). After their session closes, a
+  submission grades, as decision 1 says, and the ingest writers skip its
+  ranking rows.
 - The hill's unique key becomes (assignment, group). `jobOpponent` stages the
   group's champion. `jobOpponentSet` lists the group's participants.
 - The leaderboard, standings and bracket pages filter by group. The present

@@ -119,6 +119,22 @@ enum ActivitySessionStore {
         try await session.save(on: db)
     }
 
+    /// Ends every open session of the assignments on `testSetupID`, for an
+    /// activity that no longer runs per group. Without this, turning the
+    /// flag on again would bring back an earlier lab's code.
+    static func closeOpenSessions(testSetupID: String, now: Date = Date(), on db: any Database) async throws {
+        let assignmentIDs = try await APIAssignment.query(on: db)
+            .filter(\.$testSetupID == testSetupID)
+            .all()
+            .compactMap(\.id)
+        guard !assignmentIDs.isEmpty else { return }
+        try await APIActivitySession.query(on: db)
+            .filter(\.$assignmentID ~~ assignmentIDs)
+            .filter(\.$closedAt == nil)
+            .set(\.$closedAt, to: now)
+            .update()
+    }
+
     /// Joins `userID` to the open session named by `code`, in any letter case
     /// and with spaces ignored. A second join moves the student back to this
     /// session from any other they joined since.

@@ -143,6 +143,12 @@ struct RestoreAssignmentVersionTool: ContentTool {
         setup.manifest = try await CourseDatasetService.reconciledManifestText(
             setup.manifest, courseID: setup.courseID, zipPath: setup.zipPath, on: context.mainDB)
         try await setup.save(on: context.db)
+        // A restored activity that does not run per group ends its sessions,
+        // as `ActivityAuthoring.setActivity` does. The group tables are
+        // outside the MCP role, so this writes on the main pool.
+        if setup.decodedManifest()?.activity?.runsPerGroup != true {
+            try await ActivitySessionStore.closeOpenSessions(testSetupID: setup.requireID(), on: context.mainDB)
+        }
 
         // Re-derive everything downstream of the zip: the shared support-file
         // directory the runner and personalization read, and the generated

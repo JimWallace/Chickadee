@@ -128,8 +128,9 @@ import VaporTesting
 
             let audited = try await APIAuditLogEntry.query(on: app.db)
                 .filter(\.$action == AuditAction.activityGroupSessionChanged.rawValue)
-                .count()
-            #expect(audited == 2, "the start and the end are audited, and the second Start is not")
+                .all()
+            #expect(audited.count == 2, "the start and the end are audited, and the second Start is not")
+            #expect(audited.allSatisfy { $0.courseID == f.courseID }, "so the course's Activity tab shows them")
         }
     }
 

@@ -180,4 +180,20 @@ import VaporTesting
             #expect(kept.runsPerGroup, "a call that leaves it out keeps it")
         }
     }
+
+    // MARK: - Copies into another course
+
+    /// A clone and a bundle import copy no groups, so a per-group activity in
+    /// the copy would refuse every student (the #2189 trap).
+    @Test func aCloneAndAnImportDoNotRunPerGroup() throws {
+        let perGroup = try manifest(runsPerGroup: true)
+        let setup = APITestSetup(id: "clone_src", manifest: perGroup, zipPath: "", courseID: UUID())
+        let cloned = try AssignmentAuthoringService.cloneManifest(of: setup)
+        #expect(decodeManifest(from: Data(cloned.utf8))?.activity?.runsPerGroup == false)
+        let imported = try AssignmentAuthoringService.manifestNotRunPerGroup(perGroup)
+        #expect(decodeManifest(from: Data(imported.utf8))?.activity?.runsPerGroup == false)
+
+        let plain = try manifest(runsPerGroup: false)
+        #expect(try AssignmentAuthoringService.manifestNotRunPerGroup(plain) == plain, "other bytes are kept")
+    }
 }

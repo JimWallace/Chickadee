@@ -191,6 +191,16 @@ import VaporTesting
             await #expect(throws: ActivitySessionError.sessionClosed) {
                 try await ActivitySessionStore.join(code: labA.joinCode, userID: f.grace, on: app.db)
             }
+            let ended = try await ActivitySessionStore.session(
+                assignmentID: f.assignmentID, groupID: f.labA, on: app.db)
+            #expect(ended?.closedAt != nil, "turning the flag off ends the open sessions")
+
+            // On again: Start draws a new code, so the earlier lab's code
+            // stays dead.
+            try await ActivityAuthoring.setActivity(setup: setup, to: activity, on: app.db)
+            let reopened = try await ActivitySessionStore.open(
+                assignmentID: f.assignmentID, groupID: f.labA, by: nil, now: Date().addingTimeInterval(1), on: app.db)
+            #expect(reopened.joinCode != labA.joinCode)
         }
     }
 

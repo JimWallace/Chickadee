@@ -135,6 +135,9 @@ enum ActivityAuthoring {
             try await validateComposite(of: activity, current: current, setup: setup, on: lockDB)
         }
         try await setManifestActivity(setup: setup, to: activity, on: db)
+        if activity?.runsPerGroup != true {
+            try await ActivitySessionStore.closeOpenSessions(testSetupID: setup.requireID(), on: lockDB)
+        }
         if let activity, activity.kind.aggregation == .leaderboard {
             try await seedLeaderboardRecord(setup: setup, on: db)
         } else {

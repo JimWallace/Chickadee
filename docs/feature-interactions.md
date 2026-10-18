@@ -457,6 +457,11 @@ because line numbers go out of date.
     start does not count.
   - Sessions read the course's first group set only.
   - Staff are never gated, as with the window.
+  - Every write that turns `runsPerGroup` off ends the open sessions:
+    `ActivityAuthoring.setActivity` and the MCP version restore. A new writer
+    of the flag must do the same, or turning it on again brings back an
+    earlier lab's code.
+  - A clone and a bundle import clear the flag (see Cloning).
 - **Gap:** `POST /api/v1/submissions` checks enrollment only, so it skips
   this gate, as it skips the window.
 
@@ -538,6 +543,9 @@ because line numbers go out of date.
 - **Traps:**
   - `.auto` enrollment let students from the last term in (#1780).
   - An old activity window refused students (#2189).
+  - A per-group activity in a course with no groups refuses every student.
+    A clone and a bundle import clear `runsPerGroup`, because neither copies
+    group sets.
   - The two clones once copied different policies (#1738).
   - A rollback left orphan files (#1743, #2168).
 

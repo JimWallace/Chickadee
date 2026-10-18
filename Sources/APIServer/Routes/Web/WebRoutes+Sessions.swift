@@ -125,6 +125,7 @@ extension WebRoutes {
                 "group": session.groupID.uuidString,
                 "change": change,
             ],
+            courseID: assignment.courseID,
             on: req
         )
     }
