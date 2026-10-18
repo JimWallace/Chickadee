@@ -144,7 +144,7 @@ private struct GroupSetSection: HTML {
                     "CSV file"
                     input(.class("form-input"), .type(.file), .name("file"), .accept(".csv"), .required)
                     span(.class("field-note field-note--muted")) {
-                        "The file replaces every student's group."
+                        "A username column and a group column, one row per student."
                     }
                 }
                 div(.class("toolbar")) {
