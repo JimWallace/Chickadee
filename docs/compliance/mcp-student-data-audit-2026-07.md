@@ -164,6 +164,18 @@ is layered:
      `preview_personalization`) — ensures the *staff* account's seed only.
    `MCPSeedMainPoolTests` / `MCPDatabasePoolTests` pin the pool routing.
 
+   Added 2026-10, after this audit: `set_activity` counts student
+   submissions on the privileged pool to lock a kind change, and returns only
+   the refusal. Four authoring steps also run there, on instructor data the
+   MCP role cannot reach: version v1 of a created or cloned assignment, the
+   copied reference solution and the course dataset library of
+   `clone_assignment`, and the starter run that `get_suite` returns. The
+   starter run is row data, but it is the instructor's starter notebook run,
+   selected by `kind == .starterValidation`; no student row can match.
+   `MCPOwnerPoolRoutingTests` runs these tools against a stand-in for the
+   `chickadee_mcp` role, including a check that a student run never shows as
+   the starter run.
+
 6. **Per-student personalization exposes no student.** Seeds are 32 CSPRNG
    bytes per (user, assignment) (`AssignmentSeedStore.generateSeedHex`) —
    *not* derived from identity, so a seed neither reveals nor is derivable

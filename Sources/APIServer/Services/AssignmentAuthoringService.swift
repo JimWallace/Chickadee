@@ -180,14 +180,21 @@ enum AssignmentAuthoringService {
     /// is re-graded. Every live copy path (the course clone through
     /// `CourseCloneService`, the web clone route and MCP `clone_assignment`)
     /// runs this one function, so the copies cannot drift.
+    ///
+    /// `ownerDB` takes the three steps that the least-privilege MCP role
+    /// cannot run: the copied solution (a `submissions` insert), the library
+    /// dataset check (`course_datasets`) and version v1 (`assignment_versions`).
+    /// MCP passes `ToolContext.mainDB`; the web callers leave it nil.
     static func cloneAssignment(
         source: APIAssignment,
         sourceSetup: APITestSetup,
         newTitle: String,
         targetCourseID: UUID,
         directories: AuthoringDirectories,
-        on db: any Database
+        on db: any Database,
+        ownerDB: (any Database)? = nil
     ) async throws -> AuthoredAssignment {
+        let ownerDB = ownerDB ?? db
         let newSetupID = freshShortID(prefix: "setup")
         let fm = FileManager.default
 
@@ -216,7 +223,7 @@ enum AssignmentAuthoringService {
         let clonedManifest: String
         do {
             clonedManifest = try await CourseDatasetService.reconciledManifestText(
-                try cloneManifest(of: sourceSetup), courseID: targetCourseID, zipPath: dstZip, on: db)
+                try cloneManifest(of: sourceSetup), courseID: targetCourseID, zipPath: dstZip, on: ownerDB)
         } catch {
             try? fm.removeItem(atPath: dstZip)
             if let newNotebookPath { try? fm.removeItem(atPath: newNotebookPath) }
@@ -245,7 +252,7 @@ enum AssignmentAuthoringService {
                 from: source,
                 toSetupID: newSetupID,
                 submissionsDirectory: directories.submissions,
-                on: db)
+                on: db, savingOn: ownerDB)
             copiedSolutionPath = clonedSolution?.zipPath
             let assignment = try await createAssignmentWithUniquePublicID(
                 NewAssignmentFields(
@@ -282,7 +289,7 @@ enum AssignmentAuthoringService {
             // gives the fresh assignment a starting point to roll back to.
             await AssignmentVersionStore.seedInitialVersion(
                 setup: newSetup, origin: AssignmentVersionOrigin.clone,
-                testSetupsDirectory: directories.setups, on: db)
+                testSetupsDirectory: directories.setups, on: ownerDB)
             // The zip copy above carries the support files, but students and
             // personalization expressions read them from the shared directory.
             await extractSupportFilesToSharedDirectory(
@@ -328,11 +335,15 @@ enum AssignmentAuthoringService {
     /// is a legitimate state, and refusing to clone it would be a regression.
     /// A solution that is present but unreadable IS an error — that is the
     /// silent-loss shape this whole change exists to remove.
+    ///
+    /// The source is read on `db`; the copy is saved on `ownerDB`, because the
+    /// least-privilege MCP role may only read `submissions`.
     private static func copyReferenceSolution(
         from source: APIAssignment,
         toSetupID newSetupID: String,
         submissionsDirectory: String,
-        on db: any Database
+        on db: any Database,
+        savingOn ownerDB: any Database
     ) async throws -> APISubmission? {
         let fm = FileManager.default
         guard
@@ -359,7 +370,7 @@ enum AssignmentAuthoringService {
             userID: sourceSolution.userID,
             kind: APISubmission.Kind.validation)
         do {
-            try await solution.save(on: db)
+            try await solution.save(on: ownerDB)
         } catch {
             try? fm.removeItem(atPath: copied.path)
             throw error
@@ -376,12 +387,16 @@ enum AssignmentAuthoringService {
     ///
     /// Empty suite ⇒ no validation is queued, so a from-scratch assignment can
     /// be opened by the instructor without a runner once it has content.
+    ///
+    /// `ownerDB` takes version v1 (`assignment_versions`), which the
+    /// least-privilege MCP role cannot write. MCP passes `ToolContext.mainDB`.
     static func createAssignment(
         courseID: UUID,
         title: String,
         notebookData: Data,
         setupsDirectory: String,
-        on db: any Database
+        on db: any Database,
+        ownerDB: (any Database)? = nil
     ) async throws -> AuthoredAssignment {
         let setupID = freshShortID(prefix: "setup")
         let zipPath = setupsDirectory + "\(setupID).zip"
@@ -410,7 +425,7 @@ enum AssignmentAuthoringService {
                 on: db)
             await AssignmentVersionStore.seedInitialVersion(
                 setup: setup, origin: AssignmentVersionOrigin.create,
-                testSetupsDirectory: setupsDirectory, on: db)
+                testSetupsDirectory: setupsDirectory, on: ownerDB ?? db)
             return AuthoredAssignment(assignment: assignment, setup: setup)
         } catch {
             // Roll back the files written so a failed create leaves no orphans.

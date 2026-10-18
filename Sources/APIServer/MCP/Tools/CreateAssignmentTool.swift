@@ -142,7 +142,8 @@ struct CreateAssignmentTool: ContentTool {
         do {
             created = try await AssignmentAuthoringService.createAssignment(
                 courseID: courseID, title: title, notebookData: data,
-                setupsDirectory: context.request.application.testSetupsDirectory, on: context.db)
+                setupsDirectory: context.request.application.testSetupsDirectory, on: context.db,
+                ownerDB: context.mainDB)
         } catch let error as AssignmentAuthoringError {
             if case .setupCopyFailed(let reason) = error {
                 throw MCPToolError.executionFailed(detail: "Could not create the test setup: \(reason)")

@@ -189,7 +189,9 @@ enum AssignmentVersionStore {
     ///
     /// Best-effort: an assignment must not fail to be created because its first
     /// history row could not be written. The lazy baseline in `ensureBaseline`
-    /// is the backstop for any creation path that does not call this.
+    /// is the backstop for any creation path that does not call this. A
+    /// failure is logged: a silent one hid that MCP wrote this on a pool with
+    /// no grant on `assignment_versions`.
     @discardableResult
     static func seedInitialVersion(
         setup: APITestSetup,
@@ -197,10 +199,11 @@ enum AssignmentVersionStore {
         testSetupsDirectory: String,
         on db: any Database
     ) async -> AssignmentVersionOutcome? {
-        try? await record(
+        await recordBestEffort(
             setup: setup,
             request: AssignmentVersionRequest(origin: origin),
             testSetupsDirectory: testSetupsDirectory,
+            logger: db.logger,
             on: db)
     }
 
