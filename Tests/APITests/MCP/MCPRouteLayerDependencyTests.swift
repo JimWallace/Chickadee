@@ -18,20 +18,12 @@ import Testing
 
     private let apiServer = repositoryRoot.appendingPathComponent("Sources/APIServer")
 
-    private func swiftFiles(under directory: String) throws -> [URL] {
-        let root = apiServer.appendingPathComponent(directory)
-        guard let enumerator = FileManager.default.enumerator(at: root, includingPropertiesForKeys: nil) else {
-            throw IssueRecorded("Cannot list \(root.path)")
-        }
-        return enumerator.compactMap { $0 as? URL }.filter { $0.pathExtension == "swift" }
-    }
-
     /// The names of the non-private top-level declarations in Routes/Web.
     private func webRouteNames() throws -> Set<String> {
         let declaration = try Regex(
             #"^(?:@\w+\s+)*(?:final\s+)?(?:func|struct|enum|class|actor|protocol|typealias)\s+([A-Za-z_]\w*)"#)
         var names: Set<String> = []
-        for file in try swiftFiles(under: "Routes/Web") {
+        for file in try swiftFiles(under: apiServer.appendingPathComponent("Routes/Web")) {
             for line in try String(contentsOf: file, encoding: .utf8).components(separatedBy: "\n") {
                 if let match = line.firstMatch(of: declaration), let name = match.output[1].substring {
                     names.insert(String(name))
@@ -47,7 +39,7 @@ import Testing
         // An identifier not after a `.` or another identifier character.
         let identifier = try Regex(#"(?:^|[^.\w])([A-Za-z_]\w*)"#).anchorsMatchLineEndings()
         var offenders: [String] = []
-        for file in try swiftFiles(under: "MCP") {
+        for file in try swiftFiles(under: apiServer.appendingPathComponent("MCP")) {
             let code = try String(contentsOf: file, encoding: .utf8)
                 .components(separatedBy: "\n")
                 .filter { !$0.trimmingCharacters(in: .whitespaces).hasPrefix("//") }

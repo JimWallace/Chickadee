@@ -12,19 +12,12 @@
 // feedback policy on `submissions` and the `reflection_feedback` grants are
 // documented in the SQL file itself; docs/ai-assisted-feedback.md.)
 
-import ChickadeeTestSupport
 import Foundation
 import Testing
 
 @testable import APIServer
 
 @Suite struct MCPLeastPrivilegeGrantSyncTests {
-    /// `deploy/sql/mcp-least-privilege-role.sql`, resolved from this test
-    /// file's location (same technique as MCPStudentDataWallTests).
-    private static var grantsFile: URL {
-        repositoryRoot.appendingPathComponent("deploy/sql/mcp-least-privilege-role.sql")
-    }
-
     /// Student-data tables the MCP read path queries: the two the boundary
     /// accessors filter to validation rows, the collection-blob side table
     /// `loadCollectionJSON` joins in, and the multi-variant validation batch
@@ -38,29 +31,17 @@ import Testing
     ]
 
     @Test func everyMCPReadTableHasSelectGrant() throws {
-        let sql = try String(contentsOf: Self.grantsFile, encoding: .utf8)
-        // Collapse whitespace so multi-line GRANT statements parse the same.
-        let flat = sql.replacingOccurrences(
-            of: "\\s+", with: " ", options: .regularExpression)
-
-        let grantedTables =
-            flat
-            .components(separatedBy: "GRANT SELECT ON ")
-            .dropFirst()
-            .compactMap { $0.components(separatedBy: " TO chickadee_mcp").first }
-            .flatMap { $0.components(separatedBy: ",") }
-            .map { $0.trimmingCharacters(in: .whitespaces) }
-
+        let grants = try MCPRoleGrants.privilegesByTable()
         for table in Self.readTables {
             #expect(
-                grantedTables.contains(table),
+                grants[table]?.contains("SELECT") == true,
                 "\(table) is read by the MCP tool surface but has no SELECT grant in deploy/sql/mcp-least-privilege-role.sql — every call reading it will fail in production with a permission-denied the tests cannot see"
             )
         }
     }
 
     @Test func everyMCPReadTableHasRowLevelSecurityPolicy() throws {
-        let sql = try String(contentsOf: Self.grantsFile, encoding: .utf8)
+        let sql = try String(contentsOf: MCPRoleGrants.file, encoding: .utf8)
         for table in Self.readTables {
             #expect(
                 sql.contains("ALTER TABLE \(table) ENABLE ROW LEVEL SECURITY"),

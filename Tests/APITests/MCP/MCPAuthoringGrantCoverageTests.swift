@@ -27,10 +27,6 @@ import Testing
 @testable import APIServer
 
 @Suite struct MCPAuthoringGrantCoverageTests {
-    private static var grantsFile: URL {
-        repositoryRoot.appendingPathComponent("deploy/sql/mcp-least-privilege-role.sql")
-    }
-
     /// Every Swift file in these directories is scanned.
     private static let scannedDirectories = [
         "Sources/APIServer/MCP/Tools",
@@ -185,30 +181,8 @@ import Testing
         return Set(words.map(String.init))
     }
 
-    /// Every table named in a `GRANT ... ON ... TO chickadee_mcp` statement.
-    /// SQL comments are removed first: section 5 quotes a stopgap GRANT that
-    /// must stay revoked.
+    /// Every table with a grant of any privilege.
     private static func grantedTables() throws -> Set<String> {
-        let sql = try String(contentsOf: grantsFile, encoding: .utf8)
-        let statements = sql.split(separator: "\n")
-            .map { line in line.range(of: "--").map { line[..<$0.lowerBound] } ?? line }
-            .joined(separator: " ")
-        let grantPattern = try Regex(#"GRANT\s+[A-Z_, ()]+?\s+ON\s+([^;]+?)\s+TO\s+chickadee_mcp"#).ignoresCase()
-        var tables: Set<String> = []
-        for match in statements.matches(of: grantPattern) {
-            guard let list = match.output[1].substring else { continue }
-            for table in list.split(separator: ",") {
-                tables.insert(table.trimmingCharacters(in: .whitespaces))
-            }
-        }
-        return tables
-    }
-
-    private static func swiftFiles(under directory: URL) throws -> [URL] {
-        guard
-            let enumerator = FileManager.default.enumerator(
-                at: directory, includingPropertiesForKeys: nil)
-        else { throw IssueRecorded("Cannot read \(directory.path)") }
-        return enumerator.compactMap { $0 as? URL }.filter { $0.pathExtension == "swift" }
+        Set(try MCPRoleGrants.privilegesByTable().keys)
     }
 }

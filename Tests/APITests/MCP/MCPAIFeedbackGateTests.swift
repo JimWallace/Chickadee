@@ -17,15 +17,8 @@ import Testing
         repositoryRoot.appendingPathComponent("Sources/APIServer/MCP")
     }
 
-    private func swiftFiles(under dir: URL) -> [URL] {
-        guard let walker = FileManager.default.enumerator(at: dir, includingPropertiesForKeys: nil) else {
-            return []
-        }
-        return walker.compactMap { $0 as? URL }.filter { $0.pathExtension == "swift" }
-    }
-
     @Test func noMCPSourceWritesAnAIFeedbackGate() throws {
-        let files = swiftFiles(under: Self.mcpDirectory)
+        let files = try swiftFiles(under: Self.mcpDirectory)
         #expect(files.count > 50)  // sanity: the directory resolved
         let assignment = try Regex(#"aiFeedbackEnabled\s*=[^=]"#)
         for file in files {
