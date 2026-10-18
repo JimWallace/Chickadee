@@ -38,6 +38,7 @@ extension InstructorDashboardRoutes {
         let fmt = waterlooDateTimeFormatter()
 
         var enrolledStudents: [EnrolledStudentRow] = []
+        var showsGroups = false
         var courseEnrollmentMode = CourseEnrollmentMode.open.rawValue
         var courseIsArchived = false
 
@@ -49,6 +50,7 @@ extension InstructorDashboardRoutes {
                 fmt: fmt
             )
             enrolledStudents = roster.rows
+            showsGroups = roster.showsGroups
             if let course = try await APICourse.find(activeCourseUUID, on: req.db) {
                 courseEnrollmentMode = course.enrollmentMode.rawValue
                 courseIsArchived = course.isArchived
@@ -73,8 +75,12 @@ extension InstructorDashboardRoutes {
             switch req.query[String.self, at: "handleError"] {
             case "exhausted": return "No unused handle is left."
             case "notEnrolled": return "That person is not enrolled in this course."
-            default: return nil
+            default: break
             }
+            if req.query[String.self, at: "groupError"] != nil {
+                return "The group did not change. Reload the page and try again."
+            }
+            return nil
         }()
 
         let (staffRows, studentRows) = Self.splitRoster(enrolledStudents)
@@ -94,7 +100,8 @@ extension InstructorDashboardRoutes {
                 rosterReadOnly: courseIsArchived || !canManageRoster,
                 staffForm: StaffFieldsContext(
                     idPrefix: "add-staff", placeholderAllowed: true, defaultRole: .ta,
-                    errorQuery: req.query[String.self, at: "staffError"])
+                    errorQuery: req.query[String.self, at: "staffError"]),
+                showsGroups: showsGroups
             )
         }
         .encodeResponse(for: req)
@@ -152,7 +159,8 @@ extension InstructorDashboardRoutes {
         let html = StudentRows(
             students: Self.splitRoster(roster.rows).students,
             rosterReadOnly: courseIsArchived || !canManageRoster,
-            csrfToken: csrfToken
+            csrfToken: csrfToken,
+            showsGroups: roster.showsGroups
         ).render()
         return Response.pollFragment(html: html, csrfToken: csrfToken, for: req)
     }

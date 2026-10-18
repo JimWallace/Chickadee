@@ -158,6 +158,10 @@ enum AuditAction: String, Sendable, CaseIterable {
     case enrollmentRemoved = "enrollment.removed"
     case enrollmentRoleChanged = "enrollment.role_changed"
     case enrollmentHandleChanged = "enrollment.handle_changed"
+    /// A course's groups changed (docs/lab-groups.md): a set or group was
+    /// made or removed, a student moved, or a file was imported. The
+    /// `change` metadata key says which.
+    case enrollmentGroupsChanged = "enrollment.groups_changed"
 
     // Assignment lifecycle (#421). Content edits are recorded separately and in
     // far more detail by `assignment_versions`; these are the metadata and
@@ -278,7 +282,8 @@ enum AuditAction: String, Sendable, CaseIterable {
         case .courseCreated, .courseCloned, .courseArchived, .courseUnarchived, .courseDeleted,
             .courseBundleImported, .courseBundleExported:
             return .courses
-        case .enrollmentBulkAdded, .enrollmentRemoved, .enrollmentRoleChanged, .enrollmentHandleChanged:
+        case .enrollmentBulkAdded, .enrollmentRemoved, .enrollmentRoleChanged, .enrollmentHandleChanged,
+            .enrollmentGroupsChanged:
             return .enrollment
         case .assignmentCreated, .assignmentCloned, .assignmentDeleted,
             .assignmentVisibilityChanged, .assignmentDueDateChanged:
@@ -334,7 +339,7 @@ enum AuditAction: String, Sendable, CaseIterable {
             .userDataExportDownloaded, .courseCreated, .courseCloned, .courseArchived, .courseUnarchived,
             .courseDeleted, .courseBundleImported, .courseBundleExported,
             .enrollmentBulkAdded, .enrollmentRemoved, .enrollmentRoleChanged, .enrollmentHandleChanged,
-            .assignmentCreated, .assignmentCloned, .assignmentDeleted,
+            .enrollmentGroupsChanged, .assignmentCreated, .assignmentCloned, .assignmentDeleted,
             .assignmentVisibilityChanged, .assignmentDueDateChanged, .submissionsPurged,
             .submissionRetestAll, .submissionRetestForStudent, .submissionsBulkDownloaded,
             .extensionGranted,
@@ -391,6 +396,7 @@ enum AuditAction: String, Sendable, CaseIterable {
         case .enrollmentRemoved: return "Unenrolled"
         case .enrollmentRoleChanged: return "Per-course role changed"
         case .enrollmentHandleChanged: return "Class handle changed"
+        case .enrollmentGroupsChanged: return "Groups changed"
         case .assignmentCreated: return "Assignment created"
         case .assignmentCloned: return "Assignment cloned"
         case .assignmentDeleted: return "Assignment deleted"

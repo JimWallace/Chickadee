@@ -14,10 +14,13 @@ struct StudentRows: HTML {
     /// a TA. Every mutating control is gated on it.
     let rosterReadOnly: Bool
     let csrfToken: String
+    /// True when the course has a group set: each row then has a Group cell.
+    var showsGroups = false
 
     var body: some HTML {
         for student in students {
-            StudentRow(student: student, rosterReadOnly: rosterReadOnly, csrfToken: csrfToken)
+            StudentRow(
+                student: student, rosterReadOnly: rosterReadOnly, csrfToken: csrfToken, showsGroups: showsGroups)
         }
     }
 }
@@ -28,6 +31,7 @@ private struct StudentRow: HTML {
     let student: EnrolledStudentRow
     let rosterReadOnly: Bool
     let csrfToken: String
+    let showsGroups: Bool
 
     var body: some HTML {
         tr(.class("js-student-row-link"), .data("student-id", value: student.id)) {
@@ -48,6 +52,15 @@ private struct StudentRow: HTML {
                     student.role
                 } else if let roleSelect = student.roleSelect {
                     RoleSelect(cell: roleSelect, csrfToken: csrfToken)
+                }
+            }
+            if showsGroups {
+                td(.class("col-hide-phone")) {
+                    if !rosterReadOnly, let groupSelect = student.groupSelect {
+                        GroupSelect(cell: groupSelect, csrfToken: csrfToken)
+                    } else if let groupName = student.groupName {
+                        groupName
+                    }
                 }
             }
             if let iso = student.lastSeenAtISO {

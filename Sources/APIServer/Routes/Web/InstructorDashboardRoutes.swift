@@ -56,6 +56,8 @@ struct InstructorDashboardRoutes: RouteCollection {
         r.post("slip-days", "refund", use: refundSlipDaySpendAction)
         // Datasets tab: the course dataset library.
         registerDatasetRoutes(on: r)
+        // Groups tab: the course's lab groups (docs/lab-groups.md).
+        registerGroupRoutes(on: r)
         r.get("grades.csv", use: exportGradesCSV)
         r.get(":assignmentID", "submissions", use: assignmentSubmissionsPage)
         r.get(":assignmentID", "submissions.zip", use: downloadAssignmentSubmissions)

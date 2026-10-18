@@ -17,7 +17,7 @@ today.
 | slice | what | state |
 |---|---|---|
 | 0 | This design note | draft |
-| 1 | Groups: group sets, groups, memberships; the Groups tab; the join code; the CSV import; the Group column on the roster | not started |
+| 1 | Groups: group sets, groups, memberships; the Groups tab; the CSV import; the Group column on the roster; groups in the data export | built |
 | 2 | Sessions: a session per (activity, group), started and ended from the present page; the submission gate reads the session; attendance by join code | not started |
 | 3 | Rankings per group: leaderboard, standings, the hill, round-robin opponents, tournament runs, the present page per group | not started |
 | 4 | The composite per group, and the course gallery of every group's image | not started |
@@ -107,8 +107,8 @@ course_groups
   UNIQUE(set_id, external_id) where external_id is not null
 
 course_group_memberships
-  id, group_id, user_id, created_at
-  UNIQUE(group_id, user_id)
+  id, set_id, group_id, user_id, created_at
+  UNIQUE(set_id, user_id)
 
 activity_sessions
   id, assignment_id, group_id, join_code, opened_at, closed_at, opened_by
@@ -197,7 +197,7 @@ Nil means course-wide, which is what every existing row is.
 
 | Source | When it fills a group | State |
 |---|---|---|
-| The join code on the projector | During the session, by the students in the room | Slice 1 and 2. Needs nothing outside Chickadee. |
+| The join code on the projector | During the session, by the students in the room | Slice 2. Needs nothing outside Chickadee. |
 | A CSV of `username,group` | Before the term, by the instructor; also the LEARN Groups export (group name, username, org-defined ID) | Slice 1. |
 | The Groups tab | Any time, by an instructor | Slice 1. |
 | A D2L group category through Valence | Every ten minutes | The reader exists (`fetchGroups`). Blocked on production credentials. Slice 6. |
@@ -209,19 +209,37 @@ the Sections reader.
 
 ## Slices
 
-### Slice 1: groups
+### Slice 1: groups (built)
 
-- The three group tables and `CourseGroupStore`: the sets of a course, the
-  groups of a set, a student's group in a set, a group's members, and
-  `replaceMemberships(set:assignments:)`, which the Groups tab, the CSV import
-  and the sweep all call.
-- The instructor **Groups** tab, per-course `instructor` only. Create a set,
-  add a group, move a student with a select on the roster row, import a CSV.
-  A TA reads it.
-- The Students tab gets a Group column and the Filter box matches on it.
-- Tests: the one-group-per-set rule, a replace that moves a student, a removed
-  group keeps its rows, the two CSV shapes, a student in two groups in one
-  file is refused.
+- One migration, `CreateCourseGroups`, makes the three tables. A membership
+  carries its set as well as its group, so the unique key (set, user) keeps a
+  person in at most one group of a set in the database itself, not only in the
+  app.
+- `CourseGroupStore` holds every read and write: the sets of a course, the
+  groups of a set, each member's group, `setMembership` (one move),
+  `replaceMemberships` (the import, and the sweep in slice 6), `removeGroup`
+  and `importRoster`. A write to a synced set is refused
+  (`CourseGroupError.setNotEditable`). A removed group keeps its row and loses
+  its members. A membership of a student who later leaves the course stays,
+  and every count reads enrolled students only.
+- `GroupRosterCSV` reads two shapes: `username,group` with no header, or a
+  header that names a username column and a group column among others (the
+  LEARN Groups export). A student in two groups refuses the whole file. The
+  import replaces every membership of the set, makes the groups the file
+  names, and lists the usernames that match no student of the course.
+- The instructor **Groups** tab (`/instructor/groups`): make the set, add or
+  remove a group, import a file. Course staff read it. Every write is floored
+  at `.instructor` on the set's own course, and refused in an archived course.
+  No group route takes a path parameter, so `RouteAuthorizationMatrixTests`
+  does not walk them; `GroupsRoutesTests` is their authorization check.
+- The Students tab gets a sortable Group column when the course has a set: a
+  select per student for an instructor, the group's name for a TA. The Filter
+  box matches it.
+- Each change is audited as `enrollment.groups_changed` and shows on the
+  course's Activity tab.
+- A student's personal data export lists their group in each set.
+- Tests: `GroupRosterCSVTests`, `CourseGroupStoreTests`, `GroupsRoutesTests`,
+  and the page fixtures in `ElementaryPageFixtures+Groups.swift`.
 
 ### Slice 2: sessions
 

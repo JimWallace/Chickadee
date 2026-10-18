@@ -168,7 +168,9 @@ student `APIResult` (grades), `APIGradeOverride`, `APIAssignmentExtension`,
 `APICoursePersonalizationSeed` content,
 `APIClientDiagnostic`, `APISubmissionDiagnostics`, `JobExecutionMetric`,
 `APIClassAchievement`, `APIUserActivityEvent`, `APIBrightSpaceSyncLog`,
-`APIPreEnrollment`, `APIUserActivityEvent`.
+`APIPreEnrollment`, `APIUserActivityEvent`, and the lab-group tables
+`APICourseGroupSet`, `APICourseGroup` and `APICourseGroupMembership`
+(docs/lab-groups.md, decision 11: membership is enrollment data).
 
 **Caveat (see student-data wall finding):** "never touched" is true of the
 *current* handler code, but it is enforced by which models each handler chooses

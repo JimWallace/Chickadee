@@ -118,10 +118,19 @@ struct DataExportEnrollment: Codable, Sendable {
     let role: String
     let enrolledAt: Date?
     let learnSection: String?
+    /// The student's group in each of the course's group sets
+    /// (docs/lab-groups.md). Empty when the course has none.
+    var groups: [DataExportGroup] = []
     /// The per-course handle from before a handle named the bird
     /// (docs/student-avatars.md §3), still stored with the enrollment. nil for
     /// a course joined since. The bird's handle is in the profile.
     let avatarHandle: String?
+}
+
+/// One group membership: the set ("Lab sections") and the group in it.
+struct DataExportGroup: Codable, Sendable, Equatable {
+    let set: String
+    let group: String
 }
 
 struct DataExportSubmission: Codable, Sendable {
@@ -285,6 +294,7 @@ private func gatherEnrollments(
         .filter(\.$userID == userID)
         .with(\.$course)
         .all()
+    let groupsByCourse = try await gatherGroups(userID: userID, on: db)
     return
         rows
         .sorted { courseListPrecedes($0.course, $1.course) }
@@ -297,9 +307,26 @@ private func gatherEnrollments(
                 role: row.role.rawValue,
                 enrolledAt: row.enrolledAt,
                 learnSection: row.brightspaceSection,
+                groups: groupsByCourse[row.$course.id] ?? [],
                 avatarHandle: row.legacyAvatarHandle
             )
         }
+}
+
+/// The user's group memberships (docs/lab-groups.md), by course id.
+private func gatherGroups(userID: UUID, on db: any Database) async throws -> [UUID: [DataExportGroup]] {
+    let memberships = try await APICourseGroupMembership.query(on: db).filter(\.$userID == userID).all()
+    guard !memberships.isEmpty else { return [:] }
+    let groups = try await APICourseGroup.query(on: db).filter(\.$id ~~ memberships.map(\.groupID)).all()
+    let sets = try await APICourseGroupSet.query(on: db).filter(\.$id ~~ memberships.map(\.setID)).all()
+    let groupByID = Dictionary(groups.compactMap { g in g.id.map { ($0, g) } }, uniquingKeysWith: { a, _ in a })
+    let setByID = Dictionary(sets.compactMap { s in s.id.map { ($0, s) } }, uniquingKeysWith: { a, _ in a })
+    var result: [UUID: [DataExportGroup]] = [:]
+    for membership in memberships {
+        guard let group = groupByID[membership.groupID], let set = setByID[membership.setID] else { continue }
+        result[set.courseID, default: []].append(DataExportGroup(set: set.name, group: group.name))
+    }
+    return result.mapValues { $0.sorted { ($0.set, $0.group) < ($1.set, $1.group) } }
 }
 
 private struct GatheredSubmissions: Sendable {
@@ -621,7 +648,8 @@ func dataExportReadme(username: String, generatedAt: Date) -> String {
       with the submission that earned each one and when. Passwords are
       stored only as one-way hashes and are never included.
     - `enrollments.json` — the courses you are enrolled in, with each
-      course's term, your role in each, when you enrolled, and the
+      course's term, your role in each, when you enrolled, your group in
+      each of the course's group sets (a lab section, for example), and the
       per-course handle you had there before handles moved to your avatar.
     - `submissions.json` — an index of every submission you have made:
       course, assignment, attempt number, timestamps, and where in this
