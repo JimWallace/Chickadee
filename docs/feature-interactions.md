@@ -452,11 +452,12 @@ because line numbers go out of date.
   - Connect a new accumulator at both ingest paths. An accumulator on one
     path shows only the half of the class that one substrate grades, as if it
     were the whole class.
-  - For an activity that runs per lab group, a ranking row carries the group
-    of the session the student submitted in, and a submission with no open
-    joined session does not rank (docs/lab-groups.md, slice 3a). A new
-    ranking writer must read `ActivitySessionStore.sessionAtSubmission` the
-    same way, or `ActivityAuthoring` must refuse its kind with the flag.
+  - For an activity that runs per lab group, a leaderboard result goes to
+    `group_leaderboard_entries` under the group of the session the student
+    submitted in, and a submission with no open joined session does not
+    rank (docs/lab-groups.md, slice 3a). A new ranking writer must read
+    `ActivitySessionStore.sessionAtSubmission` the same way, or
+    `ActivityKind.canRunPerGroup` must stay false for its kind.
 
 ### Lab groups and per-group sessions: `runsPerGroup`, `activity_sessions`
 

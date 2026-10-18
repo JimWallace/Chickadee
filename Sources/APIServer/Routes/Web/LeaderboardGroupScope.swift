@@ -2,8 +2,8 @@
 //
 // Which lab group's board the leaderboard page shows, for an activity that
 // runs once per group (docs/lab-groups.md, slice 3). Staff pick a group and
-// land on their own; a student sees the group they ranked in, else the one
-// whose session they last joined, else the one they are a member of.
+// land on their own; a student sees the group whose session they last
+// joined, else one they ranked in, else the one they are a member of.
 
 import Core
 import Fluent
@@ -29,7 +29,7 @@ struct LeaderboardGroupScope: Sendable {
         req: Request, user: APIUser, isStaff: Bool, activity: ClassActivity, setup: APITestSetup,
         assignment: APIAssignment?
     ) async throws -> LeaderboardGroupScope? {
-        guard activity.runsPerGroup, let assignmentID = assignment?.id,
+        guard activity.runsPerGroup, activity.kind.canRunPerGroup, let assignmentID = assignment?.id,
             let setID = try await CourseGroupStore.sets(courseID: setup.courseID, on: req.db).first?.id
         else { return nil }
         let groups = try await CourseGroupStore.groups(inSet: setID, on: req.db)
@@ -58,18 +58,12 @@ struct LeaderboardGroupScope: Sendable {
             isLive: isLive)
     }
 
-    /// The group a student's board is: the one they ranked in, else the one
-    /// whose session they last joined, else the one they are a member of.
+    /// The group a student's board is: the one whose session they last
+    /// joined (attendance beats membership), else one they ranked in, else
+    /// the one they are a member of.
     private static func studentGroup(
         userID: UUID, setupID: String, assignmentID: UUID, setID: UUID, on db: any Database
     ) async throws -> UUID? {
-        if let ranked = try await APILeaderboardEntry.query(on: db)
-            .filter(\.$testSetupID == setupID)
-            .filter(\.$userID == userID)
-            .first()?.groupID
-        {
-            return ranked
-        }
         let sessions = try await ActivitySessionStore.sessions(assignmentID: assignmentID, on: db)
         if !sessions.isEmpty,
             let latest = try await APIActivitySessionAttendance.query(on: db)
@@ -80,6 +74,14 @@ struct LeaderboardGroupScope: Sendable {
             let joined = sessions.first(where: { $0.id == latest.sessionID })
         {
             return joined.groupID
+        }
+        if let ranked = try await APIGroupLeaderboardEntry.query(on: db)
+            .filter(\.$testSetupID == setupID)
+            .filter(\.$userID == userID)
+            .sort(\.$reachedAt, .descending)
+            .first()?.groupID
+        {
+            return ranked
         }
         return try await CourseGroupStore.groupIDsByUser(inSet: setID, on: db)[userID]
     }

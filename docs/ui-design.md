@@ -472,7 +472,10 @@ duplicate.
   `.present-join-address` in its own case, the `.present-join-code` in large
   monospace capitals, and a second `.present-clock-label` with the seconds
   until the code changes and the count who joined. It is its own polled
-  region, every two seconds, and shows no names.  A `.present-footer` ends the page, with a
+  region, every two seconds, and shows no names. The lab-group select is
+  `LabGroupSelect`, the one "pick a lab group" control; the leaderboard
+  page's toolbar uses it too (`LeaderboardGroupControl`), and shows a
+  student their group as a `.chip` instead.  A `.present-footer` ends the page, with a
   `.tier-preview` Live tag while it polls.  Display sizes are `em` of one size set for a 1600-pixel screen; the
   page steps by `zoom` (down at 1500 pixels, up at 1900), since the type scale
   forbids a fluid font size.

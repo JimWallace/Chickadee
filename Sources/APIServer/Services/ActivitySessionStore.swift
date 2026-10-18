@@ -39,7 +39,8 @@ enum ActivitySessionStore {
     /// The session `userID` plays in at `now`: the open session of this
     /// assignment they most recently joined, or nil. A join from before a
     /// session's latest start does not count: it was a join to an earlier
-    /// lab. A student whom staff removed does not count either.
+    /// lab. A student whom staff removed does not count either, nor a join
+    /// after `now`.
     static func currentSession(
         assignmentID: UUID, userID: UUID, now: Date = Date(), on db: any Database
     ) async throws -> APIActivitySession? {
@@ -50,7 +51,7 @@ enum ActivitySessionStore {
             .filter(\.$sessionID ~~ open.compactMap(\.id))
             .all()
         let current = attended.filter { row in
-            open.contains { row.counts(in: $0) }
+            row.joinedAt <= now && open.contains { row.counts(in: $0) }
         }
         guard let latest = current.max(by: { $0.joinedAt < $1.joinedAt }) else { return nil }
         return open.first { $0.id == latest.sessionID }

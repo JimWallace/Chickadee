@@ -30,7 +30,9 @@ struct LeaderboardPage: HTML {
                         if board.isStaff {
                             visibilityForm
                             a(
-                                .class("btn action-btn"), .href("\(board.boardURL)?present=1"), .target(.blank),
+                                .class("btn action-btn"),
+                                .href("\(board.boardURL)?present=1\(board.groupScope?.groupQuery ?? "")"),
+                                .target(.blank),
                                 .rel("noopener")
                             ) {
                                 Icon("i-slides")
@@ -40,6 +42,10 @@ struct LeaderboardPage: HTML {
                     }
                 }
                 intro
+                if let scope = board.groupScope, scope.groupID == nil {
+                    // A student in no lab group of a per-group activity.
+                    p(.class("section-note")) { "Join your lab's session at /join to see its board." }
+                }
                 if board.showFilter {
                     div(.class("toolbar toolbar--end section-gap")) {
                         span(.class("filter-group")) {

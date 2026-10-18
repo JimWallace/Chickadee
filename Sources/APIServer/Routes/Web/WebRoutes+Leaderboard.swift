@@ -416,15 +416,6 @@ struct LeaderboardBoard: Sendable {
 
 // MARK: - Rows
 
-/// The metric board for `setup`: the ranked rows, the list a viewer is shown,
-/// and the viewer's own card. Handles and avatars are materialised on first
-/// view (`AvatarStore`), so a student who has never opened their account page
-/// still appears under a stable pseudonym.
-///
-/// Batched: one query for the users, one for the course's enrollments; the
-/// per-row calls only write when a handle or spec is missing, which happens
-/// once per student for the life of the course.
-///
 extension WebRoutes {
     /// The metric board, empty for any other aggregation, and for a per-group
     /// activity the lab group it shows.
@@ -452,6 +443,15 @@ func buildLeaderboard(
     return try await buildLeaderboard(setup: setup, reader: reader, showAll: showAll, groupID: groupID, on: db)
 }
 
+/// The metric board for `setup`: the ranked rows, the list a viewer is shown,
+/// and the viewer's own card. Handles and avatars are materialised on first
+/// view (`AvatarStore`), so a student who has never opened their account page
+/// still appears under a stable pseudonym.
+///
+/// Batched: one query for the users, one for the course's enrollments; the
+/// per-row calls only write when a handle or spec is missing, which happens
+/// once per student for the life of the course.
+///
 /// `isStaff` decides whether names, usernames and submission counts are built
 /// at all — a student's page never holds them. With `groupID`, one lab
 /// group's board (docs/lab-groups.md, slice 3).

@@ -206,9 +206,8 @@ enum ActivityAuthoring {
         guard activity.kind.aggregation != .composite else {
             throw AppError.badRequest(reason: runsPerGroupCompositeMessage)
         }
-        // Only the leaderboard ranks per group so far (slice 3a). Standings,
-        // a bracket and the union would mix the groups on one board.
-        guard activity.kind.aggregation == .leaderboard else {
+        // Only a kind whose ranking is per group (slice 3a).
+        guard activity.kind.canRunPerGroup else {
             throw AppError.badRequest(reason: runsPerGroupKindMessage)
         }
         guard activity.window == nil else {
@@ -224,7 +223,7 @@ enum ActivityAuthoring {
     static let runsPerGroupCompositeMessage =
         "A class composite cannot run once per lab group yet."
     static let runsPerGroupKindMessage =
-        "Only a leaderboard activity can run once per lab group yet."
+        "Only a Best metric or Beat the instructor activity can run once per lab group yet."
     static let runsPerGroupWithWindowMessage =
         "Each group's session is the clock of a per-group activity, so clear the session window first."
 

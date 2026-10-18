@@ -310,7 +310,9 @@ struct SetActivityTool: ContentTool {
                 // the kind is unchanged and seeds the starter otherwise.
                 .withComposite(input.composite)
                 .withRunsPerGroup(
-                    input.runsPerGroup ?? (current?.kind == block.kind ? current?.runsPerGroup == true : false))
+                    input.runsPerGroup
+                        ?? (current?.kind == block.kind && block.kind.canRunPerGroup
+                            ? current?.runsPerGroup == true : false))
         }
         do {
             try await ActivityAuthoring.setActivity(

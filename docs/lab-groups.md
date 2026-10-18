@@ -19,7 +19,7 @@ today.
 | 0 | This design note | draft |
 | 1 | Groups: group sets, groups, memberships; the Groups tab; the CSV import; the Group column on the roster; groups in the data export | built |
 | 2 | Sessions: a session per (activity, group), started and ended from the present page; the submission gate reads the session; attendance by join code at `/join`; presence: a code for every student that changes every 30 seconds, the staff list of who joined, a limit on wrong codes, the "Other network" flag | built |
-| 3a | Rankings per group, the leaderboard: entries stamped with the group, a late result does not rank, the board and the present page per group; other kinds refuse the flag until their slice | built |
+| 3a | Rankings per group, the leaderboard: `group_leaderboard_entries`, a late result does not rank, the board and the present page per group; other kinds refuse the flag until their slice | built |
 | 3 | Rankings per group, the rest: standings, the hill, round-robin opponents, tournament runs; the gate after a session closes | not started |
 | 4 | The composite per group, and the course gallery of every group's image | not started |
 | 5 | Group goals: the union and the corpus percent per group; a group achievement | not started |
@@ -120,7 +120,11 @@ activity_session_attendance
   UNIQUE(session_id, user_id)
 ```
 
-And one nullable `group_id` column on each ranking table:
+And, per ranking table, a per-group form: slice 3a made the leaderboard's a
+twin table, `group_leaderboard_entries` keyed (assignment, group, student),
+because a column under the existing (assignment, student) key strands a
+student who moves labs. The rest are still a nullable `group_id` in this
+plan:
 `leaderboard_entries`, `activity_standings`, `activity_champions`,
 `match_results`, `tournament_runs`, `composite_slots`,
 `composite_contributions`, `class_item_coverage`, `class_coverage_runs`.
@@ -367,26 +371,35 @@ should be able to see it. The maintainer chose best effort on 2026-10-18.
 
 ### Slice 3a: the leaderboard per group (built)
 
-- `leaderboard_entries.group_id` (`AddLeaderboardEntryGroup`, no foreign
-  key). `recordLeaderboardEntry` stamps a per-group activity's row with the
-  group of the session the student had joined when they submitted
-  (`ActivitySessionStore.sessionAtSubmission`, by the submission's own
-  time, so a grading delay costs no student their place). A submission made
-  with no such session open grades and does not rank (decision 1). A
-  student keeps one best row, in the group where they reached it. The
-  `highestMetric` class record stays course-wide.
+- `group_leaderboard_entries` (`CreateGroupLeaderboardEntries`): one best
+  row per (assignment, group, student), the per-group twin of
+  `leaderboard_entries`. A second table, not a column, so a student who
+  plays in two labs ranks in each, and a course-wide row from before the
+  activity ran per group blocks nothing. `recordLeaderboardEntry` writes a
+  per-group activity's result under the group of the session the student
+  had joined when they submitted (`ActivitySessionStore.sessionAtSubmission`:
+  by the submission's own time, and only a join made before it, so a
+  grading delay costs no student their place). A submission made with no
+  such session open grades and does not rank (decision 1). A retest after
+  the session restarted finds no session and leaves the board as it was.
+  The `highestMetric` class record stays course-wide.
 - `buildLeaderboard` takes a group. `LeaderboardGroupScope` picks it: staff
-  choose with `LeaderboardGroupControl` (`?group=`, landing on their own
-  group); a student reads the group they ranked in, else the one whose
-  session they last joined, else the one they are a member of. A student in
-  no group has no board. The page refreshes while the shown group's session
+  choose with `LeaderboardGroupControl` (`LabGroupSelect`, `?group=`,
+  landing on their own group); a student reads the group whose session they
+  last joined, else one they ranked in, else the one they are a member of,
+  and a student's `?group=` is ignored. A student in no group has no board
+  and a note that sends them to `/join`. The page refreshes while the shown group's session
   is open. The staff "not ranked" count is the group's members.
 - The present page projects the selected group's board, and its refresh
-  keeps the group.
-- `ActivityAuthoring` refuses `runsPerGroup` on every kind whose
-  aggregation is not `.leaderboard` (`runsPerGroupKindMessage`): standings,
-  a bracket and the union would mix the groups on one board until their
-  slice ships. A composite keeps its own message.
+  and the leaderboard's Present link keep the group.
+- `ActivityKind.canRunPerGroup` (Core) is the one rule: a leaderboard kind
+  with no champion (Best metric, Beat the instructor). `ActivityAuthoring`
+  refuses the flag on every other kind (`runsPerGroupKindMessage`), the
+  edit page shows the checkbox only for these kinds, `set_activity` keeps a
+  stored flag only for them, and an older per-group activity of another
+  kind is read as course-wide. A hill, standings, a bracket and the union
+  would mix the groups until their slices make them per group. A composite
+  keeps its own message.
 - Not yet: the gate still refuses a submission after the student's session
   closes. Relaxing it changes an assertion in an existing test, so it waits
   for the maintainer.

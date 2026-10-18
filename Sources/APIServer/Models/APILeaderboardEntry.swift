@@ -52,13 +52,6 @@ final class APILeaderboardEntry: Model, Content, @unchecked Sendable {
     @Timestamp(key: "reached_at", on: .none)
     var reachedAt: Date?
 
-    /// The lab group whose session the best result was played in, for an
-    /// activity that runs per group (docs/lab-groups.md); nil otherwise. A
-    /// student has one best row, so a student who played in two groups'
-    /// sessions ranks in the group of their best.
-    @OptionalField(key: "group_id")
-    var groupID: UUID?
-
     init() {}
 
     init(testSetupID: String, userID: UUID, submissionID: String, metric: Double, reachedAt: Date) {

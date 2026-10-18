@@ -35,10 +35,11 @@ func submissionMetric(from outcomes: [TestOutcome]) -> Double? {
 /// Safe to call repeatedly for the same submission: a re-test or a replayed
 /// report re-reads the same metric and finds nothing better to write.
 ///
-/// For an activity that runs per group (docs/lab-groups.md), the row is
-/// stamped with the group of the session the student had joined when they
-/// submitted. A submission made with no such session open grades and does not
-/// rank: the board froze when the session closed (maintainer decision 1).
+/// For an activity that runs per group (docs/lab-groups.md), the row goes to
+/// `group_leaderboard_entries`, under the group of the session the student had
+/// joined when they submitted. A submission made with no such session open
+/// grades and does not rank: the board froze when the session closed
+/// (maintainer decision 1).
 ///
 /// Deliberately NOT gated on the submission's grade. The metric is what the
 /// script chose to measure, and a run that fails a correctness gate yet
@@ -57,55 +58,92 @@ func recordLeaderboardEntry(
         activity.kind.aggregation == .leaderboard,
         try await courseRole(of: userID, inCourse: setup.courseID, db: db) == .student
     else { return }
-    var groupID: UUID?
-    if activity.runsPerGroup {
+
+    if activity.runsPerGroup && activity.kind.canRunPerGroup {
         guard
             let session = try await ActivitySessionStore.sessionAtSubmission(
                 testSetupID: testSetupID, userID: userID, submissionID: submissionID, on: db)
         else { return }
-        groupID = session.groupID
-    }
-
-    let existing = try await APILeaderboardEntry.query(on: db)
-        .filter(\.$testSetupID == testSetupID)
-        .filter(\.$userID == userID)
-        .first()
-    if let existing {
-        // Strictly better only: a tie keeps the earlier submission, which is
-        // also what keeps a replayed report from moving `reachedAt`.
-        guard metric > existing.metric else { return }
-        existing.metric = metric
-        existing.submissionID = submissionID
-        existing.reachedAt = Date()
-        existing.groupID = groupID
-        try await existing.update(on: db)
+        try await recordGroupLeaderboardEntry(
+            testSetupID: testSetupID, groupID: session.groupID, userID: userID, submissionID: submissionID,
+            metric: metric, on: db)
     } else {
-        let row = APILeaderboardEntry(
-            testSetupID: testSetupID, userID: userID, submissionID: submissionID,
-            metric: metric, reachedAt: Date())
-        row.groupID = groupID
-        // Ignore the conflict: two first submissions from one student landing
-        // at once, first insert wins. Same shape as `awardImmutableBadge`.
-        try await row.createIgnoringConflict(on: db)
+        let existing = try await APILeaderboardEntry.query(on: db)
+            .filter(\.$testSetupID == testSetupID)
+            .filter(\.$userID == userID)
+            .first()
+        if let existing {
+            // Strictly better only: a tie keeps the earlier submission, which
+            // is also what keeps a replayed report from moving `reachedAt`.
+            guard metric > existing.metric else { return }
+            existing.metric = metric
+            existing.submissionID = submissionID
+            existing.reachedAt = Date()
+            try await existing.update(on: db)
+        } else {
+            // Ignore the conflict: two first submissions from one student
+            // landing at once, first insert wins. Same shape as
+            // `awardImmutableBadge`.
+            try await APILeaderboardEntry(
+                testSetupID: testSetupID, userID: userID, submissionID: submissionID, metric: metric, reachedAt: Date()
+            ).createIgnoringConflict(on: db)
+        }
     }
 
     try await awardHighestMetricRecords(
         setup: setup, userID: userID, submissionID: submissionID, metric: metric, on: db)
 }
 
+/// The per-group twin of the best-so-far write above: one row per (setup,
+/// group, student), so a student who plays in two labs ranks in each.
+private func recordGroupLeaderboardEntry(
+    testSetupID: String, groupID: UUID, userID: UUID, submissionID: String, metric: Double, on db: any Database
+) async throws {
+    let existing = try await APIGroupLeaderboardEntry.query(on: db)
+        .filter(\.$testSetupID == testSetupID)
+        .filter(\.$groupID == groupID)
+        .filter(\.$userID == userID)
+        .first()
+    if let existing {
+        guard metric > existing.metric else { return }
+        existing.metric = metric
+        existing.submissionID = submissionID
+        existing.reachedAt = Date()
+        try await existing.update(on: db)
+    } else {
+        try await APIGroupLeaderboardEntry(
+            testSetupID: testSetupID, groupID: groupID, userID: userID, submissionID: submissionID, metric: metric,
+            reachedAt: Date()
+        ).createIgnoringConflict(on: db)
+    }
+}
+
 /// The activity's ranking, best first; ties rank the earlier row first. With
-/// `groupID`, one lab group's ranking (docs/lab-groups.md).
+/// `groupID`, one lab group's ranking (docs/lab-groups.md), read from
+/// `group_leaderboard_entries` and returned in the same shape, unsaved, so
+/// the board builds one way.
 ///
 /// Reads the materialised rows rather than the stored collections, which is
 /// the whole point of materialising them.
 func leaderboardEntries(
     testSetupID: String, groupID: UUID? = nil, on db: any Database
 ) async throws -> [APILeaderboardEntry] {
-    var query = APILeaderboardEntry.query(on: db).filter(\.$testSetupID == testSetupID)
-    if let groupID { query = query.filter(\.$groupID == groupID) }
-    return
-        try await query
+    guard let groupID else {
+        return try await APILeaderboardEntry.query(on: db)
+            .filter(\.$testSetupID == testSetupID)
+            .sort(\.$metric, .descending)
+            .sort(\.$reachedAt, .ascending)
+            .all()
+    }
+    return try await APIGroupLeaderboardEntry.query(on: db)
+        .filter(\.$testSetupID == testSetupID)
+        .filter(\.$groupID == groupID)
         .sort(\.$metric, .descending)
         .sort(\.$reachedAt, .ascending)
         .all()
+        .map {
+            APILeaderboardEntry(
+                testSetupID: $0.testSetupID, userID: $0.userID, submissionID: $0.submissionID, metric: $0.metric,
+                reachedAt: $0.reachedAt ?? Date())
+        }
 }
