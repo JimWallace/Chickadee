@@ -9,6 +9,13 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.710] - 2026-10-18
+
+### Added
+
+- **Achievements and rewards: the plan.** `docs/achievement-rewards.md` proposes achievements at the assignment, course and site levels, one stored award ledger, and a wardrobe item as an achievement reward. Nothing is built yet.
+
+
 ## [0.5.709] - 2026-10-17
 
 ### Added
