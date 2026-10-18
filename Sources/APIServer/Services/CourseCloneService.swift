@@ -32,6 +32,8 @@ enum CourseCloneService {
     ///
     /// Copied:
     /// - course sections, content items and their attachment files;
+    /// - the course dataset library, every dataset with all its versions
+    ///   (rows only; the bytes are blobs shared by hash);
     /// - every assignment: setup, notebook, reference solution, support
     ///   files, section, order, runner requirements, and the per-assignment
     ///   policies (secret reveal, passing threshold, LMS sync exclusion);
@@ -92,6 +94,11 @@ enum CourseCloneService {
         newCourse.mcpInstructions = source.mcpInstructions
         try await newCourse.save(on: db)
         let newCourseID = try newCourse.requireID()
+
+        // Before the assignments: `cloneAssignment` keeps a file's library
+        // source only when the new course's library holds that version, and
+        // drops it otherwise (docs/datasets-course-library.md D10).
+        try await CourseDatasetService.copyLibrary(from: sourceID, to: newCourseID, on: db)
 
         var sectionIDMap: [UUID: UUID] = [:]
         for section in sections {

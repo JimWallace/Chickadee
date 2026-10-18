@@ -1,12 +1,17 @@
 // Core/CourseBundleManifest.swift
 //
-// Codable types for the Chickadee course bundle format (schemaVersion 1).
+// Codable types for the Chickadee course bundle format (schemaVersion 1 and 2).
 //
 // Bundle ZIP layout:
 //   bundle.json                        — this manifest (JSON, iso8601 dates)
 //   testsetups/<originalSetupID>.zip   — instructor test-setup zips
 //   submissions/<originalSubID>.<ext>  — student submission files
 //   content/<exportAttachmentID>       — content-item hosted file attachments
+//   datasets/<sha256>                  — course dataset library versions (v2)
+//
+// Version 2 adds the course dataset library (`datasets`). An export writes 2
+// only when the course has a dataset, so a bundle without one stays readable
+// by a server that knows only version 1.
 //
 // bundleID values are stable cross-references within a single bundle.
 // They are NEVER reused as DB primary keys on the target instance;
@@ -20,7 +25,12 @@ import Foundation
 // MARK: - Top-level manifest
 
 public struct CourseBundleManifest: Codable, Sendable {
-    /// Always 1 for this format version.
+    /// The format versions an import accepts.
+    public static let supportedSchemaVersions = 1...2
+    /// The version a bundle that carries datasets is written as.
+    public static let datasetsSchemaVersion = 2
+
+    /// 1, or 2 for a bundle that carries the dataset library.
     public let schemaVersion: Int
     public let exportedAt: Date
     /// Username of the admin who performed the export.
@@ -51,6 +61,8 @@ public struct CourseBundleManifest: Codable, Sendable {
     public let submissions: [BundledSubmission]
     /// Results paired with their submissions.
     public let results: [BundledResult]
+    /// The course dataset library (nil in a version 1 bundle).
+    public let datasets: [BundledDataset]?
 
     public init(
         schemaVersion: Int = 1,
@@ -66,7 +78,8 @@ public struct CourseBundleManifest: Codable, Sendable {
         assignments: [BundledAssignment],
         testSetups: [BundledTestSetup],
         submissions: [BundledSubmission],
-        results: [BundledResult]
+        results: [BundledResult],
+        datasets: [BundledDataset]? = nil
     ) {
         self.schemaVersion = schemaVersion
         self.exportedAt = exportedAt
@@ -82,6 +95,7 @@ public struct CourseBundleManifest: Codable, Sendable {
         self.testSetups = testSetups
         self.submissions = submissions
         self.results = results
+        self.datasets = datasets
     }
 }
 

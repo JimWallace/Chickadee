@@ -9,6 +9,27 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.722] - 2026-10-18
+
+### Changed
+
+- **Course dataset library, slice 9: docs.** The architecture overview describes the course dataset library, the per-student dataset design points to it, and the plan records the steps to move HLTH 230's two live datasets into the library and the maintainer's decisions on slices 10 and 11.
+
+
+## [0.5.721] - 2026-10-18
+
+### Fixed
+
+- **The solution-visibility doc now says what a course bundle and a clone do with the reveal policy.** It said that a `.chickadee` bundle does not carry the solution visibility or `secretRevealEnabled`. A bundle carries both (#1737). A clone copies `secretRevealEnabled` and sets the solution reveal back to hidden (#2664).
+
+
+## [0.5.720] - 2026-10-18
+
+### Added
+
+- **Course dataset library, slice 8: lifecycle.** A course clone copies the dataset library, every dataset with all its versions, before the assignments, so each cloned file keeps its library source. A course bundle carries the library as schemaVersion 2, with each version's bytes at `datasets/<sha256>`; a course with no dataset still exports version 1, and an import accepts both and refuses a dataset file whose bytes are not the ones named. The admin storage page and `get_storage_usage` list each course's library. A course delete already removed the library rows and frees their bytes.
+
+
 ## [0.5.719] - 2026-10-18
 
 ### Added

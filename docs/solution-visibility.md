@@ -174,9 +174,14 @@ one reveal token on the assignment to see its secret test results.
   copy does not: it refreshes to the stored solution whenever the stored
   content differs from it, so staff never open, or save back, a superseded
   answer key.
-- **Not carried in `.chickadee` course bundles** — matching
-  `secretRevealEnabled`, which does not travel either: per-offering display
-  policy, re-chosen each term.
+- **A `.chickadee` course bundle carries the policy; a clone resets it.** A
+  bundle is a faithful restore, so it carries the solution visibility and
+  `secretRevealEnabled` exactly as they were (#1737). A clone for a new term
+  copies `secretRevealEnabled` but sets the solution reveal back to hidden.
+  This is necessary because the clone also clears the due date. With no
+  date, an "after due" policy shows the answer key as soon as the assignment
+  opens. The instructor turns the reveal on again for the new term
+  (`docs/course-terms.md`, "Dates").
 - **No per-view record.** A `solution_views` first-view ledger (useful when
   granting a late accommodation: "had this student already seen the answer
   key?") is the natural follow-up if the need materializes; the audit trail

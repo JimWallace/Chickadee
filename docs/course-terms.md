@@ -188,7 +188,9 @@ The Core type, the migration, the model accessor, and tests
 - **Copied:** course sections; every assignment (setup, notebook, reference
   solution, support files, section, order, runner requirements, secret-reveal
   flag, passing threshold, LMS sync exclusion); content items and their
-  attachment files;
+  attachment files; the course dataset library, every dataset with all its
+  versions and its published flags, before the assignments, so each attached
+  file keeps its library source (`docs/datasets-course-library.md` §4.8);
   the slip-day policy and the course MCP authoring guide.
 - **Not copied:** enrollments, pre-enrollments, submissions, results, grade
   overrides, extensions, slip-day spends, achievement results, version

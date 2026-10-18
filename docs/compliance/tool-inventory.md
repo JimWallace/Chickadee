@@ -201,7 +201,7 @@ rows and assert their identifiers never serialize (`AdminMCPToolsTests`).
 | `get_instructor_card_series` | `instructorCardSeries` (one course) | per-bucket counts only; PII-tested |
 | `get_queue_state` | submissions table | counts/ages only |
 | `list_runners` / `get_runner_detail` | worker rows, `job_execution_metrics` | aggregates; per-job rows (username + submission id) deliberately omitted; PII-tested |
-| `get_storage_usage` | storage scan | per-assignment byte/count aggregates |
+| `get_storage_usage` | storage scan | per-assignment and per-course-library byte/count aggregates |
 | `get_request_metrics` | `request_metrics` | routes normalized to `:id`; prefix filter matches normalized routes (audit F-3) |
 | `get_query_stats` | `pg_stat_statements` (Postgres) | returns only SELECT / INSERT / UPDATE / DELETE / MERGE statements, which Postgres normalizes (every constant becomes a placeholder); utility statements, which keep their literals, are filtered out. Residual risk: a SQL comment inside a statement is kept verbatim; the server writes no comments that hold values |
 | `get_health_alerts` | live rule evaluation | counts/thresholds; runner IDs of runners that stopped polling (operational, as `list_runners`); BrightSpace `last_error` writer-sanitized (audit F-2) |

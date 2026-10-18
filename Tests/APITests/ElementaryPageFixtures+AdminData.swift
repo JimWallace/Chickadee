@@ -78,14 +78,21 @@ extension ElementaryPageFixtures {
                 submissionsFormatted: "0 B", submissionCount: 0, totalFormatted: "10 KB",
                 testSuiteBytes: 10_000, submissionsBytes: 0, totalBytes: 10_000),
         ]
-        func render(_ assignments: [AdminAssignmentStorageRow], disk: DiskSpace?) -> String {
+        let libraries = [
+            AdminCourseLibraryStorageRow(
+                courseKey: "HLTH230-W27", datasetCount: 2, versionCount: 3, bytes: 90_000, formatted: "90 KB")
+        ]
+        func render(
+            _ assignments: [AdminAssignmentStorageRow], disk: DiskSpace?,
+            libraries: [AdminCourseLibraryStorageRow] = []
+        ) -> String {
             let storage = AdminStorageContext(
                 rows: [
                     AdminStorageRow(label: "Database", formatted: "2.0 MB"),
                     AdminStorageRow(label: "Submissions", formatted: "3.0 MB"),
                 ],
                 totalFormatted: "5.0 MB", dbBackend: "sqlite", assignments: assignments, totalBytes: 5_000_000,
-                disk: disk)
+                disk: disk, libraries: libraries)
             return AdminStoragePage(
                 page: page(currentUser: signedInAdmin), storage: storage,
                 assignmentRows: AdminStorageShareRow.rows(from: assignments, totalBytes: storage.totalBytes)
@@ -97,6 +104,7 @@ extension ElementaryPageFixtures {
             renders: [
                 render(assignments, disk: DiskSpace(freeBytes: 25_000_000_000, totalBytes: 93_000_000_000)),
                 render([], disk: nil),
+                render(assignments, disk: nil, libraries: libraries),
             ]
         )
     }

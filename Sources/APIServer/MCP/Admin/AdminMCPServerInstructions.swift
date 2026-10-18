@@ -67,7 +67,7 @@ enum AdminMCPServerInstructions {
         active-assignment / browser-error counts, scoped by an explicit \
         courseCode filter).
         - Errors & logs: get_browser_diagnostics, query_logs, get_health_alerts.
-        - Storage: get_storage_usage (footprint by component + per-assignment).
+        - Storage: get_storage_usage (footprint by component + per-assignment + per-course dataset library).
         - Integrations & security: list_connected_agents (MCP OAuth grants), \
         get_brightspace_sync_status (grade-push health), query_audit_log \
         (activity COUNTS by action/category only).
