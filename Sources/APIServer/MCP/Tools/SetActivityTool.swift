@@ -336,7 +336,7 @@ struct SetActivityTool: ContentTool {
             opensAt: stored?.activity?.window?.opensAtISO,
             closesAt: stored?.activity?.window?.closesAtISO,
             composite: stored?.activity?.composite,
-            runsPerGroup: stored?.activity?.runsPerGroup == true)
+            runsPerGroup: stored?.activity?.isPerGroup == true)
     }
 
     /// The visibility the call means: the given value, or, when absent, the

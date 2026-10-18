@@ -20,7 +20,8 @@ extension ActivitySessionStore {
 
     /// Joins `userID` to the open session whose code at `now` (or just
     /// before) is `code`. A second join moves the student back to this
-    /// session from any other they joined since. `network` is the network
+    /// session from any other they joined since; a second join of the session
+    /// they are in changes nothing. `network` is the network
     /// part of the student's address (`ClientNetwork.prefix`), nil when
     /// unknown.
     @discardableResult
@@ -65,6 +66,15 @@ extension ActivitySessionStore {
             .first()
         if let removedAt = existing?.removedAt, removedAt >= session.openedAt {
             throw ActivitySessionError.removed
+        }
+        // Typing the code of the session the student already plays in changes
+        // nothing: the join time stays, so a submission made before it still
+        // ranks when it is graded (`sessionAtSubmission`).
+        if let existing, existing.counts(in: session),
+            try await currentSession(assignmentID: session.assignmentID, userID: userID, now: now, on: db)?.id
+                == sessionID
+        {
+            return session
         }
         // Membership first: if it fails, no attendance is left behind.
         let setID = try set.requireID()

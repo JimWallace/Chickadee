@@ -272,7 +272,10 @@ the Sections reader.
   nothing. A reopen keeps the row and draws a new code secret. Sessions use
   the course's first group set, which in slice 2 is its only one; a start
   that names a group of another set is a 404.
-- Joining records attendance, or moves its time to now on a second join.
+- Joining records attendance, or moves its time to now on a join that moves
+  the student from another session. Typing the code of the session the
+  student already plays in changes nothing, so a submission made before it
+  still ranks when it is graded.
   A student in no group of a manual set becomes a member of the session's
   group; a member of another group stays where they are and plays in the
   session they joined. A removed group's session, and a session of an

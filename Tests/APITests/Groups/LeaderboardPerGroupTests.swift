@@ -167,6 +167,23 @@ import VaporTesting
         }
     }
 
+    @Test func reEnteringTheSameCodeDuringGradingKeepsThePlace() async throws {
+        try await withApp(app) { _ in
+            let f = try await fixture(on: app)
+            let labA = try await joinSession(f, group: f.labA, userID: f.ada)
+            _ = try await makeTestSubmission(on: app, id: "lbg_s10", setupID: setupID, userID: f.ada)
+            // ada types Lab 101's code again before the result is graded.
+            let later = Date().addingTimeInterval(5)
+            try await ActivitySessionStore.join(
+                code: ActivitySessionCode.code(secret: labA.codeSecret, at: later), userID: f.ada, now: later,
+                on: app.db)
+            try await recordLeaderboardEntry(
+                testSetupID: setupID, userID: f.ada, submissionID: "lbg_s10", outcomes: [outcome(metric: 6)],
+                on: app.db)
+            #expect(try await entry(f.ada, in: f.labA)?.metric == 6)
+        }
+    }
+
     // MARK: - Reading
 
     @Test func eachGroupReadsItsOwnBoard() async throws {
