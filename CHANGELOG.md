@@ -9,6 +9,13 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.717] - 2026-10-18
+
+### Added
+
+- **Course dataset library, slice 7: MCP tools.** Seven content tools let an authoring agent work with the course dataset library: `list_datasets` and `get_dataset` read it; `create_dataset` (from a `sourceUrl` or an assignment's support file), `update_dataset` (metadata, column prose, publishing) and `add_dataset_version` edit it; `attach_dataset` and `detach_dataset` attach a dataset to an assignment, move it to another version or scope, and end the attachment. `get_support_files` reports each attached file's source and scope, and `get_assignment` lists the attached datasets. The MCP database role is granted the two library tables.
+
+
 ## [0.5.716] - 2026-10-18
 
 ### Added
