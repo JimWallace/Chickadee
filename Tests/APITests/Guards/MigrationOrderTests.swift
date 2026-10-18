@@ -13,8 +13,9 @@
 // Both rules are read from the source, so a migration appended in the wrong
 // place fails here the day it lands, not on the next fresh boot. The fifth
 // consolidation round deleted every data migration, so both rules check no
-// migration until the next one lands; the parse itself is still checked by
-// `theListIsReadInFull`.
+// migration until the next one lands. `theListIsReadInFull` checks the parse
+// of the list, and `theScannersFindWhatAMigrationReads` checks the two
+// scanners on a written source.
 
 import ChickadeeTestSupport
 import Foundation
@@ -81,6 +82,18 @@ import Testing
                     atPath: repositoryRoot.appendingPathComponent("Sources/APIServer/Migrations/\(name).swift").path),
                 "no source file for \(name)")
         }
+    }
+
+    /// With no data migration registered, the two rules below check nothing,
+    /// so a broken scanner would pass them. This feeds both scanners a source
+    /// written as a data migration would be.
+    @Test func theScannersFindWhatAMigrationReads() throws {
+        let source = """
+            let setups = try await APITestSetup.query(on: database).all()
+            let rows = try await sql.select().columns("id", "avatar_spec").from("users").all()
+            """
+        #expect(try Self.queriedModels(in: source) == ["APITestSetup"])
+        #expect(try Self.selectedColumns(in: source) == ["id", "avatar_spec"])
     }
 
     @Test func aMigrationThatQueriesAModelFollowsEveryChangeToItsTable() throws {

@@ -1,7 +1,8 @@
 // Tests/APITests/Gamification/BirdHandleTests.swift
 //
-// The handle names the bird (docs/student-avatars.md §3). A hatch gives the bird a new handle, unique across the deployment; a go back gives
-// the old one back while it is free; and the data export carries both.
+// The handle names the bird (docs/student-avatars.md §3). A hatch gives the
+// bird a new handle, unique across the deployment; a go back gives the old one
+// back while it is free; and the data export carries both.
 
 import Core
 import Fluent

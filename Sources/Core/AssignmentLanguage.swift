@@ -376,10 +376,10 @@ public enum AssignmentLanguage: String, Codable, Sendable, CaseIterable {
     /// can be recorded once and never guessed again.
     ///
     /// THE ONLY REMAINING SNIFF, and it is deliberately not called `resolve`.
-    /// Three callers, all of them boundaries where content enters the system
-    /// with no author answer attached: the REST zip upload, course-bundle
-    /// import, and the one-time backfill. Each records the result immediately,
-    /// so the guess is made once and becomes a declaration.
+    /// Two callers, both of them boundaries where content enters the system
+    /// with no author answer attached: the REST zip upload and course-bundle
+    /// import. Each records the result immediately, so the guess is made once
+    /// and becomes a declaration.
     ///
     /// Precedence is the old resolution order, preserved so that what gets
     /// recorded matches what the system used to compute on the fly: a graded
