@@ -11,7 +11,10 @@
 //   adds the column.
 //
 // Both rules are read from the source, so a migration appended in the wrong
-// place fails here the day it lands, not on the next fresh boot.
+// place fails here the day it lands, not on the next fresh boot. The fifth
+// consolidation round deleted every data migration, so both rules check no
+// migration until the next one lands; the parse itself is still checked by
+// `theListIsReadInFull`.
 
 import ChickadeeTestSupport
 import Foundation
@@ -82,7 +85,6 @@ import Testing
 
     @Test func aMigrationThatQueriesAModelFollowsEveryChangeToItsTable() throws {
         let names = try Self.registeredMigrations()
-        var checked = 0
         for (index, name) in names.enumerated() {
             for model in try Self.queriedModels(in: try Self.migrationSource(name)) {
                 let declared = try Self.table(of: model)
@@ -92,17 +94,13 @@ import Testing
                         !(try MigrationSourceScan.tables(in: try Self.migrationSource(later))).contains(table),
                         "\(later) changes \(table) after \(name) full-queries \(model)")
                 }
-                checked += 1
             }
         }
-        // BackfillDeclaredLanguage and BackfillSharedSupportFiles.
-        #expect(checked >= 2)
     }
 
     @Test func aRawSQLMigrationFollowsTheMigrationThatAddsEachColumnItReads() throws {
         let names = try Self.registeredMigrations()
         let sources = try names.map(Self.migrationSource)
-        var checked = 0
         for (index, source) in sources.enumerated() where source.contains("sql.select()") {
             for column in try Self.selectedColumns(in: source) where column != "id" {
                 let marker = ".field(\"\(column)\""
@@ -111,10 +109,7 @@ import Testing
                 if let adder {
                     #expect(adder < index, "\(names[index]) reads \(column) before \(names[adder]) adds it")
                 }
-                checked += 1
             }
         }
-        // SwapStarterGradcapForHeadband and FillLateAvatarAxes read avatar_spec.
-        #expect(checked >= 2)
     }
 }

@@ -332,7 +332,7 @@ func registerMigrations(on app: Application) {
     // Production DBs that already applied them still carry the names in
     // `_fluent_migrations`; Fluent ignores history rows whose struct names
     // are no longer registered, so this is harmless.  Fresh deploys produce
-    // the same final schema from the `Create*` files alone.  Four rounds so
+    // the same final schema from the `Create*` files alone.  Five rounds so
     // far:
     //   - the #502/#505 round: 13 historical `Add*` migrations folded in
     //     PR #502 (v0.4.171); their remaining no-op stubs were deleted in
@@ -346,6 +346,12 @@ func registerMigrations(on app: Application) {
     //   - the fourth round (#1806): 15 column and index migrations, from
     //     `AddAvatarIdentity` to `ScopeCourseCodeIndexToTerm`.
     //     `AddLTIGradeSyncFailureReasonColumn` stays: it backfills rows.
+    //   - the fifth round: 8 column and index migrations, from
+    //     `AddGitHubCourseRepositoryInvitedUser` to `AddAssignmentConcept`,
+    //     and the 6 one-time data migrations deleted outright
+    //     (`BackfillDeclaredLanguage` to `MoveHandlesToBirds`). Production
+    //     had run every one; on a fresh database each data migration
+    //     touched no rows.
     // `AddSessionsCreatedAt` is NOT consolidated — it's a real migration
     // against Vapor's `_fluent_sessions` table (not one of our own).
     app.migrations.add(CreateUsers())
@@ -529,13 +535,32 @@ func registerMigrations(on app: Application) {
     // whose table it names.
     app.migrations.add(CreateSweepAndPollIndexes())
 
-    // The GitHub account a course repository's invitation went to (#2208).
-    // One optional column; existing rows keep NULL.
-    app.migrations.add(AddGitHubCourseRepositoryInvitedUser())
-
     // The match-job lookup by `match_submission_id` (#2278). Index only;
     // must follow `CreateTournamentRuns`, which creates the table.
     app.migrations.add(CreateTournamentMatchSubmissionIndex())
+
+    // Class composite (docs/class-composite.md, slice 3): the dealt slots.
+    app.migrations.add(CreateCompositeSlots())
+    // Class composite, slice 4: the latest contribution of each student.
+    app.migrations.add(CreateCompositeContributions())
+    // Class composite, slice 6: the reference render of each slot.
+    app.migrations.add(CreateCompositeReferences())
+    app.migrations.add(CreateCompositeSpares())
+    // "Hatch a new bird" (Core/AvatarHatch.swift): the per-term hatch rows.
+    app.migrations.add(CreateAvatarHatches())
+    // Wardrobe unlocks (docs/student-wardrobe.md, W3): the items a student
+    // has earned, kept for good.
+    app.migrations.add(CreateWardrobeUnlocks())
+    // The course dataset library (docs/datasets-course-library.md, slice 2).
+    app.migrations.add(CreateCourseDatasets())
+    // The per-student course cohort seed (docs/datasets-course-library.md, slice 4).
+    app.migrations.add(CreateCoursePersonalizationSeeds())
+    // The award ledger (docs/achievement-rewards.md, S1): the achievements a
+    // student has earned, kept for good.
+    app.migrations.add(CreateAchievementAwards())
+    // Lab groups (docs/lab-groups.md, slice 1): group sets, groups and
+    // memberships.
+    app.migrations.add(CreateCourseGroups())
 
     // ---------------------------------------------------------------------
     // DATA MIGRATIONS. Keep these at the end, and add every new schema
@@ -550,71 +575,5 @@ func registerMigrations(on app: Application) {
     // re-run it: Fluent records each by name.
     // ---------------------------------------------------------------------
 
-    // Records the derived language on every setup that predates the rule that
-    // an assignment declares one. Full-queries `APITestSetup`.
-    app.migrations.add(BackfillDeclaredLanguage())
-
-    // Gives every copied setup the shared support directory the copy paths
-    // never wrote. Full-queries `APITestSetup`.
-    app.migrations.add(BackfillSharedSupportFiles(testSetupsDirectory: app.testSetupsDirectory))
-
-    // One-time swap of every drawn gradcap for the headband: the gradcap is
-    // now kept as a completion item (docs/student-wardrobe.md, decision 4).
-    // Raw SQL that reads `users.avatar_spec`, so it must follow
-    // `CreateUsers`.
-    app.migrations.add(SwapStarterGradcapForHeadband())
-
-    // One-time fill of the tuft and tilt axes for birds stored before the
-    // axes existed; a draw into the empty slots only (#1762). Raw SQL that
-    // reads `users.avatar_spec`, so it must follow `CreateUsers`.
-    app.migrations.add(FillLateAvatarAxes())
-
-    // One-time delete of the session rows that predate `created_at`, which
-    // the reaper can never age out (#2281). Raw SQL that reads
-    // `_fluent_sessions.created_at`, so it must follow `AddSessionsCreatedAt`.
-    app.migrations.add(DeleteUndatedSessions())
-
-    // The runner a staff-requested validation run asks for (MCP
-    // `run_validation`). One optional column; existing rows keep NULL.
-    app.migrations.add(AddSubmissionTargetRunner())
-
-    // AI-assisted feedback (docs/ai-assisted-feedback.md): the course and
-    // assignment opt-in gates, then the per-student feedback rows.
-    app.migrations.add(AddAIFeedbackGates())
-    app.migrations.add(CreateReflectionFeedback())
-    // The per-staff attestation recorded on the instructor AI agents tab.
-    app.migrations.add(AddAIFeedbackAttestation())
-    // Class composite (docs/class-composite.md, slice 3): the dealt slots.
-    app.migrations.add(CreateCompositeSlots())
-    // Class composite, slice 4: the latest contribution of each student.
-    app.migrations.add(CreateCompositeContributions())
-    // Class composite, slice 6: the reference render of each slot.
-    app.migrations.add(CreateCompositeReferences())
-    app.migrations.add(CreateCompositeSpares())
-    // "Hatch a new bird" (Core/AvatarHatch.swift): the per-term hatch rows,
-    // and the bird before the last hatch.
-    app.migrations.add(CreateAvatarHatches())
-    app.migrations.add(AddUserAvatarPreviousSpec())
-    // The handle names the bird, not the enrollment (docs/student-avatars.md
-    // §3): the columns, then the one-time move. `MoveHandlesToBirds`
-    // full-queries `APIUser` and `APICourseEnrollment`, so it stays last.
-    app.migrations.add(AddUserAvatarHandle())
-    app.migrations.add(MoveHandlesToBirds())
-    // Wardrobe unlocks (docs/student-wardrobe.md, W3): the items a student
-    // has earned, kept for good.
-    app.migrations.add(CreateWardrobeUnlocks())
-    // The species each hatch came from and went to (#2593).
-    app.migrations.add(AddAvatarHatchSpecies())
-    // The lab concept on an assignment, for the concept rings.
-    app.migrations.add(AddAssignmentConcept())
-    // The course dataset library (docs/datasets-course-library.md, slice 2).
-    app.migrations.add(CreateCourseDatasets())
-    // The per-student course cohort seed (docs/datasets-course-library.md, slice 4).
-    app.migrations.add(CreateCoursePersonalizationSeeds())
-    // The award ledger (docs/achievement-rewards.md, S1): the achievements a
-    // student has earned, kept for good.
-    app.migrations.add(CreateAchievementAwards())
-    // Lab groups (docs/lab-groups.md, slice 1): group sets, groups and
-    // memberships.
-    app.migrations.add(CreateCourseGroups())
+    // (None at present: the fifth consolidation round deleted them all.)
 }

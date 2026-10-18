@@ -359,9 +359,9 @@ public enum AssignmentLanguage: String, Codable, Sendable, CaseIterable {
     /// Declaration is now a requirement, not a hint. Every door that creates an
     /// assignment answers the question — the web create page's `required`
     /// select (with an explicit "None"), MCP `create_assignment`'s required
-    /// `language`, the REST zip upload, and course-bundle import — and
-    /// `BackfillDeclaredLanguage` answered it for everything that predates the
-    /// rule. So a nil here means "the author says this has no language", which
+    /// `language`, the REST zip upload, and course-bundle import — and a
+    /// one-time migration, since deleted, answered it for everything that
+    /// predates the rule. So a nil here means "the author says this has no language", which
     /// is a real and supported state (a suite of plain `.sh` scripts), and NOT
     /// "nobody has been asked".
     ///

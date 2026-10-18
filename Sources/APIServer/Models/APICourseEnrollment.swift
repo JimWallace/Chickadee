@@ -46,8 +46,8 @@ final class APICourseEnrollment: Model, Content, @unchecked Sendable {
     var roleRaw: String?
 
     /// Legacy: the per-course handle from before a handle named the bird
-    /// (docs/student-avatars.md §3). Read only by `MoveHandlesToBirds`, which
-    /// copied it to `APIUser.avatarHandle`. Nothing else reads or writes it.
+    /// (docs/student-avatars.md §3). A one-time migration, since deleted,
+    /// copied it to `APIUser.avatarHandle`. Only the data export reads it.
     @OptionalField(key: "avatar_handle")
     var legacyAvatarHandle: String?
 

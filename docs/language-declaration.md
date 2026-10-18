@@ -18,7 +18,8 @@ call site that wants to know an assignment's language reads the declaration.
 load-bearing: **nil means the author said "none"**, which is a real and
 supported state — a suite of plain `.sh` scripts. It does not mean "nobody has
 been asked", because `languageDeclared` records that the question has an
-answer, and `BackfillDeclaredLanguage` stamped it on every assignment that
+answer, and a one-time migration (`BackfillDeclaredLanguage`, deleted in the
+fifth migration consolidation round) stamped it on every assignment that
 predates the rule.
 
 Conflating those two states is where every silent misroute in this arc came
@@ -88,12 +89,14 @@ produce the incoherent `uploadOnly` + `browser` pair.
 ### The one remaining sniff
 
 `AssignmentLanguage.derivedDeclaration` is derivation, deliberately not named
-`resolve`. Three callers, all boundaries where content arrives with no author
+`resolve`. Two callers, both boundaries where content arrives with no author
 answer attached:
 
 1. the REST zip upload,
-2. course-bundle import,
-3. `BackfillDeclaredLanguage` (one-time).
+2. course-bundle import.
+
+A third caller, the one-time `BackfillDeclaredLanguage` migration, ran on every
+deployed database and was deleted in the fifth migration consolidation round.
 
 Each **records the result immediately**, so the guess is made once and becomes a
 declaration. Precedence is the old resolution order — a graded script's
@@ -246,7 +249,8 @@ Closed:
 - `resolve(manifest:)` reads the declaration only; the sniff is gone from every
   read path.
 - `rederive`, `isRNotebook`, `isRNotebookMetadata` deleted.
-- All four creation doors declare; `BackfillDeclaredLanguage` covers the rest.
+- All four creation doors declare; `BackfillDeclaredLanguage` covered the rest
+  (since deleted, after it had run everywhere).
 - The seventeen `language:` parameter defaults are gone and guarded.
 - The browser runner boots only the declared language's substrate
   (`ensureReady`), rather than every kind present.
