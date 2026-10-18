@@ -38,7 +38,7 @@ enum ElementaryPageFixtures {
         [adminUserPage, loginPage, registerPage] + historyPages + mcpLtiPages + studentPages
             + adminIntegrationPages + adminCorePages + adminDataPages
             + instructorIntegrationPages + instructorOverviewPages + instructorPeoplePages + submissionsPages
-            + studentPagesPages + leaderboardPages + notebookPages + editorPages + workbenchPages
+            + studentPagesPages + leaderboardPages + notebookPages + editorPages + workbenchPages + datasetPages
     }
 
     // MARK: - Shared values

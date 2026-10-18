@@ -16,7 +16,7 @@ states what it adds and what proves it.
 | 2 | Server: the `course_datasets` and `course_dataset_versions` tables, the blob-backed store, `CourseDatasetService` | built |
 | 3 | Attachment: copy a pinned version into the setup zip and record the source; promote a support file into the library; detect a newer version | built |
 | 4 | Course cohort: the per-(student, course) seed, and `DatasetResolver` choosing the seed per spec at every delivery path | built |
-| 5 | Instructor surfaces: the Datasets tab, the Files-panel picker and the scope control | proposed |
+| 5 | Instructor surfaces: the Datasets tab (5a), the Files-panel picker and the scope control (5b) | 5a built; 5b proposed |
 | 6 | Student surfaces: the course Data page, the assignment-page dataset line, the "my rows" download | proposed |
 | 7 | MCP: `list_datasets`, `get_dataset`, `create_dataset`, `update_dataset`, `add_dataset_version`, `attach_dataset`, `detach_dataset`; `set_dataset` gains `scope` | proposed |
 | 8 | Lifecycle: course clone, bundle export and import, storage page, purge | proposed |
@@ -407,15 +407,42 @@ spare's pinned seeds) and `DatasetCourseSeedCallSiteTests` in `APITests`.
 
 ### 4.5 Instructor surfaces (slice 5)
 
-**The Datasets tab** (`/instructor/datasets`, `InstructorTab.datasets`,
-`InstructorDatasetsPage`). A list of the course's datasets: name, slug,
-current version, size, row count, published state, and the assignments that
-use it with their pinned versions. Per dataset: edit metadata and the
-dictionary, add a version with a note, publish or unpublish, delete (when
-unused). The page follows the titlebar pattern in `docs/ui-design.md` and is
-reviewed by `ui-review`.
+**The Datasets tab (5a, built).** `InstructorTab.datasets` sits after Slip
+days. Two pages, both on the active course:
 
-**The Files panel** gains one control beside the upload: "Attach from the
+| Page | Route | Shows |
+|---|---|---|
+| `InstructorDatasetsPage` (instructor tabbed) | `GET /instructor/datasets` | Each dataset: name, slug, newest version, row count, size, how many assignments attach it, published state. "New dataset" opens the upload form. |
+| `InstructorDatasetPage` (titlebar) | `GET /instructor/datasets/view?slug=` | The facts and their Edit form, the data dictionary of the newest version, every version with its download, and the assignments that attach it with a "v3 available" chip when one pins an older version. Publish, Unpublish and Delete are in the title bar. |
+
+The writes are form POSTs to `/instructor/datasets` (create),
+`/instructor/datasets/versions`, `/metadata`, `/dictionary`, `/publish` and
+`/delete`, and each one redirects back with a notice or the service's error.
+`GET /instructor/datasets/download?slug=&version=` returns one version's bytes
+as `<slug>-v<n>.csv`.
+
+- **The slug travels in the query or the form, not the path.** Every lookup is
+  `CourseDatasetService.find(courseID:slug:)` on the active course, so a slug
+  of another course is not found. The routes have no path parameter, so they
+  are not rows of the route authorization matrix; the `/instructor` gate
+  admits course staff to read, as for the Slip days tab.
+- **A dataset is content.** Every write needs a TA or above in a course that
+  is not archived (`requireCourseWriteAccess(atLeast: .ta)`), as a content
+  item does. An archived course is never the active course, so its tab does
+  not open.
+- **A blank slug is made from the name** (`CourseDatasetService.suggestedSlug`):
+  lowercase ASCII letters and digits, one hyphen for each run of other
+  characters.
+- **The list page reads the course's manifests once**
+  (`CourseDatasetService.usageCounts`) and the newest versions in one query,
+  so its cost does not grow with the number of datasets times assignments.
+- The pages use shared classes only, so the page `<style>` ratchet does not
+  move.
+
+Tests: `InstructorDatasetsTabTests`, and the two fixtures in
+`ElementaryPageFixtures+Datasets.swift`.
+
+**The Files panel (5b).** It gains one control beside the upload: "Attach from the
 course library", a select of published and unpublished datasets. An attached
 row shows the source (`from VitalDB cases v2`), a "v3 available: update"
 action when behind, and a "same rows in every assignment" checkbox for the

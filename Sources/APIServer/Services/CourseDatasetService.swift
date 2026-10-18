@@ -153,6 +153,38 @@ enum CourseDatasetService {
         }
     }
 
+    /// The newest version of each dataset, by dataset ID, in one query.
+    static func newestVersions(
+        of datasets: [APICourseDataset], on db: any Database
+    ) async throws -> [UUID: APICourseDatasetVersion] {
+        let ids = try datasets.map { try $0.requireID() }
+        guard !ids.isEmpty else { return [:] }
+        let current = Dictionary(
+            try datasets.map { (try $0.requireID(), $0.currentVersion) }, uniquingKeysWith: { first, _ in first })
+        let versions = try await APICourseDatasetVersion.query(on: db)
+            .filter(\.$datasetID ~~ ids)
+            .all()
+        return Dictionary(
+            versions.filter { current[$0.datasetID] == $0.version }.map { ($0.datasetID, $0) },
+            uniquingKeysWith: { first, _ in first })
+    }
+
+    /// How many assignments and drafts of the course attach each dataset, by
+    /// slug. One read of the course's manifests, for the list page.
+    static func usageCounts(courseID: UUID, on db: any Database) async throws -> [String: Int] {
+        let setups = try await APITestSetup.query(on: db)
+            .filter(\.$courseID == courseID)
+            .all()
+        var counts: [String: Int] = [:]
+        for setup in setups {
+            let slugs = Set((setup.decodedManifest()?.datasets ?? []).compactMap(\.source?.slug))
+            for slug in slugs {
+                counts[slug, default: 0] += 1
+            }
+        }
+        return counts
+    }
+
     // MARK: - Writing
 
     /// Creates a dataset whose version 1 is `upload`. The dataset starts
@@ -320,6 +352,22 @@ enum CourseDatasetService {
         let slug = raw.trimmingCharacters(in: .whitespaces)
         guard slug.wholeMatch(of: slugPattern) != nil else { throw CourseDatasetError.invalidSlug(raw) }
         return slug
+    }
+
+    /// A slug made from a dataset name: lowercase letters and digits, with
+    /// one hyphen for each run of other characters. Empty when the name has
+    /// no letter or digit, so `validatedSlug` refuses it.
+    static func suggestedSlug(from name: String) -> String {
+        var slug = ""
+        for character in name.lowercased() {
+            if character.isASCII, character.isLetter || character.isNumber {
+                slug.append(character)
+            } else if !slug.isEmpty, slug.last != "-" {
+                slug.append("-")
+            }
+        }
+        let capped = String(slug.prefix(64))
+        return capped.trimmingCharacters(in: CharacterSet(charactersIn: "-"))
     }
 
     private static func validatedName(_ raw: String) throws -> String {
