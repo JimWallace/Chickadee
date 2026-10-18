@@ -27,6 +27,9 @@ struct InstructorStudentsPage: HTML {
     let rosterReadOnly: Bool
     /// The "Add staff member" panel's fields.
     let staffForm: StaffFieldsContext
+    /// True when the course has a group set: the students table then has a
+    /// Group column (docs/lab-groups.md).
+    var showsGroups = false
 
     var body: some HTML {
         BaseLayout(title: "Students", page: page, flash: flash) {
@@ -57,7 +60,8 @@ struct InstructorStudentsPage: HTML {
                             label(.class("filter-label"), .for("enrolled-filter")) { "Filter" }
                             input(
                                 .id("enrolled-filter"), .class("form-input filter-input"), .type(.search),
-                                .placeholder("Filter by name or username…"),
+                                .placeholder(
+                                    showsGroups ? "Filter by name, username or group…" : "Filter by name or username…"),
                                 .data("list-filter", value: "enrolled-students-table"),
                                 .data("list-filter-empty", value: "No students match this filter."))
                         }
@@ -187,6 +191,7 @@ struct InstructorStudentsPage: HTML {
                 col(.class("section-items-tile"))
                 col()
                 col(.class("section-items-status"))
+                if showsGroups { col(.class("section-items-status col-hide-phone")) }
                 col(.class("section-items-seen col-hide-phone"))
                 col(.class("section-items-actions"))
             }
@@ -195,12 +200,15 @@ struct InstructorStudentsPage: HTML {
                     th(.custom(name: "scope", value: "col")) { span(.class("visually-hidden")) { "Person" } }
                     SortHeader(key: "name", type: "text", label: "Name")
                     SortHeader(key: "role", type: "text", label: "Role")
+                    if showsGroups { SortHeader(key: "group", type: "text", label: "Group", hideOnPhone: true) }
                     SortHeader(key: "last-seen", type: "date", label: "Last seen", hideOnPhone: true)
                     th(.custom(name: "scope", value: "col")) { span(.class("visually-hidden")) { "Actions" } }
                 }
             }
             tbody {
-                StudentRows(students: students, rosterReadOnly: rosterReadOnly, csrfToken: page.csrfToken)
+                StudentRows(
+                    students: students, rosterReadOnly: rosterReadOnly, csrfToken: page.csrfToken,
+                    showsGroups: showsGroups)
             }
         }
     }

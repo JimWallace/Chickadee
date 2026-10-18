@@ -1,0 +1,24 @@
+// APIServer/Routes/Web/GroupSetPanel.swift
+//
+// The Groups tab's view of one group set (docs/lab-groups.md, slice 1).
+
+struct GroupSetPanel: Sendable {
+    /// One group with its number of enrolled students.
+    struct Row: Sendable {
+        let id: String
+        let name: String
+        let memberCount: Int
+
+        /// "1 student" or "24 students".
+        var countText: String { memberCount == 1 ? "1 student" : "\(memberCount) students" }
+    }
+
+    let id: String
+    let name: String
+    /// True for a manual set, the only kind Chickadee edits.
+    let isManual: Bool
+    let groups: [Row]
+    /// Enrolled students, and those of them in no group of the set.
+    let studentCount: Int
+    let ungroupedCount: Int
+}

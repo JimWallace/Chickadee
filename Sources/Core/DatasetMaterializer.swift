@@ -254,7 +254,7 @@ public enum DatasetMaterializer {
     /// neighbouring column's values as the strata and silently stratify by the
     /// wrong thing. Embedded newlines remain out of scope — a record is a
     /// physical line, as `sampleRows` has always assumed.
-    static func splitCSVLine(_ line: Substring) -> [String] {
+    public static func splitCSVLine(_ line: Substring) -> [String] {
         var fields: [String] = []
         var current = ""
         var inQuotes = false

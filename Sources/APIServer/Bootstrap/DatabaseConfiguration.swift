@@ -614,4 +614,7 @@ func registerMigrations(on app: Application) {
     // The award ledger (docs/achievement-rewards.md, S1): the achievements a
     // student has earned, kept for good.
     app.migrations.add(CreateAchievementAwards())
+    // Lab groups (docs/lab-groups.md, slice 1): group sets, groups and
+    // memberships.
+    app.migrations.add(CreateCourseGroups())
 }
