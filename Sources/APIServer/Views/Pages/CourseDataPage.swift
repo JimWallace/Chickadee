@@ -16,9 +16,11 @@ struct CourseDataPage: HTML {
     var body: some HTML {
         BaseLayout(title: "Data — \(courseCode)", page: page) {
             h1 { "Data" }
-            p(.class("section-intro")) { "The datasets that the assignments in \(courseCode) use." }
+            p(.class("section-intro")) { "The datasets published for the assignments in \(courseCode)." }
             if datasets.isEmpty {
                 p(.class("empty")) { "No datasets yet." }
+                p(.class("section-note")) { "A dataset appears here when an instructor publishes it." }
+                p { a(.href("/")) { "Back to your assignments" } }
             } else {
                 for dataset in datasets {
                     CourseDataSection(dataset: dataset)
@@ -61,14 +63,45 @@ private struct CourseDataSection: HTML {
             }
             h3 { "Your rows" }
             if dataset.downloads.isEmpty {
-                p(.class("empty")) { "No open assignment uses this dataset yet." }
+                p(.class("empty")) { "No assignment you can open uses this dataset yet." }
             } else {
-                ul {
-                    for download in dataset.downloads {
-                        li {
-                            a(.href(download.href)) { download.assignmentTitle }
-                            " · "
-                            code { download.filename }
+                CourseDataDownloads(downloads: dataset.downloads)
+            }
+        }
+    }
+}
+
+/// The viewer's rows in each assignment, in the shared row shape: the
+/// assignment, the file, and a Download button in the actions track.
+private struct CourseDataDownloads: HTML {
+    let downloads: [CourseDataEntry.Download]
+
+    var body: some HTML {
+        table(.class("results-table section-items")) {
+            thead(.class("visually-hidden")) {
+                tr {
+                    th(.custom(name: "scope", value: "col")) { "Assignment" }
+                    th(.custom(name: "scope", value: "col")) { "Download" }
+                }
+            }
+            tbody {
+                for download in downloads {
+                    tr {
+                        td(.class("item-main")) {
+                            div(.class("item-title")) { download.assignmentTitle }
+                            div(.class("item-details")) { code { download.filename } }
+                        }
+                        td(.class("item-actions-td")) {
+                            div(.class("assignment-actions-cell")) {
+                                a(
+                                    .class("btn action-btn"), .href(download.href),
+                                    .ariaLabel(
+                                        "Download your rows of \(download.filename) in \(download.assignmentTitle)")
+                                ) {
+                                    Icon("i-download")
+                                    "Download"
+                                }
+                            }
                         }
                     }
                 }

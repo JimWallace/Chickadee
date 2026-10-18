@@ -231,8 +231,7 @@ extension WebRoutes {
     ) async throws -> String? {
         let slugs = Set((manifest?.datasets ?? []).compactMap(\.source?.slug))
         guard !slugs.isEmpty, let course = try await APICourse.find(courseID, on: db) else { return nil }
-        let published = try await CourseDatasetService.list(courseID: courseID, on: db)
-            .contains { $0.isPublished && slugs.contains($0.slug) }
+        let published = try await CourseDatasetService.hasPublished(courseID: courseID, slugs: slugs, on: db)
         return published ? "/data/\(urlEncode(course.urlKey))" : nil
     }
 

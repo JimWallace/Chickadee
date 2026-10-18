@@ -238,7 +238,7 @@ struct WebRoutes: RouteCollection {
         courseState: ResolvedCourseState, on db: any Database
     ) async throws -> String? {
         guard let courseID = courseState.activeCourseUUID, let urlKey = courseState.active?.urlKey else { return nil }
-        let published = try await CourseDatasetService.list(courseID: courseID, on: db).contains(where: \.isPublished)
+        let published = try await CourseDatasetService.hasPublished(courseID: courseID, on: db)
         return published ? "/data/\(urlEncode(urlKey))" : nil
     }
 

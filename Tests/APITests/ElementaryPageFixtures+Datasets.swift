@@ -22,7 +22,7 @@ extension ElementaryPageFixtures {
     static var courseDataPage: ElementaryPageFixture {
         let published = CourseDataEntry(
             name: "Ward cases", description: "Admissions by ward.", provenance: "Hospital extract",
-            licence: "Course use only", isPublished: true, rowsText: "1204 rows in v2",
+            licence: "Course use only", isPublished: true, rowsText: "1204 rows",
             columns: [
                 DatasetColumn(name: "ward", valueType: .text, description: "Hospital ward"),
                 DatasetColumn(name: "systolic", valueType: .integer, unit: "mmHg"),
@@ -34,7 +34,7 @@ extension ElementaryPageFixtures {
             ])
         let unpublished = CourseDataEntry(
             name: "Draft data", description: nil, provenance: nil, licence: nil, isPublished: false,
-            rowsText: "30 rows in v1", columns: [], downloads: [])
+            rowsText: "30 rows", columns: [], downloads: [])
         return ElementaryPageFixture(
             typeName: "CourseDataPage",
             archetype: .plainStudentPage,

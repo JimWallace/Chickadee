@@ -508,18 +508,20 @@ course.
   unless every student receives the whole file (decision 2). The seeds are
   issued on first use, as an editor open or a submission issues them.
 - **Who sees what.** A student sees published datasets only, and only the
-  assignments they can open (`assignmentVisibleToStudentByState`); the
-  download refuses an assignment they cannot open. Staff see unpublished
-  datasets, marked, and every assignment. The download needs no published
-  dataset, because the student already receives those rows.
+  assignments they may read: the assignment is open for them (an extension
+  counts), or `studentMayViewClosedAssignment` admits them (visible by its
+  state, or opened before). That function is the rule of
+  `closedAssignmentGate` too, without its first-access record. So the upload
+  page never links to a download that refuses. Staff see
+  unpublished datasets, marked, and every assignment. The download needs no
+  published dataset, because the student already receives those rows. It is
+  sent with `Cache-Control: private, no-store`.
 - **Links.** The dashboard links to the Data page when the active course has a
   published dataset. The upload page (`SubmitPage`) lists each dataset file of
   the assignment with its row count and a download, and links to the Data
   page when a file comes from a published library dataset. A notebook
   assignment's student has the file in the editor already; the Data page
   serves them too.
-- **Known gap:** an assignment the student reaches only through an extension
-  after its close is not listed and cannot be downloaded from.
 
 Tests: `StudentDataRoutesTests`, and the `CourseDataPage` and upload-page
 fixtures in `ElementaryPageFixtures+Datasets.swift`.

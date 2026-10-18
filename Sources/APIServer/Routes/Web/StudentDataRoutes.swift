@@ -11,8 +11,8 @@
 // and hide an assignment whose slug is "data".
 //
 // Both routes need an enrollment in the course. A student sees published
-// datasets only, and only the assignments they can open; staff see both in
-// full. The download serves the bytes the grader gives the viewer
+// datasets only, and only the assignments they may read (`mayRead`); staff
+// see both in full. The download serves the bytes the grader gives the viewer
 // (`StudentDatasetDelivery`), so it is never the pool unless every student
 // receives the whole file (decision 2).
 
@@ -41,17 +41,19 @@ struct StudentDataRoutes: RouteCollection {
         }
         try await req.cachedRequireCourseEnrollment(caller: user, courseID: courseID)
         let isStaff = try await req.cachedIsCourseStaff(user, inCourse: courseID)
+        guard let userID = user.id else { throw AppError.notFound(resource: "Course") }
 
         let datasets = try await CourseDatasetService.list(courseID: courseID, on: req.db)
             .filter { isStaff || $0.isPublished }
         let newest = try await CourseDatasetService.newestVersions(of: datasets, on: req.db)
-        let downloads = try await Self.downloadsBySlug(courseID: courseID, isStaff: isStaff, on: req.db)
+        let downloads = try await Self.downloadsBySlug(
+            courseID: courseID, user: user, userID: userID, isStaff: isStaff, req: req)
         let entries = try datasets.map { dataset in
             let version = newest[try dataset.requireID()]
             return CourseDataEntry(
                 name: dataset.name, description: dataset.datasetDescription, provenance: dataset.provenance,
                 licence: dataset.licence, isPublished: dataset.isPublished,
-                rowsText: version.map { "\(InstructorDatasetDetail.rowsText($0.rowCount)) in v\($0.version)" } ?? "",
+                rowsText: version.map { InstructorDatasetDetail.rowsText($0.rowCount) } ?? "",
                 columns: version?.columns ?? [], downloads: downloads[dataset.slug] ?? [])
         }
         let page = try await PageRequestContext.courseAware(req)
@@ -60,20 +62,21 @@ struct StudentDataRoutes: RouteCollection {
         }.encodeResponse(for: req)
     }
 
-    /// For each dataset slug, a download for every assignment the viewer can
-    /// open that attaches it, by assignment title.
+    /// For each dataset slug, a download for every assignment the viewer may
+    /// read that attaches it, by assignment title.
     private static func downloadsBySlug(
-        courseID: UUID, isStaff: Bool, on db: any Database
+        courseID: UUID, user: APIUser, userID: UUID, isStaff: Bool, req: Request
     ) async throws -> [String: [CourseDataEntry.Download]] {
-        let setups = try await APITestSetup.query(on: db).filter(\.$courseID == courseID).all()
-        let assignments = try await APIAssignment.query(on: db).filter(\.$courseID == courseID).all()
+        let setups = try await APITestSetup.query(on: req.db).filter(\.$courseID == courseID).all()
+        let assignments = try await APIAssignment.query(on: req.db).filter(\.$courseID == courseID).all()
         let bySetup = Dictionary(assignments.map { ($0.testSetupID, $0) }, uniquingKeysWith: { first, _ in first })
         var downloads: [String: [CourseDataEntry.Download]] = [:]
         for setup in setups {
-            guard let setupID = setup.id, let assignment = bySetup[setupID],
-                isStaff || assignmentVisibleToStudentByState(assignment)
+            let specs = setup.decodedManifest()?.datasets ?? []
+            guard let setupID = setup.id, let assignment = bySetup[setupID], !specs.isEmpty,
+                try await mayRead(assignment, user: user, userID: userID, isStaff: isStaff, req: req)
             else { continue }
-            for spec in setup.decodedManifest()?.datasets ?? [] {
+            for spec in specs {
                 guard let slug = spec.source?.slug else { continue }
                 downloads[slug, default: []].append(
                     .init(
@@ -82,6 +85,20 @@ struct StudentDataRoutes: RouteCollection {
             }
         }
         return downloads.mapValues { $0.sorted { $0.assignmentTitle < $1.assignmentTitle } }
+    }
+
+    /// Whether the viewer may read the data of `assignment`: the rule of
+    /// `closedAssignmentGate`, without its first-access record. Staff always
+    /// may; a student when the assignment is open for them (an extension
+    /// counts) or `studentMayViewClosedAssignment` admits them. The upload
+    /// page is behind that gate, so its links to the student's rows never
+    /// lead to a 404.
+    private static func mayRead(
+        _ assignment: APIAssignment, user: APIUser, userID: UUID, isStaff: Bool, req: Request
+    ) async throws -> Bool {
+        if isStaff { return true }
+        if try await isAssignmentEffectivelyOpen(assignment, for: user, req: req) { return true }
+        return try await studentMayViewClosedAssignment(assignment, userID: userID, on: req.db)
     }
 
     // MARK: - GET /testsetups/:testSetupID/data/:filename/mine.csv
@@ -101,7 +118,7 @@ struct StudentDataRoutes: RouteCollection {
             throw AppError.notFound(resource: "Dataset")
         }
         let isStaff = try await req.cachedIsCourseStaff(user, inCourse: setup.courseID)
-        guard isStaff || assignmentVisibleToStudentByState(assignment),
+        guard try await Self.mayRead(assignment, user: user, userID: userID, isStaff: isStaff, req: req),
             let csv = try await StudentDatasetDelivery.file(
                 named: filename, setup: setup, assignment: assignment, userID: userID,
                 testSetupsDirectory: req.application.testSetupsDirectory, on: req.db)
@@ -114,6 +131,8 @@ struct StudentDataRoutes: RouteCollection {
         // end the header value early.
         let safeName = filename.replacingOccurrences(of: "\"", with: "_")
         response.headers.replaceOrAdd(name: .contentDisposition, value: "attachment; filename=\"\(safeName)\"")
+        // The rows are this student's own; no shared cache may keep them.
+        response.headers.replaceOrAdd(name: .cacheControl, value: "private, no-store")
         return response
     }
 }

@@ -21,7 +21,7 @@ struct CourseDataEntry: Sendable {
     let licence: String?
     /// Staff see an unpublished dataset, marked as such; students never do.
     let isPublished: Bool
-    /// "1204 rows in v2"
+    /// "1204 rows", of the newest version
     let rowsText: String
     /// The newest version's dictionary.
     let columns: [DatasetColumn]

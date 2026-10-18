@@ -32,7 +32,7 @@ struct IndexPage: HTML {
                 }
             }
             if let dataPageHref {
-                p(.class("section-note")) { a(.href(dataPageHref)) { "The datasets this course uses" } }
+                p { a(.href(dataPageHref)) { "Course data" } }
             }
             if !hasAny {
                 if activeCourse != nil {

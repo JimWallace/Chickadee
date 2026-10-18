@@ -67,6 +67,25 @@ import VaporTesting
         return Fixture(courseKey: course.urlKey, setupID: setupID, assignment: assignment)
     }
 
+    /// The course seed of `username` and the `lib.csv` the grader resolves
+    /// for them.
+    private func resolved(
+        for username: String, fx: Fixture, on app: Application
+    ) async throws -> (courseSeed: String, csv: String?) {
+        let user = try #require(try await APIUser.query(on: app.db).filter(\.$username == username).first())
+        let setup = try #require(try await APITestSetup.find(fx.setupID, on: app.db))
+        let manifest = try #require(setup.decodedManifest())
+        let seed = try await AssignmentSeedStore.ensureSeed(
+            userID: try user.requireID(), assignmentID: try fx.assignment.requireID(), on: app.db)
+        let courseSeed = try #require(
+            try await CourseSeedStore.seedIfNeeded(
+                manifest: manifest, userID: try user.requireID(), courseID: setup.courseID, on: app.db))
+        let files = DatasetResolver.resolve(
+            manifest: manifest, seedHex: seed, courseSeedHex: courseSeed,
+            sourceDirectory: app.testSetupsDirectory + "shared/\(fx.setupID)/")
+        return (courseSeed, files?["lib.csv"])
+    }
+
     private func get(_ path: String, cookie: String, on app: Application) async throws -> (HTTPStatus, String) {
         var result: (HTTPStatus, String) = (.imATeapot, "")
         try await app.asyncTest(
@@ -86,7 +105,7 @@ import VaporTesting
             #expect(status == .ok)
             #expect(html.contains("Ward cases"))
             #expect(html.contains("Hospital extract"))
-            #expect(html.contains("6 rows in v1"))
+            #expect(html.contains("6 rows"))
             #expect(html.contains("/testsetups/\(fx.setupID)/data/lib.csv/mine.csv"))
             #expect(!html.contains("Draft data"))
         }
@@ -142,6 +161,93 @@ import VaporTesting
             #expect(csv == graded?["lib.csv"])
             // A 3-row sample under the header.
             #expect(csv.split(separator: "\n").count == 4)
+        }
+    }
+
+    /// Each student's download is the resolver's output for that student's
+    /// own seeds. Two students can draw the same 3 rows by chance, so the
+    /// test compares each download with its own resolution, not the two
+    /// downloads with each other.
+    @Test func eachStudentDownloadsTheRowsResolvedForThem() async throws {
+        try await withAssignmentRoutesApp { app in
+            let fx = try await fixture(on: app)
+            var seeds: Set<String> = []
+            for username in ["sdr_student_a", "sdr_student_b"] {
+                let cookie = try await loginAsStudent(username, on: app)
+                let (status, csv) = try await get(
+                    "/testsetups/\(fx.setupID)/data/lib.csv/mine.csv", cookie: cookie, on: app)
+                #expect(status == .ok)
+                let (courseSeed, graded) = try await resolved(for: username, fx: fx, on: app)
+                seeds.insert(courseSeed)
+                #expect(csv == graded)
+            }
+            #expect(seeds.count == 2)
+        }
+    }
+
+    @Test func staffCanDownloadTheirOwnRows() async throws {
+        try await withAssignmentRoutesApp { app in
+            let cookie = try await arLoginAsInstructor(on: app)
+            let fx = try await fixture(on: app, isOpen: false)
+            let (status, csv) = try await get(
+                "/testsetups/\(fx.setupID)/data/lib.csv/mine.csv", cookie: cookie, on: app)
+            #expect(status == .ok)
+            #expect(csv.split(separator: "\n").count == 4)
+        }
+    }
+
+    /// A student who opened an assignment before it closed may still read
+    /// its data, as they may still open its upload page.
+    @Test func aStudentWhoOpenedAClosedAssignmentCanStillDownload() async throws {
+        try await withAssignmentRoutesApp { app in
+            let cookie = try await arLoginAsStudent(on: app)
+            let fx = try await fixture(on: app, isOpen: false)
+            let student = try #require(
+                try await APIUser.query(on: app.db).filter(\.$username == "teststudent").first())
+            try await AssignmentParticipationStore.recordFirstAccess(
+                userID: try student.requireID(), assignmentID: try fx.assignment.requireID(), on: app.db)
+
+            let href = "/testsetups/\(fx.setupID)/data/lib.csv/mine.csv"
+            let (status, _) = try await get(href, cookie: cookie, on: app)
+            #expect(status == .ok)
+            let (_, html) = try await get("/data/\(fx.courseKey)", cookie: cookie, on: app)
+            #expect(html.contains(href))
+        }
+    }
+
+    /// An extension reopens a closed assignment for one student, so that
+    /// student may read its data and the Data page lists the download.
+    @Test func anExtensionOpensTheDataOfAClosedAssignment() async throws {
+        try await withAssignmentRoutesApp { app in
+            let cookie = try await arLoginAsStudent(on: app)
+            let fx = try await fixture(on: app, isOpen: false)
+            let student = try #require(
+                try await APIUser.query(on: app.db).filter(\.$username == "teststudent").first())
+            try await APIAssignmentExtension(
+                assignmentID: try fx.assignment.requireID(), userID: try student.requireID(),
+                extendedDueAt: Date().addingTimeInterval(86_400)
+            ).save(on: app.db)
+
+            let href = "/testsetups/\(fx.setupID)/data/lib.csv/mine.csv"
+            let (status, _) = try await get(href, cookie: cookie, on: app)
+            #expect(status == .ok)
+            let (_, html) = try await get("/data/\(fx.courseKey)", cookie: cookie, on: app)
+            #expect(html.contains(href))
+        }
+    }
+
+    @Test func theDownloadIsAPrivateAttachment() async throws {
+        try await withAssignmentRoutesApp { app in
+            let cookie = try await arLoginAsStudent(on: app)
+            let fx = try await fixture(on: app)
+            var headers = HTTPHeaders()
+            try await app.asyncTest(
+                .GET, "/testsetups/\(fx.setupID)/data/lib.csv/mine.csv",
+                beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
+                afterResponse: { res in headers = res.headers })
+            #expect(headers.first(name: .cacheControl) == "private, no-store")
+            #expect(headers.first(name: .contentDisposition) == "attachment; filename=\"lib.csv\"")
+            #expect(headers.first(name: .contentType)?.hasPrefix("text/csv") == true)
         }
     }
 

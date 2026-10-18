@@ -74,13 +74,15 @@ struct SubmitPage: HTML {
             "Your data: "
             for (index, dataset) in datasets.enumerated() {
                 if index > 0 { ", " }
-                a(.href(dataset.href)) { code { dataset.filename } }
+                a(.href(dataset.href), .ariaLabel("Download your rows of \(dataset.filename)")) {
+                    code { dataset.filename }
+                }
                 " (\(dataset.rowsText))"
             }
             "."
             if let dataPageHref {
                 " "
-                a(.href(dataPageHref)) { "About the data" }
+                a(.href(dataPageHref)) { "Course data" }
             }
         }
     }
