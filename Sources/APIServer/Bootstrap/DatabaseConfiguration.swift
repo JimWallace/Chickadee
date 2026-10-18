@@ -620,4 +620,5 @@ func registerMigrations(on app: Application) {
     // Lab groups, slice 2: per-group activity sessions and their attendance.
     app.migrations.add(CreateActivitySessions())
     app.migrations.add(AddActivitySessionNetworks())
+    app.migrations.add(AddLeaderboardEntryGroup())
 }

@@ -56,6 +56,23 @@ enum ActivitySessionStore {
         return open.first { $0.id == latest.sessionID }
     }
 
+    /// The session a submission was made in: the one the student played in
+    /// when they submitted, by the submission's own time, so a grading delay
+    /// costs no student their place. Nil when the submission is unknown or
+    /// was made with no session open.
+    static func sessionAtSubmission(
+        testSetupID: String, userID: UUID, submissionID: String, on db: any Database
+    ) async throws -> APIActivitySession? {
+        guard let submission = try await APISubmission.find(submissionID, on: db),
+            let submittedAt = submission.submittedAt,
+            let assignmentID = try await APIAssignment.query(on: db)
+                .filter(\.$testSetupID == testSetupID)
+                .first()?.id
+        else { return nil }
+        return try await currentSession(
+            assignmentID: assignmentID, userID: userID, now: submittedAt, on: db)
+    }
+
     // MARK: - Writes
 
     /// Starts the group's session, or reopens an ended one with a new code

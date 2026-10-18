@@ -20,12 +20,13 @@ extension WebRoutes {
     /// Renders Present mode. The caller has already checked that the viewer is
     /// course staff and that the setup has a leaderboard activity.
     func leaderboardPresentPage(
-        req: Request, user: APIUser, setup: APITestSetup, activity: ClassActivity
+        req: Request, user: APIUser, setup: APITestSetup, activity: ClassActivity, groupSession: GroupSessionPanel?
     ) async throws -> Response {
         let setupID = setup.id ?? ""
         let assignment = try await assignmentByTestSetupID(setupID, on: req.db)
         let course = try await APICourse.find(setup.courseID, on: req.db)
         let aggregation = activity.kind.aggregation
+        let groupID = groupSession.flatMap { UUID(uuidString: $0.selectedGroupID) }
 
         // Nameless like a student view, locking no handle like a staff one.
         // Staff decide what they project and when, and opening the page to
@@ -66,7 +67,7 @@ extension WebRoutes {
             // Named rather than left to a catch-all arm, so a fifth
             // aggregation does not render the metric board silently (#1745).
             let board = try await buildLeaderboard(
-                setup: setup, reader: reader, showAll: true, on: req.db)
+                setup: setup, reader: reader, showAll: true, groupID: groupID, on: req.db)
             places = board.rows.map {
                 PresentPlace(
                     rank: $0.rank, rankText: $0.rankText, rankTier: $0.rankTier, handle: $0.handle,
@@ -123,7 +124,7 @@ extension WebRoutes {
             // A finished tournament cannot change, so its wall stops saying Live.
             pollsLive: tournament?.isComplete != true
                 && (activity.window.map { $0.state(at: Date()) != .afterClose } ?? true),
-            pollURL: "\(boardURL)?present=1&fragment=present",
+            pollURL: "\(boardURL)?present=1&fragment=present\(groupID.map { "&group=\($0)" } ?? "")",
             boardURL: boardURL,
             arenaSetupID: aggregation == .bracket && playsInArena(setup) ? setupID : nil,
             compositeStage: compositeProgress?.stage)
@@ -131,8 +132,6 @@ extension WebRoutes {
         // `?fragment=present` renders the SAME view the page renders inline,
         // so the refresh cannot drift from what it replaces.
         guard req.query[String.self, at: "fragment"] == "present" else {
-            let groupSession = try await GroupSessionPanel.make(
-                req: req, user: user, activity: activity, assignment: assignment, courseID: setup.courseID)
             return try await HTMLResponse {
                 LeaderboardPresentPage(
                     page: PageRequestContext(request: req), board: presentation, groupSession: groupSession)
@@ -153,7 +152,12 @@ extension WebRoutes {
         if req.query[String.self, at: "fragment"] == "join" {
             return try await presentJoinFragment(req: req, user: user, setup: setup, activity: activity)
         }
-        return try await leaderboardPresentPage(req: req, user: user, setup: setup, activity: activity)
+        // A per-group activity projects one lab group's board and session.
+        let assignment = try await assignmentByTestSetupID(setup.id ?? "", on: req.db)
+        let groupSession = try await GroupSessionPanel.make(
+            req: req, user: user, activity: activity, assignment: assignment, courseID: setup.courseID)
+        return try await leaderboardPresentPage(
+            req: req, user: user, setup: setup, activity: activity, groupSession: groupSession)
     }
 
     /// `?present=1&fragment=join`: the join code box alone, refreshed every

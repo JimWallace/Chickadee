@@ -4,7 +4,8 @@
 // (docs/class-activities.md). The fixed chrome is here: the title, the kind
 // chip, the staff visibility form and Present link, and the intro. The part
 // that moves is `LeaderboardBody`, which refreshes from `?fragment=body` while
-// a session window is live.
+// a session window is live, or while the lab group's session is open for an
+// activity that runs per group (`LeaderboardGroupControl` picks the group).
 
 import Elementary
 
@@ -23,6 +24,9 @@ struct LeaderboardPage: HTML {
                     h2 { "Leaderboard" }
                     div(.class("toolbar")) {
                         span(.class("chip")) { board.kindLabel }
+                        if let scope = board.groupScope {
+                            LeaderboardGroupControl(scope: scope, boardURL: board.boardURL)
+                        }
                         if board.isStaff {
                             visibilityForm
                             a(
