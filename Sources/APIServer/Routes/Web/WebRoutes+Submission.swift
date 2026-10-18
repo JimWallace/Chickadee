@@ -203,6 +203,7 @@ extension WebRoutes {
         let githubSubmitURL =
             try await GitHubSubmissionOffer.isOffered(setup: setup, on: req.db)
             ? "/testsetups/\(setupID)/github" : nil
+        let dataPageHref = try await Self.dataPageHref(manifest: manifest, courseID: setup.courseID, on: req.db)
         return try await HTMLResponse {
             SubmitPage(
                 page: PageRequestContext(request: req),
@@ -216,9 +217,23 @@ extension WebRoutes {
                     ? nil : requiredFiles.joined(separator: ", "),
                 chips: chips,
                 githubSubmitURL: githubSubmitURL,
-                aiFeedbackNotice: aiFeedbackNotice
+                aiFeedbackNotice: aiFeedbackNotice,
+                datasets: (manifest?.datasets ?? []).map { SubmitDatasetLink(spec: $0, setupID: setupID) },
+                dataPageHref: dataPageHref
             )
         }.encodeResponse(for: req)
+    }
+
+    /// The course Data page, when a dataset of `manifest` comes from the
+    /// course library and is published there.
+    private static func dataPageHref(
+        manifest: TestProperties?, courseID: UUID, on db: any Database
+    ) async throws -> String? {
+        let slugs = Set((manifest?.datasets ?? []).compactMap(\.source?.slug))
+        guard !slugs.isEmpty, let course = try await APICourse.find(courseID, on: db) else { return nil }
+        let published = try await CourseDatasetService.list(courseID: courseID, on: db)
+            .contains { $0.isPublished && slugs.contains($0.slug) }
+        return published ? "/data/\(urlEncode(course.urlKey))" : nil
     }
 
     // MARK: - POST /testsetups/:id/submit

@@ -70,6 +70,8 @@ func routes(_ app: Application) throws {
     try auth.register(collection: TestSetupRoutes())
     // Gated download of hosted content-item file attachments (enrolled students).
     try auth.register(collection: ContentFileRoutes())
+    // The course Data page and each student's own dataset rows.
+    try auth.register(collection: StudentDataRoutes())
     // Binds an LMS course to a Chickadee course after an instructor launch
     // (docs/lti-1-3.md "Courses"). A first-party form, so it rides the CSRF group.
     try auth.register(collection: LTIBindRoutes())

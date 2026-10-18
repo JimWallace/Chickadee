@@ -123,7 +123,7 @@ them is the answer.
 | **Admin tabbed** | `AdminTabs` (the `.admin-version-banner`, the hidden `<h1>`, the tab bar) → `.page-section` blocks, headings starting at `<h2>` | `AlertsPage` | `AdminPage`, `AdminUsersPage`, `AdminAuditPage`, `AdminBrightspacePage`, `AdminGitHubPage`, `AdminLTIPage`, `AdminMCPPage`, `AdminRetentionPage`, `AdminStoragePage` |
 | **Instructor tabbed** | `InstructorTabs` → `.page-section` blocks | `InstructorMCPPage` | `AssignmentsPage`, `InstructorActivityPage`, `InstructorBrightspacePage`, `InstructorDatasetsPage`, `InstructorGitHubPage`, `InstructorLTIGradesPage`, `InstructorNewTermPage`, `InstructorSlipDaysPage`, `InstructorStudentsPage` |
 | **Titlebar page** | `.page-titlebar` (`<h1>` left, actions right) → optional `.page-subtitle` → content | `AdminUserPage` | `AdminCoursePage`, `AdminRunnerPage`, `AssignmentFeedbackPage`, `AssignmentSubmissionsPage`, `CourseStudentSubmissionsPage`, `InstructorDatasetPage`, `InstructorEnrollCSVPage`, `AssignmentNewPage` |
-| **Plain student page** | `<h1>` → content | `AccountPage` | `SubmitPage`, `EnrollPage`, `IndexPage`, `SubmissionPage`, `GitHubSubmitPage`, `LeaderboardPage` |
+| **Plain student page** | `<h1>` → content | `AccountPage` | `SubmitPage`, `CourseDataPage`, `EnrollPage`, `IndexPage`, `SubmissionPage`, `GitHubSubmitPage`, `LeaderboardPage` |
 | **Auth box** | `.auth-box` centred card | `RegisterPage` | `LoginPage`, `OAuthConsentPage` |
 | **Body-partial shim** | `BaseLayout` around one shared body view, no markup of its own | `AssignmentEditPage` | `NotebookPage` |
 | **Full-bleed app** | `BaseLayout(fullBleed: true)`; owns the viewport | `WorkbenchPage` | `LeaderboardPresentPage` |

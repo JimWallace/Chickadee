@@ -221,14 +221,25 @@ struct WebRoutes: RouteCollection {
             allAssignments: allAssignments, allSections: allSections)
 
         let page = try await PageRequestContext.courseAware(req)
+        let dataPageHref = try await Self.courseDataPageHref(courseState: courseState, on: req.db)
         return try await HTMLResponse {
             IndexPage(
                 page: page,
                 activeCourse: courseState.active,
                 displayGroups: displayGroups,
                 hasAny: !displayGroups.isEmpty,
-                slipDaySummary: slipDayData.summaryLine)
+                slipDaySummary: slipDayData.summaryLine,
+                dataPageHref: dataPageHref)
         }.encodeResponse(for: req)
+    }
+
+    /// The Data page of the active course, when it has a published dataset.
+    private static func courseDataPageHref(
+        courseState: ResolvedCourseState, on db: any Database
+    ) async throws -> String? {
+        guard let courseID = courseState.activeCourseUUID, let urlKey = courseState.active?.urlKey else { return nil }
+        let published = try await CourseDatasetService.list(courseID: courseID, on: db).contains(where: \.isPublished)
+        return published ? "/data/\(urlEncode(urlKey))" : nil
     }
 
     /// The "not enrolled in any courses" dashboard — the home page is

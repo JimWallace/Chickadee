@@ -17,7 +17,7 @@ states what it adds and what proves it.
 | 3 | Attachment: copy a pinned version into the setup zip and record the source; promote a support file into the library; detect a newer version | built |
 | 4 | Course cohort: the per-(student, course) seed, and `DatasetResolver` choosing the seed per spec at every delivery path | built |
 | 5 | Instructor surfaces: the Datasets tab (5a), the Files-panel picker and the scope control (5b) | built |
-| 6 | Student surfaces: the course Data page, the assignment-page dataset line, the "my rows" download | proposed |
+| 6 | Student surfaces: the course Data page, the assignment-page dataset line, the "my rows" download | built |
 | 7 | MCP: `list_datasets`, `get_dataset`, `create_dataset`, `update_dataset`, `add_dataset_version`, `attach_dataset`, `detach_dataset`; `set_dataset` gains `scope` | proposed |
 | 8 | Lifecycle: course clone, bundle export and import, storage page, purge | proposed |
 | 9 | Migration of HLTH 230: promote the two live datasets; docs and CLAUDE.md | proposed |
@@ -484,27 +484,45 @@ Tests: `DatasetLibraryPanelRoutesTests`, `support-files-library.test.mjs`, the
 five route floors in `RouteAuthorizationMatrixTests`, and an edit-page fixture
 with the library controls in `ElementaryPageFixtures+Datasets.swift`.
 
-### 4.6 Student surfaces (slice 6)
+### 4.6 Student surfaces (slice 6, built)
 
-**The course Data page** (`/:courseKey/data`, `CourseDataPage`), linked from
-the student assignments page. For each published dataset: name, description,
-provenance, licence, the dictionary as a table, row count, the assignments
-that use it, and "Your rows" with a download. The download is
-`/:courseKey/data/:slug/mine.csv`: the student's course-scoped slice when the
-dataset is attached anywhere with course scope and the whole file otherwise,
-with a line that says which.
+`StudentDataRoutes.swift` holds two routes. Both need an enrollment in the
+course.
 
-**The assignment page** (`SubmitPage` and the notebook guide) gets one line
-per attached published dataset: "Uses VitalDB cases (v2), 150 of your rows",
-linking to the Data page and to a download of the rows this assignment
-delivers (`/testsetups/:id/data/:filename/mine.csv`, made by the same
-`DatasetResolver` call the grader uses).
+| Route | Shows |
+|---|---|
+| `GET /data/:courseKey` (`CourseDataPage`, plain student page) | Each dataset: name, description, provenance, licence, row count of the newest version, the data dictionary, and "Your rows": one download for each assignment the viewer can open that attaches it. |
+| `GET /testsetups/:id/data/:filename/mine.csv` | The viewer's own rows of one dataset file in one assignment. |
 
-A dataset that is attached but not published is listed to staff only.
+- **The page is `/data/:courseKey`, not `/:courseKey/data`.** A fixed second
+  segment routes ahead of the vanity URL `/:courseCode/:slug`, so the plan's
+  path would hide an assignment whose slug is "data".
+- **"Your rows" is one download per assignment, not one per course.** Two
+  assignments can attach one dataset with different samples, so a single
+  course-level slice is not defined. Each download is the bytes that
+  assignment delivers.
+- **The download is the grader's bytes** (`StudentDatasetDelivery`): the
+  viewer's assignment seed and, for a course-scoped dataset, the course seed,
+  through `DatasetResolver.resolve` over the shared support directory, as the
+  worker and the editor resolve them. So a student never downloads the pool
+  unless every student receives the whole file (decision 2). The seeds are
+  issued on first use, as an editor open or a submission issues them.
+- **Who sees what.** A student sees published datasets only, and only the
+  assignments they can open (`assignmentVisibleToStudentByState`); the
+  download refuses an assignment they cannot open. Staff see unpublished
+  datasets, marked, and every assignment. The download needs no published
+  dataset, because the student already receives those rows.
+- **Links.** The dashboard links to the Data page when the active course has a
+  published dataset. The upload page (`SubmitPage`) lists each dataset file of
+  the assignment with its row count and a download, and links to the Data
+  page when a file comes from a published library dataset. A notebook
+  assignment's student has the file in the editor already; the Data page
+  serves them too.
+- **Known gap:** an assignment the student reaches only through an extension
+  after its close is not listed and cannot be downloaded from.
 
-Tests: the route authorization matrix gains the new routes (students in the
-course, staff, nobody else); the download bytes equal the grader's bytes for
-the same student; an unpublished dataset is absent from the student page.
+Tests: `StudentDataRoutesTests`, and the `CourseDataPage` and upload-page
+fixtures in `ElementaryPageFixtures+Datasets.swift`.
 
 ### 4.7 MCP (slice 7)
 
