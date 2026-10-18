@@ -12,7 +12,10 @@ import Foundation
 extension ElementaryPageFixtures {
 
     static var groupPages: [ElementaryPageFixture] {
-        [instructorGroupsPage, instructorStudentsPageWithGroups]
+        [
+            instructorGroupsPage, instructorStudentsPageWithGroups, joinSessionPage,
+            leaderboardPresentPageWithSession,
+        ]
     }
 
     static var instructorGroupsPage: ElementaryPageFixture {

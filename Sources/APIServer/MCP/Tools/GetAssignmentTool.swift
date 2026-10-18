@@ -106,10 +106,12 @@ struct GetAssignmentTool: ContentTool {
         /// The composite block `set_activity` accepts; nil for any kind but
         /// `classComposite`. Defaulted so existing call sites still compile.
         var composite: CompositeSpec?
+        /// True when the activity runs once per lab group (docs/lab-groups.md).
+        var runsPerGroup: Bool = false
 
         private enum CodingKeys: String, CodingKey {
             case kind, kindDisplayName, leaderboardVisibility, leaderboardPath, aggregation
-            case opponentSource, opponentFile, opensAt, closesAt, composite
+            case opponentSource, opponentFile, opensAt, closesAt, composite, runsPerGroup
         }
 
         /// The three nullable keys are always present, explicitly null when
@@ -128,6 +130,7 @@ struct GetAssignmentTool: ContentTool {
             try c.encode(opensAt, forKey: .opensAt)
             try c.encode(closesAt, forKey: .closesAt)
             try c.encode(composite, forKey: .composite)
+            try c.encode(runsPerGroup, forKey: .runsPerGroup)
         }
     }
 
@@ -220,6 +223,7 @@ struct GetAssignmentTool: ContentTool {
                         "description": .string(
                             "The composite block, in set_activity's shape; null for any other kind."),
                     ]),
+                    "runsPerGroup": MCPSchema.boolean,
                 ]),
                 "required": .array([
                     .string("kind"), .string("kindDisplayName"), .string("leaderboardVisibility"),
@@ -295,7 +299,8 @@ struct GetAssignmentTool: ContentTool {
                     opponentFile: activity.opponentFile,
                     opensAt: activity.window?.opensAtISO,
                     closesAt: activity.window?.closesAtISO,
-                    composite: activity.composite)
+                    composite: activity.composite,
+                    runsPerGroup: activity.runsPerGroup)
             }
         )
     }

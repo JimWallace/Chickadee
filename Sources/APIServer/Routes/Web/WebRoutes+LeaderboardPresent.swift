@@ -130,12 +130,17 @@ extension WebRoutes {
         // `?fragment=present` renders the SAME view the page renders inline,
         // so the refresh cannot drift from what it replaces.
         guard req.query[String.self, at: "fragment"] == "present" else {
+            let groupSession = try await GroupSessionPanel.make(
+                req: req, user: user, activity: activity, assignment: assignment, courseID: setup.courseID)
             return try await HTMLResponse {
-                LeaderboardPresentPage(page: PageRequestContext(request: req), board: presentation)
+                LeaderboardPresentPage(
+                    page: PageRequestContext(request: req), board: presentation, groupSession: groupSession)
             }
             .encodeResponse(for: req)
         }
         let html = LeaderboardPresentBody(board: presentation).render()
+        // The fragment refreshes the board only; the session panel sits
+        // outside it, so the code on the wall does not flicker.
         return Response.pollFragment(html: html, for: req)
     }
 

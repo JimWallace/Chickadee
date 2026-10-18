@@ -12,6 +12,9 @@ import Elementary
 struct LeaderboardPresentPage: HTML {
     let page: PageRequestContext
     let board: PresentModePresentation
+    /// The lab group's session, for a per-group activity (docs/lab-groups.md);
+    /// nil for any other activity.
+    var groupSession: GroupSessionPanel?
 
     var body: some HTML {
         PresentLayout(title: "\(board.assignmentTitle) — Leaderboard", page: page) {
@@ -21,6 +24,11 @@ struct LeaderboardPresentPage: HTML {
                     a(.class("btn action-btn"), .href(board.boardURL)) { "Back to leaderboard" }
                     " "
                     button(.class("btn action-btn"), .type(.button), .dataFlag("ck-fullscreen")) { "Full screen" }
+                    if let groupSession {
+                        " "
+                        PresentSessionControls(
+                            panel: groupSession, boardURL: board.boardURL, csrfToken: page.csrfToken)
+                    }
                     if board.arenaSetupID != nil {
                         " "
                         button(.class("btn action-btn"), .type(.button), .dataFlag("arena-play")) { "Play matches" }
@@ -29,6 +37,9 @@ struct LeaderboardPresentPage: HTML {
                     }
                 }
                 .attributes(.data("arena-setup-id", value: board.arenaSetupID ?? ""), when: board.arenaSetupID != nil)
+                if let groupSession, let code = groupSession.joinCode {
+                    PresentJoinCode(groupName: groupSession.groupName, address: groupSession.joinAddress, code: code)
+                }
                 div(.id("present-results")) {
                     LeaderboardPresentBody(board: board)
                 }

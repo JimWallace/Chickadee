@@ -18,7 +18,7 @@ today.
 |---|---|---|
 | 0 | This design note | draft |
 | 1 | Groups: group sets, groups, memberships; the Groups tab; the CSV import; the Group column on the roster; groups in the data export | built |
-| 2 | Sessions: a session per (activity, group), started and ended from the present page; the submission gate reads the session; attendance by join code | not started |
+| 2 | Sessions: a session per (activity, group), started and ended from the present page; the submission gate reads the session; attendance by join code at `/join` | built |
 | 3 | Rankings per group: leaderboard, standings, the hill, round-robin opponents, tournament runs, the present page per group | not started |
 | 4 | The composite per group, and the course gallery of every group's image | not started |
 | 5 | Group goals: the union and the corpus percent per group; a group achievement | not started |
@@ -241,26 +241,63 @@ the Sections reader.
 - Tests: `GroupRosterCSVTests`, `CourseGroupStoreTests`, `GroupsRoutesTests`,
   and the page fixtures in `ElementaryPageFixtures+Groups.swift`.
 
-### Slice 2: sessions
+### Slice 2: sessions (built)
 
-- `runsPerGroup` on the activity block, with `withRunsPerGroup` rebuilding the
-  block as the three existing edit forms do (docs/class-activities.md,
-  "Compatibility rules"). The edit page and `set_activity` set it. It is
-  refused when the course has no group set.
-- `activity_sessions` and `activity_session_attendance`, and
-  `ActivitySessionStore`: open, close, reopen, join by code, the session for a
-  student now, and whether a session is open at an instant (the ingest
-  writers ask this in slice 3 before they write a ranking row).
-- The present page gains Start, End and the join code. The code is five
-  characters from an alphabet with no look-alike glyphs, and it is shown large.
-- The assignment page shows a student the join field when their activity runs
-  per group and they are in no open session.
-- `requireOpenStudentAssignment(gate: .submission)` reads the session when
-  `runsPerGroup` is set, else the manifest window as today. The refusal names
-  the group.
-- Tests: the gate table (member of an open session, member of a closed one,
-  joined by code into another group's session, no group and no code, staff),
-  the code's uniqueness while open, a reopen.
+- `ClassActivity.runsPerGroup` (Core). It is encoded only when true, so a
+  block that does not run per group keeps its bytes, and every `with…`
+  rebuild keeps it. `withRunsPerGroup` sets it.
+- `ActivityAuthoring` refuses it in a course with no group set, beside a
+  session window (each group's session replaces the window as the clock), and
+  on a class composite (slice 4). It reads the group sets on the owner pool,
+  since the least-privilege MCP role cannot.
+- The edit page's session form gains a "Run once per lab group" checkbox
+  (`POST /instructor/:assignmentID/activity/window`, unchanged floor). The
+  form sends the whole session state, so an unticked box turns the flag off.
+  `set_activity` takes and reports `runsPerGroup`, keeping the stored value
+  when the field is absent, and `get_assignment` reports it.
+- `CreateActivitySessions` makes `activity_sessions` (unique on assignment and
+  group, and on the join code) and `activity_session_attendance` (unique on
+  session and student). `ActivitySessionStore` starts, ends and reopens a
+  session, joins by code, and answers which session a student plays in now:
+  the open session they most recently joined by code, else their own group's.
+  A join from before the session's latest start does not count. Start on an
+  open session changes nothing, so the code on the screen stays. A reopen
+  keeps the row and draws a new code. The code is five characters from an
+  alphabet with no look-alike pair, and it is unique across the deployment,
+  so `/join` takes the code alone. Sessions use the course's first group set,
+  which in slice 2 is its only one; a start that names a group of another set
+  is a 404. `/join` has no rate limit: 25 to the fifth is about 9.7 million
+  codes, and a session is open for one lab.
+- Joining records attendance, or moves its time to now on a second join.
+  A student in no group of a manual set becomes a member of the session's
+  group; a member of another group stays where they are and plays in the
+  session they joined. A removed group's session, and a session of an
+  activity that no longer runs per group, or of an archived course, refuse a
+  join. Removing a group ends its open sessions.
+- `requireOpenStudentAssignment(gate: .submission)` reads the student's
+  session when the activity runs per group. The refusal
+  (`AssignmentSubmissionGateError.groupSessionNotOpen`) names the student's
+  group, or sends a student in no group to `/join`. Staff are never gated, and
+  reading is not gated. The gate covers the web submission doors. The JSON
+  door, `POST /api/v1/submissions`, checks enrollment only, so it skips the
+  session gate and the window gate today. That gap is older than groups and
+  is not closed here.
+- The present page gains `PresentSessionControls` (the group select and Start,
+  End or Reopen, in the presenter's corner) and, while the session is open,
+  `PresentJoinCode` above the board. Both sit outside the polled region. The
+  controls are in the presenter's toolbar, which full screen hides, so the
+  presenter leaves full screen to end the session; the code stays on the
+  wall in full screen.
+  `POST /testsetups/:testSetupID/sessions/start` and `/end` are floored at
+  `.ta` on the activity's course, in a course that is not archived. The
+  caller is authorized before the activity is read. Each start and end is
+  audited as `activity_group_session.changed`.
+- `GET /join` and `POST /join` (`JoinSessionPage`) take a code and send the
+  student to the assignment's vanity path.
+- A student's personal data export lists the sessions they joined.
+- Tests: `ClassActivityRunsPerGroupTests`, `ActivitySessionStoreTests`,
+  `GroupSessionGateTests`, `GroupSessionRoutesTests`, and the fixtures in
+  `ElementaryPageFixtures+Sessions.swift`.
 
 ### Slice 3: rankings per group
 

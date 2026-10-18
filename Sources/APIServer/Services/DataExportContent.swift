@@ -121,6 +121,9 @@ struct DataExportEnrollment: Codable, Sendable {
     /// The student's group in each of the course's group sets
     /// (docs/lab-groups.md). Empty when the course has none.
     var groups: [DataExportGroup] = []
+    /// The lab sessions the student joined by code (docs/lab-groups.md,
+    /// slice 2). Empty when they joined none.
+    var sessionsJoined: [DataExportSessionJoin] = []
     /// The per-course handle from before a handle named the bird
     /// (docs/student-avatars.md §3), still stored with the enrollment. nil for
     /// a course joined since. The bird's handle is in the profile.
@@ -131,6 +134,14 @@ struct DataExportEnrollment: Codable, Sendable {
 struct DataExportGroup: Codable, Sendable, Equatable {
     let set: String
     let group: String
+}
+
+/// One join of a lab session by code: the activity, the session's group and
+/// the time of the latest join.
+struct DataExportSessionJoin: Codable, Sendable, Equatable {
+    let assignment: String
+    let group: String
+    let joinedAt: Date
 }
 
 struct DataExportSubmission: Codable, Sendable {
@@ -295,6 +306,7 @@ private func gatherEnrollments(
         .with(\.$course)
         .all()
     let groupsByCourse = try await gatherGroups(userID: userID, on: db)
+    let sessionsByCourse = try await gatherSessionJoins(userID: userID, on: db)
     return
         rows
         .sorted { courseListPrecedes($0.course, $1.course) }
@@ -308,6 +320,7 @@ private func gatherEnrollments(
                 enrolledAt: row.enrolledAt,
                 learnSection: row.brightspaceSection,
                 groups: groupsByCourse[row.$course.id] ?? [],
+                sessionsJoined: sessionsByCourse[row.$course.id] ?? [],
                 avatarHandle: row.legacyAvatarHandle
             )
         }
@@ -327,6 +340,31 @@ private func gatherGroups(userID: UUID, on db: any Database) async throws -> [UU
         result[set.courseID, default: []].append(DataExportGroup(set: set.name, group: group.name))
     }
     return result.mapValues { $0.sorted { ($0.set, $0.group) < ($1.set, $1.group) } }
+}
+
+/// The lab sessions the user joined by code (docs/lab-groups.md), by course
+/// id, oldest join first.
+private func gatherSessionJoins(
+    userID: UUID, on db: any Database
+) async throws -> [UUID: [DataExportSessionJoin]] {
+    let rows = try await APIActivitySessionAttendance.query(on: db).filter(\.$userID == userID).all()
+    guard !rows.isEmpty else { return [:] }
+    let sessions = try await APIActivitySession.query(on: db).filter(\.$id ~~ rows.map(\.sessionID)).all()
+    let assignments = try await APIAssignment.query(on: db).filter(\.$id ~~ sessions.map(\.assignmentID)).all()
+    let groups = try await APICourseGroup.query(on: db).filter(\.$id ~~ sessions.map(\.groupID)).all()
+    let sessionByID = Dictionary(sessions.compactMap { s in s.id.map { ($0, s) } }, uniquingKeysWith: { a, _ in a })
+    let assignmentByID = Dictionary(
+        assignments.compactMap { a in a.id.map { ($0, a) } }, uniquingKeysWith: { a, _ in a })
+    let groupByID = Dictionary(groups.compactMap { g in g.id.map { ($0, g) } }, uniquingKeysWith: { a, _ in a })
+    var result: [UUID: [DataExportSessionJoin]] = [:]
+    for row in rows {
+        guard let session = sessionByID[row.sessionID], let assignment = assignmentByID[session.assignmentID],
+            let group = groupByID[session.groupID]
+        else { continue }
+        result[assignment.courseID, default: []].append(
+            DataExportSessionJoin(assignment: assignment.title, group: group.name, joinedAt: row.joinedAt))
+    }
+    return result.mapValues { $0.sorted { $0.joinedAt < $1.joinedAt } }
 }
 
 private struct GatheredSubmissions: Sendable {

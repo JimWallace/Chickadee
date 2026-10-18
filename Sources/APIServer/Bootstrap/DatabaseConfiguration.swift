@@ -617,4 +617,6 @@ func registerMigrations(on app: Application) {
     // Lab groups (docs/lab-groups.md, slice 1): group sets, groups and
     // memberships.
     app.migrations.add(CreateCourseGroups())
+    // Lab groups, slice 2: per-group activity sessions and their attendance.
+    app.migrations.add(CreateActivitySessions())
 }

@@ -131,6 +131,7 @@ enum ActivityAuthoring {
         if let activity {
             try await validateOpponent(of: activity, setup: setup)
             try validateWindow(of: activity)
+            try await validateRunsPerGroup(of: activity, courseID: setup.courseID, on: lockDB)
             try await validateComposite(of: activity, current: current, setup: setup, on: lockDB)
         }
         try await setManifestActivity(setup: setup, to: activity, on: db)
@@ -185,6 +186,37 @@ enum ActivityAuthoring {
             throw AppError.badRequest(reason: windowBoundsOutOfOrderMessage)
         }
     }
+
+    /// Refuses a per-group activity (docs/lab-groups.md) in a course with no
+    /// group set, since its sessions would have no group to run in, and one
+    /// that also carries a window, since each group's session replaces the
+    /// window as the clock and a stored window nobody reads misleads.
+    ///
+    /// Reads the group sets on `db`, which the MCP caller passes as the owner
+    /// pool: the least-privilege MCP role cannot read them.
+    private static func validateRunsPerGroup(
+        of activity: ClassActivity, courseID: UUID, on db: any Database
+    ) async throws {
+        guard activity.runsPerGroup else { return }
+        // A composite deals its slots course-wide until slice 4 deals them
+        // per group, so it cannot run per group yet.
+        guard activity.kind.aggregation != .composite else {
+            throw AppError.badRequest(reason: runsPerGroupCompositeMessage)
+        }
+        guard activity.window == nil else {
+            throw AppError.badRequest(reason: runsPerGroupWithWindowMessage)
+        }
+        guard try await !CourseGroupStore.sets(courseID: courseID, on: db).isEmpty else {
+            throw AppError.badRequest(reason: runsPerGroupNeedsGroupsMessage)
+        }
+    }
+
+    static let runsPerGroupNeedsGroupsMessage =
+        "This course has no lab groups yet, so make them on the Groups tab first."
+    static let runsPerGroupCompositeMessage =
+        "A class composite cannot run once per lab group yet."
+    static let runsPerGroupWithWindowMessage =
+        "Each group's session is the clock of a per-group activity, so clear the session window first."
 
     /// The requested block with its composite settled: kept or seeded for a
     /// class composite, refused on any other kind.

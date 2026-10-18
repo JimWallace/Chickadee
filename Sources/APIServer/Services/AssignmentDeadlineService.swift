@@ -5,7 +5,7 @@ import Fluent
 import Foundation
 import Vapor
 
-enum AssignmentSubmissionGateError: AbortError {
+enum AssignmentSubmissionGateError: AbortError, Equatable {
     case closed
     /// A class activity's live-session window has not opened yet
     /// (docs/class-activities.md). Carries the formatted opening time,
@@ -17,10 +17,14 @@ enum AssignmentSubmissionGateError: AbortError {
     /// false and would send a student looking for an extension that is not
     /// the thing standing in their way.
     case activityClosed(closedAtText: String)
+    /// A per-group activity (docs/lab-groups.md) whose student is in no open
+    /// session. Carries the student's group name, nil for a student in no
+    /// group, so the refusal says whose session to wait for or where to join.
+    case groupSessionNotOpen(groupName: String?)
 
     var status: HTTPResponseStatus {
         switch self {
-        case .closed, .activityNotYetOpen, .activityClosed:
+        case .closed, .activityNotYetOpen, .activityClosed, .groupSessionNotOpen:
             return .forbidden
         }
     }
@@ -33,6 +37,10 @@ enum AssignmentSubmissionGateError: AbortError {
             return "This class activity opens at \(opensAtText)."
         case .activityClosed(let closedAtText):
             return "This class activity closed at \(closedAtText)."
+        case .groupSessionNotOpen(let groupName?):
+            return "The session for \(groupName) is not open. In another lab, enter the code on the screen at /join."
+        case .groupSessionNotOpen(nil):
+            return "Enter the code on the screen at /join."
         }
     }
 }

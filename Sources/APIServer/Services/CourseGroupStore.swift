@@ -90,9 +90,17 @@ enum CourseGroupStore {
         guard group.setID == set.id else { throw CourseGroupError.groupNotInSet }
         guard group.removedAt == nil else { return }
         let groupID = try group.requireID()
+        let now = Date()
         try await db.transaction { tx in
             try await APICourseGroupMembership.query(on: tx).filter(\.$groupID == groupID).delete()
-            group.removedAt = Date()
+            // Its open sessions end with it, so no submission lands in a
+            // group nobody can see.
+            try await APIActivitySession.query(on: tx)
+                .filter(\.$groupID == groupID)
+                .filter(\.$closedAt == nil)
+                .set(\.$closedAt, to: now)
+                .update()
+            group.removedAt = now
             try await group.save(on: tx)
         }
     }

@@ -226,6 +226,9 @@ struct ActivityEditFacts: Encodable {
     /// (`ActivityAuthoring.compositeLeaderboardHiddenMessage`). Keyed on the
     /// kind, not on the block, which `setActivity` always seeds.
     var showsVisibilityToggle: Bool = true
+    /// True when the activity runs once per lab group (docs/lab-groups.md):
+    /// the session form's checkbox. Defaulted like `composite`.
+    var runsPerGroup: Bool = false
 
     static func make(setup: APITestSetup, on db: any Database) async throws -> ActivityEditFacts {
         let activity = setup.decodedManifest()?.activity
@@ -262,7 +265,8 @@ struct ActivityEditFacts: Encodable {
             windowOpensAtLocal: dueAtLocalInputString(activity?.window?.opensAt),
             windowClosesAtLocal: dueAtLocalInputString(activity?.window?.closesAt),
             composite: composite,
-            showsVisibilityToggle: activity?.kind != .classComposite)
+            showsVisibilityToggle: activity?.kind != .classComposite,
+            runsPerGroup: activity?.runsPerGroup == true)
     }
 }
 

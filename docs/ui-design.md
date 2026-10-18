@@ -464,7 +464,12 @@ duplicate.
   run stands in the clock's place.  A browser-graded tournament adds the
   projector arena to the toolbar: a "Play matches" `btn action-btn` and a
   `.text-quiet` `role="status"` line that names the match it plays by round
-  and position, never by student (`tournament-arena.js`).  A `.present-footer` ends the page, with a
+  and position, never by student (`tournament-arena.js`).  A per-group
+  activity (docs/lab-groups.md) adds the lab-group select and the Start, End
+  or Reopen button to the corner toolbar; while the group's session is open, a
+  `.present-join` above the board shows a `.present-clock-label` ("Lab 103 ·
+  join at"), the `.present-join-address` in its own case, and the
+  `.present-join-code` in large monospace capitals.  A `.present-footer` ends the page, with a
   `.tier-preview` Live tag while it polls.  Display sizes are `em` of one size set for a 1600-pixel screen; the
   page steps by `zoom` (down at 1500 pixels, up at 1900), since the type scale
   forbids a fluid font size.
