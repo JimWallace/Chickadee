@@ -452,6 +452,13 @@ because line numbers go out of date.
   - Connect a new accumulator at both ingest paths. An accumulator on one
     path shows only the half of the class that one substrate grades, as if it
     were the whole class.
+  - An activity whose kind compares students (`ActivityKind.comparesStudents`)
+    accepts only shared data (`DatasetSpec.isShared`). The rule is in
+    `ManifestCoherence`. A new door that writes an activity or a dataset spec
+    must call `ManifestCoherence.violation(introducedBy:in:)`
+    (`docs/datasets-course-library.md` §4.11). The bundle import, the
+    version restore, the clone and the draft publish copy a whole manifest
+    and run no coherence rule, so an existing pair passes through them.
 
 ### Lab groups and per-group sessions: `runsPerGroup`, `activity_sessions`
 

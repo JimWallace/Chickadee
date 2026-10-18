@@ -87,7 +87,8 @@ struct SetDatasetTool: ContentTool {
         + "the web editor's dataset control this does not close the assignment or re-run validation "
         + "(the suite is unchanged); existing submissions pick up their slice on the next regrade. "
         + "List support files with get_support_files (dataset marks are reported there); pass "
-        + "remove:true to make the file an ordinary shared support file again."
+        + "remove:true to make the file an ordinary shared support file again. "
+        + MCPActivityProse.sharedDataRule
     static let inputSchema: JSONValue = .object([
         "type": .string("object"),
         "properties": .object([
@@ -183,15 +184,20 @@ struct SetDatasetTool: ContentTool {
             throw MCPToolError.invalidArguments(detail: refusal)
         }
 
-        try await mutateManifest(setup: setup, on: context.db) { props in
-            // Replaced, never appended — two specs for one file would disagree
-            // about how many rows a student gets, and both PUT endpoints reject
-            // such a pair outright.
+        // Replaced, never appended — two specs for one file would disagree
+        // about how many rows a student gets, and both PUT endpoints reject
+        // such a pair outright.
+        let change: (inout TestProperties) -> Void = { props in
             props.datasets.removeAll { $0.file == cleaned }
             if !remove {
                 props.datasets.append(written)
             }
         }
+        // An activity that ranks or matches students refuses personal data.
+        if let violation = ManifestCoherence.violation(introducedBy: change, in: setup.manifest) {
+            throw MCPToolError.invalidArguments(detail: violation)
+        }
+        try await mutateManifest(setup: setup, on: context.db, change)
 
         let datasets = (setup.decodedManifest()?.datasets ?? []).map {
             DatasetEntry(

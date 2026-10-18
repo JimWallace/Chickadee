@@ -22,7 +22,8 @@ states what it adds and what proves it.
 | 8 | Lifecycle: course clone, bundle export and import, storage page, purge | built |
 | 9 | Migration of HLTH 230: promote the two live datasets; docs and CLAUDE.md | docs built; the promotion is the maintainer's, in the UI |
 | 10 | Optional: the `formatNoise` transform | built |
-| 11 | Class-wide data: the `partition` kind dealt by slot, the ranked-activity refusal, and the rule for jobs with no student | proposed |
+| 11a | The ranked-activity refusal, and the rule for jobs with no student | built |
+| 11b | The `partition` kind, dealt by slot | proposed |
 
 ---
 
@@ -711,15 +712,61 @@ no student sees the whole file, so a corpus run over everyone's parts checks
 the class's combined work against the complete data.
 
 **Ranked activities refuse personal data.** A leaderboard that ranks a metric
-computed on different rows per student compares nothing. Every door that saves
-a dataset spec or an activity (both `/datasets` PUTs, `set_dataset`,
+computed on different rows per student compares nothing. Every authoring door
+that saves a dataset spec or an activity (both `/datasets` PUTs, `set_dataset`,
 `attach_dataset`, `set_activity`, the edit page) refuses the pair "an activity
-whose aggregation is a leaderboard or whose opponent source matches students,
-and a dataset that is not `shared`", with a message that names the file and
-says to clear the sample. A composite is not ranked, so a composite with
+whose kind compares students (`ActivityKind.comparesStudents`) and a dataset
+that is not `shared`", with a message that names the file and the ways to
+share it. A composite is not ranked, so a composite with
 personal data is allowed; that is the per-student histogram gallery above. The
-refusal is a save-time check in `ActivityAuthoring`, beside the kind lock, with
-the delivery side unchanged.
+refusal is a save-time rule in `ManifestCoherence`, on the same footing as the
+kind lock, with the delivery side unchanged. The "As built" list below states
+the rule exactly.
+
+As built (11a):
+
+- **Two predicates in Core.** `ActivityKind.comparesStudents` is an exhaustive
+  switch, so a new kind does not compile until it gives an answer. Every kind
+  but `classComposite` answers true. `DatasetSpec.isShared` is
+  `sampleSize == nil && transforms.isEmpty`.
+- **One rule in `ManifestCoherence`.** The rule gives one message per personal
+  file (`ActivityAuthoring.personalDataMessage(file:)`). A door calls
+  `violation(introducedBy:in:)`, so it refuses only a personal file that the
+  edit adds. A legacy manifest that already has the pair can still change its
+  leaderboard visibility, or remove the file's dataset settings. It can also
+  change the sample of a file that is already personal, because the rule
+  compares files and not samples; that is intended, since the pair exists
+  already and the edit does not add a file. The message names the file and
+  not the kind, so a change from one ranked kind to another is not refused for
+  a file that was already there. The zip upload checks every rule, as it does
+  for the other rules.
+- **The doors.**
+  - `ActivityAuthoring.setActivity`: `set_activity`, the edit page and the
+    Activity section.
+  - `applyDatasetsEdit`: both `/datasets` PUTs.
+  - `set_dataset`.
+  - `CourseDatasetService.attach`: `attach_dataset` and the Files-panel
+    picker. The check runs before the zip write.
+
+  An update to a newer version, a scope change, a promote and a detach do not
+  change whether a file is shared, so they cannot add the pair.
+- **The doors that carry a whole manifest.** A course bundle import, a version
+  restore, a clone and a draft publish copy the manifest as it is. They run no
+  `ManifestCoherence` rule, for this rule or for the others, so a manifest
+  that already has the pair keeps it. The zip upload is the one whole-manifest
+  door that checks. It refuses a manifest that breaks any rule, with the
+  message of the first one, so a manifest with the pair is refused there. An upload always makes a new test setup, so no existing
+  assignment changes.
+- **A sample at least as large as the pool** delivers the whole file, but
+  `isShared` reads only the spec, so the pair is refused. To remove the
+  sample gives the same bytes and passes.
+- **The message names both ways out.** A plain support file with no sample and
+  no transforms is not a valid spec, so the author removes its dataset
+  settings. A library file may have no sample, so the author clears it. The
+  MCP descriptions of `set_activity`, `set_dataset` and `attach_dataset` state
+  the rule (`MCPActivityProse.sharedDataRule`), with the exempt kinds derived.
+- **The jobs with no student need no code.** The table above describes what
+  the code already does, and 11a does not change it.
 
 **What this does not add.** A dataset built from the students' own
 contributions (each student submits rows; the class's union becomes a version)
@@ -780,7 +827,7 @@ own changelog fragment.
 | 8 | `CourseCloneService.swift`, `CourseBundleRoutes*.swift`, `AdminStoragePage.swift` | clone resolves sources; bundle round trip v1 and v2 |
 | 9 | docs, `CLAUDE.md`; the promotion is done through the UI or MCP on the live course | docs-audit clean |
 | 10 | `DatasetTransform.swift`, `DatasetTransformApplication.swift` | transform tests, the row-set theorem still holds |
-| 11 | `DatasetSpec.swift`, `DatasetMaterializer.swift`, `DatasetResolver.swift`, `CompositeSlots.swift`, `ActivityAuthoring`, the dataset save doors | partition bytes pinned by fixture; overlap formula answers zero; the ranked-activity refusal at every door; a corpus run on a partition sees the whole file |
+| 11 | `DatasetSpec.swift`, `DatasetMaterializer.swift`, `DatasetResolver.swift`, `CompositeSlots.swift`, `ManifestCoherence.swift`, the dataset save doors | partition bytes pinned by fixture; overlap formula answers zero; the ranked-activity refusal at every door; a corpus run on a partition sees the whole file |
 
 The rules that apply to every slice: Swift Testing only; no new environment
 variables; `scripts/format-lint.sh` before each push; the `ui-review` agent on

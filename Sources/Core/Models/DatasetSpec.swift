@@ -94,6 +94,13 @@ public struct DatasetSpec: Codable, Equatable, Sendable {
             transforms: transforms)
     }
 
+    /// True when every student receives the same bytes: no sample and no
+    /// transforms. The "shared" mode of docs/datasets-course-library.md §4.11,
+    /// and the only mode an activity that compares students accepts.
+    public var isShared: Bool {
+        sampleSize == nil && transforms.isEmpty
+    }
+
     private enum CodingKeys: String, CodingKey {
         case file, kind, sampleSize, stratumColumn, transforms, source, scope
     }
