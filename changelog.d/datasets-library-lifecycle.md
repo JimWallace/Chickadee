@@ -1,3 +1,0 @@
-### Added
-
-- **Course dataset library, slice 8: lifecycle.** A course clone copies the dataset library, every dataset with all its versions, before the assignments, so each cloned file keeps its library source. A course bundle carries the library as schemaVersion 2, with each version's bytes at `datasets/<sha256>`; a course with no dataset still exports version 1, and an import accepts both and refuses a dataset file whose bytes are not the ones named. The admin storage page and `get_storage_usage` list each course's library. A course delete already removed the library rows and frees their bytes.
