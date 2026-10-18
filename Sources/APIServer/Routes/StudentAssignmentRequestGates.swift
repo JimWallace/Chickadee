@@ -91,7 +91,7 @@ private func requireOpenActivityWindow(
     guard let setup = try await APITestSetup.find(testSetupID, on: req.db),
         let activity = setup.decodedManifest()?.activity
     else { return }
-    if activity.runsPerGroup {
+    if activity.isPerGroup {
         try await requireOpenGroupSession(assignment: assignment, user: user, on: req, now: now)
         return
     }

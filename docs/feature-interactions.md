@@ -457,7 +457,9 @@ because line numbers go out of date.
     submitted in, and a submission with no open joined session does not
     rank (docs/lab-groups.md, slice 3a). A new ranking writer must read
     `ActivitySessionStore.sessionAtSubmission` the same way, or
-    `ActivityKind.canRunPerGroup` must stay false for its kind.
+    `ActivityKind.canRunPerGroup` must stay false for its kind. Every
+    reader of the per-group behaviour reads `ClassActivity.isPerGroup`, never
+    the raw `runsPerGroup` flag.
 
 ### Lab groups and per-group sessions: `runsPerGroup`, `activity_sessions`
 

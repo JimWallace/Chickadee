@@ -39,7 +39,7 @@ struct GroupSessionPanel: Sendable {
     static func make(
         req: Request, user: APIUser, activity: ClassActivity, assignment: APIAssignment?, courseID: UUID
     ) async throws -> GroupSessionPanel? {
-        guard activity.runsPerGroup, let assignmentID = assignment?.id,
+        guard activity.isPerGroup, let assignmentID = assignment?.id,
             let set = try await CourseGroupStore.sets(courseID: courseID, on: req.db).first,
             let setID = set.id
         else { return nil }

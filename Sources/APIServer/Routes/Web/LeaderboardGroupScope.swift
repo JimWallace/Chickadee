@@ -29,7 +29,7 @@ struct LeaderboardGroupScope: Sendable {
         req: Request, user: APIUser, isStaff: Bool, activity: ClassActivity, setup: APITestSetup,
         assignment: APIAssignment?
     ) async throws -> LeaderboardGroupScope? {
-        guard activity.runsPerGroup, activity.kind.canRunPerGroup, let assignmentID = assignment?.id,
+        guard activity.isPerGroup, let assignmentID = assignment?.id,
             let setID = try await CourseGroupStore.sets(courseID: setup.courseID, on: req.db).first?.id
         else { return nil }
         let groups = try await CourseGroupStore.groups(inSet: setID, on: req.db)

@@ -572,6 +572,13 @@ public struct ClassActivity: Codable, Equatable, Sendable {
 
     /// The same block run once per lab group, or not, everything else kept —
     /// the fifth rebuild, for the session form's checkbox.
+    /// Whether the activity behaves per lab group: the flag is set and the
+    /// kind can run per group (`ActivityKind.canRunPerGroup`). Every reader of
+    /// the behaviour reads this, not the flag, so a flag stored on a kind
+    /// that cannot run per group (one saved before the kind rule) reads as
+    /// course-wide everywhere at once: the gate, the sessions and the board.
+    public var isPerGroup: Bool { runsPerGroup && kind.canRunPerGroup }
+
     public func withRunsPerGroup(_ runsPerGroup: Bool) -> ClassActivity {
         ClassActivity(
             kind: kind, leaderboardVisibility: leaderboardVisibility, opponentFile: opponentFile,

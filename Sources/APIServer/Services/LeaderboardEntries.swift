@@ -59,7 +59,7 @@ func recordLeaderboardEntry(
         try await courseRole(of: userID, inCourse: setup.courseID, db: db) == .student
     else { return }
 
-    if activity.runsPerGroup && activity.kind.canRunPerGroup {
+    if activity.isPerGroup {
         guard
             let session = try await ActivitySessionStore.sessionAtSubmission(
                 testSetupID: testSetupID, userID: userID, submissionID: submissionID, on: db)

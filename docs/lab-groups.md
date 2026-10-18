@@ -396,8 +396,11 @@ should be able to see it. The maintainer chose best effort on 2026-10-18.
   with no champion (Best metric, Beat the instructor). `ActivityAuthoring`
   refuses the flag on every other kind (`runsPerGroupKindMessage`), the
   edit page shows the checkbox only for these kinds, `set_activity` keeps a
-  stored flag only for them, and an older per-group activity of another
-  kind is read as course-wide. A hill, standings, a bracket and the union
+  stored flag only for them. `ClassActivity.isPerGroup` (the flag and the
+  kind rule) is what every reader reads: the gate, the session routes, the
+  present panel, the board and ingest. So an older per-group activity of
+  another kind reads as course-wide everywhere at once, and its students
+  are not asked for a code that ranks nowhere. A hill, standings, a bracket and the union
   would mix the groups until their slices make them per group. A composite
   keeps its own message.
 - Not yet: the gate still refuses a submission after the student's session

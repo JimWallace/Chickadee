@@ -145,7 +145,7 @@ enum ActivitySessionStore {
 
     /// Whether the assignment's activity runs once per lab group.
     static func runsPerGroup(_ assignment: APIAssignment, on db: any Database) async throws -> Bool {
-        try await APITestSetup.find(assignment.testSetupID, on: db)?.decodedManifest()?.activity?.runsPerGroup
+        try await APITestSetup.find(assignment.testSetupID, on: db)?.decodedManifest()?.activity?.isPerGroup
             == true
     }
 }
