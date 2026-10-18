@@ -201,12 +201,11 @@ Nil means course-wide, which is what every existing row is.
 | A CSV of `username,group` | Before the term, by the instructor; also the LEARN Groups export (group name, username, org-defined ID) | Slice 1. |
 | The Groups tab | Any time, by an instructor | Slice 1. |
 | A D2L group category through Valence | Every ten minutes | The reader exists (`fetchGroups`). Blocked on production credentials. Slice 6. |
-| D2L Sections through Valence | Every ten minutes | No reader. Verify the route and the member field against the Valence reference first; the public search did not reach the page. Slice 6. |
+| D2L Sections through Valence | Every ten minutes | **The UW source**: the registrar assigns the labs and LEARN makes a Section per lab. No reader yet. Verify the route and the member field against the Valence reference first; the public search did not reach the page. Slice 6. |
 | LTI 1.3 | never | NRPS sends no group per member. D2L lists AGS, NRPS and Deep Linking as its LTI Advantage services, not the Course Groups Service. |
 
-Before slice 6, check in the LEARN site whether the lab sections are D2L
-**Sections** or a **Group category**. The existing reader handles categories
-only.
+The existing reader handles group categories only, so slice 6 starts with
+the Sections reader.
 
 ## Slices
 
@@ -232,7 +231,8 @@ only.
   refused when the course has no group set.
 - `activity_sessions` and `activity_session_attendance`, and
   `ActivitySessionStore`: open, close, reopen, join by code, the session for a
-  student now.
+  student now, and whether a session is open at an instant (the ingest
+  writers ask this in slice 3 before they write a ranking row).
 - The present page gains Start, End and the join code. The code is five
   characters from an alphabet with no look-alike glyphs, and it is shown large.
 - The assignment page shows a student the join field when their activity runs
@@ -256,8 +256,11 @@ only.
 - "Run tournament" and the arena routes take the group. `run_tournament` on
   MCP refuses a `runsPerGroup` assignment, because choosing a group is choosing
   students.
+- A result that lands after the group's session closed grades and does not
+  rank (maintainer decision 1).
 - Tests: an entry stamped with the right group, the hill per group, a round
-  robin that plays only the group, two groups' tournaments running at once.
+  robin that plays only the group, two groups' tournaments running at once,
+  a late result that grades but leaves the board as it was.
 
 ### Slice 4: the composite per group
 
@@ -286,7 +289,8 @@ only.
   set from a non-null `brightspaceSectionCategoryID`.
 - The BrightSpace tab gets the category and section picker and a "Sync now"
   button.
-- `BrightSpaceAPIClient.fetchSections`, after the route is verified.
+- `BrightSpaceAPIClient.fetchSections` first, after the route is verified:
+  it is the source the UW labs come from.
 - Tests with a fake `BrightSpaceGrading`: a first sync, a rename, a member who
   moves, a group that disappears, a student the classlist cannot match. Today
   the sweep has no tests at all.
@@ -308,18 +312,31 @@ redesigned when one of them is wanted.
   The in-lab version is pairs formed in the room by a second join code, and
   it is a separate design.
 
-## Open questions for the maintainer
+## Decisions from the maintainer (2026-10-18)
 
-1. When a group's session closes, is the group's board frozen, or does a
-   student who submits later from home (the assignment is still open) move
-   it? The proposal: the board is frozen at close, since the session is the
-   contest, and a later submission still grades but does not rank. This is
-   the one place the session changes what a result does.
-2. In the UW LEARN site, are the lab sections D2L Sections or a Group
-   category? This decides whether slice 6 needs `fetchSections`.
-3. Should a student in no group, with no code, be able to submit at all when
-   the activity runs per group? The proposal: no, with the join prompt as the
-   answer, because an unattributed result ranks nowhere.
+The three questions the first draft left open are settled.
+
+1. **The board freezes when the session closes.** A session is time-limited
+   to the lab's own slot. A submission after the close still grades, because
+   the assignment is still open, but it does not rank, move the hill, enter
+   a bracket or take a slot. The ingest writers check the session before
+   they write a ranking row. This is the one place a session changes what a
+   result does, and it is deliberate.
+2. **The lab groups are registrar-assigned and arrive in LEARN as D2L
+   Sections.** So the LEARN source is Sections, not a group category, and
+   slice 6 needs `fetchSections` before it is useful. The existing
+   group-category reader stays for a course that makes its own groups in
+   LEARN. The route and the member field are still to be verified against the
+   Valence reference.
+3. **A student in no group, with no code, cannot submit** when the activity
+   runs per group. The refusal shows the join prompt. An unattributed result
+   would rank nowhere, and the room is where the activity happens.
+
+One consequence of decision 1 to carry into slice 2: because each session is
+the lab's assigned slot, a session may later take a planned open and close
+from the timetable, so a TA does not have to press Start. The row already has
+the two instants; a planned session is one that is written before the day.
+The TA's Start and End still win.
 
 ## Sources
 
