@@ -7,9 +7,12 @@
 // shape, fixed at the bottom right. earned-toast.js shows it after the
 // celebration's pop and announces it. It never closes by itself.
 //
-// Wear it is an ordinary form: without the script it saves and goes to the
-// account page. The script saves in place and points the page bird's layers
-// at the `data-wear-*` values, as the account page's live preview does.
+// The toast renders hidden, and only earned-toast.js shows it, so without
+// the script no toast shows; the item is still a choice on the account page.
+// Wear it is an ordinary form to the account page's save route. The script
+// saves in place and points the page bird's layers at the `data-wear-*`
+// values, as the account page's live preview does. When that save fails, the
+// form submits as usual, and the account page says why.
 
 import Core
 import Elementary

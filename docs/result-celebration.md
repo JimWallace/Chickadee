@@ -140,9 +140,10 @@ the live region still reads its sentence once.
 - **Wear it** is an ordinary form to `POST /account/avatar`. `earned-toast.js`
   posts it with `Accept: application/json`; the route then answers 204 (or
   422 for a refused choice) instead of a redirect, and the script points the
-  page bird's layers at the new item, with no reload. Without the script, or
-  when the save fails, the form submits as usual and lands on the account
-  page.
+  page bird's layers at the new item, with no reload. When the save fails,
+  the form submits as usual and lands on the account page. The toast renders
+  hidden and only the script shows it, so without the script no toast shows;
+  the item is still a choice on the account page.
 - If two items are new at once, the toast shows the first. The others are
   choices on the account page, until J3.
 
