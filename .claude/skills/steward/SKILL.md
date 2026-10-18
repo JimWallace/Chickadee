@@ -91,6 +91,17 @@ and fails on a `changes requested` verdict; its findings are bot findings, so
 verify each one and push the fix. If the agent cannot run in your session, the
 workflow is the review; no note in the PR is needed.
 
+## The interaction review is advisory
+
+CI runs the **`interaction-review` agent** (`.claude/agents/interaction-review.md`)
+on every pull request that changes `Sources/` or a `Public/*.js` file
+(`.github/workflows/interaction-review.yml`). It looks for a side effect on a
+feature that the change does not mention, with the map in
+`docs/feature-interactions.md`. Its job stays green on every verdict for now.
+Its findings are still bot findings: verify each failure path in the code, and
+fix the ones that are real. When a finding says the map needs a row, add the
+row in the same PR.
+
 ## Do not add an environment variable
 
 Standing rule, server (`AppConfig`) and runner (`RunnerDaemonConfig`) alike. A
