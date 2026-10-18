@@ -9,6 +9,13 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.726] - 2026-10-18
+
+### Changed
+
+- **Fifth migration consolidation round.** Eight column and index migrations are folded into their `Create*` files: `AddGitHubCourseRepositoryInvitedUser`, `AddSubmissionTargetRunner`, `AddAIFeedbackGates`, `AddAIFeedbackAttestation`, `AddUserAvatarPreviousSpec`, `AddUserAvatarHandle`, `AddAvatarHatchSpecies` and `AddAssignmentConcept`. The six one-time data migrations are deleted: `BackfillDeclaredLanguage`, `BackfillSharedSupportFiles`, `SwapStarterGradcapForHeadband`, `FillLateAvatarAxes`, `DeleteUndatedSessions` and `MoveHandlesToBirds`. A fresh database gets the same schema in fewer steps. A database that already ran these migrations does not change, because Fluent ignores the history rows of migrations that are no longer registered. A database that has not run them must first start once on a release that still has them, such as v0.5.723.
+
+
 ## [0.5.725] - 2026-10-18
 
 ### Added
