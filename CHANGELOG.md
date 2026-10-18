@@ -9,6 +9,13 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.727] - 2026-10-18
+
+### Changed
+
+- **A ranked class activity accepts only shared data.** An activity that ranks or matches students (every kind but a class composite) now refuses a dataset that gives each student their own rows: a sample or a transform. A ranking of a metric that each student computed on different rows compares nothing. The refusal names the file and the ways to share it. Every authoring door that saves a dataset spec or an activity refuses the pair: the zip upload, `set_activity`, the edit page, the `/datasets` editors, `set_dataset` and the library attach. The MCP descriptions of these tools state the rule. An assignment that already has the pair can still be edited toward the rule. A class composite accepts personal data.
+
+
 ## [0.5.726] - 2026-10-18
 
 ### Changed
