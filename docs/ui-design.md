@@ -121,7 +121,7 @@ them is the answer.
 | Archetype | Skeleton | Copy this | Also |
 |-----------|----------|-----------|------|
 | **Admin tabbed** | `AdminTabs` (the `.admin-version-banner`, the hidden `<h1>`, the tab bar) → `.page-section` blocks, headings starting at `<h2>` | `AlertsPage` | `AdminPage`, `AdminUsersPage`, `AdminAuditPage`, `AdminBrightspacePage`, `AdminGitHubPage`, `AdminLTIPage`, `AdminMCPPage`, `AdminRetentionPage`, `AdminStoragePage` |
-| **Instructor tabbed** | `InstructorTabs` → `.page-section` blocks | `InstructorMCPPage` | `AssignmentsPage`, `InstructorActivityPage`, `InstructorBrightspacePage`, `InstructorDatasetsPage`, `InstructorGitHubPage`, `InstructorLTIGradesPage`, `InstructorNewTermPage`, `InstructorSlipDaysPage`, `InstructorStudentsPage` |
+| **Instructor tabbed** | `InstructorTabs` → `.page-section` blocks | `InstructorMCPPage` | `AssignmentsPage`, `InstructorActivityPage`, `InstructorBrightspacePage`, `InstructorDatasetsPage`, `InstructorGitHubPage`, `InstructorGroupsPage`, `InstructorLTIGradesPage`, `InstructorNewTermPage`, `InstructorSlipDaysPage`, `InstructorStudentsPage` |
 | **Titlebar page** | `.page-titlebar` (`<h1>` left, actions right) → optional `.page-subtitle` → content | `AdminUserPage` | `AdminCoursePage`, `AdminRunnerPage`, `AssignmentFeedbackPage`, `AssignmentSubmissionsPage`, `CourseStudentSubmissionsPage`, `InstructorDatasetPage`, `InstructorEnrollCSVPage`, `AssignmentNewPage` |
 | **Plain student page** | `<h1>` → content | `AccountPage` | `SubmitPage`, `EnrollPage`, `IndexPage`, `SubmissionPage`, `GitHubSubmitPage`, `LeaderboardPage` |
 | **Auth box** | `.auth-box` centred card | `RegisterPage` | `LoginPage`, `OAuthConsentPage` |

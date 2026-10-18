@@ -200,8 +200,7 @@ enum CourseGroupStore {
         var names: [String] = []
         for username in parsed.usernames {
             guard matched[username] != nil, let name = parsed.groupByUsername[username] else { continue }
-            let trimmed = String(name.prefix(nameLimit))
-            if known.insert(trimmed.lowercased()).inserted { names.append(trimmed) }
+            if known.insert(name.lowercased()).inserted { names.append(name) }
         }
         return names.sorted { $0.localizedStandardCompare($1) == .orderedAscending }
     }

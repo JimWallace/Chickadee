@@ -60,7 +60,7 @@ extension InstructorDashboardRoutes {
             switch self {
             case .setCreated: "Group set created."
             case .groupAdded: "Group added."
-            case .groupRemoved: "Group removed. Its students are in no group."
+            case .groupRemoved: "Group removed, and its students are in no group."
             }
         }
     }

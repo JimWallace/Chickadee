@@ -55,7 +55,8 @@ private struct StudentRow: HTML {
                 }
             }
             if showsGroups {
-                td(.class("col-hide-phone")) {
+                // Sort by the group's name: a select would sort by its value, the group id.
+                td(.class("col-hide-phone"), .data("sort-value", value: student.groupName ?? "")) {
                     if !rosterReadOnly, let groupSelect = student.groupSelect {
                         GroupSelect(cell: groupSelect, csrfToken: csrfToken)
                     } else if let groupName = student.groupName {
@@ -107,6 +108,10 @@ private struct StudentRow: HTML {
             }
             div(.class("item-details")) {
                 code { student.username }
+                if showsGroups, let groupName = student.groupName {
+                    " "
+                    span(.class("row-phone-meta")) { groupName }
+                }
                 if student.learnFlag != nil {
                     " · \(student.learnFlagReason ?? "") · \(student.learnFlagAdvice ?? "")"
                 }

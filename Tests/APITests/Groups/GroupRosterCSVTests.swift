@@ -32,13 +32,15 @@ import Testing
     }
 
     /// The LEARN Groups export: a header row, the columns in another order,
-    /// quoted cells, and a "Group Category Name" column that must not be read
-    /// as the group.
+    /// quoted cells, a "Group Category Name" column that must not be read as
+    /// the group, the `#` LEARN writes before a username, and a LEARN test
+    /// account, which is skipped as the enrol CSV skips it.
     @Test func readsTheLEARNGroupsExport() throws {
         let text = """
             Group Category Name,Group Name,Group Code,Username,Org Defined ID,"Last Name, First"\r
-            Lab sections,Lab 101,L101,ada,20001234,"Lovelace, Ada"\r
+            Lab sections,Lab 101,L101,#ada,20001234,"Lovelace, Ada"\r
             Lab sections,Lab 102,L102,ALAN,20005678,"Turing, Alan"\r
+            Lab sections,Lab 102,L102,#174667.teststudent1,0,"Test, Student"\r
 
             """
         let parsed = try parse(text)

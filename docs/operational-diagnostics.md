@@ -458,6 +458,7 @@ the user row is hard-deleted via `POST /admin/users/:userID/delete`.
 | `class_item_coverage` | `user_id` | **preserved** | Coverage never retreats when a student drops (docs/collaborative-class-assignments.md). No FK on either backend, on purpose. |
 | `brightspace_credentials`, `brightspace_sync_log`, `courses` | `user_id`, `captured_by_user_id`, `brightspace_sync_user_id` | **preserved** | A BrightSpace binding and its sync history outlive the instructor who made them. No FK on either backend. |
 | `activity_champions`, `activity_standings` | `user_id` | CASCADE | Class-activity rows for the user; go with the user. |
+| `course_group_memberships` | `user_id` | CASCADE | The student's lab-group memberships (docs/lab-groups.md); go with the user. DB-level cascade on both engines (the FK is declared at create time). |
 | `wardrobe_unlocks`, `achievement_awards` | `user_id` | CASCADE | The wardrobe items and the achievements the student has earned (docs/student-wardrobe.md, docs/achievement-rewards.md); go with the user. DB-level cascade on both engines (the FK is declared at create time). |
 | `assignment_participations`, `secret_reveal_unlocks`, `brightspace_grade_clears` | `user_id` | CASCADE | Per-user assignment state; goes with the user. |
 | `assignment_extensions`, `grade_overrides` | `user_id` | CASCADE | The student's extension or override; goes with the student. |

@@ -46,10 +46,12 @@ enum GroupRosterCSV {
         var usernames: [String] = []
         var conflicts: [String] = []
         for row in dataRows {
-            let username = usernameColumn < row.count ? row[usernameColumn] : ""
-            guard !username.isEmpty else { continue }
+            // A LEARN export writes `#username`; the enrol CSV reads it the same way.
+            guard usernameColumn < row.count, let username = learnUsername(fromCell: row[usernameColumn]) else {
+                continue
+            }
             let key = username.lowercased()
-            let group = groupColumn < row.count ? row[groupColumn] : ""
+            let group = groupColumn < row.count ? String(row[groupColumn].prefix(CourseGroupStore.nameLimit)) : ""
             if !usernames.contains(key) { usernames.append(key) }
             guard !group.isEmpty else { continue }
             if let earlier = groupByUsername[key] {
@@ -58,7 +60,8 @@ enum GroupRosterCSV {
                 groupByUsername[key] = group
             }
         }
-        guard conflicts.isEmpty else { throw .conflictingRows(usernames: conflicts) }
+        // Ten names are enough to find the rows; the rest only lengthen the message.
+        guard conflicts.isEmpty else { throw .conflictingRows(usernames: Array(conflicts.prefix(10))) }
         guard !usernames.isEmpty else { throw .emptyFile }
         return Parsed(groupByUsername: groupByUsername, usernames: usernames)
     }

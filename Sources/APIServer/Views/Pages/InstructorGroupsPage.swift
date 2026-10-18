@@ -56,13 +56,13 @@ private struct NoGroupSetSection: HTML {
                 form(.method(.post), .action("/instructor/groups/sets"), .class("form-stack")) {
                     CSRFField(token: csrfToken)
                     label(.class("form-label")) {
-                        "Set name"
+                        "Name"
                         input(
                             .class("form-input"), .type(.text), .name("name"), .value("Lab sections"), .required,
                             .maxlength(CourseGroupStore.nameLimit))
                     }
                     div(.class("toolbar")) {
-                        button(.class("btn btn-primary"), .type(.submit)) { "Create group set" }
+                        button(.class("btn btn-primary"), .type(.submit)) { "Create groups" }
                     }
                 }
             } else {
@@ -89,18 +89,7 @@ private struct GroupSetSection: HTML {
                         "\(panel.studentCount) students · \(panel.ungroupedCount) in no group"
                     }
                 }
-                if canEdit {
-                    div(.class("toolbar")) {
-                        a(
-                            .class("btn action-btn"), .href("#group-add-panel"),
-                            .data("add-target", value: "group-add-panel")
-                        ) { "Add group" }
-                        a(
-                            .class("btn action-btn"), .href("#group-import-panel"),
-                            .data("add-target", value: "group-import-panel")
-                        ) { "Import CSV" }
-                    }
-                }
+                if canEdit { GroupAddMenu() }
             }
             if let readOnlyNote { p(.class("section-note")) { readOnlyNote } }
             if canEdit {
@@ -109,6 +98,7 @@ private struct GroupSetSection: HTML {
             }
             if panel.groups.isEmpty {
                 p(.class("empty")) { "No groups yet." }
+                if canEdit { p(.class("section-note")) { "Add a group, or import a CSV file." } }
             } else {
                 GroupRowsTable(csrfToken: csrfToken, groups: panel.groups, canEdit: canEdit)
             }
@@ -145,7 +135,8 @@ private struct GroupSetSection: HTML {
         div(.class("add-panel card"), .id("group-import-panel")) {
             form(
                 .method(.post), .action("/instructor/groups/import"), .enctype(.multipartFormData),
-                .class("form-stack")
+                .class("form-stack"),
+                .data("confirm", value: "Replace every student's group with the groups in this file?")
             ) {
                 CSRFField(token: csrfToken)
                 input(.type(.hidden), .name("setID"), .value(panel.id))
@@ -153,12 +144,49 @@ private struct GroupSetSection: HTML {
                     "CSV file"
                     input(.class("form-input"), .type(.file), .name("file"), .accept(".csv"), .required)
                     span(.class("field-note field-note--muted")) {
-                        "A username column and a group column. The file replaces every student's group."
+                        "The file replaces every student's group."
                     }
                 }
                 div(.class("toolbar")) {
                     button(.class("btn btn-primary"), .type(.submit)) { "Import" }
                     button(.class("btn action-btn js-add-cancel"), .type(.button)) { "Cancel" }
+                }
+            }
+        }
+    }
+}
+
+/// The one "+ Add" menu: a group by name, or groups from a file. Each item
+/// opens its add panel, as on the Students tab.
+private struct GroupAddMenu: HTML {
+    var body: some HTML {
+        details(.class("add-section-details popup-anchor")) {
+            summary(.class("btn action-btn summary-btn")) {
+                "+ Add "
+                Icon("i-chevron-down")
+            }
+            div(.class("add-section-popup card suite-section-popup row-menu-panel"), .role("menu")) {
+                a(
+                    .class("row-menu-item"), .href("#group-add-panel"), .role("menuitem"),
+                    .data("add-target", value: "group-add-panel")
+                ) {
+                    span(.class("item-tile"), .data("kind", value: "outline")) { Icon("i-plus") }
+                    span {
+                        "Add group"
+                        br()
+                        span(.class("card-meta")) { "One group, by name" }
+                    }
+                }
+                a(
+                    .class("row-menu-item"), .href("#group-import-panel"), .role("menuitem"),
+                    .data("add-target", value: "group-import-panel")
+                ) {
+                    span(.class("item-tile"), .data("kind", value: "document")) { Icon("i-upload") }
+                    span {
+                        "Import CSV"
+                        br()
+                        span(.class("card-meta")) { "Usernames and groups; replaces every group" }
+                    }
                 }
             }
         }
@@ -210,7 +238,7 @@ private struct GroupRemoveMenu: HTML {
             RowMenu(for: group.name) {
                 form(
                     .method(.post), .action("/instructor/groups/remove"),
-                    .data("confirm", value: "Remove \(group.name)? Its students will be in no group.")
+                    .data("confirm", value: "Remove \(group.name) and leave its students in no group?")
                 ) {
                     CSRFField(token: csrfToken)
                     input(.type(.hidden), .name("groupID"), .value(group.id))

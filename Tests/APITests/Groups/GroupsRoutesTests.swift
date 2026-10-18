@@ -84,7 +84,7 @@ import VaporTesting
             let ada = try await student("ada", in: courseID)
 
             let empty = try await getHTML("/instructor/groups", cookie: instructor.cookie, on: app)
-            #expect(empty.contains("Create group set"))
+            #expect(empty.contains("Create groups"))
 
             try await post(
                 "/instructor/groups/sets", as: instructor, fields: ["name": "Lab sections"], expecting: .seeOther)

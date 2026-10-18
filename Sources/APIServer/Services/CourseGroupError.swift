@@ -25,7 +25,7 @@ enum CourseGroupError: Error, Sendable, Equatable, CustomStringConvertible {
         case .duplicateGroupName(let name):
             return "This set already has a group named \(name)."
         case .setNotEditable:
-            return "This group set comes from LEARN. Change its groups in LEARN."
+            return "This group set comes from LEARN, so change its groups in LEARN."
         case .groupNotInSet:
             return "That group is not in this set."
         case .groupRemoved:
