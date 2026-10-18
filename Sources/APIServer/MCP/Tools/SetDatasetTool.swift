@@ -122,13 +122,14 @@ struct SetDatasetTool: ContentTool {
                     "Optional. Derivation steps applied to the student's rows AFTER sampling, in "
                         + "order. Sampling decides which rows a student gets; a transform alters the "
                         + "values in them, so the pool becomes a template each student varies on. "
-                        + "Kinds: " + DatasetTransformProse.kinds + ". Each step takes columns (an "
+                        + "Kinds: " + DatasetTransformProse.glossary + ". Each step takes columns (an "
                         + "explicit list of header names — there is no wildcard, so a column a "
                         + "notebook check asserts on cannot be altered by accident) and rate (the "
                         + "fraction of the student's rows affected, above 0 and at most 1). A "
                         + "transform never adds, removes, renames or reorders a column. Note this "
-                        + "changes the values a student computes over, so pair it with per-student "
-                        + "expected values rather than a fixed one. OMIT this to leave existing "
+                        + "changes the cells a student computes over, and a per-student expression "
+                        + "reads them as delivered, so pair it with per-student expected values rather "
+                        + "than a fixed one. OMIT this to leave existing "
                         + "transforms untouched; send [] to clear them."),
             ]),
         ]),

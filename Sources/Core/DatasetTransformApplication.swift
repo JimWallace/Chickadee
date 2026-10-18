@@ -34,15 +34,29 @@ extension DatasetMaterializer {
         switch transform.kind {
         case .missingValues:
             return blankCells(transform, at: index, in: csv, seedHex: seedHex)
+        case .formatNoise:
+            return editCells(transform, at: index, in: csv, seedHex: seedHex) { cell, rng in
+                noisy(cell, variant: rng.next(upperBound: 3))
+            }
         }
     }
 
     /// Blanks `rate` of the rows in each named column.
+    static func blankCells(
+        _ transform: DatasetTransform, at index: Int, in csv: String, seedHex: String
+    ) -> String {
+        editCells(transform, at: index, in: csv, seedHex: seedHex) { _, _ in "" }
+    }
+
+    /// Replaces the cell of `rate` of the rows in each named column with
+    /// `edit(cell, rng)`, where `rng` is that column's stream, after it chose
+    /// the rows.
     ///
     /// Returns `csv` untouched when the step cannot apply — no rate, a
     /// non-positive rate, no data rows, or a column the file does not have.
-    static func blankCells(
-        _ transform: DatasetTransform, at index: Int, in csv: String, seedHex: String
+    private static func editCells(
+        _ transform: DatasetTransform, at index: Int, in csv: String, seedHex: String,
+        edit: (Substring, inout SplitMix64) -> String
     ) -> String {
         guard let permille = permille(of: transform.rate), permille > 0 else { return csv }
         let (lines, hadTrailingNewline) = normalizedLines(of: csv)
@@ -64,7 +78,7 @@ extension DatasetMaterializer {
                 seed: fnv1a64(
                     "\(seedHex)|\(index)|\(transform.kind.rawValue)|\(column)"))
             for row in chooseRows(count: affected, of: rowCount, using: &rng) {
-                rows[row] = blanking(field: columnIndex, in: rows[row])
+                rows[row] = replacing(field: columnIndex, in: rows[row]) { edit($0, &rng) }
             }
         }
 
@@ -95,17 +109,53 @@ extension DatasetMaterializer {
         return indices.prefix(take).sorted()
     }
 
-    /// `line` with field `index` replaced by an empty value.
+    /// `line` with the raw text of field `index` replaced by `edit(text)`.
     ///
     /// Edits the raw text in place rather than splitting and re-joining: a
     /// rebuild would re-quote every OTHER field by this file's rules rather than
     /// the source's, changing bytes in cells the transform was never asked to
     /// touch.  A short row (fewer fields than the header) is returned unchanged.
-    private static func blanking(field index: Int, in line: String) -> String {
+    private static func replacing(
+        field index: Int, in line: String, with edit: (Substring) -> String
+    ) -> String {
         let ranges = fieldRanges(of: Substring(line))
         guard index < ranges.count else { return line }
-        return line.replacingCharacters(in: ranges[index], with: "")
+        return line.replacingCharacters(in: ranges[index], with: edit(line[ranges[index]]))
     }
+
+    /// `raw` written another way: `variant` 0 adds a space on each side, 1 is
+    /// upper case, 2 is lower case.
+    ///
+    /// The written cell, trimmed and lower-cased, is always the source cell
+    /// lower-cased, so a student who cleans it recovers the value:
+    ///
+    /// - A case change that changes nothing (a number, or a cell already in
+    ///   that case) adds the spaces instead, so a chosen cell always changes.
+    /// - A case change that would not lower-case back to the source's lower
+    ///   case ("Straße" upper-cases to "STRASSE") adds the spaces instead.
+    /// - A missing-value marker such as `NA` stays as it is, as an empty cell
+    ///   does: a reader treats `NA` and `na` differently, and a hole is
+    ///   `missingValues`' to make, not this step's.
+    /// - A quoted cell keeps its quotes outside the change, so it stays one
+    ///   field.
+    static func noisy(_ raw: Substring, variant: UInt64) -> String {
+        let quoted = raw.count >= 2 && raw.first == "\"" && raw.last == "\""
+        let value = quoted ? raw.dropFirst().dropLast() : raw
+        guard !value.isEmpty, !missingMarkers.contains(value.lowercased()) else { return String(raw) }
+        let padded = " \(value) "
+        var written: String
+        switch variant {
+        case 1: written = value.uppercased()
+        case 2: written = value.lowercased()
+        default: written = padded
+        }
+        if written == value || written.lowercased() != value.lowercased() { written = padded }
+        return quoted ? "\"\(written)\"" : written
+    }
+
+    /// Cell values that common CSV readers (R `read.csv`, pandas) read as
+    /// missing, lower-cased. A noise step leaves them as they are.
+    static let missingMarkers: Set<String> = ["na", "n/a", "nan", "null", "none", "#n/a", "-nan"]
 
     /// The raw span of each comma-separated field in `line`, using the same
     /// quoting rules as `splitCSVLine` — a comma inside quotes is data, and a

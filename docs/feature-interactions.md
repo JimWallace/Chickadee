@@ -361,6 +361,26 @@ because line numbers go out of date.
   - `variesPerStudent` is not a wider `hasPersonalization`. Each predicate
     has its own readers. Do not use one in place of the other.
 
+### Dataset transform kinds: `DatasetTransform.Kind`
+
+- **Objects:** the kind of each step in a spec's `transforms`, and the bytes
+  `DatasetMaterializer` writes for it.
+- **Readers that branch on the kind:**
+  - The Files panel edits one `missingValues` step only, in two copies that
+    must agree: `datasetTransformsEditable` (`SuiteRowContexts.swift`) and
+    `ownsTransforms` (`Public/support-files.js`). Any other spec renders
+    disabled and its steps are carried through.
+  - The divergence diagnostic folds the columns a `formatNoise` step names
+    (`DatasetDivergence.swift`).
+  - The MCP `set_dataset` description glosses each kind
+    (`DatasetTransformProse.gloss`, an exhaustive switch).
+  - The row-set test holds every kind to "a transform never changes which
+    rows a student holds" (`DatasetDiagnosticsTests`, an exhaustive switch).
+- **Rules:**
+  - A new kind updates every reader above, or says why it does not.
+  - A kind never changes a delivered byte of an existing kind: each step draws
+    from its own stream, keyed on the step's index, kind and column.
+
 ### The course dataset library
 
 - **Objects:**
