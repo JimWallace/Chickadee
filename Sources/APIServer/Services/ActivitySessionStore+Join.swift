@@ -19,9 +19,10 @@ extension ActivitySessionStore {
     static let joinFailureWindow: TimeInterval = 600
 
     /// Joins `userID` to the open session whose code at `now` (or just
-    /// before) is `code`. A second join moves the student back to this
-    /// session from any other they joined since; a second join of the session
-    /// they are in changes nothing. `network` is the network
+    /// before) is `code`. A student who is a member of a group joins only
+    /// that group's session; a student in no group joins any, and becomes a
+    /// member of it in a manual set. A second join of the session the student
+    /// is in changes nothing. `network` is the network
     /// part of the student's address (`ClientNetwork.prefix`), nil when
     /// unknown.
     @discardableResult
@@ -82,6 +83,12 @@ extension ActivitySessionStore {
             .filter(\.$setID == setID)
             .filter(\.$userID == userID)
             .first()
+        // A member joins only their own group's session; a TA moves a
+        // student who goes to another lab on the Groups tab.
+        if let membership, membership.groupID != session.groupID {
+            let own = try await APICourseGroup.find(membership.groupID, on: db)?.name ?? "another lab"
+            throw ActivitySessionError.otherGroup(session: group.name, own: own)
+        }
         let placed = set.acceptsManualEdits && membership == nil
         if placed {
             try await CourseGroupStore.setMembership(userID: userID, groupID: group.requireID(), in: set, on: db)

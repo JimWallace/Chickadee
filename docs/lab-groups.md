@@ -20,7 +20,7 @@ today.
 | 1 | Groups: group sets, groups, memberships; the Groups tab; the CSV import; the Group column on the roster; groups in the data export | built |
 | 2 | Sessions: a session per (activity, group), started and ended from the present page; the submission gate reads the session; attendance by join code at `/join`; presence: a code for every student that changes every 30 seconds, the staff list of who joined, a limit on wrong codes, the "Other network" flag | built |
 | 3a | Rankings per group, the leaderboard: `group_leaderboard_entries`, a late result does not rank, the board and the present page per group; other kinds refuse the flag until their slice | built |
-| 3 | Rankings per group, the rest: standings, the hill, round-robin opponents, tournament runs; the gate after a session closes | not started |
+| 3 | Rankings per group, the rest: standings, the hill, round-robin opponents, tournament runs | not started |
 | 4 | The composite per group, and the course gallery of every group's image | not started |
 | 5 | Group goals: the union and the corpus percent per group; a group achievement | not started |
 | 6 | The LEARN source: the existing group-category sweep writes the new tables; a D2L Sections reader; the category picker | not started |
@@ -141,13 +141,12 @@ Nil means course-wide, which is what every existing row is.
    ready. Content is versioned, exported in a course bundle and authored by
    MCP. A session is none of those. Keeping them apart is the same reason the
    window is not the deadline (docs/class-activities.md, slice 8).
-3. **Attendance beats membership.** A student who enters Lab 103's code plays
-   in Lab 103, even if LEARN puts them in Lab 101. The join code is the one
-   thing a TA can control from the front of the room. It also fills a group
-   with no source at all: a student with no group who joins a session becomes a
-   member of that group. That is the manual source that needs no form. Since
-   Presence, only attendance counts: a member who has not typed the code
-   does not play.
+3. **Membership decides the room; attendance decides who plays.** A member
+   of a group joins only that group's session (maintainer decision 4); a TA
+   moves a student who goes to another lab on the Groups tab. A student with
+   no group who joins a session becomes a member of that group: the manual
+   source that needs no form. Since Presence, only attendance counts: a
+   member who has not typed the code does not play.
 4. **The group is written at ingest and never recomputed.** A ranking row
    carries the group it was played in. A student who moves groups later keeps
    their place in the room they played in. This is the house pattern (every
@@ -277,8 +276,8 @@ the Sections reader.
   student already plays in changes nothing, so a submission made before it
   still ranks when it is graded.
   A student in no group of a manual set becomes a member of the session's
-  group; a member of another group stays where they are and plays in the
-  session they joined. A removed group's session, and a session of an
+  group; a member of another group is refused ("This session is for Lab 103.
+  You are in Lab 101.", maintainer decision 4). A removed group's session, and a session of an
   activity that no longer runs per group, or of an archived course, refuse a
   join (an ended session shows no code to type). Removing a group ends its
   open sessions, and so does turning
@@ -406,9 +405,12 @@ should be able to see it. The maintainer chose best effort on 2026-10-18.
   are not asked for a code that ranks nowhere. A hill, standings, a bracket and the union
   would mix the groups until their slices make them per group. A composite
   keeps its own message.
-- Not yet: the gate still refuses a submission after the student's session
-  closes. Relaxing it changes an assertion in an existing test, so it waits
-  for the maintainer.
+- The submission gate refuses only a student who never joined one of the
+  activity's sessions (`ActivitySessionStore.hasJoined`). After the session
+  a student joined closes, their submission grades and does not rank
+  (decision 1). A member of a group who missed their lab stays refused.
+- The staff board's submission count stays the student's total for the
+  activity, not per group (maintainer decision 6).
 - Tests: `LeaderboardPerGroupTests`.
 
 ### Slice 3: rankings per group, the rest
@@ -416,9 +418,6 @@ should be able to see it. The maintainer chose best effort on 2026-10-18.
 - `group_id` on `leaderboard_entries`, `activity_standings`,
   `activity_champions`, `match_results` and `tournament_runs`. The ingest
   writers resolve the student's session group once and stamp it.
-- The submission gate refuses only a student who never joined a run of the
-  activity's sessions. After the session they joined closes, a submission
-  grades, as decision 1 says, and the ingest writers skip its ranking rows.
 - The hill's unique key becomes (assignment, group). `jobOpponent` stages the
   group's champion. `jobOpponentSet` lists the group's participants.
 - The leaderboard, standings and bracket pages filter by group. The present
@@ -503,6 +502,18 @@ The three questions the first draft left open are settled.
    would rank nowhere, and the room is where the activity happens. Presence
    (2026-10-18) widens this: no student submits without the code, a member
    of the group included.
+4. **A member joins only their own group's session** (later on 2026-10-18).
+   The registrar assigns the labs, so membership is reliable, and a door
+   into every lab weakens presence. A student in no group may still join
+   any session. A student who goes to another lab is moved by a TA on the
+   Groups tab (a synced set cannot be edited, so that case waits for a
+   "let in" action or slice 6).
+5. **A student who joined still submits after the close.** The result
+   grades and does not rank, as decision 1 says. Only a student who never
+   joined is refused.
+6. **The staff submission count is the student's total** for the activity,
+   not per group. Only a student who played in two labs shows a
+   difference, and a per-group count needs the session of each submission.
 
 One consequence of decision 1 to carry into slice 2: because each session is
 the lab's assigned slot, a session may later take a planned open and close

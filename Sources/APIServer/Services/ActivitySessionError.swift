@@ -11,6 +11,9 @@ enum ActivitySessionError: Error, Sendable, Equatable, CustomStringConvertible {
     case removed
     /// Too many wrong codes in `ActivitySessionStore.joinFailureWindow`.
     case tooManyAttempts
+    /// The student is a member of another group: a member joins only their
+    /// own group's session.
+    case otherGroup(session: String, own: String)
 
     var description: String {
         switch self {
@@ -19,6 +22,7 @@ enum ActivitySessionError: Error, Sendable, Equatable, CustomStringConvertible {
         case .notAStudent: return "Only a student of this course can join its sessions."
         case .removed: return "Course staff removed you from this session."
         case .tooManyAttempts: return "Too many wrong codes. Try again later."
+        case .otherGroup(let session, let own): return "This session is for \(session). You are in \(own)."
         }
     }
 }

@@ -488,7 +488,10 @@ because line numbers go out of date.
     composite.
   - Only attendance counts: membership does not let a student submit. A
     join from before a session's latest start, or a removed one, does not
-    count.
+    count. But membership limits the join: a member joins only their own
+    group's session. The gate lets in any student who has ever joined one of
+    the activity's sessions; ranking still needs an open joined session at
+    the submission's time.
   - The join code is derived from the session's secret and the time; it is
     never stored. A reopen draws a new secret.
   - Remove undoes a group placement that the student's join made

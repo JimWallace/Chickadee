@@ -112,16 +112,19 @@ private func requireOpenActivityWindow(
 }
 
 /// Refuses a submission to a per-group activity (docs/lab-groups.md) from a
-/// student who has joined no open session by code. In place of the window,
-/// not beside it: a per-group activity carries none. Course staff are not
-/// gated, for the window's reason.
+/// student who has never joined one of its sessions by code. In place of the
+/// window, not beside it: a per-group activity carries none. A student who
+/// joined may still submit after their session closes: the result grades and
+/// does not rank, because the board froze at the close (maintainer decision
+/// 1, `recordLeaderboardEntry`). Course staff are not gated, for the window's
+/// reason.
 private func requireOpenGroupSession(
     assignment: APIAssignment, user: APIUser, on req: Request, now: Date
 ) async throws {
     if try await isCourseStaff(user, inCourse: assignment.courseID, db: req.db) { return }
-    let session = try await ActivitySessionStore.currentSession(
-        assignmentID: assignment.requireID(), userID: user.requireID(), now: now, on: req.db)
-    guard session == nil else { return }
+    let joined = try await ActivitySessionStore.hasJoined(
+        assignmentID: assignment.requireID(), userID: user.requireID(), on: req.db)
+    guard !joined else { return }
     throw AssignmentSubmissionGateError.notInGroupSession
 }
 

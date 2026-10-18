@@ -82,6 +82,14 @@ import VaporTesting
         return session
     }
 
+    /// Moves `userID` to `group`, as a TA does on the Groups tab: a member
+    /// joins only their own lab's session.
+    private func move(_ userID: UUID, to group: UUID) async throws {
+        let groupRow = try #require(try await APICourseGroup.find(group, on: app.db))
+        let set = try #require(try await APICourseGroupSet.find(groupRow.setID, on: app.db))
+        try await CourseGroupStore.setMembership(userID: userID, groupID: group, in: set, on: app.db)
+    }
+
     /// Makes a submission now and records its metric, as result ingest does.
     private func submit(_ userID: UUID, id: String, metric: Double) async throws {
         _ = try await makeTestSubmission(on: app, id: id, setupID: setupID, userID: userID)
@@ -139,6 +147,7 @@ import VaporTesting
             ).save(on: app.db)
             try await joinSession(f, group: f.labA, userID: f.ada)
             try await submit(f.ada, id: "lbg_s7", metric: 5)
+            try await move(f.ada, to: f.labB)
             try await joinSession(f, group: f.labB, userID: f.ada)
             try await submit(f.ada, id: "lbg_s8", metric: 3)
             #expect(try await entry(f.ada, in: f.labA)?.metric == 5, "the older, higher row does not block it")
@@ -151,6 +160,7 @@ import VaporTesting
             let f = try await fixture(on: app)
             try await joinSession(f, group: f.labA, userID: f.ada)
             _ = try await makeTestSubmission(on: app, id: "lbg_s9", setupID: setupID, userID: f.ada)
+            try await move(f.ada, to: f.labB)
             // ada joins Lab 102 after submitting, before the result is graded.
             let labB = try await ActivitySessionStore.open(
                 assignmentID: f.assignmentID, groupID: f.labB, by: nil, now: Date().addingTimeInterval(-60),
