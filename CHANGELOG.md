@@ -9,6 +9,23 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.713] - 2026-10-18
+
+### Added
+
+- **The Earned toast on the result page (J2, #2616).** When a submission earns
+  a new face or ring, the result page shows it once: the student's bird
+  wearing it, how it was earned, and Wear it, which saves without a reload.
+
+### Changed
+
+- **A simpler account page.** The Account info card no longer repeats the
+  username under the heading, and it shows the preferred name only when the
+  heading does not already show it. The bird card no longer has the "How you
+  earned these" list: the result page says how an item was earned, when it is
+  earned.
+
+
 ## [0.5.712] - 2026-10-18
 
 ### Added
