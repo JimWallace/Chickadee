@@ -1,4 +1,4 @@
-// Tests/APITests/AchievementAwardLedgerTests.swift
+// Tests/APITests/Gamification/AchievementAwardLedgerTests.swift
 //
 // The award ledger (docs/achievement-rewards.md, S1): a student's own result
 // page and dashboard store the badges they show, once each, and a regrade
