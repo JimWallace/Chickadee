@@ -411,6 +411,10 @@ private struct EditActivityBlock: HTML {
                     p(.class("field-note field-note--muted")) {
                         "Each group's session, started on the present page, replaces the times below."
                     }
+                } else {
+                    p(.class("field-note field-note--muted")) {
+                        ActivityAuthoring.runsPerGroupKindMessage
+                    }
                 }
                 " "
                 label(.class("form-label")) {
