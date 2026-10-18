@@ -64,6 +64,19 @@ extension InstructorDashboardRoutes {
         var published: String?
     }
 
+    /// The Datasets tab routes, under the `/instructor` group.
+    func registerDatasetRoutes(on r: any RoutesBuilder) {
+        r.get("datasets", use: datasetsPage)
+        r.on(.POST, "datasets", body: .collect(maxSize: "17mb"), use: createDataset)
+        r.get("datasets", "view", use: datasetPage)
+        r.get("datasets", "download", use: downloadDatasetVersion)
+        r.post("datasets", "metadata", use: saveDatasetMetadata)
+        r.post("datasets", "dictionary", use: saveDatasetDictionary)
+        r.on(.POST, "datasets", "versions", body: .collect(maxSize: "17mb"), use: addDatasetVersion)
+        r.post("datasets", "publish", use: publishDataset)
+        r.post("datasets", "delete", use: deleteDataset)
+    }
+
     // MARK: - Pages
 
     @Sendable
