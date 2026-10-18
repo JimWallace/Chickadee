@@ -9,6 +9,13 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.722] - 2026-10-18
+
+### Changed
+
+- **Course dataset library, slice 9: docs.** The architecture overview describes the course dataset library, the per-student dataset design points to it, and the plan records the steps to move HLTH 230's two live datasets into the library and the maintainer's decisions on slices 10 and 11.
+
+
 ## [0.5.721] - 2026-10-18
 
 ### Fixed
