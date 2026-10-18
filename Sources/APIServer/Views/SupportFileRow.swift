@@ -16,15 +16,24 @@ struct SupportFileRow: HTML {
             td {
                 a(.href(file.url)) { code { file.name } }
                 datasetControl
+                if let library = file.library {
+                    SupportFileLibraryControl(filename: file.name, library: library)
+                }
             }
             td(.class("time")) {
+                // The delete door refuses an attached file, so its Remove
+                // detaches it and removes the file in one step.
                 button(
-                    .class("btn action-btn action-danger js-support-file-delete-btn"), .type(.button),
-                    .data("filename", value: file.name)
+                    .class(
+                        "btn action-btn action-danger "
+                            + (isAttached ? "js-library-remove" : "js-support-file-delete-btn")),
+                    .type(.button), .data("filename", value: file.name)
                 ) { "Remove" }
             }
         }
     }
+
+    private var isAttached: Bool { file.library?.attachment != nil }
 
     /// `hidden` on the fields that only mean something for a dataset.
     private var hiddenUnlessDataset: [MarkupAttribute<HTMLTag.span>] {
@@ -41,7 +50,10 @@ struct SupportFileRow: HTML {
         div(.class("dataset-control")) {
             label(.class("dataset-toggle")) {
                 " "
-                input(attributes: [.type(.checkbox), .class("js-dataset-toggle")] + (file.isDataset ? [.checked] : []))
+                // An attached file always has a spec; detach ends it.
+                input(
+                    attributes: [.type(.checkbox), .class("js-dataset-toggle")] + (file.isDataset ? [.checked] : [])
+                        + (isAttached ? [.disabled] : []))
                 " Per-student sample"
             }
             " "
@@ -97,6 +109,46 @@ struct SupportFileRow: HTML {
                 span(.class("chip js-dataset-drift"), .hidden) {}
                 " "
             }
+        }
+    }
+}
+
+/// The course library line under a support file: where an attached file comes
+/// from, with update, scope and detach, or the move into the library for a
+/// CSV that is not attached. Public/support-files.js sends each action.
+private struct SupportFileLibraryControl: HTML {
+    let filename: String
+    let library: SupportFileLibraryState
+
+    var body: some HTML {
+        div(.class("dataset-control")) {
+            if let attachment = library.attachment {
+                span { "From \(attachment.sourceText)" }
+                if let newer = attachment.newerVersion {
+                    button(
+                        .class("btn action-btn js-library-update"), .type(.button),
+                        .data("filename", value: filename)
+                    ) { "Update to v\(newer)" }
+                }
+                label(.class("dataset-toggle")) {
+                    input(
+                        attributes: [
+                            .type(.checkbox), .class("js-library-scope"), .data("filename", value: filename),
+                        ] + (attachment.isCourseScoped ? [.checked] : []))
+                    " Same rows in every assignment"
+                }
+                button(
+                    .class("btn action-btn js-library-detach"), .type(.button), .data("filename", value: filename)
+                ) { "Detach" }
+            } else {
+                button(
+                    .class("btn action-btn js-library-promote"), .type(.button), .data("filename", value: filename)
+                ) { "Move to course library" }
+            }
+            span(
+                .class("upload-status-inline js-library-status"), .role("status"),
+                .custom(name: "aria-live", value: "polite")
+            ) {}
         }
     }
 }

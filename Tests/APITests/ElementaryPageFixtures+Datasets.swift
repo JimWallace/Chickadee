@@ -11,7 +11,27 @@ import Foundation
 extension ElementaryPageFixtures {
 
     static var datasetPages: [ElementaryPageFixture] {
-        [instructorDatasetsPage, instructorDatasetPage]
+        [instructorDatasetsPage, instructorDatasetPage, assignmentEditPageWithLibrary]
+    }
+
+    /// The edit page's Files panel with the course library: the attach
+    /// control, an attached file that pins an older version, and a CSV the
+    /// panel offers to move into the library. The exemplar fixture of this
+    /// page is in `ElementaryPageFixtures+Editors.swift`.
+    static var assignmentEditPageWithLibrary: ElementaryPageFixture {
+        var attached = EditorSamples.supportFile(dataset: true, editable: true)
+        attached.library = SupportFileLibraryState(
+            attachment: .init(sourceText: "VitalDB cases v1", newerVersion: 2, isCourseScoped: true))
+        var promotable = EditorSamples.supportFile(dataset: false, editable: true)
+        promotable.library = SupportFileLibraryState(attachment: nil)
+        var edit = EditorSamples.edit(rich: true, embedded: nil)
+        edit.supportFileRows = [attached, promotable]
+        edit.datasetLibraryOptions = [DatasetLibraryOption(slug: "vitaldb-cases", label: "VitalDB cases (v2)")]
+        return ElementaryPageFixture(
+            typeName: "AssignmentEditPage",
+            archetype: .bodyPartialShim,
+            renders: [AssignmentEditPage(page: page(currentUser: signedInAdmin), edit: edit).render()]
+        )
     }
 
     static var instructorDatasetsPage: ElementaryPageFixture {

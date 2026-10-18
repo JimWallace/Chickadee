@@ -204,6 +204,9 @@
             datasetsURL: function () {
                 return '/instructor/' + encodeURIComponent(assignmentID) + '/datasets';
             },
+            libraryURL: function (op) {
+                return '/instructor/' + encodeURIComponent(assignmentID) + '/datasets/library/' + op;
+            },
             onChange: function () { ChickadeeSurfaceSwap.refreshEditSurface(); }
         });
     }

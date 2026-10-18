@@ -601,6 +601,8 @@ struct InstructorDashboardRoutes: RouteCollection {
         let resolvedLanguage = manifest.flatMap {
             AssignmentLanguage.resolve(manifest: $0)
         }
+        let library = try await withLibraryStates(
+            currentFiles.existingSuiteRows.filter { $0.tier == "support" }, setup: setup, on: req.db)
         let patternFamiliesJSON = manifestArraySeedJSON(manifest?.patternFamilies)
         let notebookChecksJSON = manifestArraySeedJSON(manifest?.notebookChecks)
         return EditAssignmentContext(
@@ -620,7 +622,7 @@ struct InstructorDashboardRoutes: RouteCollection {
                 ? "/testsetups/\(assignment.testSetupID)/notebook?file=solution&edit=1&title=\(urlEncode("Solution Notebook"))"
                 : nil,
             existingSuiteRows: currentFiles.existingSuiteRows.filter { $0.tier != "support" },
-            supportFileRows: currentFiles.existingSuiteRows.filter { $0.tier == "support" },
+            supportFileRows: library.rows,
             familyRows: familySuiteRowsForSetup(setup),
             patternFamiliesJSON: patternFamiliesJSON,
             notebookChecksJSON: notebookChecksJSON,
@@ -679,6 +681,7 @@ struct InstructorDashboardRoutes: RouteCollection {
             // Where a write inside the pane sends the pane afterwards.  Must
             // match the route `InstructorWorkbenchRoutes` registers, since the
             // pane is already showing it.
+            datasetLibraryOptions: library.options
         )
     }
 }

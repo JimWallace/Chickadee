@@ -61,6 +61,10 @@ struct EditableSuiteRow: Encodable {
     /// when a spec holds a shape it CANNOT edit and step aside rather than
     /// overwrite it.
     let datasetTransforms: [DatasetTransform]
+    /// The file's place in the course dataset library, for the edit page's
+    /// Files panel. Nil on every other row and page, which then shows no
+    /// library control (`withLibraryStates`).
+    var library: SupportFileLibraryState?
 
     /// Empty string when displayName is nil.
     var displayNameOrEmpty: String { displayName ?? "" }

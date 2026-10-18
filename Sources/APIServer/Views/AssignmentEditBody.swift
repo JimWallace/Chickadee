@@ -264,6 +264,18 @@ private struct EditFilesBlock: HTML {
             div(.class("editor-block-head")) {
                 h2 { "Files" }
                 div(.class("toolbar toolbar--end")) {
+                    if !edit.datasetLibraryOptions.isEmpty {
+                        select(
+                            .class("form-input js-library-attach-select"),
+                            .ariaLabel("Dataset to attach from the course library")
+                        ) {
+                            for dataset in edit.datasetLibraryOptions {
+                                option(.value(dataset.slug)) { dataset.label }
+                            }
+                        }
+                        button(.class("btn action-btn js-library-attach"), .type(.button)) { "Attach" }
+                        " "
+                    }
                     button(
                         .class("btn action-btn"), .type(.button), .id("add-support-file-btn"),
                         .title("Upload a data file (CSV, JSON, etc.) bundled with the assignment")

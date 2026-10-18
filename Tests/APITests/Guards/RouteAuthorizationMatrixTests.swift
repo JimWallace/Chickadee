@@ -298,6 +298,11 @@ import VaporTesting
         "PUT /instructor/:assignmentID/global-variables": .ta,
         "GET /instructor/:assignmentID/datasets": .ta,
         "PUT /instructor/:assignmentID/datasets": .ta,
+        "POST /instructor/:assignmentID/datasets/library/attach": .ta,
+        "POST /instructor/:assignmentID/datasets/library/update": .ta,
+        "POST /instructor/:assignmentID/datasets/library/detach": .ta,
+        "POST /instructor/:assignmentID/datasets/library/scope": .ta,
+        "POST /instructor/:assignmentID/datasets/library/promote": .ta,
         "GET /instructor/:assignmentID/achievements": .ta,
         "PUT /instructor/:assignmentID/achievements": .ta,
         // Ungraded course material is content authoring, not course structure —

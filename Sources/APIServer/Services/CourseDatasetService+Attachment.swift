@@ -164,6 +164,33 @@ extension CourseDatasetService {
         return source.version < dataset.currentVersion
     }
 
+    // MARK: - Scope
+
+    /// Sets whether the attached file `filename` gives a student the same rows
+    /// in every assignment (`.course`) or rows of this assignment's own
+    /// (`.assignment`). The bytes and the sample do not change.
+    @discardableResult
+    static func setAttachmentScope(
+        file filename: String, in setup: APITestSetup, to scope: DatasetSliceScope, on db: any Database
+    ) async throws -> DatasetSpec {
+        guard let manifest = setup.decodedManifest() else { throw CourseDatasetError.unreadableManifest }
+        guard let attached = manifest.libraryAttachment(for: filename) else {
+            throw CourseDatasetError.notAttached(filename)
+        }
+        let spec = DatasetSpec(
+            file: filename, kind: attached.kind, sampleSize: attached.sampleSize,
+            stratumColumn: attached.stratumColumn, transforms: attached.transforms, source: attached.source,
+            scope: scope)
+        if let issue = DatasetSpecValidation.scopeIssue(with: spec) {
+            throw CourseDatasetError.attachmentIssue(issue)
+        }
+        try await mutateManifest(setup: setup, on: db) { props in
+            guard let index = props.datasets.firstIndex(where: { $0.file == filename }) else { return }
+            props.datasets[index] = spec
+        }
+        return spec
+    }
+
     // MARK: - Promote
 
     /// Creates a library dataset whose version 1 is the support file
