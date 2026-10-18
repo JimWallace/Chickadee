@@ -372,6 +372,14 @@
     // after an upload, because an action can add a file, change a row's
     // source line or remove a row.
     var boundLibraryControls = false;
+    // What failed, per action, for the error beside the control.
+    var LIBRARY_FAILURES = {
+        attach: 'Could not attach the dataset',
+        update: 'Could not update the dataset',
+        detach: 'Could not detach the dataset',
+        scope: 'Could not change the scope',
+        promote: 'Could not move the file to the course library'
+    };
     var libraryConfig = null;
 
     // What a library control asks for: the action and its body, or null for
@@ -429,7 +437,7 @@
             } catch (e) {
                 // A refused scope change leaves the box as the server holds it.
                 if (request.op === 'scope') target.checked = !target.checked;
-                ChickadeeUI.showActionError('Could not change the course library link — ' + e.message, target);
+                ChickadeeUI.showActionError(LIBRARY_FAILURES[request.op] + ' — ' + e.message, target);
             }
         }
 

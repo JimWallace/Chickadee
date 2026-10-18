@@ -135,20 +135,17 @@ private struct SupportFileLibraryControl: HTML {
                         attributes: [
                             .type(.checkbox), .class("js-library-scope"), .data("filename", value: filename),
                         ] + (attachment.isCourseScoped ? [.checked] : []))
-                    " Same rows in every assignment"
+                    " Course-wide rows"
                 }
                 button(
                     .class("btn action-btn js-library-detach"), .type(.button), .data("filename", value: filename)
                 ) { "Detach" }
+                span(.class("dataset-note")) { "Detach the file to clear its sample." }
             } else {
                 button(
                     .class("btn action-btn js-library-promote"), .type(.button), .data("filename", value: filename)
                 ) { "Move to course library" }
             }
-            span(
-                .class("upload-status-inline js-library-status"), .role("status"),
-                .custom(name: "aria-live", value: "polite")
-            ) {}
         }
     }
 }

@@ -450,7 +450,7 @@ datasets PUT does (`PublishedAssignmentRoutes+DatasetLibrary.swift`):
 |---|---|---|
 | A select and Attach, beside the upload (only when the course has datasets) | `POST …/datasets/library/attach` `{slug}` | Attaches the newest version under its own filename, with course scope and no sample (decision 1). The instructor then sets the sample as for any dataset. |
 | "Update to v3", on an attached row that pins an older version | `…/update` `{file}` | Moves to the newest version. |
-| "Same rows in every assignment" | `…/scope` `{file, courseScoped}` | Sets the scope (`setAttachmentScope`). |
+| "Course-wide rows" | `…/scope` `{file, courseScoped}` | Sets the scope (`setAttachmentScope`). |
 | Detach | `…/detach` `{file}` | Ends the attachment and keeps the file and its sample. |
 | Remove, on an attached row | `…/detach` `{file, removeFile: true}` | The support-file delete refuses an attached file, so Remove detaches and removes in one step. |
 | "Move to course library", on a CSV that is not attached | `…/promote` `{file}` | Creates an unpublished dataset named after the file (decision 3). The instructor renames it on the Datasets tab. |
@@ -461,8 +461,9 @@ datasets PUT does (`PublishedAssignmentRoutes+DatasetLibrary.swift`):
   still changes a course-scoped sample back to the assignment seed. A scope
   change and a promote do not, as a datasets PUT does not; both are listed in
   `WebContentEditCoverageTests`.
-- **An attached row's per-student checkbox is disabled.** An attached file
-  always has a spec, and unchecking it would be refused; Detach ends it.
+- **An attached row's per-student checkbox is disabled,** with a one-line note
+  that says to detach first. An attached file always has a spec, and
+  unchecking it would be refused.
 - **The create page has no library controls.** Its endpoints are draft
   endpoints, so a dataset is attached after the assignment exists.
 - A refusal from the service is a 400 with its reason, which the panel shows
