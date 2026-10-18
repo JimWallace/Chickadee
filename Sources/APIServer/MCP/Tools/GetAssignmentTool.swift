@@ -83,6 +83,9 @@ struct GetAssignmentTool: ContentTool {
         /// The class-activity block, or nil for an ordinary assignment. Set via
         /// the activity tool (same naming caveat as `secretRevealEnabled`).
         let activity: ActivityOutput?
+        /// The files that come from the course dataset library, with the
+        /// version each one pins.
+        let datasets: [AttachedDatasetDTO]
     }
 
     /// The activity block as reported: its kind, the leaderboard's visibility,
@@ -155,7 +158,8 @@ struct GetAssignmentTool: ContentTool {
         + "\(MCPActivityProse.quotedTokenAlternatives) — with leaderboardVisibility, the "
         + "leaderboard path, the aggregation, the opponent source and file, and the live-session "
         + "window as opensAt and closesAt, null when unset) — which together decide what may be "
-        + "authored here."
+        + "authored here. datasets lists the files that come from the course dataset library, with the "
+        + "slug, the pinned version, the scope and the sample of each."
     static let inputSchema: JSONValue = MCPSchema.assignmentPublicIDOnlyInput
     static let outputSchema: JSONValue? = .object([
         "type": .string("object"),
@@ -226,6 +230,7 @@ struct GetAssignmentTool: ContentTool {
                     .string("leaderboardPath"), .string("aggregation"), .string("opponentSource"),
                 ]),
             ]),
+            "datasets": .object(["type": .string("array"), "items": DatasetToolSchema.attached]),
         ]),
         "required": .array([
             .string("publicID"), .string("title"), .string("slug"), .string("courseCode"),
@@ -296,7 +301,8 @@ struct GetAssignmentTool: ContentTool {
                     opensAt: activity.window?.opensAtISO,
                     closesAt: activity.window?.closesAtISO,
                     composite: activity.composite)
-            }
+            },
+            datasets: (manifest?.datasets ?? []).compactMap(AttachedDatasetDTO.init)
         )
     }
 }

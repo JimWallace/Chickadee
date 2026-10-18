@@ -158,10 +158,8 @@ expression evaluated with the student's seed (reusing
 
 Deterministic and server-side, exactly like today's personalization.
 
-**MCP surface** (natural extension of existing content tools):
-`create_dataset`, `list_datasets`, `get_dataset` (list files / read a head,
-like `get_support_files`), `attach_dataset` / `detach_dataset`,
-`set_dataset_slice`.
+**MCP surface:** built as the course dataset library tools; see
+[datasets-course-library.md](datasets-course-library.md) §4.7.
 
 ### Migration
 

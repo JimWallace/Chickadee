@@ -58,6 +58,13 @@ The catalog:
 | `set_assignment_concept` | `content:write` | Tag an assignment with the lab concept whose wardrobe ring full marks earn, or clear it; no regrade/close |
 | `set_time_limit` | `content:write` | Set the assignment-wide (or per-test) execution time limit; no regrade/close |
 | `set_dataset` | `content:write` | Mark a support file as a per-student dataset (per-seed row sample under the same filename) or clear the mark; no regrade/close |
+| `list_datasets` | `content:read` | The course dataset library: each dataset with its versions, dictionary and the assignments that attach it |
+| `get_dataset` | `content:read` | One library dataset, plus the header and first rows of one version and its dictionary |
+| `create_dataset` | `content:write` | Create a library dataset from a `sourceUrl` or by promoting an assignment's support file; starts unpublished; no regrade/close |
+| `update_dataset` | `content:write` | Edit a library dataset's metadata and column prose, and publish it to the course Data page; no regrade/close |
+| `add_dataset_version` | `content:write` | Add a version to a library dataset from a `sourceUrl`; attachments keep their pinned version; no regrade/close |
+| `attach_dataset` | `content:write` | Attach a library dataset to an assignment (pinned version, scope, sample), or move an attached file to another version or scope; re-grades and re-validates, no close |
+| `detach_dataset` | `content:write` | End a library attachment, keeping the file and its sample unless `removeFile`; re-grades and re-validates, no close |
 | `set_minimum_runner_version` | `content:write` | Set (or clear) the minimum native-runner version that may grade the assignment (semver); server-side claim-time gate, worker path only; no regrade/close |
 | `set_activity` | `content:write` | Make the assignment a class activity (a leaderboard kind ranked on the footer's `metric`), change its leaderboard visibility, or clear it; the kind is locked once a student has submitted; no regrade/close |
 | `run_tournament` | `content:write` | Start a single-elimination or Swiss tournament on a tournament-kind activity: snapshots every student's latest complete submission as the entrants and enqueues the first round's match jobs; rounds advance as results land; a run in progress is superseded; never a grade of record |

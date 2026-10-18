@@ -98,6 +98,16 @@ import Testing
         // suite; mirrors the web PUT /datasets endpoint, which neither closes
         // nor regrades. Slices apply on the next (re)grade.
         "SetDatasetTool.swift",
+        // The course dataset library itself: a create, a metadata edit and a
+        // new version change no attached file, because an attachment pins its
+        // version. A create that promotes a support file keeps its bytes and
+        // sample, as the web promote does. No close/regrade.
+        "CourseDatasetWriteTools.swift",
+        // Attach, version move, scope change and detach change the rows each
+        // student receives, so they re-grade and re-validate through
+        // applyContentEditEffects. Like the web library routes they mirror,
+        // and like set_dataset, they do not close: the suite is unchanged.
+        "DatasetAttachmentTools.swift",
         // Display-only awards; never change what the suite grades.
         "UpdateAchievementsTool.swift",
         // Shared inputs re-inline into scripts in place, matching the web

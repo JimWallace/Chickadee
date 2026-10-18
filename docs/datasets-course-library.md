@@ -18,7 +18,7 @@ states what it adds and what proves it.
 | 4 | Course cohort: the per-(student, course) seed, and `DatasetResolver` choosing the seed per spec at every delivery path | built |
 | 5 | Instructor surfaces: the Datasets tab (5a), the Files-panel picker and the scope control (5b) | built |
 | 6 | Student surfaces: the course Data page, the assignment-page dataset line, the "my rows" download | built |
-| 7 | MCP: `list_datasets`, `get_dataset`, `create_dataset`, `update_dataset`, `add_dataset_version`, `attach_dataset`, `detach_dataset`; `set_dataset` gains `scope` | proposed |
+| 7 | MCP: `list_datasets`, `get_dataset`, `create_dataset`, `update_dataset`, `add_dataset_version`, `attach_dataset`, `detach_dataset` | built |
 | 8 | Lifecycle: course clone, bundle export and import, storage page, purge | proposed |
 | 9 | Migration of HLTH 230: promote the two live datasets; docs and CLAUDE.md | proposed |
 | 10 | Optional: the `formatNoise` transform | proposed |
@@ -526,25 +526,46 @@ course.
 Tests: `StudentDataRoutesTests`, and the `CourseDataPage` and upload-page
 fixtures in `ElementaryPageFixtures+Datasets.swift`.
 
-### 4.7 MCP (slice 7)
+### 4.7 MCP (slice 7, as built)
 
-New tools, all course-scoped, with the same gates as content items:
+Seven tools, all course-scoped, with the gates of the web Datasets tab and the
+Files panel: a read needs an enrollment, a write the TA role and a course that
+is not archived.
 
 | Tool | Scope | Does |
 |---|---|---|
-| `list_datasets` | `content:read` | the library with versions and usage |
-| `get_dataset` | `content:read` | metadata, dictionary, the first rows of the pool |
-| `create_dataset` | `content:write` | from a `sourceUrl` under the SSRF guard (as content attachments), or by promoting a support file of an assignment |
-| `update_dataset` | `content:write` | name, description, provenance, licence, dictionary, published |
+| `list_datasets` | `content:read` | the library with versions, the newest dictionary and usage |
+| `get_dataset` | `content:read` | the same for one dataset, plus the header and first rows of one version |
+| `create_dataset` | `content:write` | version 1 from a `sourceUrl` under the SSRF guard, or by promoting an assignment's support file |
+| `update_dataset` | `content:write` | name, description, provenance, licence, column prose, published |
 | `add_dataset_version` | `content:write` | a new version from a `sourceUrl` with a note |
-| `attach_dataset` | `content:write` | to an assignment, with filename, version, scope and the sample fields |
-| `detach_dataset` | `content:write` | from an assignment |
+| `attach_dataset` | `content:write` | attach to an assignment, with filename, version, scope and the sample fields; on an attached file, move it to another version or scope |
+| `detach_dataset` | `content:write` | end an attachment, keeping the file and its sample unless `removeFile` |
 
-`set_dataset` gains `scope`. `get_support_files` reports `datasetSource` and
-`datasetScope`. `get_assignment` lists attached datasets. The instructions
-text in `InitializeTypes.swift` gains a Datasets paragraph. Every tool is
-added to `docs/compliance/tool-inventory.md` and to the version-capture
-coverage test.
+- **`set_dataset` does not gain `scope`.** The plan said it would. Slice 3
+  made the library fields (`source` and `scope`) writable only by the library
+  attach path (`DatasetSpecValidation.libraryFieldIssue`, pinned by
+  `DatasetLibraryFieldDoorTests`), so `attach_dataset` sets the scope of a file
+  that is already attached, and `set_dataset` keeps the sample.
+- **Re-grade, no close.** An attach, a version move, a scope change and a
+  detach call `applyContentEditEffects(.gradeAffecting)`, as the web library
+  routes do. None closes the assignment, as neither those routes nor
+  `set_dataset` do. The library tools change no attached file, so they neither
+  re-grade nor close. `MCPContentEditCoverageTests` records both files.
+- **`update_dataset` changes only the columns it names.** The service
+  replaces the prose of every column, so the tool sends the other columns with
+  the prose they have. An agent that edits one column does not clear the rest.
+- `get_support_files` reports `datasetSource` and `datasetScope`;
+  `get_assignment` lists the attached datasets. The `initialize` instructions
+  have a "Course dataset library" paragraph, which names every tool
+  (`MCPInstructionsCatalogSyncTests`).
+- `deploy/sql/mcp-least-privilege-role.sql` grants DML on `course_datasets`
+  and `course_dataset_versions` to the MCP role.
+- The tools that fetch a `sourceUrl` take the fetch as a property, so a test
+  gives the bytes without a network.
+
+Tests: `CourseDatasetToolsTests`; the rows in `docs/compliance/tool-inventory.md`
+and `docs/mcp-authoring-roadmap.md` (`MCPRoadmapDocSyncTests`).
 
 ### 4.8 Lifecycle (slice 8)
 
