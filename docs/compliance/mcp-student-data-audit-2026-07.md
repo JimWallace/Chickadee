@@ -146,7 +146,8 @@ is layered:
 
 4. **Students cannot appear on this surface at all.** Consent to authorize an
    agent requires staff-in-≥1-course (`MCPOAuthSurface.ResolvedSurface.permits`:
-   `isStaffAnywhere`), re-checked at consent submit and on every refresh; and
+   `isStaffAnywhere`, archived courses included since #2663), re-checked at
+   consent submit and on every refresh; and
    `ToolContext.requireEligibleSubject` re-refuses a plain-student subject on
    every call, so the guarantee does not rest on token issuance alone.
 

@@ -470,8 +470,14 @@ because line numbers go out of date.
 - **Trap:** some handlers had comments that said "instructor", but they had
   only the area gate (#1448). `RouteAuthorizationMatrixTests` now finds a
   route under `/instructor` or `/courses` that has no minimum role.
-- **Known gap:** `isStaffAnywhere` counts a staff role in an archived course.
-  `AvatarStore.courseStaff` does not. See "Gaps found while mapping".
+- **Rule:** every caller of `isStaffAnywhere` states `includingArchived`
+  (#2663).
+  - `false` where a `true` answer opens data that no per-course check guards:
+    the user-file namespace and the JupyterLite contents. A TA in a past term
+    is a student there, as in `AvatarStore.courseStaff` (#1756).
+  - `true` where a per-course check follows: MCP eligibility and the OAuth
+    content consent. An instructor whose only course is archived can still
+    read it through MCP (`MCPArchivedWriteBlockTests`).
 
 ### The deployment role: `UserRole`
 
@@ -637,16 +643,11 @@ When an issue is closed, remove its item and correct the section above.
    `verdictOnly`. `docs/failure-detail.md` calls the setting a display
    policy, not a secret. But it does not say that these two paths are out of
    scope.
-2. **`isStaffAnywhere` and archived courses (#2663).** Its doc comment says
-   "non-archived enrolled course". Its query does not filter on archival.
-   `AvatarStore.courseStaff` does filter (#1756). Thus a TA from a past term
-   still passes the four `isStaffAnywhere` checks: the user-file namespace,
-   MCP, the OAuth consent surface, and the JupyterLite contents routes.
-3. **The dashboard copy of the reveal rule (#2665).** `solutionRevealAvailable` in
+2. **The dashboard copy of the reveal rule (#2665).** `solutionRevealAvailable` in
    `WebRoutes+IndexRows.swift` is a full inline copy of
    `solutionVisibleToStudent` and `postDeadlineRevealDeadline`. It is
    correct now. It is the most likely place for the next drift.
-4. **Fixed routes and vanity URLs (#2666).** The vanity routes
+3. **Fixed routes and vanity URLs (#2666).** The vanity routes
    (`VanityURLRoutes.swift`, `/:courseCode/:assignmentSlug`) are registered
    last, so a fixed route with two segments wins. `/data/:courseKey` and
    `/submissions/:submissionID` have that shape. `StudentDataRoutes.swift`
