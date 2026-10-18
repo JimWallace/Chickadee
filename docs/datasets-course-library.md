@@ -19,7 +19,7 @@ states what it adds and what proves it.
 | 5 | Instructor surfaces: the Datasets tab (5a), the Files-panel picker and the scope control (5b) | built |
 | 6 | Student surfaces: the course Data page, the assignment-page dataset line, the "my rows" download | built |
 | 7 | MCP: `list_datasets`, `get_dataset`, `create_dataset`, `update_dataset`, `add_dataset_version`, `attach_dataset`, `detach_dataset` | built |
-| 8 | Lifecycle: course clone, bundle export and import, storage page, purge | proposed |
+| 8 | Lifecycle: course clone, bundle export and import, storage page, purge | built |
 | 9 | Migration of HLTH 230: promote the two live datasets; docs and CLAUDE.md | proposed |
 | 10 | Optional: the `formatNoise` transform | proposed |
 | 11 | Class-wide data: the `partition` kind dealt by slot, the ranked-activity refusal, and the rule for jobs with no student | proposed |
@@ -567,18 +567,38 @@ is not archived.
 Tests: `CourseDatasetToolsTests`; the rows in `docs/compliance/tool-inventory.md`
 and `docs/mcp-authoring-roadmap.md` (`MCPRoadmapDocSyncTests`).
 
-### 4.8 Lifecycle (slice 8)
+### 4.8 Lifecycle (slice 8, as built)
 
-- **Course clone** (`CourseCloneService`): copy every dataset with all its
-  versions. Blobs are shared by hash, so only rows are written. The cloned
-  assignments' zips already carry their pinned bytes; their `source` slugs
-  resolve in the new course by D3.
-- **Bundle export and import** (`CourseBundleRoutes`): add `datasets/` to the
-  bundle with a `datasets.json` manifest. Schema version 2 of the bundle.
-  Import of a version-1 bundle still works.
-- **Storage page** (`AdminStoragePage`): a library row per course.
-- **Purge**: the course purge drops the rows; the blob sweep already drops
-  unreferenced blobs, and it must count dataset versions as references.
+`CourseDatasetService+Lifecycle.swift` holds the library's part of each step.
+
+- **Course clone** (`CourseCloneService`). It copies every dataset with all
+  its versions (`copyLibrary`), and it does so before it copies the
+  assignments. Only rows are written; the versions share their blobs by hash.
+  Order matters: `cloneAssignment` keeps a file's `source` only when the new
+  course's library holds that version, so a library copied after the
+  assignments would strip every source. The cloned assignments resolve their
+  sources in the new course (D10).
+- **Bundle export and import** (`CourseBundleRoutes`). A bundle that carries
+  the library is `schemaVersion` 2. Its manifest has a `datasets` list
+  (`BundledDataset`), and each version's bytes are at `datasets/<sha256>`, one
+  file per hash. A course with no dataset still exports version 1, so a
+  server that knows only version 1 reads it. An import accepts 1 and 2. It
+  creates the library before the test setups, for the same reason as the
+  clone, and it refuses a dataset file that is missing or whose bytes do not
+  hash to the name. The result page counts the datasets.
+- **Storage page** (`AdminStoragePage`, `get_storage_usage`). A "Dataset
+  Libraries" section has one row per course: datasets, versions and the bytes
+  of its distinct version files, from the version rows, with no disk walk.
+  The bytes are part of the Test Setups card. A clone's row counts the hashes
+  it shares with its source again, because each row is what that course would
+  free.
+- **Purge.** It needs no code. The course delete cascades to the library rows
+  (`CreateCourseDatasets`), and the blob collector counts every version as a
+  reference until its row is gone.
+
+Tests: `CourseDatasetLifecycleTests` (clone, library copy, storage rows,
+delete, blob collection) and `CourseDatasetBundleTests` (version 2 export,
+version 1 export, round trip, refused files).
 
 ### 4.9 Migration of HLTH 230 (slice 9)
 
