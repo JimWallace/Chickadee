@@ -31,7 +31,7 @@ enum AvatarStore {
 
     /// This user's stored avatar, drawing and saving one on first call.  A
     /// spec stored before a later axis gets that axis from its decoder default;
-    /// the `FillLateAvatarAxes` migration stored the draw once.
+    /// a one-time migration, since deleted, stored the draw once (#1762).
     ///
     /// - Important: do NOT call inside an enclosing `db.transaction { … }`.
     ///   On Postgres a failed write aborts the whole transaction, so the
@@ -39,7 +39,7 @@ enum AvatarStore {
     ///   same reason, as `AssignmentSeedStore.ensureSeed`.
     static func ensureSpec(for user: APIUser, on db: any Database) async throws -> AvatarSpec {
         // A stored bird is returned as it is. An axis added after a bird was
-        // stored is filled once, by `FillLateAvatarAxes`, not on every read.
+        // stored was filled once, by a migration, not on every read.
         if let stored = user.avatarSpecJSON, let decoded = decode(stored) { return decoded }
         let spec = AvatarSpec.drawn()
         user.avatarSpecJSON = encode(spec)

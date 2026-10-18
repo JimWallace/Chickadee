@@ -24,10 +24,10 @@ import Testing
         #expect(try Self.tables(inMigration: "CreateUsers").contains("users"))
     }
 
-    /// The newest migration names its table through the model. The literal-only
+    /// `CreateAvatarHatches` names its table through the model. The literal-only
     /// scan read no table in it at all.
     @Test func resolvesAModelSchemaThroughTheModelFile() throws {
-        #expect(try Self.tables(inMigration: "AddGitHubCourseRepositoryInvitedUser") == ["github_course_repositories"])
+        #expect(try Self.tables(inMigration: "CreateAvatarHatches") == ["avatar_hatches"])
     }
 
     /// `AddSessionsCreatedAt` changes Vapor's table with raw SQL.

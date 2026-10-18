@@ -13,8 +13,8 @@
 // older than `maxAge` are deleted; rows with NULL `created_at` are skipped,
 // because `created_at < cutoff` is never true for NULL. Vapor's driver updates
 // only `data`, so the DEFAULT never fills an existing row. The rows that
-// predated the column were deleted once by `DeleteUndatedSessions` (#2281),
-// and every row inserted since takes the DEFAULT.
+// predated the column were deleted once by a one-time migration, since
+// deleted (#2281), and every row inserted since takes the DEFAULT.
 //
 // This uses a Fluent typed query — the SAME pattern as `AuditLogReaperService`
 // and `UserActivityEventReaperService` — rather than hand-rolled raw SQL, so the

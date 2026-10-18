@@ -22,8 +22,8 @@ final class ReapableSession: Model, @unchecked Sendable {
     @ID(key: .id) var id: UUID?
 
     /// Nullable: pre-`AddSessionsCreatedAt` rows had NULL here, which the
-    /// reaper skips (NULL never satisfies `< cutoff`). `DeleteUndatedSessions`
-    /// deleted them once (#2281).
+    /// reaper skips (NULL never satisfies `< cutoff`). A one-time migration,
+    /// since deleted, removed them (#2281).
     @OptionalField(key: "created_at") var createdAt: Date?
 
     init() {}

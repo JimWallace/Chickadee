@@ -1,9 +1,8 @@
 // Tests/APITests/Gamification/BirdHandleTests.swift
 //
-// The handle names the bird (docs/student-avatars.md §3). `MoveHandlesToBirds`
-// moves each student's handle from their newest course to the bird; a hatch
-// gives the bird a new handle, unique across the deployment; a go back gives
-// the old one back while it is free; and the data export carries both.
+// The handle names the bird (docs/student-avatars.md §3). A hatch gives the
+// bird a new handle, unique across the deployment; a go back gives the old one
+// back while it is free; and the data export carries both.
 
 import Core
 import Fluent
@@ -34,20 +33,6 @@ import VaporTesting
         try #require(try await APIUser.find(user.id, on: app.db))
     }
 
-    private func course(_ code: String, _ term: AcademicTerm?) async throws -> APICourse {
-        let course = APICourse(code: code, name: "Course \(code)", term: term)
-        try await course.save(on: app.db)
-        return course
-    }
-
-    /// Enrolls `user` in `course` with the per-course handle the enrollment
-    /// held before the move.
-    private func enroll(_ user: APIUser, in course: APICourse, handle: String) async throws {
-        let enrollment = APICourseEnrollment(userID: try user.requireID(), courseID: try course.requireID())
-        enrollment.legacyAvatarHandle = handle
-        try await enrollment.save(on: app.db)
-    }
-
     /// A student with a stored bird and `handle`.
     private func birdWithHandle(_ username: String, _ handle: String?) async throws -> APIUser {
         let user = try await makeTestStudent(on: app, username: username)
@@ -55,75 +40,6 @@ import VaporTesting
         user.avatarHandle = handle
         try await user.save(on: app.db)
         return user
-    }
-
-    // MARK: - The move
-
-    @Test func theMoveGivesEachBirdTheHandleOfItsNewestCourse() async throws {
-        try await withApp(app) { _ in
-            let fall = try await course("BH100", AcademicTerm(year: 2026, season: .fall))
-            let winter = try await course("BH100", AcademicTerm(year: 2027, season: .winter))
-            let student = try await makeTestStudent(on: app, username: "bh_newest")
-            try await enroll(student, in: fall, handle: Self.first)
-            try await enroll(student, in: winter, handle: Self.second)
-
-            try await MoveHandlesToBirds().prepare(on: app.db)
-
-            #expect(try await stored(student).avatarHandle == Self.second)
-        }
-    }
-
-    /// Handles were unique per course, so two students can share one. The
-    /// older account keeps it, and the newer one draws a handle no bird holds.
-    @Test func theOlderAccountKeepsASharedHandleAndTheNewerDrawsAnother() async throws {
-        try await withApp(app) { _ in
-            let one = try await course("BH201", Self.term)
-            let other = try await course("BH202", Self.term)
-            let older = try await makeTestStudent(on: app, username: "bh_older")
-            let newer = try await makeTestStudent(on: app, username: "bh_newer")
-            try await APIUser.query(on: app.db).filter(\.$id == older.requireID())
-                .set(\.$createdAt, to: Date(timeIntervalSince1970: 1_000)).update()
-            try await APIUser.query(on: app.db).filter(\.$id == newer.requireID())
-                .set(\.$createdAt, to: Date(timeIntervalSince1970: 2_000)).update()
-            try await enroll(newer, in: one, handle: Self.first)
-            try await enroll(older, in: other, handle: Self.first)
-
-            try await MoveHandlesToBirds().prepare(on: app.db)
-
-            #expect(try await stored(older).avatarHandle == Self.first)
-            let drawn = try #require(try await stored(newer).avatarHandle)
-            #expect(drawn != Self.first)
-            #expect(AvatarHandle.allHandles.contains(drawn))
-        }
-    }
-
-    /// Staff appear under their own name, so a staff enrollment's old handle
-    /// does not move to the bird.
-    @Test func theMoveGivesAStaffBirdNoHandle() async throws {
-        try await withApp(app) { _ in
-            let course = try await course("BH250", Self.term)
-            let staff = try await makeTestUser(on: app, username: "bh_ta", role: "user")
-            let enrollment = APICourseEnrollment(
-                userID: try staff.requireID(), courseID: try course.requireID(), role: .ta)
-            enrollment.legacyAvatarHandle = Self.first
-            try await enrollment.save(on: app.db)
-
-            try await MoveHandlesToBirds().prepare(on: app.db)
-
-            #expect(try await stored(staff).avatarHandle == nil)
-        }
-    }
-
-    @Test func theMoveLeavesABirdThatAlreadyHasAHandleAsItIs() async throws {
-        try await withApp(app) { _ in
-            let course = try await course("BH300", Self.term)
-            let student = try await birdWithHandle("bh_kept", Self.second)
-            try await enroll(student, in: course, handle: Self.first)
-
-            try await MoveHandlesToBirds().prepare(on: app.db)
-
-            #expect(try await stored(student).avatarHandle == Self.second)
-        }
     }
 
     // MARK: - Hatch and go back

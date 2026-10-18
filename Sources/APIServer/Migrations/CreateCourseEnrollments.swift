@@ -17,6 +17,9 @@
 //     partial unique index on (course_id, avatar_handle)
 //   - AddAvatarHandleLock                — avatar_handle_locked_at
 //
+// The fifth round folded in:
+//   - AddAIFeedbackAttestation           — ai_feedback_attested_at
+//
 // Existing deploys have this migration already marked applied and never re-run
 // it; the folded Add* structs were deleted outright (Fluent ignores
 // `_fluent_migrations` rows whose names are no longer registered).
@@ -63,6 +66,10 @@ struct CreateCourseEnrollments: ChickadeeMigration {
             // Folded from AddAvatarHandleLock: when the handle stopped being
             // the student's to change. nil = the student may still choose once.
             .field("avatar_handle_locked_at", .datetime)
+            // Folded from AddAIFeedbackAttestation: when a staff member
+            // recorded the AI-account attestation (docs/ai-assisted-feedback.md).
+            // nil = not recorded.
+            .field("ai_feedback_attested_at", .datetime)
             // One enrollment per (user, course) pair.
             .unique(on: "user_id", "course_id")
             .create()

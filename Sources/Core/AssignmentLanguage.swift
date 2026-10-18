@@ -359,9 +359,9 @@ public enum AssignmentLanguage: String, Codable, Sendable, CaseIterable {
     /// Declaration is now a requirement, not a hint. Every door that creates an
     /// assignment answers the question — the web create page's `required`
     /// select (with an explicit "None"), MCP `create_assignment`'s required
-    /// `language`, the REST zip upload, and course-bundle import — and
-    /// `BackfillDeclaredLanguage` answered it for everything that predates the
-    /// rule. So a nil here means "the author says this has no language", which
+    /// `language`, the REST zip upload, and course-bundle import — and a
+    /// one-time migration, since deleted, answered it for everything that
+    /// predates the rule. So a nil here means "the author says this has no language", which
     /// is a real and supported state (a suite of plain `.sh` scripts), and NOT
     /// "nobody has been asked".
     ///
@@ -376,10 +376,10 @@ public enum AssignmentLanguage: String, Codable, Sendable, CaseIterable {
     /// can be recorded once and never guessed again.
     ///
     /// THE ONLY REMAINING SNIFF, and it is deliberately not called `resolve`.
-    /// Three callers, all of them boundaries where content enters the system
-    /// with no author answer attached: the REST zip upload, course-bundle
-    /// import, and the one-time backfill. Each records the result immediately,
-    /// so the guess is made once and becomes a declaration.
+    /// Two callers, both of them boundaries where content enters the system
+    /// with no author answer attached: the REST zip upload and course-bundle
+    /// import. Each records the result immediately, so the guess is made once
+    /// and becomes a declaration.
     ///
     /// Precedence is the old resolution order, preserved so that what gets
     /// recorded matches what the system used to compute on the fly: a graded
