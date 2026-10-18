@@ -99,11 +99,13 @@ test('remove on an attached file detaches it and removes the file', async () => 
   assert.deepEqual(h.posts[0].body, { file: 'lib.csv', removeFile: true });
 });
 
-test('a declined confirm sends nothing', async () => {
+test('a declined confirm stops a remove, and a detach asks no confirm', async () => {
   const h = load({ confirm: false });
-  await fire(h, 'click', makeControl('js-library-detach', 'lib.csv'));
   await fire(h, 'click', makeControl('js-library-remove', 'lib.csv'));
   assert.equal(h.posts.length, 0);
+  // A detach keeps the file and its sample, so it is easy to undo.
+  await fire(h, 'click', makeControl('js-library-detach', 'lib.csv'));
+  assert.deepEqual(h.posts.map((p) => p.body), [{ file: 'lib.csv' }]);
 });
 
 test('the scope box sends its state, and a refusal puts it back', async () => {

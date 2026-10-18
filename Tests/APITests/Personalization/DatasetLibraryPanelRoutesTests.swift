@@ -133,7 +133,7 @@ import VaporTesting
             #expect(await zipEntries(fx).contains("lib.csv"))
 
             let after = try await editPage(fx)
-            #expect(after.contains("From Ward cases v1"))
+            #expect(after.contains("From Ward cases (v1)"))
             #expect(after.contains("js-library-scope"))
             #expect(after.contains("js-library-remove"))
         }
@@ -206,7 +206,53 @@ import VaporTesting
         }
     }
 
+    @Test func aScopeBodyWithoutAValueIsRefused() async throws {
+        try await withApp(app) { _ in
+            let fx = try await fixture("h")
+            try await post(fx, "attach", #"{"slug":"ward-cases"}"#)
+            try await post(fx, "scope", #"{"file":"lib.csv"}"#, expect: .badRequest)
+            #expect(try await specs(fx)["lib.csv"]?.scope == .course)
+        }
+    }
+
+    // MARK: - Re-grade
+
+    private func retestedHash(_ fx: Fixture) async throws -> (stamped: String?, current: String) {
+        let setup = try #require(try await APITestSetup.find(fx.setupID, on: app.db))
+        return (setup.lastRetestedManifestHash, manifestHash(setup.manifest))
+    }
+
+    /// Each edit that changes a student's rows runs the steps after an edit,
+    /// which stamp the manifest they re-graded.
+    @Test func attachAndAScopeChangeReGradeAndAPromoteDoesNot() async throws {
+        try await withApp(app) { _ in
+            let fx = try await fixture("i")
+            try await post(fx, "attach", #"{"slug":"ward-cases"}"#)
+            var hashes = try await retestedHash(fx)
+            #expect(hashes.stamped == hashes.current)
+
+            try await post(fx, "scope", #"{"file":"lib.csv","courseScoped":false}"#)
+            hashes = try await retestedHash(fx)
+            #expect(hashes.stamped == hashes.current)
+
+            try await post(fx, "promote", #"{"file":"cases.csv"}"#)
+            hashes = try await retestedHash(fx)
+            #expect(hashes.stamped != hashes.current)
+        }
+    }
+
     // MARK: - Promote
+
+    @Test func aPromoteWhoseSlugIsTakenGetsTheNextFreeOne() async throws {
+        try await withApp(app) { _ in
+            let fx = try await fixture("j")
+            _ = try await CourseDatasetService.create(
+                courseID: fx.courseID, dataset: .init(name: "Cases", slug: "cases"),
+                upload: .init(filename: "other.csv", bytes: Data(Self.libraryCSV.utf8)), blobs: blobs, on: app.db)
+            try await post(fx, "promote", #"{"file":"cases.csv"}"#)
+            #expect(try await specs(fx)["cases.csv"]?.source == DatasetSource(slug: "cases-2", version: 1))
+        }
+    }
 
     @Test func promoteMovesACSVSupportFileIntoTheLibrary() async throws {
         try await withApp(app) { _ in

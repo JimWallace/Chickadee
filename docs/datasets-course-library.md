@@ -451,23 +451,34 @@ datasets PUT does (`PublishedAssignmentRoutes+DatasetLibrary.swift`):
 | A select and Attach, beside the upload (only when the course has datasets) | `POST …/datasets/library/attach` `{slug}` | Attaches the newest version under its own filename, with course scope and no sample (decision 1). The instructor then sets the sample as for any dataset. |
 | "Update to v3", on an attached row that pins an older version | `…/update` `{file}` | Moves to the newest version. |
 | "Course-wide rows" | `…/scope` `{file, courseScoped}` | Sets the scope (`setAttachmentScope`). |
-| Detach | `…/detach` `{file}` | Ends the attachment and keeps the file and its sample. |
+| Detach | `…/detach` `{file}` | Ends the attachment and keeps the file and its sample. No confirm, because it is easy to undo. |
 | Remove, on an attached row | `…/detach` `{file, removeFile: true}` | The support-file delete refuses an attached file, so Remove detaches and removes in one step. |
 | "Move to course library", on a CSV that is not attached | `…/promote` `{file}` | Creates an unpublished dataset named after the file (decision 3). The instructor renames it on the Datasets tab. |
 
-- **Attach, update and detach re-grade and re-validate**
-  (`applyContentEditEffects(.gradeAffecting)`), because each changes the bytes
-  a student receives or the files in the zip. A detach that keeps the file
-  still changes a course-scoped sample back to the assignment seed. A scope
-  change and a promote do not, as a datasets PUT does not; both are listed in
-  `WebContentEditCoverageTests`.
+- **Attach, update, detach and a scope change re-grade and re-validate**
+  (`applyContentEditEffects(.gradeAffecting)`). Attach and update change the
+  bytes, and a detach with `removeFile` removes a file. The scope decides which
+  seed picks a student's rows, so a scope change and a detach that keeps the
+  file change the rows too. A promote keeps the bytes, the sample and the
+  scope, so it does neither; `WebContentEditCoverageTests` lists it.
+- **The scope write is made from the manifest being saved.** A lost race
+  re-applies it to the newer manifest, so it cannot bring back a source that a
+  concurrent update or detach replaced. The scope route takes its own body,
+  and a body without `courseScoped` is refused.
+- **A promote picks a free slug** from the file name: the plain slug, else
+  `-2`, `-3` and on. A grader-only CSV offers no promote, because the service
+  refuses one.
+- **Known gap: attach uses the version's own filename.** When the assignment
+  already has a file with that name, the attach is refused with that reason.
+  The panel has no field for another name yet; the route accepts `filename`.
 - **An attached row's per-student checkbox is disabled,** with a one-line note
   that says to detach first. An attached file always has a spec, and
   unchecking it would be refused.
 - **The create page has no library controls.** Its endpoints are draft
   endpoints, so a dataset is attached after the assignment exists.
 - A refusal from the service is a 400 with its reason, which the panel shows
-  beside the row. A refused scope change puts the box back.
+  as an action error. A refused scope change puts the box back. A control is
+  disabled while its request runs.
 
 Tests: `DatasetLibraryPanelRoutesTests`, `support-files-library.test.mjs`, the
 five route floors in `RouteAuthorizationMatrixTests`, and an edit-page fixture

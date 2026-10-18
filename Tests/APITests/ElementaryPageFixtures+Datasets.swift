@@ -21,7 +21,7 @@ extension ElementaryPageFixtures {
     static var assignmentEditPageWithLibrary: ElementaryPageFixture {
         var attached = EditorSamples.supportFile(dataset: true, editable: true)
         attached.library = SupportFileLibraryState(
-            attachment: .init(sourceText: "VitalDB cases v1", newerVersion: 2, isCourseScoped: true))
+            attachment: .init(sourceText: "VitalDB cases (v1)", newerVersion: 2, isCourseScoped: true))
         var promotable = EditorSamples.supportFile(dataset: false, editable: true)
         promotable.library = SupportFileLibraryState(attachment: nil)
         var edit = EditorSamples.edit(rich: true, embedded: nil)

@@ -395,10 +395,8 @@
         if (!file) return null;
         if (target.classList.contains('js-library-update')) return { op: 'update', body: { file: file } };
         if (target.classList.contains('js-library-detach')) {
-            return {
-                op: 'detach', body: { file: file },
-                confirm: 'Detach "' + file + '" from the course library? The file and its sample stay.'
-            };
+            // The file and its sample stay, so a detach needs no confirm.
+            return { op: 'detach', body: { file: file } };
         }
         if (target.classList.contains('js-library-remove')) {
             return {
@@ -423,22 +421,26 @@
             var request = libraryRequest(target);
             if (!request) return;
             var current = libraryConfig;
-            if (request.confirm && !await ChickadeeUI.confirmAction(request.confirm)) {
-                if (request.op === 'scope') target.checked = !target.checked;
-                return;
-            }
+            // One request per control at a time: a second click while the
+            // first is in flight would be refused as already done.
+            if (target.disabled) return;
+            if (request.confirm && !await ChickadeeUI.confirmAction(request.confirm)) return;
+            target.disabled = true;
             try {
                 await ChickadeeUI.fetchJSON(current.libraryURL(request.op), {
                     method: 'POST',
                     csrfToken: current.csrfToken || '',
                     body: request.body
                 });
-                current.onChange();
             } catch (e) {
                 // A refused scope change leaves the box as the server holds it.
                 if (request.op === 'scope') target.checked = !target.checked;
                 ChickadeeUI.showActionError(LIBRARY_FAILURES[request.op] + ' — ' + e.message, target);
+                return;
+            } finally {
+                target.disabled = false;
             }
+            current.onChange();
         }
 
         document.body.addEventListener('click', function (ev) {

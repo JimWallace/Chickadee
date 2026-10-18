@@ -678,10 +678,10 @@ struct InstructorDashboardRoutes: RouteCollection {
             // nil rather than `false` on the standalone page so its rendered
             // HTML is byte-identical to before the workbench existed.
             embedded: embedded ? true : nil,
-            // Where a write inside the pane sends the pane afterwards.  Must
-            // match the route `InstructorWorkbenchRoutes` registers, since the
-            // pane is already showing it.
             datasetLibraryOptions: library.options
+                // Where a write inside the pane sends the pane afterwards.  Must
+                // match the route `InstructorWorkbenchRoutes` registers, since the
+                // pane is already showing it.
         )
     }
 }

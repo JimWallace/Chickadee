@@ -11,10 +11,10 @@
 //
 // Each answers with the panel state (`DatasetsResponse`), as the datasets PUT
 // does. `CourseDatasetService+Attachment.swift` does the work; these handlers
-// own the access check and the steps after the edit. Attach, update and
-// detach change the bytes a student receives or the files in the zip, so
-// they re-grade and re-validate. A scope change and a promote change neither
-// the files nor the graded suite, as a datasets PUT does not.
+// own the access check and the steps after the edit. Attach, update, detach
+// and a scope change alter the files in the zip or the rows each student
+// receives, so they re-grade and re-validate. A promote keeps the bytes, the
+// sample and the scope, so every student keeps the rows they had.
 
 import Core
 import Fluent
@@ -34,8 +34,14 @@ extension PublishedAssignmentRoutes {
         var file: String
         /// Detach only: remove the file too.
         var removeFile: Bool?
-        /// Scope only: true for the same rows in every assignment.
-        var courseScoped: Bool?
+    }
+
+    /// The scope has its own body, so a request that leaves the value out is
+    /// refused rather than read as `.assignment`.
+    struct LibraryScopeBody: Content {
+        var file: String
+        /// True for the same rows in every assignment of the course.
+        var courseScoped: Bool
     }
 
     // MARK: - Attach
@@ -51,7 +57,7 @@ extension PublishedAssignmentRoutes {
             throw AppError.notFound(resource: "Dataset")
         }
         try await libraryEdit {
-            try await CourseDatasetService.attach(
+            _ = try await CourseDatasetService.attach(
                 dataset, to: setup,
                 request: .init(filename: body.filename, scope: .course),
                 testSetupsDirectory: req.application.testSetupsDirectory, on: req.db)
@@ -69,7 +75,7 @@ extension PublishedAssignmentRoutes {
         let (assignment, setup) = try await loadAssignmentAndSetupForWrite(req, atLeast: .ta)
         let body = try await req.decodeContent(LibraryFileBody.self)
         try await libraryEdit {
-            try await CourseDatasetService.updateAttachment(
+            _ = try await CourseDatasetService.updateAttachment(
                 file: body.file, in: setup, to: nil, testSetupsDirectory: req.application.testSetupsDirectory,
                 on: req.db)
         }
@@ -102,14 +108,19 @@ extension PublishedAssignmentRoutes {
 
     // MARK: - Scope
 
+    /// The scope decides which seed picks a student's rows, so a change
+    /// re-grades and re-validates, as a detach does.
     @Sendable
     func setLibraryDatasetScope(req: Request) async throws -> DatasetsResponse {
-        let (_, setup) = try await loadAssignmentAndSetupForWrite(req, atLeast: .ta)
-        let body = try await req.decodeContent(LibraryFileBody.self)
-        let scope: DatasetSliceScope = body.courseScoped == true ? .course : .assignment
+        let (assignment, setup) = try await loadAssignmentAndSetupForWrite(req, atLeast: .ta)
+        let body = try await req.decodeContent(LibraryScopeBody.self)
         try await libraryEdit {
-            try await CourseDatasetService.setAttachmentScope(file: body.file, in: setup, to: scope, on: req.db)
+            _ = try await CourseDatasetService.setAttachmentScope(
+                file: body.file, in: setup, to: body.courseScoped ? .course : .assignment, on: req.db)
         }
+        await applyContentEditEffects(
+            .gradeAffecting, assignment: assignment, setup: setup, actingUserID: req.auth.get(APIUser.self)?.id,
+            context: req)
         return try await datasetsPanelResponse(req: req, setup: setup)
     }
 
@@ -123,20 +134,34 @@ extension PublishedAssignmentRoutes {
         let (_, setup) = try await loadAssignmentAndSetupForWrite(req, atLeast: .ta)
         let body = try await req.decodeContent(LibraryFileBody.self)
         let name = FilePath(body.file).stem ?? body.file
+        let slug = try await freeSlug(for: name, courseID: setup.courseID, on: req.db)
         try await libraryEdit {
-            try await CourseDatasetService.promote(
-                file: body.file, from: setup,
-                dataset: .init(name: name, slug: CourseDatasetService.suggestedSlug(from: name)),
+            _ = try await CourseDatasetService.promote(
+                file: body.file, from: setup, dataset: .init(name: name, slug: slug),
                 testSetupsDirectory: req.application.testSetupsDirectory, on: req.db)
         }
         return try await datasetsPanelResponse(req: req, setup: setup)
     }
 
+    /// A slug made from `name` that the course does not use yet: the plain
+    /// slug, else the slug with "-2", "-3" and on. A name with no letter or
+    /// digit gives "dataset". Two promotes that race can still pick the same
+    /// slug, and the second is then refused as taken.
+    private func freeSlug(for name: String, courseID: UUID, on db: any Database) async throws -> String {
+        let made = CourseDatasetService.suggestedSlug(from: name)
+        let base = made.isEmpty ? "dataset" : String(made.prefix(60))
+        for suffix in [""] + (2...99).map({ "-\($0)" }) {
+            let slug = base + suffix
+            if try await CourseDatasetService.find(courseID: courseID, slug: slug, on: db) == nil { return slug }
+        }
+        return base
+    }
+
     /// Runs one library operation and turns its refusal into a 400 that the
     /// panel shows beside the row.
-    private func libraryEdit<T>(_ operation: () async throws -> T) async throws {
+    private func libraryEdit(_ operation: () async throws -> Void) async throws {
         do {
-            _ = try await operation()
+            try await operation()
         } catch let error as CourseDatasetError {
             throw Abort(.badRequest, reason: error.description)
         }

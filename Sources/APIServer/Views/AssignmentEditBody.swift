@@ -266,7 +266,7 @@ private struct EditFilesBlock: HTML {
                 div(.class("toolbar toolbar--end")) {
                     if !edit.datasetLibraryOptions.isEmpty {
                         select(
-                            .class("form-input js-library-attach-select"),
+                            .class("form-input select-xs js-library-attach-select"),
                             .ariaLabel("Dataset to attach from the course library")
                         ) {
                             for dataset in edit.datasetLibraryOptions {
