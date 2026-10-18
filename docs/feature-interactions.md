@@ -642,15 +642,11 @@ When an issue is closed, remove its item and correct the section above.
    `AvatarStore.courseStaff` does filter (#1756). Thus a TA from a past term
    still passes the four `isStaffAnywhere` checks: the user-file namespace,
    MCP, the OAuth consent surface, and the JupyterLite contents routes.
-3. **The solution reveal and course bundles (#2664).**
-   `docs/solution-visibility.md` ("Edge cases") says that a course bundle
-   does not carry the solution visibility or `secretRevealEnabled`. The
-   bundle export and import carry both (#1737).
-4. **The dashboard copy of the reveal rule (#2665).** `solutionRevealAvailable` in
+3. **The dashboard copy of the reveal rule (#2665).** `solutionRevealAvailable` in
    `WebRoutes+IndexRows.swift` is a full inline copy of
    `solutionVisibleToStudent` and `postDeadlineRevealDeadline`. It is
    correct now. It is the most likely place for the next drift.
-5. **Fixed routes and vanity URLs (#2666).** The vanity routes
+4. **Fixed routes and vanity URLs (#2666).** The vanity routes
    (`VanityURLRoutes.swift`, `/:courseCode/:assignmentSlug`) are registered
    last, so a fixed route with two segments wins. `/data/:courseKey` and
    `/submissions/:submissionID` have that shape. `StudentDataRoutes.swift`
