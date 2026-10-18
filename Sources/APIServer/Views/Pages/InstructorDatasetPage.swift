@@ -17,6 +17,7 @@ struct InstructorDatasetPage: HTML {
 
     var body: some HTML {
         BaseLayout(title: "\(dataset.name) — Datasets", page: page, flash: flash) {
+            p(.class("page-crumb")) { a(.href("/instructor/datasets")) { "Datasets" } }
             DatasetHeader(page: page, dataset: dataset)
             p(.class("page-subtitle")) {
                 code { dataset.slug }
@@ -48,7 +49,6 @@ private struct DatasetHeader: HTML {
         div(.class("page-titlebar")) {
             h1 { dataset.name }
             div(.class("toolbar")) {
-                a(.class("btn action-btn"), .href("/instructor/datasets")) { "Datasets" }
                 a(.class("btn action-btn"), .href(dataset.downloadHref)) {
                     Icon("i-download")
                     "Download"

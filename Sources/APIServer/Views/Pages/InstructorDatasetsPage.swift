@@ -60,7 +60,7 @@ struct InstructorDatasetsPage: HTML {
                     for dataset in datasets {
                         tr {
                             td(.class("item-tile-cell")) {
-                                span(.class("item-tile"), .data("kind", value: "document")) { Icon("i-layers") }
+                                span(.class("item-tile"), .data("kind", value: "document")) { Icon("i-list") }
                             }
                             td(.class("item-main")) {
                                 div(.class("item-title")) { a(.href(dataset.href)) { dataset.name } }

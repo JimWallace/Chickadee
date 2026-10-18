@@ -587,7 +587,8 @@ duplicate.
   not removed.  Each row leads with an `.item-tile` (in an `.item-tile-cell`),
   a square glyph coloured by `data-kind` (`slides`, `notebook`, `document`,
   `link`, `outline`, `graded`) from the `--kind-*` token pairs — one component
-  with an attribute, not six classes.  The name cell is an `.item-title` over an
+  with an attribute, not six classes.  A course library dataset is reference
+  material, so it takes `document` with the `i-list` glyph.  The name cell is an `.item-title` over an
   `.item-details` line; `.item-grade` right-aligns the grade.  A material's
   buttons are `.action-btn-icon`, the same fixed square as an assignment's.
   A section filter appears only at `IndexDisplayGroup.filterThreshold` (8) rows
@@ -656,8 +657,9 @@ duplicate.
   `.action-copied` and a "Copied!" title for two seconds.  The copy-student-link
   button on a dashboard row and the LTI tool URLs.
 - **`.page-crumb`** — the group name ("Data", "Integrations") in small capitals
-  above an admin page title, or the course above a leaderboard's title, as its
-  course tab names it.
+  above an admin page title, the course above a leaderboard's title, as its
+  course tab names it, or a link to the instructor tab above one item of it
+  (a dataset).
   Visual only; the `h1` already names the page.
 - **`.row-menu-spacer`** — an empty 1.95rem square in the place of a ⋯ menu when a
   row type only sometimes has one, so the actions track lines up.  Never an
