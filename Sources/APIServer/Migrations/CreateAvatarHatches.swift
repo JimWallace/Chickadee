@@ -18,6 +18,10 @@ struct CreateAvatarHatches: ChickadeeMigration {
             .field("term_key", .string, .required)
             .field("slot", .int, .required)
             .field("created_at", .datetime)
+            // Folded from AddAvatarHatchSpecies (fifth round): the species the
+            // hatch came from and went to (#2593). nil = not recorded.
+            .field("from_species", .string)
+            .field("species", .string)
             .unique(on: "user_id", "term_key", "slot")
             .create()
     }

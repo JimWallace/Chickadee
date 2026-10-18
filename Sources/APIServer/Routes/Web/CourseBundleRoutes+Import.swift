@@ -575,9 +575,8 @@ private func importBundledTestSetups(
         tally.createdPaths.append(setupsDir + "shared/\(newSetupID)/")
         await extractSupportFilesToSharedDirectory(for: setup, testSetupsDirectory: setupsDir)
         // A bundle exported by an older build carries no language declaration,
-        // so declare one on the way in — the same thing
-        // `BackfillDeclaredLanguage` does for content already on disk, applied
-        // at the one other door assignments come through.
+        // so declare one on the way in — the same thing a one-time migration,
+        // since deleted, did for the content already on disk.
         //
         // Without this, import is a permanent source of undeclared assignments,
         // and "undeclared" is exactly the state the worker must be able to

@@ -9,6 +9,20 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.726] - 2026-10-18
+
+### Changed
+
+- **Fifth migration consolidation round.** Eight column and index migrations are folded into their `Create*` files: `AddGitHubCourseRepositoryInvitedUser`, `AddSubmissionTargetRunner`, `AddAIFeedbackGates`, `AddAIFeedbackAttestation`, `AddUserAvatarPreviousSpec`, `AddUserAvatarHandle`, `AddAvatarHatchSpecies` and `AddAssignmentConcept`. The six one-time data migrations are deleted: `BackfillDeclaredLanguage`, `BackfillSharedSupportFiles`, `SwapStarterGradcapForHeadband`, `FillLateAvatarAxes`, `DeleteUndatedSessions` and `MoveHandlesToBirds`. A fresh database gets the same schema in fewer steps. A database that already ran these migrations does not change, because Fluent ignores the history rows of migrations that are no longer registered. A database that has not run them must first start once on a release that still has them, such as v0.5.723.
+
+
+## [0.5.725] - 2026-10-18
+
+### Added
+
+- **Lab groups (slice 2): per-group sessions.** A class activity can now run once per lab group (the edit page's "Run once per lab group" box, or `set_activity`'s `runsPerGroup`). Course staff start and end each group's session from the present page, which shows a five-character join code that changes every 30 seconds. Every student types the code at `/join` to take part, and submits only while the session they joined is open. Staff see who joined on a separate page and can remove a student who is not in the room. Wrong codes are limited to ten in ten minutes per student. See `docs/lab-groups.md`.
+
+
 ## [0.5.724] - 2026-10-18
 
 ### Added

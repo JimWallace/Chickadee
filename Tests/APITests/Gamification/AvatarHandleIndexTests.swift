@@ -1,8 +1,8 @@
 // Tests/APITests/Gamification/AvatarHandleIndexTests.swift
 //
 // A handle names the bird, so it is unique across the deployment:
-// `idx_users_avatar_handle`, a partial unique index that `AddUserAvatarHandle`
-// creates by raw SQL. The lost-race branches in `AvatarStore` run only when
+// `idx_users_avatar_handle`, a partial unique index that `CreateUsers` creates
+// by raw SQL. The lost-race branches in `AvatarStore` run only when
 // that index refuses a write, so a migration that dropped the index would pass
 // every other test (#1755). These name the index by its effect.
 

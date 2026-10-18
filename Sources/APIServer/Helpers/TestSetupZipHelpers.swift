@@ -389,11 +389,11 @@ func createRunnerSetupZip(
 /// `extractSupportFilesToSharedDirectory` for a stored setup, with the graded
 /// scripts read from its own manifest.
 ///
-/// The copy paths (course-bundle import, `clone_assignment`) and the
-/// `BackfillSharedSupportFiles` migration use it. Those paths used to copy the
-/// zip without this step, so a copied assignment had no shared directory: its
-/// students could not open its data files in the editor, and a personalization
-/// expression that calls a support module failed with a `NameError`.
+/// The copy paths (course-bundle import, `clone_assignment`) use it. They used
+/// to copy the zip without this step, so a copied assignment had no shared
+/// directory: its students could not open its data files in the editor, and a
+/// personalization expression that calls a support module failed with a
+/// `NameError`.
 func extractSupportFilesToSharedDirectory(
     for setup: APITestSetup,
     testSetupsDirectory: String

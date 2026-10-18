@@ -24,7 +24,7 @@ extension TestProperties {
     ///
     /// The flag decides whether the question has an answer.  A manifest with
     /// a `language` but without the flag is `.undeclared`, which is the rule
-    /// that course-bundle import and `BackfillDeclaredLanguage` apply.  Use
+    /// that course-bundle import applies.  Use
     /// `AssignmentLanguage.resolve(manifest:)` to read the language itself.
     ///
     /// The setter writes both fields.  For `.undeclared` it writes nil to

@@ -292,8 +292,8 @@ because line numbers go out of date.
 - **Writers:**
   - Only `applyLanguageDeclaration`, through `changeDeclaredLanguage`. Its
     callers are the save-edit route and MCP `set_assignment_language`.
-  - `derivedDeclaration` runs only at three boundaries: test setup upload,
-    bundle import, and the backfill migration.
+  - `derivedDeclaration` runs only at two boundaries: test setup upload and
+    bundle import.
 - **Readers of the union:** `RunnerLanguageGate.evaluate`, through
   `claimCompatibility`. The claim walk and `UnclaimableJobsRule` share it, so
   the alert and the claim agree.

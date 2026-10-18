@@ -151,7 +151,7 @@ call, one quirk per kernel) are in `Tools/jupyterlite/CLAUDE.md`.
 `resolve(manifest:)` returns `manifest.language` and nothing else. A nil
 language means that the author said "none": a suite of hand-written scripts.
 **Do not reintroduce inference.** If a call site does not know the language,
-ask the author. `AssignmentLanguage.derivedDeclaration` runs only at three
+ask the author. `AssignmentLanguage.derivedDeclaration` runs only at two
 boundaries, and each records the result at once. See
 [docs/language-declaration.md](docs/language-declaration.md).
 

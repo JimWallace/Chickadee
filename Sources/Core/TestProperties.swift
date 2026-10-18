@@ -548,8 +548,8 @@ public struct TestProperties: Codable, Equatable, Sendable {
     /// `.chickadee` bundle exported by an older build. The boundary that
     /// accepts one (`AssignmentLanguage.derivedDeclaration`) records a
     /// declaration at once; nothing resolves a language from content.
-    /// Everything on disk is backfilled by `BackfillDeclaredLanguage`, so an
-    /// undeclared manifest after that point came from outside this deployment.
+    /// A one-time migration, since deleted, backfilled everything on disk, so
+    /// an undeclared manifest now came from outside this deployment.
     public var languageDeclared: Bool?
 
     /// Optional minimum `chickadee-runner` version required to grade this
