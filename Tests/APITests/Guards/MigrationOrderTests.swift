@@ -84,6 +84,21 @@ import Testing
         }
     }
 
+    /// The other direction: a migration file that is not registered never
+    /// runs, so a fresh database lacks its table, and nothing else fails until
+    /// a query reaches the table.
+    @Test func everyMigrationFileIsRegistered() throws {
+        let registered = Set(try Self.registeredMigrations())
+        let directory = repositoryRoot.appendingPathComponent("Sources/APIServer/Migrations").path
+        let files = try FileManager.default.contentsOfDirectory(atPath: directory)
+            .filter { $0.hasSuffix(".swift") && $0 != "ChickadeeMigration.swift" }
+            .map { String($0.dropLast(".swift".count)) }
+        #expect(!files.isEmpty)
+        for name in files {
+            #expect(registered.contains(name), "\(name) has a source file but is not registered")
+        }
+    }
+
     /// With no data migration registered, the two rules below check nothing,
     /// so a broken scanner would pass them. This feeds both scanners a source
     /// written as a data migration would be.

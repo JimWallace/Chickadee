@@ -539,6 +539,10 @@ func registerMigrations(on app: Application) {
     // must follow `CreateTournamentRuns`, which creates the table.
     app.migrations.add(CreateTournamentMatchSubmissionIndex())
 
+    // AI-assisted feedback (docs/ai-assisted-feedback.md): the per-student
+    // feedback rows. The two opt-in gates and the attestation are columns in
+    // `CreateCourses`, `CreateAssignments` and `CreateCourseEnrollments`.
+    app.migrations.add(CreateReflectionFeedback())
     // Class composite (docs/class-composite.md, slice 3): the dealt slots.
     app.migrations.add(CreateCompositeSlots())
     // Class composite, slice 4: the latest contribution of each student.
