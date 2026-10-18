@@ -437,6 +437,12 @@ The subagents are in `.claude/agents/`. Each one reports and does not edit.
 - For drift between the docs and the code, run `docs-audit`. CI runs it each
   month (`.github/workflows/docs-audit.yml`) and files the report as an issue.
 - Before a commit, run `diff-reviewer` on the uncommitted diff.
+- Before a commit on a change under `Sources/` or to a `Public/*.js` file, run
+  `interaction-review`. It checks the change for side effects on other
+  features, with the shared-object map in `docs/feature-interactions.md`. CI
+  runs it on each such PR (`.github/workflows/interaction-review.yml`). Its
+  verdict is advisory for now. When a change adds a shared object, add its
+  row to the map.
 
 The hooks in `.claude/hooks/` do three jobs, so you need not:
 - `format-swift.py` runs `swift-format` on each Swift file that you edit.
@@ -645,6 +651,7 @@ One line per document. Each document holds its own rules and evidence.
 - `docs/avatar-species.md` — eleven avatar species on one shared skeleton, the colourway decides the species, the trait weights, the prototype findings; opens with a Status table
 - `docs/browser-freeze-investigation.md` — the 2026-08 editor freeze, its root cause, the freeze tracer
 - `docs/ci-flakiness.md` — CI flake families; start here before chasing a red check on an unrelated PR
+- `docs/feature-interactions.md` — the shared objects that several features read or write, and the rule for each; the `interaction-review` agent's map
 - `docs/abstraction-survey.md` — the 2026-10 survey of parallel code paths that need a shared abstraction (#2259)
 - `docs/elementary-spike.md` — the finished Leaf-to-Elementary migration: where the views live, the traps, the guards, the known remainder
 - `docs/manifest-format-v2.md` — proposed: the manifest (`TestProperties`) review, the v2 envelope and its phased rollout

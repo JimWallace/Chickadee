@@ -9,6 +9,48 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.719] - 2026-10-18
+
+### Added
+
+- **Interaction review on pull requests.** A new `interaction-review` agent checks a change for side effects on other features. It uses a new map of the shared objects that several features read or write (`docs/feature-interactions.md`). CI runs it on each pull request that changes code. Its verdict is advisory while its precision is measured.
+
+
+## [0.5.718] - 2026-10-18
+
+### Added
+
+- **Lab groups (slice 1).** A course can now hold a group set, for example its lab sections. The new instructor Groups tab makes the set, adds and removes groups, and imports a CSV file of usernames and groups (a LEARN Groups export with Username and Group Name columns also reads). The Students tab shows each student's group, with a select for instructors, and its filter matches the group. Group changes are audited, and a student's data export lists their group. See `docs/lab-groups.md`.
+
+
+## [0.5.717] - 2026-10-18
+
+### Added
+
+- **Course dataset library, slice 7: MCP tools.** Seven content tools let an authoring agent work with the course dataset library: `list_datasets` and `get_dataset` read it; `create_dataset` (from a `sourceUrl` or an assignment's support file), `update_dataset` (metadata, column prose, publishing) and `add_dataset_version` edit it; `attach_dataset` and `detach_dataset` attach a dataset to an assignment, move it to another version or scope, and end the attachment. `get_support_files` reports each attached file's source and scope, and `get_assignment` lists the attached datasets. The MCP database role is granted the two library tables.
+
+
+## [0.5.716] - 2026-10-18
+
+### Added
+
+- **Lab groups design note.** `docs/lab-groups.md` proposes lab groups and in-lab sessions: a group set per course, a session per (activity, group) started from the present page, a join code for the room, and every class activity (leaderboard, hill, round robin, tournament, composite, class goal) running once per group. Design only; no behaviour changes.
+
+
+## [0.5.715] - 2026-10-18
+
+### Added
+
+- **Course dataset library, slice 6: what students see.** A course Data page (`/data/<course>`) lists the published datasets with their description, provenance, licence and data dictionary, and a download of the student's own rows in each assignment that uses them. The download is the bytes the grader gives that student. The dashboard links to the page, and the upload page lists each dataset file of the assignment with the student's rows.
+
+
+## [0.5.714] - 2026-10-18
+
+### Added
+
+- **Course dataset library, slice 5b: the library in the assignment Files panel.** On the edit page, an instructor attaches a library dataset to the assignment, updates an attached file to the newest version, sets whether it gives each student the same rows in every assignment, detaches it, or moves a CSV support file into the library. Attach, update, detach and a scope change re-grade and re-validate the assignment.
+
+
 ## [0.5.713] - 2026-10-18
 
 ### Added

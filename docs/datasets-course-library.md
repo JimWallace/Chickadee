@@ -16,9 +16,9 @@ states what it adds and what proves it.
 | 2 | Server: the `course_datasets` and `course_dataset_versions` tables, the blob-backed store, `CourseDatasetService` | built |
 | 3 | Attachment: copy a pinned version into the setup zip and record the source; promote a support file into the library; detect a newer version | built |
 | 4 | Course cohort: the per-(student, course) seed, and `DatasetResolver` choosing the seed per spec at every delivery path | built |
-| 5 | Instructor surfaces: the Datasets tab (5a), the Files-panel picker and the scope control (5b) | 5a built; 5b proposed |
-| 6 | Student surfaces: the course Data page, the assignment-page dataset line, the "my rows" download | proposed |
-| 7 | MCP: `list_datasets`, `get_dataset`, `create_dataset`, `update_dataset`, `add_dataset_version`, `attach_dataset`, `detach_dataset`; `set_dataset` gains `scope` | proposed |
+| 5 | Instructor surfaces: the Datasets tab (5a), the Files-panel picker and the scope control (5b) | built |
+| 6 | Student surfaces: the course Data page, the assignment-page dataset line, the "my rows" download | built |
+| 7 | MCP: `list_datasets`, `get_dataset`, `create_dataset`, `update_dataset`, `add_dataset_version`, `attach_dataset`, `detach_dataset` | built |
 | 8 | Lifecycle: course clone, bundle export and import, storage page, purge | proposed |
 | 9 | Migration of HLTH 230: promote the two live datasets; docs and CLAUDE.md | proposed |
 | 10 | Optional: the `formatNoise` transform | proposed |
@@ -442,58 +442,130 @@ as `<slug>-v<n>.csv`.
 Tests: `InstructorDatasetsTabTests`, and the two fixtures in
 `ElementaryPageFixtures+Datasets.swift`.
 
-**The Files panel (5b).** It gains one control beside the upload: "Attach from the
-course library", a select of published and unpublished datasets. An attached
-row shows the source (`from VitalDB cases v2`), a "v3 available: update"
-action when behind, and a "same rows in every assignment" checkbox for the
-scope. The existing sample, stratum and blanking fields stay as they are. The
-behaviour lives in `Public/support-files.js`; the markup in `SupportFileRow`.
+**The Files panel (5b, built).** The edit page's Files panel reaches the
+library through five JSON routes, each answering with the panel state as the
+datasets PUT does (`PublishedAssignmentRoutes+DatasetLibrary.swift`):
 
-A promote action on a plain support-file row: "Move to the course library".
+| Control | Route | Does |
+|---|---|---|
+| A select and Attach, beside the upload (only when the course has datasets) | `POST …/datasets/library/attach` `{slug}` | Attaches the newest version under its own filename, with course scope and no sample (decision 1). The instructor then sets the sample as for any dataset. |
+| "Update to v3", on an attached row that pins an older version | `…/update` `{file}` | Moves to the newest version. |
+| "Course-wide rows" | `…/scope` `{file, courseScoped}` | Sets the scope (`setAttachmentScope`). |
+| Detach | `…/detach` `{file}` | Ends the attachment and keeps the file and its sample. No confirm, because it is easy to undo. |
+| Remove, on an attached row | `…/detach` `{file, removeFile: true}` | The support-file delete refuses an attached file, so Remove detaches and removes in one step. |
+| "Move to course library", on a CSV that is not attached | `…/promote` `{file}` | Creates an unpublished dataset named after the file (decision 3). The instructor renames it on the Datasets tab. |
 
-Every page change runs `ui-guard` and `ui-review`.
+- **Attach, update, detach and a scope change re-grade and re-validate**
+  (`applyContentEditEffects(.gradeAffecting)`). Attach and update change the
+  bytes, and a detach with `removeFile` removes a file. The scope decides which
+  seed picks a student's rows, so a scope change and a detach that keeps the
+  file change the rows too. A promote keeps the bytes, the sample and the
+  scope, so it does neither; `WebContentEditCoverageTests` lists it.
+- **The scope write is made from the manifest being saved.** A lost race
+  re-applies it to the newer manifest, so it cannot bring back a source that a
+  concurrent update or detach replaced. The scope route takes its own body,
+  and a body without `courseScoped` is refused.
+- **A promote picks a free slug** from the file name: the plain slug, else
+  `-2`, `-3` and on. A grader-only CSV offers no promote, because the service
+  refuses one.
+- **Known gap: attach uses the version's own filename.** When the assignment
+  already has a file with that name, the attach is refused with that reason.
+  The panel has no field for another name yet; the route accepts `filename`.
+- **An attached row's per-student checkbox is disabled,** with a one-line note
+  that says to detach first. An attached file always has a spec, and
+  unchecking it would be refused.
+- **The create page has no library controls.** Its endpoints are draft
+  endpoints, so a dataset is attached after the assignment exists.
+- A refusal from the service is a 400 with its reason, which the panel shows
+  as an action error. A refused scope change puts the box back. A control is
+  disabled while its request runs.
 
-### 4.6 Student surfaces (slice 6)
+Tests: `DatasetLibraryPanelRoutesTests`, `support-files-library.test.mjs`, the
+five route floors in `RouteAuthorizationMatrixTests`, and an edit-page fixture
+with the library controls in `ElementaryPageFixtures+Datasets.swift`.
 
-**The course Data page** (`/:courseKey/data`, `CourseDataPage`), linked from
-the student assignments page. For each published dataset: name, description,
-provenance, licence, the dictionary as a table, row count, the assignments
-that use it, and "Your rows" with a download. The download is
-`/:courseKey/data/:slug/mine.csv`: the student's course-scoped slice when the
-dataset is attached anywhere with course scope and the whole file otherwise,
-with a line that says which.
+### 4.6 Student surfaces (slice 6, built)
 
-**The assignment page** (`SubmitPage` and the notebook guide) gets one line
-per attached published dataset: "Uses VitalDB cases (v2), 150 of your rows",
-linking to the Data page and to a download of the rows this assignment
-delivers (`/testsetups/:id/data/:filename/mine.csv`, made by the same
-`DatasetResolver` call the grader uses).
+`StudentDataRoutes.swift` holds two routes. Both need an enrollment in the
+course.
 
-A dataset that is attached but not published is listed to staff only.
+| Route | Shows |
+|---|---|
+| `GET /data/:courseKey` (`CourseDataPage`, plain student page) | Each dataset: name, description, provenance, licence, row count of the newest version, the data dictionary, and "Your rows": one download for each assignment the viewer can open that attaches it. |
+| `GET /testsetups/:id/data/:filename/mine.csv` | The viewer's own rows of one dataset file in one assignment. |
 
-Tests: the route authorization matrix gains the new routes (students in the
-course, staff, nobody else); the download bytes equal the grader's bytes for
-the same student; an unpublished dataset is absent from the student page.
+- **The page is `/data/:courseKey`, not `/:courseKey/data`.** A fixed second
+  segment routes ahead of the vanity URL `/:courseCode/:slug`, so the plan's
+  path would hide an assignment whose slug is "data".
+- **"Your rows" is one download per assignment, not one per course.** Two
+  assignments can attach one dataset with different samples, so a single
+  course-level slice is not defined. Each download is the bytes that
+  assignment delivers.
+- **The download is the grader's bytes** (`StudentDatasetDelivery`): the
+  viewer's assignment seed and, for a course-scoped dataset, the course seed,
+  through `DatasetResolver.resolve` over the shared support directory, as the
+  worker and the editor resolve them. So a student never downloads the pool
+  unless every student receives the whole file (decision 2). The seeds are
+  issued on first use, as an editor open or a submission issues them.
+- **Who sees what.** A student sees published datasets only, and only the
+  assignments they may read: the assignment is open for them (an extension
+  counts), or `studentMayViewClosedAssignment` admits them (visible by its
+  state, or opened before). That function is the rule of
+  `closedAssignmentGate` too, without its first-access record. So the upload
+  page never links to a download that refuses. Staff see
+  unpublished datasets, marked, and every assignment. The download needs no
+  published dataset, because the student already receives those rows. It is
+  sent with `Cache-Control: private, no-store`.
+- **Links.** The dashboard links to the Data page when the active course has a
+  published dataset. The upload page (`SubmitPage`) lists each dataset file of
+  the assignment with its row count and a download, and links to the Data
+  page when a file comes from a published library dataset. A notebook
+  assignment's student has the file in the editor already; the Data page
+  serves them too.
 
-### 4.7 MCP (slice 7)
+Tests: `StudentDataRoutesTests`, and the `CourseDataPage` and upload-page
+fixtures in `ElementaryPageFixtures+Datasets.swift`.
 
-New tools, all course-scoped, with the same gates as content items:
+### 4.7 MCP (slice 7, as built)
+
+Seven tools, all course-scoped, with the gates of the web Datasets tab and the
+Files panel: a read needs an enrollment, a write the TA role and a course that
+is not archived.
 
 | Tool | Scope | Does |
 |---|---|---|
-| `list_datasets` | `content:read` | the library with versions and usage |
-| `get_dataset` | `content:read` | metadata, dictionary, the first rows of the pool |
-| `create_dataset` | `content:write` | from a `sourceUrl` under the SSRF guard (as content attachments), or by promoting a support file of an assignment |
-| `update_dataset` | `content:write` | name, description, provenance, licence, dictionary, published |
+| `list_datasets` | `content:read` | the library with versions, the newest dictionary and usage |
+| `get_dataset` | `content:read` | the same for one dataset, plus the header and first rows of one version |
+| `create_dataset` | `content:write` | version 1 from a `sourceUrl` under the SSRF guard, or by promoting an assignment's support file |
+| `update_dataset` | `content:write` | name, description, provenance, licence, column prose, published |
 | `add_dataset_version` | `content:write` | a new version from a `sourceUrl` with a note |
-| `attach_dataset` | `content:write` | to an assignment, with filename, version, scope and the sample fields |
-| `detach_dataset` | `content:write` | from an assignment |
+| `attach_dataset` | `content:write` | attach to an assignment, with filename, version, scope and the sample fields; on an attached file, move it to another version or scope |
+| `detach_dataset` | `content:write` | end an attachment, keeping the file and its sample unless `removeFile` |
 
-`set_dataset` gains `scope`. `get_support_files` reports `datasetSource` and
-`datasetScope`. `get_assignment` lists attached datasets. The instructions
-text in `InitializeTypes.swift` gains a Datasets paragraph. Every tool is
-added to `docs/compliance/tool-inventory.md` and to the version-capture
-coverage test.
+- **`set_dataset` does not gain `scope`.** The plan said it would. Slice 3
+  made the library fields (`source` and `scope`) writable only by the library
+  attach path (`DatasetSpecValidation.libraryFieldIssue`, pinned by
+  `DatasetLibraryFieldDoorTests`), so `attach_dataset` sets the scope of a file
+  that is already attached, and `set_dataset` keeps the sample.
+- **Re-grade, no close.** An attach, a version move, a scope change and a
+  detach call `applyContentEditEffects(.gradeAffecting)`, as the web library
+  routes do. None closes the assignment, as neither those routes nor
+  `set_dataset` do. The library tools change no attached file, so they neither
+  re-grade nor close. `MCPContentEditCoverageTests` records both files.
+- **`update_dataset` changes only the columns it names.** The service
+  replaces the prose of every column, so the tool sends the other columns with
+  the prose they have. An agent that edits one column does not clear the rest.
+- `get_support_files` reports `datasetSource` and `datasetScope`;
+  `get_assignment` lists the attached datasets. The `initialize` instructions
+  have a "Course dataset library" paragraph, which names every tool
+  (`MCPInstructionsCatalogSyncTests`).
+- `deploy/sql/mcp-least-privilege-role.sql` grants DML on `course_datasets`
+  and `course_dataset_versions` to the MCP role.
+- The tools that fetch a `sourceUrl` take the fetch as a property, so a test
+  gives the bytes without a network.
+
+Tests: `CourseDatasetToolsTests`; the rows in `docs/compliance/tool-inventory.md`
+and `docs/mcp-authoring-roadmap.md` (`MCPRoadmapDocSyncTests`).
 
 ### 4.8 Lifecycle (slice 8)
 

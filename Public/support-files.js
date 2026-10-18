@@ -17,6 +17,9 @@
 //     onChange:    () => run after a successful upload batch or delete
 //                  (the edit surface re-renders in place; the create page
 //                  reloads its draft)
+//     libraryURL:  (op) => POST target for one course-library action, where
+//                  op is attach | update | detach | scope | promote
+//                  (optional: the create page has no library controls)
 //   })
 //
 // Expects the shared markup ids: #add-support-file-btn,
@@ -362,6 +365,96 @@
         resync();
     }
 
+    // ── The course dataset library (docs/datasets-course-library.md §4.5) ──
+    //
+    // Each control names its file in data-filename, and each action is one
+    // POST whose answer is the panel state. The surface then re-renders, as
+    // after an upload, because an action can add a file, change a row's
+    // source line or remove a row.
+    var boundLibraryControls = false;
+    // What failed, per action, for the error beside the control.
+    var LIBRARY_FAILURES = {
+        attach: 'Could not attach the dataset',
+        update: 'Could not update the dataset',
+        detach: 'Could not detach the dataset',
+        scope: 'Could not change the scope',
+        promote: 'Could not move the file to the course library'
+    };
+    var libraryConfig = null;
+
+    // What a library control asks for: the action and its body, or null for
+    // an element that is not a library control.
+    function libraryRequest(target) {
+        if (!target || !target.classList) return null;
+        var file = target.getAttribute && target.getAttribute('data-filename');
+        if (target.classList.contains('js-library-attach')) {
+            var select = document.querySelector('.js-library-attach-select');
+            if (!select || !select.value) return null;
+            return { op: 'attach', body: { slug: select.value } };
+        }
+        if (!file) return null;
+        if (target.classList.contains('js-library-update')) return { op: 'update', body: { file: file } };
+        if (target.classList.contains('js-library-detach')) {
+            // The file and its sample stay, so a detach needs no confirm.
+            return { op: 'detach', body: { file: file } };
+        }
+        if (target.classList.contains('js-library-remove')) {
+            return {
+                op: 'detach', body: { file: file, removeFile: true },
+                confirm: 'Remove "' + file + '"? Tests that read it will fail until you re-add it.'
+            };
+        }
+        if (target.classList.contains('js-library-promote')) return { op: 'promote', body: { file: file } };
+        if (target.classList.contains('js-library-scope')) {
+            return { op: 'scope', body: { file: file, courseScoped: !!target.checked } };
+        }
+        return null;
+    }
+
+    function initLibraryControls(config) {
+        if (typeof config.libraryURL !== 'function') return;
+        libraryConfig = config;
+        if (boundLibraryControls) return;
+        boundLibraryControls = true;
+
+        async function send(target) {
+            var request = libraryRequest(target);
+            if (!request) return;
+            var current = libraryConfig;
+            // One request per control at a time: a second click while the
+            // first is in flight would be refused as already done.
+            if (target.disabled) return;
+            if (request.confirm && !await ChickadeeUI.confirmAction(request.confirm)) return;
+            target.disabled = true;
+            try {
+                await ChickadeeUI.fetchJSON(current.libraryURL(request.op), {
+                    method: 'POST',
+                    csrfToken: current.csrfToken || '',
+                    body: request.body
+                });
+            } catch (e) {
+                // A refused scope change leaves the box as the server holds it.
+                if (request.op === 'scope') target.checked = !target.checked;
+                ChickadeeUI.showActionError(LIBRARY_FAILURES[request.op] + ' — ' + e.message, target);
+                return;
+            } finally {
+                target.disabled = false;
+            }
+            current.onChange();
+        }
+
+        document.body.addEventListener('click', function (ev) {
+            var target = ev.target && ev.target.closest
+                && ev.target.closest('.js-library-attach, .js-library-update, .js-library-detach, '
+                    + '.js-library-remove, .js-library-promote');
+            if (target) send(target);
+        });
+        document.body.addEventListener('change', function (ev) {
+            var target = ev.target;
+            if (target && target.classList && target.classList.contains('js-library-scope')) send(target);
+        });
+    }
+
     window.initSupportFiles = function (config) {
         var csrfToken = config.csrfToken || '';
         var addBtn = document.getElementById('add-support-file-btn');
@@ -414,6 +507,7 @@
         }
 
         initDatasetControls(config, csrfToken);
+        initLibraryControls(config);
 
         deleteConfig = config;
         if (boundDeleteClicks) return;

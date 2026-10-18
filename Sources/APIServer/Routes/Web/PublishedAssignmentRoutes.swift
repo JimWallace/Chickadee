@@ -79,6 +79,12 @@ struct PublishedAssignmentRoutes: RouteCollection {
         // Per-student dataset specs (Phase 1 datasets).
         r.get(":assignmentID", "datasets", use: getDatasets)
         r.put(":assignmentID", "datasets", use: putDatasets)
+        // The course dataset library in the Files panel.
+        r.post(":assignmentID", "datasets", "library", "attach", use: attachLibraryDataset)
+        r.post(":assignmentID", "datasets", "library", "update", use: updateLibraryAttachment)
+        r.post(":assignmentID", "datasets", "library", "detach", use: detachLibraryDataset)
+        r.post(":assignmentID", "datasets", "library", "scope", use: setLibraryDatasetScope)
+        r.post(":assignmentID", "datasets", "library", "promote", use: promoteSupportFileToLibrary)
 
         // Unified Achievements table — the whole typed achievement list (class
         // goals, badges, built-in awards).  Display-only; no retest/validation.

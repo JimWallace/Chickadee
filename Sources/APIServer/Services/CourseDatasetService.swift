@@ -93,6 +93,20 @@ enum CourseDatasetService {
             .all()
     }
 
+    /// Whether the course has a published dataset, of `slugs` when given.
+    /// The dashboard and the upload page ask this to decide on their link
+    /// to the Data page.
+    static func hasPublished(courseID: UUID, slugs: Set<String>? = nil, on db: any Database) async throws -> Bool {
+        if let slugs, slugs.isEmpty { return false }
+        let query = APICourseDataset.query(on: db)
+            .filter(\.$courseID == courseID)
+            .filter(\.$isPublished == true)
+        if let slugs {
+            query.filter(\.$slug ~~ Array(slugs))
+        }
+        return try await query.first() != nil
+    }
+
     static func find(courseID: UUID, slug: String, on db: any Database) async throws -> APICourseDataset? {
         try await APICourseDataset.query(on: db)
             .filter(\.$courseID == courseID)
