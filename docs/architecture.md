@@ -839,6 +839,19 @@ per-student; the server materializes a deterministic per-seed slice delivered
 under the same filename to grading and the editor. See
 [`datasets.md`](datasets.md).
 
+**The course dataset library.** A course keeps its datasets once, with
+versions, a provenance, a licence and a data dictionary
+(`CourseDatasetService`, tables `course_datasets` and
+`course_dataset_versions`; the bytes are blobs in the version store). An
+assignment attaches a version: the bytes are copied into its setup zip and
+the spec records the `source`, so grading reads the zip as before. A
+course-scoped spec keys each student's rows to a per-course seed, so a
+student gets the same rows in every assignment that attaches the dataset.
+Students read published datasets and their own rows on the course Data page;
+staff manage the library on the Datasets tab and through MCP. A clone and a
+version 2 course bundle carry the library. See
+[`datasets-course-library.md`](datasets-course-library.md).
+
 ---
 
 ## Deployment

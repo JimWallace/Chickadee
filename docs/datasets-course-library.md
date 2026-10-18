@@ -20,7 +20,7 @@ states what it adds and what proves it.
 | 6 | Student surfaces: the course Data page, the assignment-page dataset line, the "my rows" download | built |
 | 7 | MCP: `list_datasets`, `get_dataset`, `create_dataset`, `update_dataset`, `add_dataset_version`, `attach_dataset`, `detach_dataset` | built |
 | 8 | Lifecycle: course clone, bundle export and import, storage page, purge | built |
-| 9 | Migration of HLTH 230: promote the two live datasets; docs and CLAUDE.md | proposed |
+| 9 | Migration of HLTH 230: promote the two live datasets; docs and CLAUDE.md | docs built; the promotion is the maintainer's, in the UI |
 | 10 | Optional: the `formatNoise` transform | proposed |
 | 11 | Class-wide data: the `partition` kind dealt by slot, the ranked-activity refusal, and the rule for jobs with no student | proposed |
 
@@ -608,14 +608,26 @@ version 1 export, round trip, refused files).
 
 ### 4.9 Migration of HLTH 230 (slice 9)
 
-Promote Assignment 4's `assignment4_vitaldb_cases.csv` and Lab 9's
-`nhanes_bp.csv` into the library, fill provenance and licence, and publish.
+The maintainer does the promotion on the live course, in the UI (decided
+2026-10-18). After the deploy that carries slices 5 to 8:
+
+1. In Assignment 4, open the Files panel and choose "Move to the course
+   library" on `assignment4_vitaldb_cases.csv`.
+2. In Lab 9, do the same for `nhanes_bp.csv`.
+3. On the Datasets tab, rename each dataset if the file name is not the name
+   students should see, fill the provenance and the licence, describe the
+   columns, and publish.
+
 Lab 6 and Lab 8 keep their plain files; the instructor may promote them. No
 grading changes: a promoted spec keeps `scope == .assignment` and its sample
-size, so every student's rows stay the same.
+size, so every student's rows stay the same. A later assignment that attaches
+one of these datasets with course scope gives each student the same rows
+across those assignments, but not the rows of Assignment 4 or Lab 9, whose
+specs stay on the assignment seed.
 
-Docs: a section in `datasets.md` that points here; `CLAUDE.md` reference line;
-`docs/architecture.md` one paragraph; `docs/mcp-authoring-roadmap.md` rows.
+Docs, as built: `datasets.md` points here; the `CLAUDE.md` reference line;
+one paragraph in `docs/architecture.md`; the `docs/mcp-authoring-roadmap.md`
+rows (slice 7).
 
 ### 4.10 Optional: `formatNoise` (slice 10)
 
@@ -787,8 +799,8 @@ PR and no version bump.
 
 ## 8. Decisions by the maintainer
 
-The maintainer accepted the recommended answers on 2026-10-17. Two questions
-had no recommendation, and they stay open until their slice comes up.
+The maintainer accepted the recommended answers on 2026-10-17. The two
+questions that had no recommendation were decided on 2026-10-18.
 
 1. **Scope default (D5). Decided.** `assignment` is the decoded default, so
    every existing spec is unchanged. The Files-panel picker and
@@ -800,7 +812,11 @@ had no recommendation, and they stay open until their slice comes up.
    unpublished until provenance and licence are filled.
 4. **Tab names. Decided.** "Datasets" on the instructor bar and "Data" on the
    student side.
-5. **Slice 10 (`formatNoise`). Open.** Decide before slice 9 ships.
+5. **Slice 10 (`formatNoise`). Decided 2026-10-18.** Build it.
 6. **The ranked-activity refusal (§4.11). Decided.** A refusal, on the same
    footing as the kind lock.
-7. **Slice 11. Open.** Decide after slice 6 ships.
+7. **Slice 11. Decided 2026-10-18.** Build both halves: the ranked-activity
+   refusal and the dealt `partition` kind.
+8. **The HLTH 230 promotion (slice 9). Decided 2026-10-18.** The maintainer
+   promotes and publishes the two live datasets in the UI; the slice ships
+   the docs.
