@@ -185,7 +185,7 @@ private struct GroupAddMenu: HTML {
                     span {
                         "Import CSV"
                         br()
-                        span(.class("card-meta")) { "Usernames and groups; replaces every group" }
+                        span(.class("card-meta")) { "Usernames and groups" }
                     }
                 }
             }
