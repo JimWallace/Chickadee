@@ -140,7 +140,7 @@ private struct SupportFileLibraryControl: HTML {
                 button(
                     .class("btn action-btn js-library-detach"), .type(.button), .data("filename", value: filename)
                 ) { "Detach" }
-                span(.class("dataset-note")) { "Detach keeps the sample; clear it after you detach." }
+                span(.class("dataset-note")) { "Detach keeps the file and its per-student sample." }
             } else {
                 button(
                     .class("btn action-btn js-library-promote"), .type(.button), .data("filename", value: filename)
