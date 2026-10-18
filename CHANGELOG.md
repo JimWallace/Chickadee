@@ -9,6 +9,20 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.725] - 2026-10-18
+
+### Added
+
+- **Lab groups (slice 2): per-group sessions.** A class activity can now run once per lab group (the edit page's "Run once per lab group" box, or `set_activity`'s `runsPerGroup`). Course staff start and end each group's session from the present page, which shows a five-character join code that changes every 30 seconds. Every student types the code at `/join` to take part, and submits only while the session they joined is open. Staff see who joined on a separate page and can remove a student who is not in the room. Wrong codes are limited to ten in ten minutes per student. See `docs/lab-groups.md`.
+
+
+## [0.5.724] - 2026-10-18
+
+### Added
+
+- **The `formatNoise` dataset transform.** A per-student dataset can now write a deterministic share of the cells in named columns another way: with surrounding spaces, in upper case or in lower case. Trimming and case-folding gives the original value back, so the step adds cleaning work without changing any answer. Empty cells stay empty, quoted cells stay one field, and the divergence diagnostic compares folded text. It is authored through MCP `set_dataset`.
+
+
 ## [0.5.723] - 2026-10-18
 
 ### Security

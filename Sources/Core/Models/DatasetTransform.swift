@@ -34,8 +34,15 @@ public struct DatasetTransform: Codable, Sendable, Equatable {
     ///   columns, so the student's data has holes to notice and handle.  Pure
     ///   string replacement — no type inference and no formatting decisions,
     ///   which is why it is the first derivation to ship.
+    /// - `formatNoise`: writes a deterministic subset of cells in the named
+    ///   columns another way — with surrounding spaces, in upper case or in
+    ///   lower case — so the student's data has inconsistent formats to clean.
+    ///   It changes the representation and never the value: trimming and
+    ///   case-folding a cell gives the pool's cell back, so it preserves the
+    ///   answer and the distribution.  An empty cell stays empty.
     public enum Kind: String, Codable, Sendable, Equatable, CaseIterable {
         case missingValues
+        case formatNoise
     }
 
     public let kind: Kind

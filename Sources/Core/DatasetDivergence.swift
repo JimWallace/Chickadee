@@ -7,8 +7,9 @@
 //
 // It is measured, not derived — every sampled slice comes from
 // `DatasetMaterializer.materialize`, the exact call delivery makes — so it
-// covers every transform automatically, including kinds that do not exist
-// yet.  A fairness report about bytes other than the delivered ones would be
+// covers every transform from the bytes. One kind needs a rule of its own:
+// `formatNoise` writes a value another way, so the columns it names are
+// compared as trimmed, lower-cased text.  A fairness report about bytes other than the delivered ones would be
 // worse than no report.  The pool is parsed once and reused across seeds;
 // the slices are never approximated.
 //
@@ -79,13 +80,20 @@ extension DatasetDiagnostics {
     public static func divergence(
         spec: DatasetSpec, sourceCSV: String, seedCount: Int = defaultSeedCount
     ) -> [DatasetColumnDivergence] {
-        guard seedCount > 0, let pool = ParsedColumns(csv: sourceCSV) else { return [] }
+        // Format noise changes how a value is written, not the value, so the
+        // columns it names are compared as trimmed, case-folded text;
+        // otherwise "Ward A" and "ward a" would read as two categories and
+        // inflate the measure. Other columns keep their case.
+        let folded = Set(spec.transforms.filter { $0.kind == .formatNoise }.flatMap(\.columns))
+        guard seedCount > 0, let pool = ParsedColumns(csv: sourceCSV, foldingColumns: folded) else {
+            return []
+        }
 
         var samples: [[Double]] = Array(repeating: [], count: pool.names.count)
         for seed in 0..<seedCount {
             let materialized = DatasetMaterializer.materialize(
                 source: sourceCSV, spec: spec, seedHex: preflightSeed(seed))
-            guard let slice = ParsedColumns(csv: materialized) else { continue }
+            guard let slice = ParsedColumns(csv: materialized, foldingColumns: folded) else { continue }
             for index in pool.names.indices where index < slice.observed.count {
                 let observed = slice.observed[index]
                 guard !observed.isEmpty, !pool.observed[index].isEmpty else { continue }
@@ -222,7 +230,9 @@ private struct ParsedColumns {
     /// Population standard deviation per column (0 for categorical).
     let standardDeviation: [Double]
 
-    init?(csv: String) {
+    /// Each value of a column named in `foldingColumns` is trimmed and
+    /// lower-cased first.
+    init?(csv: String, foldingColumns: Set<String>) {
         let (lines, _) = DatasetMaterializer.normalizedLines(of: csv)
         guard lines.count > 1 else { return nil }
         let names = DatasetMaterializer.splitCSVLine(lines[0])
@@ -232,7 +242,10 @@ private struct ParsedColumns {
         for index in 1..<lines.count {
             let fields = DatasetMaterializer.splitCSVLine(lines[index])
             for column in names.indices where column < fields.count {
-                let value = fields[column]
+                let raw = fields[column]
+                let value =
+                    foldingColumns.contains(names[column])
+                    ? raw.trimmingCharacters(in: .whitespaces).lowercased() : raw
                 if !value.isEmpty { observed[column].append(value) }
             }
         }

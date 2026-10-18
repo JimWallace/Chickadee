@@ -361,6 +361,26 @@ because line numbers go out of date.
   - `variesPerStudent` is not a wider `hasPersonalization`. Each predicate
     has its own readers. Do not use one in place of the other.
 
+### Dataset transform kinds: `DatasetTransform.Kind`
+
+- **Objects:** the kind of each step in a spec's `transforms`, and the bytes
+  `DatasetMaterializer` writes for it.
+- **Readers that branch on the kind:**
+  - The Files panel edits one `missingValues` step only, in two copies that
+    must agree: `datasetTransformsEditable` (`SuiteRowContexts.swift`) and
+    `ownsTransforms` (`Public/support-files.js`). Any other spec renders
+    disabled and its steps are carried through.
+  - The divergence diagnostic folds the columns a `formatNoise` step names
+    (`DatasetDivergence.swift`).
+  - The MCP `set_dataset` description glosses each kind
+    (`DatasetTransformProse.gloss`, an exhaustive switch).
+  - The row-set test holds every kind to "a transform never changes which
+    rows a student holds" (`DatasetDiagnosticsTests`, an exhaustive switch).
+- **Rules:**
+  - A new kind updates every reader above, or says why it does not.
+  - A kind never changes a delivered byte of an existing kind: each step draws
+    from its own stream, keyed on the step's index, kind and column.
+
 ### The course dataset library
 
 - **Objects:**
@@ -432,6 +452,61 @@ because line numbers go out of date.
   - Connect a new accumulator at both ingest paths. An accumulator on one
     path shows only the half of the class that one substrate grades, as if it
     were the whole class.
+
+### Lab groups and per-group sessions: `runsPerGroup`, `activity_sessions`
+
+- **Writers:**
+  - `CourseGroupStore`: the Groups tab, the roster import and the Students
+    tab's Group column write memberships. `removeGroup` also ends the
+    group's open sessions.
+  - `ActivitySessionStore.open` and `close`, from the present page's Start
+    and End (`WebRoutes+Sessions.swift`).
+  - `ActivitySessionStore.join` (`/join`) writes attendance, and places a
+    student in no group of a manual set in the session's group. A wrong code
+    writes a `login_attempts` row (scope `join_failure`).
+  - `ActivitySessionStore.remove`, from the staff attendance page, sets
+    `removed_at` on an attendance row.
+  - `ActivityAuthoring.setActivity` sets `ClassActivity.runsPerGroup`.
+- **Readers:**
+  - `requireOpenActivityWindow` in `Routes/StudentAssignmentRequestGates.swift`,
+    through `ActivitySessionStore.currentSession`.
+  - `GroupSessionPanel` on the present page, and `SessionAttendancePage`.
+  - The data export (`gatherGroups`, `gatherSessionJoins`).
+- **Rules** (`docs/lab-groups.md`):
+  - A per-group activity has no session window: each group's session is its
+    clock. `ActivityAuthoring` refuses both together, and refuses a class
+    composite.
+  - Only attendance counts: membership does not let a student submit. A
+    join from before a session's latest start, or a removed one, does not
+    count.
+  - The join code is derived from the session's secret and the time; it is
+    never stored. A reopen draws a new secret.
+  - Remove undoes a group placement that the student's join made
+    (`placed_in_group`), and only while that is still their group.
+  - Sessions read the course's first group set only.
+  - Staff are never gated, as with the window.
+  - Every write that turns `runsPerGroup` off ends the open sessions:
+    `ActivityAuthoring.setActivity` and the MCP version restore. A new writer
+    of the flag must do the same, or turning it on again brings back an
+    earlier lab's code.
+  - A clone and a bundle import clear the flag (see Cloning).
+- **Gap:** `POST /api/v1/submissions` checks enrollment only, so it skips
+  this gate, as it skips the window.
+
+### Rate-limit rows: `login_attempts`
+
+- **Writers:** the login rate limit (`LoginRateLimitMiddleware`: scopes `ip`
+  and `user_failure`) and `/join` (`ActivitySessionStore`: scope
+  `join_failure`, keyed by user id).
+- **Readers:** each writer reads its own scope only.
+- **Rules:**
+  - Every reader filters by `scope`. A new scope is a new string constant in
+    `LoginAttempt.Scope`, never a reuse of another feature's.
+  - `purgeStale` removes rows of every scope by age (an hour or the lockout
+    window, whichever is longer). A window longer than that needs a change
+    to the sweep.
+  - No row has a foreign key, so a deleted user's rows stay until the sweep
+    (`docs/operational-diagnostics.md`).
 
 ### Notebook-check kind support
 
@@ -517,6 +592,9 @@ because line numbers go out of date.
 - **Traps:**
   - `.auto` enrollment let students from the last term in (#1780).
   - An old activity window refused students (#2189).
+  - A per-group activity in a course with no groups refuses every student.
+    A clone and a bundle import clear `runsPerGroup`, because neither copies
+    group sets.
   - The two clones once copied different policies (#1738).
   - A rollback left orphan files (#1743, #2168).
 

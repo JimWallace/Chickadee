@@ -29,6 +29,8 @@ struct WebRoutes: RouteCollection {
         // A class activity's ranking (docs/class-activities.md); 404 unless the
         // assignment has one, and for students unless it is published.
         routes.get("testsetups", ":testSetupID", "leaderboard", use: leaderboardPage)
+        // Per-group activity sessions and the student join page (docs/lab-groups.md).
+        registerSessionRoutes(on: routes)
         // A class composite's slot states and pixels (docs/class-composite.md).
         routes.get("testsetups", ":testSetupID", "composite", use: compositeSnapshot)
         // "Fill a hole": a student's passing tile, graded again for an empty slot.

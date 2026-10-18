@@ -89,10 +89,13 @@ private func requireOpenActivityWindow(
     now: Date
 ) async throws {
     guard let setup = try await APITestSetup.find(testSetupID, on: req.db),
-        let activity = setup.decodedManifest()?.activity,
-        !activity.acceptsSubmissions(at: now),
-        let window = activity.window
+        let activity = setup.decodedManifest()?.activity
     else { return }
+    if activity.runsPerGroup {
+        try await requireOpenGroupSession(assignment: assignment, user: user, on: req, now: now)
+        return
+    }
+    guard !activity.acceptsSubmissions(at: now), let window = activity.window else { return }
     if try await isCourseStaff(user, inCourse: assignment.courseID, db: req.db) { return }
 
     let formatter = waterlooDateTimeFormatter()
@@ -106,6 +109,20 @@ private func requireOpenActivityWindow(
     case .open:
         return
     }
+}
+
+/// Refuses a submission to a per-group activity (docs/lab-groups.md) from a
+/// student who has joined no open session by code. In place of the window,
+/// not beside it: a per-group activity carries none. Course staff are not
+/// gated, for the window's reason.
+private func requireOpenGroupSession(
+    assignment: APIAssignment, user: APIUser, on req: Request, now: Date
+) async throws {
+    if try await isCourseStaff(user, inCourse: assignment.courseID, db: req.db) { return }
+    let session = try await ActivitySessionStore.currentSession(
+        assignmentID: assignment.requireID(), userID: user.requireID(), now: now, on: req.db)
+    guard session == nil else { return }
+    throw AssignmentSubmissionGateError.notInGroupSession
 }
 
 extension Request {

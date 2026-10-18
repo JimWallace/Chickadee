@@ -143,6 +143,8 @@ extension InstructorDashboardRoutes {
         struct WindowBody: Content {
             var opensAt: String?
             var closesAt: String?
+            /// "on" when the per-group checkbox is ticked; absent otherwise.
+            var runsPerGroup: String?
         }
         let body = (try? await req.decodeContent(WindowBody.self)) ?? WindowBody()
         // An empty field clears that bound; a field the parser cannot read is
@@ -159,7 +161,9 @@ extension InstructorDashboardRoutes {
             opensAt: parseDueDate(body.opensAt), closesAt: parseDueDate(body.closesAt))
         do {
             try await ActivityAuthoring.setActivity(
-                setup: setup, to: current.withWindow(window.isBounded ? window : nil), on: req.db)
+                setup: setup,
+                to: current.withWindow(window.isBounded ? window : nil).withRunsPerGroup(body.runsPerGroup != nil),
+                on: req.db)
         } catch let error as AppError {
             let encoded =
                 error.reason.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
@@ -173,10 +177,11 @@ extension InstructorDashboardRoutes {
                 "assignment": assignment.publicID,
                 "opensAt": window.opensAtISO ?? "",
                 "closesAt": window.closesAtISO ?? "",
+                "runsPerGroup": body.runsPerGroup != nil ? "true" : "false",
             ],
             on: req
         )
-        return req.redirect(to: editPath + "?notice=Session+window+saved")
+        return req.redirect(to: editPath + "?notice=Session+settings+saved")
     }
 
     // MARK: - POST /instructor/:assignmentID/activity/composite

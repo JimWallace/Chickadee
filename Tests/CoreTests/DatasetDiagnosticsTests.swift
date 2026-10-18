@@ -95,6 +95,8 @@ import Testing
         switch kind {
         case .missingValues:
             transform = DatasetTransform(kind: .missingValues, columns: ["score"], rate: 0.5)
+        case .formatNoise:
+            transform = DatasetTransform(kind: .formatNoise, columns: ["score"], rate: 0.5)
         }
         let with = DatasetSpec(file: "cases.csv", sampleSize: 40, transforms: [transform])
         for seed in 0..<5 {
