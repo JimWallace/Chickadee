@@ -415,15 +415,14 @@ jobs:
       # Same tmpfs `/tmp` as the api-tests lane, for the same reason and with
       # the same `exec` requirement — see that job for the measurement.
       #
-      # On THIS lane the win is much smaller and not yet established: 382 s
-      # and 342 s against a 391 s main median. The `[ci-pressure]` telemetry
-      # says why, and that part does not rest on durations — this lane still
-      # runs at io_full 10.5-14.7 %, because
-      # its database is not in `/tmp` at all. It is in the postgres service
-      # container, writing to the runner's real disk, where moving our own
-      # temp directory to RAM cannot reach it. Kept anyway: it still takes the
-      # per-application temp trees off disk, and two lanes running the same
-      # target are worth more identical than they are worth micro-tuned.
+      # The database itself is not in `/tmp`: it is in the postgres service
+      # container, on the runner's real disk. That once cost this lane
+      # io_full 10.5-14.7 %. Since MigratedPostgresSchemaPool removed the
+      # per-test migrations, the lane runs at io_full 0.0-4.0 % (2026-10-18),
+      # so the service container needs no tmpfs of its own. The `/tmp` tmpfs
+      # stays: it takes the per-application temp trees off disk, and two
+      # lanes running the same target are worth more identical than
+      # micro-tuned. See docs/ci-flakiness.md, Family 5 "Re-check".
       options: "--privileged --tmpfs /tmp:rw,exec,size=2g"
     services:
       postgres:
