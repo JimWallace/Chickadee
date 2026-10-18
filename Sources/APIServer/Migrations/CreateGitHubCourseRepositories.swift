@@ -5,7 +5,8 @@
 // each student. New tables only; empty tables change nothing.
 //
 // The last-push columns were folded in from
-// AddGitHubCourseRepositoryPushColumns in the fourth round (#1806).
+// AddGitHubCourseRepositoryPushColumns in the fourth round (#1806), and the
+// invited-user column from AddGitHubCourseRepositoryInvitedUser in the fifth.
 
 import Fluent
 
@@ -45,6 +46,9 @@ struct CreateGitHubCourseRepositories: ChickadeeMigration {
             // (docs/github-submissions.md slice 5). nil = no push seen.
             .field("last_pushed_at", .datetime)
             .field("last_push_sha", .string)
+            // The GitHub account the invitation went to (#2208), so a later
+            // link to another account is seen. nil = not recorded.
+            .field("invited_github_user_id", .int64)
             .unique(on: "test_setup_id", "user_id")
             .create()
     }

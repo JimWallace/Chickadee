@@ -111,9 +111,10 @@ or cumulative achievement. It leaves the first-use draw:
 - **Existing gradcaps become headbands, once.** The maintainer chose this so
   that the gradcap means completion from the first day. It is the one place
   where a stored bird changes after it is drawn, and it changes one slot only.
-  The migration `SwapStarterGradcapForHeadband` does it. It is a migration, not
-  a rule in `ensureSpec`, because a rule in `ensureSpec` would also take away a
-  gradcap that a student EARNED later.
+  The one-time migration `SwapStarterGradcapForHeadband` did it (deleted in
+  the fifth migration consolidation round, after it had run). It was a
+  migration, not a rule in `ensureSpec`, because a rule in `ensureSpec` would
+  also take away a gradcap that a student EARNED later.
 
 The headband is a band across the forehead, tied at the right side. It does
 not hide the tuft. It covers part of the brows on `curious`, `keen` and

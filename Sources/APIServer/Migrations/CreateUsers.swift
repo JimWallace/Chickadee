@@ -36,6 +36,14 @@ struct CreateUsers: ChickadeeMigration {
             // it is materialized the first time an avatar is needed
             // (docs/student-avatars.md).
             .field("avatar_spec", .string)
+            // Folded from AddUserAvatarPreviousSpec (fifth round): the bird
+            // before the last hatch. nil = no previous bird.
+            .field("avatar_previous_spec", .string)
+            // Folded from AddUserAvatarHandle (fifth round): the bird's handle,
+            // unique across the deployment (docs/student-avatars.md §3), and
+            // the handle of the bird before the last hatch. nil until drawn.
+            .field("avatar_handle", .string)
+            .field("avatar_previous_handle", .string)
             .field("created_at", .datetime)
             .create()
 
@@ -57,11 +65,21 @@ struct CreateUsers: ChickadeeMigration {
                 WHERE url_token IS NOT NULL
                 """
             ).run()
+            // Folded from AddUserAvatarHandle. Partial, so the many users with
+            // no handle yet do not collide.
+            try await sql.raw(
+                """
+                CREATE UNIQUE INDEX IF NOT EXISTS idx_users_avatar_handle
+                ON users(avatar_handle)
+                WHERE avatar_handle IS NOT NULL
+                """
+            ).run()
         }
     }
 
     func revert(on database: any Database) async throws {
         if let sql = database as? (any SQLDatabase) {
+            try await sql.raw("DROP INDEX IF EXISTS idx_users_avatar_handle").run()
             try await sql.raw("DROP INDEX IF EXISTS idx_users_url_token").run()
             try await sql.raw(
                 "DROP INDEX IF EXISTS idx_users_auth_provider_external_subject"

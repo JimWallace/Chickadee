@@ -160,30 +160,4 @@ import VaporTesting
                 })
         }
     }
-
-    // MARK: - The gradcap swap
-
-    @Test func theMigrationSwapsOnlyDrawnGradcaps() async throws {
-        try await withApp(app) { _ in
-            let withCap = try await makeTestStudent(on: app, username: "swap_cap")
-            let capSpec = AvatarSpec(
-                cap: .plum, wing: .barred, expression: .wink, accessory: .gradcap, accent: .honey,
-                backdrop: .rose, tuft: .crest, tilt: .left, border: .moss)
-            withCap.avatarSpecJSON = AvatarStore.encode(capSpec)
-            try await withCap.save(on: app.db)
-
-            let without = try await makeTestStudent(on: app, username: "swap_scarf")
-            var scarfSpec = capSpec
-            scarfSpec.accessory = .scarf
-            without.avatarSpecJSON = AvatarStore.encode(scarfSpec)
-            try await without.save(on: app.db)
-
-            try await SwapStarterGradcapForHeadband().prepare(on: app.db)
-
-            var expected = capSpec
-            expected.accessory = .headband
-            #expect(try await storedSpec(username: "swap_cap") == expected)
-            #expect(try await storedSpec(username: "swap_scarf") == scarfSpec)
-        }
-    }
 }

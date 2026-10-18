@@ -26,6 +26,8 @@ import SQLKit
 ///   - AddCourseTerm                     — `term_year`, `term_season`
 ///   - ScopeCourseCodeIndexToTerm        — the active-code index scoped to the
 ///     term (all six in the fourth round, #1806)
+///   - AddAIFeedbackGates (its courses half) — `ai_feedback_enabled`
+///     (fifth round)
 ///
 /// The consolidated form below produces the same final schema in a single
 /// Create step.  Existing deploys have CreateCourses already marked
@@ -83,6 +85,10 @@ struct CreateCourses: ChickadeeMigration {
             // term of the offering. nil = no term recorded.
             .field("term_year", .int)
             .field("term_season", .string)
+            // Folded from AddAIFeedbackGates (fifth round): the admin-set
+            // AI-assisted feedback gate (docs/ai-assisted-feedback.md).
+            // nil = off.
+            .field("ai_feedback_enabled", .bool)
             .field("created_at", .datetime)
             .create()
         // Partial unique index: one active course per code and term. Archived

@@ -40,6 +40,10 @@ struct CreateSubmissions: ChickadeeMigration {
             .field("source_repo_id", .int64)
             .field("source_repo_name", .string)
             .field("source_commit", .string)
+            // Folded from AddSubmissionTargetRunner (fifth round): the runner a
+            // staff-requested validation run asks for (MCP `run_validation`).
+            // nil = any runner may claim it.
+            .field("target_runner_id", .string)
             .create()
     }
 

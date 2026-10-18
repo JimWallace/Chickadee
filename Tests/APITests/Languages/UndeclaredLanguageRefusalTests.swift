@@ -95,8 +95,8 @@ import Vapor
         )
     }
 
-    /// Declared, with no language — the state `BackfillDeclaredLanguage` writes
-    /// for a plain `.sh` suite and the create page's "None" option produces.
+    /// Declared, with no language — the state that the create page's "None"
+    /// option produces for a plain `.sh` suite.
     private let undeclaredManifest =
         #"{"schemaVersion":1,"languageDeclared":true,"testSuites":[],"timeLimitSeconds":10,"sections":[{"id":"sec1","name":"Part A"}]}"#
 

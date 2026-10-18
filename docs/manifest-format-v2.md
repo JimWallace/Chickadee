@@ -392,9 +392,9 @@ Phase 3 must ship in a release before phase 4 (constraint 2).
   is stored. It used to serve the stored text with only `graderOnlyFiles`
   removed, which sent expression source and other authoring data to the
   student's browser; that was fixed on its own, outside these phases.
-- `BackfillDeclaredLanguage` edits manifest JSON as a dictionary. It needs no
-  change: a migration runs once per database, it has run on every existing
-  database, and a fresh database has no manifests when it runs.
+- `BackfillDeclaredLanguage` edited manifest JSON as a dictionary. It ran on
+  every existing database and was deleted in the fifth migration
+  consolidation round, so v2 has no migration to accommodate.
 
 ### Effect on tests
 

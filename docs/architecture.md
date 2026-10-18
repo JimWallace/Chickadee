@@ -599,7 +599,10 @@ file. The steady-state convention:
   0.5.0 cleanup, folding the post-#502 incrementals. A third round (#1252)
   folded the two slip-day migrations. A fourth round (#1806) folded 15
   column and index migrations, from the avatar columns to the per-term
-  course-code index. A handful are deliberately kept as
+  course-code index. A fifth round folded 8 more column and index migrations,
+  from the GitHub invited-user column to the assignment concept, and deleted
+  the 6 one-time data migrations outright, because every deployed database had
+  run them and they touch no rows on a fresh one. A handful are deliberately kept as
   standalone migrations: `AddUserFKConstraints`, `AddSessionsCreatedAt` (it targets
   Vapor's own sessions table, which no `Create*` file owns),
   `CollapseUserRoles` (a pure data rewrite with no schema home), and

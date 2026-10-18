@@ -21,6 +21,9 @@
 //   - AddAssignmentPassingThreshold            — `passing_threshold_percent`
 //   - AddLTIGradeColumns (its assignments half) — `lti_line_item_url`
 //     (all three in the fourth round, #1806)
+//   - AddAIFeedbackGates (its assignments half) — `ai_feedback_enabled`
+//   - AddAssignmentConcept                     — `concept`
+//     (both in the fifth round)
 //
 // Existing prod has the historical migrations already marked applied so the
 // body changes are invisible to production; the folded Add*/Change* structs
@@ -96,6 +99,12 @@ struct CreateAssignments: ChickadeeMigration {
             // Folded from AddLTIGradeColumns: the AGS line item this
             // assignment's grades go to (docs/lti-1-3.md). nil = none yet.
             .field("lti_line_item_url", .string)
+            // Folded from AddAIFeedbackGates: the instructor-set AI-assisted
+            // feedback gate (docs/ai-assisted-feedback.md). nil = off.
+            .field("ai_feedback_enabled", .bool)
+            // Folded from AddAssignmentConcept: the lab concept, for the
+            // wardrobe's concept rings (docs/student-wardrobe.md). nil = none.
+            .field("concept", .string)
             .field("created_at", .datetime)
             .unique(on: "public_id")
             .unique(on: "test_setup_id")

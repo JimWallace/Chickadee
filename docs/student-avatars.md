@@ -217,7 +217,8 @@ both.
 - **Students only.** Staff appear under their own name, so a staff-only
   account's bird gets no handle, its card shows none, and a hatch does not give
   it one. An account that is a student in a current course gets one.
-- **The move.** `MoveHandlesToBirds` copied each student's handle from their
+- **The move.** The one-time migration `MoveHandlesToBirds` (since deleted)
+  copied each student's handle from their
   newest course (by term, then by enrollment date) to the bird. Handles were
   unique per course, so two students could share one: accounts are taken
   oldest first, and a later account whose handle is taken draws a new one. The
@@ -550,7 +551,8 @@ shape, accessory colour.** The tune-up targets those:
   three except tests and the preview tool.
 
 **Specs stored before the tune-up** have no `tuft` or `tilt` key. They decode to
-`none` / `upright`, and the `FillLateAvatarAxes` migration gave each of them a
+`none` / `upright`, and the one-time `FillLateAvatarAxes` migration (since
+deleted) gave each of them a
 one-time random fill of **only the missing keys** (#1762). That is a draw into
 an empty slot, not a reshuffle, so decision 2 holds: every slot the student
 already had stays as it was. The alternative, keeping them tuftless and upright
