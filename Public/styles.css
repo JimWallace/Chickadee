@@ -2726,6 +2726,16 @@ body:has(.notebook-header .nb-title-block) .nav {
     line-height: 1;
     font-variant-numeric: tabular-nums;
 }
+/* A per-group session's join address and code are for the room. */
+.present-join { display: grid; justify-items: center; gap: .25rem; }
+.present-join-address { font-size: 1.6em; font-weight: 600; }
+.present-join-code {
+    font-family: var(--font-mono);
+    font-size: 4em;
+    font-weight: 800;
+    line-height: 1;
+    letter-spacing: .2em;
+}
 
 /* The podium on the left, places four to ten on the right. */
 .present-stage {

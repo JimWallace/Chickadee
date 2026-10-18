@@ -399,6 +399,15 @@ private struct EditActivityBlock: HTML {
             }
             form(.method(.post), .action("/instructor/\(assignmentID)/activity/window"), .dataFlag("ck-inplace")) {
                 CSRFField(token: csrfToken)
+                label(.class("form-label")) {
+                    " "
+                    input(.type(.checkbox), .name("runsPerGroup"))
+                        .attributes(.checked, when: activity.runsPerGroup)
+                    " Run once per lab group"
+                }
+                p(.class("field-note field-note--muted")) {
+                    "Each group's session, started on the present page, replaces the times below."
+                }
                 " "
                 label(.class("form-label")) {
                     "Session opens (optional) "
@@ -416,7 +425,7 @@ private struct EditActivityBlock: HTML {
                     " "
                 }
                 p(.class("field-note field-note--muted")) { "Submissions outside these times are refused." }
-                button(.class("btn action-btn"), .type(.submit)) { "Save session window" }
+                button(.class("btn action-btn"), .type(.submit)) { "Save session settings" }
             }
         }
     }

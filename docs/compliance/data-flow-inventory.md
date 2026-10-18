@@ -169,8 +169,11 @@ student `APIResult` (grades), `APIGradeOverride`, `APIAssignmentExtension`,
 `APIClientDiagnostic`, `APISubmissionDiagnostics`, `JobExecutionMetric`,
 `APIClassAchievement`, `APIUserActivityEvent`, `APIBrightSpaceSyncLog`,
 `APIPreEnrollment`, `APIUserActivityEvent`, and the lab-group tables
-`APICourseGroupSet`, `APICourseGroup` and `APICourseGroupMembership`
-(docs/lab-groups.md, decision 11: membership is enrollment data).
+`APICourseGroupSet`, `APICourseGroup`, `APICourseGroupMembership`,
+`APIActivitySession` and `APIActivitySessionAttendance` (docs/lab-groups.md,
+decision 11: membership and attendance are enrollment data). `set_activity`
+sets only the `runsPerGroup` flag, which is content; its group-set check reads
+on the owner pool.
 
 **Caveat (see student-data wall finding):** "never touched" is true of the
 *current* handler code, but it is enforced by which models each handler chooses

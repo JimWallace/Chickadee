@@ -39,7 +39,7 @@ extension WebRoutes {
         if req.query[String.self, at: "present"] == "1" {
             // Present mode is for the room, and only staff start it.
             guard isStaff else { throw Abort(.notFound) }
-            return try await leaderboardPresentPage(req: req, user: user, setup: setup, activity: activity)
+            return try await presentModeResponse(req: req, user: user, setup: setup, activity: activity)
         }
 
         let assignment = try await assignmentByTestSetupID(setupID, on: req.db)

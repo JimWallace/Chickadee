@@ -122,8 +122,8 @@ them is the answer.
 |-----------|----------|-----------|------|
 | **Admin tabbed** | `AdminTabs` (the `.admin-version-banner`, the hidden `<h1>`, the tab bar) → `.page-section` blocks, headings starting at `<h2>` | `AlertsPage` | `AdminPage`, `AdminUsersPage`, `AdminAuditPage`, `AdminBrightspacePage`, `AdminGitHubPage`, `AdminLTIPage`, `AdminMCPPage`, `AdminRetentionPage`, `AdminStoragePage` |
 | **Instructor tabbed** | `InstructorTabs` → `.page-section` blocks | `InstructorMCPPage` | `AssignmentsPage`, `InstructorActivityPage`, `InstructorBrightspacePage`, `InstructorDatasetsPage`, `InstructorGitHubPage`, `InstructorGroupsPage`, `InstructorLTIGradesPage`, `InstructorNewTermPage`, `InstructorSlipDaysPage`, `InstructorStudentsPage` |
-| **Titlebar page** | `.page-titlebar` (`<h1>` left, actions right) → optional `.page-subtitle` → content | `AdminUserPage` | `AdminCoursePage`, `AdminRunnerPage`, `AssignmentFeedbackPage`, `AssignmentSubmissionsPage`, `CourseStudentSubmissionsPage`, `InstructorDatasetPage`, `InstructorEnrollCSVPage`, `AssignmentNewPage` |
-| **Plain student page** | `<h1>` → content | `AccountPage` | `SubmitPage`, `CourseDataPage`, `EnrollPage`, `IndexPage`, `SubmissionPage`, `GitHubSubmitPage`, `LeaderboardPage` |
+| **Titlebar page** | `.page-titlebar` (`<h1>` left, actions right) → optional `.page-subtitle` → content | `AdminUserPage` | `AdminCoursePage`, `AdminRunnerPage`, `AssignmentFeedbackPage`, `AssignmentSubmissionsPage`, `CourseStudentSubmissionsPage`, `InstructorDatasetPage`, `InstructorEnrollCSVPage`, `AssignmentNewPage`, `SessionAttendancePage` |
+| **Plain student page** | `<h1>` → content | `AccountPage` | `SubmitPage`, `CourseDataPage`, `EnrollPage`, `IndexPage`, `SubmissionPage`, `GitHubSubmitPage`, `LeaderboardPage`, `JoinSessionPage` |
 | **Auth box** | `.auth-box` centred card | `RegisterPage` | `LoginPage`, `OAuthConsentPage` |
 | **Body-partial shim** | `BaseLayout` around one shared body view, no markup of its own | `AssignmentEditPage` | `NotebookPage` |
 | **Full-bleed app** | `BaseLayout(fullBleed: true)`; owns the viewport | `WorkbenchPage` | `LeaderboardPresentPage` |
@@ -464,7 +464,15 @@ duplicate.
   run stands in the clock's place.  A browser-graded tournament adds the
   projector arena to the toolbar: a "Play matches" `btn action-btn` and a
   `.text-quiet` `role="status"` line that names the match it plays by round
-  and position, never by student (`tournament-arena.js`).  A `.present-footer` ends the page, with a
+  and position, never by student (`tournament-arena.js`).  A per-group
+  activity (docs/lab-groups.md) adds the lab-group select, the Start, End
+  or Reopen button and a "Who joined" new-tab link to the corner toolbar;
+  while the group's session is open, a `.present-join` above the board shows
+  a `.present-clock-label` ("Lab 103 · join at"), the
+  `.present-join-address` in its own case, the `.present-join-code` in large
+  monospace capitals, and a second `.present-clock-label` with the seconds
+  until the code changes and the count who joined. It is its own polled
+  region, every two seconds, and shows no names.  A `.present-footer` ends the page, with a
   `.tier-preview` Live tag while it polls.  Display sizes are `em` of one size set for a 1600-pixel screen; the
   page steps by `zoom` (down at 1500 pixels, up at 1900), since the type scale
   forbids a fluid font size.

@@ -1,7 +1,8 @@
 // APIServer/Routes/Web/WebRoutes+LeaderboardPresent.swift
 //
 // GET /testsetups/:testSetupID/leaderboard?present=1 — the leaderboard for a
-// projector (docs/class-activities.md). Course staff only.
+// projector (docs/class-activities.md). Course staff only. `&fragment=present`
+// refreshes the board and `&fragment=join` a lab group's join code box.
 //
 // A projected page is read by the whole room, so every presentation here is
 // built WITHOUT names, whoever is viewing: the handle and the bird are the
@@ -130,12 +131,41 @@ extension WebRoutes {
         // `?fragment=present` renders the SAME view the page renders inline,
         // so the refresh cannot drift from what it replaces.
         guard req.query[String.self, at: "fragment"] == "present" else {
+            let groupSession = try await GroupSessionPanel.make(
+                req: req, user: user, activity: activity, assignment: assignment, courseID: setup.courseID)
             return try await HTMLResponse {
-                LeaderboardPresentPage(page: PageRequestContext(request: req), board: presentation)
+                LeaderboardPresentPage(
+                    page: PageRequestContext(request: req), board: presentation, groupSession: groupSession)
             }
             .encodeResponse(for: req)
         }
         let html = LeaderboardPresentBody(board: presentation).render()
+        // The fragment refreshes the board only; the session panel sits
+        // outside it, so the code on the wall does not flicker.
+        return Response.pollFragment(html: html, for: req)
+    }
+
+    /// Present mode: the join code box for `&fragment=join`, else the page or
+    /// its board refresh.
+    func presentModeResponse(
+        req: Request, user: APIUser, setup: APITestSetup, activity: ClassActivity
+    ) async throws -> Response {
+        if req.query[String.self, at: "fragment"] == "join" {
+            return try await presentJoinFragment(req: req, user: user, setup: setup, activity: activity)
+        }
+        return try await leaderboardPresentPage(req: req, user: user, setup: setup, activity: activity)
+    }
+
+    /// `?present=1&fragment=join`: the join code box alone, refreshed every
+    /// two seconds because the code changes every thirty. Empty while the
+    /// group's session is not open.
+    func presentJoinFragment(
+        req: Request, user: APIUser, setup: APITestSetup, activity: ClassActivity
+    ) async throws -> Response {
+        let assignment = try await assignmentByTestSetupID(setup.id ?? "", on: req.db)
+        let panel = try await GroupSessionPanel.make(
+            req: req, user: user, activity: activity, assignment: assignment, courseID: setup.courseID)
+        let html = panel.flatMap(PresentJoinCode.init(panel:))?.render() ?? ""
         return Response.pollFragment(html: html, for: req)
     }
 

@@ -35,6 +35,10 @@ struct SetActivityTool: ContentTool {
         /// keeps the stored block while the kind is unchanged, else seeds
         /// `CompositeSpec.starter`. Refused on any other kind.
         var composite: CompositeSpec?
+        /// True to run the activity once per lab group, each group's session
+        /// its clock (docs/lab-groups.md). Absent keeps the stored value while
+        /// the kind is unchanged, else false.
+        var runsPerGroup: Bool?
     }
 
     struct Output: Encodable, Sendable {
@@ -61,10 +65,13 @@ struct SetActivityTool: ContentTool {
         var closesAt: String?
         /// The stored composite block; null for any kind but `classComposite`.
         var composite: CompositeSpec?
+        /// True when the stored activity runs once per lab group.
+        var runsPerGroup: Bool = false
 
         private enum CodingKeys: String, CodingKey {
             case assignmentPublicID, kind, leaderboardVisibility, leaderboardPath
             case recordAchievementSeeded, opponentSource, opponentFile, opensAt, closesAt, composite
+            case runsPerGroup
         }
 
         /// The two opponent keys are always present — explicitly null when
@@ -85,6 +92,7 @@ struct SetActivityTool: ContentTool {
             try c.encode(opensAt, forKey: .opensAt)
             try c.encode(closesAt, forKey: .closesAt)
             try c.encode(composite, forKey: .composite)
+            try c.encode(runsPerGroup, forKey: .runsPerGroup)
         }
     }
 
@@ -125,7 +133,10 @@ struct SetActivityTool: ContentTool {
         + "frameRate, showFailed, emptySlots); absent keeps the stored block, and a new composite "
         + "starts from a 6 by 8 grid of 8 by 8 RGB tiles. The compositor, layout, contribution and "
         + "dealOrder lock once a student has submitted; the other three stay editable. A composite's "
-        + "leaderboard stays hidden from students: it is for the projector. Each test "
+        + "leaderboard stays hidden from students: it is for the projector. runsPerGroup true "
+        + "runs the activity once per lab group: each group's session, started by course staff on "
+        + "the present page, replaces the window, so it needs the course's groups and no window. "
+        + "Absent keeps the stored value while the kind is unchanged, else false. Each test "
         + "script reports its rendering as the footer's `composite` object, which never changes a "
         + "grade. No regrade or close. Read "
         + "the current state from get_assignment; get_server_info lists the kinds with their "
@@ -167,6 +178,12 @@ struct SetActivityTool: ContentTool {
                     "ISO-8601 instant it stops. Absent keeps the stored bound; \"\" clears it."),
             ]),
             "composite": compositeSchema,
+            "runsPerGroup": .object([
+                "type": .string("boolean"),
+                "description": .string(
+                    "Run once per lab group, each group's session its clock. Absent keeps the stored "
+                        + "value while the kind is unchanged, else false."),
+            ]),
         ]),
         "required": .array([.string("assignmentPublicID"), .string("kind")]),
         "additionalProperties": .bool(false),
@@ -190,6 +207,7 @@ struct SetActivityTool: ContentTool {
                 "type": .array([.string("object"), .string("null")]),
                 "description": .string("The stored composite block; null for any other kind."),
             ]),
+            "runsPerGroup": MCPSchema.boolean,
         ]),
         "required": .array([
             .string("assignmentPublicID"), .string("kind"), .string("recordAchievementSeeded"),
@@ -291,6 +309,8 @@ struct SetActivityTool: ContentTool {
                 // Absent: `ActivityAuthoring` keeps the stored block while
                 // the kind is unchanged and seeds the starter otherwise.
                 .withComposite(input.composite)
+                .withRunsPerGroup(
+                    input.runsPerGroup ?? (current?.kind == block.kind ? current?.runsPerGroup == true : false))
         }
         do {
             try await ActivityAuthoring.setActivity(
@@ -313,7 +333,8 @@ struct SetActivityTool: ContentTool {
             opponentFile: stored?.activity?.opponentFile,
             opensAt: stored?.activity?.window?.opensAtISO,
             closesAt: stored?.activity?.window?.closesAtISO,
-            composite: stored?.activity?.composite)
+            composite: stored?.activity?.composite,
+            runsPerGroup: stored?.activity?.runsPerGroup == true)
     }
 
     /// The visibility the call means: the given value, or, when absent, the

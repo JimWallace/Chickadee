@@ -555,9 +555,13 @@ private func importBundledTestSetups(
         // A library source names a dataset version. The library was imported
         // first (6e-ter), so a source keeps when the bundle carried its
         // version; otherwise, as from a version 1 bundle, the source goes and
-        // the file keeps its sample (docs/datasets-course-library.md §4.8).
+        // the file keeps its sample (docs/datasets-course-library.md §4.8). A
+        // bundle carries no groups, so a per-group activity stops running per
+        // group: with no group there is no session, and every student is
+        // refused.
         let importedManifest = try await CourseDatasetService.reconciledManifestText(
-            try storableImportedManifest(bundledSetup.manifest), courseID: courseID, zipPath: newZipPath, on: db)
+            try AssignmentAuthoringService.manifestNotRunPerGroup(storableImportedManifest(bundledSetup.manifest)),
+            courseID: courseID, zipPath: newZipPath, on: db)
         let setup = APITestSetup(
             id: newSetupID,
             manifest: importedManifest,
