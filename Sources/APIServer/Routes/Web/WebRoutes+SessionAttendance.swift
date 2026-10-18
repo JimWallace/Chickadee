@@ -74,7 +74,8 @@ extension WebRoutes {
             return SessionAttendeeRow(
                 userID: row.userID.uuidString, name: user.displayName ?? user.username, username: user.username,
                 joinedAtText: formatter.string(from: row.joinedAt), isRemoved: row.removedAt != nil,
-                isOtherNetwork: SessionNetworkCheck.isOtherNetwork(row.joinNetwork, room: room))
+                // A removed student needs no second look.
+                isOtherNetwork: row.removedAt == nil && SessionNetworkCheck.isOtherNetwork(row.joinNetwork, room: room))
         }
     }
 }

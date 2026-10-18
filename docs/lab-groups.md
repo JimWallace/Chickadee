@@ -18,7 +18,7 @@ today.
 |---|---|---|
 | 0 | This design note | draft |
 | 1 | Groups: group sets, groups, memberships; the Groups tab; the CSV import; the Group column on the roster; groups in the data export | built |
-| 2 | Sessions: a session per (activity, group), started and ended from the present page; the submission gate reads the session; attendance by join code at `/join`; presence: a code for every student that changes every 30 seconds, the staff list of who joined, a limit on wrong codes | built |
+| 2 | Sessions: a session per (activity, group), started and ended from the present page; the submission gate reads the session; attendance by join code at `/join`; presence: a code for every student that changes every 30 seconds, the staff list of who joined, a limit on wrong codes, the "Other network" flag | built |
 | 3 | Rankings per group: leaderboard, standings, the hill, round-robin opponents, tournament runs, the present page per group | not started |
 | 4 | The composite per group, and the course gallery of every group's image | not started |
 | 5 | Group goals: the union and the corpus percent per group; a group achievement | not started |
@@ -348,10 +348,14 @@ should be able to see it. The maintainer chose best effort on 2026-10-18.
   of the address is a signal. Chickadee stores the network part only
   (`ClientNetwork.prefix`: a /24 for IPv4, a /64 for IPv6), never the full
   address: the presenter's on Start and on each refresh of the join box
-  (`presenter_network`), and each student's on each join (`join_network`).
-  The room's networks are the presenter's and the one that most joins came
-  from (`SessionNetworkCheck`), so a TA on a wired lab network does not flag
-  a room on eduroam. "Who joined" marks a join from any other network
+  (`presenter_network`, only for the staff member who started the session),
+  and each student's on each join (`join_network`). The address is the last
+  `X-Forwarded-For` entry, the one the deployment's nginx appends, because
+  the first entry is the client's to choose. The room's networks are the
+  presenter's, the one that most joins came from, and any that at least a
+  fifth of the joins came from (`SessionNetworkCheck`). So a TA on a wired
+  lab network does not flag a room on eduroam, and on dual-stack Wi-Fi the
+  IPv4 and IPv6 halves of one room are both the room. "Who joined" marks a join from any other network
   "Other network" for staff to check. It is a flag, never a refusal: campus
   Wi-Fi may share one pool across buildings, and the university VPN gives a
   campus address off campus, so a wrong refusal would lock out an honest

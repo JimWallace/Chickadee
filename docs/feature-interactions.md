@@ -496,6 +496,21 @@ because line numbers go out of date.
 - **Gap:** `POST /api/v1/submissions` checks enrollment only, so it skips
   this gate, as it skips the window.
 
+### The client address: `clientIPAddress` and `Request.clientNetwork`
+
+- **Readers:** the login rate limit (`ip` key), the MCP OAuth rate limit,
+  the audit log's `remote_addr` (`auditRemoteAddress`), and the lab-group
+  session networks (`Request.clientNetwork`).
+- **Rules:**
+  - `X-Forwarded-For` is read only when `trustForwardedProto` is set.
+  - `clientIPAddress` takes the FIRST entry, which the client can choose:
+    the deployment's nginx appends the real peer
+    (`$proxy_add_x_forwarded_for`) after what the client sent.
+  - `Request.clientNetwork` takes the LAST entry, the one nginx appended,
+    because a session network is evidence that staff read.
+  - A change to either reading changes every reader of it. A front proxy
+    other than the repository's nginx can change which entry is real.
+
 ### Rate-limit rows: `login_attempts`
 
 - **Writers:** the login rate limit (`LoginRateLimitMiddleware`: scopes `ip`

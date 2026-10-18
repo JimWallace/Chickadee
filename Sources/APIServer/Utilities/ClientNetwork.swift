@@ -29,7 +29,9 @@ enum ClientNetwork {
     private static func ipv4Parts(_ text: String) -> [Int]? {
         let parts = text.split(separator: ".", omittingEmptySubsequences: false)
         guard parts.count == 4 else { return nil }
-        let numbers = parts.compactMap { part in Int(part).flatMap { (0...255).contains($0) ? $0 : nil } }
+        let numbers = parts.compactMap { part in
+            part.allSatisfy(\.isASCIIDigit) ? Int(part).flatMap { (0...255).contains($0) ? $0 : nil } : nil
+        }
         return numbers.count == 4 ? numbers : nil
     }
 
@@ -43,10 +45,12 @@ enum ClientNetwork {
         func groups(_ half: String) -> [Int]? {
             guard !half.isEmpty else { return [] }
             var result: [Int] = []
-            for part in half.split(separator: ":", omittingEmptySubsequences: false) {
-                if part.contains("."), let ipv4 = ipv4Parts(String(part)) {
+            let parts = half.split(separator: ":", omittingEmptySubsequences: false)
+            for (index, part) in parts.enumerated() {
+                // An IPv4 tail is only ever the last part.
+                if part.contains("."), index == parts.count - 1, let ipv4 = ipv4Parts(String(part)) {
                     result += [ipv4[0] << 8 | ipv4[1], ipv4[2] << 8 | ipv4[3]]
-                } else if part.count <= 4, let value = Int(part, radix: 16) {
+                } else if part.count <= 4, part.allSatisfy(\.isHexDigit), let value = Int(part, radix: 16) {
                     result.append(value)
                 } else {
                     return nil
@@ -59,4 +63,8 @@ enum ClientNetwork {
         guard let tail = groups(halves[1]), head.count + tail.count < 8 else { return nil }
         return head + Array(repeating: 0, count: 8 - head.count - tail.count) + tail
     }
+}
+
+extension Character {
+    fileprivate var isASCIIDigit: Bool { isASCII && isWholeNumber }
 }

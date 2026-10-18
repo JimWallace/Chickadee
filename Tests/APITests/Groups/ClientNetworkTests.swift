@@ -23,7 +23,10 @@ import Testing
         #expect(ClientNetwork.prefix(of: address) == network)
     }
 
-    @Test(arguments: ["unknown", "", "129.97.12", "129.97.12.300", "1:2:3", "1::2::3", "g::1", "1:2:3:4:5:6:7:8:9"])
+    @Test(arguments: [
+        "unknown", "", "129.97.12", "129.97.12.300", "1:2:3", "1::2::3", "g::1", "1:2:3:4:5:6:7:8:9",
+        "+1.2.3.4", "-1::", "1:1.2.3.4:5:6:7:8", "1.2.3.4:5678",
+    ])
     func anythingElseHasNoNetwork(text: String) {
         #expect(ClientNetwork.prefix(of: text) == nil)
     }
@@ -32,7 +35,8 @@ import Testing
         let lab = "129.97.12.0/24"
         let wired = "129.97.40.0/24"
         let home = "99.1.2.0/24"
-        let room = SessionNetworkCheck.roomNetworks(presenter: wired, joins: [lab, lab, lab, home, nil])
+        let joins = Array(repeating: lab, count: 10) + [home, nil]
+        let room = SessionNetworkCheck.roomNetworks(presenter: wired, joins: joins)
         #expect(room == [wired, lab])
         #expect(SessionNetworkCheck.isOtherNetwork(home, room: room))
         #expect(!SessionNetworkCheck.isOtherNetwork(lab, room: room))
@@ -44,5 +48,14 @@ import Testing
     @Test func aTieKeepsEveryTiedNetwork() {
         let room = SessionNetworkCheck.roomNetworks(presenter: nil, joins: ["a", "b"])
         #expect(room == ["a", "b"], "one join each tells nothing, so neither is flagged")
+    }
+
+    @Test func aNetworkWithAFifthOfTheJoinsIsTheRoom() {
+        let ipv4 = "129.97.12.0/24"
+        let ipv6 = "2620:101:f000:700::/64"
+        let joins = Array(repeating: ipv4, count: 14) + Array(repeating: ipv6, count: 10) + ["99.1.2.0/24"]
+        let room = SessionNetworkCheck.roomNetworks(presenter: nil, joins: joins)
+        #expect(room == [ipv4, ipv6], "the IPv6 half of a dual-stack room is the room")
+        #expect(SessionNetworkCheck.isOtherNetwork("99.1.2.0/24", room: room))
     }
 }

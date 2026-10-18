@@ -2,8 +2,10 @@
 //
 // The network flag on "Who joined" (docs/lab-groups.md, "Presence"), end to
 // end: Start records the presenter's network, each join records its own (the
-// network part only, never the address), the staff page marks the join from
-// another network, and the student's data export lists the network.
+// network part only, never the address, and from the address the proxy saw,
+// not one the client named), the staff page marks the join from another
+// network, only the presenter moves the presenter's network, and the
+// student's data export lists the network.
 
 import Core
 import Fluent
@@ -75,7 +77,10 @@ import VaporTesting
                     assignmentID: assignment.requireID(), groupID: labA, on: app.db))
             #expect(session.presenterNetwork == "129.97.12.0/24")
 
-            let joins = [("net_ada", "129.97.12.40"), ("net_alan", "129.97.12.41"), ("net_grace", "99.1.2.3")]
+            // Six students in the room, and one at home who names the room's
+            // network first in the header; the proxy appends the real address.
+            let room = (1...6).map { ("net_student\($0)", "129.97.12.\(40 + $0)") }
+            let joins = room + [("net_grace", "129.97.12.9, 99.1.2.3")]
             for (username, address) in joins {
                 let student = try await actor(username, role: .student, courseID: courseID)
                 let code = ActivitySessionCode.code(secret: session.codeSecret, at: Date())
@@ -91,6 +96,23 @@ import VaporTesting
             let grace = try #require(try await APIUser.query(on: app.db).filter(\.$username == "net_grace").first())
             let export = try await gatherDataExportContent(for: grace, on: app.db)
             #expect(export.enrollments.first?.sessionsJoined.first?.network == "99.1.2.0/24")
+
+            // A colleague who opens the present page on another network does
+            // not move the presenter's network; the TA who started it does.
+            let colleague = try await actor("net_colleague", role: .ta, courseID: courseID)
+            let present = "/testsetups/net1_setup/leaderboard?present=1&fragment=join&group=\(labA.uuidString)"
+            for (viewer, address) in [(colleague, "10.9.8.7"), (ta, "129.97.13.5")] {
+                try await app.asyncTest(
+                    .GET, present,
+                    beforeRequest: { req in
+                        req.headers.add(name: .cookie, value: viewer.cookie)
+                        req.headers.add(name: "X-Forwarded-For", value: address)
+                    },
+                    afterResponse: { res in #expect(res.status == .ok) })
+            }
+            let moved = try await ActivitySessionStore.session(
+                assignmentID: assignment.requireID(), groupID: labA, on: app.db)
+            #expect(moved?.presenterNetwork == "129.97.13.0/24")
         }
     }
 }

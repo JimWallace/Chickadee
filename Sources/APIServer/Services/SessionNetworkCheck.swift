@@ -7,13 +7,16 @@
 
 enum SessionNetworkCheck {
 
-    /// The room's networks: the presenter's, and the network that most joins
-    /// came from (every network tied for most).
+    /// The room's networks: the presenter's, the network that most joins came
+    /// from, and every network that at least a fifth of the joins came from.
+    /// The fifth keeps a room on two networks whole: on dual-stack Wi-Fi an
+    /// IPv4 and an IPv6 address of one room share no prefix.
     static func roomNetworks(presenter: String?, joins: [String?]) -> Set<String> {
+        let known = joins.compactMap(\.self)
         var counts: [String: Int] = [:]
-        for network in joins.compactMap(\.self) { counts[network, default: 0] += 1 }
+        for network in known { counts[network, default: 0] += 1 }
         let most = counts.values.max() ?? 0
-        var room = Set(counts.filter { $0.value == most }.keys)
+        var room = Set(counts.filter { $0.value == most || $0.value * 5 >= known.count }.keys)
         if let presenter { room.insert(presenter) }
         return room
     }

@@ -39,7 +39,18 @@ extension Request: AuditContext {
     }
     var auditUserAgent: String? { headers.first(name: "User-Agent") }
 
-    /// The network part of the client's address (`ClientNetwork.prefix`),
-    /// under the same proxy trust rules. Nil when unknown.
-    var clientNetwork: String? { auditRemoteAddress.flatMap(ClientNetwork.prefix(of:)) }
+    /// The network part of the client's address (`ClientNetwork.prefix`), nil
+    /// when unknown. Read from the LAST `X-Forwarded-For` entry, the address
+    /// the deployment's own proxy saw: nginx appends it
+    /// (`$proxy_add_x_forwarded_for`) after whatever the client sent, so the
+    /// first entry is the client's to choose, and a student could name the
+    /// room's network.
+    var clientNetwork: String? {
+        let forwarded = headers.first(name: "X-Forwarded-For")?.split(separator: ",").last
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+        let address =
+            application.securityConfiguration.trustForwardedProto
+            ? (forwarded ?? remoteAddress?.ipAddress) : remoteAddress?.ipAddress
+        return address.flatMap(ClientNetwork.prefix(of:))
+    }
 }
