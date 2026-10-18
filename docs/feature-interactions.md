@@ -488,7 +488,8 @@ because line numbers go out of date.
     student in no group of a manual set in the session's group. A wrong code
     writes a `login_attempts` row (scope `join_failure`).
   - `ActivitySessionStore.remove`, from the staff attendance page, sets
-    `removed_at` on an attendance row.
+    `removed_at` on an attendance row, and empties the group's hill
+    (`group_activity_champions`) when the removed student holds it.
   - `ActivityAuthoring.setActivity` sets `ClassActivity.runsPerGroup`.
 - **Readers:**
   - The submission gate (`requireOpenGroupSession` in

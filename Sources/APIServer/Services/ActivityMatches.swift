@@ -477,10 +477,8 @@ func standingSignals(
     return (row.rank, row.standing.wins)
 }
 
-/// The hill's current holder, for the leaderboard page; nil when the bot or
-/// nobody holds it.
+/// The course-wide hill's current holder; nil when the bot or nobody holds
+/// it. A lab group's hill is read through `Hill.group`.
 func currentChampion(testSetupID: String, on db: any Database) async throws -> APIActivityChampion? {
-    try await APIActivityChampion.query(on: db)
-        .filter(\.$testSetupID == testSetupID)
-        .first()
+    try await Hill.course(testSetupID: testSetupID).holder(on: db) as? APIActivityChampion
 }

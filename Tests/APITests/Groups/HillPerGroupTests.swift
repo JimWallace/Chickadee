@@ -4,7 +4,8 @@
 // slice 3b): each lab has its own hill, a challenger plays the champion of
 // the group whose session they submitted in, a submission made with no
 // session open takes no hill, no lab's champion holds the course's class
-// record, and the page shows the champion of the group it shows.
+// record, a student whom staff removed loses the hill and cannot take it, and
+// the page shows the champion of the group it shows.
 
 import Core
 import Fluent
@@ -120,7 +121,8 @@ import VaporTesting
             #expect(try await play(f, userID: f.ben, id: "hpg_b2", won: true).champion?.id == "hpg_a1")
             #expect(try await holder(f.labA)?.userID == f.ben)
 
-            #expect(try await currentChampion(testSetupID: setupID, on: app.db) == nil, "no course-wide hill")
+            #expect(
+                try await Hill.course(testSetupID: setupID).holder(on: app.db) == nil, "no course-wide hill")
             let record = try await APIClassAchievement.query(on: app.db)
                 .filter(\.$testSetupID == setupID)
                 .filter(\.$achievementID == ActivityAuthoring.seededChampionRecordID)
@@ -140,6 +142,35 @@ import VaporTesting
             #expect(try await play(f, userID: f.ben, id: "hpg_b3", won: true).champion == nil)
             #expect(try await holder(f.labA)?.userID == f.ada)
             #expect(try await holder(f.labA)?.defences == 0)
+        }
+    }
+
+    @Test func aRemovedStudentLosesTheHillAndCannotTakeIt() async throws {
+        try await withApp(app) { _ in
+            let f = try await fixture()
+            try await join(f, group: f.labA, userID: f.ada)
+            try await join(f, group: f.labA, userID: f.ben)
+            try await play(f, userID: f.ada, id: "hpg_a4", won: true)
+            let session = try #require(
+                try await ActivitySessionStore.session(assignmentID: f.assignmentID, groupID: f.labA, on: app.db))
+
+            // ben's job is out against ada when staff remove him: his win
+            // lands with no session and moves no hill.
+            let submission = try await makeTestSubmission(on: app, id: "hpg_b4", setupID: setupID, userID: f.ben)
+            let chosen = try await chooseOpponent(for: submission, activity: f.activity, on: app.db)
+            #expect(chosen.champion?.id == "hpg_a4")
+            try await openMatch(
+                testSetupID: setupID, submissionID: "hpg_b4", opponent: chosen,
+                seed: JobOpponent.matchSeed(submissionID: "hpg_b4", opponentIdentity: chosen.identity), on: app.db)
+            #expect(try await ActivitySessionStore.remove(userID: f.ben, from: session, on: app.db))
+            try await recordActivityMatch(
+                testSetupID: setupID, userID: f.ben, submissionID: "hpg_b4", outcomes: [outcome(won: true)],
+                on: app.db)
+            #expect(try await holder(f.labA)?.userID == f.ada)
+
+            // Removing the champion empties the hill.
+            #expect(try await ActivitySessionStore.remove(userID: f.ada, from: session, on: app.db))
+            #expect(try await holder(f.labA) == nil)
         }
     }
 

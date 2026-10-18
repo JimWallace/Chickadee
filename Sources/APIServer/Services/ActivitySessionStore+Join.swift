@@ -141,8 +141,9 @@ extension ActivitySessionStore {
     /// Removes a student from the session's current run: they stop playing,
     /// and cannot join again until the session starts again. A group
     /// placement that their join made is undone, so the Groups tab shows them
-    /// as in no group again. False when the student is not in the current run,
-    /// so nothing changed.
+    /// as in no group again, and the group's hill is emptied when they hold
+    /// it, so no challenger plays them. False when the student is not in the
+    /// current run, so nothing changed.
     @discardableResult
     static func remove(
         userID: UUID, from session: APIActivitySession, now: Date = Date(), on db: any Database
@@ -160,6 +161,13 @@ extension ActivitySessionStore {
             row.placedInGroup = false
         }
         try await row.save(on: db)
+        if let testSetupID = try await APIAssignment.find(session.assignmentID, on: db)?.testSetupID {
+            try await APIGroupActivityChampion.query(on: db)
+                .filter(\.$testSetupID == testSetupID)
+                .filter(\.$groupID == session.groupID)
+                .filter(\.$userID == userID)
+                .delete()
+        }
         return true
     }
 

@@ -397,10 +397,11 @@ should be able to see it. The maintainer chose best effort on 2026-10-18.
 - The present page projects the selected group's board, and its refresh
   and the leaderboard's Present link keep the group.
 - `ActivityKind.canRunPerGroup` (Core) is the one rule: a leaderboard kind
-  with no champion (Best metric, Beat the instructor). `ActivityAuthoring`
-  refuses the flag on every other kind (`runsPerGroupKindMessage`), the
-  edit page shows the checkbox only for these kinds, `set_activity` keeps a
-  stored flag only for them (slice 3b adds the hill). `ClassActivity.isPerGroup` (the flag and the
+  (Best metric, Beat the instructor, and since slice 3b Beat the champion).
+  `ActivityAuthoring` refuses the flag on every other kind
+  (`runsPerGroupKindMessage`), the edit page shows the checkbox only for
+  these kinds, `set_activity` keeps a stored flag only for them.
+  `ClassActivity.isPerGroup` (the flag and the
   kind rule) is what every reader reads: the gate, the session routes, the
   present panel, the board and ingest. So an older per-group activity of
   another kind reads as course-wide everywhere at once, and its students
@@ -431,8 +432,18 @@ should be able to see it. The maintainer chose best effort on 2026-10-18.
   from the same submission, so the champion check reads the row the claim
   read.
 - The champion class record is not awarded for a per-group hill: a record
-  has one holder, and the activity has a hill in every lab. The
+  has one holder, and the activity has a hill in every lab. The authoring
+  door still seeds the record on a hill, so on a per-group hill it stays
+  unheld (or with its earlier holder) until per-group records exist. The
   `highestMetric` record stays course-wide, as in slice 3a.
+- Remove on "Who joined" empties the group's hill when the removed student
+  holds it, so no challenger plays a student who was not in the room. A
+  result that lands after its student was removed finds no session and
+  moves no hill.
+- The two hill tables are independent. Turning the flag on leaves the
+  course-wide champion in place, and turning it off leaves each group's;
+  the hill that `Hill.of` picks is the only one read, and turning the flag
+  back brings the earlier hill back.
 - The leaderboard page and the present page show the champion of the group
   they show (`buildChampionPresentation(groupID:)`); a student in no group
   sees no hill. The metric board under the hill is the slice 3a board.
