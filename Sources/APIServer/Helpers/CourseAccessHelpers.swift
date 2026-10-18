@@ -144,22 +144,33 @@ private func resolvedRoleIsStaff(_ role: CourseRole?) -> Bool {
     role.map { $0 >= .ta } ?? false
 }
 
-/// True when `user` is staff (role >= `.ta`) in *any* non-archived enrolled
-/// course, or an admin. The coarse analog of `isCourseStaff` for gates that
-/// have no single resource course in scope (the MCP content-tool gate, the
-/// OAuth content-scope consent gate, the user-file namespace). Downstream
-/// per-course checks still apply, so this only decides "may this account touch
-/// the staff surface at all", never which course it may act on.
-func isStaffAnywhere(_ user: APIUser, db: any Database) async throws -> Bool {
+/// True when `user` is staff (role >= `.ta`) in any enrolled course, or an
+/// admin. The coarse analog of `isCourseStaff` for gates that have no single
+/// resource course in scope. Every caller states `includingArchived`:
+///
+/// - `true` for the MCP content-tool gate and the OAuth content-scope consent
+///   gate. Downstream per-course checks still apply there, and an archived
+///   course stays readable through MCP, so an instructor whose only course is
+///   archived keeps that access.
+/// - `false` for the deployment-wide file trees (the user-file namespace and
+///   the JupyterLite contents). There a `true` answer opens every user's
+///   folder, and no per-course check follows. A TA in a past term is a student
+///   now (#1756, #2663).
+func isStaffAnywhere(_ user: APIUser, includingArchived: Bool, db: any Database) async throws -> Bool {
     if user.isAdmin { return true }
     guard let userID = user.id else { return false }
-    return try await APICourseEnrollment.query(on: db)
+    let query = APICourseEnrollment.query(on: db)
         .filter(\.$userID == userID)
         .group(.or) { or in
             or.filter(\.$roleRaw == CourseRole.ta.rawValue)
             or.filter(\.$roleRaw == CourseRole.instructor.rawValue)
         }
-        .count() > 0
+    if !includingArchived {
+        query
+            .join(APICourse.self, on: \APICourseEnrollment.$course.$id == \APICourse.$id)
+            .filter(APICourse.self, \.$isArchived == false)
+    }
+    return try await query.count() > 0
 }
 
 /// The UUID of the course that owns `submission`, resolved through its test

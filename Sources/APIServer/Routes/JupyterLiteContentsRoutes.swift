@@ -44,10 +44,11 @@ struct JupyterLiteContentsRoutes: RouteCollection {
     private func contentsResponse(req: Request, relativePath: String) async throws -> Response {
         let caller = try req.auth.require(APIUser.self)
         // The JupyterLite virtual filesystem is deployment-wide (not course-
-        // scoped): course staff (TA+ or admin anywhere) get the full authoring
-        // tree, everyone else is scoped to their own `users/<id>` folder (#417
-        // Slice G — was the global `caller.isInstructor`).
-        let isStaff = try await isStaffAnywhere(caller, db: req.db)
+        // scoped): course staff (TA+ in a course that is not archived, or
+        // admin) get the full authoring tree, everyone else is scoped to their
+        // own `users/<id>` folder (#417 Slice G — was the global
+        // `caller.isInstructor`). A past-term TA is a student here (#2663).
+        let isStaff = try await isStaffAnywhere(caller, includingArchived: false, db: req.db)
         let fm = FileManager.default
         let baseDir = req.application.directory.publicDirectory + "jupyterlite/files/"
         try fm.createDirectory(atPath: baseDir, withIntermediateDirectories: true)
