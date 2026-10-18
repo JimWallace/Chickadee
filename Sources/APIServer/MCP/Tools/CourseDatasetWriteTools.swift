@@ -39,6 +39,7 @@ struct CreateDatasetTool: ContentTool {
 
     struct Output: Encodable, Sendable {
         let courseKey: String
+        let courseTerm: String?
         let dataset: DatasetDTO
     }
 
@@ -74,7 +75,10 @@ struct CreateDatasetTool: ContentTool {
             ]),
             "sourceUrl": DatasetToolSchema.sourceURL,
             "note": .object([
-                "type": .string("string"), "description": .string("Optional. A note on version 1."),
+                "type": .string("string"),
+                "description": .string(
+                    "Optional, with sourceUrl. A note on version 1. A promoted file's version 1 is noted "
+                        + "\"Moved from an assignment\"."),
             ]),
             "assignmentPublicID": .object([
                 "type": .string("string"),
@@ -91,7 +95,10 @@ struct CreateDatasetTool: ContentTool {
         ],
         required: ["courseCode", "name"])
     static let outputSchema: JSONValue? = MCPSchema.object(
-        properties: ["courseKey": MCPSchema.courseKeyOutput, "dataset": DatasetToolSchema.dataset],
+        properties: [
+            "courseKey": MCPSchema.courseKeyOutput, "courseTerm": MCPSchema.courseTermOutput,
+            "dataset": DatasetToolSchema.dataset,
+        ],
         required: ["courseKey", "dataset"], additionalProperties: nil)
     static let annotations: MCPToolAnnotations? = MCPToolAnnotations(
         readOnlyHint: false, destructiveHint: false, idempotentHint: false)
@@ -102,7 +109,7 @@ struct CreateDatasetTool: ContentTool {
         let courseID = try course.requireID()
         let testSetupsDirectory = context.request.application.testSetupsDirectory
         let new = CourseDatasetService.NewDataset(
-            name: input.name, slug: input.slug ?? CourseDatasetService.suggestedSlug(from: input.name),
+            name: input.name, slug: try newDatasetSlug(input.slug, name: input.name),
             description: input.description, provenance: input.provenance, licence: input.licence)
 
         let dataset: APICourseDataset
@@ -137,7 +144,9 @@ struct CreateDatasetTool: ContentTool {
             throw MCPToolError.invalidArguments(
                 detail: "Pass exactly one of sourceUrl or assignmentPublicID as the source of version 1.")
         }
-        return Output(courseKey: course.urlKey, dataset: try await datasetDTO(dataset, context: context))
+        return Output(
+            courseKey: course.urlKey, courseTerm: course.term?.displayName,
+            dataset: try await datasetDTO(dataset, context: context))
     }
 }
 
@@ -165,6 +174,7 @@ struct UpdateDatasetTool: ContentTool {
 
     struct Output: Encodable, Sendable {
         let courseKey: String
+        let courseTerm: String?
         let dataset: DatasetDTO
     }
 
@@ -198,7 +208,10 @@ struct UpdateDatasetTool: ContentTool {
         ],
         required: ["courseCode", "slug"])
     static let outputSchema: JSONValue? = MCPSchema.object(
-        properties: ["courseKey": MCPSchema.courseKeyOutput, "dataset": DatasetToolSchema.dataset],
+        properties: [
+            "courseKey": MCPSchema.courseKeyOutput, "courseTerm": MCPSchema.courseTermOutput,
+            "dataset": DatasetToolSchema.dataset,
+        ],
         required: ["courseKey", "dataset"], additionalProperties: nil)
     static let annotations: MCPToolAnnotations? = MCPToolAnnotations(
         readOnlyHint: false, destructiveHint: false, idempotentHint: true)
@@ -208,35 +221,40 @@ struct UpdateDatasetTool: ContentTool {
         let course = try await resolveCourseForWrite(code: input.courseCode, context: context, atLeast: .ta)
         let dataset = try await requireCourseDataset(
             slug: input.slug, courseID: try course.requireID(), context: context)
+        // One transaction, so a refused step leaves the dataset as it was.
+        // Unpublish first and publish last, so one call can clear the licence
+        // of a published dataset, or fill it and publish.
         try await datasetLibraryCall {
-            // Unpublish first and publish last, so one call can clear the
-            // licence of a published dataset, or fill it and publish.
-            if input.isPublished == false {
-                try await CourseDatasetService.setPublished(dataset, false, on: context.db)
-            }
-            try await CourseDatasetService.updateMetadata(
-                dataset,
-                edit: .init(
-                    name: input.name, description: input.description, provenance: input.provenance,
-                    licence: input.licence),
-                on: context.db)
-            if let columns = input.columns {
-                try await updateColumns(columns, of: dataset, context: context)
-            }
-            if input.isPublished == true {
-                try await CourseDatasetService.setPublished(dataset, true, on: context.db)
+            try await context.db.transaction { db in
+                if input.isPublished == false {
+                    try await CourseDatasetService.setPublished(dataset, false, on: db)
+                }
+                try await CourseDatasetService.updateMetadata(
+                    dataset,
+                    edit: .init(
+                        name: input.name, description: input.description, provenance: input.provenance,
+                        licence: input.licence),
+                    on: db)
+                if let columns = input.columns {
+                    try await Self.updateColumns(columns, of: dataset, on: db)
+                }
+                if input.isPublished == true {
+                    try await CourseDatasetService.setPublished(dataset, true, on: db)
+                }
             }
         }
-        return Output(courseKey: course.urlKey, dataset: try await datasetDTO(dataset, context: context))
+        return Output(
+            courseKey: course.urlKey, courseTerm: course.term?.displayName,
+            dataset: try await datasetDTO(dataset, context: context))
     }
 
     /// Merges `columns` into the newest version's prose. The service replaces
     /// the prose of every column, so the columns that `columns` does not name
     /// are sent with the prose they have.
-    private func updateColumns(
-        _ columns: [ColumnInput], of dataset: APICourseDataset, context: ToolContext
+    private static func updateColumns(
+        _ columns: [ColumnInput], of dataset: APICourseDataset, on db: any Database
     ) async throws {
-        guard let newest = try await CourseDatasetService.version(dataset.currentVersion, of: dataset, on: context.db)
+        guard let newest = try await CourseDatasetService.version(dataset.currentVersion, of: dataset, on: db)
         else { throw CourseDatasetError.unknownVersion(dataset.currentVersion) }
         let named = Dictionary(columns.map { ($0.name, $0) }, uniquingKeysWith: { _, last in last })
         var notes = newest.columns.map { column in
@@ -251,7 +269,7 @@ struct UpdateDatasetTool: ContentTool {
             CourseDatasetService.ColumnNote(name: $0.name, description: $0.description, unit: $0.unit)
         }
         _ = try await CourseDatasetService.updateDictionary(
-            dataset, version: dataset.currentVersion, notes: notes, on: context.db)
+            dataset, version: dataset.currentVersion, notes: notes, on: db)
     }
 }
 
@@ -268,6 +286,7 @@ struct AddDatasetVersionTool: ContentTool {
 
     struct Output: Encodable, Sendable {
         let courseKey: String
+        let courseTerm: String?
         /// The number of the new version.
         let version: Int
         /// Columns of the previous version that the new file lacks. Their
@@ -296,7 +315,8 @@ struct AddDatasetVersionTool: ContentTool {
         required: ["courseCode", "slug", "sourceUrl"])
     static let outputSchema: JSONValue? = MCPSchema.object(
         properties: [
-            "courseKey": MCPSchema.courseKeyOutput, "version": MCPSchema.integer,
+            "courseKey": MCPSchema.courseKeyOutput, "courseTerm": MCPSchema.courseTermOutput,
+            "version": MCPSchema.integer,
             "droppedColumns": .object(["type": .string("array"), "items": MCPSchema.string]),
             "dataset": DatasetToolSchema.dataset,
         ],
@@ -320,7 +340,7 @@ struct AddDatasetVersionTool: ContentTool {
                 on: context.db)
         }
         return Output(
-            courseKey: course.urlKey, version: added.version.version, droppedColumns: added.droppedColumns,
+            courseKey: course.urlKey, courseTerm: course.term?.displayName, version: added.version.version, droppedColumns: added.droppedColumns,
             dataset: try await datasetDTO(dataset, context: context))
     }
 }

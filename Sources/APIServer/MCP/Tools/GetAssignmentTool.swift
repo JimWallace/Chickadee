@@ -84,9 +84,8 @@ struct GetAssignmentTool: ContentTool {
         /// the activity tool (same naming caveat as `secretRevealEnabled`).
         let activity: ActivityOutput?
         /// The files that come from the course dataset library, with the
-        /// version each one pins. Defaulted so existing call sites still
-        /// compile.
-        var datasets: [AttachedDatasetDTO] = []
+        /// version each one pins.
+        let datasets: [AttachedDatasetDTO]
     }
 
     /// The activity block as reported: its kind, the leaderboard's visibility,

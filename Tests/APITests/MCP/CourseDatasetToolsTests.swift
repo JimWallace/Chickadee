@@ -13,7 +13,9 @@ import Vapor
 
 @testable import APIServer
 
-@Suite(.serialized) final class CourseDatasetToolsTests {
+/// The attach and detach paths run `zip` and `unzip`, so the suite has a time
+/// limit.
+@Suite(.serialized, .timeLimit(.minutes(5))) final class CourseDatasetToolsTests {
 
     let app: Application
 
@@ -53,6 +55,10 @@ import Vapor
             entries: [("test_a.sh", "exit 0\n"), ("notes.csv", "id,note\n1,a\n2,b\n")])
         let assignment = try await makeTestAssignment(on: app, testSetupID: setupID, courseID: courseID)
         return Fixture(courseID: courseID, assignment: assignment)
+    }
+
+    private func courseID(_ code: String) async throws -> UUID {
+        try #require(try await APICourse.query(on: app.db).filter(\.$code == code).first()).requireID()
     }
 
     private func context(_ username: String = "cdt_staff") -> ToolContext {
@@ -241,6 +247,58 @@ import Vapor
         }
     }
 
+    @Test func aRefusedUpdateLeavesTheDatasetAsItWas() async throws {
+        try await withApp(app) { app in
+            _ = try await fixture()
+            await #expect(throws: MCPToolError.self) {
+                _ = try await UpdateDatasetTool().execute(
+                    .init(
+                        courseCode: "CDT1", slug: "ward-cases", name: "Renamed", description: nil,
+                        provenance: nil, licence: nil, isPublished: true, columns: nil),
+                    self.context())
+            }
+            let stored = try #require(
+                try await CourseDatasetService.find(courseID: try await self.courseID("CDT1"), slug: "ward-cases", on: app.db))
+            #expect(stored.name == "Ward cases")
+        }
+    }
+
+    /// One call may unpublish a dataset and clear its licence, because the
+    /// unpublish runs first.
+    @Test func oneUpdateCanUnpublishAndClearTheLicence() async throws {
+        try await withApp(app) { _ in
+            _ = try await fixture()
+            func update(licence: String, publish: Bool) async throws -> UpdateDatasetTool.Output {
+                try await UpdateDatasetTool().execute(
+                    .init(
+                        courseCode: "CDT1", slug: "ward-cases", name: nil, description: nil,
+                        provenance: "Hospital extract", licence: licence, isPublished: publish, columns: nil),
+                    self.context())
+            }
+            _ = try await update(licence: "Course use only", publish: true)
+            let out = try await update(licence: "", publish: false)
+            #expect(!out.dataset.isPublished)
+            #expect(out.dataset.licence == nil)
+        }
+    }
+
+    @Test func createDatasetRefusesToPromoteAFileOfAnotherCourse() async throws {
+        try await withApp(app) { app in
+            let fx = try await fixture()
+            let other = try await makeTestCourse(on: app, code: "CDT3").requireID()
+            let staff = try #require(try await APIUser.query(on: app.db).filter(\.$username == "cdt_staff").first())
+            try await makeTestEnrollment(on: app, userID: staff.requireID(), courseID: other)
+            await #expect(throws: MCPToolError.self) {
+                _ = try await CreateDatasetTool().execute(
+                    .init(
+                        courseCode: "CDT3", name: "Notes", slug: nil, description: nil, provenance: nil,
+                        licence: nil, sourceUrl: nil, note: nil, assignmentPublicID: fx.assignment.publicID,
+                        filename: "notes.csv"),
+                    self.context())
+            }
+        }
+    }
+
     // MARK: - Attachments
 
     @Test func attachCopiesTheFileWithCourseScopeAndDoesNotClose() async throws {
@@ -277,6 +335,39 @@ import Vapor
             #expect(out.dataset.sampleSize == 3)
             await #expect(throws: MCPToolError.self) { _ = try await self.attach(fx, sampleSize: 2) }
             await #expect(throws: MCPToolError.self) { _ = try await self.attach(fx, scope: "class") }
+        }
+    }
+
+    @Test func attachRefusesANameThatAnotherFileHas() async throws {
+        try await withApp(app) { _ in
+            let fx = try await fixture()
+            await #expect(throws: MCPToolError.self) { _ = try await self.attach(fx, filename: "notes.csv") }
+        }
+    }
+
+    /// A second filename makes a second attachment. With two, a call that
+    /// names no file is refused, and one that names a file changes only it.
+    @Test func aDatasetAttachedTwiceNeedsAFilename() async throws {
+        try await withApp(app) { _ in
+            let fx = try await fixture()
+            _ = try await attach(fx)
+            #expect(try await attach(fx, filename: "second.csv").action == "attached")
+            await #expect(throws: MCPToolError.self) { _ = try await self.attach(fx, scope: "assignment") }
+            let out = try await attach(fx, filename: "second.csv", scope: "assignment")
+            #expect(out.action == "updated")
+            let specs = try #require(try await setup(of: fx).decodedManifest()?.datasetSpecsByFile)
+            #expect(specs["cases.csv"]?.scope == .course)
+            #expect(specs["second.csv"]?.scope == .assignment)
+        }
+    }
+
+    @Test func anUnchangedAttachRegradesNothing() async throws {
+        try await withApp(app) { _ in
+            let fx = try await fixture()
+            _ = try await attach(fx, scope: "course")
+            let out = try await attach(fx, version: 1, scope: "course")
+            #expect(out.action == "unchanged")
+            #expect(out.submissionsRequeued == 0)
         }
     }
 

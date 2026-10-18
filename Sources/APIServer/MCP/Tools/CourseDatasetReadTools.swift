@@ -70,12 +70,14 @@ struct GetDatasetTool: ContentTool {
     struct Output: Encodable, Sendable {
         let courseCode: String
         let courseKey: String
+        let courseTerm: String?
         let dataset: DatasetDTO
         /// The version that `rows` and `columns` are of.
         let version: Int
-        /// That version's dictionary.
+        /// That version's dictionary. `dataset.columns` is the newest one's.
         let columns: [DatasetColumnDTO]
-        /// The header and the first data rows of that version, as CSV text.
+        /// The header and the first data rows of that version, as CSV text,
+        /// at most `MCPContentByteCap.defaultBytes` bytes.
         let rows: String
         let rowCount: Int
         /// True when `rows` holds fewer data rows than the version has.
@@ -88,7 +90,8 @@ struct GetDatasetTool: ContentTool {
     static let description =
         "Get one dataset of the course library by slug: its metadata, versions and usage (as "
         + "list_datasets reports them), plus the header and the first rows of one version as CSV text "
-        + "and that version's data dictionary. These are the rows of the uploaded file. A student "
+        + "and that version's data dictionary, capped at \(MCPContentByteCap.defaultBytes) bytes. These are "
+        + "the rows of the uploaded file. A student "
         + "receives a sample of them, or all of them, as the assignment that attaches the file says; "
         + "preview_personalization shows one student's rows."
     static let inputSchema: JSONValue = MCPSchema.object(
@@ -104,8 +107,8 @@ struct GetDatasetTool: ContentTool {
     static let outputSchema: JSONValue? = MCPSchema.object(
         properties: [
             "courseCode": MCPSchema.string, "courseKey": MCPSchema.courseKeyOutput,
-            "dataset": DatasetToolSchema.dataset, "version": MCPSchema.integer,
-            "columns": .object(["type": .string("array")]), "rows": MCPSchema.string,
+            "courseTerm": MCPSchema.courseTermOutput, "dataset": DatasetToolSchema.dataset,
+            "version": MCPSchema.integer, "columns": DatasetToolSchema.columns, "rows": MCPSchema.string,
             "rowCount": MCPSchema.integer, "truncated": MCPSchema.boolean,
         ],
         required: ["courseCode", "courseKey", "dataset", "version", "columns", "rows", "rowCount", "truncated"],
@@ -131,10 +134,12 @@ struct GetDatasetTool: ContentTool {
         let limit = Self.rowLimit.resolve(input.maxRows)
         // One row per line, as the materializer that samples the rows reads them.
         let lines = text.split(omittingEmptySubsequences: true, whereSeparator: \.isNewline)
+        let head = lines.prefix(limit + 1).joined(separator: "\n") + "\n"
+        let capped = MCPContentByteCap.cappedUTF8(Data(head.utf8), cap: MCPContentByteCap.defaultBytes)
         return Output(
-            courseCode: course.code, courseKey: course.urlKey, dataset: try await datasetDTO(dataset, context: context),
-            version: number, columns: version.columns.map(DatasetColumnDTO.init),
-            rows: lines.prefix(limit + 1).joined(separator: "\n") + "\n", rowCount: version.rowCount,
-            truncated: version.rowCount > limit)
+            courseCode: course.code, courseKey: course.urlKey, courseTerm: course.term?.displayName,
+            dataset: try await datasetDTO(dataset, context: context), version: number,
+            columns: version.columns.map(DatasetColumnDTO.init), rows: capped?.content ?? head,
+            rowCount: version.rowCount, truncated: version.rowCount > limit || capped?.truncated == true)
     }
 }

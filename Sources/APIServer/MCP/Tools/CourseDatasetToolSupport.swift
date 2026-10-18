@@ -101,11 +101,6 @@ struct AttachedDatasetDTO: Encodable, Sendable {
     }
 }
 
-/// The value-type names, derived so the prose cannot fall behind the enum.
-enum DatasetColumnValueTypeProse {
-    static var values: String { DatasetColumn.ValueType.allCases.map(\.rawValue).joined(separator: ", ") }
-}
-
 // MARK: - Schemas
 
 enum DatasetToolSchema {
@@ -115,6 +110,21 @@ enum DatasetToolSchema {
     ])
 
     static let scopeValues = DatasetSliceScope.allCases.map(\.rawValue)
+
+    /// One dictionary column. The type enum is derived, so it cannot fall
+    /// behind `DatasetColumn.ValueType`.
+    static let column: JSONValue = MCPSchema.object(
+        properties: [
+            "name": MCPSchema.string,
+            "type": .object([
+                "type": .string("string"),
+                "enum": .array(DatasetColumn.ValueType.allCases.map { .string($0.rawValue) }),
+            ]),
+            "description": MCPSchema.string, "unit": MCPSchema.string,
+        ],
+        required: ["name", "type"], additionalProperties: nil)
+
+    static let columns: JSONValue = .object(["type": .string("array"), "items": column])
 
     static let attached: JSONValue = MCPSchema.object(
         properties: [
@@ -128,15 +138,7 @@ enum DatasetToolSchema {
             "slug": MCPSchema.string, "name": MCPSchema.string, "description": MCPSchema.string,
             "provenance": MCPSchema.string, "licence": MCPSchema.string, "isPublished": MCPSchema.boolean,
             "currentVersion": MCPSchema.integer,
-            "columns": .object([
-                "type": .string("array"),
-                "items": MCPSchema.object(
-                    properties: [
-                        "name": MCPSchema.string, "type": MCPSchema.string, "description": MCPSchema.string,
-                        "unit": MCPSchema.string,
-                    ],
-                    required: ["name", "type"], additionalProperties: nil),
-            ]),
+            "columns": columns,
             "versions": .object([
                 "type": .string("array"),
                 "items": MCPSchema.object(
@@ -223,6 +225,8 @@ func datasetDTO(_ dataset: APICourseDataset, context: ToolContext) async throws 
         provenance: dataset.provenance, licence: dataset.licence, isPublished: dataset.isPublished,
         currentVersion: dataset.currentVersion, columns: (newest?.columns ?? []).map(DatasetColumnDTO.init),
         versions: versions.map(DatasetVersionDTO.init),
+        // `Usage` carries the pinned version and not the spec, so this is
+        // `CourseDatasetService.attachmentIsBehind` on the version alone.
         usage: usage.map {
             DatasetUsageDTO(
                 assignmentPublicID: $0.assignmentPublicID, assignmentTitle: $0.assignmentTitle, file: $0.file,
@@ -235,4 +239,15 @@ func datasetDTO(_ dataset: APICourseDataset, context: ToolContext) async throws 
 func datasetVersionFilename(_ filename: String?, sourceURL: String) -> String {
     if let filename, !filename.trimmingCharacters(in: .whitespaces).isEmpty { return filename }
     return attachmentFilename(fromURL: sourceURL)
+}
+
+/// The slug for a new dataset: `slug` when given, else one made from `name`.
+func newDatasetSlug(_ slug: String?, name: String) throws -> String {
+    if let slug { return slug }
+    let suggested = CourseDatasetService.suggestedSlug(from: name)
+    guard !suggested.isEmpty else {
+        throw MCPToolError.invalidArguments(
+            detail: "The name \"\(name)\" has no letter or digit to make a slug from. Pass slug.")
+    }
+    return suggested
 }

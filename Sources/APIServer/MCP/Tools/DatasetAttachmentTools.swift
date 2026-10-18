@@ -66,7 +66,8 @@ struct AttachDatasetTool: ContentTool {
                 "type": .string("string"),
                 "description": .string(
                     "Optional. The filename in the assignment, a bare name that ends in .csv. Omitted, the "
-                        + "version's own filename, or the file already attached from this dataset."),
+                        + "version's own filename, or the file already attached from this dataset. A name that "
+                        + "no attached file has makes another attachment of the dataset; it does not rename one."),
             ]),
             "version": .object([
                 "type": .string("integer"), "minimum": .int(1),
