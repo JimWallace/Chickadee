@@ -6,6 +6,9 @@ assignments where students **query data to solve a problem** rather than
 just write standalone functions.
 
 Status: **shipped** (all three waves; this document is the design record).
+The course dataset library, which keeps a course's datasets once and
+attaches them to assignments, is in
+[datasets-course-library.md](datasets-course-library.md).
 
 ---
 
@@ -165,7 +168,9 @@ Deterministic and server-side, exactly like today's personalization.
 
 Support-file CSVs are the v0 of this. Assignment 4 is the first consumer:
 its `assignment4_vitaldb_cases.csv` becomes a Dataset, attached at
-`data/`, and the existing notebook checks are unchanged.
+`data/`, and the existing notebook checks are unchanged. The move of the
+live HLTH 230 files into the course library is in
+[datasets-course-library.md](datasets-course-library.md) §4.9.
 
 ---
 
