@@ -9,6 +9,13 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.712] - 2026-10-18
+
+### Added
+
+- **Course dataset library, slice 5a: the instructor Datasets tab.** Course staff can upload a CSV as a new library dataset, write its description, provenance and licence, describe each column in the data dictionary, add versions with a note, download any version, publish it once it has a provenance and a licence, and delete it while no assignment attaches it. Each dataset page lists the assignments that attach it and the version each one pins.
+
+
 ## [0.5.711] - 2026-10-18
 
 ### Added
