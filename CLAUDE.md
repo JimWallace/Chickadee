@@ -369,8 +369,8 @@ greeting. The example below does so in R."
   each module whose members a file uses), through `sourceSettings` in
   `Package.swift`. Import the umbrella modules `Foundation` and
   `NIOFoundationCompat`, not the split `FoundationEssentials` and
-  `NIOFoundationEssentialsCompat` modules that a fix-it suggests on Linux. No `@unchecked Sendable` except on a Fluent
-  `Model` class, where the reason is always the same (Fluent's property
+  `NIOFoundationEssentialsCompat` modules that a fix-it suggests on Linux. No `@unchecked Sendable`, in `Sources/` or
+  `Tests/`, except on a Fluent `Model` class, where the reason is always the same (Fluent's property
   wrappers are what the compiler cannot check). Use an actor or a `Mutex`
   instead. `scripts/check-unchecked-sendable.sh` fails `format-lint` on any
   other site, with or without a comment.
@@ -470,8 +470,8 @@ The reason for each rule is in
 - **No force unwraps in tests.** Use `try #require(value)`.
 - **Skip with a `ConditionTrait`, never with `Issue.record`.** A bare
   `guard … else { return }` is allowed only where a trait cannot express the
-  condition, with a comment that says so. The shared traits (`.ciOnly`, `.requires<Tool>`) live in one
-  `HostConditionTraits.swift` per target. `scripts/check-no-skipped-tests.sh`
+  condition, with a comment that says so. The shared traits (`.ciOnly`, `.requires<Tool>`) live once, in
+  `Tests/TestSupport/HostConditionTraits.swift`. `scripts/check-no-skipped-tests.sh`
   fails every CI lane on any skip. A broken test setup throws
   `IssueRecorded("...")`.
 - **Pattern references:** `COEPMiddlewareTests` (struct suite),
@@ -629,6 +629,7 @@ One line per document. Each document holds its own rules and evidence.
 - `docs/course-terms.md` — course year and term, the two course-code resolvers, cloning for a new term
 - `docs/solution-visibility.md` — the post-deadline solution reveal and its slip-day ceiling
 - `docs/datasets.md` — per-student datasets (#1083)
+- `docs/datasets-course-library.md` — in progress: a per-course dataset library, the course cohort seed, the student Data page; opens with a Status table
 - `docs/admin-mcp.md` — the read-only admin diagnostics MCP surface
 - `docs/ai-assisted-feedback.md` — an instructor's own AI agent drafts feedback on written reasoning through MCP, behind two opt-in gates and staff review
 - `docs/compliance/` — the UW approval package: student-data audits, tool and data-flow inventories
@@ -636,6 +637,7 @@ One line per document. Each document holds its own rules and evidence.
 - `docs/class-activities.md` — leaderboards, bots, round robins, hills and brackets (#1508); opens with a Status table
 - `docs/class-composite.md` — shipped: each student renders one slot of a shared image, composed live on the projector; opens with a Status table
 - `docs/unlockable-labs.md` — assignment prerequisites and sticky per-student unlocks
+- `docs/achievement-rewards.md` — proposed: achievements at the assignment, course and site levels, one award ledger, and a wardrobe item as a reward
 - `docs/student-wardrobe.md` — cosmetic choices for the avatar, kept apart from earned status
 - `docs/result-celebration.md` — the result-page celebration: the 100% moment, the bird, and the Earned toast
 - `docs/student-avatars.md` — generated avatars and the per-course pseudonymous handle

@@ -22,7 +22,7 @@ import Vapor
 
 @Suite struct MCPSeedMainPoolTests {
 
-    private let manifestWithRoom = #"{"schemaVersion":1,"testSuites":[],"timeLimitSeconds":10}"#
+    private let manifestWithRoom = TestManifests.emptySuite
 
     /// A second, unmigrated in-memory database with NO
     /// `assignment_personalization_seeds` table — stands in for the

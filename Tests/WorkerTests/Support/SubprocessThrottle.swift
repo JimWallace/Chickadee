@@ -36,49 +36,15 @@ import Foundation
 /// exists to catch.
 func withSubprocessSlot<R: Sendable>(_ body: @Sendable () async throws -> R) async rethrows -> R {
     try await WedgeWatchdog.track {
-        try await SubprocessThrottle.shared.run(body)
+        try await subprocessThrottle.run(body)
     }
 }
 
-private actor SubprocessThrottle {
-    // Deliberately a small fixed constant rather than scaled to core count:
-    // the failure mode is resource exhaustion under load, and the hosted CI
-    // runner is exactly where it bites (2 cores when this was chosen, 4 since;
-    // the storm threshold, not the core count, is what the constant tracks),
-    // so a low floor is the safe choice.  A
-    // cheap `/bin/sh` fork is sub-millisecond, so four in flight is ample
-    // throughput while staying far below the storm threshold.
-    static let shared = SubprocessThrottle(limit: 4)
-
-    private let limit: Int
-    private var inUse = 0
-    private var waiters: [CheckedContinuation<Void, Never>] = []
-
-    init(limit: Int) { self.limit = limit }
-
-    func run<R: Sendable>(_ body: @Sendable () async throws -> R) async rethrows -> R {
-        await acquire()
-        defer { release() }
-        return try await body()
-    }
-
-    private func acquire() async {
-        if inUse < limit {
-            inUse += 1
-            return
-        }
-        // No free permit: park until a releaser hands one directly to us.
-        await withCheckedContinuation { waiters.append($0) }
-    }
-
-    private func release() {
-        if let next = waiters.first {
-            // Transfer our permit straight to the next waiter: neither
-            // decrement nor re-increment, so `inUse` stays accurate.
-            waiters.removeFirst()
-            next.resume()
-        } else {
-            inUse -= 1
-        }
-    }
-}
+// Deliberately a small fixed constant rather than scaled to core count:
+// the failure mode is resource exhaustion under load, and the hosted CI
+// runner is exactly where it bites (2 cores when this was chosen, 4 since;
+// the storm threshold, not the core count, is what the constant tracks),
+// so a low floor is the safe choice.  A
+// cheap `/bin/sh` fork is sub-millisecond, so four in flight is ample
+// throughput while staying far below the storm threshold.
+private let subprocessThrottle = AsyncPermits(limit: 4)

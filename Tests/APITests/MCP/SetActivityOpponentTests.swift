@@ -28,7 +28,7 @@ import Vapor
     private let workerManifest =
         #"{"schemaVersion":1,"gradingMode":"worker","testSuites":[{"tier":"public","script":"match.sh"}],"timeLimitSeconds":10}"#
     private let browserManifest =
-        #"{"schemaVersion":1,"gradingMode":"browser","testSuites":[],"timeLimitSeconds":10}"#
+        TestManifests.browserEmpty
 
     /// Course + enrolled instructor + setup whose zip holds `support` beside
     /// the graded `match.sh`.

@@ -3,37 +3,22 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 
+import { loadRunnerWasm } from './support/runner-wasm.mjs';
+
 // Browser side of the shared output-interpretation contract. Drives every case
 // in Tests/Fixtures/output-contract.json through the REAL vendored RunnerCore
 // wasm (the same Swift `interpretScriptOutput`, invoked via `executeSuites`),
 // and asserts the browser produces byte-for-byte the same status / shortResult /
 // longResult the native worker does (the fixture's `native` block) — and never
 // leaks the raw JSON result envelope into student-facing strings. The native
-// side is asserted by Tests/WorkerTests/OutputContractTests.swift; both consume
+// side is asserted by Tests/CoreTests/OutputContractTests.swift; both consume
 // one fixture, so the two runners cannot drift.
 
-const RUNNER_CORE = path.resolve('Public/runner-wasm/runner-core.js');
-// The wasm filename is content-hashed (RunnerWasm.<hash>.wasm) for immutable
-// caching, so discover it rather than hardcoding the name.
-const RUNNER_DIR = path.resolve('Public/runner-wasm');
-const RUNNER_WASM = path.join(
-  RUNNER_DIR,
-  (await fs.readdir(RUNNER_DIR)).find(f => /^RunnerWasm\..*\.wasm$/.test(f)),
-);
-
-let _ready;
 async function ensureWasm() {
-  if (!_ready) {
-    _ready = (async () => {
-      const { init } = await import(RUNNER_CORE);
-      const module = await WebAssembly.compile(await fs.readFile(RUNNER_WASM));
-      await init({ module });
-      if (typeof globalThis.runnerExecuteSuites !== 'function') {
-        throw new Error('RunnerCore wasm did not register runnerExecuteSuites');
-      }
-    })();
+  await loadRunnerWasm();
+  if (typeof globalThis.runnerExecuteSuites !== 'function') {
+    throw new Error('RunnerCore wasm did not register runnerExecuteSuites');
   }
-  return _ready;
 }
 
 // Interpret one case's raw script output through the real wasm by running a
@@ -73,27 +58,17 @@ test('browser wasm interprets output identically to the native worker (shared fi
         `shortResult mismatch for case '${c.name}'`);
       assert.equal(outcome.longResult ?? null, c.native.longResult ?? null,
         `longResult mismatch for case '${c.name}'`);
-      // `score` is part of the contract but only emitted by a re-vendored wasm
-      // (runner-wasm-vendor.yml rebuilds on main; a PR runs against the
-      // checked-in artifact).  Assert it once present so parity is pinned after
-      // the re-vendor without going red on the not-yet-rebuilt artifact.
-      if (typeof outcome.score === 'number') {
-        assert.ok(Math.abs(outcome.score - c.native.score) < 1e-9,
-          `score mismatch for case '${c.name}': ${outcome.score} != ${c.native.score}`);
-      }
-      // `metric` follows the same once-present rule: an artifact built before
-      // the field existed leaves it undefined, and only a re-vendored one
-      // reports null-or-number. Once it does, it must match the native value.
-      if (outcome.metric !== undefined) {
-        assert.equal(outcome.metric ?? null, c.native.metric ?? null,
-          `metric mismatch for case '${c.name}'`);
-      }
-      // `composite` follows the same once-present rule. Its keys are the
-      // footer's (`w`, `h`, `frames`, `format`, `data`), on both sides.
-      if (outcome.composite !== undefined) {
-        assert.deepEqual(outcome.composite ?? null, c.native.composite ?? null,
-          `composite mismatch for case '${c.name}'`);
-      }
+      // Required, not once-present: the vendored artifact carries every field,
+      // and a stale artifact must fail here rather than pass by omission.
+      assert.equal(typeof outcome.score, 'number', `score missing for case '${c.name}'`);
+      assert.ok(Math.abs(outcome.score - c.native.score) < 1e-9,
+        `score mismatch for case '${c.name}': ${outcome.score} != ${c.native.score}`);
+      assert.notEqual(outcome.metric, undefined, `metric missing for case '${c.name}'`);
+      assert.equal(outcome.metric ?? null, c.native.metric ?? null,
+        `metric mismatch for case '${c.name}'`);
+      assert.notEqual(outcome.composite, undefined, `composite missing for case '${c.name}'`);
+      assert.deepEqual(outcome.composite ?? null, c.native.composite ?? null,
+        `composite mismatch for case '${c.name}'`);
     }
 
     assert.ok(!leaksEnvelope(outcome.shortResult),

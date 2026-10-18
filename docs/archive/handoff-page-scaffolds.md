@@ -17,7 +17,7 @@ What shipped:
   fullest demonstration of the skeleton — not on which page was listed
   first.  `instructor-mcp.leaf` shed a vestigial empty `<style>` block to
   take its row.
-- **`Tests/APITests/PageArchetypeTests.swift`**, which reads the exemplar
+- **`Tests/APITests/Guards/PageArchetypeTests.swift`**, which reads the exemplar
   column out of that table rather than restating it, and re-checks each
   exemplar against its own row.  The tag-walking it needs was extracted from
   `ListFilterMarkupTests` into `LeafMarkupScanner` rather than copied, so
@@ -100,7 +100,7 @@ A structural test asserting each exemplar still matches its archetype: the
 tabbed ones open with the right partial and start sections at `<h2>`, the
 titlebar one has `.page-titlebar` with a single `<h1>`, the auth box uses
 `.auth-box`, exactly one `<h1>` per non-tabbed page, `_flash` is the only
-banner source. `Tests/APITests/ListFilterMarkupTests.swift` is the pattern to
+banner source. `Tests/APITests/Guards/ListFilterMarkupTests.swift` is the pattern to
 copy — it walks tags backwards from a match rather than grepping the document,
 which is the right technique here for the same reason (a scanner cannot tell
 markup from prose about markup, and this codebase has been bitten by that four

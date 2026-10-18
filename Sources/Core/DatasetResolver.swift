@@ -24,6 +24,16 @@ public enum DatasetResolver {
     public static func resolve(
         manifest: TestProperties, seedHex: String?, sourceDirectory: String
     ) -> [String: String]? {
+        resolve(manifest: manifest, seedHex: seedHex, courseSeedHex: nil, sourceDirectory: sourceDirectory)
+    }
+
+    /// The same, with the student's per-(student, course) seed for the
+    /// course-scoped specs (docs/datasets-course-library.md, D4). Each spec is
+    /// sliced with the seed `DatasetSeedDerivation.effectiveSeed` picks for it.
+    /// A nil `courseSeedHex` slices every spec with the assignment seed.
+    public static func resolve(
+        manifest: TestProperties, seedHex: String?, courseSeedHex: String?, sourceDirectory: String
+    ) -> [String: String]? {
         guard !manifest.datasets.isEmpty else { return nil }
         guard let seedHex, !seedHex.isEmpty else { return nil }
 
@@ -39,8 +49,10 @@ public enum DatasetResolver {
             guard FilenameSafety.bareFilename(spec.file) != nil else { continue }
             let path = directory + spec.file
             guard let content = try? String(contentsOfFile: path, encoding: .utf8) else { continue }
+            let specSeed = DatasetSeedDerivation.effectiveSeed(
+                spec: spec, assignmentSeedHex: seedHex, courseSeedHex: courseSeedHex)
             files[spec.file] = DatasetMaterializer.materialize(
-                source: content, spec: spec, seedHex: seedHex)
+                source: content, spec: spec, seedHex: specSeed)
         }
         return files.isEmpty ? nil : files
     }

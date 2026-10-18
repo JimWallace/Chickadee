@@ -79,7 +79,7 @@ unbound → any expression calling `solution.*` raises `NameError`.
 
 **Acceptance**: `ciphertext = solution.composite(fortune, 1 + seed % 25, 2 + seed % 5)`
 resolves on an assignment whose solution uses `{{ }}` placeholders. Regression
-test in `Tests/APITests/PersonalizationEvaluatorTests.swift`: a solution with both
+test in `Tests/APITests/Personalization/PersonalizationEvaluatorTests.swift`: a solution with both
 `def`s and a `{{x}}` placeholder → `solution.*` callable; a genuinely broken
 solution surfaces a *named* error, not a silent downstream `NameError`.
 **Server-side only** — never change what's bundled to the student/browser env.

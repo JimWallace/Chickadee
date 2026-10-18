@@ -8,7 +8,7 @@
 // same chain for the same reason: instructor validation is a NATIVE-worker
 // job, so a broken native path means no C++ assignment can be validated at
 // all. (The REAL renderer's bytes are executed in
-// Tests/APITests/PatternFamilyRendererCppTests.swift — this suite pins the
+// Tests/APITests/PatternFamilies/PatternFamilyRendererCppTests.swift — this suite pins the
 // worker chain with wrappers of the same shape.)
 
 import ChickadeeTestSupport

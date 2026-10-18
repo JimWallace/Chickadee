@@ -31,6 +31,11 @@ struct SubmissionMaterialization: Codable, Sendable {
     /// The seed every cached value was resolved against; nil for a
     /// literal-only assignment that declares no per-student expressions.
     let seedHex: String?
+    /// The per-(student, course) seed the course-scoped dataset slices were
+    /// resolved against (docs/datasets-course-library.md, slice 4). Nil when
+    /// the manifest has no course-scoped dataset, and for a row written before
+    /// the course cohort existed.
+    let courseSeedHex: String?
     /// Resolved `=` expression values (Python literals), keyed by name — the
     /// same map `PersonalizationSubstitution.gradingInputs` produces. Empty for
     /// a literal-only assignment.

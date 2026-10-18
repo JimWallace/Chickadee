@@ -152,7 +152,7 @@ panes.  On a page that holds the notebook toolbar (`.nb-title-block`), the
 site header is a compact 44px bar, so that the editor gets the height.  This is
 the one page-local change to the shared header, and it keeps every link.
 
-`Tests/APITests/PageArchetypeTests.swift` reads this table —
+`Tests/APITests/Guards/PageArchetypeTests.swift` reads this table —
 so the exemplar column and the guard cannot drift apart — and re-checks each
 exemplar against its own row on every run.  It reads each exemplar's renders
 in `ElementaryPageFixtures`, where the exemplar fixtures are marked
@@ -262,7 +262,7 @@ duplicate.
   Escape.  Placeholder microcopy on live filters: "Filter by
   &lt;matched fields&gt;…"; `data-list-filter-empty` names the row type
   ("No students match this filter.").  The markup contract is asserted by
-  `Tests/APITests/ListFilterMarkupTests.swift`, which walks the tags rather
+  `Tests/APITests/Guards/ListFilterMarkupTests.swift`, which walks the tags rather
   than searching the document.
 - **`.field-inline`**, `.field-stack` (+ `--grow`, `--narrow`),
   `.checkbox-row`, `.field-note` (+ `--muted`), `.field-help`,
@@ -1198,7 +1198,7 @@ variants that exist nowhere and silently rendered as unstyled text.
   `scripts/class-resolution-allowlist.txt`, which only shrinks.
 - **Interpolated class families** (`status-…`-style names built from
   enum values) are outside the grep's reach; they are pinned by
-  `Tests/APITests/StatusClassStylesheetTests.swift`, which iterates the enum
+  `Tests/APITests/Guards/StatusClassStylesheetTests.swift`, which iterates the enum
   (`CaseIterable`) and asserts each minted selector exists.  A new
   interpolated family needs the same treatment.
 - A class name a cross-page script depends on (e.g. `.error-message`, which

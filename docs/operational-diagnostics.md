@@ -471,6 +471,7 @@ the user row is hard-deleted via `POST /admin/users/:userID/delete`.
 | `oauth_clients` | `created_by` | SET NULL | Registered MCP client preserved; who registered it drops. |
 | `client_diagnostics` | `user_id` | CASCADE | Browser-error breadcrumb; tied to the user. |
 | `assignment_personalization_seeds` | `user_id` | CASCADE | Per-user seed; gone with the user. |
+| `course_personalization_seeds` | `user_id` | CASCADE | Per-user course cohort seed; gone with the user. |
 | `job_execution_metrics` | `user_id` | SET NULL | Metric row preserved for capacity reporting; user attribution drops. |
 | `audit_log` | `actor_user_id` | SET NULL | Audit row preserved; actor link drops. |
 | `audit_log` | `actor_username` (denormalised string, no FK) | **preserved verbatim** | Audit log is a forensic record. "Who did what" must survive even when the user row is gone — otherwise incident-response queries blank out. The denormalised column is the only attribution that remains after the FK breaks. |

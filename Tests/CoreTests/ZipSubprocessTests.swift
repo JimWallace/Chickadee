@@ -19,6 +19,7 @@
 // suites); the concurrency test runs its subprocesses in parallel *within* one
 // test body, which is the shape being pinned.
 
+import ChickadeeTestSupport
 import Core
 import Foundation
 import Testing
