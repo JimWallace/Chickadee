@@ -485,8 +485,12 @@ because line numbers go out of date.
     `removed_at` on an attendance row.
   - `ActivityAuthoring.setActivity` sets `ClassActivity.runsPerGroup`.
 - **Readers:**
-  - `requireOpenActivityWindow` in `Routes/StudentAssignmentRequestGates.swift`,
-    through `ActivitySessionStore.currentSession`.
+  - The submission gate (`requireOpenGroupSession` in
+    `Routes/StudentAssignmentRequestGates.swift`), through
+    `ActivitySessionStore.hasJoined`.
+  - Ranking, through `ActivitySessionStore.sessionAtSubmission` and
+    `currentSession`.
+  - `LeaderboardGroupScope.studentGroup`, which picks a student's board.
   - `GroupSessionPanel` on the present page, and `SessionAttendancePage`.
   - The data export (`gatherGroups`, `gatherSessionJoins`).
 - **Rules** (`docs/lab-groups.md`):
@@ -496,9 +500,11 @@ because line numbers go out of date.
   - Only attendance counts: membership does not let a student submit. A
     join from before a session's latest start, or a removed one, does not
     count. But membership limits the join: a member joins only their own
-    group's session. The gate lets in any student who has ever joined one of
-    the activity's sessions; ranking still needs an open joined session at
-    the submission's time.
+    group's session, and the join refuses another lab's code
+    (`ActivitySessionError.otherGroup`). The gate lets in any student who has
+    ever joined one of the activity's sessions and was not removed; ranking
+    still needs an open joined session at the submission's time. A new reader
+    of attendance must skip a row with `removed_at` set.
   - The join code is derived from the session's secret and the time; it is
     never stored. A reopen draws a new secret.
   - Remove undoes a group placement that the student's join made

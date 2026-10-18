@@ -59,7 +59,7 @@ struct LeaderboardGroupScope: Sendable {
     }
 
     /// The group a student's board is: the one whose session they last
-    /// joined (attendance beats membership), else one they ranked in, else
+    /// joined and were not removed from (attendance beats membership), else one they ranked in, else
     /// the one they are a member of.
     private static func studentGroup(
         userID: UUID, setupID: String, assignmentID: UUID, setID: UUID, on db: any Database
@@ -69,6 +69,7 @@ struct LeaderboardGroupScope: Sendable {
             let latest = try await APIActivitySessionAttendance.query(on: db)
                 .filter(\.$userID == userID)
                 .filter(\.$sessionID ~~ sessions.compactMap(\.id))
+                .filter(\.$removedAt == nil)
                 .sort(\.$joinedAt, .descending)
                 .first(),
             let joined = sessions.first(where: { $0.id == latest.sessionID })

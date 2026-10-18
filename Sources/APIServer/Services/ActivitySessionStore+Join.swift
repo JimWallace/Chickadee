@@ -22,9 +22,8 @@ extension ActivitySessionStore {
     /// before) is `code`. A student who is a member of a group joins only
     /// that group's session; a student in no group joins any, and becomes a
     /// member of it in a manual set. A second join of the session the student
-    /// is in changes nothing. `network` is the network
-    /// part of the student's address (`ClientNetwork.prefix`), nil when
-    /// unknown.
+    /// is in changes nothing. `network` is the network part of the student's
+    /// address (`ClientNetwork.prefix`), nil when unknown.
     @discardableResult
     static func join(
         code: String, userID: UUID, network: String? = nil, now: Date = Date(), on db: any Database
@@ -68,15 +67,6 @@ extension ActivitySessionStore {
         if let removedAt = existing?.removedAt, removedAt >= session.openedAt {
             throw ActivitySessionError.removed
         }
-        // Typing the code of the session the student already plays in changes
-        // nothing: the join time stays, so a submission made before it still
-        // ranks when it is graded (`sessionAtSubmission`).
-        if let existing, existing.counts(in: session),
-            try await currentSession(assignmentID: session.assignmentID, userID: userID, now: now, on: db)?.id
-                == sessionID
-        {
-            return session
-        }
         // Membership first: if it fails, no attendance is left behind.
         let setID = try set.requireID()
         let membership = try await APICourseGroupMembership.query(on: db)
@@ -88,6 +78,15 @@ extension ActivitySessionStore {
         if let membership, membership.groupID != session.groupID {
             let own = try await APICourseGroup.find(membership.groupID, on: db)?.name ?? "another lab"
             throw ActivitySessionError.otherGroup(session: group.name, own: own)
+        }
+        // Typing the code of the session the student already plays in changes
+        // nothing: the join time stays, so a submission made before it still
+        // ranks when it is graded (`sessionAtSubmission`).
+        if let existing, existing.counts(in: session),
+            try await currentSession(assignmentID: session.assignmentID, userID: userID, now: now, on: db)?.id
+                == sessionID
+        {
+            return session
         }
         let placed = set.acceptsManualEdits && membership == nil
         if placed {

@@ -75,14 +75,16 @@ enum ActivitySessionStore {
     }
 
     /// Whether the student has joined any session of the assignment by
-    /// code, in any run: what the submission gate asks once the student is
-    /// past the room (docs/lab-groups.md, decision 1).
+    /// code, in any run, and staff did not remove them since: what the
+    /// submission gate asks once the student is past the room
+    /// (docs/lab-groups.md, decision 1).
     static func hasJoined(assignmentID: UUID, userID: UUID, on db: any Database) async throws -> Bool {
         let sessionIDs = try await sessions(assignmentID: assignmentID, on: db).compactMap(\.id)
         guard !sessionIDs.isEmpty else { return false }
         return try await APIActivitySessionAttendance.query(on: db)
             .filter(\.$userID == userID)
             .filter(\.$sessionID ~~ sessionIDs)
+            .filter(\.$removedAt == nil)
             .count() > 0
     }
 

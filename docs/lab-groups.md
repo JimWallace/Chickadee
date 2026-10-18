@@ -406,9 +406,10 @@ should be able to see it. The maintainer chose best effort on 2026-10-18.
   would mix the groups until their slices make them per group. A composite
   keeps its own message.
 - The submission gate refuses only a student who never joined one of the
-  activity's sessions (`ActivitySessionStore.hasJoined`). After the session
-  a student joined closes, their submission grades and does not rank
-  (decision 1). A member of a group who missed their lab stays refused.
+  activity's sessions, or whom staff removed (`ActivitySessionStore.hasJoined`).
+  After the session a student joined closes, their submission grades and
+  does not rank (decision 1). A member of a group who missed their lab stays
+  refused.
 - The staff board's submission count stays the student's total for the
   activity, not per group (maintainer decision 6).
 - Tests: `LeaderboardPerGroupTests`.
@@ -507,10 +508,13 @@ The three questions the first draft left open are settled.
    into every lab weakens presence. A student in no group may still join
    any session. A student who goes to another lab is moved by a TA on the
    Groups tab (a synced set cannot be edited, so that case waits for a
-   "let in" action or slice 6).
+   "let in" action or slice 6). A student moved to another lab cannot type
+   the old lab's code again. A student in no group whose first join was in
+   the wrong lab is a member of that lab now: a TA presses Remove on that
+   session, which undoes the placement, or moves them on the Groups tab.
 5. **A student who joined still submits after the close.** The result
    grades and does not rank, as decision 1 says. Only a student who never
-   joined is refused.
+   joined, or whom staff removed, is refused.
 6. **The staff submission count is the student's total** for the activity,
    not per group. Only a student who played in two labs shows a
    difference, and a per-group count needs the session of each submission.
