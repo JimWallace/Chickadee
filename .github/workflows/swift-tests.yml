@@ -12,10 +12,18 @@ on:
 
 # Cancel superseded runs when new commits land on a PR branch (one branch
 # racked up four full CI runs in 70 minutes during the #890 audit).  Pushes
-# to main and merge-queue runs are never cancelled — their group key is the
-# unique ref/SHA and cancel-in-progress is false outside pull_request.
+# to main and merge-queue runs are never cancelled or queued: their group key
+# is the commit SHA, so each one is a group of its own.
+#
+# Do not key a push on `github.ref`. Every push to main has the same ref, and
+# a group runs one run and holds one more pending: each newer push cancels the
+# pending run, and the rest wait. On 2026-10-05..18 that cancelled 43 % of
+# main runs before any job started and held the rest a median 408 s in the
+# queue. Nothing waits on a main run finishing (auto-release, docker-build and
+# the deployer all run from the push or the tag), so concurrent runs are safe.
+# The cost is deliberate: several full main runs can now execute at once.
 concurrency:
-  group: swift-tests-${{ github.event_name }}-${{ github.ref }}
+  group: swift-tests-${{ github.event_name }}-${{ github.event_name == 'pull_request' && github.ref || github.sha }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
@@ -636,8 +644,8 @@ jobs:
   # `success` fails the gate.
   #
   # `!cancelled()` is run-scoped: when this whole run is superseded
-  # (concurrency cancel — e.g. a newer push, or a rerun of an older head
-  # entering the shared group), the gate SKIPS instead of reporting a
+  # (concurrency cancel — a newer commit on the PR branch; a push to main
+  # has a group of its own), the gate SKIPS instead of reporting a
   # spurious failure for the cancelled jobs. A single job killed by its
   # own timeout-minutes also reads "cancelled", but the run survives, so
   # the gate still runs and still fails — that detection is load-bearing
