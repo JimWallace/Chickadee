@@ -56,12 +56,12 @@ COPY Tools/runner-support ./Tools/runner-support
 # deprecated and warns; drop this flag once the default engine links statically.
 RUN swift build -c release --static-swift-stdlib --build-system native --product chickadee-server
 RUN swift build -c release --static-swift-stdlib --build-system native --product chickadee-runner
-# A release build links with -g, and the debug data is most of each binary
-# (measured on 6.4: server 237 MB, 101 MB without it; runner 28 MB, 10 MB).
-# --strip-debug keeps the symbol table, so a crash still names its functions.
-# The build-release job of docker-build.yml strips the same way. That job also
-# builds the production images, so only it keeps the debug data: a tag build
-# saves it as a workflow artifact, and each binary links to its debug file.
+# A release build links with -g. Measured in CI on 6.4, --strip-debug takes
+# the server from 301 MB to 171 MB and the runner from 98 MB to 80 MB. It keeps
+# the symbol table, so a crash still names its functions. This build saves no
+# debug file, so the symbols stay in the binary. The build-release job of
+# docker-build.yml builds the production images. It saves the debug data and
+# the symbols to a separate file, so it can remove both (--strip-all).
 RUN mkdir -p /out \
     && strip --strip-debug -o /out/chickadee-server .build/release/chickadee-server \
     && strip --strip-debug -o /out/chickadee-runner .build/release/chickadee-runner
