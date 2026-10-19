@@ -242,9 +242,8 @@ func applyDatasetsEdit(
     }
 
     // An activity that ranks or matches students refuses personal data.
-    // Still a Vapor `Abort`: `RankedActivityDatasetTests` expects that type here.
     if let violation = ManifestCoherence.violation(introducedBy: { $0.datasets = datasets }, in: setup.manifest) {
-        throw Abort(.badRequest, reason: violation)
+        throw AppError.badRequest(reason: violation)
     }
 
     try await mutateManifest(setup: setup, on: db) { props in
