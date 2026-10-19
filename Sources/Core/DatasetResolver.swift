@@ -24,15 +24,31 @@ public enum DatasetResolver {
     public static func resolve(
         manifest: TestProperties, seedHex: String?, sourceDirectory: String
     ) -> [String: String]? {
-        resolve(manifest: manifest, seedHex: seedHex, courseSeedHex: nil, sourceDirectory: sourceDirectory)
+        resolve(
+            manifest: manifest, seedHex: seedHex, courseSeedHex: nil, dealNumber: nil, sourceDirectory: sourceDirectory)
+    }
+
+    /// The same, with the student's per-(student, course) seed and no deal
+    /// number, so every partition gives the whole file. For callers that
+    /// predate partitions; every server call site names the deal number
+    /// (`DatasetDealNumberCallSiteTests`).
+    public static func resolve(
+        manifest: TestProperties, seedHex: String?, courseSeedHex: String?, sourceDirectory: String
+    ) -> [String: String]? {
+        resolve(
+            manifest: manifest, seedHex: seedHex, courseSeedHex: courseSeedHex, dealNumber: nil,
+            sourceDirectory: sourceDirectory)
     }
 
     /// The same, with the student's per-(student, course) seed for the
-    /// course-scoped specs (docs/datasets-course-library.md, D4). Each spec is
+    /// course-scoped specs (docs/datasets-course-library.md, D4) and the
+    /// student's deal number for the partition specs (§4.11). Each spec is
     /// sliced with the seed `DatasetSeedDerivation.effectiveSeed` picks for it.
-    /// A nil `courseSeedHex` slices every spec with the assignment seed.
+    /// A nil `courseSeedHex` slices every spec with the assignment seed, and a
+    /// nil `dealNumber` gives every partition the whole file.
     public static func resolve(
-        manifest: TestProperties, seedHex: String?, courseSeedHex: String?, sourceDirectory: String
+        manifest: TestProperties, seedHex: String?, courseSeedHex: String?, dealNumber: Int?,
+        sourceDirectory: String
     ) -> [String: String]? {
         guard !manifest.datasets.isEmpty else { return nil }
         guard let seedHex, !seedHex.isEmpty else { return nil }
@@ -52,7 +68,7 @@ public enum DatasetResolver {
             let specSeed = DatasetSeedDerivation.effectiveSeed(
                 spec: spec, assignmentSeedHex: seedHex, courseSeedHex: courseSeedHex)
             files[spec.file] = DatasetMaterializer.materialize(
-                source: content, spec: spec, seedHex: specSeed)
+                source: content, spec: spec, seedHex: specSeed, dealNumber: dealNumber)
         }
         return files.isEmpty ? nil : files
     }

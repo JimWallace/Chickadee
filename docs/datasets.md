@@ -164,9 +164,16 @@ Deterministic and server-side, exactly like today's personalization.
 **MCP surface:** built as the course dataset library tools; see
 [datasets-course-library.md](datasets-course-library.md) §4.7.
 
+**The dealt partition.** A spec of kind `partition` with `partCount: N` splits
+the file into N disjoint parts and gives each student one part: data row `i`
+is in part `i mod N`. The part is dealt, not drawn from the seed, so the class
+fills the parts in turn, and a job with no student (the class corpus run) gets
+the whole file. A solution run gets part 0. See
+[datasets-course-library.md](datasets-course-library.md) §4.11.
+
 **Class activities.** An activity that ranks or matches students accepts only
-a dataset that gives every student the same bytes: no sample and no
-transforms. Every authoring door that saves a dataset spec or an activity
+a dataset that gives every student the same bytes: no sample, no transforms
+and no partition. Every authoring door that saves a dataset spec or an activity
 refuses the pair. A bundle import, a version restore and a clone copy the
 manifest as it is. A class composite accepts personal data. See
 [datasets-course-library.md](datasets-course-library.md) §4.11.

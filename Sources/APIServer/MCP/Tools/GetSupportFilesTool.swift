@@ -40,7 +40,7 @@ struct GetSupportFilesTool: ContentTool {
         let datasetSampleSize: Int?
         /// True when the file is a per-student dataset (docs/datasets.md).
         let isDataset: Bool
-        /// "rowSample" or "stratifiedSample" for a dataset; nil otherwise.
+        /// A `DatasetKind` raw value for a dataset; nil otherwise.
         let datasetKind: String?
         /// The column a stratified dataset balances across; nil otherwise.
         /// Reported for the same reason the sample size is: an agent that
@@ -53,6 +53,8 @@ struct GetSupportFilesTool: ContentTool {
         /// "course" or "assignment" for a dataset: whose seed picks a
         /// student's rows. Nil otherwise.
         var datasetScope: String?
+        /// The number of parts of a partition dataset; nil otherwise.
+        var datasetPartCount: Int?
     }
 
     struct Output: Encodable, Sendable {
@@ -77,7 +79,8 @@ struct GetSupportFilesTool: ContentTool {
         + "get_solution). Omit filename to list filenames and sizes; pass filename to read that file's "
         + "UTF-8 content, capped at maxBytes (default \(MCPContentByteCap.defaultBytes)) with truncated:true when the file is "
         + "larger — so a big dataset returns a useful head. Listed entries report per-student "
-        + "dataset marks (isDataset / datasetSampleSize / datasetKind / datasetStratumColumn — set "
+        + "dataset marks (isDataset / datasetSampleSize / datasetKind / datasetStratumColumn / "
+        + "datasetPartCount — set "
         + "them with set_dataset), and for a file attached from the course dataset library its "
         + "datasetSource ({slug, version}) and datasetScope. Write "
         + "support files with "
@@ -145,7 +148,8 @@ struct GetSupportFilesTool: ContentTool {
                         datasetKind: datasetSpecs[name]?.kind.rawValue,
                         datasetStratumColumn: datasetSpecs[name]?.stratumColumn,
                         datasetSource: datasetSpecs[name]?.source,
-                        datasetScope: datasetSpecs[name]?.scope.rawValue))
+                        datasetScope: datasetSpecs[name]?.scope.rawValue,
+                        datasetPartCount: datasetSpecs[name]?.partCount))
             }
             return Output(
                 assignmentPublicID: assignment.publicID,

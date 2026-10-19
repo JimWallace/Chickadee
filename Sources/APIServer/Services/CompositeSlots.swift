@@ -155,7 +155,8 @@ enum CompositeSlots {
         let slot: Int
     }
 
-    private static func dealtSlot(assignmentID: UUID, userID: UUID, on db: any Database) async throws -> Int? {
+    /// The student's slot if one is dealt, dealing none.
+    static func dealtSlot(assignmentID: UUID, userID: UUID, on db: any Database) async throws -> Int? {
         try await APICompositeSlot.query(on: db)
             .filter(\.$assignmentID == assignmentID)
             .filter(\.$userID == userID)

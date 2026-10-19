@@ -144,7 +144,8 @@ extension CourseDatasetService {
         let spec = DatasetSpec(
             file: filename, kind: attached.kind, sampleSize: attached.sampleSize,
             stratumColumn: attached.stratumColumn, transforms: attached.transforms,
-            source: DatasetSource(slug: dataset.slug, version: version.version), scope: attached.scope)
+            source: DatasetSource(slug: dataset.slug, version: version.version), scope: attached.scope,
+            partCount: attached.partCount)
         try requireValid(spec, bytes: bytes)
 
         guard let previous = await extractZipEntry(zipPath: setup.zipPath, entryName: filename) else {
@@ -223,7 +224,7 @@ extension CourseDatasetService {
         let spec = DatasetSpec(
             file: filename, kind: existing?.kind ?? .rowSample, sampleSize: existing?.sampleSize,
             stratumColumn: existing?.stratumColumn, transforms: existing?.transforms ?? [], source: source,
-            scope: .assignment)
+            scope: .assignment, partCount: existing?.partCount)
         try await mutateManifest(setup: setup, on: db) { props in
             props.datasets.removeAll { $0.file == filename }
             props.datasets.append(spec)
@@ -378,14 +379,5 @@ extension CourseDatasetService {
             props, courseID: courseID, zipPath: zipPath, on: db)
         guard !dropped.isEmpty else { return manifestText }
         return try encodeManifest(reconciled)
-    }
-}
-
-extension DatasetSpec {
-    /// This spec with `scope` in place of its own.
-    fileprivate func withScope(_ scope: DatasetSliceScope) -> DatasetSpec {
-        DatasetSpec(
-            file: file, kind: kind, sampleSize: sampleSize, stratumColumn: stratumColumn, transforms: transforms,
-            source: source, scope: scope)
     }
 }

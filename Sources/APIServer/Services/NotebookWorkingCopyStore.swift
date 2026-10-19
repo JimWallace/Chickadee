@@ -486,12 +486,14 @@ private func applyNotebookSubstitutionsIfNeeded(
     // A seed is only needed to evaluate per-student expressions; literal-only
     // assignments substitute without one (and without an assignment lookup).
     var seedHex: String?
+    var assignmentID: UUID?
     if manifest.hasExpressions, let setupID = setup.id {
         if let assignment = try? await assignmentByTestSetupID(setupID, on: db),
-            let assignmentID = assignment.id
+            let id = assignment.id
         {
+            assignmentID = id
             seedHex = try? await AssignmentSeedStore.ensureSeed(
-                userID: userID, assignmentID: assignmentID, on: db)
+                userID: userID, assignmentID: id, on: db)
         }
         if seedHex == nil {
             logger.warning(
@@ -500,22 +502,29 @@ private func applyNotebookSubstitutionsIfNeeded(
     }
 
     // An expression that reads a course-scoped dataset sees the student's
-    // cohort rows (docs/datasets-course-library.md, slice 4).
-    // When the course seed cannot be read, expressions are left out rather
-    // than evaluated on per-assignment rows the student does not hold.
+    // cohort rows (docs/datasets-course-library.md, slice 4), and one that
+    // reads a partition sees the student's part (§4.11).
+    // When either cannot be read, expressions are left out rather than
+    // evaluated on rows the student does not hold.
     var courseSeedHex: String?
+    var dealNumber: Int?
     if manifest.hasExpressions {
         do {
             courseSeedHex = try await CourseSeedStore.seedIfNeeded(
                 manifest: manifest, userID: userID, courseID: setup.courseID, on: db)
+            dealNumber = try await DatasetDeals.dealNumber(
+                manifest: manifest, courseID: setup.courseID, assignmentID: assignmentID, userID: userID,
+                grading: false, on: db)
         } catch {
             logger.warning(
-                "Could not resolve a course seed for setup \(setup.id ?? "?"); substituting literal values only.")
+                Logger.Message(
+                    stringLiteral: "Could not resolve a course seed or a deal number for setup \(setup.id ?? "?"); "
+                        + "substituting literal values only."))
             seedHex = nil
         }
     }
     let resolution = await PersonalizationSubstitution.resolve(
-        manifest: manifest, seedHex: seedHex, courseSeedHex: courseSeedHex,
+        manifest: manifest, seedHex: seedHex, courseSeedHex: courseSeedHex, dealNumber: dealNumber,
         supportFilesDirectory: supportFilesDirectory, language: AssignmentLanguage.resolve(manifest: manifest))
     if let evalError = resolution.evaluationError {
         logger.warning(
@@ -750,12 +759,17 @@ func writeDatasetFiles(
             userID: userID, assignmentID: assignmentID, on: db)
     else { return }
     // The course cohort seed for course-scoped datasets
-    // (docs/datasets-course-library.md, slice 4). A lookup failure leaves the
-    // editor copy as it is rather than writing per-assignment rows.
+    // (docs/datasets-course-library.md, slice 4), and the deal number for
+    // partitions (§4.11). A lookup failure leaves the editor copy as it is
+    // rather than writing rows the student does not hold.
     let courseSeedHex: String?
+    let dealNumber: Int?
     do {
         courseSeedHex = try await CourseSeedStore.seedIfNeeded(
             manifest: props, userID: userID, courseID: setup.courseID, on: db)
+        dealNumber = try await DatasetDeals.dealNumber(
+            manifest: props, courseID: setup.courseID, assignmentID: assignmentID, userID: userID,
+            grading: false, on: db)
     } catch {
         return
     }
@@ -768,7 +782,8 @@ func writeDatasetFiles(
     let state: (fingerprint: String, targetsPresent: Bool)? = try? await runBlocking {
         (
             fingerprint: datasetMaterializationFingerprint(
-                props: props, seeds: [seedHex, courseSeedHex ?? "-"], sharedDir: sharedDir),
+                props: props, seeds: [seedHex, courseSeedHex ?? "-", dealNumber.map(String.init) ?? "-"],
+                sharedDir: sharedDir),
             targetsPresent: props.datasets.allSatisfy {
                 FileManager.default.fileExists(atPath: studentDir + "/" + $0.file)
             }
@@ -788,7 +803,8 @@ func writeDatasetFiles(
         (try? await runBlocking {
             guard
                 let files = DatasetResolver.resolve(
-                    manifest: props, seedHex: seedHex, courseSeedHex: courseSeedHex, sourceDirectory: sharedDir)
+                    manifest: props, seedHex: seedHex, courseSeedHex: courseSeedHex, dealNumber: dealNumber,
+                    sourceDirectory: sharedDir)
             else { return false }
 
             for (filename, content) in files {
@@ -807,7 +823,8 @@ func writeDatasetFiles(
 }
 
 /// Everything that determines the bytes `writeDatasetFiles` produces, folded
-/// into one comparable string: the student's seeds, each whole dataset spec,
+/// into one comparable string: the student's seeds and deal number, each whole
+/// dataset spec,
 /// and each source file's (mtime, size) identity. A missing source contributes
 /// a sentinel, so its later appearance also invalidates.
 ///

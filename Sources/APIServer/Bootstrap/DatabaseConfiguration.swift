@@ -567,6 +567,9 @@ func registerMigrations(on app: Application) {
     app.migrations.add(CreateCourseGroups())
     // Lab groups, slice 2: per-group activity sessions and their attendance.
     app.migrations.add(CreateActivitySessions())
+    // The deal numbers behind the partition datasets
+    // (docs/datasets-course-library.md §4.11).
+    app.migrations.add(CreateDatasetDeals())
 
     // ---------------------------------------------------------------------
     // DATA MIGRATIONS. Keep these at the end, and add every new schema

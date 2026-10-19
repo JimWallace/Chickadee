@@ -25,9 +25,14 @@
 ///   exercise for that student; this is the fix for that, and the reason the
 ///   `set_dataset` advice "pick a sample size large enough that every category
 ///   still appears" exists.
+/// - `partition`: the file split into `partCount` disjoint parts, one part per
+///   student. Data row `i` is in part `i mod partCount`, so every part spans
+///   the whole file in order. The part is not chosen by a seed: it is dealt,
+///   like a class composite's slot (docs/datasets-course-library.md §4.11).
 public enum DatasetKind: String, Codable, Sendable, Equatable, CaseIterable {
     case rowSample
     case stratifiedSample
+    case partition
 }
 
 /// Marks one bundled support file as a per-student dataset.
@@ -64,11 +69,14 @@ public struct DatasetSpec: Codable, Equatable, Sendable {
     /// default, so every spec written before the course library keeps the bytes
     /// it delivers.
     public let scope: DatasetSliceScope
+    /// How many parts a `.partition` spec splits the file into. Nil for the
+    /// other kinds, which authoring refuses to store with one.
+    public let partCount: Int?
 
     public init(
         file: String, kind: DatasetKind = .rowSample, sampleSize: Int? = nil,
         stratumColumn: String? = nil, transforms: [DatasetTransform] = [],
-        source: DatasetSource? = nil, scope: DatasetSliceScope = .assignment
+        source: DatasetSource? = nil, scope: DatasetSliceScope = .assignment, partCount: Int? = nil
     ) {
         self.file = file
         self.kind = kind
@@ -77,6 +85,19 @@ public struct DatasetSpec: Codable, Equatable, Sendable {
         self.transforms = transforms
         self.source = source
         self.scope = scope
+        self.partCount = partCount
+    }
+
+    /// The part of the file that `dealNumber` receives, or nil when the spec
+    /// is not a partition or no number is dealt. A job with no student has no
+    /// number and gets the whole file. The part is the number modulo the part
+    /// count, so a later change of the count still gives each part to the
+    /// same share of the class.
+    public func part(forDeal dealNumber: Int?) -> Int? {
+        guard kind == .partition, let partCount, partCount > 0, let dealNumber, dealNumber >= 0 else {
+            return nil
+        }
+        return dealNumber % partCount
     }
 
     /// The spec once the file is no longer attached from the library: the same
@@ -88,21 +109,30 @@ public struct DatasetSpec: Codable, Equatable, Sendable {
     /// Detaching keeps a sample a student already receives. Removing the spec
     /// instead would hand every student the whole pool.
     public func withoutLibraryFields() -> DatasetSpec? {
-        if sampleSize == nil, transforms.isEmpty { return nil }
+        if isShared { return nil }
         return DatasetSpec(
             file: file, kind: kind, sampleSize: sampleSize, stratumColumn: stratumColumn,
-            transforms: transforms)
+            transforms: transforms, partCount: partCount)
     }
 
-    /// True when every student receives the same bytes: no sample and no
-    /// transforms. The "shared" mode of docs/datasets-course-library.md §4.11,
-    /// and the only mode an activity that compares students accepts.
+    /// The same spec with another scope. The library attach path is the only
+    /// caller that changes a scope.
+    public func withScope(_ scope: DatasetSliceScope) -> DatasetSpec {
+        DatasetSpec(
+            file: file, kind: kind, sampleSize: sampleSize, stratumColumn: stratumColumn, transforms: transforms,
+            source: source, scope: scope, partCount: partCount)
+    }
+
+    /// True when every student receives the same bytes: no sample, no
+    /// transforms and no partition. The "shared" mode of
+    /// docs/datasets-course-library.md §4.11, and the only mode an activity
+    /// that compares students accepts.
     public var isShared: Bool {
-        sampleSize == nil && transforms.isEmpty
+        sampleSize == nil && transforms.isEmpty && kind != .partition
     }
 
     private enum CodingKeys: String, CodingKey {
-        case file, kind, sampleSize, stratumColumn, transforms, source, scope
+        case file, kind, sampleSize, stratumColumn, transforms, source, scope, partCount
     }
 
     public init(from decoder: any Decoder) throws {
@@ -114,6 +144,7 @@ public struct DatasetSpec: Codable, Equatable, Sendable {
         transforms = try c.decodeIfPresent([DatasetTransform].self, forKey: .transforms) ?? []
         source = try c.decodeIfPresent(DatasetSource.self, forKey: .source)
         scope = try c.decodeIfPresent(DatasetSliceScope.self, forKey: .scope) ?? .assignment
+        partCount = try c.decodeIfPresent(Int.self, forKey: .partCount)
     }
 
     /// Writes the same keys, in the same form, as the synthesized encoder did
@@ -132,5 +163,6 @@ public struct DatasetSpec: Codable, Equatable, Sendable {
         if scope != .assignment {
             try c.encode(scope, forKey: .scope)
         }
+        try c.encodeIfPresent(partCount, forKey: .partCount)
     }
 }

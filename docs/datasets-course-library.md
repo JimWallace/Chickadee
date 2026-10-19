@@ -6,7 +6,8 @@ of datasets per course, attached to many assignments, with a per-student cohort
 that stays the same from the first lab to the final assignment, and a page
 where students can read about the data they work with.
 
-Status: **in progress**. The decisions in §8 are settled. Each slice below
+Status: **built**, except the HLTH 230 promotion (slice 9), which the
+maintainer does in the UI. The decisions in §8 are settled. Each slice below
 states what it adds and what proves it.
 
 | slice | what | state |
@@ -23,7 +24,7 @@ states what it adds and what proves it.
 | 9 | Migration of HLTH 230: promote the two live datasets; docs and CLAUDE.md | docs built; the promotion is the maintainer's, in the UI |
 | 10 | Optional: the `formatNoise` transform | built |
 | 11a | The ranked-activity refusal, and the rule for jobs with no student | built |
-| 11b | The `partition` kind, dealt by slot | proposed |
+| 11b | The `partition` kind, dealt by a deal number (a class composite's slot) | built |
 
 ---
 
@@ -34,8 +35,9 @@ first design named a course-level, versioned, reusable artifact. What shipped
 is **a support file in one assignment's zip, with a per-student sample**.
 
 - `DatasetSpec` (`Sources/Core/Models/DatasetSpec.swift`) marks one support
-  file in one assignment. It holds the selection (`rowSample` or
-  `stratifiedSample`, `sampleSize`, `stratumColumn`) and the derivation
+  file in one assignment. It holds the selection (`rowSample`,
+  `stratifiedSample` or, since slice 11b, `partition`; `sampleSize`,
+  `stratumColumn`, `partCount`) and the derivation
   (`transforms`, two kinds: `missingValues` and `formatNoise`).
 - `DatasetMaterializer` makes the student's bytes from `(source, spec, seed)`.
   The seed is the per-(student, assignment) seed
@@ -652,13 +654,13 @@ the plan above does not say is which of three ways a dataset can be shared
 across a class, and what happens on the jobs an activity runs that no student
 owns. This section says both.
 
-**Three modes of sharing.** Two exist today and one is new.
+**Three modes of sharing.** Two existed before slice 11, and 11b adds the third.
 
 | Mode | Spec | Every student gets | Fits |
 |---|---|---|---|
-| shared | `sampleSize == nil`, no transforms | the same bytes | ranked and matched activities, a shared bug-hunt registry, a class reference |
+| shared | `sampleSize == nil`, no transforms, not a partition | the same bytes | ranked and matched activities, a shared bug-hunt registry, a class reference |
 | personal | a sample, a stratum or a transform; scope `assignment` or `course` | their own rows | labs, the cohort arc, a composite of per-student results |
-| dealt (new) | `kind: partition`, `partCount: N` | one disjoint part of the file | work the class divides and then combines |
+| dealt | `kind: partition`, `partCount: N` | one disjoint part of the file | work the class divides and then combines |
 
 `shared` needs no new code; the library adds provenance, a dictionary and a
 version to a file that is already shared today. The Files panel names the mode
@@ -667,27 +669,23 @@ on the row, so an instructor sees which one they have.
 **The dealt partition.** `DatasetKind.partition` with `partCount`. The
 student's part is not chosen by a seed; it is dealt, like a composite slot.
 Data row `i` belongs to part `i mod partCount`, so every part spans the whole
-file in order, which matters for time-ordered records. The deal reuses
-`CompositeDealing.dealSequence` and the row shape of `composite_slots` (one
-slot per student per assignment, dealt at first open, a second round when
-attendance passes the count). Whether that table is renamed or given a sibling
-is decided inside the slice; the dealer is not written twice. `DatasetResolver`
-and `DatasetMaterializer` gain a `part: Int?` beside the seed, and
-`DatasetSeedDerivation` becomes `DatasetSliceKey` (seed or part). A composite
-whose `contribution` count equals `partCount` deals one slot for both, so a
-student's tile and their rows agree.
+file in order, which matters for time-ordered records. Each student gets a
+deal number per assignment, and the part is the number modulo the part count.
+`DatasetResolver` and `DatasetMaterializer` take the number beside the seed.
+On a class composite the number is the student's slot, so a student's tile and
+their rows agree. "As built (11b)" below has the details.
 
-The diagnostics still hold: overlap for a partition is zero by construction,
-which the `allCases` completeness test makes the formula say; divergence is
-measured as for every other kind. A partition does not change the row set a
-transform sees, so the row-set theorem holds. Under course scope a part is
-dealt per assignment in this slice; a course-wide part (the same part of the
-same file in every assignment) is a later decision.
+The diagnostics still hold: the overlap formula answers for a partition (two
+students in different parts share no row), and divergence is measured part by
+part. A partition does not change the row set a transform sees, so the
+row-set theorem holds. A part is dealt per assignment, so a partition refuses
+the course scope; a course-wide part (the same part of the same file in every
+assignment) is a later decision.
 
 A dealt partition is what makes "the class cleans the whole registry" an
 assignment: each student cleans their part, and the class corpus run
 (`docs/collaborative-class-assignments.md` §"The corpus run") or a composite
-combines the parts. The combination step exists; the deal is what is missing.
+combines the parts. The combination step existed before; 11b adds the deal.
 
 **Jobs with no student grade the pool.** Several jobs run with no student
 seed, and the rule is the same for every mode and every scope:
@@ -695,7 +693,7 @@ seed, and the rule is the same for every mode and every scope:
 | Job | Seed today | Rows the job sees |
 |---|---|---|
 | class corpus run (`classAggregate`, no owner) | none | the pool |
-| composite reference render | none | the pool |
+| composite reference render | none | the pool; for a partition, the part of the slot it renders (11b) |
 | composite spare | the student's own seed, pinned | the student's rows |
 | a match (round robin, tournament, king of the hill) | the submitter's seed | the submitter's rows, for both sides |
 | validation | the enqueuing instructor's seed | that one variant |
@@ -767,6 +765,73 @@ As built (11a):
   the rule (`MCPActivityProse.sharedDataRule`), with the exempt kinds derived.
 - **The jobs with no student need no code.** The table above describes what
   the code already does, and 11a does not change it.
+
+As built (11b):
+
+- **The spec.** `DatasetKind.partition` with `DatasetSpec.partCount`, which
+  encodes only when it is set, so every stored manifest keeps its bytes. A
+  partition takes no sample and no stratum, needs 2 or more parts and at most
+  one part per data row, and a part count on another kind is refused
+  (`DatasetSpecValidation.partitionIssue`). A partition is not `isShared`, so a
+  ranked activity refuses it (11a). A transform may follow a partition: it runs
+  on the student's part.
+- **The deal number, not a (round, slot) pair.** The plan above reused the
+  composite's dealer and row shape. As built, a student gets one deal number
+  per assignment, from 0 up, in `dataset_deals` (`APIDatasetDeal`, unique on
+  the assignment and the student, and on the assignment and the number). The
+  part is the number modulo the part count (`DatasetSpec.part(forDeal:)`). This
+  is the composite's row-major deal with no rounds to store: number `n` is
+  round `n / partCount`, part `n mod partCount`. It also keeps the parts
+  balanced if the part count changes after the deal. The dealer gives the
+  lowest free number, so a freed number is dealt again, as a freed slot is.
+- **A class composite deals one slot for both.** On a class composite the deal
+  number is the student's slot (`CompositeSlots.slot`), and no `dataset_deals`
+  row is written. When the part count equals the slot count, a student's tile
+  and their rows agree. The slot keeps its own dealing rule: a grading path
+  deals it as the backstop, and a path that does not grade (the editor copy,
+  the "my rows" download) deals it only while the session window is open, as
+  opening the page does. Outside the window such a path reads a slot already
+  dealt, or gets the whole file.
+- **Who gets which number** (`DatasetDeals`):
+
+  | Run | Deal number | Rows |
+  |---|---|---|
+  | a student's run, the editor copy, the browser seed, the "my rows" download | the student's, dealt on first use | the student's part |
+  | course staff or an admin | 0, never dealt | part 0 |
+  | validation and the starter run | 0 | part 0 |
+  | validation variant `i` | `i` | part `i mod partCount`: the four variants run parts 0 to 3, and a larger part count is not covered |
+  | composite spare for hole `h` | `h`, pinned | the hole's part, so the spare tile reads the rows of its slot |
+  | composite reference for slot `s` | `s` | the part of the slot it renders, as the student in that slot holds |
+  | class corpus run | none | the whole file |
+  | `preview_personalization` | 0 | part 0 |
+
+  The MCP role cannot read `dataset_deals`
+  (`deploy/sql/mcp-least-privilege-role.sql`), so the preview takes part 0
+  rather than a dealt number.
+- **Every delivery path names the number.** `DatasetResolver.resolve` and the
+  two `PersonalizationSubstitution` helpers take `dealNumber:`, beside the
+  course seed. `DatasetDealNumberCallSiteTests` scans every server call for the
+  label, as `DatasetCourseSeedCallSiteTests` does for the course seed. A
+  pinned run stores its number on `SubmissionMaterialization.dealNumber`. The
+  editor copy's fingerprint folds the number in.
+- **The corpus run.** `TestProperties.variesBeyondPartitions` replaces
+  `variesPerStudent` at the corpus gate (`assembleClassCorpus`), so an
+  assignment whose only per-student data is a plain partition gets a corpus
+  run, which checks the class's combined parts against the whole file.
+  Multi-variant validation still gates on `variesPerStudent`.
+- **Diagnostics.** The overlap formula answers for a partition: two students in
+  different parts share nothing, two in one part share every row, and the
+  shared fraction is the chance that two classmates hold one part. So a class
+  no larger than the part count shares nothing. Divergence deals preflight
+  student `i` number `i`, so it measures part by part.
+- **Authoring.** MCP `set_dataset` takes `partCount`: a number sets a
+  partition and drops a stored sample, an omitted one keeps the stored kind,
+  and 0 ends a partition. A partition refuses the course scope, because a part
+  is dealt per assignment and cannot be the same rows in every assignment.
+  `get_support_files` and the attached-dataset readback report `partCount`,
+  and the upload page names the student's file as "one part of N". The Files panel has no fields for a partition:
+  it hides the sample fields and shows a note that names the part count, and
+  it never sends a part count on a spec that is not a partition.
 
 **What this does not add.** A dataset built from the students' own
 contributions (each student submits rows; the class's union becomes a version)

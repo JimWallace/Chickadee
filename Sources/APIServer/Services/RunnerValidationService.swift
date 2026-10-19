@@ -205,7 +205,10 @@ private func enqueueValidationVariants(
                 testSetupsDirectory: context.application.testSetupsDirectory,
                 app: context.application,
                 on: context.db,
-                variantSeedHex: seedHex)
+                variantSeedHex: seedHex,
+                // Variant `index` is dealt number `index`, so the variants
+                // run the first parts of a partition dataset.
+                variantDealNumber: index)
             try await materialized.saveClaimable(on: context.db)
 
             try await ValidationVariant(
@@ -287,7 +290,8 @@ func materializeValidationGrading(
     app: Application,
     on db: any Database,
     variantSeedHex: String? = nil,
-    variantCourseSeedHex: String? = nil
+    variantCourseSeedHex: String? = nil,
+    variantDealNumber: Int? = nil
 ) async -> MaterializedValidationSubmission {
     await resolveAndCacheValidationMaterialization(
         submission: submission,
@@ -296,7 +300,7 @@ func materializeValidationGrading(
         testSetupsDirectory: testSetupsDirectory,
         app: app,
         on: db,
-        seeds: PinnedSeeds(assignment: variantSeedHex, course: variantCourseSeedHex))
+        seeds: PinnedSeeds(assignment: variantSeedHex, course: variantCourseSeedHex, deal: variantDealNumber))
     return MaterializedValidationSubmission(submission: submission)
 }
 
@@ -306,9 +310,12 @@ func materializeValidationGrading(
 private struct PinnedSeeds: Sendable {
     let assignment: String?
     let course: String?
+    /// The deal number for the partition datasets
+    /// (docs/datasets-course-library.md §4.11).
+    let deal: Int?
 
-    /// Nothing pinned: both seeds come from the submitter.
-    static let fromSubmitter = PinnedSeeds(assignment: nil, course: nil)
+    /// Nothing pinned: the seeds and the deal number come from the submitter.
+    static let fromSubmitter = PinnedSeeds(assignment: nil, course: nil, deal: nil)
 }
 
 /// Best-effort body of `materializeValidationGrading`: any early exit leaves
@@ -369,11 +376,19 @@ private func resolveAndCacheValidationMaterialization(
                 manifest: manifest, userID: submission.userID, courseID: setup.courseID, on: db)
         }
 
+        // The deal number for the partition datasets: a variant or a spare
+        // pins its own, and any other run takes its kind's number (0 for a
+        // solution run, none for a job with no student).
+        let dealNumber = try await DatasetDeals.jobDealNumber(
+            manifest: manifest, courseID: setup.courseID,
+            assignmentID: try await assignmentByTestSetupID(setupID, on: db)?.id, submission: submission,
+            pinned: seeds.deal, on: db)
+
         let supportDir = testSetupsDirectory + "shared/\(setupID)/"
         let language = AssignmentLanguage.resolve(manifest: manifest)
         let resolution = await PersonalizationSubstitution.resolve(
-            manifest: manifest, seedHex: seedHex, courseSeedHex: courseSeedHex, supportFilesDirectory: supportDir,
-            language: language)
+            manifest: manifest, seedHex: seedHex, courseSeedHex: courseSeedHex, dealNumber: dealNumber,
+            supportFilesDirectory: supportDir, language: language)
 
         // Expression-only value map (identical to `gradingInputs`) → _ck_inputs.py.
         let exprNames = Set(resolution.evaluatedExpressionNames)
@@ -401,6 +416,7 @@ private func resolveAndCacheValidationMaterialization(
             key: manifestHash((seedHex ?? "") + "|" + manifestTextAsV1(setup.manifest)),
             seedHex: seedHex,
             courseSeedHex: courseSeedHex,
+            dealNumber: dealNumber,
             inputs: inputs)
         if let encoded = try? JSONEncoder().encode(materialization),
             let json = String(data: encoded, encoding: .utf8)

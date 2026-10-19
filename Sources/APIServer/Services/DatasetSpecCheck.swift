@@ -49,12 +49,13 @@ func datasetSpecRefusal(
     else {
         return "'\(spec.file)' is not a support file. Only a support data file can be a per-student dataset."
     }
-    // A spec must do something: sample the rows, transform them, or record
-    // that the file came from the course library. A library file or a
-    // transformed file may deliver every row, so it may have no sample.
+    // A spec must do something: sample the rows, transform them, split them
+    // into parts, or record that the file came from the course library. A
+    // library file or a transformed file may deliver every row, so it may
+    // have no sample.
     if let sampleSize = spec.sampleSize {
         guard sampleSize >= 1 else { return "sampleSize for '\(spec.file)' must be 1 or more." }
-    } else if spec.source == nil, spec.transforms.isEmpty {
+    } else if spec.source == nil, spec.transforms.isEmpty, spec.kind != .partition {
         return "sampleSize for '\(spec.file)' is required and must be 1 or more."
     }
     // Needs no file, so it runs before the early return below.
@@ -62,7 +63,10 @@ func datasetSpecRefusal(
     // Reads the file only when the spec claims something checkable against
     // it. A plain row sample needs nothing from the bytes, and these files are
     // course datasets, not small.
-    guard spec.kind == .stratifiedSample || spec.stratumColumn != nil || !spec.transforms.isEmpty else {
+    guard
+        spec.kind == .stratifiedSample || spec.kind == .partition || spec.stratumColumn != nil
+            || spec.partCount != nil || !spec.transforms.isEmpty
+    else {
         return nil
     }
     let text = await extractZipEntry(zipPath: setup.zipPath, entryName: spec.file)

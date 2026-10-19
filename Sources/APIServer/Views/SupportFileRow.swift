@@ -40,6 +40,12 @@ struct SupportFileRow: HTML {
         file.isDataset ? [] : [.hidden]
     }
 
+    /// `hidden` on the sample fields, which mean nothing for a partition: a
+    /// partition has no sample, and the panel has no field for its parts.
+    private var hiddenUnlessSampled: [MarkupAttribute<HTMLTag.span>] {
+        file.isDataset && file.datasetPartCount == nil ? [] : [.hidden]
+    }
+
     /// `disabled` on the derivation inputs when an agent wrote steps the panel
     /// cannot represent.
     private var disabledUnlessEditable: [MarkupAttribute<HTMLTag.input>] {
@@ -50,14 +56,16 @@ struct SupportFileRow: HTML {
         div(.class("dataset-control")) {
             label(.class("dataset-toggle")) {
                 " "
-                // An attached file always has a spec; detach ends it.
+                // An attached file always has a spec; detach ends it. A
+                // partition is not a sample, so this box does not end it.
                 input(
                     attributes: [.type(.checkbox), .class("js-dataset-toggle")] + (file.isDataset ? [.checked] : [])
-                        + (isAttached ? [.disabled] : []))
+                        + (isAttached || file.datasetPartCount != nil ? [.disabled] : [])
+                        + (isAttached ? [.data("lock", value: "attached")] : []))
                 " Per-student sample"
             }
             " "
-            span(attributes: [.class("dataset-size-field js-dataset-size-field")] + hiddenUnlessDataset) {
+            span(attributes: [.class("dataset-size-field js-dataset-size-field")] + hiddenUnlessSampled) {
                 " "
                 input(
                     .type(.number), .min(1), .step(1), .class("form-input input-sm dataset-size js-dataset-size"),
@@ -65,7 +73,7 @@ struct SupportFileRow: HTML {
                 " rows per student"
             }
             " "
-            span(attributes: [.class("dataset-size-field js-dataset-stratum-field")] + hiddenUnlessDataset) {
+            span(attributes: [.class("dataset-size-field js-dataset-stratum-field")] + hiddenUnlessSampled) {
                 "balanced across "
                 input(
                     .type(.text), .class("form-input input-sm dataset-stratum js-dataset-stratum"),
@@ -74,7 +82,7 @@ struct SupportFileRow: HTML {
                 " "
             }
             " "
-            span(attributes: [.class("dataset-size-field js-dataset-blank-field")] + hiddenUnlessDataset) {
+            span(attributes: [.class("dataset-size-field js-dataset-blank-field")] + hiddenUnlessSampled) {
                 "blanking "
                 input(
                     attributes: [
@@ -91,7 +99,18 @@ struct SupportFileRow: HTML {
                 " % of rows"
             }
             " "
-            if !file.datasetTransformsEditable {
+            // Always rendered, so the panel can show it when a spec becomes
+            // a partition after the page loads. The panel sets the count.
+            span(
+                attributes: [.class("dataset-note js-dataset-partition-note")]
+                    + (file.datasetPartCount == nil ? [.hidden] : [])
+            ) {
+                "Split into "
+                span(.class("js-dataset-part-count")) { file.datasetPartCount.map(String.init) ?? "" }
+                " parts, one per student — edit it with set_dataset."
+            }
+            " "
+            if file.datasetPartCount == nil, !file.datasetTransformsEditable {
                 span(.class("dataset-note")) {
                     "Derivation steps authored by an agent — edit them with set_dataset."
                 }

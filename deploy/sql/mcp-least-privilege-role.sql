@@ -167,7 +167,7 @@ CREATE POLICY mcp_ai_feedback_rows ON reflection_feedback
 --      user_activity_events, brightspace_sync_log, pre_enrollments, audit_log,
 --      request_metrics, runner_profiles, runner_snapshots, composite_slots,
 --      composite_contributions, composite_references, composite_spares,
---      oauth_* ...
+--      dataset_deals, oauth_* ...
 --
 --    composite_slots maps each student to their class-composite slot. The one
 --    MCP use of it, the set_activity structure lock, counts rows on the MAIN
@@ -177,6 +177,8 @@ CREATE POLICY mcp_ai_feedback_rows ON reflection_feedback
 --    each slot. It holds no student data, but no MCP tool reads it either.
 --    composite_spares holds the tiles students render for empty slots. No MCP
 --    tool reads it.
+--    dataset_deals maps each student to the part of a partition dataset they
+--    receive (docs/datasets-course-library.md). No MCP tool reads it.
 --    Do NOT add blanket "GRANT ... ON ALL TABLES" — that would defeat the wall.
 --
 --    assignment_personalization_seeds STAYS DENIED. The MCP personalization
@@ -211,3 +213,4 @@ CREATE POLICY mcp_ai_feedback_rows ON reflection_feedback
 --                                                   -- (the set_activity lock runs on the owner pool)
 --      SELECT * FROM composite_contributions LIMIT 1;
 --                                                   -- must ERROR: permission denied
+--      SELECT * FROM dataset_deals LIMIT 1;         -- must ERROR: permission denied

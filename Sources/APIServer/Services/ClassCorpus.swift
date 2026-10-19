@@ -53,7 +53,10 @@ struct ClassCorpus {
 /// graded once, and a per-student assignment has no single set of inputs to
 /// grade it against — every contributor wrote their tests against their own
 /// material. Grading the corpus under one student's seed would report a number
-/// about nobody. Stated rather than silently approximated.
+/// about nobody. Stated rather than silently approximated. A plain partition is
+/// the exception (`variesBeyondPartitions`): the corpus run has no student, so
+/// it gets the whole file, and checks the class's combined parts against the
+/// complete data (docs/datasets-course-library.md §4.11).
 ///
 /// Deterministic: contributors are ordered by user id, so the same set of
 /// latest submissions always assembles the same bytes. Ordering by submission
@@ -63,7 +66,7 @@ func assembleClassCorpus(
     setup: APITestSetup, app: Application, on db: any Database
 ) async throws -> ClassCorpus? {
     guard let manifest = setup.decodedManifest(),
-        !manifest.variesPerStudent,
+        !manifest.variesBeyondPartitions,
         let instructorData = try? await app.notebookBytesCache.notebookData(
             for: NotebookSourceRef(setup)),
         let instructorCells = NotebookCellSources.cells(from: instructorData)

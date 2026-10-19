@@ -88,6 +88,8 @@ struct AttachedDatasetDTO: Encodable, Sendable {
     /// Rows per student; nil delivers every row.
     let sampleSize: Int?
     let stratumColumn: String?
+    /// The number of parts of a partition; nil for the other kinds.
+    let partCount: Int?
 
     /// Nil for a spec that does not come from the library.
     init?(_ spec: DatasetSpec) {
@@ -98,6 +100,7 @@ struct AttachedDatasetDTO: Encodable, Sendable {
         scope = spec.scope.rawValue
         sampleSize = spec.sampleSize
         stratumColumn = spec.stratumColumn
+        partCount = spec.partCount
     }
 }
 
@@ -130,6 +133,7 @@ enum DatasetToolSchema {
         properties: [
             "file": MCPSchema.string, "slug": MCPSchema.string, "version": MCPSchema.integer,
             "scope": MCPSchema.string, "sampleSize": MCPSchema.integer, "stratumColumn": MCPSchema.string,
+            "partCount": MCPSchema.integer,
         ],
         required: ["file", "slug", "version", "scope"], additionalProperties: nil)
 

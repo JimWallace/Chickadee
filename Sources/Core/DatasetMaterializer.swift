@@ -30,15 +30,25 @@ public enum DatasetMaterializer {
     /// rate applies to the rows the student actually receives rather than to the
     /// pool, and appending a step never re-decides an earlier one.
     public static func materialize(source: String, spec: DatasetSpec, seedHex: String) -> String {
-        let selected = select(source: source, spec: spec, seedHex: seedHex)
+        materialize(source: source, spec: spec, seedHex: seedHex, dealNumber: nil)
+    }
+
+    /// The same, for a student dealt `dealNumber` (docs/datasets-course-library.md
+    /// §4.11). Only a `.partition` spec reads it. A nil number gives a
+    /// partition the whole file, which is what a job with no student grades.
+    public static func materialize(source: String, spec: DatasetSpec, seedHex: String, dealNumber: Int?) -> String {
+        let selected = select(source: source, spec: spec, seedHex: seedHex, part: spec.part(forDeal: dealNumber))
         guard !spec.transforms.isEmpty else { return selected }
         return spec.transforms.enumerated().reduce(selected) { csv, step in
             apply(step.element, at: step.offset, to: csv, seedHex: seedHex)
         }
     }
 
-    private static func select(source: String, spec: DatasetSpec, seedHex: String) -> String {
+    private static func select(source: String, spec: DatasetSpec, seedHex: String, part: Int?) -> String {
         switch spec.kind {
+        case .partition:
+            guard let part, let partCount = spec.partCount else { return source }
+            return partitionRows(csv: source, partCount: partCount, part: part)
         case .rowSample:
             return sampleRows(csv: source, sampleSize: spec.sampleSize ?? .max, seedHex: seedHex)
         case .stratifiedSample:
@@ -87,6 +97,21 @@ public enum DatasetMaterializer {
 
         var out: [Substring] = [header]
         out.append(contentsOf: chosen.map { lines[$0] })
+        let result = out.joined(separator: "\n")
+        return hadTrailingNewline ? result + "\n" : result
+    }
+
+    /// The data rows of `csv` whose position modulo `partCount` is `part`, with
+    /// the header, in file order. Data row 0 is the first row after the header.
+    /// The same envelope as `sampleRows`: LF output, the trailing newline
+    /// mirrored, and the file unchanged when there is nothing to split.
+    static func partitionRows(csv: String, partCount: Int, part: Int) -> String {
+        let (lines, hadTrailingNewline) = normalizedLines(of: csv)
+        guard lines.count > 1, partCount > 1, (0..<partCount).contains(part) else { return csv }
+        var out: [Substring] = [lines[0]]
+        for index in 1..<lines.count where (index - 1) % partCount == part {
+            out.append(lines[index])
+        }
         let result = out.joined(separator: "\n")
         return hadTrailingNewline ? result + "\n" : result
     }

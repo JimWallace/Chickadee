@@ -36,6 +36,23 @@ struct SetDatasetTool: ContentTool {
         /// is already there" — an agent adjusting sampleSize must not silently
         /// drop the transforms it was not asked about. Send `[]` to clear them.
         let transforms: [TransformInput]?
+        /// The number of parts of a partition (docs/datasets-course-library.md
+        /// §4.11). Omitted keeps the stored kind; 0 turns a partition back
+        /// into a sample.
+        let partCount: Int?
+
+        init(
+            assignmentPublicID: String, filename: String, sampleSize: Int?, stratumColumn: String?, remove: Bool?,
+            transforms: [TransformInput]?, partCount: Int? = nil
+        ) {
+            self.assignmentPublicID = assignmentPublicID
+            self.filename = filename
+            self.sampleSize = sampleSize
+            self.stratumColumn = stratumColumn
+            self.remove = remove
+            self.transforms = transforms
+            self.partCount = partCount
+        }
     }
 
     struct TransformInput: Decodable, Sendable {
@@ -47,13 +64,15 @@ struct SetDatasetTool: ContentTool {
     struct DatasetEntry: Encodable, Sendable {
         let file: String
         let sampleSize: Int?
-        /// "rowSample" or "stratifiedSample" — reported so an agent can read
-        /// back which kind of slice a file is marked for, not just that it is.
+        /// A `DatasetKind` raw value — reported so an agent can read back which
+        /// kind of slice a file is marked for, not just that it is.
         let kind: String
         let stratumColumn: String?
         /// Reported for the same reason as `kind`: an agent that cannot read a
         /// file's transforms back cannot tell whether its edit preserved them.
         let transforms: [TransformEntry]
+        /// The number of parts of a partition; nil for the other kinds.
+        var partCount: Int?
     }
 
     struct TransformEntry: Encodable, Sendable {
@@ -116,6 +135,17 @@ struct SetDatasetTool: ContentTool {
             "remove": .object([
                 "type": .string("boolean"),
                 "description": .string("True to clear the dataset mark for this file."),
+            ]),
+            "partCount": .object([
+                "type": .string("integer"),
+                "description": .string(
+                    "Optional. Split the file into this many disjoint parts (2 or more, at most the "
+                        + "number of data rows) and give each student one part: data row i is in part "
+                        + "i mod partCount, and the student's part is dealt, not drawn, so the class fills "
+                        + "the parts in turn. A partition takes no sampleSize and no stratumColumn; a "
+                        + "stored sample is dropped. A job with no student (the class corpus run) gets the "
+                        + "whole file, and a solution run gets part 0. Omit to keep the stored kind; send "
+                        + "0 to turn a partition back into a sample."),
             ]),
             "transforms": .object([
                 "type": .string("array"),
@@ -205,7 +235,7 @@ struct SetDatasetTool: ContentTool {
                 kind: $0.kind.rawValue, stratumColumn: $0.stratumColumn,
                 transforms: $0.transforms.map {
                     TransformEntry(kind: $0.kind.rawValue, columns: $0.columns, rate: $0.rate)
-                })
+                }, partCount: $0.partCount)
         }
         return Output(assignmentPublicID: assignment.publicID, datasets: datasets)
     }
@@ -220,13 +250,23 @@ struct SetDatasetTool: ContentTool {
     private func spec(from input: Input, filename: String, existing: DatasetSpec?) -> DatasetSpec {
         let column = input.stratumColumn?.trimmingCharacters(in: .whitespaces)
         let stratum = (column?.isEmpty ?? true) ? nil : column
+        // Omitted keeps a stored partition, as for the other fields; 0 ends
+        // it. A partition replaces the sample, so a stored sample size is not
+        // carried into one, and one that the caller sends is refused.
+        let partCount: Int?
+        switch input.partCount {
+        case .some(0): partCount = nil
+        case .some(let count): partCount = count
+        case .none: partCount = existing?.kind == .partition ? existing?.partCount : nil
+        }
+        let kind: DatasetKind = partCount != nil ? .partition : (stratum == nil ? .rowSample : .stratifiedSample)
         return DatasetSpec(
             file: filename,
-            kind: stratum == nil ? .rowSample : .stratifiedSample,
+            kind: kind,
             // Omitted means "keep the stored sample", as for `transforms`: an
             // agent changing only the stratum must not turn a sample into the
             // whole file.
-            sampleSize: input.sampleSize ?? existing?.sampleSize,
+            sampleSize: kind == .partition ? input.sampleSize : input.sampleSize ?? existing?.sampleSize,
             stratumColumn: stratum,
             // Omitted means "leave them alone". Rebuilding a spec from only the
             // fields a caller mentioned is how this surface twice came within a
@@ -236,7 +276,8 @@ struct SetDatasetTool: ContentTool {
             // The library fields are not this tool's to change: the library
             // attach path writes them, and every other door carries them.
             source: existing?.source,
-            scope: existing?.scope ?? .assignment)
+            scope: existing?.scope ?? .assignment,
+            partCount: partCount)
     }
 
     /// Maps the wire shape to the model. An unrecognised kind is dropped rather

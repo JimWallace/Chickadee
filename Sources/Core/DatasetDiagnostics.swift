@@ -99,6 +99,11 @@ public enum DatasetDiagnostics {
         let k = (requested > 0 && requested < poolRows) ? requested : poolRows
 
         switch spec.kind {
+        case .partition:
+            guard let partCount = spec.partCount, partCount > 1, partCount <= poolRows else {
+                return plainOverlap(poolRows: poolRows, k: poolRows, classSize: classSize)
+            }
+            return partitionOverlap(poolRows: poolRows, partCount: partCount, classSize: classSize)
         case .rowSample:
             return plainOverlap(poolRows: poolRows, k: k, classSize: classSize)
         case .stratifiedSample:
@@ -114,6 +119,28 @@ public enum DatasetDiagnostics {
                 lines: lines, poolRows: poolRows, k: k,
                 columnIndex: columnIndex, classSize: classSize)
         }
+    }
+
+    /// Two students in different parts share no row, and two in the same part
+    /// share every row. Deal numbers run from 0 up, so a class no larger than
+    /// `partCount` shares nothing, and a larger one fills each part in turn.
+    /// The shared fraction is the chance that two classmates hold the same
+    /// part. The rows per student are those of the largest part.
+    private static func partitionOverlap(poolRows: Int, partCount: Int, classSize: Int) -> DatasetOverlap {
+        let rows = (poolRows + partCount - 1) / partCount
+        let students = max(classSize, 2)
+        let perPart = students / partCount
+        let fuller = students % partCount
+        func pairs(_ n: Int) -> Int { n * (n - 1) / 2 }
+        let samePart = fuller * pairs(perPart + 1) + (partCount - fuller) * pairs(perPart)
+        let fraction = Double(samePart) / Double(pairs(students))
+        return DatasetOverlap(
+            poolRows: poolRows,
+            rowsPerStudent: rows,
+            expectedSharedRows: fraction * Double(rows),
+            sharedFraction: fraction,
+            worstPairSharedRows: students > partCount ? Double(rows) : 0,
+            mostCopyableStratum: nil)
     }
 
     /// Two independent size-`k` samples from a pool of `n` share a
