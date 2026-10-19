@@ -146,9 +146,14 @@ struct RestoreAssignmentVersionTool: ContentTool {
         // A restored activity that does not run per group ends its sessions,
         // as `ActivityAuthoring.setActivity` does. The group tables are
         // outside the MCP role, so this writes on the main pool.
-        if setup.decodedManifest()?.activity?.isPerGroup != true {
+        let restoredPerGroup = setup.decodedManifest()?.activity?.isPerGroup == true
+        if !restoredPerGroup {
             try await ActivitySessionStore.closeOpenSessions(testSetupID: setup.requireID(), on: context.mainDB)
         }
+        // A tournament run of the other scope would play on where no page
+        // shows it (docs/lab-groups.md, slice 3d).
+        try await supersedeRunningTournaments(
+            testSetupID: setup.requireID(), outsideScopeOfPerGroup: restoredPerGroup, on: context.db)
 
         // Re-derive everything downstream of the zip: the shared support-file
         // directory the runner and personalization read, and the generated

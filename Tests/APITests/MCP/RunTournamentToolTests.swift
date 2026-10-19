@@ -2,7 +2,8 @@
 //
 // run_tournament: starts a run on a tournament kind and reports its shape
 // without naming a student; refuses an unknown schedule, any other kind, and
-// a class with fewer than two entrants; instructor-level.
+// a class with fewer than two entrants; instructor-level. It also starts a run
+// with the dedicated MCP pool, which cannot see the students' submissions.
 
 import Core
 import Fluent
@@ -89,6 +90,32 @@ import Vapor
                     .init(assignmentPublicID: assignment.publicID, schedule: "bracket"), context(app))
             }
             #expect(try await APITournamentRun.query(on: app.db).count() == 0)
+        }
+    }
+
+    /// With the dedicated MCP pool, the role sees no student submission and
+    /// may not write `tournament_runs`, so the start runs on the owner pool.
+    /// The output still names no student.
+    @Test func startsARunWithTheDedicatedMCPPool() async throws {
+        let app = try await makeTestApp()
+        try await withApp(app) { app in
+            try app.useMCPRoleDatabase()
+            let assignment = try await fixture(on: app, kind: .elimination, students: 3)
+            let out = try await RunTournamentTool().execute(
+                .init(assignmentPublicID: assignment.publicID, schedule: nil), context(app))
+            #expect(out.entrantCount == 3)
+            #expect(out.status == "running")
+            #expect(
+                try await APISubmission.query(on: app.db)
+                    .filter(\.$kind == APISubmission.Kind.tournamentMatch).count() == 1)
+            let json = try #require(String(data: JSONEncoder().encode(out), encoding: .utf8)).lowercased()
+            #expect(!json.contains("cup_s"), "the output names a student or a submission")
+            for student in try await APIUser.query(on: app.db).filter(\.$username ~~ ["cup_s1", "cup_s2", "cup_s3"])
+                .all()
+            {
+                let id = try student.requireID().uuidString.lowercased()
+                #expect(!json.contains(id), "the output carries a student's user id")
+            }
         }
     }
 

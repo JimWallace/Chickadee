@@ -24,11 +24,19 @@ import Vapor
 enum TournamentStartError: Error {
     case notATournamentKind
     case tooFewEntrants(Int)
+    /// A tournament that runs per lab group was started with no group.
+    case noGroupChosen
+    /// The chosen group has never started its session, so nobody joined.
+    case noSession
 
     var reason: String {
         switch self {
         case .notATournamentKind:
             return "This assignment's class activity is not a tournament kind, so there is no bracket to run."
+        case .noGroupChosen:
+            return "This tournament runs once per lab group, so choose the group that plays it."
+        case .noSession:
+            return "This lab group has not started its session, so no student has joined to play."
         case .tooFewEntrants(let count):
             return "A tournament needs at least two students with a complete submission; there "
                 + (count == 1 ? "is 1." : "are \(count).")
@@ -43,14 +51,25 @@ enum TournamentStartError: Error {
 /// jobs still complete their rows but move nothing — so a stalled run can
 /// never block the class. Refuses on a kind with no bracket and on fewer
 /// than two entrants.
+///
+/// For an activity that runs per lab group, `groupID` names the group that
+/// plays: its entrants are the students who joined the group's session (its
+/// latest run, removed students left out), and only that group's run in
+/// progress is superseded, so two labs can play at once (docs/lab-groups.md,
+/// slice 3d). For any other activity `groupID` is ignored.
 @discardableResult
 func startTournament(
-    setup: APITestSetup, schedule: TournamentSchedule, startedBy: UUID?, on db: any Database
+    setup: APITestSetup, schedule: TournamentSchedule, startedBy: UUID?, groupID requestedGroup: UUID? = nil,
+    on db: any Database
 ) async throws -> APITournamentRun {
-    guard let setupID = setup.id, setup.decodedManifest()?.activity?.kind.aggregation == .bracket else {
+    guard let setupID = setup.id, let activity = setup.decodedManifest()?.activity,
+        activity.kind.aggregation == .bracket
+    else {
         throw TournamentStartError.notATournamentKind
     }
-    let entrants = try await snapshotEntrants(setup: setup, on: db)
+    let groupID = activity.isPerGroup ? requestedGroup : nil
+    if activity.isPerGroup, groupID == nil { throw TournamentStartError.noGroupChosen }
+    let entrants = try await snapshotEntrants(setup: setup, groupID: groupID, on: db)
     guard entrants.count >= 2 else { throw TournamentStartError.tooFewEntrants(entrants.count) }
 
     // One transaction, so a failure part-way leaves no run without its first
@@ -58,6 +77,7 @@ func startTournament(
     return try await db.transaction { tx in
         for running in try await APITournamentRun.query(on: tx)
             .filter(\.$testSetupID == setupID)
+            .filter(\.$groupID == groupID)
             .filter(\.$status == APITournamentRun.Status.running)
             .all()
         {
@@ -67,6 +87,7 @@ func startTournament(
 
         let run = try APITournamentRun(
             testSetupID: setupID, schedule: schedule, startedBy: startedBy, startedAt: Date(), entrants: entrants)
+        run.groupID = groupID
         try await run.save(on: tx)
         let slots = TournamentPairing.firstRound(schedule: schedule, entrantCount: entrants.count)
         try await enqueueRound(run: run, slots: slots, inArena: playsInArena(setup), on: tx)
@@ -79,8 +100,21 @@ func startTournament(
 /// one `latestStudentSubmissionsByUser` states for the classmate chooser and
 /// the union read model; only the seeding order is the tournament's own
 /// (#1751).
-private func snapshotEntrants(setup: APITestSetup, on db: any Database) async throws -> [TournamentEntrant] {
-    let latestByUser = try await latestStudentSubmissionsByUser(setup: setup, on: db)
+///
+/// With `groupID`, only the students who joined that group's session (its
+/// latest run, removed students left out) enter, seeded the same way.
+private func snapshotEntrants(
+    setup: APITestSetup, groupID: UUID?, on db: any Database
+) async throws -> [TournamentEntrant] {
+    var latestByUser = try await latestStudentSubmissionsByUser(setup: setup, on: db)
+    if let groupID {
+        guard let assignmentID = try await assignmentByTestSetupID(setup.id ?? "", on: db)?.id,
+            let session = try await ActivitySessionStore.session(assignmentID: assignmentID, groupID: groupID, on: db)
+        else { throw TournamentStartError.noSession }
+        let players = Set(
+            try await ActivitySessionStore.attendance(of: session, on: db).filter { $0.removedAt == nil }.map(\.userID))
+        latestByUser = latestByUser.filter { players.contains($0.key) }
+    }
     return latestByUser.values
         .sorted { a, b in
             let (ta, tb) = (a.submittedAt ?? .distantPast, b.submittedAt ?? .distantPast)
@@ -243,7 +277,9 @@ func advanceTournamentIfRoundComplete(runID: UUID, on db: any Database) async th
         }
         run.winnerUserID = winner.userID
         try await run.update(on: tx)
-        if let setup = try await APITestSetup.find(run.testSetupID, on: tx) {
+        // A class record has one holder, and a per-group tournament has a
+        // winner in every lab: no lab's winner holds it.
+        if run.groupID == nil, let setup = try await APITestSetup.find(run.testSetupID, on: tx) {
             try await awardTournamentWinnerRecords(
                 setup: setup, userID: winner.userID, submissionID: winner.submissionID, on: tx)
         }
@@ -281,14 +317,34 @@ private func claimTournamentStep(
     return !rows.isEmpty
 }
 
+/// Supersedes the setup's running runs of the scope the activity no longer
+/// has: the lab groups' runs when it runs for the whole class, the whole
+/// class's run when it runs per group (docs/lab-groups.md, slice 3d).
+/// Without this a run would play on where no page shows it.
+func supersedeRunningTournaments(
+    testSetupID: String, outsideScopeOfPerGroup isPerGroup: Bool, on db: any Database
+) async throws {
+    let query = APITournamentRun.query(on: db)
+        .filter(\.$testSetupID == testSetupID)
+        .filter(\.$status == APITournamentRun.Status.running)
+    if isPerGroup {
+        query.filter(\.$groupID == nil)
+    } else {
+        query.filter(\.$groupID != nil)
+    }
+    try await query.set(\.$status, to: APITournamentRun.Status.superseded).update()
+}
+
 /// The most recent run for the setup, any status, with its slots in round
 /// and position order — what the bracket page and the run control show.
+/// With `groupID`, that lab group's run; without, the whole class's.
 func latestTournament(
-    testSetupID: String, on db: any Database
+    testSetupID: String, groupID: UUID? = nil, on db: any Database
 ) async throws -> (run: APITournamentRun, slots: [APITournamentMatch])? {
     guard
         let run = try await APITournamentRun.query(on: db)
             .filter(\.$testSetupID == testSetupID)
+            .filter(\.$groupID == groupID)
             .sort(\.$startedAt, .descending)
             .first(),
         let runID = run.id

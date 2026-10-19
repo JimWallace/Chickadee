@@ -88,6 +88,11 @@ struct ToolContext {
     /// through any of them. `MCPOwnerPoolRoutingTests` runs each one as the role would.
     /// With no dedicated MCP pool configured this is the same connection as
     /// `db`, so behaviour is unchanged.
+    ///
+    /// `run_tournament` also starts its run here. Its entrants are student
+    /// submissions, which the role cannot see, but the tool returns only the
+    /// number of entrants and rounds, never a student or a submission
+    /// (`RunTournamentToolTests`).
     var mainDB: any Database { request.db }
 
     var logger: Logger { request.logger }

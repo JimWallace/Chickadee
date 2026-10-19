@@ -475,7 +475,18 @@ because line numbers go out of date.
     of the standings passes a group to `rankedStandings` (nil reads only the
     whole class's rows, never a lab's); the badge signal
     ranks a student in the group of their own row while the activity runs
-    per group, and among the class rows otherwise. A per-group round robin
+    per group, and among the class rows otherwise.
+  - A tournament of a per-group activity is one run per lab group
+    (`tournament_runs.group_id`, slice 3d), entered by the group's session.
+    A new run supersedes only its group's run; a reader passes a group to
+    `latestTournament` (nil reads only whole-class runs). The arena plays
+    every running run of the assignment. A lab's winner holds no class
+    record, `setActivity` seeds none for a per-group tournament, and MCP
+    `run_tournament` starts no per-group run. A write that changes the
+    scope supersedes the running runs of the other scope
+    (`supersedeRunningTournaments`): `setActivity` and the MCP version
+    restore. A new writer of `runsPerGroup` must do the same. Remove does
+    not touch a run in progress: its entrants are frozen. A per-group round robin
     awards no standings-leader record, and `setActivity` seeds none for it.
   - An activity whose kind compares students (`ActivityKind.comparesStudents`)
     accepts only shared data (`DatasetSpec.isShared`). The rule is in
@@ -700,7 +711,7 @@ because line numbers go out of date.
   re-grade, version capture, the version tools and restore, the
   `set_activity` lock count, version v1 of `create_assignment` and
   `clone_assignment`, the copied reference solution of `clone_assignment`,
-  and the starter run of `get_suite`.
+  the starter run of `get_suite`, and the start of a `run_tournament` run.
 - **Rules:**
   - A step that the `chickadee_mcp` role is denied runs on `mainDB`, not on
     `ToolContext.db`. A new MCP step on an ungranted table needs a choice:

@@ -41,11 +41,19 @@ enum ArenaResultError: Error, Equatable {
 }
 
 /// The next match the arena plays for the setup: the lowest undecided slot
-/// of the current round of the running tournament, or nil when none waits.
+/// of the current round of a running tournament, or nil when none waits.
+/// Every lab group of a per-group activity can have a run going at once
+/// (docs/lab-groups.md, slice 3d), and any presenter's arena plays any of
+/// them: a match is decided by the code, not by the room that runs it.
 func nextArenaMatch(testSetupID: String, on db: any Database) async throws -> ArenaMatch? {
-    guard let run = try await runningTournament(testSetupID: testSetupID, on: db), let runID = run.id else {
-        return nil
+    for run in try await runningTournaments(testSetupID: testSetupID, on: db) {
+        if let match = try await nextArenaMatch(in: run, on: db) { return match }
     }
+    return nil
+}
+
+private func nextArenaMatch(in run: APITournamentRun, on db: any Database) async throws -> ArenaMatch? {
+    guard let runID = run.id else { return nil }
     let slots = try await APITournamentMatch.query(on: db)
         .filter(\.$tournamentID == runID)
         .filter(\.$round == run.currentRound)
@@ -70,14 +78,22 @@ func nextArenaMatch(testSetupID: String, on db: any Database) async throws -> Ar
     return nil
 }
 
-/// True when the submission is one side of an arena match of the setup's
-/// running tournament: the match itself (the home entrant's upload) or the
-/// away entrant's snapshotted submission. Only these may reach the
+/// True when the submission is one side of an arena match of one of the
+/// setup's running tournaments: the match itself (the home entrant's upload)
+/// or the away entrant's snapshotted submission. Only these may reach the
 /// presenter's browser through the arena.
 func isArenaEntrySubmission(_ submissionID: String, testSetupID: String, on db: any Database) async throws -> Bool {
-    guard let run = try await runningTournament(testSetupID: testSetupID, on: db), let runID = run.id else {
-        return false
+    for run in try await runningTournaments(testSetupID: testSetupID, on: db) {
+        guard try await isArenaEntrySubmission(submissionID, in: run, on: db) else { continue }
+        return true
     }
+    return false
+}
+
+private func isArenaEntrySubmission(
+    _ submissionID: String, in run: APITournamentRun, on db: any Database
+) async throws -> Bool {
+    guard let runID = run.id else { return false }
     let slots = try await APITournamentMatch.query(on: db)
         .filter(\.$tournamentID == runID)
         .filter(\.$round == run.currentRound)
@@ -153,11 +169,12 @@ private func claimArenaMatch(_ submissionID: String, testSetupID: String, on db:
     return !rows.isEmpty
 }
 
-/// The setup's running tournament, newest first; nil when none runs.
-private func runningTournament(testSetupID: String, on db: any Database) async throws -> APITournamentRun? {
+/// The setup's running tournaments, newest first: one for the whole class,
+/// or one per lab group of a per-group activity.
+private func runningTournaments(testSetupID: String, on db: any Database) async throws -> [APITournamentRun] {
     try await APITournamentRun.query(on: db)
         .filter(\.$testSetupID == testSetupID)
         .filter(\.$status == APITournamentRun.Status.running)
         .sort(\.$startedAt, .descending)
-        .first()
+        .all()
 }
