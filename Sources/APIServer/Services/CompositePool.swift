@@ -4,12 +4,28 @@
 // 4): the assignment's one image, or one lab group's when the activity runs
 // once per group. Each group deals its own slots, so two groups hold the same
 // slot numbers. A student holds one slot per assignment, in whichever pool
-// dealt it. The rules of dealing are the same for both and live in
-// `CompositeSlots`; only the table that holds the slots differs.
+// dealt it. The rules of dealing and of spares are the same for both and live
+// in `CompositeSlots` and `CompositeSpares`; only the tables that hold the
+// slots and the spares differ.
 
 import Core
 import Fluent
 import Foundation
+
+/// The row that holds a spare: `APICompositeSpare` for the assignment's
+/// image, `APIGroupCompositeSpare` for a lab group's.
+protocol CompositeSpareRow: Model {
+    var userID: UUID { get set }
+    var slot: Int { get set }
+    var submissionID: String { get set }
+    var data: String? { get set }
+    var passed: Bool { get set }
+    var finished: Bool { get set }
+    var updatedAt: Date? { get set }
+}
+
+extension APICompositeSpare: CompositeSpareRow {}
+extension APIGroupCompositeSpare: CompositeSpareRow {}
 
 enum CompositePool: Equatable, Sendable {
     case course(assignmentID: UUID)
@@ -65,6 +81,49 @@ enum CompositePool: Equatable, Sendable {
                 assignmentID: assignmentID, groupID: groupID, userID: userID, slot: slot, round: round
             ).create(on: db)
         }
+    }
+
+    /// The pool's spares, or one student's, lowest slot first.
+    func spares(onlyUserID: UUID? = nil, on db: any Database) async throws -> [any CompositeSpareRow] {
+        switch self {
+        case .course(let assignmentID):
+            let query = APICompositeSpare.query(on: db).filter(\.$assignmentID == assignmentID).sort(\.$slot)
+            if let onlyUserID { query.filter(\.$userID == onlyUserID) }
+            return try await query.all()
+        case .group(let assignmentID, let groupID):
+            let query = APIGroupCompositeSpare.query(on: db)
+                .filter(\.$assignmentID == assignmentID)
+                .filter(\.$groupID == groupID)
+                .sort(\.$slot)
+            if let onlyUserID { query.filter(\.$userID == onlyUserID) }
+            return try await query.all()
+        }
+    }
+
+    /// A new spare in the pool, not yet saved. A unique key refuses a second
+    /// spare in the slot, and the caller handles that conflict.
+    func newSpare(userID: UUID, slot: Int, submissionID: String) -> any CompositeSpareRow {
+        switch self {
+        case .course(let assignmentID):
+            APICompositeSpare(assignmentID: assignmentID, userID: userID, slot: slot, submissionID: submissionID)
+        case .group(let assignmentID, let groupID):
+            APIGroupCompositeSpare(
+                assignmentID: assignmentID, groupID: groupID, userID: userID, slot: slot, submissionID: submissionID)
+        }
+    }
+
+    /// The spare that a `compositeSpare` job renders, and its pool, from
+    /// either table.
+    static func spare(
+        submissionID: String, on db: any Database
+    ) async throws -> (pool: CompositePool, row: any CompositeSpareRow)? {
+        if let row = try await APICompositeSpare.query(on: db).filter(\.$submissionID == submissionID).first() {
+            return (.course(assignmentID: row.assignmentID), row)
+        }
+        if let row = try await APIGroupCompositeSpare.query(on: db).filter(\.$submissionID == submissionID).first() {
+            return (.group(assignmentID: row.assignmentID, groupID: row.groupID), row)
+        }
+        return nil
     }
 
     /// The student's dealt slot and the pool that dealt it, from either

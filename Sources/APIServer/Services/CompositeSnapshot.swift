@@ -159,7 +159,7 @@ struct CompositeSnapshot: Content, Equatable {
     /// What fills the slots that show no passing contribution. Never in the
     /// student view: a student sees only their own slot.
     struct Fills {
-        var spares: [Int: APICompositeSpare] = [:]
+        var spares: [Int: any CompositeSpareRow] = [:]
         var references: [Int: APICompositeReference] = [:]
     }
 
@@ -178,11 +178,8 @@ struct CompositeSnapshot: Content, Equatable {
 
         var fills = Fills()
         let filled = Set(shown.filter(\.value.passed).keys)
-        // Spares fill the whole class's image only: a lab's spares are slice 4b.
-        let spares =
-            scope.groupID == nil
-            ? try await APICompositeSpare.query(on: db).filter(\.$assignmentID == scope.assignmentID).all() : []
-        for row in spares where row.passed && !filled.contains(row.slot) && fits(row.slot, row.data) {
+        for row in try await scope.pool.spares(on: db)
+        where row.passed && !filled.contains(row.slot) && fits(row.slot, row.data) {
             fills.spares[row.slot] = row
         }
         guard spec.emptySlots == .reference else { return fills }

@@ -183,7 +183,7 @@ CREATE POLICY mcp_ai_feedback_rows ON reflection_feedback
 --      user_activity_events, brightspace_sync_log, pre_enrollments, audit_log,
 --      request_metrics, runner_profiles, runner_snapshots, composite_slots,
 --      group_composite_slots, composite_contributions, composite_references,
---      composite_spares,
+--      composite_spares, group_composite_spares,
 --      oauth_* ...
 --
 --    composite_slots and group_composite_slots map each student to their
@@ -193,8 +193,9 @@ CREATE POLICY mcp_ai_feedback_rows ON reflection_feedback
 --    composite_contributions holds each student's rendered pixels. No MCP tool
 --    reads it. composite_references holds the reference solution's render of
 --    each slot. It holds no student data, but no MCP tool reads it either.
---    composite_spares holds the tiles students render for empty slots. No MCP
---    tool reads it.
+--    composite_spares and group_composite_spares hold the tiles students
+--    render for empty slots (the second per lab group). No MCP tool reads
+--    them.
 --    Do NOT add blanket "GRANT ... ON ALL TABLES" — that would defeat the wall.
 --
 --    assignment_personalization_seeds STAYS DENIED. The MCP personalization
@@ -228,5 +229,7 @@ CREATE POLICY mcp_ai_feedback_rows ON reflection_feedback
 --      SELECT * FROM composite_slots LIMIT 1;       -- must ERROR: permission denied
 --                                                   -- (the set_activity lock runs on the owner pool)
 --      SELECT * FROM group_composite_slots LIMIT 1; -- must ERROR: permission denied
+--      SELECT * FROM group_composite_spares LIMIT 1;
+--                                                   -- must ERROR: permission denied
 --      SELECT * FROM composite_contributions LIMIT 1;
 --                                                   -- must ERROR: permission denied

@@ -172,11 +172,28 @@ extension ActivitySessionStore {
 
     /// Deletes the student's rows in one lab group's rankings of the
     /// assignment: the hill, the leaderboard and the standings, and their
-    /// composite slot and tile in the group's image, so the student can be
-    /// dealt again in the lab they are in.
+    /// composite slot, tile and finished spares in the group's image, so the
+    /// student can be dealt again in the lab they are in. A spare that is
+    /// still grading stays, so the runner's report finds its job.
     private static func forgetRankings(
         of userID: UUID, assignmentID: UUID, testSetupID: String, groupID: UUID, on db: any Database
     ) async throws {
+        // A spare job is owned by no student, so it goes with its row.
+        let spares = try await APIGroupCompositeSpare.query(on: db)
+            .filter(\.$assignmentID == assignmentID)
+            .filter(\.$groupID == groupID)
+            .filter(\.$userID == userID)
+            .filter(\.$finished == true)
+            .all()
+        let spareJobs =
+            spares.isEmpty
+            ? [] : try await APISubmission.query(on: db).filter(\.$id ~~ spares.map(\.submissionID)).all()
+        for spare in spares { try await spare.delete(on: db) }
+        for job in spareJobs {
+            try await job.delete(on: db)
+            try? FileManager.default.removeItem(atPath: job.zipPath)
+            try? FileManager.default.removeItem(atPath: job.zipPath + ".grading")
+        }
         try await APIGroupCompositeSlot.query(on: db)
             .filter(\.$assignmentID == assignmentID)
             .filter(\.$groupID == groupID)

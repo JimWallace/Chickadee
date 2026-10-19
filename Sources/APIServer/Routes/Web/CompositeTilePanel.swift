@@ -30,7 +30,9 @@ struct CompositeTilePanel: Encodable {
     var spares: [Spare] = []
     /// The "Fill a hole" form's action, when the owner may ask for a spare
     /// now: their tile passed, none of their spares is grading, the session
-    /// is open, and a hole is left.
+    /// is open, and a hole is left. For a composite that runs per lab group,
+    /// the session is the one of their tile's group, and the hole is in that
+    /// group's image.
     var spareAction: String?
 
     /// The panel for `submission`, or nil when the assignment is not a class
@@ -46,7 +48,7 @@ struct CompositeTilePanel: Encodable {
             let contribution = outcome.composite,
             CompositeContributions.isValid(contribution, for: spec.contribution),
             let assignmentID = assignment?.id, let userID = submission.userID,
-            let slot = try await CompositePool.dealtSlot(assignmentID: assignmentID, userID: userID, on: db)?.slot
+            let (pool, slot) = try await CompositePool.dealtSlot(assignmentID: assignmentID, userID: userID, on: db)
         else { return nil }
 
         let passed = outcome.status == .pass
@@ -58,7 +60,7 @@ struct CompositeTilePanel: Encodable {
         guard viewerIsOwner, let assignment else { return panel }
         let setupID = assignment.testSetupID
 
-        let spares = try await CompositeSpares.status(assignmentID: assignmentID, userID: userID, on: db)
+        let spares = try await CompositeSpares.status(in: pool, userID: userID, on: db)
         panel.spares = spares.map { spare in
             let (text, tier) =
                 spare.grading
@@ -69,10 +71,10 @@ struct CompositeTilePanel: Encodable {
         let ownPassed =
             try await APICompositeContribution.query(on: db)
             .filter(\.$assignmentID == assignmentID).filter(\.$userID == userID).first()?.passed ?? false
-        // A lab's composite has no spares yet (docs/lab-groups.md, slice 4b).
-        if ownPassed, !activity.isPerGroup, assignment.isOpen, activity.acceptsSubmissions(at: Date()),
+        if ownPassed, assignment.isOpen, activity.acceptsSubmissions(at: Date()),
+            try await CompositeSpares.playsInSession(of: pool, userID: userID, on: db),
             !spares.contains(where: \.grading),
-            try await !CompositeSpares.holes(assignmentID: assignmentID, spec: spec, on: db).isEmpty
+            try await !CompositeSpares.holes(in: pool, spec: spec, on: db).isEmpty
         {
             panel.spareAction = "/testsetups/\(setupID)/composite/spare"
         }

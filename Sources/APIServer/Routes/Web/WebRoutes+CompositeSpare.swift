@@ -4,7 +4,9 @@
 // page (docs/class-composite.md, slice 6b). A student whose tile passed asks
 // the server to grade that code again for an empty slot. The request passes
 // the same gates as a submission: enrolment, an open assignment and an open
-// session window. It returns to the result page with a fixed message.
+// session window. On a composite that runs per lab group, the student must
+// also play in the open session of their tile's group (docs/lab-groups.md,
+// slice 4b). It returns to the result page with a fixed message.
 
 import Core
 import Fluent
@@ -37,8 +39,8 @@ extension WebRoutes {
             answer = .queued
         } catch let error as CompositeSpares.RequestError {
             switch error {
-            // The page offers no spare on a per-group composite.
-            case .notComposite, .perGroup: throw Abort(.notFound)
+            case .notComposite: throw Abort(.notFound)
+            case .sessionClosed: answer = .closed
             case .noPassingTile: answer = .noTile
             case .inFlight: answer = .grading
             case .noHole: answer = .noHole

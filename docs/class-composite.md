@@ -23,7 +23,7 @@ of all parts together.
 | 5 | The composite view on the leaderboard page, with all four compositors | shipped |
 | 6a | Reference renders and `emptySlots: reference` | shipped |
 | 6b | Spare slots | shipped |
-| groups | One image per lab group (`docs/lab-groups.md`, slices 4a and 4b) | 4a shipped |
+| groups | One image per lab group (`docs/lab-groups.md`, slices 4a to 4c) | 4a and 4b shipped |
 
 Slice 5 is the first slice that a class can use. Slices 1 to 4 only supply data
 to it. Run one session with TAs after slice 5, before slice 6.
@@ -418,6 +418,11 @@ submit. Then come the slots whose holder has not passed. In each group, the
 holes follow the deal order. A slot where the student's own spare failed is
 not offered to them again, because the same code fails there again; it stays
 a hole for the others.
+
+On a composite that runs once per lab group, a student fills holes in the
+image of their own lab, and only while they play in that lab's open session
+(`docs/lab-groups.md`, slice 4b). The spare's row is in
+`group_composite_spares`, and it covers no class item before slice 5.
 
 The button grades the student's passing submission again with the inputs of
 the first hole. The job is a `compositeSpare` submission, owned by no student,

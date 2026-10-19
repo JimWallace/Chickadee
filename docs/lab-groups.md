@@ -24,7 +24,8 @@ today.
 | 3c | Rankings per group, the round robin: classmates are the students in the challenger's session, `activity_standings.group_id`, standings per group on the page and the present page | built |
 | 3d | Rankings per group, the tournament: `tournament_runs.group_id`, a group's run is entered by its session, labs play at once, the bracket per group, the run control takes the group | built |
 | 4a | The composite per group: `group_composite_slots`, each group deals its own slots in its session, contributions fill the group's image, the board and the present page per group | built |
-| 4b | The composite per group, the rest: spares ("Fill a hole") per group, and the course gallery of every group's image | not started |
+| 4b | Spares per group: `group_composite_spares`, "Fill a hole" fills a hole in the image of the student's own lab while their session is open | built |
+| 4c | The course gallery of every group's image | not started |
 | 5 | Group goals: the union and the corpus percent per group; a group achievement | not started |
 | 6 | The LEARN source: the existing group-category sweep writes the new tables; a D2L Sections reader; the category picker | not started |
 | later | Per-group deadlines; a TA's roster filtered to their groups; a `team` kind with a shared submission | not planned |
@@ -137,8 +138,10 @@ the run. Slice 4a made the composite's slots a twin table,
 SQLite cannot drop the unique key that `composite_slots` holds on
 (assignment, round, slot); and gave `composite_contributions` a nullable
 `group_id` under its (assignment, student) key, since a student holds one
-slot per assignment. The rest are still a nullable `group_id` in this plan:
-`composite_spares`, `class_item_coverage`, `class_coverage_runs`.
+slot per assignment. Slice 4b made the spares a twin table too,
+`group_composite_spares`, for the same reason. The rest are still a
+nullable `group_id` in this plan: `class_item_coverage`,
+`class_coverage_runs`.
 Nil means course-wide, which is what every existing row is.
 
 ## Decisions
@@ -557,8 +560,6 @@ should be able to see it. The maintainer chose best effort on 2026-10-18.
   for staff and reads a student's own slot's group; the staff board, the
   stage's poll URL and the present page pass the group they show. A
   per-group composite with no group chosen shows no image.
-- A lab's composite has no spares yet: the tile panel offers none, and a
-  request is refused (slice 4b).
 - The scope locks once a slot is dealt: `setActivity` refuses to turn
   `runsPerGroup` on or off for a composite that holds a dealt slot
   (`compositeScopeLockedMessage`), since each slot sits in one pool.
@@ -573,14 +574,34 @@ should be able to see it. The maintainer chose best effort on 2026-10-18.
   joins the kinds) and `GroupSessionGateTests` (it no longer expects the
   composite's refusal). New: `CompositePerGroupTests`.
 
-### Slice 4b: the composite per group, the rest
+### Slice 4b: spares per group (built)
 
-- `composite_spares` per group: `holes`, `request` and the snapshot's spare
-  fill read the group. A twin table again, for the same reason as the
-  slots: the unique key on (assignment, slot).
+- `group_composite_spares` (`CreateGroupCompositeSpares`): the per-group
+  twin of `composite_spares`, unique on (assignment, group, slot). A twin
+  table again, for the same reason as the slots: the unique key on
+  (assignment, slot).
+- `CompositePool` reads and makes a pool's spares (`spares`, `newSpare`,
+  and `spare(submissionID:)` for a job). `CompositeSpares.holes`, `status`,
+  `request`, the job's slot inputs and `record`, and the snapshot's spare
+  fill, all read the pool of the student's own tile.
+- A student fills holes in their lab's image only while they play in that
+  lab's open session (`CompositeSpares.playsInSession`). After the close,
+  the result page offers no button, and a request returns "The class
+  session is closed."
+- A lab's spare covers no class item before slice 5, as a lab's own tile
+  does not.
+- Remove on "Who joined" also deletes the student's finished spares in the
+  group, with their jobs. A spare that is still grading stays, so the
+  runner's report finds its job, and its tile shows if it passes.
+- Changed under the maintainer's direction: `CompositePerGroupTests` no
+  longer expects a lab's spare request to be refused. New:
+  `CompositeSparesPerGroupTests`.
+
+### Slice 4c: the course gallery
+
 - The course page shows a gallery of every group's image once their
   sessions have closed.
-- Tests: a spare fills a hole in its own group only, the gallery order.
+- Tests: the gallery order, and no image of a group whose session is open.
 
 ### Slice 5: group goals
 
