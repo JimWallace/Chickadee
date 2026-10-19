@@ -59,6 +59,11 @@ final class APIClassCoverageRun: Model, Content, @unchecked Sendable {
     @OptionalField(key: "coverage")
     var coverage: Double?
 
+    /// The lab group whose corpus this is, for an activity that runs once
+    /// per group (docs/lab-groups.md, slice 5c); nil for the whole class.
+    @OptionalField(key: "group_id")
+    var groupID: UUID?
+
     /// When the corpus was assembled and enqueued. Also the cutoff that says
     /// which submissions it was built from.
     @Field(key: "created_at")

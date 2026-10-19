@@ -175,10 +175,13 @@ struct ResultIngestEffects {
                 testSetupID: testSetupID, userID: userID, submissionID: submissionID,
                 outcomes: collection.outcomes, declaredSlotCount: slotCount, on: db)
             // A new contribution changes what the class's combined corpus
-            // covers, so the corpus is re-graded. Debounced to one run in
-            // flight per assignment.
+            // covers, so the corpus is re-graded: the class's, or the lab's
+            // on an activity that runs per lab group. Debounced to one run
+            // in flight per assignment, or per lab.
             if slotCount > 0 {
-                await scheduleClassCorpusRun(setupID: testSetupID, app: application, on: db, logger: logger)
+                await scheduleClassCorpusRun(
+                    afterSubmission: submissionID, userID: userID, setupID: testSetupID, app: application, on: db,
+                    logger: logger)
             }
         }
 
