@@ -39,6 +39,7 @@
 
 import Core
 import Foundation
+import SystemPackage
 
 struct SandboxedScriptRunner: ScriptRunner {
 
@@ -431,9 +432,7 @@ struct SandboxVisibleDirectories {
         let rootPrefix = root.path.hasSuffix("/") ? root.path : root.path + "/"
         for value in environment.values.sorted() {
             guard value.hasPrefix(rootPrefix) else { continue }
-            var isDirectory: ObjCBool = false
-            guard FileManager.default.fileExists(atPath: value, isDirectory: &isDirectory), isDirectory.boolValue
-            else { continue }
+            guard let status = try? Stat(FilePath(value)), status.type == .directory else { continue }
             let url = URL(fileURLWithPath: value, isDirectory: true).standardizedFileURL
             if !directories.contains(url) { directories.append(url) }
         }

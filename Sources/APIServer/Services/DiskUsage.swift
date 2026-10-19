@@ -9,6 +9,7 @@
 import Fluent
 import Foundation
 import SQLKit
+import SystemPackage
 
 /// Recursive size of every regular file under `path`.  Returns 0 for a
 /// missing directory so a not-yet-created sink shows as empty rather than
@@ -51,8 +52,7 @@ func topLevelFileSizesByID(inDirectory path: String) -> [String: Int] {
     var result: [String: Int] = [:]
     for entry in entries {
         let full = base + entry
-        var isDir: ObjCBool = false
-        guard fm.fileExists(atPath: full, isDirectory: &isDir), !isDir.boolValue else { continue }
+        guard let status = try? Stat(FilePath(full)), status.type != .directory else { continue }
         let id = entry.split(separator: ".", maxSplits: 1).first.map(String.init) ?? entry
         result[id, default: 0] += fileSizeBytes(at: full)
     }
@@ -72,8 +72,7 @@ func testSetupSizesByID(testSetupsDirectory dir: String) -> [String: Int] {
         guard let setupDirs = try? fm.contentsOfDirectory(atPath: subtreeDir) else { continue }
         for setupID in setupDirs {
             let full = subtreeDir + "/" + setupID
-            var isDir: ObjCBool = false
-            guard fm.fileExists(atPath: full, isDirectory: &isDir), isDir.boolValue else { continue }
+            guard let status = try? Stat(FilePath(full)), status.type == .directory else { continue }
             result[setupID, default: 0] += directorySizeBytes(at: full)
         }
     }

@@ -82,7 +82,7 @@ struct JobCgroups: Sendable, Equatable {
         guard enabled.isSuperset(of: ["memory", "pids"]) else {
             return .unavailable(reason: "memory and pids are not enabled in \(jobsDirectory.path)")
         }
-        guard access(jobsDirectory.path, W_OK) == 0 else {
+        guard FileManager.default.isWritableFile(atPath: jobsDirectory.path) else {
             return .unavailable(reason: "the runner cannot write to \(jobsDirectory.path)")
         }
         return .available(JobCgroups(jobsDirectory: jobsDirectory))
@@ -100,7 +100,9 @@ struct JobCgroups: Sendable, Equatable {
     /// applies it when the runner runs as root too.
     func makeJobCgroup(memoryLimitMegabytes: Int, processLimit: Int) throws(JobCgroupError) -> JobCgroup {
         let directory = jobsDirectory.appendingPathComponent("job-\(UUID().uuidString)", isDirectory: true)
-        guard mkdir(directory.path, 0o755) == 0 else {
+        // mkdir(2), not FileManager: the error needs its errno. No safe API
+        // for it exists.
+        guard unsafe mkdir(directory.path, 0o755) == 0 else {
             throw .cannotCreate(directory.path, errno: errno)
         }
         let cgroup = JobCgroup(directory: directory)
@@ -113,7 +115,7 @@ struct JobCgroups: Sendable, Equatable {
             }
             try cgroup.write(String(processLimit + 1), to: "pids.max")
         } catch {
-            rmdir(directory.path)
+            unsafe rmdir(directory.path)
             throw error
         }
         return cgroup

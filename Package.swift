@@ -15,6 +15,11 @@ let sourceSettings: [SwiftSetting] =
         .enableUpcomingFeature("MemberImportVisibility"),
     ]
 
+// Strict memory safety (SE-0458) for the product targets: each unsafe
+// construct needs an explicit `unsafe` mark, and `strictWarnings` makes a
+// missing mark a build error. The test targets do not use it yet (#2683).
+let productSettings: [SwiftSetting] = sourceSettings + [.strictMemorySafety()]
+
 let package = Package(
     name: "Chickadee",
     platforms: [
@@ -89,7 +94,7 @@ let package = Package(
         .target(
             name: "RunnerCore",
             path: "Sources/RunnerCore",
-            swiftSettings: sourceSettings
+            swiftSettings: productSettings
         ),
 
         // MARK: - Core library
@@ -106,7 +111,7 @@ let package = Package(
             ],
             path: "Sources/Core",
             exclude: ["README.md"],
-            swiftSettings: sourceSettings
+            swiftSettings: productSettings
         ),
 
         // MARK: - API Server library
@@ -142,7 +147,7 @@ let package = Package(
             ],
             path: "Sources/APIServer",
             exclude: ["README.md", "CLAUDE.md", "MCP/CLAUDE.md", "Views/CLAUDE.md"],
-            swiftSettings: sourceSettings
+            swiftSettings: productSettings
         ),
 
         // MARK: - API Server executable (thin wrapper)
@@ -158,7 +163,7 @@ let package = Package(
                 .target(name: "CProcessHardening"),
             ],
             path: "Sources/chickadee-server",
-            swiftSettings: sourceSettings
+            swiftSettings: productSettings
         ),
 
         // MARK: - Process hardening (C)
@@ -184,7 +189,7 @@ let package = Package(
             ],
             path: "Sources/Worker",
             exclude: ["README.md", "CLAUDE.md"],
-            swiftSettings: sourceSettings,
+            swiftSettings: productSettings,
             // Compiles Tools/runner-support/* into the binary. Replaces 2,223
             // lines of hand-typed string literals that mirrored those files;
             // see the plugin for why this is codegen and not `resources:`.
@@ -206,7 +211,7 @@ let package = Package(
                 .product(name: "NIOHTTP1", package: "swift-nio"),
             ],
             path: "Sources/LoadTest",
-            swiftSettings: sourceSettings
+            swiftSettings: productSettings
         ),
 
         // MARK: - Build-tool plugins
