@@ -87,7 +87,7 @@ extension WebRoutes {
                 code: form.code ?? "", userID: user.requireID(), network: req.clientNetwork, on: req.db)
             guard let assignment = try await APIAssignment.find(session.assignmentID, on: req.db),
                 let course = try await APICourse.find(assignment.courseID, on: req.db)
-            else { throw Abort(.notFound) }
+            else { throw AppError.notFound(resource: "Assignment") }
             return req.redirect(
                 to: VanityURLRoutes.vanityPath(courseCode: course.urlKey, assignmentSlug: assignment.slug))
         } catch let error as ActivitySessionError {
@@ -112,7 +112,7 @@ extension WebRoutes {
         let user = try req.auth.require(APIUser.self)
         guard let setupID = req.parameters.get("testSetupID"),
             let setup = try await APITestSetup.find(setupID, on: req.db)
-        else { throw Abort(.notFound) }
+        else { throw AppError.notFound(resource: "Test setup") }
         if toChange {
             try await requireCourseWriteAccess(caller: user, courseID: setup.courseID, atLeast: .ta, db: req.db)
         } else {
@@ -120,12 +120,12 @@ extension WebRoutes {
         }
         guard setup.decodedManifest()?.activity?.isPerGroup == true,
             let assignment = try await assignmentByTestSetupID(setupID, on: req.db)
-        else { throw Abort(.notFound) }
+        else { throw AppError.notFound(resource: "Per-group activity") }
         guard let groupID = rawGroupID.flatMap(UUID.init(uuidString:)),
             let group = try await APICourseGroup.find(groupID, on: req.db),
             group.removedAt == nil,
             try await CourseGroupStore.sets(courseID: setup.courseID, on: req.db).first?.id == group.setID
-        else { throw Abort(.notFound) }
+        else { throw AppError.notFound(resource: "Group") }
         return (user, assignment, groupID)
     }
 

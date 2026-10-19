@@ -221,15 +221,15 @@ func applyDatasetsEdit(
     var seenFiles: Set<String> = []
     for spec in datasets {
         if let refusal = await datasetSpecRefusal(spec, setup: setup, bundledFiles: bundledFiles) {
-            throw Abort(.badRequest, reason: refusal)
+            throw AppError.badRequest(reason: refusal)
         }
         // The library fields are written by the library attach path only; this
         // door carries them through (docs/datasets-course-library.md).
         if let refusal = DatasetSpecValidation.libraryFieldIssue(proposed: spec, stored: stored[spec.file]) {
-            throw Abort(.badRequest, reason: refusal)
+            throw AppError.badRequest(reason: refusal)
         }
         guard seenFiles.insert(spec.file).inserted else {
-            throw Abort(.badRequest, reason: "Dataset file '\(spec.file)' is listed more than once.")
+            throw AppError.badRequest(reason: "Dataset file '\(spec.file)' is listed more than once.")
         }
     }
 
@@ -237,14 +237,13 @@ func applyDatasetsEdit(
     // end the attachment and give every student the whole file. Detach does
     // that deliberately and keeps the sample.
     for (file, spec) in stored where spec.source != nil && !seenFiles.contains(file) {
-        throw Abort(
-            .badRequest,
+        throw AppError.badRequest(
             reason: "'\(file)' is attached from the course library. Detach it to remove its dataset settings.")
     }
 
     // An activity that ranks or matches students refuses personal data.
     if let violation = ManifestCoherence.violation(introducedBy: { $0.datasets = datasets }, in: setup.manifest) {
-        throw Abort(.badRequest, reason: violation)
+        throw AppError.badRequest(reason: violation)
     }
 
     try await mutateManifest(setup: setup, on: db) { props in

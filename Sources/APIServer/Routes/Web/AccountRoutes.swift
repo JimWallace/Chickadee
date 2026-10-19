@@ -29,7 +29,9 @@ struct AccountRoutes: RouteCollection {
     @Sendable
     func accountPage(req: Request) async throws -> Response {
         let user = try req.auth.require(APIUser.self)
-        guard let userID = user.id else { throw Abort(.internalServerError) }
+        guard let userID = user.id else {
+            throw AppError.internalFailure(reason: "Your account has no saved identity.")
+        }
 
         // All non-archived courses, newest term first (`courseListPrecedes`):
         // two offerings of one code must sort in a fixed order (#2231).
@@ -198,7 +200,9 @@ struct AccountRoutes: RouteCollection {
     @Sendable
     func joinCourse(req: Request) async throws -> Response {
         let user = try req.auth.require(APIUser.self)
-        guard let userID = user.id else { throw Abort(.internalServerError) }
+        guard let userID = user.id else {
+            throw AppError.internalFailure(reason: "Your account has no saved identity.")
+        }
 
         struct JoinBody: Content { var courseID: String }
         let body = try await req.decodeContent(JoinBody.self)
@@ -224,19 +228,21 @@ struct AccountRoutes: RouteCollection {
     @Sendable
     func leaveCourse(req: Request) async throws -> Response {
         let user = try req.auth.require(APIUser.self)
-        guard let userID = user.id else { throw Abort(.internalServerError) }
+        guard let userID = user.id else {
+            throw AppError.internalFailure(reason: "Your account has no saved identity.")
+        }
 
         guard
             let idString = req.parameters.get("courseID"),
             let courseID = UUID(uuidString: idString)
         else {
-            throw Abort(.badRequest)
+            throw AppError.badRequest(reason: "The course ID is not valid.")
         }
 
         // Only open-mode courses can be self-left.
         // Closed courses are instructor-managed; auto courses are mandatory.
         guard let course = try await APICourse.find(courseID, on: req.db) else {
-            throw Abort(.notFound)
+            throw AppError.notFound(resource: "Course")
         }
         guard course.enrollmentMode == .open else {
             throw AppError.forbidden(action: "leave a \(course.enrollmentMode.rawValue)-enrolment course")

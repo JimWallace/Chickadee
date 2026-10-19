@@ -16,7 +16,7 @@ extension InstructorWorkbenchRoutes {
     func suiteOutline(req: Request) async throws -> Response {
         let (assignment, setup) = try await loadAssignmentAndSetupForStaffRead(req)
         guard let manifest = decodeManifest(fromJSON: setup.manifest) else {
-            throw Abort(.unprocessableEntity, reason: "The assignment's manifest cannot be read.")
+            throw AppError.unprocessable(reason: "The assignment's manifest cannot be read.")
         }
         let language = AssignmentLanguage.resolve(manifest: manifest)
 

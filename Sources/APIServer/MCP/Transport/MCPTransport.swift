@@ -135,7 +135,7 @@ struct MCPTransport: Sendable {
         guard !configuration.allowedHosts.isEmpty else { return }
         let host = req.headers.first(name: "Host")?.lowercased() ?? ""
         guard configuration.allowedHosts.contains(host) else {
-            throw Abort(.forbidden, reason: "Host header is not in the allowlist.")
+            throw AppError.forbiddenReason(reason: "Host header is not in the allowlist.")
         }
     }
 
@@ -146,7 +146,7 @@ struct MCPTransport: Sendable {
         // An absent Origin is allowed (non-browser clients: Inspector, curl).
         guard let origin = req.headers.first(name: "Origin") else { return }
         guard configuration.allowedOrigins.contains(origin) else {
-            throw Abort(.forbidden, reason: "Origin is not in the allowlist.")
+            throw AppError.forbiddenReason(reason: "Origin is not in the allowlist.")
         }
     }
 
@@ -170,7 +170,7 @@ struct MCPTransport: Sendable {
 
     private func decodeRequest(_ req: Request) throws -> JSONRPCRequest {
         guard var buffer = req.body.data else {
-            throw Abort(.badRequest, reason: "Missing request body.")
+            throw AppError.badRequest(reason: "Missing request body.")
         }
         let bytes = buffer.readBytes(length: buffer.readableBytes) ?? []
         return try JSONDecoder().decode(JSONRPCRequest.self, from: Data(bytes))

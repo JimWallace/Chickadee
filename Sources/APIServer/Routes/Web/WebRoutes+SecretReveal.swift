@@ -24,12 +24,12 @@ extension WebRoutes {
     @Sendable
     func spendSecretRevealToken(req: Request) async throws -> Response {
         let user = try req.auth.require(APIUser.self)
-        guard let userID = user.id else { throw Abort(.unauthorized) }
+        guard let userID = user.id else { throw AppError.unauthenticated }
         guard
             let setupID = req.parameters.get("testSetupID"),
             let setup = try await APITestSetup.find(setupID, on: req.db)
         else {
-            throw Abort(.notFound)
+            throw AppError.notFound(resource: "Test setup")
         }
         // Cross-tenant guard: only members of the setup's course may interact
         // with it (same gate as the submit form).
@@ -39,7 +39,7 @@ extension WebRoutes {
             let assignment = try await assignmentByTestSetupID(setupID, on: req.db),
             let assignmentID = assignment.id
         else {
-            throw Abort(.notFound)
+            throw AppError.notFound(resource: "Assignment")
         }
 
         let redirectTarget = try await spendRedirectTarget(

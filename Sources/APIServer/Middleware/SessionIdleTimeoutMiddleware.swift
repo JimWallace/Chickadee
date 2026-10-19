@@ -68,7 +68,7 @@ struct SessionIdleTimeoutMiddleware: AsyncMiddleware {
         request.session.destroy()
 
         if request.url.path.hasPrefix("/api/") {
-            throw Abort(.unauthorized, reason: "Session timed out")
+            throw AppError.unauthorized(reason: "Session timed out")
         }
         // Force IdP re-authentication on the next sign-in, same as an explicit
         // logout — otherwise the timed-out session is silently restored by Duo's

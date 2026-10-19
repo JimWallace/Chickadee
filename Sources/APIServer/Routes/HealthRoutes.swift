@@ -22,7 +22,7 @@ struct HealthRoutes: RouteCollection {
         do {
             guard let sql = req.db as? (any SQLDatabase) else {
                 dbStatus = "error"
-                throw Abort(.internalServerError)
+                throw AppError.internalFailure(reason: "The database health check is unavailable.")
             }
             _ = try await sql.raw("SELECT 1").all()
             dbStatus = "ok"

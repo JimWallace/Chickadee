@@ -15,7 +15,7 @@ struct WorkerArtifactRoutes: RouteCollection {
         guard let subID = req.parameters.get("submissionID"),
             let submission = try await APISubmission.find(subID, on: req.db)
         else {
-            throw Abort(.notFound)
+            throw AppError.notFound(resource: "Submission")
         }
 
         // A validation (reference-solution) notebook carrying `{{name}}`
@@ -52,7 +52,7 @@ struct WorkerArtifactRoutes: RouteCollection {
         guard let setupID = req.parameters.get("testSetupID"),
             let setup = try await APITestSetup.find(setupID, on: req.db)
         else {
-            throw Abort(.notFound)
+            throw AppError.notFound(resource: "Test setup")
         }
         return try await req.fileio.asyncStreamFile(at: setup.zipPath)
     }

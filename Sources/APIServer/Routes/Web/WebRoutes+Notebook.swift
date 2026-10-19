@@ -31,12 +31,12 @@ extension WebRoutes {
             var edit: Bool?
         }
         let user = try req.auth.require(APIUser.self)
-        guard let userID = user.id else { throw Abort(.unauthorized) }
+        guard let userID = user.id else { throw AppError.unauthenticated }
         guard
             let setupID = req.parameters.get("testSetupID"),
             let setup = try await APITestSetup.find(setupID, on: req.db)
         else {
-            throw Abort(.notFound)
+            throw AppError.notFound(resource: "Test setup")
         }
         try await req.cachedRequireCourseEnrollment(caller: user, courseID: setup.courseID)
 
@@ -180,12 +180,12 @@ extension WebRoutes {
     @Sendable
     func resetOwnNotebook(req: Request) async throws -> Response {
         let user = try req.auth.require(APIUser.self)
-        guard let userID = user.id else { throw Abort(.unauthorized) }
+        guard let userID = user.id else { throw AppError.unauthenticated }
         guard
             let setupID = req.parameters.get("testSetupID"),
             let setup = try await APITestSetup.find(setupID, on: req.db)
         else {
-            throw Abort(.notFound)
+            throw AppError.notFound(resource: "Test setup")
         }
 
         // A bare test setup with no assignment row is not a student-facing
@@ -195,7 +195,7 @@ extension WebRoutes {
             try await requireOpenStudentAssignment(for: setupID, user: user, gate: .access, on: req)
                 != nil
         else {
-            throw Abort(.notFound)
+            throw AppError.notFound(resource: "Assignment")
         }
 
         let starter: Data
@@ -203,7 +203,7 @@ extension WebRoutes {
             starter = try await req.application.notebookBytesCache.notebookData(
                 for: NotebookSourceRef(setup))
         } catch {
-            throw Abort(.badRequest, reason: "This assignment has no starter notebook to reset to.")
+            throw AppError.badRequest(reason: "This assignment has no starter notebook to reset to.")
         }
 
         // Staff reset their copy on the student view, never their authoring copy.
@@ -475,7 +475,7 @@ extension WebRoutes {
         fileKind: NotebookFileKind,
         requestedView: String?
     ) async throws -> NotebookContext {
-        guard let userID = user.id else { throw Abort(.unauthorized) }
+        guard let userID = user.id else { throw AppError.unauthenticated }
         let setupID = setup.id ?? ""
         let isStaff = try await req.cachedIsCourseStaff(user, inCourse: setup.courseID)
         let viewMode = try await resolveNotebookViewMode(
@@ -686,12 +686,12 @@ extension WebRoutes {
             var edit: Bool?
         }
         let user = try req.auth.require(APIUser.self)
-        guard let userID = user.id else { throw Abort(.unauthorized) }
+        guard let userID = user.id else { throw AppError.unauthenticated }
         guard
             let setupID = req.parameters.get("testSetupID"),
             let setup = try await APITestSetup.find(setupID, on: req.db)
         else {
-            throw Abort(.notFound)
+            throw AppError.notFound(resource: "Test setup")
         }
 
         try await req.cachedRequireCourseEnrollment(caller: user, courseID: setup.courseID)
@@ -707,7 +707,7 @@ extension WebRoutes {
             !(try await isAssignmentEffectivelyOpen(assignment, for: user, req: req)),
             !(try await studentHasOpenedAssignment(assignment: assignment, userID: userID, on: req.db))
         {
-            throw Abort(.forbidden)
+            throw AppError.forbidden(action: "open the notebook for an assignment that is not open")
         }
 
         let query = try req.query.decode(NotebookSourceQuery.self)
@@ -787,7 +787,7 @@ extension WebRoutes {
             let setupID = req.parameters.get("testSetupID"),
             let setup = try await APITestSetup.find(setupID, on: req.db)
         else {
-            throw Abort(.notFound)
+            throw AppError.notFound(resource: "Test setup")
         }
         try await req.cachedRequireCourseEnrollment(caller: user, courseID: setup.courseID)
         let isStaff = try await req.cachedIsCourseStaff(user, inCourse: setup.courseID)
