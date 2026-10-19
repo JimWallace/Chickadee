@@ -25,7 +25,7 @@ today.
 | 3d | Rankings per group, the tournament: `tournament_runs.group_id`, a group's run is entered by its session, labs play at once, the bracket per group, the run control takes the group | built |
 | 4a | The composite per group: `group_composite_slots`, each group deals its own slots in its session, contributions fill the group's image, the board and the present page per group | built |
 | 4b | Spares per group: `group_composite_spares`, "Fill a hole" fills a hole in the image of the student's own lab while their session is open | built |
-| 4c | The course gallery of every group's image | not started |
+| 4c | The gallery of every lab's image, under the staff leaderboard, once each lab's session has ended | built |
 | 5 | Group goals: the union and the corpus percent per group; a group achievement | not started |
 | 6 | The LEARN source: the existing group-category sweep writes the new tables; a D2L Sections reader; the category picker | not started |
 | later | Per-group deadlines; a TA's roster filtered to their groups; a `team` kind with a shared submission | not planned |
@@ -177,8 +177,8 @@ Nil means course-wide, which is what every existing row is.
    when a group has nobody yet.
 7. **Each group makes its own composite.** Slots are dealt per (assignment,
    group, round, slot). A 6 × 8 starter grid suits a lab of 25 with spares
-   for the fast students. The course page gains a gallery of every group's
-   image, which is the end-of-term artefact.
+   for the fast students. The staff leaderboard gains a gallery of every
+   group's image, which is the end-of-term artefact.
 8. **A group goal is the same goal, counted per group.** The union and the
    corpus percent read their rows filtered by group; breadth is the fraction
    of the group's current members. The achievement is awarded to the group's
@@ -208,7 +208,7 @@ Nil means course-wide, which is what every existing row is.
 | King of the hill | One champion per assignment | One champion per group; the job stages the group's champion. |
 | Round robin | Every classmate in the course | Every participant in the group. |
 | Tournament | One run per assignment, started from the present page | One run per (assignment, group), started from the group's present page. The arena plays that group's bracket. |
-| Composite | One image, slots dealt course-wide | One image per group; a gallery on the course page. |
+| Composite | One image, slots dealt course-wide | One image per group; a gallery of every group's image on the staff leaderboard. |
 | Class goal | The course roster | The group's members; the award goes to the group's participants. |
 | Present page | One board | A group picker for staff; the TA's own group by default; the join code and the session clock on the board. |
 | Students with no group | n/a | See the join prompt and the code's entry field on the assignment page. |
@@ -597,11 +597,20 @@ should be able to see it. The maintainer chose best effort on 2026-10-18.
   longer expects a lab's spare request to be refused. New:
   `CompositeSparesPerGroupTests`.
 
-### Slice 4c: the course gallery
+### Slice 4c: the gallery (built)
 
-- The course page shows a gallery of every group's image once their
-  sessions have closed.
-- Tests: the gallery order, and no image of a group whose session is open.
+- The staff leaderboard of a per-group composite ends with "Every lab's
+  image" (`CompositeGalleryPresentation`, `CompositeGallerySection`): one
+  stage per lab whose session has ended, in the group set's order, each with
+  the lab's name and its progress. A lab whose session is open, or never
+  opened, is not in it. Each stage reads its lab's snapshot when the page
+  opens and stops polling, because the close is past.
+- Staff only, as the composite board is: a student sees only their own tile.
+  Whether students see the gallery at the end of term is a decision for
+  later.
+- `CompositeStage` takes the slider's id, so two animated stages on one page
+  do not share one.
+- Tests: `CompositeGalleryTests`.
 
 ### Slice 5: group goals
 

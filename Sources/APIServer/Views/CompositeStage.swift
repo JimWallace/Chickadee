@@ -11,6 +11,9 @@ import Elementary
 
 struct CompositeStage: HTML {
     let stage: CompositeStagePresentation
+    /// The frame slider's id. A page with more than one stage gives each its
+    /// own.
+    var scrubID = "composite-scrub"
 
     var body: some HTML {
         div(
@@ -49,9 +52,9 @@ struct CompositeStage: HTML {
                 div(.class("toolbar")) {
                     button(.class("btn action-btn js-composite-play"), .type(.button)) { "Pause" }
                     " "
-                    label(.class("visually-hidden"), .for("composite-scrub")) { "Frame" }
+                    label(.class("visually-hidden"), .for(scrubID)) { "Frame" }
                     input(
-                        .id("composite-scrub"), .class("composite-scrub js-composite-scrub"), .type(.range),
+                        .id(scrubID), .class("composite-scrub js-composite-scrub"), .type(.range),
                         .custom(name: "min", value: "0"), .custom(name: "max", value: "0"), .value("0"))
                 }
             }
