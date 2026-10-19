@@ -349,7 +349,10 @@ import Testing
         // End-to-end guard: a cell using `/` must keep the `/` in the generated
         // module so its exec(compile()) doesn't fail and its variables resolve.
         let cells: [JSONValue] = [
-            .object(["cell_type": .string("code"), "source": .array([.string("daily_ml = 2450\ndaily_l = daily_ml / 1000\n")])])
+            .object([
+                "cell_type": .string("code"),
+                "source": .array([.string("daily_ml = 2450\ndaily_l = daily_ml / 1000\n")]),
+            ])
         ]
         let notebook: [String: JSONValue] = ["cells": .array(cells)]
         let result = try extractor.extractPythonSource(from: notebook, filename: "submission.ipynb")
@@ -429,9 +432,14 @@ import Testing
         // cell) and ask python3 which names actually resolve after import.
         let cells: [JSONValue] = [
             .object(["cell_type": .string("code"), "source": .array([.string("good = 1\n")])]),
-            .object(["cell_type": .string("code"), "source": .array([.string("daily_ml = 2450\ndaily_l = daily_ml / 1000\n")])]),  // division
-            .object(["cell_type": .string("code"), "source": .array([.string("broken = (\n")])]),  // syntax error → isolated
-            .object(["cell_type": .string("code"), "source": .array([.string("# Your code here\n")])]),  // comment-only → harmless
+            .object([
+                "cell_type": .string("code"),
+                "source": .array([.string("daily_ml = 2450\ndaily_l = daily_ml / 1000\n")]),
+            ]),  // division
+            // syntax error → isolated
+            .object(["cell_type": .string("code"), "source": .array([.string("broken = (\n")])]),
+            // comment-only → harmless
+            .object(["cell_type": .string("code"), "source": .array([.string("# Your code here\n")])]),
             .object(["cell_type": .string("code"), "source": .array([.string("after = 7\n")])]),
         ]
         let notebook: [String: JSONValue] = ["cells": .array(cells)]

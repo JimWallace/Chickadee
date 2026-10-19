@@ -138,7 +138,7 @@ private func resolveNotebookForExtraction(
     }
 
     let validated = try SubmissionValidation.validatedNotebook(
-        data: data, filename: item.lastPathComponent, language: language)
+        parsed: lenient, filename: item.lastPathComponent, language: language)
     let cells = validated["cells"]?.arrayOfObjects ?? []
     let codeCellCount = cells.count(where: { $0["cell_type"]?.stringValue == "code" })
     try SubmissionValidation.requireCodeCells(

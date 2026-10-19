@@ -41,7 +41,7 @@ import Testing
     @Test func arrayOfObjectsNeedsEveryElementToBeAnObject() {
         let objects = JSONValue.array([.object(["a": .int(1)]), .object([:])])
         #expect(objects.arrayOfObjects == [["a": .int(1)], [:]])
-        #expect(JSONValue.array([]).arrayOfObjects == [])
+        #expect(JSONValue.array([]).arrayOfObjects?.isEmpty == true)
         #expect(JSONValue.array([.object([:]), .string("cell")]).arrayOfObjects == nil)
         #expect(JSONValue.object([:]).arrayOfObjects == nil)
     }

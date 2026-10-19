@@ -145,12 +145,23 @@ enum SubmissionValidation {
         filename: String,
         language: AssignmentLanguage
     ) throws(SubmissionNormalizationError) -> [String: JSONValue] {
+        try validatedNotebook(parsed: JSONValue.object(from: data), filename: filename, language: language)
+    }
+
+    /// The same validation over a notebook that the caller already parsed with
+    /// `JSONValue.object(from:)`, so that the file is not parsed twice. Nil
+    /// means that the parse failed.
+    static func validatedNotebook(
+        parsed: [String: JSONValue]?,
+        filename: String,
+        language: AssignmentLanguage
+    ) throws(SubmissionNormalizationError) -> [String: JSONValue] {
         guard submissionGuaranteeApplies(.validNotebookJSON, to: language) else {
             // Exempt: parse leniently and let the caller skip on failure.
             reportSkippedGuarantee(.validNotebookJSON, language: language, filename: filename)
-            return JSONValue.object(from: data) ?? [:]
+            return parsed ?? [:]
         }
-        guard let object = JSONValue.object(from: data) else {
+        guard let object = parsed else {
             throw SubmissionNormalizationError.invalidNotebookJSON(filename)
         }
         guard object["metadata"] != nil, object["nbformat"] != nil,
