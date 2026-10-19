@@ -96,14 +96,22 @@ func latestStudentSubmissionsByUser(
 ///
 /// Latest by submission time, one per classmate, so a resubmission by B
 /// changes what A's NEXT job plays and never what A's landed job played.
+///
+/// For an activity that runs per lab group, the classmates are the students
+/// in the session the challenger submitted in (docs/lab-groups.md, slice
+/// 3c); a submission made with no session open plays only the bot.
 func chooseClassmates(
     for submission: APISubmission, activity: ClassActivity, on db: any Database
 ) async throws -> [ChosenOpponent] {
     guard activity.kind.opponentSource == .classmates,
         let setup = try await APITestSetup.find(submission.testSetupID, on: db)
     else { return [] }
-    let latestByUser = try await latestStudentSubmissionsByUser(
+    var latestByUser = try await latestStudentSubmissionsByUser(
         setup: setup, excluding: submission.userID, on: db)
+    if activity.isPerGroup {
+        guard let players = try await sessionPlayers(of: submission, on: db) else { return [] }
+        latestByUser = latestByUser.filter { players.contains($0.key) }
+    }
     // Stable order — by submission ID — so two claims of one submission
     // stage the same opponents in the same order.
     return latestByUser.values
@@ -113,6 +121,18 @@ func chooseClassmates(
                 ChosenOpponent(champion: classmate, identity: JobOpponent.submissionIdentity($0))
             }
         }
+}
+
+/// The students who play in the session `submission` was made in: its
+/// current run, removed students left out. Nil when the submission was made
+/// with no session open.
+private func sessionPlayers(of submission: APISubmission, on db: any Database) async throws -> Set<UUID>? {
+    guard let userID = submission.userID, let submissionID = submission.id,
+        let session = try await ActivitySessionStore.sessionAtSubmission(
+            testSetupID: submission.testSetupID, userID: userID, submissionID: submissionID, on: db)
+    else { return nil }
+    return Set(
+        try await ActivitySessionStore.attendance(of: session, on: db).filter { $0.removedAt == nil }.map(\.userID))
 }
 
 /// Opens (or reopens, on a re-test) the match row for this job. One row per
@@ -320,21 +340,40 @@ private func recordMatrixMatches(
         try await row.update(on: db)
     }
 
-    guard let setupID = setup.id,
+    guard let setupID = setup.id, let activity = setup.decodedManifest()?.activity,
         try await courseRole(of: userID, inCourse: setup.courseID, db: db) == .student
     else { return }
     // A union kind materialises nothing: both halves of its reading — whose
     // code the class defeated, and whose code held up — are queries over the
     // rows just completed (`unionTally`). A standings row would answer only
     // the tester's half and would be read as the whole record.
-    guard setup.decodedManifest()?.activity?.kind.aggregation != .union else { return }
+    guard activity.kind.aggregation != .union else { return }
+    // A lab group's standings row carries the group of the session the
+    // submission was made in. With no session open the result grades and
+    // the student's standing stays as it was (docs/lab-groups.md, slice 3c).
+    let groupID: UUID?
+    if activity.isPerGroup {
+        guard
+            let session = try await ActivitySessionStore.sessionAtSubmission(
+                testSetupID: setupID, userID: userID, submissionID: submissionID, on: db)
+        else { return }
+        groupID = session.groupID
+    } else {
+        groupID = nil
+    }
     try await db.transaction { tx in
         try await lockStandings(of: setupID, on: tx)
-        try await recomputeStanding(testSetupID: setupID, userID: userID, submissionID: submissionID, on: tx)
-        if let leader = try await rankedStandings(testSetupID: setupID, courseID: setup.courseID, on: tx).first {
-            try await awardTournamentWinnerRecords(
-                setup: setup, userID: leader.standing.userID, submissionID: leader.standing.submissionID, on: tx)
-        }
+        try await recomputeStanding(
+            testSetupID: setupID, userID: userID, submissionID: submissionID, groupID: groupID, on: tx)
+        // A class record has one holder, and a per-group round robin has a
+        // leader in every lab: no lab's leader holds it.
+        guard groupID == nil,
+            let leader = try await rankedStandings(
+                testSetupID: setupID, courseID: setup.courseID, groupID: nil, on: tx
+            ).first
+        else { return }
+        try await awardTournamentWinnerRecords(
+            setup: setup, userID: leader.standing.userID, submissionID: leader.standing.submissionID, on: tx)
     }
 }
 
@@ -365,7 +404,7 @@ private func lockStandings(of setupID: String, on db: any Database) async throws
 /// counting it sat the first submitter last on a loss until a classmate
 /// arrived (#1748). With nothing to count, the student has no standings row.
 private func recomputeStanding(
-    testSetupID: String, userID: UUID, submissionID: String, on db: any Database
+    testSetupID: String, userID: UUID, submissionID: String, groupID: UUID?, on db: any Database
 ) async throws {
     let rows = try await APIMatchResult.query(on: db)
         .filter(\.$submissionID == submissionID)
@@ -384,6 +423,7 @@ private func recomputeStanding(
         try await existing?.delete(on: db)
     } else if let existing {
         existing.submissionID = submissionID
+        existing.groupID = groupID
         existing.played = rows.count
         existing.wins = wins
         existing.draws = draws
@@ -392,20 +432,26 @@ private func recomputeStanding(
         existing.updatedAt = Date()
         try await existing.update(on: db)
     } else {
-        try? await APIActivityStanding(
+        let standing = APIActivityStanding(
             testSetupID: testSetupID, userID: userID, submissionID: submissionID,
             played: rows.count, wins: wins, draws: draws, losses: losses, scoreSum: scoreSum,
-            updatedAt: Date()
-        ).save(on: db)
+            updatedAt: Date())
+        standing.groupID = groupID
+        try? await standing.save(on: db)
     }
 }
 
 /// The standings, best first: average match score, then wins, then matches
-/// played, then the earlier row.
-func activityStandings(testSetupID: String, on db: any Database) async throws -> [APIActivityStanding] {
-    try await APIActivityStanding.query(on: db)
-        .filter(\.$testSetupID == testSetupID)
-        .all()
+/// played, then the earlier row. With `groupID`, one lab group's standings;
+/// without, every row.
+func activityStandings(
+    testSetupID: String, groupID: UUID? = nil, on db: any Database
+) async throws
+    -> [APIActivityStanding]
+{
+    let query = APIActivityStanding.query(on: db).filter(\.$testSetupID == testSetupID)
+    if let groupID { query.filter(\.$groupID == groupID) }
+    return try await query.all()
         .sorted { a, b in
             if a.averageScore != b.averageScore { return a.averageScore > b.averageScore }
             if a.wins != b.wins { return a.wins > b.wins }
@@ -430,8 +476,10 @@ struct RankedStanding: Sendable {
 /// and the standings-leader record all read it, so a tie or a student who
 /// left the course cannot give the page one answer and the badge or the
 /// record another (#2191).
-func rankedStandings(testSetupID: String, courseID: UUID, on db: any Database) async throws -> [RankedStanding] {
-    let standings = try await activityStandings(testSetupID: testSetupID, on: db)
+func rankedStandings(
+    testSetupID: String, courseID: UUID, groupID: UUID? = nil, on db: any Database
+) async throws -> [RankedStanding] {
+    let standings = try await activityStandings(testSetupID: testSetupID, groupID: groupID, on: db)
     let enrolled = try await APICourseEnrollment.query(on: db)
         .filter(\.$course.$id == courseID)
         .filter(\.$userID ~~ standings.map(\.userID))
@@ -467,12 +515,19 @@ private struct StandingKey: Equatable {
 /// A student's place (1 = first, shared on a tie) and win count in the
 /// standings, for the `standing` / `matchesWon` badge signals; nil when they
 /// have no row, or have left the course. The place is the page's
-/// (`rankedStandings`).
+/// (`rankedStandings`): in a per-group round robin, the place in the lab
+/// group of the student's row.
 func standingSignals(
     testSetupID: String, userID: UUID, on db: any Database
 ) async throws -> (standing: Int, matchesWon: Int)? {
-    guard let setup = try await APITestSetup.find(testSetupID, on: db) else { return nil }
-    let ranked = try await rankedStandings(testSetupID: testSetupID, courseID: setup.courseID, on: db)
+    guard let setup = try await APITestSetup.find(testSetupID, on: db),
+        let own = try await APIActivityStanding.query(on: db)
+            .filter(\.$testSetupID == testSetupID)
+            .filter(\.$userID == userID)
+            .first()
+    else { return nil }
+    let ranked = try await rankedStandings(
+        testSetupID: testSetupID, courseID: setup.courseID, groupID: own.groupID, on: db)
     guard let row = ranked.first(where: { $0.standing.userID == userID }) else { return nil }
     return (row.rank, row.standing.wins)
 }

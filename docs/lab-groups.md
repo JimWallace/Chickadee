@@ -21,7 +21,8 @@ today.
 | 2 | Sessions: a session per (activity, group), started and ended from the present page; the submission gate reads the session; attendance by join code at `/join`; presence: a code for every student that changes every 30 seconds, the staff list of who joined, a limit on wrong codes, the "Other network" flag | built |
 | 3a | Rankings per group, the leaderboard: `group_leaderboard_entries`, a late result does not rank, the board and the present page per group; other kinds refuse the flag until their slice | built |
 | 3b | Rankings per group, the hill: `group_activity_champions`, a challenger plays their group's champion, the page and the present page show the group's hill | built |
-| 3 | Rankings per group, the rest: standings, round-robin opponents, tournament runs | not started |
+| 3c | Rankings per group, the round robin: classmates are the students in the challenger's session, `activity_standings.group_id`, standings per group on the page and the present page | built |
+| 3 | Rankings per group, the rest: tournament runs | not started |
 | 4 | The composite per group, and the course gallery of every group's image | not started |
 | 5 | Group goals: the union and the corpus percent per group; a group achievement | not started |
 | 6 | The LEARN source: the existing group-category sweep writes the new tables; a D2L Sections reader; the category picker | not started |
@@ -125,9 +126,11 @@ And, per ranking table, a per-group form: slice 3a made the leaderboard's a
 twin table, `group_leaderboard_entries` keyed (assignment, group, student),
 because a column under the existing (assignment, student) key strands a
 student who moves labs. Slice 3b made the hill's a twin table too,
-`group_activity_champions` keyed (assignment, group). The rest are still a
-nullable `group_id` in this plan:
-`activity_standings`,
+`group_activity_champions` keyed (assignment, group). Slice 3c gave
+`activity_standings` a nullable `group_id` under its (assignment, student)
+key: a standings row is the student's latest submission, never a best, so a
+student who moves labs moves with it. The rest are still a nullable
+`group_id` in this plan:
 `match_results`, `tournament_runs`, `composite_slots`,
 `composite_contributions`, `class_item_coverage`, `class_coverage_runs`.
 Nil means course-wide, which is what every existing row is.
@@ -397,7 +400,8 @@ should be able to see it. The maintainer chose best effort on 2026-10-18.
 - The present page projects the selected group's board, and its refresh
   and the leaderboard's Present link keep the group.
 - `ActivityKind.canRunPerGroup` (Core) is the one rule: a leaderboard kind
-  (Best metric, Beat the instructor, and since slice 3b Beat the champion).
+  (Best metric, Beat the instructor, and since slice 3b Beat the champion),
+  and since slice 3c the Round robin.
   `ActivityAuthoring` refuses the flag on every other kind
   (`runsPerGroupKindMessage`), the edit page shows the checkbox only for
   these kinds, `set_activity` keeps a stored flag only for them.
@@ -405,7 +409,7 @@ should be able to see it. The maintainer chose best effort on 2026-10-18.
   kind rule) is what every reader reads: the gate, the session routes, the
   present panel, the board and ingest. So an older per-group activity of
   another kind reads as course-wide everywhere at once, and its students
-  are not asked for a code that ranks nowhere. Standings, a bracket and the union
+  are not asked for a code that ranks nowhere. A bracket and the union
   would mix the groups until their slices make them per group. A composite
   keeps its own message.
 - The submission gate refuses only a student who never joined one of the
@@ -451,12 +455,34 @@ should be able to see it. The maintainer chose best effort on 2026-10-18.
   Beat the instructor and Beat the champion.
 - Tests: `HillPerGroupTests`.
 
+### Slice 3c: the round robin per group (built)
+
+- `chooseClassmates` plays the students in the session the challenger
+  submitted in: that run's attendance, removed students left out, each
+  with their latest complete submission. A submission made with no session
+  open plays only the bot, or nobody.
+- `activity_standings.group_id` (`AddActivityStandingGroup`): the group of
+  the session the row's submission was made in. A standings row stays the
+  student's latest submission, so it moves with a student who plays in
+  another lab. A result that lands with no session open grades and leaves
+  the student's standing as it was.
+- `rankedStandings` and `buildStandingsBoard` take a group; the leaderboard
+  page and the present page show the group they show, and a student in no
+  group sees no standings. A student's `standing` badge signal is their
+  place in the group of their own row.
+- The standings-leader class record is not awarded for a per-group round
+  robin, as with the hill (slice 3b): every lab has a leader.
+- Tests changed with the maintainer's direction (each activity can be
+  scoped to the whole class or a lab): the round robin joins the kinds that
+  can run per group in `ClassActivityIsPerGroupTests` and leaves the refused
+  kinds in `LeaderboardPerGroupTests`. New: `RoundRobinPerGroupTests`.
+
 ### Slice 3: rankings per group, the rest
 
-- `group_id` on `activity_standings`, `match_results` and
-  `tournament_runs`. The ingest
+- `group_id` on `match_results` and `tournament_runs`. The ingest
   writers resolve the student's session group once and stamp it.
-- `jobOpponentSet` lists the group's participants (the hill is slice 3b).
+- Tournament entrants are the group's participants (the hill is slice 3b,
+  the round robin slice 3c).
 - The leaderboard, standings and bracket pages filter by group. The present
   page takes a group; a TA with a group membership lands on it.
 - "Run tournament" and the arena routes take the group. `run_tournament` on

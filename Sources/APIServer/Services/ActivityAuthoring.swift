@@ -239,7 +239,7 @@ enum ActivityAuthoring {
     static let runsPerGroupCompositeMessage =
         "A class composite cannot run once per lab group yet."
     static let runsPerGroupKindMessage =
-        "Only a Best metric, Beat the instructor or Beat the champion activity can run once per lab group yet."
+        "Only a Best metric, Beat the instructor, Beat the champion or Round robin activity can run once per lab group yet."
     static let runsPerGroupWithWindowMessage =
         "Each group's session is the clock of a per-group activity, so clear the session window first."
 

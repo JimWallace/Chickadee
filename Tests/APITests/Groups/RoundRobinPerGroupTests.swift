@@ -1,0 +1,181 @@
+// Tests/APITests/Groups/RoundRobinPerGroupTests.swift
+//
+// A round robin run once per lab group (docs/lab-groups.md, slice 3c): a
+// challenger plays only the students in the session they submitted in, each
+// standings row carries the group it was played in and ranks only there, a
+// submission made with no session open plays nobody and leaves the standings
+// as they were, and no lab's leader holds the course's class record.
+
+import Core
+import Fluent
+import Foundation
+import Testing
+import Vapor
+import VaporTesting
+
+@testable import APIServer
+
+@Suite(.serialized) final class RoundRobinPerGroupTests {
+
+    let app: Application
+
+    init() async throws {
+        self.app = try await makeTestApp(prefix: "chickadee-robin-groups")
+    }
+
+    private struct Fixture {
+        let setup: APITestSetup
+        let activity: ClassActivity
+        let assignmentID: UUID
+        let labA: UUID
+        let labB: UUID
+        let ada: UUID
+        let ben: UUID
+        let alan: UUID
+        let ari: UUID
+    }
+
+    private let setupID = "rrg_setup"
+
+    /// A per-group round robin with ada and ben in Lab 101 and alan and ari
+    /// in Lab 102.
+    private func fixture() async throws -> Fixture {
+        let course = try await makeTestCourse(on: app, code: "RRG1", mode: .closed)
+        let courseID = try course.requireID()
+        let set = try await CourseGroupStore.createSet(courseID: courseID, name: "Lab sections", on: app.db)
+        let labA = try await CourseGroupStore.addGroup(named: "Lab 101", to: set, on: app.db).requireID()
+        let labB = try await CourseGroupStore.addGroup(named: "Lab 102", to: set, on: app.db).requireID()
+        let props = TestProperties(
+            testSuites: [TestSuiteEntry(tier: .pub, script: "match.sh")], language: nil,
+            activity: ClassActivity(kind: .roundRobin, runsPerGroup: true),
+            achievements: [ActivityAuthoring.seededWinnerRecord])
+        let manifest = try #require(String(data: JSONEncoder().encode(props), encoding: .utf8))
+        let setup = try await makeTestSetup(on: app, id: setupID, courseID: courseID, manifest: manifest)
+        let assignment = try await makeTestAssignment(on: app, testSetupID: setupID, courseID: courseID)
+        var students: [UUID] = []
+        for (name, group) in [("rrg_ada", labA), ("rrg_ben", labA), ("rrg_alan", labB), ("rrg_ari", labB)] {
+            let id = try await makeTestStudent(on: app, username: name).requireID()
+            try await makeTestEnrollment(on: app, userID: id, courseID: courseID)
+            try await CourseGroupStore.setMembership(userID: id, groupID: group, in: set, on: app.db)
+            students.append(id)
+        }
+        return Fixture(
+            setup: setup, activity: try #require(setup.decodedManifest()?.activity),
+            assignmentID: try assignment.requireID(), labA: labA, labB: labB,
+            ada: students[0], ben: students[1], alan: students[2], ari: students[3])
+    }
+
+    private func outcome() -> TestOutcome {
+        TestOutcome(
+            testName: "match", testClass: nil, tier: .pub, status: .pass, shortResult: "passed", longResult: nil,
+            metric: 1, executionTimeMs: 1, memoryUsageBytes: nil, attemptNumber: 1, isFirstPassSuccess: false)
+    }
+
+    /// Opens the group's session a minute ago, unless it is open, and joins
+    /// `userID` to it.
+    private func join(_ f: Fixture, group: UUID, userID: UUID) async throws {
+        let session = try await ActivitySessionStore.open(
+            assignmentID: f.assignmentID, groupID: group, by: nil, now: Date().addingTimeInterval(-60), on: app.db)
+        let joinedAt = Date().addingTimeInterval(-30)
+        try await ActivitySessionStore.join(
+            code: ActivitySessionCode.code(secret: session.codeSecret, at: joinedAt), userID: userID,
+            now: joinedAt, on: app.db)
+    }
+
+    /// Runs one challenger's job as the claim and result paths do: choose the
+    /// classmates, open a row for each, then land a report that wins every
+    /// match. Returns the submissions played.
+    @discardableResult
+    private func play(_ f: Fixture, userID: UUID, id: String) async throws -> [String] {
+        let submission = try await makeTestSubmission(on: app, id: id, setupID: setupID, userID: userID)
+        let chosen = try await chooseClassmates(for: submission, activity: f.activity, on: app.db)
+        let opponents =
+            chosen.isEmpty ? [ChosenOpponent(champion: nil, identity: JobOpponent.noOpponentIdentity)] : chosen
+        var reports: [MatchReport] = []
+        for opponent in opponents {
+            let seed = JobOpponent.matchSeed(submissionID: id, opponentIdentity: opponent.identity)
+            try await openMatch(testSetupID: setupID, submissionID: id, opponent: opponent, seed: seed, on: app.db)
+            reports.append(
+                MatchReport(
+                    opponentIdentity: opponent.identity, opponentSubmissionID: opponent.champion?.id, seed: seed,
+                    score: 1, metric: 1, won: true))
+        }
+        try await recordActivityMatch(
+            testSetupID: setupID, userID: userID, submissionID: id, outcomes: [outcome()],
+            matches: chosen.isEmpty ? nil : reports, on: app.db)
+        return chosen.compactMap { $0.champion?.id }
+    }
+
+    private func standing(_ userID: UUID) async throws -> APIActivityStanding? {
+        try await APIActivityStanding.query(on: app.db)
+            .filter(\.$testSetupID == setupID)
+            .filter(\.$userID == userID)
+            .first()
+    }
+
+    @Test func aChallengerPlaysOnlyTheStudentsInTheirSession() async throws {
+        try await withApp(app) { _ in
+            let f = try await fixture()
+            for (student, group) in [(f.ada, f.labA), (f.ben, f.labA), (f.alan, f.labB), (f.ari, f.labB)] {
+                try await join(f, group: group, userID: student)
+            }
+            #expect(try await play(f, userID: f.ada, id: "rrg_a1").isEmpty)
+            #expect(try await play(f, userID: f.alan, id: "rrg_l1").isEmpty, "Lab 102 plays nobody from Lab 101")
+            #expect(try await play(f, userID: f.ben, id: "rrg_b1") == ["rrg_a1"])
+            #expect(try await play(f, userID: f.ari, id: "rrg_r1") == ["rrg_l1"])
+        }
+    }
+
+    @Test func eachLabRanksItsOwnStandings() async throws {
+        try await withApp(app) { _ in
+            let f = try await fixture()
+            for (student, group) in [(f.ada, f.labA), (f.ben, f.labA), (f.alan, f.labB), (f.ari, f.labB)] {
+                try await join(f, group: group, userID: student)
+            }
+            try await play(f, userID: f.ada, id: "rrg_a2")
+            try await play(f, userID: f.ben, id: "rrg_b2")
+            try await play(f, userID: f.alan, id: "rrg_l2")
+            try await play(f, userID: f.ari, id: "rrg_r2")
+
+            #expect(try await standing(f.ben)?.groupID == f.labA)
+            #expect(try await standing(f.ari)?.groupID == f.labB)
+            let labA = try await rankedStandings(
+                testSetupID: setupID, courseID: f.setup.courseID, groupID: f.labA, on: app.db)
+            #expect(labA.map(\.standing.userID) == [f.ben])
+            let labB = try await rankedStandings(
+                testSetupID: setupID, courseID: f.setup.courseID, groupID: f.labB, on: app.db)
+            #expect(labB.map(\.standing.userID) == [f.ari])
+            #expect(try await standingSignals(testSetupID: setupID, userID: f.ari, on: app.db)?.standing == 1)
+
+            let board = try await buildStandingsBoard(
+                setup: f.setup, reader: .presenting(as: try #require(try await APIUser.find(f.ada, on: app.db))),
+                showAll: true, groupID: f.labB, on: app.db)
+            #expect(board.rows.count == 1)
+
+            let record = try await APIClassAchievement.query(on: app.db)
+                .filter(\.$testSetupID == setupID)
+                .filter(\.$achievementID == ActivityAuthoring.seededWinnerRecordID)
+                .first()
+            #expect(record == nil, "no lab's leader holds the class record")
+        }
+    }
+
+    @Test func aSubmissionWithNoSessionPlaysNobodyAndLeavesTheStandings() async throws {
+        try await withApp(app) { _ in
+            let f = try await fixture()
+            try await join(f, group: f.labA, userID: f.ada)
+            try await join(f, group: f.labA, userID: f.ben)
+            try await play(f, userID: f.ada, id: "rrg_a3")
+            try await play(f, userID: f.ben, id: "rrg_b3")
+            let before = try #require(try await standing(f.ben))
+            #expect(before.submissionID == "rrg_b3")
+
+            // The session closes; ben's next submission grades and plays nobody.
+            let session = try #require(
+                try await ActivitySessionStore.session(assignmentID: f.assignmentID, groupID: f.labA, on: app.db))
+            try await ActivitySessionStore.close(session, now: Date().addingTimeInterval(-1), on: app.db)
+            #expect(try await play(f, userID: f.ben, id: "rrg_b4").isEmpty)
+            #expect(try await standing(f.ben)?.submissionID == "rrg_b3")
+        }
+    }
+}

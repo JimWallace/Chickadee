@@ -59,9 +59,12 @@ extension WebRoutes {
         let reader = LeaderboardReader.page(user: user, isStaff: isStaff)
         let (board, groupScope) = try await metricBoard(
             req: req, reader: reader, setup: setup, activity: activity, assignment: assignment, showAll: showingAll)
+        // A per-group round robin shows the scope's group, and nothing to a
+        // student in no group (docs/lab-groups.md, slice 3c).
         let standingsBoard =
-            showsStandings
-            ? try await buildStandingsBoard(setup: setup, reader: reader, showAll: showingAll, on: req.db)
+            showsStandings && groupScope.map({ $0.groupID != nil }) != false
+            ? try await buildStandingsBoard(
+                setup: setup, reader: reader, showAll: showingAll, groupID: groupScope?.groupID, on: req.db)
             : StandingsBoard.empty
         let champion = try await buildChampionPresentation(
             setup: setup, activity: activity, groupID: groupScope?.groupID, viewerID: user.id,
@@ -713,11 +716,12 @@ struct StandingsBoard: Sendable {
 /// The standings for a round robin, best first (`activityStandings`), under
 /// the same handle-and-bird identity as a ranking row.
 func buildStandingsBoard(
-    setup: APITestSetup, reader: LeaderboardReader, showAll: Bool, on db: any Database
+    setup: APITestSetup, reader: LeaderboardReader, showAll: Bool, groupID: UUID? = nil, on db: any Database
 ) async throws -> StandingsBoard {
     let viewer = reader.user
     let isStaff = reader.isStaff
-    let ranked = try await rankedStandings(testSetupID: setup.id ?? "", courseID: setup.courseID, on: db)
+    let ranked = try await rankedStandings(
+        testSetupID: setup.id ?? "", courseID: setup.courseID, groupID: groupID, on: db)
     let identities = try await RankedIdentities.load(
         userIDs: ranked.map(\.standing.userID), courseID: setup.courseID, on: db)
 

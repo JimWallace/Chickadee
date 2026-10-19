@@ -468,6 +468,12 @@ because line numbers go out of date.
     check reads the row the claim staged. A new reader or writer of a hill
     goes through `Hill`, never straight to `activity_champions`. A per-group
     hill awards no champion class record.
+  - The round robin of a per-group activity plays the students in the
+    challenger's session (`chooseClassmates`), and its standings row carries
+    the session's group (`activity_standings.group_id`, slice 3c). A reader
+    of the standings passes a group to `rankedStandings`; the badge signal
+    ranks a student in the group of their own row. A per-group round robin
+    awards no standings-leader record.
   - An activity whose kind compares students (`ActivityKind.comparesStudents`)
     accepts only shared data (`DatasetSpec.isShared`). The rule is in
     `ManifestCoherence`. A new door that writes an activity or a dataset spec
@@ -498,6 +504,7 @@ because line numbers go out of date.
   - Ranking, through `ActivitySessionStore.sessionAtSubmission` and
     `currentSession`.
   - `LeaderboardGroupScope.studentGroup`, which picks a student's board.
+  - `chooseClassmates`, which plays the students of the challenger's session.
   - `GroupSessionPanel` on the present page, and `SessionAttendancePage`.
   - The data export (`gatherGroups`, `gatherSessionJoins`).
 - **Rules** (`docs/lab-groups.md`):
