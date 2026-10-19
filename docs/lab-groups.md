@@ -761,7 +761,9 @@ should be able to see it. The maintainer chose best effort on 2026-10-18.
   course has no set yet. The lab features read the course's first set, so a
   course that has a set keeps it. The sync no longer writes
   `APICourseEnrollment.brightspaceSection`, and the migration clears the old
-  names. Both fields stay in the schema, and nothing reads them.
+  names. Both fields stay in the schema, and nothing else reads them. The
+  data export drops its `learnSection` field: the student's groups carry
+  the lab.
 - Tests: `LearnGroupSyncTests`, with a fake `BrightSpaceGrading`: a first
   sync, a rename, a member who moves, a section that disappears and comes
   back, a student the classlist cannot match, a group-category set, a manual

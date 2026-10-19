@@ -657,6 +657,10 @@ because line numbers go out of date.
     loses its rows at the next sync. A removed group counts for nobody (its
     joins, its board and its class-goal bonus go), so an automatic writer
     must not remove a group that held a session.
+  - `APICourseEnrollment.brightspaceSection` and
+    `APICourse.brightspaceSectionCategoryID` are retired: only
+    `MoveLearnSectionCategoryToGroupSet` reads them. A student's lab goes
+    out in the data export as a group membership (`gatherGroups`).
   - Staff are never gated, as with the window.
   - Every write that turns `runsPerGroup` off ends the open sessions:
     `ActivityAuthoring.setActivity` and the MCP version restore. A new writer

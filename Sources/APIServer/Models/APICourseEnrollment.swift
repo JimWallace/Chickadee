@@ -76,7 +76,7 @@ final class APICourseEnrollment: Model, Content, @unchecked Sendable {
     /// Retired by lab groups slice 6: the LEARN group name that the old
     /// section sweep wrote. The LEARN group sync writes group memberships
     /// instead, and `MoveLearnSectionCategoryToGroupSet` cleared the old
-    /// names, so this is nil. The data export still names the field.
+    /// names, so this is nil. Nothing reads it, the data export included.
     @OptionalField(key: "brightspace_section")
     var brightspaceSection: String?
 
