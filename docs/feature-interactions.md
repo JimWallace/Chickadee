@@ -220,6 +220,28 @@ because line numbers go out of date.
   Its bonus reaches LEARN only through "Push all"
   (`docs/brightspace-setup.md`, "What triggers a push").
 
+### A lab's item coverage: `group_class_item_coverage`
+
+- **Writers** (`recordLabItemCoverage`; `docs/lab-groups.md`, slice 5b):
+  `recordClassItemCoverage` for the lab of the session at submission, a
+  lab's composite tile (`CompositeContributions.cover`) and a lab's spare
+  (`CompositeSpares.record`).
+- **Readers:** the class-goal sweep (`labItemCoverage`).
+- **Rules:**
+  - The first finder in a lab keeps an item. Coverage never retreats: no
+    foreign key to the user, and Remove keeps it.
+  - On an activity that runs per lab group, no writer writes
+    `class_item_coverage`. A new writer of item coverage branches on the
+    lab the same way.
+  - The whole class's `class_item_coverage` has two readers: the sweep's
+    whole-class branch and the instructor's coverage section
+    (`buildAssignmentCoverageRows`). That section treats no rows as "not a
+    contribution assignment", so it is empty on a per-group activity; it
+    has no lab reader yet.
+  - Turning `runsPerGroup` off leaves the lab coverage unread: the item
+    goal counts from `class_item_coverage` again.
+  - Course delete removes it (`LabGoalGroups.deleteClassGoalData`).
+
 ### The class-goal bonus: `classGoalBonusPoints`
 
 - **Writers:** the sweep (`evaluateClassGoalAchievements`) writes
@@ -546,8 +568,8 @@ because line numbers go out of date.
     slots (`group_composite_slots`, slice 4a) through `CompositePool`. A
     reader of slots goes through `CompositePool` (`dealt`, `dealtSlot`),
     never straight to `composite_slots`, and a reader of the image passes a
-    group to `CompositeSnapshot.Scope`. A lab's tiles and spares cover their
-    slot in `group_class_item_coverage` (slice 5b). A lab's spares are in `group_composite_spares` (slice
+    group to `CompositeSnapshot.Scope`. A lab's tiles and spares cover
+    their slot in `group_class_item_coverage` (slice 5b). A lab's spares are in `group_composite_spares` (slice
     4b): a reader of spares goes through `CompositePool.spares` or
     `CompositePool.spare(submissionID:)`. A per-group round robin
     awards no standings-leader record, and `setActivity` seeds none for it.

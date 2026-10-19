@@ -672,9 +672,21 @@ should be able to see it. The maintainer chose best effort on 2026-10-18.
   coverage, with breadth over the lab's students (`isCountedPerLab` now
   leaves out only a `classCoverage` goal).
 - Course delete removes the lab coverage (`LabGoalGroups.deleteClassGoalData`).
-- Known limit, accepted: the instructor's coverage section on the
-  assignment page shows the whole class's coverage only, so it is empty on
-  a per-group activity. A lab picker there is later work.
+- Known limits, accepted:
+  - The instructor's coverage section on the assignment page shows the
+    whole class's coverage only, so it is empty on a per-group activity. A
+    lab picker there is later work.
+  - An item counts for the lab of the session it was submitted in, and a
+    student's breadth counts in their lab (`LabGoalGroups`). A student who
+    submits in one lab and then joins another covers items in the first and
+    counts toward breadth in the second, as a composite tile does.
+  - Before slice 5b, an item goal on a per-group activity was counted for
+    the whole class. Those `class_item_coverage` rows are not moved to a
+    lab; the lab goals count from the first lab coverage on.
+  - The other way round too: turning `runsPerGroup` off counts the item
+    goal for the whole class again, from `class_item_coverage` only, which
+    no writer filled while the activity ran per lab. The lab coverage stays
+    and is not read. This is the same as the grade goal's snapshot in 5a.
 - Changed under the maintainer's direction: `LabGoalTests` keeps its
   whole-class case with a coverage goal, and `UserReferenceScanTests`
   lists the new table's `user_id` as kept on purpose. New:

@@ -3,8 +3,10 @@
 // Item goals of an activity that runs once per lab group (docs/lab-groups.md,
 // slice 5b): an item counts for the lab of the session it was submitted in,
 // and for nobody without one; each lab's item goal is counted over its own
-// coverage; and a lab's composite tile and spare cover their slot in their
-// lab, not in the class.
+// coverage; a lab's composite tile and spare cover their slot in their lab,
+// not in the class, and the holder's own tile takes the slot back from a
+// spare; the first finder in a lab keeps an item; and course delete removes
+// the lab coverage.
 
 import Core
 import Fluent
@@ -156,6 +158,8 @@ import VaporTesting
                 activity: ClassActivity(kind: .classComposite, composite: spec, runsPerGroup: true))
             let ada = try await student("litem_ada", joining: f.labA, f)
             await CompositeSlots.dealOnOpen(setup: f.setup, assignment: f.assignment, userID: ada, on: app.db)
+            let ben = try await student("litem_ben", joining: f.labA, f)
+            await CompositeSlots.dealOnOpen(setup: f.setup, assignment: f.assignment, userID: ben, on: app.db)
 
             let pixels = Data([1, 2]).base64EncodedString()
             let outcome = TestOutcome(
@@ -171,7 +175,7 @@ import VaporTesting
             let own = try await makeTestSubmission(on: app, id: "litem_tile", setupID: setupID, userID: ada)
             try await CompositeContributions.record(submission: own, collection: collection("litem_tile"), on: app.db)
 
-            // ada's spare fills slot 1 of Lab 101's image.
+            // ada's spare fills slot 1 of Lab 101's image, which ben holds.
             let job = APISubmission(
                 id: "litem_spare", testSetupID: setupID, zipPath: "unused", attemptNumber: 1, filename: nil,
                 userID: nil, kind: APISubmission.Kind.compositeSpare)
@@ -183,6 +187,59 @@ import VaporTesting
 
             #expect(try await labItems(f.labA) == spec.coverageItems.sorted())
             #expect(try await APIClassItemCoverage.query(on: app.db).count() == 0, "no whole-class coverage")
+
+            // ben's own tile takes slot 1 back from the spare.
+            let bens = try await makeTestSubmission(on: app, id: "litem_ben_tile", setupID: setupID, userID: ben)
+            try await CompositeContributions.record(
+                submission: bens, collection: collection("litem_ben_tile"), on: app.db)
+            let slotOne = try #require(
+                try await APIGroupClassItemCoverage.query(on: app.db)
+                    .filter(\.$groupID == f.labA).filter(\.$item == spec.coverageItems[1]).first())
+            #expect(slotOne.userID == ben)
+            #expect(slotOne.submissionID == "litem_ben_tile")
+        }
+    }
+
+    @Test func theFirstFinderInALabKeepsTheItem() async throws {
+        try await withApp(app) { _ in
+            let f = try await fixture(activity: ClassActivity(kind: .bestMetric, runsPerGroup: true))
+            let ada = try await student("litem_ada", joining: f.labA, f)
+            let ben = try await student("litem_ben", joining: f.labA, f)
+            try await recordLabItemCoverage(
+                testSetupID: setupID, groupID: f.labA, items: [f.items[0]], userID: ada, submissionID: "first",
+                on: app.db)
+            try await recordLabItemCoverage(
+                testSetupID: setupID, groupID: f.labA, items: [f.items[0]], userID: ben, submissionID: "second",
+                on: app.db)
+            let rows = try await APIGroupClassItemCoverage.query(on: app.db).all()
+            #expect(rows.map(\.submissionID) == ["first"])
+            #expect(rows.map(\.userID) == [ada])
+        }
+    }
+
+    @Test func deletingTheCourseRemovesTheLabCoverage() async throws {
+        try await withApp(app) { _ in
+            let cookie = try await loginAsAdmin("litem_admin", on: app)
+            let f = try await fixture(activity: ClassActivity(kind: .bestMetric, runsPerGroup: true))
+            let ada = try await student("litem_ada", joining: f.labA, f)
+            try await covers(f.items, by: ada)
+            #expect(try await APIGroupClassItemCoverage.query(on: app.db).count() == 2)
+
+            let course = try #require(try await APICourse.find(f.setup.courseID, on: app.db))
+            course.isArchived = true
+            // Past the 365-day retention window, so deletion is permitted.
+            course.archivedAt = Date().addingTimeInterval(-400 * 86_400)
+            try await course.save(on: app.db)
+            let path = "/admin/courses/\(f.setup.courseID.uuidString)"
+            let (token, boundCookie) = try await csrfFields(for: path, cookie: cookie, on: app)
+            try await app.asyncTest(
+                .POST, "\(path)/delete",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: boundCookie)
+                    try req.content.encode(["_csrf": token], as: .urlEncodedForm)
+                },
+                afterResponse: { res in #expect(res.status == .seeOther) })
+            #expect(try await APIGroupClassItemCoverage.query(on: app.db).count() == 0)
         }
     }
 }
