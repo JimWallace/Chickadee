@@ -32,9 +32,27 @@ public enum NotebookCellSources {
     /// Reads a cell's `source` field, tolerating either form nbformat
     /// permits (a single string, or an array of strings to be joined).
     /// Returns an empty string for missing / wrong-type fields.
+    ///
+    /// The `[String: JSONValue]` overload below states the same rule. Keep the
+    /// two the same until this one has no caller.
     public static func cellSource(_ cell: [String: Any]) -> String {
         if let s = cell["source"] as? String { return s }
         if let arr = cell["source"] as? [String] { return arr.joined() }
         return ""
+    }
+
+    /// The same read over a cell parsed as `JSONValue`, with the same rule as
+    /// the `[String: Any]` overload above: an array form counts only when
+    /// every element is a string, the same as `as? [String]`.
+    public static func cellSource(_ cell: [String: JSONValue]) -> String {
+        switch cell["source"] {
+        case .string(let source):
+            return source
+        case .array(let parts):
+            let strings = parts.compactMap(\.stringValue)
+            return strings.count == parts.count ? strings.joined() : ""
+        default:
+            return ""
+        }
     }
 }

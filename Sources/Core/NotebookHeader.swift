@@ -36,6 +36,13 @@ public struct NotebookHeader: Sendable, Equatable {
             self.kernelName = kernelName
             self.languageInfoName = languageInfoName
         }
+
+        /// The kernel names of a `metadata` object that is already parsed.
+        /// A name that is not a string reads as absent.
+        public init(_ metadata: [String: JSONValue]) {
+            kernelName = metadata["kernelspec"]?["name"]?.stringValue
+            languageInfoName = metadata["language_info"]?["name"]?.stringValue
+        }
     }
 
     /// Nil when the notebook has no `metadata` object.

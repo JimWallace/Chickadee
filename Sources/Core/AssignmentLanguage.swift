@@ -141,20 +141,10 @@ public enum AssignmentLanguage: String, Codable, Sendable, CaseIterable {
     /// declares nothing recognisable; the caller then asks the author. Checks
     /// `kernelspec.name` first, then `language_info.name`.
     ///
-    /// Both overloads call `languageFromKernelNames`, the one implementation
-    /// of the sniff, so a new language is a `notebookKernelNames` arm and
-    /// nothing else.
+    /// The ONE implementation of the sniff is `languageFromKernelNames`, so a
+    /// new language is a `notebookKernelNames` arm and nothing else.
     public static func fromNotebookMetadata(_ metadata: NotebookHeader.Metadata) -> AssignmentLanguage? {
         languageFromKernelNames(metadata.kernelName, metadata.languageInfoName)
-    }
-
-    /// The same sniff over an already-parsed `metadata` dictionary, for the
-    /// worker's notebook extractor, which still parses with
-    /// `JSONSerialization`. Remove it when that extractor moves to typed JSON.
-    public static func fromNotebookMetadata(_ metadata: [String: Any]) -> AssignmentLanguage? {
-        languageFromKernelNames(
-            (metadata["kernelspec"] as? [String: Any])?["name"] as? String,
-            (metadata["language_info"] as? [String: Any])?["name"] as? String)
     }
 
     /// See `LanguageDescriptor.scriptExtensions`.

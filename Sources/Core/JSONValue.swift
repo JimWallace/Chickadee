@@ -24,7 +24,25 @@ public indirect enum JSONValue: Codable, Equatable, Sendable {
             self = .null
             return
         }
-        // Order matters: Int before Double so whole numbers round-trip as int.
+        // Each failed attempt throws, and a throw is the main cost of this
+        // decode, so the commonest types come first: in a notebook, strings
+        // and objects are most of the nodes. Reordering does not change the
+        // result, because JSONDecoder does not convert one JSON type to
+        // another (a number never decodes as a string, nor `true` as an Int).
+        // Among the numbers the order matters: Int before Double, so whole
+        // numbers round-trip as int.
+        if let s = try? c.decode(String.self) {
+            self = .string(s)
+            return
+        }
+        if let o = try? c.decode([String: JSONValue].self) {
+            self = .object(o)
+            return
+        }
+        if let a = try? c.decode([JSONValue].self) {
+            self = .array(a)
+            return
+        }
         if let b = try? c.decode(Bool.self) {
             self = .bool(b)
             return
@@ -35,18 +53,6 @@ public indirect enum JSONValue: Codable, Equatable, Sendable {
         }
         if let d = try? c.decode(Double.self) {
             self = .double(d)
-            return
-        }
-        if let s = try? c.decode(String.self) {
-            self = .string(s)
-            return
-        }
-        if let a = try? c.decode([JSONValue].self) {
-            self = .array(a)
-            return
-        }
-        if let o = try? c.decode([String: JSONValue].self) {
-            self = .object(o)
             return
         }
         throw DecodingError.dataCorruptedError(

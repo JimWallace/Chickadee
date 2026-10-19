@@ -1,3 +1,4 @@
+import Core
 import Foundation
 import Testing
 
@@ -12,26 +13,26 @@ import Testing
     private let extractor = NotebookExtractor()
 
     @Test func aWellFormedNotebookIsAccepted() {
-        let notebook: [String: Any] = [
-            "metadata": [String: Any](), "nbformat": 4,
-            "cells": [["cell_type": "code", "source": "x = 1"]],
+        let notebook: [String: JSONValue] = [
+            "metadata": .object([:]), "nbformat": .int(4),
+            "cells": .array([.object(["cell_type": .string("code"), "source": .string("x = 1")])]),
         ]
         #expect(extractor.isNotebookJSONObject(notebook))
     }
 
     @Test func anEmptyCellListIsStillANotebook() {
-        let notebook: [String: Any] = ["metadata": [String: Any](), "nbformat": 4, "cells": [Any]()]
+        let notebook: [String: JSONValue] = ["metadata": .object([:]), "nbformat": .int(4), "cells": .array([])]
         #expect(extractor.isNotebookJSONObject(notebook))
     }
 
     @Test func cellsMustBeAnArray() {
-        let notebook: [String: Any] = ["metadata": [String: Any](), "nbformat": 4, "cells": "none"]
+        let notebook: [String: JSONValue] = ["metadata": .object([:]), "nbformat": .int(4), "cells": .string("none")]
         #expect(!extractor.isNotebookJSONObject(notebook))
     }
 
     @Test(arguments: ["metadata", "nbformat", "cells"])
     func eachTopLevelKeyIsRequired(_ missing: String) {
-        var notebook: [String: Any] = ["metadata": [String: Any](), "nbformat": 4, "cells": [Any]()]
+        var notebook: [String: JSONValue] = ["metadata": .object([:]), "nbformat": .int(4), "cells": .array([])]
         notebook[missing] = nil
         #expect(!extractor.isNotebookJSONObject(notebook))
     }
