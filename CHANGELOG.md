@@ -9,6 +9,13 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.739] - 2026-10-19
+
+### Changed
+
+- **Fewer unsafe calls in the tests.** The daemon retry tests pass their retry delays through the daemon's `config` instead of `setenv`, so they no longer need an exit test. The two raw-socket test clients use AsyncHTTPClient and NIO's `ClientBootstrap` (#2683).
+
+
 ## [0.5.738] - 2026-10-19
 
 ### Added
