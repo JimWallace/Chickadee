@@ -11,7 +11,7 @@
 // truncates output instead of throwing, and reports a signal as a negated
 // exit code, which `Tests/Fixtures/output-contract.json` pins.
 
-import Subprocess
+public import Subprocess
 import SystemPackage
 
 /// How long a bounded run may take, how much it may print, and how long its

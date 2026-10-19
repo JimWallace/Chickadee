@@ -24,7 +24,7 @@
 // a compile error, not a silent auth break.
 
 import Crypto
-import Foundation
+public import Foundation
 
 public enum WorkerHMACSigning {
 

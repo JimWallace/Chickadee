@@ -67,7 +67,7 @@
 // silently drop any existing override. Read it as "the test-process stall
 // limit".
 
-import Foundation
+public import Foundation
 import Synchronization
 import SystemPackage
 

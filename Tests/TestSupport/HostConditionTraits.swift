@@ -14,7 +14,7 @@
 // target needs (the worker's sandbox and make probes) stays in that target.
 
 import Foundation
-import Testing
+public import Testing
 
 extension ConditionTrait {
     /// Runs the test only in CI, where every grading interpreter must be

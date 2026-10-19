@@ -10,7 +10,7 @@
 // `VariableScanSyntax`. Like the function scan, a language that cannot be read
 // answers "unsupported", never "found nothing".
 
-import Foundation
+public import Foundation
 
 /// One name a notebook defines at the top level of a code cell.
 public struct NotebookDefinition: Sendable, Equatable {

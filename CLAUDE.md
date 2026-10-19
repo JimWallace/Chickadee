@@ -365,9 +365,12 @@ greeting. The example below does so in R."
 ## Coding Conventions
 
 - Swift 6, strict concurrency. Every target also turns on the upcoming
-  features `ExistentialAny` (write `any P`) and `MemberImportVisibility` (import
-  each module whose members a file uses), through `sourceSettings` in
-  `Package.swift`. Import the umbrella modules `Foundation` and
+  features `ExistentialAny` (write `any P`), `MemberImportVisibility` (import
+  each module whose members a file uses), `InternalImportsByDefault` (write
+  `public import` where a public API shows another module's type),
+  `InferIsolatedConformances` and `ImmutableWeakCaptures`, through
+  `sourceSettings` in `Package.swift`. `NonisolatedNonsendingByDefault` waits
+  for the Vapor 5 move (#1523). Import the umbrella modules `Foundation` and
   `NIOFoundationCompat`, not the split `FoundationEssentials` and
   `NIOFoundationEssentialsCompat` modules that a fix-it suggests on Linux. No `@unchecked Sendable`, in `Sources/` or
   `Tests/`, except on a Fluent `Model` class, where the reason is always the same (Fluent's property

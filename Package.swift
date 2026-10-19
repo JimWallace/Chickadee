@@ -9,10 +9,18 @@ let strictWarnings: [SwiftSetting] = [.treatAllWarnings(as: .error)]
 // - ExistentialAny: an existential type is written `any P`.
 // - MemberImportVisibility: a file uses only the members of the modules that
 //   it imports itself, not those that another file imports.
+// - InternalImportsByDefault: an `import` is internal. A file whose public API
+//   shows a type from another module writes `public import`.
+// - InferIsolatedConformances: a conformance of an actor-isolated type has that
+//   isolation.
+// - ImmutableWeakCaptures: a `weak` capture is a `let`.
 let sourceSettings: [SwiftSetting] =
     strictWarnings + [
         .enableUpcomingFeature("ExistentialAny"),
         .enableUpcomingFeature("MemberImportVisibility"),
+        .enableUpcomingFeature("InternalImportsByDefault"),
+        .enableUpcomingFeature("InferIsolatedConformances"),
+        .enableUpcomingFeature("ImmutableWeakCaptures"),
         // Strict memory safety (SE-0458): each unsafe construct needs an
         // explicit `unsafe` mark, and `strictWarnings` makes a missing mark a
         // build error.

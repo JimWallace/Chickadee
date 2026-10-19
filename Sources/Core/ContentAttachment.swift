@@ -9,7 +9,7 @@
 // name is the opaque `id`, so a hostile filename can never escape the
 // directory.
 
-import Foundation
+public import Foundation
 
 public struct ContentAttachment: Codable, Sendable, Equatable {
     /// Server-generated; also the on-disk filename under the item's directory.

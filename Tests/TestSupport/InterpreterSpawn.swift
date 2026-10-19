@@ -39,7 +39,7 @@
 // Foundation's `Process` surfaces, so the retry went and the throttle stayed
 // (`runToolThrottled`).
 
-import Foundation
+public import Foundation
 import Subprocess
 import SystemPackage
 
