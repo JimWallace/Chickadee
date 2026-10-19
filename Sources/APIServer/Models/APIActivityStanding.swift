@@ -58,9 +58,10 @@ final class APIActivityStanding: Model, Content, @unchecked Sendable {
 
     init(
         testSetupID: String, userID: UUID, submissionID: String,
-        played: Int, wins: Int, draws: Int, losses: Int, scoreSum: Double, updatedAt: Date
+        played: Int, wins: Int, draws: Int, losses: Int, scoreSum: Double, updatedAt: Date, groupID: UUID? = nil
     ) {
         self.testSetupID = testSetupID
+        self.groupID = groupID
         self.userID = userID
         self.submissionID = submissionID
         self.played = played

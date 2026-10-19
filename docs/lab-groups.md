@@ -440,10 +440,11 @@ should be able to see it. The maintainer chose best effort on 2026-10-18.
   door still seeds the record on a hill, so on a per-group hill it stays
   unheld (or with its earlier holder) until per-group records exist. The
   `highestMetric` record stays course-wide, as in slice 3a.
-- Remove on "Who joined" empties the group's hill when the removed student
-  holds it, so no challenger plays a student who was not in the room. A
-  result that lands after its student was removed finds no session and
-  moves no hill.
+- Remove on "Who joined" forgets the removed student's rankings in that
+  group: the hill when they hold it, and (with slice 3c) their group
+  leaderboard row and their standing. So no challenger plays a student who
+  was not in the room, and no board shows them. A result that lands after
+  its student was removed finds no session and moves no hill.
 - The two hill tables are independent. Turning the flag on leaves the
   course-wide champion in place, and turning it off leaves each group's;
   the hill that `Hill.of` picks is the only one read, and turning the flag
@@ -472,6 +473,17 @@ should be able to see it. The maintainer chose best effort on 2026-10-18.
   place in the group of their own row.
 - The standings-leader class record is not awarded for a per-group round
   robin, as with the hill (slice 3b): every lab has a leader.
+- Known limits, accepted: an opponent's latest submission may have been
+  made in another lab or after a session, because "latest" is the one
+  definition the union and the tournaments share. A standings row written
+  before the activity ran per group has no group: it is in no lab's
+  standings, and that student's `standing` signal ranks them against every
+  row until they play in a session. Turning the flag off leaves each row's
+  group on it, so the course-wide standings rank rows that were each played
+  in one lab, until each student submits again.
+- A retest of a standing's own submission that finds no session (after a
+  reopen, or after a Remove) deletes that standing: the retest voided the
+  matches it counted.
 - Tests changed with the maintainer's direction (each activity can be
   scoped to the whole class or a lab): the round robin joins the kinds that
   can run per group in `ClassActivityIsPerGroupTests` and leaves the refused

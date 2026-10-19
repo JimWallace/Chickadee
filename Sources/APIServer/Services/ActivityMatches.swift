@@ -356,7 +356,16 @@ private func recordMatrixMatches(
         guard
             let session = try await ActivitySessionStore.sessionAtSubmission(
                 testSetupID: setupID, userID: userID, submissionID: submissionID, on: db)
-        else { return }
+        else {
+            // A retest of the standing's own submission voided the rows it
+            // counted (`voidCompletedMatrixRows`), so it counts nothing now.
+            try await APIActivityStanding.query(on: db)
+                .filter(\.$testSetupID == setupID)
+                .filter(\.$userID == userID)
+                .filter(\.$submissionID == submissionID)
+                .delete()
+            return
+        }
         groupID = session.groupID
     } else {
         groupID = nil
@@ -432,12 +441,11 @@ private func recomputeStanding(
         existing.updatedAt = Date()
         try await existing.update(on: db)
     } else {
-        let standing = APIActivityStanding(
+        try? await APIActivityStanding(
             testSetupID: testSetupID, userID: userID, submissionID: submissionID,
             played: rows.count, wins: wins, draws: draws, losses: losses, scoreSum: scoreSum,
-            updatedAt: Date())
-        standing.groupID = groupID
-        try? await standing.save(on: db)
+            updatedAt: Date(), groupID: groupID
+        ).save(on: db)
     }
 }
 

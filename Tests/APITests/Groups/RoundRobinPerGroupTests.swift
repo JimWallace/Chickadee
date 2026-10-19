@@ -4,7 +4,8 @@
 // challenger plays only the students in the session they submitted in, each
 // standings row carries the group it was played in and ranks only there, a
 // submission made with no session open plays nobody and leaves the standings
-// as they were, and no lab's leader holds the course's class record.
+// as they were, a student whom staff removed leaves the standings, and no
+// lab's leader holds the course's class record.
 
 import Core
 import Fluent
@@ -157,6 +158,23 @@ import VaporTesting
                 .filter(\.$achievementID == ActivityAuthoring.seededWinnerRecordID)
                 .first()
             #expect(record == nil, "no lab's leader holds the class record")
+        }
+    }
+
+    @Test func aRemovedStudentLeavesTheGroupsStandings() async throws {
+        try await withApp(app) { _ in
+            let f = try await fixture()
+            try await join(f, group: f.labA, userID: f.ada)
+            try await join(f, group: f.labA, userID: f.ben)
+            try await play(f, userID: f.ada, id: "rrg_a5")
+            try await play(f, userID: f.ben, id: "rrg_b5")
+            #expect(try await standing(f.ben) != nil)
+
+            let session = try #require(
+                try await ActivitySessionStore.session(assignmentID: f.assignmentID, groupID: f.labA, on: app.db))
+            #expect(try await ActivitySessionStore.remove(userID: f.ben, from: session, on: app.db))
+            #expect(try await standing(f.ben) == nil)
+            #expect(try await play(f, userID: f.ada, id: "rrg_a6").isEmpty, "nobody plays a removed student")
         }
     }
 

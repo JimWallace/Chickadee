@@ -238,8 +238,14 @@ enum ActivityAuthoring {
         "This course has no lab groups yet, so make them on the Groups tab first."
     static let runsPerGroupCompositeMessage =
         "A class composite cannot run once per lab group yet."
-    static let runsPerGroupKindMessage =
-        "Only a Best metric, Beat the instructor, Beat the champion or Round robin activity can run once per lab group yet."
+    /// Names every kind that can run per group, so a slice that adds one
+    /// changes no copy.
+    static var runsPerGroupKindMessage: String {
+        let names = ActivityKind.allCases.filter(\.canRunPerGroup).map(\.displayName)
+        let list =
+            names.count > 1 ? names.dropLast().joined(separator: ", ") + " or " + (names.last ?? "") : names.joined()
+        return "Only a \(list) activity can run once per lab group yet."
+    }
     static let runsPerGroupWithWindowMessage =
         "Each group's session is the clock of a per-group activity, so clear the session window first."
 
