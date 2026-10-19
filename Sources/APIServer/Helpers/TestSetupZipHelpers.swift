@@ -112,7 +112,9 @@ enum ZipUploadValidationError: Error, CustomStringConvertible {
 /// rejected.  `unzip -v` parses table-of-entries delimited by a pair of
 /// dashed separator lines; each entry has seven space-separated columns
 /// (Length, Method, Size, Cmpr, Date, Time, CRC-32) before the name.
-func validateZipUploadSize(zipPath: String, limits: ZipUploadLimits = .default) async throws {
+func validateZipUploadSize(
+    zipPath: String, limits: ZipUploadLimits = .default
+) async throws(ZipUploadValidationError) {
     let result: ZipProcessResult
     do {
         result = try await runZipProcess(
