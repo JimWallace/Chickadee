@@ -151,12 +151,11 @@ func evaluateClassGoalAchievements(
 
     for entry in goalCarrying {
         let assignment = entry.assignment
-        var goals = entry.goals
+        let goals = entry.goals
         guard let setupID = entry.setup.id else { continue }
 
-        // An activity that runs per lab group counts each lab's grade goals
-        // on its own (docs/lab-groups.md, slice 5a); its other goals are still
-        // counted for the whole class below.
+        // An activity that runs per lab group counts each lab's goals on its
+        // own (docs/lab-groups.md, slice 5).
         if entry.properties.activity?.isPerGroup == true {
             let lab = try await writeLabGoalSnapshots(
                 entry: entry, enrolledStudents: studentIDsByCourse[assignment.courseID] ?? [], now: now, on: db,
@@ -165,8 +164,7 @@ func evaluateClassGoalAchievements(
             if lab.bonusFroze {
                 try await requestGradePush(.allStudents(assignment, logger: logger), testSetupID: setupID, on: db)
             }
-            goals = goals.filter { !LabGoalGroups.isCountedPerLab($0) }
-            if goals.isEmpty { continue }
+            continue
         }
 
         let existing = try await APIAchievementResult.query(on: db)
@@ -448,9 +446,9 @@ private func writeClassGoalSnapshots(
 /// Writes the class-goal snapshots of an activity that runs per lab group, one
 /// set per lab (docs/lab-groups.md, slice 5). Each lab's goal is counted over
 /// the enrolled students whose lab it is (`LabGoalGroups`), and each of them
-/// earns that lab's bonus. A grade goal, a goal with no condition and an item
-/// goal are counted per lab, the last over the lab's own coverage; a corpus
-/// goal is still counted for the whole class (`LabGoalGroups.isCountedPerLab`).
+/// earns that lab's bonus. Every goal shape is counted per lab: an item goal
+/// over the lab's own coverage (slice 5b), a corpus goal over the lab's own
+/// latest corpus run (slice 5c).
 private func writeLabGoalSnapshots(
     entry: GoalCarryingAssignment, enrolledStudents: Set<UUID>, now: Date, on db: any Database, logger: Logger
 ) async throws -> ClassGoalWriteOutcome {
@@ -458,8 +456,7 @@ private func writeLabGoalSnapshots(
     guard let setupID = entry.setup.id,
         let setID = try await CourseGroupStore.sets(courseID: entry.assignment.courseID, on: db).first?.id
     else { return outcome }
-    let goals = entry.goals.filter(LabGoalGroups.isCountedPerLab)
-    guard !goals.isEmpty else { return outcome }
+    let goals = entry.goals
     let groupIDs = try await CourseGroupStore.groups(inSet: setID, on: db).compactMap(\.id)
     let existing = Dictionary(
         grouping: try await APIGroupAchievementResult.query(on: db).filter(\.$testSetupID == setupID).all(),
@@ -477,6 +474,7 @@ private func writeLabGoalSnapshots(
     let bestByStudent = try await bestAssignmentGradeByStudent(testSetupID: setupID, on: db)
     let coverageByLab =
         goals.contains(where: \.isUnionClassGoal) ? try await labItemCoverage(testSetupID: setupID, on: db) : [:]
+    let readsCorpus = goals.contains(where: \.isCoverageClassGoal)
     for groupID in groupIDs {
         let members = Set(labs.filter { $0.value == groupID }.keys)
         let rows = Dictionary(
@@ -489,7 +487,9 @@ private func writeLabGoalSnapshots(
             evaluation: ClassGoalEvaluation(
                 setupID: setupID, properties: entry.properties,
                 bestByStudent: bestByStudent.filter { members.contains($0.key) },
-                coverage: coverageByLab[groupID] ?? [], corpusRun: nil,
+                coverage: coverageByLab[groupID] ?? [],
+                corpusRun: readsCorpus
+                    ? try await latestClassCoverageRun(testSetupID: setupID, groupID: groupID, on: db) : nil,
                 enrolledStudents: members, denominator: members.count, locked: locked, now: now),
             on: db, logger: logger)
         outcome.written += lab.written

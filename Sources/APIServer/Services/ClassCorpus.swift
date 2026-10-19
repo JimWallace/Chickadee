@@ -62,8 +62,11 @@ struct ClassCorpus {
 /// latest submissions always assembles the same bytes. Ordering by submission
 /// time would reshuffle the corpus every time anybody resubmitted, which makes
 /// two runs incomparable for no gain.
+///
+/// `students` limits the corpus to one lab's students (docs/lab-groups.md,
+/// slice 5c); nil is the whole class.
 func assembleClassCorpus(
-    setup: APITestSetup, app: Application, on db: any Database
+    setup: APITestSetup, app: Application, students: Set<UUID>? = nil, on db: any Database
 ) async throws -> ClassCorpus? {
     guard let manifest = setup.decodedManifest(),
         !manifest.variesBeyondPartitions,
@@ -79,6 +82,7 @@ func assembleClassCorpus(
     // submission is a submission like any other, and a corpus that swept it in
     // would report the reference solution's coverage as the class's.
     let latestByUser = try await latestStudentSubmissionsByUser(setup: setup, on: db)
+        .filter { students?.contains($0.key) ?? true }
     guard !latestByUser.isEmpty else { return nil }
 
     var contributed: [(user: UUID, cells: [[String: Any]])] = []
@@ -125,12 +129,17 @@ func assembleClassCorpus(
 ///
 /// Never throws out. A corpus run is a diagnostic the class reads, and failing
 /// a student's result report to schedule one is not a trade worth making.
+///
+/// `groupID` names a lab group's corpus (docs/lab-groups.md, slice 5c): it is
+/// assembled from the lab's students (`LabGoalGroups`) and debounced on its
+/// own, so two labs grade at once. nil is the whole class.
 func scheduleClassCorpusRun(
-    setupID: String, app: Application, on db: any Database, logger: Logger
+    setupID: String, groupID: UUID? = nil, app: Application, on db: any Database, logger: Logger
 ) async {
     do {
         let inFlight = try await APIClassCoverageRun.query(on: db)
             .filter(\.$testSetupID == setupID)
+            .filter(\.$groupID == groupID)
             .filter(\.$completedAt == nil)
             .first()
         if inFlight != nil { return }
@@ -143,7 +152,9 @@ func scheduleClassCorpusRun(
         // exists exactly where it is visible.
         guard let setup = try await APITestSetup.find(setupID, on: db),
             setup.decodedManifest()?.achievements.contains(where: \.isCoverageClassGoal) == true,
-            let corpus = try await assembleClassCorpus(setup: setup, app: app, on: db)
+            let corpus = try await assembleClassCorpus(
+                setup: setup, app: app, students: try await labStudents(setupID: setupID, groupID: groupID, on: db),
+                on: db)
         else { return }
 
         let subID = freshShortID(prefix: "sub")
@@ -179,15 +190,49 @@ func scheduleClassCorpusRun(
             on: db)
         try await materialized.saveClaimable(on: db)
 
-        try await APIClassCoverageRun(
-            testSetupID: setupID, submissionID: subID, contributors: corpus.contributors
-        ).save(on: db)
+        let run = APIClassCoverageRun(testSetupID: setupID, submissionID: subID, contributors: corpus.contributors)
+        run.groupID = groupID
+        try await run.save(on: db)
         logger.info(
             "Class corpus run \(subID) enqueued for setup \(setupID) with \(corpus.contributors.count) contributor(s)"
         )
     } catch {
         logger.warning("scheduleClassCorpusRun for \(setupID): \(String(describing: error))")
     }
+}
+
+/// Schedules the corpus run that a student's new result calls for: the whole
+/// class's, or on an activity that runs per lab group, the run of the lab of
+/// the session the student submitted in, and none without one
+/// (docs/lab-groups.md, slice 5c). Never throws out, as above.
+func scheduleClassCorpusRun(
+    afterSubmission submissionID: String, userID: UUID, setupID: String, app: Application, on db: any Database,
+    logger: Logger
+) async {
+    do {
+        guard try await APITestSetup.find(setupID, on: db)?.decodedManifest()?.activity?.isPerGroup == true else {
+            await scheduleClassCorpusRun(setupID: setupID, app: app, on: db, logger: logger)
+            return
+        }
+        guard
+            let session = try await ActivitySessionStore.sessionAtSubmission(
+                testSetupID: setupID, userID: userID, submissionID: submissionID, on: db)
+        else { return }
+        await scheduleClassCorpusRun(setupID: setupID, groupID: session.groupID, app: app, on: db, logger: logger)
+    } catch {
+        logger.warning("scheduleClassCorpusRun for \(setupID): \(String(describing: error))")
+    }
+}
+
+/// The students of one lab's corpus: those whose lab it is (`LabGoalGroups`),
+/// so the corpus and the goal's breadth count the same people. nil for the
+/// whole class.
+private func labStudents(setupID: String, groupID: UUID?, on db: any Database) async throws -> Set<UUID>? {
+    guard let groupID else { return nil }
+    guard let assignment = try await APIAssignment.query(on: db).filter(\.$testSetupID == setupID).first()
+    else { return [] }
+    let labs = try await LabGoalGroups.byStudent(assignment: assignment, on: db)
+    return Set(labs.filter { $0.value == groupID }.keys)
 }
 
 /// Completes the run a corpus submission's result belongs to.
@@ -225,11 +270,15 @@ func recordClassCoverageRun(
 /// Newest COMPLETED, deliberately: a queued run has no number, and reading it
 /// would blank a progress bar that freezes into a grade push. The answer to
 /// "the goal reads the latest aggregate only" is this one query.
+///
+/// `groupID` reads one lab's runs; nil reads the whole class's only, never a
+/// lab's (docs/lab-groups.md, slice 5c).
 func latestClassCoverageRun(
-    testSetupID: String, on db: any Database
+    testSetupID: String, groupID: UUID? = nil, on db: any Database
 ) async throws -> APIClassCoverageRun? {
     try await APIClassCoverageRun.query(on: db)
         .filter(\.$testSetupID == testSetupID)
+        .filter(\.$groupID == groupID)
         .filter(\.$coverage != nil)
         .sort(\.$completedAt, .descending)
         .first()

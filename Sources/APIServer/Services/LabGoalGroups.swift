@@ -17,13 +17,6 @@ import Foundation
 
 enum LabGoalGroups {
 
-    /// True for a goal counted per lab: a grade goal, a goal with no
-    /// condition and an `itemsCovered` goal (slice 5b). A `classCoverage` goal
-    /// is still counted for the whole class until slice 5c.
-    static func isCountedPerLab(_ goal: Achievement) -> Bool {
-        !goal.isCoverageClassGoal
-    }
-
     /// Each student's lab for the assignment's class goals, for every student
     /// who joined one of its sessions or is a member of a group. Callers keep
     /// only the students enrolled now.
@@ -72,10 +65,9 @@ enum LabGoalGroups {
         return lab
     }
 
-    /// The class-goal snapshots that apply to `userID`, by achievement. For an
-    /// activity that runs per lab group, a goal counted per lab reads the
-    /// student's lab, and has no snapshot for a student in no lab; every
-    /// other goal reads the class's.
+    /// The class-goal snapshots that apply to `userID`, by achievement: the
+    /// class's, or for an activity that runs per lab group, the student's
+    /// lab's, and none for a student in no lab.
     static func snapshots(
         testSetupID: String, props: TestProperties, userID: UUID?, on db: any Database
     ) async throws -> [String: any ClassGoalSnapshot] {
@@ -92,16 +84,14 @@ enum LabGoalGroups {
         return rows
     }
 
-    /// The class's snapshots, by achievement. For an activity that runs per
-    /// lab group, without the goals counted per lab.
+    /// The class's snapshots, by achievement; none for an activity that runs
+    /// per lab group, whose every goal is counted per lab.
     static func classSnapshots(
         testSetupID: String, props: TestProperties, on db: any Database
     ) async throws -> [String: any ClassGoalSnapshot] {
-        let rows = byAchievement(
+        guard props.activity?.isPerGroup != true else { return [:] }
+        return byAchievement(
             try await APIAchievementResult.query(on: db).filter(\.$testSetupID == testSetupID).all())
-        guard props.activity?.isPerGroup == true else { return rows }
-        let perLab = Set(props.achievements.filter(isCountedPerLab).map(\.id))
-        return rows.filter { !perLab.contains($0.key) }
     }
 
     /// Every lab's snapshots, by lab and then by achievement.

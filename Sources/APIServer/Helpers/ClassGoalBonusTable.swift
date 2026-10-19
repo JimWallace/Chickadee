@@ -11,8 +11,7 @@ import Foundation
 
 struct ClassGoalBonusTable {
     private let goals: [Achievement]
-    /// The class's snapshots: for an activity that runs per lab group, those
-    /// of the goals not counted per lab.
+    /// The class's snapshots; none for an activity that runs per lab group.
     private let classSnapshots: [String: any ClassGoalSnapshot]
     private let labByStudent: [UUID: UUID]
     private let snapshotsByLab: [UUID: [String: any ClassGoalSnapshot]]
