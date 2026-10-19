@@ -26,6 +26,11 @@ final class APITournamentRun: Model, Content, @unchecked Sendable {
     @Field(key: "test_setup_id")
     var testSetupID: String
 
+    /// The lab group that plays this run, for an activity that runs once per
+    /// group (docs/lab-groups.md, slice 3d); nil for a run of the whole class.
+    @OptionalField(key: "group_id")
+    var groupID: UUID?
+
     /// `TournamentSchedule` raw value.
     @Field(key: "schedule")
     var schedule: String

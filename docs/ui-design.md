@@ -475,7 +475,10 @@ duplicate.
   region, every two seconds, and shows no names. The lab-group select is
   `LabGroupSelect`, the one "pick a lab group" control; the leaderboard
   page's toolbar uses it too (`LeaderboardGroupControl`), and shows a
-  student their group as a `.chip` instead. The "Who joined" page
+  student their group as a `.chip` instead. The one exception is the
+  submissions page's tournament run form: its "Lab group" select is a plain
+  field of that POST form, beside the Schedule select, because a GET
+  `LabGroupSelect` cannot sit inside it. The "Who joined" page
   (`SessionAttendancePage`) marks a join from another network with a bare
   `.tier`, "Other network": neutral on purpose, a thing for staff to check
   and not a finding of fault.  A `.present-footer` ends the page, with a

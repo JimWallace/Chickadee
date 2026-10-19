@@ -45,7 +45,9 @@ struct RunTournamentTool: ContentTool {
         + "On a worker-graded assignment the native worker plays each match. On a browser-graded "
         + "assignment the matches wait for the projector arena: staff press Play matches on the "
         + "leaderboard's present page, and no runner is used. "
-        + "Never a grade of record. Refused on any other activity kind."
+        + "Never a grade of record. Refused on any other activity kind, and on an activity that runs "
+        + "once per lab group: choosing a group is choosing students, so staff start each group's run "
+        + "on the assignment's submissions page."
     static let inputSchema: JSONValue = .object([
         "type": .string("object"),
         "properties": .object([
@@ -79,6 +81,9 @@ struct RunTournamentTool: ContentTool {
         readOnlyHint: false, destructiveHint: false, idempotentHint: false)
     static let requiredScopes: Set<ContentScope> = [.write]
 
+    static let perGroupMessage =
+        "This tournament runs once per lab group; start each group's run on the assignment's submissions page."
+
     func execute(_ input: Input, _ context: ToolContext) async throws -> Output {
         let token =
             input.schedule?.trimmingCharacters(in: .whitespacesAndNewlines) ?? TournamentSchedule.bracket.rawValue
@@ -87,6 +92,12 @@ struct RunTournamentTool: ContentTool {
         }
         let (assignment, setup) = try await context.authorizedAssignmentAndSetupForWrite(
             publicID: input.assignmentPublicID, atLeast: .instructor)
+        // Choosing a lab group is choosing students, which no MCP tool does
+        // (docs/lab-groups.md, decision 11): a per-group run starts on the
+        // submissions page.
+        guard setup.decodedManifest()?.activity?.isPerGroup != true else {
+            throw MCPToolError.invalidArguments(detail: Self.perGroupMessage)
+        }
         let actor = try await context.requireEligibleSubject()
         let run: APITournamentRun
         do {

@@ -154,6 +154,9 @@ enum ActivityAuthoring {
         if activity?.isPerGroup != true {
             try await ActivitySessionStore.closeOpenSessions(testSetupID: setup.requireID(), on: lockDB)
         }
+        // A run of the other scope would play on where no page shows it.
+        try await supersedeRunningTournaments(
+            testSetupID: setup.requireID(), outsideScopeOfPerGroup: activity?.isPerGroup == true, on: lockDB)
         if let activity, activity.kind.aggregation == .leaderboard {
             try await seedLeaderboardRecord(setup: setup, on: db)
         } else {
@@ -166,17 +169,19 @@ enum ActivityAuthoring {
         let aggregation = activity?.kind.aggregation
         // A per-group round robin has a leader in every lab, and a record has
         // one holder, so it seeds none (docs/lab-groups.md, slice 3c).
+        // So does a per-group tournament, with a winner in every lab (3d).
         let seedsStandingsRecord = aggregation == .standings && activity?.isPerGroup != true
+        let seedsTournamentRecord = aggregation == .bracket && activity?.isPerGroup != true
         if !seedsStandingsRecord {
             try await removeSeededRecord(setup: setup, id: seededWinnerRecordID, on: db)
         }
-        if aggregation != .bracket {
+        if !seedsTournamentRecord {
             try await removeSeededRecord(setup: setup, id: seededTournamentRecordID, on: db)
         }
         if seedsStandingsRecord {
             try await seedWinnerRecord(setup: setup, record: seededWinnerRecord, on: db)
         }
-        if aggregation == .bracket {
+        if seedsTournamentRecord {
             try await seedWinnerRecord(setup: setup, record: seededTournamentRecord, on: db)
         }
         // A per-group hill has a champion in every lab, and a record has one
