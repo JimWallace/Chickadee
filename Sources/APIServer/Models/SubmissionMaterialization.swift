@@ -36,6 +36,10 @@ struct SubmissionMaterialization: Codable, Sendable {
     /// the manifest has no course-scoped dataset, and for a row written before
     /// the course cohort existed.
     let courseSeedHex: String?
+    /// The deal number the partition datasets were resolved against
+    /// (docs/datasets-course-library.md §4.11). Nil when the manifest has no
+    /// partition, and for a row written before partitions existed.
+    let dealNumber: Int?
     /// Resolved `=` expression values (Python literals), keyed by name — the
     /// same map `PersonalizationSubstitution.gradingInputs` produces. Empty for
     /// a literal-only assignment.

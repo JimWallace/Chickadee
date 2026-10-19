@@ -381,6 +381,40 @@ because line numbers go out of date.
   - A kind never changes a delivered byte of an existing kind: each step draws
     from its own stream, keyed on the step's index, kind and column.
 
+### Dataset selection kinds and the deal number: `DatasetKind`, `dataset_deals`
+
+- **Objects:** the selection kind of a spec (`rowSample`, `stratifiedSample`,
+  `partition`), a partition's `partCount`, and each student's deal number in
+  `dataset_deals` (`DatasetDeals`). On a class composite the deal number is the
+  student's row in `composite_slots`.
+- **Readers that branch on the kind:**
+  - `DatasetMaterializer.select` and the overlap formula
+    (`DatasetDiagnostics.overlap`), both exhaustive switches.
+  - `DatasetSpecValidation.selectionIssue` and `datasetSpecRefusal`.
+  - `DatasetSpec.isShared`, which the ranked-activity rule reads.
+  - `TestProperties.variesBeyondPartitions`, the class corpus gate.
+  - MCP `set_dataset`, which builds the kind from `partCount` and the stratum,
+    and the Files panel, which hides the sample fields for a partition
+    (`SupportFileRow.swift` and `Public/support-files.js`).
+- **Rules:**
+  - Every delivery path passes the deal number with the course seed
+    (`DatasetDealNumberCallSiteTests`). A pinned run stores it on
+    `SubmissionMaterialization.dealNumber`.
+  - Staff, validation and the preview get 0 and are never dealt. A job with no
+    student gets no number, so it reads the whole file. A composite spare
+    pins its hole's slot.
+  - On a class composite, `DatasetDeals` reads the slot and never deals
+    one; the composite deals it in its own pool (`CompositeSlots`, per lab
+    group). A grading path asks the composite for its inputs before the deal
+    number. A path that does not grade holds a partition back to its header
+    until the slot is dealt (`DatasetDeals.withholdingUndealtParts`).
+  - A partition refuses the course scope.
+  - The upload page names a partition as "one part of N"
+    (`SubmitDatasetLink`).
+  - Every rebuild of a `DatasetSpec` carries `partCount`, as it carries the
+    library fields.
+  - The MCP role cannot read `dataset_deals`.
+
 ### The course dataset library
 
 - **Objects:**

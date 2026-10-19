@@ -75,6 +75,8 @@ import Testing
         switch kind {
         case .rowSample: spec = plainSpec(40)
         case .stratifiedSample: spec = stratifiedSpec(40)
+        // Five parts of a 200-row pool hold 40 rows each.
+        case .partition: spec = DatasetSpec(file: "cases.csv", kind: .partition, partCount: 5)
         }
         let overlap = try #require(DatasetDiagnostics.overlap(spec: spec, sourceCSV: pool))
         #expect(overlap.poolRows == 200)

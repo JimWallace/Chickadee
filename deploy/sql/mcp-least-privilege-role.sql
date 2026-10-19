@@ -186,7 +186,7 @@ CREATE POLICY mcp_ai_feedback_rows ON reflection_feedback
 --      request_metrics, runner_profiles, runner_snapshots, composite_slots,
 --      group_composite_slots, composite_contributions, composite_references,
 --      composite_spares,
---      oauth_* ...
+--      dataset_deals, oauth_* ...
 --
 --    composite_slots and group_composite_slots map each student to their
 --    class-composite slot (the second per lab group). The one MCP use of
@@ -197,6 +197,8 @@ CREATE POLICY mcp_ai_feedback_rows ON reflection_feedback
 --    each slot. It holds no student data, but no MCP tool reads it either.
 --    composite_spares holds the tiles students render for empty slots. No MCP
 --    tool reads it.
+--    dataset_deals maps each student to the part of a partition dataset they
+--    receive (docs/datasets-course-library.md). No MCP tool reads it.
 --    Do NOT add blanket "GRANT ... ON ALL TABLES" — that would defeat the wall.
 --
 --    assignment_personalization_seeds STAYS DENIED. The MCP personalization
@@ -232,3 +234,4 @@ CREATE POLICY mcp_ai_feedback_rows ON reflection_feedback
 --      SELECT * FROM group_composite_slots LIMIT 1; -- must ERROR: permission denied
 --      SELECT * FROM composite_contributions LIMIT 1;
 --                                                   -- must ERROR: permission denied
+--      SELECT * FROM dataset_deals LIMIT 1;         -- must ERROR: permission denied

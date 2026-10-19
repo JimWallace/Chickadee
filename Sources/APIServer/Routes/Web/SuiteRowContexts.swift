@@ -61,6 +61,11 @@ struct EditableSuiteRow: Encodable {
     /// when a spec holds a shape it CANNOT edit and step aside rather than
     /// overwrite it.
     let datasetTransforms: [DatasetTransform]
+    /// The number of parts of a partition dataset
+    /// (docs/datasets-course-library.md §4.11); nil for the other kinds. The
+    /// panel has no fields for a partition, so it shows a note instead of the
+    /// sample fields.
+    let datasetPartCount: Int?
     /// The file's place in the course dataset library, for the edit page's
     /// Files panel. Nil on every other row and page, which then shows no
     /// library control (`withLibraryStates`).
@@ -122,7 +127,8 @@ struct EditableSuiteRow: Encodable {
         isDataset: Bool = false,
         datasetSampleSize: Int? = nil,
         datasetStratumColumn: String? = nil,
-        datasetTransforms: [DatasetTransform] = []
+        datasetTransforms: [DatasetTransform] = [],
+        datasetPartCount: Int? = nil
     ) {
         self.name = name
         self.url = url
@@ -136,6 +142,7 @@ struct EditableSuiteRow: Encodable {
         self.datasetSampleSize = datasetSampleSize
         self.datasetStratumColumn = datasetStratumColumn
         self.datasetTransforms = datasetTransforms
+        self.datasetPartCount = datasetPartCount
     }
 
     /// Display name if set, otherwise the filename stem (extension stripped).
@@ -164,6 +171,7 @@ struct EditableSuiteRow: Encodable {
         case isDataset
         case datasetSampleSize
         case datasetStratumColumn
+        case datasetPartCount
         case displayNameOrEmpty
         case displayNameOrStem
         case datasetSampleSizeText
@@ -190,6 +198,7 @@ struct EditableSuiteRow: Encodable {
         try container.encode(isDataset, forKey: .isDataset)
         try container.encodeIfPresent(datasetSampleSize, forKey: .datasetSampleSize)
         try container.encodeIfPresent(datasetStratumColumn, forKey: .datasetStratumColumn)
+        try container.encodeIfPresent(datasetPartCount, forKey: .datasetPartCount)
         try container.encode(displayNameOrEmpty, forKey: .displayNameOrEmpty)
         try container.encode(displayNameOrStem, forKey: .displayNameOrStem)
         try container.encode(datasetSampleSizeText, forKey: .datasetSampleSizeText)

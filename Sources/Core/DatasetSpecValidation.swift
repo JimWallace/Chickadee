@@ -140,6 +140,11 @@ public enum DatasetSpecValidation {
     }
 
     private static func selectionIssue(with spec: DatasetSpec, sourceCSV: String?) -> String? {
+        if spec.kind == .partition { return partitionIssue(with: spec, sourceCSV: sourceCSV) }
+        // A part count on another kind would be stored and then ignored.
+        if spec.partCount != nil {
+            return "'\(spec.file)': a part count only applies to a partition."
+        }
         guard spec.kind == .stratifiedSample else {
             // A column on a plain row sample would be stored and then ignored
             // at delivery — the silent-mismatch shape this whole file exists to
@@ -183,6 +188,37 @@ public enum DatasetSpecValidation {
                 "'\(spec.file)': column '\(column)' has \(categories.count) distinct values, so a sample "
                 + "of \(sampleSize) rows cannot include them all. Raise the sample size to at least "
                 + "\(categories.count), or balance across a column with fewer categories."
+        }
+        return nil
+    }
+
+    /// Why a partition cannot be saved, or nil. A partition gives each student
+    /// one part of the whole file, so it takes no sample and no stratum, and
+    /// every part must hold at least one row.
+    private static func partitionIssue(with spec: DatasetSpec, sourceCSV: String?) -> String? {
+        guard let partCount = spec.partCount, partCount >= 2 else {
+            return "'\(spec.file)': a partition needs a part count of 2 or more."
+        }
+        if spec.sampleSize != nil {
+            return "'\(spec.file)': a partition gives each student one part of the whole file, so it takes "
+                + "no sample size."
+        }
+        if let column = spec.stratumColumn, !column.isEmpty {
+            return "'\(spec.file)': a partition takes no stratum column."
+        }
+        // A part is dealt per assignment, so a partition cannot keep the
+        // promise of the course scope: the same rows in every assignment.
+        if spec.scope == .course {
+            return "'\(spec.file)': a partition gives each student a part of this assignment, not the same rows "
+                + "in every assignment. Set the file's scope to this assignment first."
+        }
+        guard let sourceCSV else {
+            return "'\(spec.file)' is not UTF-8 text, so it has no rows to split."
+        }
+        let rowCount = DatasetMaterializer.normalizedLines(of: sourceCSV).lines.count - 1
+        guard partCount <= rowCount else {
+            return "'\(spec.file)' has \(max(rowCount, 0)) data rows, so it cannot be split into \(partCount) "
+                + "parts. Use at most \(max(rowCount, 0)) parts."
         }
         return nil
     }

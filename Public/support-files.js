@@ -139,14 +139,27 @@
                 var stratum = row.querySelector('.js-dataset-stratum');
                 if (!toggle || !field || !size) return;
                 var spec = byFile[row.getAttribute('data-support-file')];
+                // A partition has no sample, and the panel has no field for
+                // its parts: the sample fields stay hidden, the note names the
+                // part count and where to edit it, and the toggle is locked so
+                // one click cannot end the partition. An attached file's toggle
+                // (data-lock="attached") stays locked: detach ends it.
+                var partitioned = !!spec && spec.kind === 'partition';
+                var sampled = !!spec && !partitioned;
+                var attached = !!(toggle.dataset && toggle.dataset.lock === 'attached');
+                toggle.disabled = attached || partitioned;
                 toggle.checked = !!spec;
-                field.hidden = !spec;
+                field.hidden = !sampled;
                 size.value = (spec && spec.sampleSize != null) ? String(spec.sampleSize) : '';
-                if (stratumField) stratumField.hidden = !spec;
+                if (stratumField) stratumField.hidden = !sampled;
                 if (stratum) stratum.value = (spec && spec.stratumColumn) || '';
+                var partitionNote = row.querySelector('.js-dataset-partition-note');
+                if (partitionNote) partitionNote.hidden = !partitioned;
+                var partCount = row.querySelector('.js-dataset-part-count');
+                if (partCount && partitioned) partCount.textContent = String(spec.partCount);
 
                 var blankField = row.querySelector('.js-dataset-blank-field');
-                if (blankField) blankField.hidden = !spec;
+                if (blankField) blankField.hidden = !sampled;
                 var step = editableStep(spec);
                 var columns = row.querySelector('.js-dataset-blank-columns');
                 var percent = row.querySelector('.js-dataset-blank-percent');
@@ -276,8 +289,10 @@
             Object.keys(spec).forEach(function (k) { out[k] = spec[k]; });
             // A plain row sample has no stratum column, and a stale one left
             // behind would be refused by the server as a spec that stores a
-            // setting its kind ignores.
+            // setting its kind ignores. The same holds for a part count on
+            // any kind but a partition.
             if (out.kind === 'rowSample') delete out.stratumColumn;
+            if (out.kind !== 'partition') delete out.partCount;
             return out;
         }
 

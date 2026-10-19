@@ -53,18 +53,21 @@ enum PersonalizationSubstitution {
         language: AssignmentLanguage?
     ) async -> Resolution {
         await resolve(
-            manifest: manifest, seedHex: seedHex, courseSeedHex: nil, supportFilesDirectory: supportFilesDirectory,
-            language: language)
+            manifest: manifest, seedHex: seedHex, courseSeedHex: nil, dealNumber: nil,
+            supportFilesDirectory: supportFilesDirectory, language: language)
     }
 
     /// The same, with the student's per-(student, course) seed, so an
     /// expression reading a course-scoped dataset sees the student's cohort
-    /// rows (docs/datasets-course-library.md, slice 4). Every production call
-    /// site uses this form; `DatasetCourseSeedCallSiteTests` checks it.
+    /// rows (docs/datasets-course-library.md, slice 4), and the student's deal
+    /// number, so an expression reading a partition sees the student's part
+    /// (§4.11). Every production call site uses this form;
+    /// `DatasetCourseSeedCallSiteTests` checks it.
     static func resolve(
         manifest: TestProperties,
         seedHex: String?,
         courseSeedHex: String?,
+        dealNumber: Int?,
         supportFilesDirectory: String?,
         language: AssignmentLanguage?
     ) async -> Resolution {
@@ -102,7 +105,8 @@ enum PersonalizationSubstitution {
         let datasetFiles =
             supportFilesDirectory.flatMap {
                 DatasetResolver.resolve(
-                    manifest: manifest, seedHex: seedHex, courseSeedHex: courseSeedHex, sourceDirectory: $0)
+                    manifest: manifest, seedHex: seedHex, courseSeedHex: courseSeedHex, dealNumber: dealNumber,
+                    sourceDirectory: $0)
             } ?? [:]
 
         do {
@@ -149,22 +153,24 @@ enum PersonalizationSubstitution {
         language: AssignmentLanguage?
     ) async -> [String: String]? {
         await gradingInputs(
-            manifest: manifest, seedHex: seedHex, courseSeedHex: nil, supportFilesDirectory: supportFilesDirectory,
-            language: language)
+            manifest: manifest, seedHex: seedHex, courseSeedHex: nil, dealNumber: nil,
+            supportFilesDirectory: supportFilesDirectory, language: language)
     }
 
-    /// The same, with the student's course seed (see `resolve`).
+    /// The same, with the student's course seed and deal number (see
+    /// `resolve`).
     static func gradingInputs(
         manifest: TestProperties,
         seedHex: String?,
         courseSeedHex: String?,
+        dealNumber: Int?,
         supportFilesDirectory: String?,
         language: AssignmentLanguage?
     ) async -> [String: String]? {
         guard let seedHex, !seedHex.isEmpty else { return nil }
         guard manifest.hasExpressions else { return nil }
         let resolution = await resolve(
-            manifest: manifest, seedHex: seedHex, courseSeedHex: courseSeedHex,
+            manifest: manifest, seedHex: seedHex, courseSeedHex: courseSeedHex, dealNumber: dealNumber,
             supportFilesDirectory: supportFilesDirectory, language: language)
         let exprNames = Set(resolution.evaluatedExpressionNames)
         let values = resolution.substitutions.filter { exprNames.contains($0.key) }
