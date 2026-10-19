@@ -5,7 +5,8 @@
 // standings row carries the group it was played in and ranks only there, a
 // submission made with no session open plays nobody and leaves the standings
 // as they were, a student whom staff removed leaves the standings, and no
-// lab's leader holds the course's class record.
+// lab's leader holds the course's class record, which a per-group round robin
+// does not seed.
 
 import Core
 import Fluent
@@ -158,6 +159,25 @@ import VaporTesting
                 .filter(\.$achievementID == ActivityAuthoring.seededWinnerRecordID)
                 .first()
             #expect(record == nil, "no lab's leader holds the class record")
+        }
+    }
+
+    @Test func aPerGroupRoundRobinSeedsNoWinnerRecord() async throws {
+        try await withApp(app) { _ in
+            let f = try await fixture()
+            func hasWinnerRecord() async throws -> Bool {
+                let setup = try #require(try await APITestSetup.find(setupID, on: app.db))
+                return setup.decodedManifest()?.achievements.contains {
+                    $0.id == ActivityAuthoring.seededWinnerRecordID
+                } == true
+            }
+            #expect(try await hasWinnerRecord(), "the fixture carries the seeded record")
+            _ = try await ActivityAuthoring.setActivity(
+                setup: f.setup, to: ClassActivity(kind: .roundRobin, runsPerGroup: true), on: app.db)
+            #expect(try await !hasWinnerRecord())
+            let setup = try #require(try await APITestSetup.find(setupID, on: app.db))
+            _ = try await ActivityAuthoring.setActivity(setup: setup, to: ClassActivity(kind: .roundRobin), on: app.db)
+            #expect(try await hasWinnerRecord(), "the whole class's round robin seeds it again")
         }
     }
 

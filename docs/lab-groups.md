@@ -436,9 +436,9 @@ should be able to see it. The maintainer chose best effort on 2026-10-18.
   from the same submission, so the champion check reads the row the claim
   read.
 - The champion class record is not awarded for a per-group hill: a record
-  has one holder, and the activity has a hill in every lab. The authoring
-  door still seeds the record on a hill, so on a per-group hill it stays
-  unheld (or with its earlier holder) until per-group records exist. The
+  has one holder, and the activity has a hill in every lab. So the
+  authoring door seeds no champion record on a per-group hill, and removes
+  a seeded one when the flag goes on (an instructor-authored one stays). The
   `highestMetric` record stays course-wide, as in slice 3a.
 - Remove on "Who joined" forgets the removed student's rankings in that
   group: the hill when they hold it, and (with slice 3c) their group
@@ -472,7 +472,9 @@ should be able to see it. The maintainer chose best effort on 2026-10-18.
   group sees no standings. A student's `standing` badge signal is their
   place in the group of their own row.
 - The standings-leader class record is not awarded for a per-group round
-  robin, as with the hill (slice 3b): every lab has a leader.
+  robin, as with the hill (slice 3b): every lab has a leader. So
+  `setActivity` seeds none on a per-group round robin, and removes a seeded
+  one when the flag goes on.
 - Known limits, accepted: an opponent's latest submission may have been
   made in another lab or after a session, because "latest" is the one
   definition the union and the tournaments share. A standings row written

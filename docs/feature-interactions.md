@@ -467,13 +467,14 @@ because line numbers go out of date.
     both resolve it with `Hill.of`, from the same submission, so the champion
     check reads the row the claim staged. A new reader or writer of a hill
     goes through `Hill`, never straight to `activity_champions`. A per-group
-    hill awards no champion class record.
+    hill awards no champion class record, and `ActivityAuthoring.setActivity`
+    seeds none for it.
   - The round robin of a per-group activity plays the students in the
     challenger's session (`chooseClassmates`), and its standings row carries
     the session's group (`activity_standings.group_id`, slice 3c). A reader
     of the standings passes a group to `rankedStandings`; the badge signal
     ranks a student in the group of their own row. A per-group round robin
-    awards no standings-leader record.
+    awards no standings-leader record, and `setActivity` seeds none for it.
   - An activity whose kind compares students (`ActivityKind.comparesStudents`)
     accepts only shared data (`DatasetSpec.isShared`). The rule is in
     `ManifestCoherence`. A new door that writes an activity or a dataset spec

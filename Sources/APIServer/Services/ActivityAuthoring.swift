@@ -164,19 +164,24 @@ enum ActivityAuthoring {
         // other aggregation's record goes FIRST, since the seeder declines
         // while any `tournamentWinner` record is on the manifest.
         let aggregation = activity?.kind.aggregation
-        if aggregation != .standings {
+        // A per-group round robin has a leader in every lab, and a record has
+        // one holder, so it seeds none (docs/lab-groups.md, slice 3c).
+        let seedsStandingsRecord = aggregation == .standings && activity?.isPerGroup != true
+        if !seedsStandingsRecord {
             try await removeSeededRecord(setup: setup, id: seededWinnerRecordID, on: db)
         }
         if aggregation != .bracket {
             try await removeSeededRecord(setup: setup, id: seededTournamentRecordID, on: db)
         }
-        if aggregation == .standings {
+        if seedsStandingsRecord {
             try await seedWinnerRecord(setup: setup, record: seededWinnerRecord, on: db)
         }
         if aggregation == .bracket {
             try await seedWinnerRecord(setup: setup, record: seededTournamentRecord, on: db)
         }
-        if activity?.kind.opponentSource == .champion {
+        // A per-group hill has a champion in every lab, and a record has one
+        // holder, so it seeds none (docs/lab-groups.md, slice 3b).
+        if activity?.kind.opponentSource == .champion, activity?.isPerGroup != true {
             try await seedChampionRecord(setup: setup, on: db)
         } else {
             // A kind change away from the hill (or clearing) takes its

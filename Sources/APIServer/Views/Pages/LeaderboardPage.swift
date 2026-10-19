@@ -43,11 +43,16 @@ struct LeaderboardPage: HTML {
                 }
                 intro
                 if let scope = board.groupScope, scope.groupID == nil {
-                    // A student in no lab group of a per-group activity.
+                    // A student in no lab group of a per-group activity, or
+                    // staff in a course whose group set has no groups.
                     p(.class("section-note")) {
-                        "To see your lab's board, "
-                        a(.href("/join")) { "join its session" }
-                        "."
+                        if board.isStaff {
+                            "This course's group set has no lab groups yet."
+                        } else {
+                            "To see your lab's board, "
+                            a(.href("/join")) { "join its session" }
+                            "."
+                        }
                     }
                 }
                 if board.showFilter {
