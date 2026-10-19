@@ -132,8 +132,8 @@ notebook page spawns must be in `NotebookAssetIsolationMiddleware.isolatedWorker
 |---|---|---|---|
 | Python | xeus-python kernel | `.py` | `docs/architecture.md` |
 | R | xeus-r kernel | `.R` | `docs/r-support.md` |
-| Lua | xeus-lua kernel | `.lua` | `docs/adding-a-xeus-kernel.md` §"What the Lua run actually cost" |
-| Octave | xeus-octave kernel | `.m` | `docs/adding-a-xeus-kernel.md` §"What the Octave run actually cost" |
+| Lua | xeus-lua kernel | `.lua` | `docs/adding-a-xeus-kernel.md` |
+| Octave | xeus-octave kernel | `.m` | `docs/adding-a-xeus-kernel.md` |
 | C++ | upload-only (a decision) | `.sh` wrapper | `docs/cpp-support.md` |
 | Racket | upload-only (no kernel exists) | `.rkt` | `docs/multi-language-audit.md` |
 | Java | upload-only (both reasons) | `.sh` wrapper | `docs/java-support.md` |
