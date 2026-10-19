@@ -47,7 +47,9 @@ struct LeaderboardPage: HTML {
                     // staff in a course whose group set has no groups.
                     p(.class("section-note")) {
                         if board.isStaff {
-                            "This course's group set has no lab groups yet."
+                            "This course has no lab groups yet; "
+                            a(.href("/instructor/groups")) { "add them on the Groups tab" }
+                            "."
                         } else {
                             "To see your lab's board, "
                             a(.href("/join")) { "join its session" }
