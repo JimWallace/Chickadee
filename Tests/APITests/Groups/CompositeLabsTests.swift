@@ -1,6 +1,6 @@
-// Tests/APITests/Groups/CompositeGalleryTests.swift
+// Tests/APITests/Groups/CompositeLabsTests.swift
 //
-// The gallery of every lab's image of a class composite run once per lab
+// Every lab's image of a class composite run once per lab
 // group (docs/lab-groups.md, slice 4c): a lab shows in the group set's order
 // once its session has ended, a lab whose session is open or never opened
 // does not, each stage reads its own lab's image and stops polling at the
@@ -16,7 +16,7 @@ import VaporTesting
 
 @testable import APIServer
 
-@Suite(.serialized) struct CompositeGalleryTests {
+@Suite(.serialized) struct CompositeLabsTests {
 
     private let setupID = "cgal_setup"
 
@@ -60,21 +60,21 @@ import VaporTesting
         }
     }
 
-    private func gallery(_ f: Fixture, on app: Application) async throws -> CompositeGalleryPresentation? {
+    private func labImages(_ f: Fixture, on app: Application) async throws -> CompositeLabsPresentation? {
         let activity = try #require(f.setup.decodedManifest()?.activity)
-        return try await CompositeGalleryPresentation.build(
+        return try await CompositeLabsPresentation.build(
             setup: f.setup, activity: activity, assignment: f.assignment, on: app.db)
     }
 
     @Test func aLabShowsOnceItsSessionHasEndedInTheSetsOrder() async throws {
         try await withWebRoutesApp { app in
             let f = try await fixture(on: app)
-            #expect(try await gallery(f, on: app) == nil, "no session has ended")
+            #expect(try await labImages(f, on: app) == nil, "no session has ended")
 
             try await session(f, group: f.labs[2], on: app)
             try await session(f, group: f.labs[1], ended: false, on: app)
             try await session(f, group: f.labs[0], on: app)
-            let labs = try #require(try await gallery(f, on: app)).labs
+            let labs = try #require(try await labImages(f, on: app)).labs
             #expect(labs.map(\.name) == ["Lab 101", "Lab 103"])
             #expect(labs.map(\.progressText) == ["0 of 4 tiles complete", "0 of 4 tiles complete"])
             let first = try #require(labs.first?.stage)
@@ -83,19 +83,19 @@ import VaporTesting
         }
     }
 
-    @Test func aWholeClassCompositeHasNoGallery() async throws {
+    @Test func aWholeClassCompositeHasNoLabImages() async throws {
         try await withWebRoutesApp { app in
             let f = try await fixture(runsPerGroup: false, on: app)
             try await session(f, group: f.labs[0], on: app)
-            #expect(try await gallery(f, on: app) == nil)
+            #expect(try await labImages(f, on: app) == nil)
         }
     }
 
     @Test func twoAnimatedStagesGetTwoSliderIDs() throws {
         let stage = CompositeStagePresentation.board(
             spec: spec(frames: 2), testSetupID: setupID, present: false, groupID: UUID(), pollUntilISO: "")
-        let html = CompositeGallerySection(
-            gallery: CompositeGalleryPresentation(labs: [
+        let html = CompositeLabsSection(
+            presentation: CompositeLabsPresentation(labs: [
                 .init(name: "Lab 101", progressText: "", stage: stage),
                 .init(name: "Lab 102", progressText: "", stage: stage),
             ])
@@ -105,7 +105,7 @@ import VaporTesting
         #expect(!html.contains("id=\"composite-scrub\""))
     }
 
-    @Test func onlyStaffSeeTheGallery() async throws {
+    @Test func onlyStaffSeeEveryLabsImage() async throws {
         try await withWebRoutesApp { app in
             let staffCookie = try await wrLoginAsInstructor(on: app)
             try await wrEnrollUser(

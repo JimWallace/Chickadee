@@ -31,6 +31,11 @@ struct CompositeBoardPresentation {
     /// Every dealt slot, in slot order, then round.
     let holders: [Holder]
 
+    /// "31 of 48 tiles complete": the board's and the gallery's progress.
+    static func progressText(_ snapshot: CompositeSnapshot, spec: CompositeSpec) -> String {
+        "\(snapshot.complete) of \(snapshot.total) \(spec.compositor.slotNoun) complete"
+    }
+
     /// The staff board of a class composite, or nil for any other kind. For
     /// a composite that runs per lab group, `groupID`'s image.
     static func build(
@@ -87,7 +92,7 @@ struct CompositeBoardPresentation {
             stage: .board(
                 spec: spec, testSetupID: testSetupID, present: false, groupID: groupID,
                 pollUntilISO: activity.window?.closesAtISO),
-            progressText: "\(snapshot.complete) of \(snapshot.total) \(spec.compositor.slotNoun) complete",
+            progressText: progressText(snapshot, spec: spec),
             holders: holders)
     }
 

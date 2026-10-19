@@ -501,7 +501,7 @@ duplicate.
   screen permits, and puts the progress in the clock's place. The result page
   wraps it in `.composite-tile`, which shows one student's contribution. The
   staff leaderboard of a composite that runs per lab group puts one stage per
-  lab in a `.composite-gallery` grid, each in a `.composite-gallery-lab` with
+  lab in a `.composite-labs` grid, each in a `.composite-labs-item` with
   the lab's name and progress, and gives each stage's range its own id. In the
   strip, passed is `--green` and failed is `--red`, the test-status pair, and
   reference is `--gray-300`, between empty and passed in both themes.

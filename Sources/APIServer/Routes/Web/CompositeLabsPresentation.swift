@@ -1,16 +1,17 @@
-// APIServer/Routes/Web/CompositeGalleryPresentation.swift
+// APIServer/Routes/Web/CompositeLabsPresentation.swift
 //
 // Every lab's image of a class composite that runs once per lab group
-// (docs/lab-groups.md, slice 4c), for the staff leaderboard page. A lab joins
-// the gallery when its session has ended, so the gallery shows finished
+// (docs/lab-groups.md, slice 4c), for the staff leaderboard page. A lab
+// shows here when its session has ended, so the section shows finished
 // images side by side. Each stage reads its lab's snapshot when the page
-// opens and stops polling, because its session has ended.
+// opens and once more at the first poll, then stops, because the close is
+// past. ("Gallery" is a compositor kind, so this is "labs".)
 
 import Core
 import Fluent
 import Foundation
 
-struct CompositeGalleryPresentation {
+struct CompositeLabsPresentation {
 
     /// One lab's image.
     struct Lab {
@@ -23,12 +24,12 @@ struct CompositeGalleryPresentation {
     /// The labs whose session has ended, in the group set's order.
     let labs: [Lab]
 
-    /// The gallery of a per-group composite, or nil for any other activity
+    /// Every lab's image of a per-group composite, or nil for any other activity
     /// and when no lab's session has ended.
     static func build(
         setup: APITestSetup, activity: ClassActivity, assignment: APIAssignment?, now: Date = Date(),
         on db: any Database
-    ) async throws -> CompositeGalleryPresentation? {
+    ) async throws -> CompositeLabsPresentation? {
         guard activity.kind == .classComposite, activity.isPerGroup, let spec = activity.composite,
             let assignmentID = assignment?.id, let testSetupID = setup.id,
             let setID = try await CourseGroupStore.sets(courseID: setup.courseID, on: db).first?.id
@@ -48,11 +49,11 @@ struct CompositeGalleryPresentation {
             labs.append(
                 Lab(
                     name: group.name,
-                    progressText: "\(snapshot.complete) of \(snapshot.total) \(spec.compositor.slotNoun) complete",
+                    progressText: CompositeBoardPresentation.progressText(snapshot, spec: spec),
                     stage: .board(
                         spec: spec, testSetupID: testSetupID, present: false, groupID: groupID,
                         pollUntilISO: closedAt.formatted(.iso8601))))
         }
-        return labs.isEmpty ? nil : CompositeGalleryPresentation(labs: labs)
+        return labs.isEmpty ? nil : CompositeLabsPresentation(labs: labs)
     }
 }

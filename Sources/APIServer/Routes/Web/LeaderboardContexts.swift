@@ -89,7 +89,7 @@ struct LeaderboardPresentation {
     /// Every lab's image whose session has ended, for a composite that runs
     /// per lab group (docs/lab-groups.md, slice 4c); nil on every other
     /// kind and for a student.
-    var compositeGallery: CompositeGalleryPresentation?
+    var compositeLabs: CompositeLabsPresentation?
     /// True when the page shows the session's state line. A COPY question
     /// only — whether the page refreshes is `pollsLive`, which answers a
     /// different one, and an open-ended session says yes to that and no to
