@@ -51,7 +51,8 @@ import Testing
         defer { try? FileManager.default.removeItem(at: workRoot) }
 
         let probeDir = try #require(SandboxedScriptRunner.makeProbeDirectory(in: workRoot))
-        #expect((try? probeDir.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory == true)
+        #expect(
+            (try? probeDir.resolvingSymlinksInPath().resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory == true)
         #expect(probeDir.deletingLastPathComponent().standardizedFileURL == workRoot.standardizedFileURL)
     }
 

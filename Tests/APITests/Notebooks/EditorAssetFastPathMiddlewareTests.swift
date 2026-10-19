@@ -275,7 +275,8 @@ import VaporTesting
             .filter { $0.hasPrefix("chickadee-") }
             .filter { environment in
                 let packages = xeusDir.appendingPathComponent("\(environment)/kernel_packages")
-                return (try? packages.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory == true
+                return (try? packages.resolvingSymlinksInPath().resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory
+                    == true
             }
             .sorted()
 

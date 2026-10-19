@@ -56,7 +56,9 @@ import VaporTesting
         // directory this suite is about.
         try await withApp(app) { app in
             let root = try #require(app.testDataDirectory)
-            let values = try? URL(fileURLWithPath: root).resourceValues(forKeys: [.isDirectoryKey])
+            let values = try? URL(fileURLWithPath: root).resolvingSymlinksInPath().resourceValues(forKeys: [
+                .isDirectoryKey
+            ])
             #expect(
                 values?.isDirectory == true,
                 "the recorded test data directory must actually exist — it is what teardown removes")
