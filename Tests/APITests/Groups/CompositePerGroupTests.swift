@@ -4,8 +4,10 @@
 // each group deals its own slots, so two groups hold the same slot numbers; a
 // student is dealt in the group of the session they play in, and a student
 // with no session is dealt nothing; a contribution fills the image of the
-// group whose pool dealt its slot; and a per-group board with no group shows
-// no image.
+// group whose pool dealt its slot; Remove frees the student's slot; the scope
+// locks once a slot is dealt, and a
+// lab's composite has no spares; and a per-group board with no group shows no
+// image.
 
 import Core
 import Fluent
@@ -170,6 +172,37 @@ import VaporTesting
             #expect(
                 try await APIClassItemCoverage.query(on: app.db).count() == 0,
                 "a lab's tile covers no class item before slice 5")
+        }
+    }
+
+    @Test func theScopeLocksOnceASlotIsDealtAndALabHasNoSpares() async throws {
+        try await withApp(app) { _ in
+            let f = try await fixture()
+            try await join(f, group: f.labA, userID: f.ada)
+            await open(f, f.ada)
+
+            await #expect(throws: AppError.self) {
+                _ = try await ActivityAuthoring.setActivity(
+                    setup: f.setup, to: ClassActivity(kind: .classComposite, composite: spec), on: app.db)
+            }
+            await #expect(throws: CompositeSpares.RequestError.perGroup) {
+                _ = try await CompositeSpares.request(
+                    assignment: f.assignment, setup: f.setup, userID: f.ada, app: app, on: app.db)
+            }
+        }
+    }
+
+    @Test func removeFreesTheStudentsSlotInTheGroup() async throws {
+        try await withApp(app) { _ in
+            let f = try await fixture()
+            try await join(f, group: f.labA, userID: f.ada)
+            await open(f, f.ada)
+            #expect(try await dealt(f, f.ada) != nil)
+
+            let session = try #require(
+                try await ActivitySessionStore.session(assignmentID: f.assignmentID, groupID: f.labA, on: app.db))
+            #expect(try await ActivitySessionStore.remove(userID: f.ada, from: session, on: app.db))
+            #expect(try await dealt(f, f.ada) == nil, "the student can be dealt again in the lab they are in")
         }
     }
 

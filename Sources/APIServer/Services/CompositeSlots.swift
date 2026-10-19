@@ -43,7 +43,7 @@ enum CompositeSlots {
         in pool: CompositePool, userID: UUID, spec: CompositeSpec, on db: any Database
     ) async throws -> Int {
         let assignmentID = pool.assignmentID
-        if let existing = try await dealtSlot(assignmentID: assignmentID, userID: userID, on: db) {
+        if let existing = try await CompositePool.dealtSlot(assignmentID: assignmentID, userID: userID, on: db)?.slot {
             return existing
         }
         let sequence = spec.dealSequence(shuffleSeed: shuffleSeed(for: assignmentID))
@@ -57,7 +57,9 @@ enum CompositeSlots {
             } catch let error where isInsertConflict(error) && attempt < 8 {
                 attempt += 1
                 // A concurrent request may have dealt this student first.
-                if let existing = try await dealtSlot(assignmentID: assignmentID, userID: userID, on: db) {
+                if let existing = try await CompositePool.dealtSlot(assignmentID: assignmentID, userID: userID, on: db)?
+                    .slot
+                {
                     return existing
                 }
             }
@@ -133,7 +135,9 @@ enum CompositeSlots {
                     try await isCourseStaff(user, inCourse: courseID, db: db)
                 {
                     slot = 0
-                } else if let existing = try await dealtSlot(assignmentID: assignmentID, userID: userID, on: db) {
+                } else if let existing = try await CompositePool.dealtSlot(
+                    assignmentID: assignmentID, userID: userID, on: db)?.slot
+                {
                     slot = existing
                 } else if let testSetupID = try await APIAssignment.find(assignmentID, on: db)?.testSetupID,
                     let pool = try await CompositePool.forDeal(
@@ -187,11 +191,6 @@ enum CompositeSlots {
     private struct DealtPosition: Hashable {
         let round: Int
         let slot: Int
-    }
-
-    /// The student's slot in any pool of the assignment.
-    private static func dealtSlot(assignmentID: UUID, userID: UUID, on db: any Database) async throws -> Int? {
-        try await CompositePool.dealtSlot(assignmentID: assignmentID, userID: userID, on: db)?.slot
     }
 
     /// The first (round, slot) in deal order that nobody holds.

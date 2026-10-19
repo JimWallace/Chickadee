@@ -22,6 +22,9 @@ enum CompositeSpares {
     enum RequestError: Error, Equatable {
         /// The assignment is not a class composite.
         case notComposite
+        /// The composite runs once per lab group, which has no spares yet
+        /// (docs/lab-groups.md, slice 4b).
+        case perGroup
         /// The student's own tile has not passed.
         case noPassingTile
         /// A spare of the student's is still grading.
@@ -48,7 +51,7 @@ enum CompositeSpares {
             let spec = activity.composite
         else { throw RequestError.notComposite }
         // A lab's composite has no spares yet (docs/lab-groups.md, slice 4b).
-        guard !activity.isPerGroup else { throw RequestError.noHole }
+        guard !activity.isPerGroup else { throw RequestError.perGroup }
         guard
             let own = try await APICompositeContribution.query(on: db)
                 .filter(\.$assignmentID == assignmentID).filter(\.$userID == userID).first(),

@@ -62,7 +62,7 @@ itself must be able to make and fill a group.
 |---|---|---|
 | The activity block | `TestProperties.activity` (`Sources/Core/ClassActivity.swift`) | `kind`, `leaderboardVisibility`, `opponentFile`, `window`, `composite`. All course-wide. |
 | The window gate | `requireOpenStudentAssignment(gate: .submission)` | Refuses a submission outside `activity.window`. Staff are never gated. |
-| The ranking rows | `leaderboard_entries`, `activity_standings`, `activity_champions`, `match_results`, `tournament_runs`, `composite_slots` | Keyed by assignment and student. Unique on (assignment, student); the hill is unique on the assignment alone. |
+| The ranking rows | `leaderboard_entries`, `activity_standings`, `activity_champions`, `match_results`, `tournament_runs`, `composite_slots` | Keyed by assignment and student. Unique on (assignment, student); the hill is unique on the assignment alone, and the composite's slots on (assignment, round, slot) too. Slices 3 and 4a added the per-group forms (see "The model"). |
 | The opponents | `WorkerJobRoutes.jobOpponentSet` / `jobOpponents` | Every classmate's latest submission in the course. |
 | The present page | `GET /testsetups/:id/leaderboard?present=1`, `LeaderboardPresentPage` | One board per assignment, polled by the projector. |
 | The arena | `WebRoutes+TournamentArena.swift` | Plays a browser-graded tournament in the presenter's browser. |
@@ -559,6 +559,15 @@ should be able to see it. The maintainer chose best effort on 2026-10-18.
   per-group composite with no group chosen shows no image.
 - A lab's composite has no spares yet: the tile panel offers none, and a
   request is refused (slice 4b).
+- The scope locks once a slot is dealt: `setActivity` refuses to turn
+  `runsPerGroup` on or off for a composite that holds a dealt slot
+  (`compositeScopeLockedMessage`), since each slot sits in one pool.
+- Remove on "Who joined" deletes the student's slot and tile in that group,
+  with their rankings, so they are dealt again in the lab they play in.
+- Known limits, accepted: a student holds one slot per assignment, so one
+  who moves labs after being dealt keeps their tile in the first lab's image
+  until staff remove them there. A class goal on a per-group composite
+  cannot advance until slice 5 counts a lab's tiles.
 - `canRunPerGroup` is now every kind but the union. Changed under the
   maintainer's direction: `ClassActivityIsPerGroupTests` (the composite
   joins the kinds) and `GroupSessionGateTests` (it no longer expects the

@@ -127,7 +127,8 @@ enum ActivityAuthoring {
     ///
     /// `lockDB` answers the two lock questions (a student submission, a dealt
     /// slot). MCP passes the owner pool: the least-privilege MCP role cannot
-    /// read `composite_slots`, and it reads `submissions` filtered to
+    /// read `composite_slots` or `group_composite_slots`, and it reads
+    /// `submissions` filtered to
     /// validation runs, so on its own pool both locks would always read as
     /// open. Every other caller reads on `db`.
     @discardableResult
@@ -293,12 +294,26 @@ enum ActivityAuthoring {
         {
             throw AppError.badRequest(reason: compositeLayoutLockedMessage)
         }
+        // A dealt slot sits in the whole class's pool or a lab group's
+        // (docs/lab-groups.md, slice 4a), so the scope locks once one is dealt.
+        if current?.kind == .classComposite, current?.isPerGroup != activity.isPerGroup,
+            try await hasDealtSlots(setup: setup, on: lockDB)
+        {
+            throw AppError.badRequest(reason: compositeScopeLockedMessage)
+        }
     }
+
+    static let compositeScopeLockedMessage =
+        "Students already hold slots, so this composite cannot change between the whole class and lab groups."
 
     /// True once a student has submitted or a slot has been dealt: each
     /// student's slot and the size the grader checks depend on the structure.
     static func compositeStructureLocked(setup: APITestSetup, on db: any Database) async throws -> Bool {
         if try await hasStudentSubmissions(setup: setup, on: db) { return true }
+        return try await hasDealtSlots(setup: setup, on: db)
+    }
+
+    private static func hasDealtSlots(setup: APITestSetup, on db: any Database) async throws -> Bool {
         guard let setupID = setup.id, let assignment = try await assignmentByTestSetupID(setupID, on: db),
             let assignmentID = assignment.id
         else { return false }

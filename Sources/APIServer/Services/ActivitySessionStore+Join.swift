@@ -163,16 +163,30 @@ extension ActivitySessionStore {
         }
         try await row.save(on: db)
         if let testSetupID = try await APIAssignment.find(session.assignmentID, on: db)?.testSetupID {
-            try await forgetRankings(of: userID, testSetupID: testSetupID, groupID: session.groupID, on: db)
+            try await forgetRankings(
+                of: userID, assignmentID: session.assignmentID, testSetupID: testSetupID, groupID: session.groupID,
+                on: db)
         }
         return true
     }
 
     /// Deletes the student's rows in one lab group's rankings of the
-    /// assignment: the hill, the leaderboard and the standings.
+    /// assignment: the hill, the leaderboard and the standings, and their
+    /// composite slot and tile in the group's image, so the student can be
+    /// dealt again in the lab they are in.
     private static func forgetRankings(
-        of userID: UUID, testSetupID: String, groupID: UUID, on db: any Database
+        of userID: UUID, assignmentID: UUID, testSetupID: String, groupID: UUID, on db: any Database
     ) async throws {
+        try await APIGroupCompositeSlot.query(on: db)
+            .filter(\.$assignmentID == assignmentID)
+            .filter(\.$groupID == groupID)
+            .filter(\.$userID == userID)
+            .delete()
+        try await APICompositeContribution.query(on: db)
+            .filter(\.$assignmentID == assignmentID)
+            .filter(\.$groupID == groupID)
+            .filter(\.$userID == userID)
+            .delete()
         try await APIGroupActivityChampion.query(on: db)
             .filter(\.$testSetupID == testSetupID)
             .filter(\.$groupID == groupID)
