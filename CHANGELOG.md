@@ -9,6 +9,20 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.743] - 2026-10-19
+
+### Changed
+
+- **Lab groups (slice 5a): a class goal per lab.** When a class activity runs once per lab group, each lab's grade goal is now counted from that lab's own students, and each student earns their own lab's bonus on the result page, the grades CSV, and the LEARN and LTI pushes. Before, the class shared one goal. An item goal or a coverage goal is still counted for the whole class. See `docs/lab-groups.md`.
+
+
+## [0.5.742] - 2026-10-19
+
+### Changed
+
+- **Three more Swift 7 features.** Every target now builds with `InternalImportsByDefault`, `InferIsolatedConformances` and `ImmutableWeakCaptures`. An import is internal unless the file writes `public import`, so the compiler shows each module that appears in a public API: Foundation in 20 `Core` files, and swift-subprocess in `BoundedSubprocess.swift`. The other two features needed no change. `NonisolatedNonsendingByDefault` waits for the Vapor 5 move (#1523).
+
+
 ## [0.5.741] - 2026-10-19
 
 ### Added

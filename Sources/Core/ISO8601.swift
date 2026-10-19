@@ -4,7 +4,7 @@
 // UTC, with no fractional seconds — the default `ISO8601DateFormatter`. The
 // code used to construct that formatter inline in some fifty places.
 
-import Foundation
+public import Foundation
 
 /// Formats `date` as an ISO 8601 date-time, such as "2026-10-08T21:30:00Z".
 public func iso8601String(_ date: Date) -> String {

@@ -4,7 +4,7 @@
 // Defined in Core so both APIServer and Worker can reference it without
 // introducing a cross-target dependency between the two executables.
 
-import Foundation
+public import Foundation
 
 /// A unit of work handed to a worker after it wins a polling request.
 public struct Job: Codable, Sendable {

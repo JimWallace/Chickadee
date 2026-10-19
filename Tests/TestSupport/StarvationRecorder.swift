@@ -72,7 +72,7 @@
 // deliberately does NOT disable this — recording evidence is safe even where
 // aborting is not.
 
-import Foundation
+public import Foundation
 import Synchronization
 
 public enum StarvationRecorder {

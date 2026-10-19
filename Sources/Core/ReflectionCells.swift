@@ -13,7 +13,7 @@
 // one, else by its position among the tagged cells. Nothing else in either
 // notebook (code, outputs, metadata) leaves this type.
 
-import Foundation
+public import Foundation
 
 /// One prompt and the student's written response to it.
 public struct ReflectionPair: Sendable, Equatable, Codable {

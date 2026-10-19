@@ -1296,7 +1296,6 @@ async function createInstantiator(options, swift) {
     }
   };
   const __bjs_codec_Array_M10RunnerWasmT11JSSuiteItem = __bjs_arrayCodec(__bjs_codec_M10RunnerWasmT11JSSuiteItem);
-  const __bjs_codec_Array_String = __bjs_arrayCodec(__bjs_stringCodec);
   const __bjs_codec_M10RunnerWasmT23JSCompositeContribution = {
     lower: (v) => {
       structHelpers.M10RunnerWasmT23JSCompositeContribution.lower(v);
@@ -1307,6 +1306,7 @@ async function createInstantiator(options, swift) {
     }
   };
   const __bjs_codec_Optional_M10RunnerWasmT23JSCompositeContribution = __bjs_optionalCodec(__bjs_codec_M10RunnerWasmT23JSCompositeContribution);
+  const __bjs_codec_Array_String = __bjs_arrayCodec(__bjs_stringCodec);
   const __bjs_codec_Optional_String = __bjs_optionalCodec(__bjs_stringCodec);
   const __bjs_codec_Optional_Double = __bjs_optionalCodec(__bjs_primitiveCodecs.Double);
   const __bjs_codec_Optional_Int = __bjs_optionalCodec(__bjs_primitiveCodecs.Int);

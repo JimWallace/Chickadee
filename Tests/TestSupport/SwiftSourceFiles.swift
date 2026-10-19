@@ -4,7 +4,7 @@
 // their own `swiftFiles`: four read the whole tree and two read one level, and
 // three returned nothing for a directory they could not read.
 
-import Foundation
+public import Foundation
 import SystemPackage
 
 /// The Swift files under `directory`, at any depth, sorted by path.

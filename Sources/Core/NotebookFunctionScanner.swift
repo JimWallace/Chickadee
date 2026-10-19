@@ -6,7 +6,7 @@
 // Used by the server to auto-generate test script stubs from a solution notebook.
 // No Vapor dependency — pure Foundation.
 
-import Foundation
+public import Foundation
 
 // MARK: - Model
 
