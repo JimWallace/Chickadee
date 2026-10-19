@@ -95,10 +95,10 @@ import VaporTesting
         _ submissionID: String, status: TestStatus = .pass, data: String
     ) -> TestOutcomeCollection {
         let passed = status == .pass
-        let outcome = TestOutcome(
-            testName: "tile.py", testClass: nil, tier: .pub, status: status, shortResult: "", longResult: nil,
+        let outcome = TestOutcome.stub(
+            "tile.py", status: status, shortResult: "",
             composite: CompositeContribution(width: 2, height: 1, frames: 1, format: .gray8, data: data),
-            executionTimeMs: 1, memoryUsageBytes: nil, attemptNumber: 1, isFirstPassSuccess: passed)
+            isFirstPassSuccess: passed)
         return TestOutcomeCollection(
             submissionID: submissionID, testSetupID: setupID, attemptNumber: 1, buildStatus: .passed,
             compilerOutput: nil, outcomes: [outcome], totalTests: 1, passCount: passed ? 1 : 0,

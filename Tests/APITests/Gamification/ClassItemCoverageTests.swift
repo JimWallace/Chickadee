@@ -23,11 +23,7 @@ import VaporTesting
 @Suite struct ClassItemCoverageTests {
 
     private func outcome(_ name: String, _ status: TestStatus) -> TestOutcome {
-        TestOutcome(
-            testName: name, testClass: nil, tier: .pub, status: status,
-            shortResult: status.defaultShortResult, longResult: nil,
-            executionTimeMs: 1, memoryUsageBytes: nil,
-            attemptNumber: 1, isFirstPassSuccess: false)
+        .stub(name, status: status)
     }
 
     /// A setup + assignment + two enrolled students, the shape every test needs.

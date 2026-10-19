@@ -93,10 +93,10 @@ import VaporTesting
     )
         -> TestOutcomeCollection
     {
-        let outcome = TestOutcome(
-            testName: "tile.py", testClass: nil, tier: .pub, status: status, shortResult: "", longResult: nil,
+        let outcome = TestOutcome.stub(
+            "tile.py", status: status, shortResult: "",
             composite: data.map { CompositeContribution(width: 2, height: 1, frames: 1, format: .gray8, data: $0) },
-            executionTimeMs: 1, memoryUsageBytes: nil, attemptNumber: 1, isFirstPassSuccess: status == .pass)
+            isFirstPassSuccess: status == .pass)
         return TestOutcomeCollection(
             submissionID: submissionID, testSetupID: setupID, attemptNumber: 1, buildStatus: .passed,
             compilerOutput: nil, outcomes: [outcome], totalTests: 1, passCount: status == .pass ? 1 : 0,
@@ -348,10 +348,10 @@ import VaporTesting
             try await wrInsertSubmission(id: "sub_page", testSetupID: f.setupID, userID: id, on: app)
             try "print(1)\n".write(
                 toFile: app.submissionsDirectory + "sub_page.py", atomically: true, encoding: .utf8)
-            let outcome = TestOutcome(
-                testName: "tile", testClass: nil, tier: .pub, status: .pass, shortResult: "passed", longResult: nil,
+            let outcome = TestOutcome.stub(
+                "tile",
                 composite: CompositeContribution(width: 2, height: 1, frames: 1, format: .gray8, data: ownPixels),
-                executionTimeMs: 1, memoryUsageBytes: nil, attemptNumber: 1, isFirstPassSuccess: true)
+                isFirstPassSuccess: true)
             try await wrInsertResult(submissionID: "sub_page", outcomes: [outcome], on: app)
             try await APICompositeContribution(
                 assignmentID: f.assignmentID, userID: id, slot: 0, submissionID: "sub_page", submittedAt: Date(),

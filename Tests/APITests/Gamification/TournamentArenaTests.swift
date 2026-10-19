@@ -49,10 +49,8 @@ import VaporTesting
     }
 
     private func collection(setupID: String, passed: Bool, submissionID: String = "browser") -> TestOutcomeCollection {
-        let outcome = TestOutcome(
-            testName: "match", testClass: nil, tier: .pub, status: passed ? .pass : .fail,
-            shortResult: "", longResult: nil, score: passed ? 1 : 0, metric: passed ? 1 : 0,
-            executionTimeMs: 1, memoryUsageBytes: nil, attemptNumber: 1, isFirstPassSuccess: false)
+        let outcome = TestOutcome.stub(
+            status: passed ? .pass : .fail, shortResult: "", score: passed ? 1 : 0, metric: passed ? 1 : 0)
         return TestOutcomeCollection(
             submissionID: submissionID, testSetupID: setupID, attemptNumber: 1, buildStatus: .passed,
             compilerOutput: nil, outcomes: [outcome], totalTests: 1,

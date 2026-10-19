@@ -137,11 +137,11 @@ import VaporTesting
             try await join(f, group: f.labA, userID: f.ada)
             await open(f, f.ada)
             let submission = try await makeTestSubmission(on: app, id: "cpg_s1", setupID: setupID, userID: f.ada)
-            let outcome = TestOutcome(
-                testName: "tile.py", testClass: nil, tier: .pub, status: .pass, shortResult: "", longResult: nil,
+            let outcome = TestOutcome.stub(
+                "tile.py", shortResult: "",
                 composite: CompositeContribution(
                     width: 2, height: 1, frames: 1, format: .gray8, data: Data([1, 2]).base64EncodedString()),
-                executionTimeMs: 1, memoryUsageBytes: nil, attemptNumber: 1, isFirstPassSuccess: true)
+                isFirstPassSuccess: true)
             let collection = TestOutcomeCollection(
                 submissionID: "cpg_s1", testSetupID: setupID, attemptNumber: 1, buildStatus: .passed,
                 compilerOutput: nil, outcomes: [outcome], totalTests: 1, passCount: 1, failCount: 0, errorCount: 0,

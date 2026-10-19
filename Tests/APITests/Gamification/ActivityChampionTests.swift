@@ -23,11 +23,7 @@ import VaporTesting
     )
         -> TestOutcome
     {
-        TestOutcome(
-            testName: name, testClass: nil, tier: .pub, status: status,
-            shortResult: status.defaultShortResult, longResult: nil, score: score, metric: metric,
-            executionTimeMs: 1, memoryUsageBytes: nil,
-            attemptNumber: 1, isFirstPassSuccess: false)
+        .stub(name, status: status, score: score, metric: metric)
     }
 
     private func hillManifest(opponentFile: String? = nil) throws -> String {

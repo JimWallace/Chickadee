@@ -83,9 +83,7 @@ import VaporTesting
         let id = "litem_\(UUID().uuidString.prefix(12))"
         _ = try await makeTestSubmission(on: app, id: id, setupID: setupID, userID: userID)
         let outcomes = items.map { item in
-            TestOutcome(
-                testName: item, testClass: nil, tier: .pub, status: .pass, shortResult: "", longResult: nil,
-                executionTimeMs: 1, memoryUsageBytes: nil, attemptNumber: 1, isFirstPassSuccess: true)
+            TestOutcome.stub(item, shortResult: "", isFirstPassSuccess: true)
         }
         try await recordClassItemCoverage(
             testSetupID: setupID, userID: userID, submissionID: id, outcomes: outcomes, declaredSlotCount: 2,
@@ -156,10 +154,10 @@ import VaporTesting
             await CompositeSlots.dealOnOpen(setup: f.setup, assignment: f.assignment, userID: ben, on: app.db)
 
             let pixels = Data([1, 2]).base64EncodedString()
-            let outcome = TestOutcome(
-                testName: "tile.py", testClass: nil, tier: .pub, status: .pass, shortResult: "", longResult: nil,
+            let outcome = TestOutcome.stub(
+                "tile.py", shortResult: "",
                 composite: CompositeContribution(width: 2, height: 1, frames: 1, format: .gray8, data: pixels),
-                executionTimeMs: 1, memoryUsageBytes: nil, attemptNumber: 1, isFirstPassSuccess: true)
+                isFirstPassSuccess: true)
             func collection(_ submissionID: String) -> TestOutcomeCollection {
                 TestOutcomeCollection(
                     submissionID: submissionID, testSetupID: setupID, attemptNumber: 1, buildStatus: .passed,

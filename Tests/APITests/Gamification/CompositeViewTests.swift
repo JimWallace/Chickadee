@@ -274,10 +274,9 @@ import VaporTesting
             let me = try student.requireID()
             try await APICompositeSlot(assignmentID: f.assignmentID, userID: me, slot: 3, round: 0).create(on: app.db)
             try await wrInsertSubmission(id: "sub_tile", testSetupID: f.setupID, userID: me, on: app)
-            let outcome = TestOutcome(
-                testName: "tile", testClass: nil, tier: .pub, status: .pass, shortResult: "passed", longResult: nil,
-                composite: CompositeContribution(width: 2, height: 1, frames: 1, format: .gray8, data: pixels),
-                executionTimeMs: 1, memoryUsageBytes: nil, attemptNumber: 1, isFirstPassSuccess: true)
+            let outcome = TestOutcome.stub(
+                "tile", composite: CompositeContribution(width: 2, height: 1, frames: 1, format: .gray8, data: pixels),
+                isFirstPassSuccess: true)
             try await wrInsertResult(submissionID: "sub_tile", outcomes: [outcome], on: app)
 
             try await app.asyncTest(
