@@ -17,11 +17,11 @@ import Foundation
 
 enum LabGoalGroups {
 
-    /// True for a goal counted per lab: a grade goal or a goal with no
-    /// condition. An `itemsCovered` or a `classCoverage` goal is still counted
-    /// for the whole class until slices 5b and 5c.
+    /// True for a goal counted per lab: a grade goal, a goal with no
+    /// condition and an `itemsCovered` goal (slice 5b). A `classCoverage` goal
+    /// is still counted for the whole class until slice 5c.
     static func isCountedPerLab(_ goal: Achievement) -> Bool {
-        !goal.isUnionClassGoal && !goal.isCoverageClassGoal
+        !goal.isCoverageClassGoal
     }
 
     /// Each student's lab for the assignment's class goals, for every student
@@ -112,11 +112,13 @@ enum LabGoalGroups {
         return Dictionary(grouping: rows, by: \.groupID).mapValues(byAchievement)
     }
 
-    /// Deletes every class-goal snapshot of the setups: the class's and each
-    /// lab's.
-    static func deleteSnapshots(forTestSetups setupIDs: [String], on db: any Database) async throws {
+    /// Deletes every class-goal snapshot of the setups, the class's and each
+    /// lab's, and each lab's item coverage. (The class's coverage goes with
+    /// the course delete's other coverage rows.)
+    static func deleteClassGoalData(forTestSetups setupIDs: [String], on db: any Database) async throws {
         try await APIAchievementResult.query(on: db).filter(\.$testSetupID ~~ setupIDs).delete()
         try await APIGroupAchievementResult.query(on: db).filter(\.$testSetupID ~~ setupIDs).delete()
+        try await APIGroupClassItemCoverage.query(on: db).filter(\.$testSetupID ~~ setupIDs).delete()
     }
 
     private static func byAchievement(_ rows: [any ClassGoalSnapshot]) -> [String: any ClassGoalSnapshot] {

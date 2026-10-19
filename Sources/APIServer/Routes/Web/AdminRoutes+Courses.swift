@@ -391,9 +391,10 @@ extension AdminRoutes {
                 // The award ledger names the student and the work that earned
                 // the award, keyed by setup with no foreign key.
                 try await AchievementAwardStore.deleteAwards(forTestSetups: setupIDs, on: db)
-                // A class goal's snapshots, the class's and each lab's. Keyed
-                // by setup with no foreign key, so nothing else removes them.
-                try await LabGoalGroups.deleteSnapshots(forTestSetups: setupIDs, on: db)
+                // A class goal's snapshots, the class's and each lab's, and
+                // each lab's item coverage. Keyed by setup with no foreign key,
+                // so nothing else removes them.
+                try await LabGoalGroups.deleteClassGoalData(forTestSetups: setupIDs, on: db)
                 try await APISubmission.query(on: db)
                     .filter(\.$testSetupID ~~ setupIDs).delete()
             }
