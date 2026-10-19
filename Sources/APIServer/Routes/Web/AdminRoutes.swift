@@ -504,8 +504,11 @@ struct AdminRoutes: RouteCollection {
         // A class composite's spare job holds a copy of the student's code
         // but no user ID (docs/class-composite.md), so the cascade from the
         // user would leave it. It goes, with its files.
-        let spareJobIDs = try await APICompositeSpare.query(on: req.db)
+        let courseSpareJobIDs = try await APICompositeSpare.query(on: req.db)
             .filter(\.$userID == uuid).all().map(\.submissionID)
+        let groupSpareJobIDs = try await APIGroupCompositeSpare.query(on: req.db)
+            .filter(\.$userID == uuid).all().map(\.submissionID)
+        let spareJobIDs = courseSpareJobIDs + groupSpareJobIDs
         let spareJobs =
             spareJobIDs.isEmpty ? [] : try await APISubmission.query(on: req.db).filter(\.$id ~~ spareJobIDs).all()
         for job in spareJobs {

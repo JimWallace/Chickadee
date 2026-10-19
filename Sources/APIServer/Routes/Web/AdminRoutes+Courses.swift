@@ -412,6 +412,8 @@ extension AdminRoutes {
                     .filter(\.$assignmentID ~~ assignmentIDs).delete()
                 try await APICompositeSpare.query(on: db)
                     .filter(\.$assignmentID ~~ assignmentIDs).delete()
+                try await APIGroupCompositeSpare.query(on: db)
+                    .filter(\.$assignmentID ~~ assignmentIDs).delete()
                 try await APIDatasetDeal.query(on: db)
                     .filter(\.$assignmentID ~~ assignmentIDs).delete()
             }

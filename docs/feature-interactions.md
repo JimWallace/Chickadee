@@ -526,7 +526,9 @@ because line numbers go out of date.
     reader of slots goes through `CompositePool` (`dealt`, `dealtSlot`),
     never straight to `composite_slots`, and a reader of the image passes a
     group to `CompositeSnapshot.Scope`. A lab's tiles cover no class item
-    until slice 5, and a lab's composite has no spares until slice 4b. A per-group round robin
+    until slice 5. A lab's spares are in `group_composite_spares` (slice
+    4b): a reader of spares goes through `CompositePool.spares` or
+    `CompositePool.spare(submissionID:)`. A per-group round robin
     awards no standings-leader record, and `setActivity` seeds none for it.
   - An activity whose kind compares students (`ActivityKind.comparesStudents`)
     accepts only shared data (`DatasetSpec.isShared`). The rule is in
@@ -551,7 +553,9 @@ because line numbers go out of date.
     `removed_at` on an attendance row, and deletes the student's rankings in
     the group: `group_activity_champions`, `group_leaderboard_entries`,
     their `activity_standings` row for that group, and their
-    `group_composite_slots` row and composite tile in the group.
+    `group_composite_slots` row, composite tile and finished spares (with
+    their jobs) in the group. A spare still grading stays, so the runner's
+    report finds its job.
   - `ActivityAuthoring.setActivity` sets `ClassActivity.runsPerGroup`.
 - **Readers:**
   - The submission gate (`requireOpenGroupSession` in

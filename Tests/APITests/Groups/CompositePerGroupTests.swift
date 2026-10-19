@@ -5,8 +5,7 @@
 // student is dealt in the group of the session they play in, and a student
 // with no session is dealt nothing; a contribution fills the image of the
 // group whose pool dealt its slot; Remove frees the student's slot; the scope
-// locks once a slot is dealt, and a
-// lab's composite has no spares; and a per-group board with no group shows no
+// locks once a slot is dealt; and a per-group board with no group shows no
 // image.
 
 import Core
@@ -175,7 +174,7 @@ import VaporTesting
         }
     }
 
-    @Test func theScopeLocksOnceASlotIsDealtAndALabHasNoSpares() async throws {
+    @Test func theScopeLocksOnceASlotIsDealt() async throws {
         try await withApp(app) { _ in
             let f = try await fixture()
             try await join(f, group: f.labA, userID: f.ada)
@@ -184,10 +183,6 @@ import VaporTesting
             await #expect(throws: AppError.self) {
                 _ = try await ActivityAuthoring.setActivity(
                     setup: f.setup, to: ClassActivity(kind: .classComposite, composite: spec), on: app.db)
-            }
-            await #expect(throws: CompositeSpares.RequestError.perGroup) {
-                _ = try await CompositeSpares.request(
-                    assignment: f.assignment, setup: f.setup, userID: f.ada, app: app, on: app.db)
             }
         }
     }

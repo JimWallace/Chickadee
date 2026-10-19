@@ -11,6 +11,10 @@
 // the student it credits. The job is personalized with the student's own
 // seed, so it runs with the values their own run had. The worker claims it
 // behind every student job.
+//
+// A composite that runs once per lab group fills each group's holes from
+// that group's spares (docs/lab-groups.md, slice 4b): a student fills holes
+// in the image their own tile is in, while their session is open.
 
 import Core
 import Fluent
@@ -22,9 +26,9 @@ enum CompositeSpares {
     enum RequestError: Error, Equatable {
         /// The assignment is not a class composite.
         case notComposite
-        /// The composite runs once per lab group, which has no spares yet
-        /// (docs/lab-groups.md, slice 4b).
-        case perGroup
+        /// The composite runs once per lab group, and the student does not
+        /// play in an open session of their tile's group.
+        case sessionClosed
         /// The student's own tile has not passed.
         case noPassingTile
         /// A spare of the student's is still grading.
@@ -50,8 +54,6 @@ enum CompositeSpares {
             let activity = setup.decodedManifest()?.activity, activity.kind == .classComposite,
             let spec = activity.composite
         else { throw RequestError.notComposite }
-        // A lab's composite has no spares yet (docs/lab-groups.md, slice 4b).
-        guard !activity.isPerGroup else { throw RequestError.perGroup }
         guard
             let own = try await APICompositeContribution.query(on: db)
                 .filter(\.$assignmentID == assignmentID).filter(\.$userID == userID).first(),
@@ -59,7 +61,11 @@ enum CompositeSpares {
             let source = try await APISubmission.find(own.submissionID, on: db),
             FileManager.default.fileExists(atPath: source.zipPath)
         else { throw RequestError.noPassingTile }
-        guard try await !status(assignmentID: assignmentID, userID: userID, on: db).contains(where: \.grading)
+        // The spare fills the image the student's own tile is in.
+        let pool: CompositePool =
+            own.groupID.map { .group(assignmentID: assignmentID, groupID: $0) } ?? .course(assignmentID: assignmentID)
+        guard try await playsInSession(of: pool, userID: userID, on: db) else { throw RequestError.sessionClosed }
+        guard try await !status(in: pool, userID: userID, on: db).contains(where: \.grading)
         else { throw RequestError.inFlight }
 
         let seed = try await AssignmentSeedStore.ensureSeed(userID: userID, assignmentID: assignmentID, on: db)
@@ -79,15 +85,24 @@ enum CompositeSpares {
         // takes the next hole.
         for _ in 0..<4 {
             guard
-                let slot = try await holes(assignmentID: assignmentID, spec: spec, skippingFailuresOf: userID, on: db)
-                    .first
+                let slot = try await holes(in: pool, spec: spec, skippingFailuresOf: userID, on: db).first
             else { throw RequestError.noHole }
             let job = Job(
-                assignmentID: assignmentID, setupID: setupID, userID: userID, slot: slot, source: source, seed: seed,
+                pool: pool, setupID: setupID, userID: userID, slot: slot, source: source, seed: seed,
                 courseSeed: courseSeed, dealNumber: hasPartitions ? slot : nil)
             if try await queue(job, app: app, on: db) { return slot }
         }
         throw RequestError.noHole
+    }
+
+    /// True for the whole class's image, and for a lab group's while the
+    /// student plays in that group's open session: a lab fills its holes
+    /// during the lab.
+    static func playsInSession(of pool: CompositePool, userID: UUID, on db: any Database) async throws -> Bool {
+        guard let groupID = pool.groupID else { return true }
+        let session = try await ActivitySessionStore.currentSession(
+            assignmentID: pool.assignmentID, userID: userID, on: db)
+        return session?.groupID == groupID
     }
 
     /// The slots a spare may fill, in the order to fill them: no passing
@@ -99,29 +114,44 @@ enum CompositeSpares {
     static func holes(
         assignmentID: UUID, spec: CompositeSpec, skippingFailuresOf userID: UUID? = nil, on db: any Database
     ) async throws -> [Int] {
+        try await holes(in: .course(assignmentID: assignmentID), spec: spec, skippingFailuresOf: userID, on: db)
+    }
+
+    // The `assignmentID` forms above and below name the whole class's pool,
+    // and the slice 6b tests call them.
+
+    /// The holes of one pool's image, in the order `holes(assignmentID:)`
+    /// gives.
+    static func holes(
+        in pool: CompositePool, spec: CompositeSpec, skippingFailuresOf userID: UUID? = nil, on db: any Database
+    ) async throws -> [Int] {
         let filled = Set(
             try await APICompositeContribution.query(on: db)
-                .filter(\.$assignmentID == assignmentID).filter(\.$passed == true).all().map(\.slot))
-        let spares = try await APICompositeSpare.query(on: db).filter(\.$assignmentID == assignmentID).all()
+                .filter(\.$assignmentID == pool.assignmentID).filter(\.$groupID == pool.groupID)
+                .filter(\.$passed == true).all().map(\.slot))
         let taken = Set(
-            spares.filter { $0.passed || !$0.finished || ($0.userID == userID && $0.finished) }.map(\.slot))
-        let dealt = Set(
-            try await APICompositeSlot.query(on: db).filter(\.$assignmentID == assignmentID).all().map(\.slot))
-        let open = spec.dealSequence(shuffleSeed: CompositeSlots.shuffleSeed(for: assignmentID))
+            try await pool.spares(on: db)
+                .filter { $0.passed || !$0.finished || ($0.userID == userID && $0.finished) }.map(\.slot))
+        let dealt = Set(try await pool.dealt(on: db).map(\.slot))
+        let open = spec.dealSequence(shuffleSeed: CompositeSlots.shuffleSeed(for: pool.assignmentID))
             .filter { !filled.contains($0) && !taken.contains($0) }
         return open.filter { !dealt.contains($0) } + open.filter { dealt.contains($0) }
     }
 
-    /// The student's spares, lowest slot first.
+    /// The student's spares in the whole class's image, lowest slot first.
     static func status(assignmentID: UUID, userID: UUID, on db: any Database) async throws -> [Status] {
-        try await APICompositeSpare.query(on: db)
-            .filter(\.$assignmentID == assignmentID).filter(\.$userID == userID).sort(\.$slot).all()
+        try await status(in: .course(assignmentID: assignmentID), userID: userID, on: db)
+    }
+
+    /// The student's spares in one pool's image, lowest slot first.
+    static func status(in pool: CompositePool, userID: UUID, on db: any Database) async throws -> [Status] {
+        try await pool.spares(onlyUserID: userID, on: db)
             .map { Status(slot: $0.slot, grading: !$0.finished, passed: $0.passed && $0.data != nil) }
     }
 
     /// One spare to queue.
     private struct Job {
-        let assignmentID: UUID
+        let pool: CompositePool
         let setupID: String
         let userID: UUID
         let slot: Int
@@ -150,15 +180,12 @@ enum CompositeSpares {
             guard submission.materializationJSON != nil else { throw RequestError.unavailable }
             let removed = try await db.transaction { tx in
                 // One spare at a time, checked again where a double press meets.
-                let grading = try await APICompositeSpare.query(on: tx)
-                    .filter(\.$assignmentID == job.assignmentID).filter(\.$userID == job.userID)
-                    .filter(\.$finished == false).count()
-                guard grading == 0 else { throw RequestError.inFlight }
-                let removed = try await removeFailed(assignmentID: job.assignmentID, slot: job.slot, on: tx)
+                let spares = try await job.pool.spares(onlyUserID: job.userID, on: tx)
+                guard spares.allSatisfy(\.finished) else { throw RequestError.inFlight }
+                let removed = try await removeFailed(in: job.pool, slot: job.slot, on: tx)
                 try await materialized.saveClaimable(on: tx)
-                try await APICompositeSpare(
-                    assignmentID: job.assignmentID, userID: job.userID, slot: job.slot, submissionID: copied.id
-                ).create(on: tx)
+                try await job.pool.newSpare(userID: job.userID, slot: job.slot, submissionID: copied.id)
+                    .create(on: tx)
                 return removed
             }
             for path in removed { try? FileManager.default.removeItem(atPath: path) }
@@ -180,10 +207,7 @@ enum CompositeSpares {
             let language = AssignmentLanguage.resolve(manifest: manifest)
         else { return nil }
         do {
-            guard
-                let row = try await APICompositeSpare.query(on: db)
-                    .filter(\.$submissionID == submissionID).first()
-            else {
+            guard let row = try await CompositePool.spare(submissionID: submissionID, on: db)?.row else {
                 db.logger.warning("composite: spare job \(submissionID) has no spare row")
                 return nil
             }
@@ -194,19 +218,21 @@ enum CompositeSpares {
         }
     }
 
-    /// Stores what a spare job reported. A passing spare covers its slot for
-    /// the student; the first to cover a slot keeps it, as for every item.
+    /// Stores what a spare job reported. A passing spare in the whole class's
+    /// image covers its slot for the student; the first to cover a slot
+    /// keeps it, as for every item. A lab's spare covers no class item before
+    /// slice 5, as a lab's own tile does not.
     static func record(
         submission: APISubmission, collection: TestOutcomeCollection, on db: any Database
     )
         async throws
     {
         guard submission.kind == APISubmission.Kind.compositeSpare, let submissionID = submission.id,
-            let row = try await APICompositeSpare.query(on: db)
-                .filter(\.$submissionID == submissionID).first(),
+            let spare = try await CompositePool.spare(submissionID: submissionID, on: db),
             let spec = try await APITestSetup.find(submission.testSetupID, on: db)?
                 .decodedManifest()?.activity?.composite
         else { return }
+        let row = spare.row
         guard let outcome = collection.outcomes.first(where: { $0.composite != nil }),
             let contribution = outcome.composite,
             CompositeContributions.isValid(contribution, for: spec.contribution)
@@ -222,7 +248,7 @@ enum CompositeSpares {
         row.passed = outcome.status == .pass
         row.finished = true
         try await row.save(on: db)
-        if row.passed {
+        if row.passed, spare.pool.groupID == nil {
             try await APIClassItemCoverage(
                 testSetupID: submission.testSetupID, item: CompositeSpec.coverageItem(forSlot: row.slot),
                 userID: row.userID, submissionID: submissionID
@@ -234,10 +260,9 @@ enum CompositeSpares {
     /// Returns the files of its job, to delete after the commit. A spare that
     /// passed or is grading stays: another request queued it after the holes
     /// were read, and the insert that follows then fails on the slot.
-    private static func removeFailed(assignmentID: UUID, slot: Int, on db: any Database) async throws -> [String] {
+    private static func removeFailed(in pool: CompositePool, slot: Int, on db: any Database) async throws -> [String] {
         guard
-            let failed = try await APICompositeSpare.query(on: db)
-                .filter(\.$assignmentID == assignmentID).filter(\.$slot == slot).first(),
+            let failed = try await pool.spares(on: db).first(where: { $0.slot == slot }),
             failed.finished, !failed.passed,
             let job = try await APISubmission.find(failed.submissionID, on: db)
         else { return [] }
