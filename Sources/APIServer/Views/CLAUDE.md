@@ -73,7 +73,8 @@ capture in the same PR.
 `Sources/APIServer/Views/`, `Public/styles.css`, or a page-wiring
 `Public/*.js`.** It reviews the layer the guards structurally cannot: whether a
 construct duplicates the vocabulary, whether the idiom is the lightest that
-fits, and whether the copy is at house length. Green guards are necessary, not
+fits, whether the copy is at house length, and whether a page steps outside
+its archetype. Green guards are necessary, not
 sufficient — every style regression so far has been mechanically legal.
 
 **This is unconditional and needs no confirmation.** The agent is checked in

@@ -7,9 +7,7 @@ system originally built in Java at the University of Maryland. The rewrite is
 in Swift using Vapor, targeting both macOS and Linux. No interoperability with
 the original Java system is required.
 
-The architecture has been redesigned from scratch; the original Java source is
-not in this repository. (A couple of code comments cite Marmoset behaviours —
-e.g. `chickadee.py`'s exit-code 3 — and are self-contained.)
+The architecture is new. The original Java source is not in this repository.
 
 ---
 
@@ -38,23 +36,15 @@ Swift targets share a clean dependency boundary:
   shell-script test suites in subprocesses (sandboxed or unsandboxed), reports
   structured results back to the server.
 - **`RunnerCore`** — The shared, Vapor-free, **Embedded-Swift-compatible**
-  grading core. Compiled two ways: natively (linked into the worker) and to
-  **WebAssembly** (the in-browser runner). It owns suite execution
-  (`executeSuites`), output interpretation (`interpretScriptOutput`), script
-  classification, notebook extraction (one `extract<Language>` per language), and the
-  `TestOutcome` / `TestTier` / `TestStatus` types — so the native and browser
-  graders run one implementation and cannot drift. Pinned by the shared
-  `Tests/Fixtures/output-contract.json` contract, asserted against both the
-  native build and the *real vendored wasm* in CI.
+  grading core, compiled natively (into the worker) and to **WebAssembly** (the
+  browser runner). It owns suite execution (`executeSuites`), output
+  interpretation (`interpretScriptOutput`), script classification, notebook
+  extraction (one `extract<Language>` per language) and the `TestOutcome` /
+  `TestTier` / `TestStatus` types, so the two graders cannot drift.
+  `Tests/Fixtures/output-contract.json` pins it, against the native build and
+  the *real vendored wasm* in CI.
 - **`Core`** — Shared models and types. No Vapor dependency; `@_exported import
   RunnerCore` re-exports the grading types. Every other target depends on this.
-
-Test suites are **shell scripts** bundled by the instructor inside the test
-setup zip. The runner executes them generically. Adding a new language means
-writing a new shell script; no Swift changes are required for the *grading*
-path. The runner does include Python/notebook-specific submission normalization
-(`SubmissionNormalizer`, `NotebookExtractor`) that pre-processes uploads before
-handing them to the shell scripts.
 
 ---
 
@@ -83,10 +73,10 @@ you change `Public/styles.css` or a page-wiring `Public/*.js` file, read
 **Shell scripts, not language runners.** Each test suite is a `.sh` file at the
 root of the instructor's test setup zip. The runner runs them with `/bin/sh`
 and maps the exit code to a result status. No per-language runners, no runner
-JSON protocol. The runner does contain a Python/notebook normalization layer
-(`SubmissionNormalizer`) that pre-processes uploaded files into a grading
-workspace before the shell scripts run. This is a submission-format concern,
-not a grading concern — the shell scripts themselves remain language-agnostic.
+JSON protocol. The *grading* path needs no Swift change for a new language.
+The runner does normalize uploads (`SubmissionNormalizer`, `NotebookExtractor`)
+into a grading workspace before the scripts run. That is a submission-format
+concern; the scripts stay language-agnostic.
 
 **Instructor bundles the helper library.** Any helper library (Swift, Python,
 etc.) is included in the test setup zip by the instructor. The runner does not
@@ -183,20 +173,18 @@ The deployment-global `UserRole` on `APIUser` is just `user` | `admin`
 **per-course**: each enrollment row carries a `CourseRole` (`student` < `ta` <
 `instructor`), so one account can be an instructor in one course and a student
 in another. TAs author content and grade but cannot manage enrollment,
-deadlines, archival or staff. The gates are in `Sources/APIServer/CLAUDE.md`
-and `docs/multi-course-roles.md`.
+deadlines, archival or staff. `AUTH_MODE` selects local, SSO (OIDC) or both.
+The gates, the session rules and the SSO details are in
+`Sources/APIServer/CLAUDE.md` and `docs/multi-course-roles.md`.
 
 **A course is one offering: a code plus a year and a term.** A bare code can
 name more than one active course. **Do not add a code-only lookup.** See
 `Sources/APIServer/CLAUDE.md` and [docs/course-terms.md](docs/course-terms.md).
 
-**The CSP `script-src` permits no inline execution (#1516).** An inline
-`<script>` does not run and an `onclick=` attribute never fires, with no error.
-Put page JS in a `Public/*.js` file (`Sources/APIServer/Views/CLAUDE.md`).
+**No inline script (#1516).** The CSP rule is in `Sources/APIServer/Views/CLAUDE.md`.
 
-**Environment configuration is centralized.** Every env var the server reads
-flows through `AppConfig` (`Sources/APIServer/Configuration/`); see
-`Sources/APIServer/CLAUDE.md`. Do not add a new variable ("What Not To Do").
+**Every env var the server reads flows through `AppConfig`**
+(`Sources/APIServer/CLAUDE.md`). The rule against new variables is in "What Not To Do".
 
 **The MCP server never exposes student data, with one gated exception.** The
 AI-assisted feedback tools read written answers only behind a course gate and
@@ -243,16 +231,9 @@ value is ignored.
 **stderr:** Captured verbatim as `longResult` (nil if empty).
 
 **How much of a failure the student sees is a per-entry display setting**
-(`TestSuiteEntry.failureDetail`: `full` | `actualOnly` | `verdictOnly`),
-applied by the server at results-display time and never by the script.
-`actualOnly` keeps only the student's own side of a generated message (the
-`input:` / `got:` / `error:` labels and a recognised headline) and withholds
-`expected:`, a diff, a tolerance or a budget; a hand-written script degrades
-to the verdict under it, because nothing in its output says which half is
-the answer. Staff always read the full text, and the hint shows at every
-level. Family defaults, per-case values and notebook checks write their
-resolved level onto the entries they generate. See
-[docs/failure-detail.md](docs/failure-detail.md).
+(`TestSuiteEntry.failureDetail`: `full` | `actualOnly` | `verdictOnly`). The
+server applies it when it shows results. The script never applies it. Staff
+always read the full text. See [docs/failure-detail.md](docs/failure-detail.md).
 
 ---
 
@@ -261,11 +242,10 @@ resolved level onto the entries they generate. See
 The source is the reference; this section names where each type lives and the
 rules the code alone does not state.
 
-- `TestStatus` — `Sources/RunnerCore/TestStatus.swift`: `pass`, `fail`,
-  `error`, `timeout`. There is no `couldNotRun`; a build failure is
-  `buildStatus: "failed"` on the collection.
+- `TestStatus` — `Sources/RunnerCore/TestStatus.swift` (the four states in Key
+  Design Decisions).
 - `TestTier` — `Sources/RunnerCore/TestTier.swift`: `public` (`.pub`),
-  `release`, `secret`. There is no student tier (see Key Design Decisions).
+  `release`, `secret`.
 - `TestOutcome` — `Sources/RunnerCore/TestOutcome.swift`: one test's result,
   including `score` (0...1 credit), `points`, and the optional ranking `metric`.
 - `TestOutcomeCollection` — `Sources/Core/Models/TestOutcomeCollection.swift`:
@@ -284,15 +264,6 @@ Two manifest rules worth knowing:
   `dependsOn` entries in authored form accept `family:<id>` tokens, which the
   server expands to the family's concrete generated filenames before
   persisting.
-
----
-
-## Auth & Roles
-
-Deployment roles: `user` < `admin` (plus the non-login `mcp` service role).
-Per-course roles on the enrollment row: `student` < `ta` < `instructor`.
-`AUTH_MODE` selects local, SSO (OIDC) or both. The per-role table, the session
-rules and the SSO details are in `Sources/APIServer/CLAUDE.md`.
 
 ---
 
@@ -405,40 +376,25 @@ greeting. The example below does so in R."
 - Optionals are preferred over sentinel values (no `-1` for "missing").
 - File names match the primary type they contain.
 - One type per file unless the types are trivially small and closely related.
-- Formatting is enforced by `swift-format` in CI (`.swift-format` at repo root).
-  Run `scripts/format.sh` before committing, or `scripts/lint.sh` to check
-  without modifying. Each `.swift-format` names every rule, `true` or `false`:
-  a rule that the file omits is off, not at its default.
-  `scripts/check-swift-format-config.sh` enforces this. The same rules apply
-  to `Tests/`.
-- Quality rules (force unwraps, `.filter{}.first` antipatterns, oversized
-  functions, etc.) are enforced by SwiftLint (`.swiftlint.yml` at repo root,
-  delivered via the `SwiftLintPlugins` SwiftPM dependency — no separate
-  install). Run `scripts/swiftlint.sh` to check. The two tools are
-  complementary: swift-format owns formatting, SwiftLint owns correctness;
-  overlapping rules are disabled in `.swiftlint.yml`. CI enforces SwiftLint
-  as a step in the `format-lint` job (alongside `scripts/lint.sh`).
-  `scripts/swiftlint.sh` passes `--strict` (every reported issue, warning
-  or error, fails the build), keeping the codebase at zero violations
-  going forward. If a structural-rule warning threshold (e.g.
-  `function_body_length` at 100 lines) starts causing legitimate
-  friction, raise the threshold in `.swiftlint.yml` rather than dropping
-  `--strict`.
+- `swift-format` owns formatting (`.swift-format`); SwiftLint owns correctness
+  (`.swiftlint.yml`, from the `SwiftLintPlugins` dependency). Overlapping rules
+  are off in `.swiftlint.yml`. Both apply to `Tests/`, and CI runs both in the
+  `format-lint` job. Run `scripts/format.sh` before you commit; `scripts/lint.sh`
+  and `scripts/swiftlint.sh` only check.
+- Each `.swift-format` names every rule, `true` or `false`. A rule that the
+  file omits is off, not at its default. `scripts/check-swift-format-config.sh`
+  enforces this.
+- `scripts/swiftlint.sh` passes `--strict`: every warning fails the build. If a
+  structural threshold (for example `function_body_length` at 100 lines)
+  causes real friction, raise it in `.swiftlint.yml`. Do not drop `--strict`.
 
 ---
 
 ## UI / Stylesheet Conventions
 
-The web UI is Elementary views (`Sources/APIServer/Views/`) and one stylesheet
-(`Public/styles.css`). The rules are in `Sources/APIServer/Views/CLAUDE.md` and
-[docs/ui-design.md](docs/ui-design.md). Two rules apply to every UI change:
-
-- Run `scripts/check-styles.sh` before you push.
-- **Run the `ui-review` agent on any change touching
-  `Sources/APIServer/Views/`, `Public/styles.css`, or a page-wiring
-  `Public/*.js`.** This is unconditional and needs no confirmation. A UI change
-  that has not been through `ui-review`, by the agent or by the CI workflow
-  (`.github/workflows/ui-review.yml`), is not finished.
+The UI rules are in `Sources/APIServer/Views/CLAUDE.md` and
+[docs/ui-design.md](docs/ui-design.md). They include `scripts/check-styles.sh`
+before a push and the unconditional `ui-review` run.
 
 ---
 
@@ -507,81 +463,64 @@ The reason for each rule is in
 
 ## Versioning
 
-Follows Semantic Versioning in the `0.y.z` phase. The version lives in the
-`VERSION` file + `ChickadeeVersion.current` in Core. What each slot means
-here — patches never remove compatibility surface; minors are deliberate
-era/removal boundaries; majors are deployer-gated — is documented in
-"What the numbers mean while we are 0.y.z" in
-[docs/release-process.md](docs/release-process.md).
+Semantic Versioning in the `0.y.z` phase. The version is in `VERSION` and
+`ChickadeeVersion.current` in Core. What each slot means here is in "What the
+numbers mean while we are 0.y.z" in [docs/release-process.md](docs/release-process.md).
 
-**Versions are assigned at merge time — do NOT bump them in a PR.** A PR must
-not touch `VERSION`, `Sources/Core/ChickadeeVersion.swift`, or `CHANGELOG.md`
-(hand-editing those three to a hardcoded next number is what used to make every
-concurrent PR conflict). Instead:
+**Versions are assigned at merge time. Do NOT bump them in a PR.** A PR must
+not touch `VERSION`, `Sources/Core/ChickadeeVersion.swift` or `CHANGELOG.md`.
+Hand-edits of those three files made every concurrent PR conflict. Instead:
 
-1. Add **one fragment** under `changelog.d/` describing the change
-   (see `changelog.d/README.md`). Preview with
-   `scripts/assemble-release.sh --dry-run`.
+1. Add **one fragment** under `changelog.d/` (see `changelog.d/README.md`).
+   Preview with `scripts/assemble-release.sh --dry-run`.
 2. On merge to `main`, `.github/workflows/auto-release.yml` computes the next
-   version, folds the fragments into `CHANGELOG.md`, bumps `VERSION` +
-   `ChickadeeVersion`, commits `chore(release): vX.Y.Z`, and pushes the tag —
-   which triggers `release.yml` + the tag build in `docker-build.yml`.
+   version, folds the fragments into `CHANGELOG.md`, bumps `VERSION` and
+   `ChickadeeVersion`, commits `chore(release): vX.Y.Z` and pushes the tag. The
+   tag triggers `release.yml` and the tag build in `docker-build.yml`.
 
-**Auto-release is patch-only by construction** — fragment categories carry no
-bump semantics, so no merge can ever produce a minor/major bump. Cutting one
-(e.g. 0.5.0) is a deliberate manual step: `scripts/assemble-release.sh
---version X.Y.0` committed as `chore(release): vX.Y.0` (that prefix suppresses
-the redundant auto-release) and tagged from a human account. See "Cutting a
-minor (or major) release" in
-[docs/release-process.md](docs/release-process.md).
-
-Full details, plus how to enable the optional merge queue, are in
-[docs/release-process.md](docs/release-process.md).
+**Auto-release is patch-only by construction.** No merge can make a minor or
+major bump. A minor (for example 0.5.0) is a manual step:
+`scripts/assemble-release.sh --version X.Y.0`, committed as
+`chore(release): vX.Y.0` (that prefix stops the auto-release) and tagged from a
+human account. See [docs/release-process.md](docs/release-process.md), which
+also tells how to enable the optional merge queue.
 
 ---
 
 ## Deployment & CI/CD (production)
 
-**Prod is full CI/CD with zero-downtime deploys — a green merge to `main`
-reaches production on its own,** within about 10–15 minutes. `auto-release.yml`
-tags the release, `docker-build.yml` publishes `:latest` and `:sha-<commit>`,
-and the host-side `chickadee-deployer` daemon blue-green-deploys it
-(`scripts/bluegreen-deploy.sh`). Major bumps wait for a human. No SSH and no
-manual deploy step.
+**A green merge to `main` reaches production on its own,** in about 10 to 15
+minutes, with zero downtime. `auto-release.yml` tags the release,
+`docker-build.yml` publishes `:latest` and `:sha-<commit>`, and the host-side
+`chickadee-deployer` daemon deploys it blue-green (`scripts/bluegreen-deploy.sh`).
+A major bump waits for a human. There is no SSH and no manual deploy step.
 
-**Verify a fix is live via the admin diagnostics MCP** (`Chickadee_Admin`,
-read-only): `get_deployment_info` for the running version,
-`get_deploy_status` / `get_deploy_history` for the daemon, and
-`list_runners` / `get_health_alerts` / `query_logs` /
-`get_browser_diagnostics` for the behaviour. Deploy control (pause, approve a
-major, roll back) is host-side by design. Full design and runbook:
-[docs/zero-downtime-deploy.md](docs/zero-downtime-deploy.md).
+**Verify a fix is live with the read-only admin diagnostics MCP**
+(`Chickadee_Admin`): `get_deployment_info` for the running version,
+`get_deploy_status` / `get_deploy_history` for the daemon, and `list_runners` /
+`get_health_alerts` / `query_logs` / `get_browser_diagnostics` for the
+behaviour. Deploy control (pause, approve a major, roll back) is host-side by
+design. See [docs/zero-downtime-deploy.md](docs/zero-downtime-deploy.md).
 
 ---
 
 ## Current State
 
 **The 0.4 series is closed.** v0.5.0 marks the end of the first full course
-offering run on Chickadee. The system is a working client–server autograder:
-Python, R, Lua, Octave, C++, Racket and Java assignments; browser (xeus/wasm)
-and native worker grading that share one RunnerCore; per-student
-personalization; pattern-generated test families (10 kinds) and notebook checks
-(10 kinds); achievements; student slip days; per-course roles; BrightSpace grade
-sync (awaiting UW IST prod credentials); an MCP authoring surface plus a
-read-only admin-diagnostics MCP (`MCPToolCatalog.live` holds the count); OIDC
-SSO; and zero-downtime auto-deploys. The 0.4 arc is summarised at the top of
-`CHANGELOG-0.4.md`. The 0.5-boundary cleanup is in the 0.5.0 entry of
-`CHANGELOG.md`.
+offering on Chickadee. The 0.4 arc is at the top of `CHANGELOG-0.4.md`; the
+0.5-boundary cleanup is in the 0.5.0 entry of `CHANGELOG.md`. BrightSpace grade
+sync waits for UW IST production credentials. `MCPToolCatalog.live` holds the
+MCP tool count.
 
 - **A scanner that cannot tell markup from prose about markup matches its own
   documentation.** This shipped twice in drift guards. Parse structure, and
   describe forbidden syntax instead of quoting it.
 
-**Feature backlog:** continued personalization / notebook-check expansion
-(e.g. per-student refs in pattern kinds beyond the three equality kinds);
-pattern kinds beyond the ten shipped (`PatternKind`); multi-provider SSO
-testing beyond UWaterloo DUO; refresh-token handling; gamification expansion
-(leaderboards, more badges beyond First-Try Perfect).
+**Feature backlog:** more personalization and notebook checks (for example
+per-student refs in pattern kinds beyond the three equality kinds); pattern
+kinds beyond the ten in `PatternKind`; SSO tests with providers other than
+UWaterloo DUO; refresh-token handling; more gamification (leaderboards, badges
+beyond First-Try Perfect).
 
 ---
 

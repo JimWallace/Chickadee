@@ -363,22 +363,9 @@ recognised extension wins, else the `#!` shebang, else content sniffing — so
 `.sh` scripts run with `/bin/sh` and Python test files (including
 extensionless ones with a shebang) run with the Python interpreter.
 
-| Exit code | Meaning |
-|-----------|---------|
-| 0 | pass |
-| 1 | fail |
-| 2 | error |
-| killed after timeout | timeout |
-
-**stdout:** Everything is ignored except the last non-empty line, which is
-parsed as optional JSON `{ "score": 0.75, "shortResult": "3/4 passed" }`.
-If not valid JSON, the line is used as plain-text `shortResult`. If stdout is
-empty, `shortResult` is synthesized from the exit code. `score` (clamped to
-`0...1`) carries partial credit — the test contributes `points × score` — and
-is orthogonal to the exit code; a script that emits no `score` grades full
-credit on a pass and none otherwise.
-
-**stderr:** Captured verbatim as `longResult` (nil if empty).
+The exit codes, the stdout footer (`score`, `shortResult`, `metric`) and the
+stderr capture are in the root `CLAUDE.md`, "Test Script Contract". That is
+the one copy of the contract.
 
 Test dependencies can be declared in `TestProperties.testSuites[].dependsOn`.
 If a prerequisite did not pass, dependents are automatically recorded as
