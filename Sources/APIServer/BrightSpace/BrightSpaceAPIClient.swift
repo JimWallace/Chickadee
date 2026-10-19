@@ -53,17 +53,23 @@ protocol BrightSpaceGrading: Sendable {
     ) async throws
 
     /// Lists the group categories defined for the org unit (e.g. "Lab Sections",
-    /// "Tutorial Groups"). Used to let the operator configure which category
-    /// maps to Chickadee sections via `APICourse.brightspaceSectionCategoryID`.
+    /// "Tutorial Groups"), so an instructor can pick the category that a
+    /// `learnGroups` group set reads.
     func fetchGroupCategories(
         orgUnitID: String, on application: Application
     ) async throws -> [BrightSpaceGroupCategory]
 
     /// Lists the groups within a category, including each group's member
-    /// D2L user IDs. Used by the section-sync sweep to populate
-    /// `APICourseEnrollment.brightspaceSection`.
+    /// D2L user IDs. The LEARN group sync reads a `learnGroups` set with it.
     func fetchGroups(
         orgUnitID: String, categoryID: String, on application: Application
+    ) async throws -> [BrightSpaceGroup]
+
+    /// Lists the D2L Sections of the course offering, including each
+    /// section's member D2L user IDs. The LEARN group sync reads a
+    /// `learnSections` set with it: the registrar's labs arrive as Sections.
+    func fetchSections(
+        orgUnitID: String, on application: Application
     ) async throws -> [BrightSpaceGroup]
 }
 
@@ -76,6 +82,10 @@ extension BrightSpaceGrading {
 
     func fetchGroups(
         orgUnitID: String, categoryID: String, on application: Application
+    ) async throws -> [BrightSpaceGroup] { [] }
+
+    func fetchSections(
+        orgUnitID: String, on application: Application
     ) async throws -> [BrightSpaceGroup] { [] }
 }
 
@@ -225,6 +235,18 @@ actor BrightSpaceAPIClient: BrightSpaceGrading {
             url = next
         }
         return collected
+    }
+
+    /// Reads a Valence list endpoint that returns a bare JSON array, with no
+    /// paging envelope: the group-category, group and section lists.
+    private func fetchArray<Element: Decodable>(
+        rawURL: String,
+        on app: Application,
+        failure: (Int) -> BrightSpaceSyncError
+    ) async throws -> [Element] {
+        let response = try await sendSigned(method: "GET", rawURL: rawURL, on: app)
+        guard response.status == .ok else { throw failure(Int(response.status.code)) }
+        return try await response.decodeContent([Element].self)
     }
 
     // MARK: - Push grade
@@ -485,7 +507,7 @@ actor BrightSpaceAPIClient: BrightSpaceGrading {
         }
     }
 
-    // MARK: - Group categories and groups (section sync)
+    // MARK: - Group categories, groups and sections (the LEARN group sync)
 
     /// Lists the D2L group categories for the org unit. The instructor selects
     /// one category to act as the "sections" source for the course.
@@ -505,9 +527,7 @@ actor BrightSpaceAPIClient: BrightSpaceGrading {
                 case name = "Name"
             }
         }
-        let items: [CategoryResponse] = try await fetchAllPages(
-            firstRawURL: rawURL, on: application
-        ) { status in
+        let items: [CategoryResponse] = try await fetchArray(rawURL: rawURL, on: application) { status in
             .groupCategoriesFetchFailed(orgUnitID: orgUnitID, status: status)
         }
         return items.map {
@@ -538,14 +558,44 @@ actor BrightSpaceAPIClient: BrightSpaceGrading {
                 case enrollments = "Enrollments"
             }
         }
-        let items: [GroupResponse] = try await fetchAllPages(
-            firstRawURL: rawURL, on: application
-        ) { status in
+        let items: [GroupResponse] = try await fetchArray(rawURL: rawURL, on: application) { status in
             .groupsFetchFailed(orgUnitID: orgUnitID, categoryID: categoryID, status: status)
         }
         return items.map {
             BrightSpaceGroup(
                 groupID: String($0.groupId),
+                name: $0.name,
+                enrollments: $0.enrollments.map(String.init))
+        }
+    }
+
+    /// Lists the Sections of the org unit and the D2L user IDs of their
+    /// members. Only this route's Fetch form carries `Enrollments`; the paged
+    /// section list does not.
+    func fetchSections(
+        orgUnitID: String, on application: Application
+    ) async throws -> [BrightSpaceGroup] {
+        guard !orgUnitID.isEmpty else { return [] }
+        let lpVersion = await apiVersion(
+            "lp", fallback: BrightSpaceSyncConfig.lpAPIVersion, on: application)
+        let encoded = orgUnitID.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? orgUnitID
+        let rawURL = "\(config.baseURL)/d2l/api/lp/\(lpVersion)/\(encoded)/sections/"
+        struct SectionResponse: Decodable {
+            let sectionId: Int
+            let name: String
+            let enrollments: [Int]
+            enum CodingKeys: String, CodingKey {
+                case sectionId = "SectionId"
+                case name = "Name"
+                case enrollments = "Enrollments"
+            }
+        }
+        let items: [SectionResponse] = try await fetchArray(rawURL: rawURL, on: application) { status in
+            .sectionsFetchFailed(orgUnitID: orgUnitID, status: status)
+        }
+        return items.map {
+            BrightSpaceGroup(
+                groupID: String($0.sectionId),
                 name: $0.name,
                 enrollments: $0.enrollments.map(String.init))
         }

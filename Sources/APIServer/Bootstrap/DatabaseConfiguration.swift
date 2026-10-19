@@ -604,5 +604,7 @@ func registerMigrations(on app: Application) {
     // re-run it: Fluent records each by name.
     // ---------------------------------------------------------------------
 
-    // (None at present: the fifth consolidation round deleted them all.)
+    // Lab groups, slice 6: a course's LEARN section category becomes a
+    // synced group set.
+    app.migrations.add(MoveLearnSectionCategoryToGroupSet())
 }

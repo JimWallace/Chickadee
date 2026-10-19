@@ -56,10 +56,10 @@ final class APICourse: Model, Content, @unchecked Sendable {
     @OptionalField(key: "brightspace_sync_user_id")
     var brightspaceSyncUserID: UUID?
 
-    /// D2L group category ID whose groups represent the "sections" for this
-    /// course (e.g. the numeric ID of the "Lab Sections" category). When set,
-    /// the section-sync sweep maps each student's group membership to
-    /// `APICourseEnrollment.brightspaceSection`. Nil = sync skipped.
+    /// Retired by lab groups slice 6: the D2L group category that the old
+    /// section sweep read. `MoveLearnSectionCategoryToGroupSet` made it a
+    /// `learnGroups` group set, and the LEARN group sync reads the set. Nothing
+    /// reads this field now.
     @OptionalField(key: "brightspace_section_category_id")
     var brightspaceSectionCategoryID: String?
 

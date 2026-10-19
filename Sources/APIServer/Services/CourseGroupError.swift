@@ -8,6 +8,7 @@ enum CourseGroupError: Error, Sendable, Equatable, CustomStringConvertible {
     case nameTooLong(limit: Int)
     case duplicateGroupName(String)
     case setNotEditable
+    case setNotSynced
     case groupNotInSet
     case groupRemoved
     case notEnrolled
@@ -26,6 +27,8 @@ enum CourseGroupError: Error, Sendable, Equatable, CustomStringConvertible {
             return "This set already has a group named \(name)."
         case .setNotEditable:
             return "This group set comes from LEARN, so change its groups in LEARN."
+        case .setNotSynced:
+            return "This group set is made in Chickadee, so LEARN does not sync it."
         case .groupNotInSet:
             return "That group is not in this set."
         case .groupRemoved:

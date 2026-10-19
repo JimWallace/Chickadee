@@ -617,7 +617,7 @@ func chunkedForInFilter<T>(_ items: [T]) -> [[T]] {
 
 /// Per-sweep cache of each course's LEARN classlist, reduced to the shared
 /// `BrightSpaceIdentityIndex` (#1117 — one classlist reduction for grade
-/// push, section sync, and the roster reconciler). Fetched once per org unit
+/// push, the LEARN group sync, and the roster reconciler). Fetched once per org unit
 /// per sweep.
 actor ClasslistUserIDCache {
     private var indexByOrgUnit: [String: BrightSpaceIdentityIndex] = [:]
