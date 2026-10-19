@@ -794,8 +794,8 @@ because line numbers go out of date.
   - Names show only to staff, and never in present mode.
   - The whole composite image is for staff and the projector: a student
     reads only their own tile. Every lab's image on the leaderboard
-    (`CompositeLabsPresentation`) is staff-only too, until the maintainer
-    decides otherwise (`docs/lab-groups.md`, slice 4c).
+    (`CompositeLabsPresentation`) is staff-only too, by the maintainer's
+    decision (`docs/lab-groups.md`, slice 4c).
 - **No guard:** no generic check finds a new page that shows student data to
   classmates. `RouteAuthorizationMatrixTests` does not cover routes outside
   `/instructor` and `/courses`. So:

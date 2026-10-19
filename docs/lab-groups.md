@@ -608,8 +608,7 @@ should be able to see it. The maintainer chose best effort on 2026-10-18.
   past. The board's 5-second refresh does not build the section. The name
   is "labs", not "gallery", because the gallery is a compositor kind.
 - Staff only, as the composite board is: a student sees only their own tile.
-  Whether students see every lab's image at the end of term is a decision for
-  later.
+  The maintainer decided that this stays staff-only.
 - `CompositeStage` takes the slider's id, so two animated stages on one page
   do not share one.
 - Tests: `CompositeLabsTests`.
