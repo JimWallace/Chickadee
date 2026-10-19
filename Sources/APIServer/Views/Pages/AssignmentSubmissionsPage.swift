@@ -144,53 +144,62 @@ struct AssignmentSubmissionsPage: HTML {
         }
     }
 
+    /// The run control. For a per-group activity it names the lab group whose
+    /// session plays (docs/lab-groups.md, slice 3d).
+    private var runForm: some HTML {
+        form(.method(.post), .action("/instructor/\(assignmentID)/tournament/run"), .class("form-stack")) {
+            CSRFField(token: page.csrfToken)
+            " "
+            label(.class("form-label")) {
+                "Schedule"
+                select(.class("form-input"), .name("schedule")) {
+                    for option in tournament.scheduleOptions {
+                        Elementary.option(.value(option.value)) { option.label }
+                            .attributes(.selected, when: option.selected)
+                    }
+                }
+                " "
+            }
+            if tournament.isPerGroup {
+                label(.class("form-label")) {
+                    "Lab group"
+                    select(.class("form-input"), .name("group")) {
+                        for group in tournament.groupOptions {
+                            option(.value(group.id)) { group.name }
+                        }
+                    }
+                    " "
+                }
+                p(.class("field-note field-note--muted")) {
+                    "The students who joined the group's session enter, seeded in submission order."
+                }
+            } else {
+                p(.class("field-note field-note--muted")) {
+                    "Every student's latest complete submission enters, seeded in submission order."
+                }
+            }
+            button(.class("btn btn-primary"), .type(.submit)) { "Run tournament" }
+        }
+        .attributes(.data("confirm", value: tournament.supersedeConfirm), when: tournament.hasRunInProgress)
+    }
+
     private var tournamentSection: some HTML {
         section(.class("page-section")) {
             div(.class("page-titlebar")) {
                 h2 { "Tournament" }
                 a(.class("btn action-btn"), .href(tournament.leaderboardURL)) { "Open bracket" }
             }
-            p(.class("section-intro")) { tournament.statusText }
-            form(.method(.post), .action("/instructor/\(assignmentID)/tournament/run"), .class("form-stack")) {
-                CSRFField(token: page.csrfToken)
-                " "
-                label(.class("form-label")) {
-                    "Schedule"
-                    select(.class("form-input"), .name("schedule")) {
-                        for option in tournament.scheduleOptions {
-                            Elementary.option(.value(option.value)) { option.label }
-                                .attributes(.selected, when: option.selected)
-                        }
-                    }
-                    " "
+            if tournament.isPerGroup && tournament.groupOptions.isEmpty {
+                // A per-group tournament with no group to play it.
+                p(.class("section-intro")) {
+                    "This course has no lab groups yet; "
+                    a(.href("/instructor/groups")) { "add them on the Groups tab" }
+                    "."
                 }
-                if !tournament.groupOptions.isEmpty {
-                    label(.class("form-label")) {
-                        "Lab group"
-                        select(.class("form-input"), .name("group")) {
-                            for group in tournament.groupOptions {
-                                option(.value(group.id)) { group.name }
-                            }
-                        }
-                        " "
-                    }
-                    p(.class("field-note field-note--muted")) {
-                        "The students who joined the group's session enter, seeded in submission order."
-                    }
-                } else {
-                    p(.class("field-note field-note--muted")) {
-                        "Every student's latest complete submission enters, seeded in submission order."
-                    }
-                }
-                button(.class("btn btn-primary"), .type(.submit)) { "Run tournament" }
+            } else {
+                p(.class("section-intro")) { tournament.statusText }
+                runForm
             }
-            .attributes(
-                .data(
-                    "confirm",
-                    value:
-                        "Start a new tournament? The run in progress is superseded and its remaining matches decide nothing."
-                ),
-                when: tournament.hasRunInProgress)
         }
     }
 }

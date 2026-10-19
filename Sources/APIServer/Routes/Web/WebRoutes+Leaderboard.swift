@@ -286,11 +286,6 @@ private func buildUnionYouCard(
         privacyLine: identity.privacyLine, submitURL: identity.submitURL)
 }
 
-/// The latest tournament run as the page shows it: its status, the winner
-/// once there is one, and every round's matches by handle and bird. Nil
-/// when no run has been started. Entrants are named from the run's frozen
-/// snapshot, so a student who has since dropped still appears in the
-/// bracket they played.
 /// The bracket for a per-group activity's `scope`, as `buildLeaderboard`
 /// takes one: the scope's group's run, or none for a student in no lab
 /// group. Every other activity's latest run.
@@ -302,6 +297,11 @@ func buildTournamentPresentation(
         setup: setup, viewerID: viewerID, includeNames: includeNames, groupID: scope?.groupID, on: db)
 }
 
+/// The latest tournament run as the page shows it: its status, the winner
+/// once there is one, and every round's matches by handle and bird. Nil
+/// when no run has been started. Entrants are named from the run's frozen
+/// snapshot, so a student who has since dropped still appears in the
+/// bracket they played. With `groupID`, that lab group's latest run.
 func buildTournamentPresentation(
     setup: APITestSetup, viewerID: UUID?, includeNames: Bool, groupID: UUID? = nil, on db: any Database
 ) async throws -> TournamentPresentation? {

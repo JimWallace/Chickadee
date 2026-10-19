@@ -317,6 +317,24 @@ private func claimTournamentStep(
     return !rows.isEmpty
 }
 
+/// Supersedes the setup's running runs of the scope the activity no longer
+/// has: the lab groups' runs when it runs for the whole class, the whole
+/// class's run when it runs per group (docs/lab-groups.md, slice 3d).
+/// Without this a run would play on where no page shows it.
+func supersedeRunningTournaments(
+    testSetupID: String, outsideScopeOfPerGroup isPerGroup: Bool, on db: any Database
+) async throws {
+    let query = APITournamentRun.query(on: db)
+        .filter(\.$testSetupID == testSetupID)
+        .filter(\.$status == APITournamentRun.Status.running)
+    if isPerGroup {
+        query.filter(\.$groupID == nil)
+    } else {
+        query.filter(\.$groupID != nil)
+    }
+    try await query.set(\.$status, to: APITournamentRun.Status.superseded).update()
+}
+
 /// The most recent run for the setup, any status, with its slots in round
 /// and position order — what the bracket page and the run control show.
 /// With `groupID`, that lab group's run; without, the whole class's.

@@ -2,9 +2,11 @@
 //
 // A tournament run once per lab group (docs/lab-groups.md, slice 3d): a
 // group's run is entered by the students who joined its session, two labs
-// play at once and each reads its own bracket, a run needs a group and a
-// started session, no lab's winner holds the course's class record, and MCP
-// starts no per-group run.
+// play at once and each reads its own bracket, the run control offers the
+// groups and warns before it supersedes a lab's run, a run needs a group and a
+// started session, no lab's winner holds the course's class record and none
+// is seeded, turning the flag off supersedes the labs' runs, and MCP starts
+// no per-group run.
 
 import Core
 import Fluent
@@ -124,6 +126,52 @@ import VaporTesting
             _ = try await start(f, group: f.labA)
             #expect(try await APITournamentRun.find(runA.requireID(), on: app.db)?.status == "superseded")
             #expect(try await APITournamentRun.find(runB.requireID(), on: app.db)?.status == "running")
+        }
+    }
+
+    @Test func theRunControlOffersTheGroupsAndWarnsBeforeSuperseding() async throws {
+        try await withApp(app) { _ in
+            let f = try await fixture()
+            let before = try await TournamentControlFacts.make(setup: f.setup, on: app.db)
+            #expect(before.isPerGroup)
+            #expect(before.groupOptions.map(\.name) == ["Lab 101", "Lab 102"])
+            #expect(!before.hasRunInProgress)
+
+            try await joinEveryone(f)
+            _ = try await start(f, group: f.labA)
+            let after = try await TournamentControlFacts.make(setup: f.setup, on: app.db)
+            #expect(after.hasRunInProgress, "the form asks before it supersedes a lab's run")
+            #expect(after.supersedeConfirm.contains("chosen group"))
+        }
+    }
+
+    @Test func aPerGroupTournamentSeedsNoWinnerRecord() async throws {
+        try await withApp(app) { _ in
+            let f = try await fixture()
+            func hasRecord() async throws -> Bool {
+                let setup = try #require(try await APITestSetup.find(setupID, on: app.db))
+                return setup.decodedManifest()?.achievements.contains {
+                    $0.id == ActivityAuthoring.seededTournamentRecordID
+                } == true
+            }
+            #expect(try await hasRecord(), "the fixture carries the seeded record")
+            _ = try await ActivityAuthoring.setActivity(
+                setup: f.setup, to: ClassActivity(kind: .elimination, runsPerGroup: true), on: app.db)
+            #expect(try await !hasRecord())
+        }
+    }
+
+    @Test func turningTheFlagOffSupersedesTheLabsRuns() async throws {
+        try await withApp(app) { _ in
+            let f = try await fixture()
+            try await joinEveryone(f)
+            let runA = try await start(f, group: f.labA)
+            let setup = try #require(try await APITestSetup.find(setupID, on: app.db))
+            _ = try await ActivityAuthoring.setActivity(setup: setup, to: ClassActivity(kind: .elimination), on: app.db)
+            #expect(
+                try await APITournamentRun.find(runA.requireID(), on: app.db)?.status
+                    == APITournamentRun.Status.superseded,
+                "a lab's run does not play on where no page shows it")
         }
     }
 

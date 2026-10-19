@@ -516,7 +516,16 @@ should be able to see it. The maintainer chose best effort on 2026-10-18.
   activity. MCP `run_tournament` refuses one (decision 11: choosing a group
   is choosing students).
 - A lab's winner holds no class record, as with the hill and the round
-  robin.
+  robin, and `setActivity` seeds none on a per-group tournament.
+- Every write that changes the scope (`setActivity`, the MCP version
+  restore) supersedes the running runs of the other scope
+  (`supersedeRunningTournaments`), so no run plays on where no page shows
+  it. The present page projects no bracket for a per-group tournament with
+  no group chosen.
+- Known limits, accepted: a run's entrants are frozen at its start, so a
+  student whom staff remove afterwards stays in that bracket. A tournament
+  that carried `runsPerGroup` from before slice 3a, which read as
+  course-wide until now, runs per group from this slice on.
 - Changed under the maintainer's direction: the tournament joins the kinds
   that can run per group in `ClassActivityIsPerGroupTests`. New:
   `TournamentPerGroupTests`.

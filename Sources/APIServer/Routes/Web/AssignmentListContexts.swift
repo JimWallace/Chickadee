@@ -185,6 +185,12 @@ struct TournamentControlFacts: Encodable {
     /// The lab groups that can play, for an activity that runs once per
     /// group (docs/lab-groups.md, slice 3d); empty otherwise.
     var groupOptions: [GroupOption] = []
+    /// True when each lab group plays its own run.
+    var isPerGroup = false
+    /// What the form asks before it supersedes a run in progress.
+    var supersedeConfirm =
+        "Start a new tournament? The run in progress is superseded and its remaining matches decide nothing."
+
     let leaderboardURL: String
 
     static let none = TournamentControlFacts(
@@ -204,14 +210,23 @@ struct TournamentControlFacts: Encodable {
             if let setID = try await CourseGroupStore.sets(courseID: setup.courseID, on: db).first?.id {
                 groups = try await CourseGroupStore.groups(inSet: setID, on: db)
             }
+            let running = try await APITournamentRun.query(on: db)
+                .filter(\.$testSetupID == setupID)
+                .filter(\.$groupID != nil)
+                .filter(\.$status == APITournamentRun.Status.running)
+                .count()
             return TournamentControlFacts(
                 isTournamentKind: true,
                 statusText: "Each lab group plays its own tournament.",
-                hasRunInProgress: false,
+                hasRunInProgress: running > 0,
                 scheduleOptions: TournamentScheduleOption.options(),
                 groupOptions: groups.compactMap { group in
                     group.id.map { GroupOption(id: $0.uuidString, name: group.name) }
                 },
+                isPerGroup: true,
+                supersedeConfirm:
+                    "Start a new tournament? A run in progress for the chosen group is superseded and its "
+                    + "remaining matches decide nothing.",
                 leaderboardURL: leaderboardURL)
         }
         let latest = try await latestTournament(testSetupID: setupID, on: db)
