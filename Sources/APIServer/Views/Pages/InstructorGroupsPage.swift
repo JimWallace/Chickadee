@@ -99,13 +99,7 @@ private struct NoGroupSetSection: HTML {
                         button(.class("btn btn-primary"), .type(.submit)) { "Create groups" }
                     }
                 }
-                if learnLinked {
-                    form(.method(.post), .action("/instructor/groups/source"), .class("toolbar")) {
-                        CSRFField(token: csrfToken)
-                        input(.type(.hidden), .name("source"), .value("learnSections"))
-                        button(.class("btn"), .type(.submit)) { "Read from LEARN Sections" }
-                    }
-                }
+                if learnLinked { ReadFromLearnButton(csrfToken: csrfToken, confirm: nil) }
             } else {
                 p(.class("empty")) { "No groups yet." }
                 if let readOnlyNote { p(.class("section-note")) { readOnlyNote } }
@@ -134,7 +128,16 @@ private struct GroupSetSection: HTML {
                         "\(panel.studentCount) students · \(panel.ungroupedCount) in no group"
                     }
                 }
-                if canEdit { GroupAddMenu(csrfToken: csrfToken, learnLinked: learnLinked) }
+                if canEdit {
+                    div(.class("assignment-actions-cell")) {
+                        if learnLinked {
+                            ReadFromLearnButton(
+                                csrfToken: csrfToken,
+                                confirm: "Replace these groups with the LEARN Sections of this course?")
+                        }
+                        GroupAddMenu()
+                    }
+                }
                 if !panel.isManual && canChangeSource {
                     LearnSyncActions(csrfToken: csrfToken, learnLinked: learnLinked)
                 }
@@ -208,9 +211,6 @@ private struct GroupSetSection: HTML {
 /// The one "+ Add" menu: a group by name, or groups from a file. Each item
 /// opens its add panel, as on the Students tab.
 private struct GroupAddMenu: HTML {
-    let csrfToken: String
-    let learnLinked: Bool
-
     var body: some HTML {
         details(.class("add-section-details popup-anchor")) {
             summary(.class("btn action-btn summary-btn")) {
@@ -240,25 +240,24 @@ private struct GroupAddMenu: HTML {
                         span(.class("card-meta")) { "Usernames and groups" }
                     }
                 }
-                if learnLinked {
-                    form(
-                        .method(.post), .action("/instructor/groups/source"),
-                        .data("confirm", value: "Replace these groups with the LEARN Sections of this course?")
-                    ) {
-                        CSRFField(token: csrfToken)
-                        input(.type(.hidden), .name("source"), .value("learnSections"))
-                        button(.class("row-menu-item"), .type(.submit), .role("menuitem")) {
-                            span(.class("item-tile"), .data("kind", value: "outline")) { Icon("i-refresh") }
-                            span {
-                                "Read from LEARN"
-                                br()
-                                span(.class("card-meta")) { "The LEARN Sections" }
-                            }
-                        }
-                    }
-                }
             }
         }
+    }
+}
+
+/// Makes the LEARN Sections the source of the groups. It confirms only when
+/// it replaces groups that exist.
+private struct ReadFromLearnButton: HTML {
+    let csrfToken: String
+    let confirm: String?
+
+    var body: some HTML {
+        form(.method(.post), .action("/instructor/groups/source"), .class("inline-form")) {
+            CSRFField(token: csrfToken)
+            input(.type(.hidden), .name("source"), .value("learnSections"))
+            button(.class("btn action-btn"), .type(.submit)) { "Read from LEARN" }
+        }
+        .attributes(.data("confirm", value: confirm ?? ""), when: confirm != nil)
     }
 }
 
@@ -281,7 +280,10 @@ private struct LearnSyncActions: HTML {
             if learnLinked {
                 form(.method(.post), .action("/instructor/groups/sync"), .class("inline-form")) {
                     CSRFField(token: csrfToken)
-                    button(.class("btn btn-primary"), .type(.submit), .title("Read the groups from LEARN now")) {
+                    button(
+                        .class("btn btn-primary"), .type(.submit),
+                        .title("Replace the groups and every student's group with those in LEARN")
+                    ) {
                         "Sync now"
                     }
                 }

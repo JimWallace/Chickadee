@@ -797,8 +797,8 @@ group categories would call LEARN on every page load.
 - **The controls.** When the course is linked to a LEARN org unit and the
   deployment has BrightSpace credentials, an instructor sees "Read from
   LEARN":
-  - in the "+ Add" menu of a manual set, which confirms, because it replaces
-    the groups;
+  - beside the "+ Add" menu of a manual set, which confirms, because it
+    replaces the groups (the menu only adds);
   - below "Create groups" when the course has no set, with no confirm,
     because nothing is lost.
   A synced set says where its groups come from and when Chickadee last read
