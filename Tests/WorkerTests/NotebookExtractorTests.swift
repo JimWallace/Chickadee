@@ -1,4 +1,5 @@
 import ChickadeeTestSupport
+import Core
 import Foundation
 import RunnerCore
 import Testing
@@ -347,10 +348,13 @@ import Testing
     @Test func divisionCellSurvivesExtraction() throws {
         // End-to-end guard: a cell using `/` must keep the `/` in the generated
         // module so its exec(compile()) doesn't fail and its variables resolve.
-        let cells: [[String: Any]] = [
-            ["cell_type": "code", "source": ["daily_ml = 2450\ndaily_l = daily_ml / 1000\n"]]
+        let cells: [JSONValue] = [
+            .object([
+                "cell_type": .string("code"),
+                "source": .array([.string("daily_ml = 2450\ndaily_l = daily_ml / 1000\n")]),
+            ])
         ]
-        let notebook: [String: Any] = ["cells": cells]
+        let notebook: [String: JSONValue] = ["cells": .array(cells)]
         let result = try extractor.extractPythonSource(from: notebook, filename: "submission.ipynb")
         #expect(result.source.contains("daily_ml / 1000"))
         #expect(!result.source.contains("\\/"))
@@ -376,11 +380,11 @@ import Testing
     @Test func eachCellCompiledIndependently() throws {
         // A NameError in cell 2 must not prevent cell 1's variable from loading;
         // each cell is its own exec(compile()) unit.
-        let cells: [[String: Any]] = [
-            ["cell_type": "code", "source": ["resting_hr = 72\n"]],
-            ["cell_type": "code", "source": ["max_hr = 220 - age\n"]],
+        let cells: [JSONValue] = [
+            .object(["cell_type": .string("code"), "source": .array([.string("resting_hr = 72\n")])]),
+            .object(["cell_type": .string("code"), "source": .array([.string("max_hr = 220 - age\n")])]),
         ]
-        let notebook: [String: Any] = ["cells": cells]
+        let notebook: [String: JSONValue] = ["cells": .array(cells)]
         let result = try extractor.extractPythonSource(from: notebook, filename: "submission.ipynb")
         #expect(result.source.components(separatedBy: "exec(compile(").count - 1 == 2)
         #expect(result.source.contains("resting_hr = 72"))
@@ -391,11 +395,11 @@ import Testing
         // The bad cell's source lives inside a compile() string literal, so it
         // can't fail the whole-module compile — only its own exec is skipped at
         // load. The good cell is emitted as its own unit alongside it.
-        let cells: [[String: Any]] = [
-            ["cell_type": "code", "source": ["good = 1\n"]],
-            ["cell_type": "code", "source": ["broken = (\n"]],  // syntax error
+        let cells: [JSONValue] = [
+            .object(["cell_type": .string("code"), "source": .array([.string("good = 1\n")])]),
+            .object(["cell_type": .string("code"), "source": .array([.string("broken = (\n")])]),  // syntax error
         ]
-        let notebook: [String: Any] = ["cells": cells]
+        let notebook: [String: JSONValue] = ["cells": .array(cells)]
         let result = try extractor.extractPythonSource(from: notebook, filename: "submission.ipynb")
         #expect(result.source.components(separatedBy: "exec(compile(").count - 1 == 2)
         #expect(result.source.contains("good = 1"))
@@ -407,11 +411,11 @@ import Testing
         // Regression: an untouched comment-only cell must not become
         // `try:\n    # comment` (an empty try body → SyntaxError that zeros the
         // whole notebook). It is compiled as a string instead.
-        let cells: [[String: Any]] = [
-            ["cell_type": "code", "source": ["# Your code here\n"]],
-            ["cell_type": "code", "source": ["age = 20\n"]],
+        let cells: [JSONValue] = [
+            .object(["cell_type": .string("code"), "source": .array([.string("# Your code here\n")])]),
+            .object(["cell_type": .string("code"), "source": .array([.string("age = 20\n")])]),
         ]
-        let notebook: [String: Any] = ["cells": cells]
+        let notebook: [String: JSONValue] = ["cells": .array(cells)]
         let result = try extractor.extractPythonSource(from: notebook, filename: "submission.ipynb")
         #expect(result.source.contains("compile(\"# Your code here\""))
         #expect(result.source.contains("age = 20"))
@@ -426,14 +430,19 @@ import Testing
         // interpreter catches that whole class, so here we extract a notebook
         // (division cell, syntax-error cell, comment-only cell, and a trailing
         // cell) and ask python3 which names actually resolve after import.
-        let cells: [[String: Any]] = [
-            ["cell_type": "code", "source": ["good = 1\n"]],
-            ["cell_type": "code", "source": ["daily_ml = 2450\ndaily_l = daily_ml / 1000\n"]],  // division
-            ["cell_type": "code", "source": ["broken = (\n"]],  // syntax error → isolated
-            ["cell_type": "code", "source": ["# Your code here\n"]],  // comment-only → harmless
-            ["cell_type": "code", "source": ["after = 7\n"]],
+        let cells: [JSONValue] = [
+            .object(["cell_type": .string("code"), "source": .array([.string("good = 1\n")])]),
+            .object([
+                "cell_type": .string("code"),
+                "source": .array([.string("daily_ml = 2450\ndaily_l = daily_ml / 1000\n")]),
+            ]),  // division
+            // syntax error → isolated
+            .object(["cell_type": .string("code"), "source": .array([.string("broken = (\n")])]),
+            // comment-only → harmless
+            .object(["cell_type": .string("code"), "source": .array([.string("# Your code here\n")])]),
+            .object(["cell_type": .string("code"), "source": .array([.string("after = 7\n")])]),
         ]
-        let notebook: [String: Any] = ["cells": cells]
+        let notebook: [String: JSONValue] = ["cells": .array(cells)]
         let source = try extractor.extractPythonSource(from: notebook, filename: "submission.ipynb").source
 
         let dir = FileManager.default.temporaryDirectory
