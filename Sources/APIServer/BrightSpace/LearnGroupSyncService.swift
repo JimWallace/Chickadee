@@ -20,7 +20,10 @@ import Vapor
 /// Reads one synced set from LEARN and writes it through the store. A
 /// student the classlist cannot match, and one in no LEARN group, ends in no
 /// group. A student in two LEARN groups of the set is placed in the first
-/// that LEARN lists. Returns nil for a set that LEARN does not sync.
+/// that LEARN lists. Returns nil for a set that LEARN does not sync, and for
+/// an empty group list or classlist, which changes nothing: a course whose
+/// labs or students all vanish at once is far more likely a LEARN fault than
+/// a real change.
 @discardableResult
 func syncLearnGroupSet(
     _ set: APICourseGroupSet,
@@ -30,7 +33,6 @@ func syncLearnGroupSet(
     application: Application,
     now: Date = Date()
 ) async throws -> CourseGroupStore.SyncResult? {
-    async let classlistTask = client.fetchClasslist(orgUnitID: orgUnitID, on: application)
     let remote: [BrightSpaceGroup]
     switch set.source {
     case .learnSections:
@@ -41,7 +43,10 @@ func syncLearnGroupSet(
     case .manual, nil:
         return nil
     }
-    let identityIndex = BrightSpaceIdentityIndex(classlist: try await classlistTask)
+    guard !remote.isEmpty else { return nil }
+    let classlist = try await client.fetchClasslist(orgUnitID: orgUnitID, on: application)
+    guard !classlist.isEmpty else { return nil }
+    let identityIndex = BrightSpaceIdentityIndex(classlist: classlist)
 
     var groupByD2LUserID: [String: String] = [:]
     for group in remote {
@@ -92,7 +97,7 @@ func sweepLearnGroups(
             synced += 1
             if result.added + result.renamed + result.removed > 0 {
                 logger.info(
-                    "LEARN group sync for \(course.code): \(result.placed) placed, \(result.added) groups added, \(result.renamed) renamed, \(result.removed) removed"
+                    "LEARN group sync for \(course.code): \(result.placed) placed, \(result.added) groups added or restored, \(result.renamed) renamed, \(result.removed) removed"
                 )
             }
         } catch {

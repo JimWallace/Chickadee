@@ -1,10 +1,10 @@
 // APIServer/BrightSpace/BrightSpaceIdentityIndex.swift
 //
 // The ONE reduction of a LEARN classlist into matchable identities (#1117).
-// Grade sync, section sync, and the roster reconciler all resolve Chickadee
+// Grade sync, the LEARN group sync, and the roster reconciler all resolve Chickadee
 // users against the classlist; before this they each built their own map with
-// divergent normalization (section sync lowercased but didn't trim, so a
-// classlist username with stray whitespace matched for grade push but
+// divergent normalization (the old section sync lowercased but didn't trim,
+// so a classlist username with stray whitespace matched for grade push but
 // silently failed section sync) and their own username-vs-student-number
 // precedence. One index, one `normalize`, one precedence.
 
@@ -51,7 +51,7 @@ struct BrightSpaceIdentityIndex: Sendable {
     /// student number second** — the username is the identity Chickadee always
     /// has (SSO or local) and equals the LEARN username at UW, so resolution
     /// works without a student-number claim. The one precedence, shared by
-    /// grade push and section sync.
+    /// grade push and the LEARN group sync.
     func d2lUserID(username: String?, studentID: String?) -> String? {
         for identity in [username, studentID] {
             guard let key = identity.map(Self.normalize), !key.isEmpty else { continue }

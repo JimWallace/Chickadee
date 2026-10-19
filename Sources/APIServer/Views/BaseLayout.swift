@@ -189,3 +189,4 @@ struct Doctype: HTML {
         HTMLRaw("<!DOCTYPE html>")
     }
 }
+let ckGuardFixture = div(.custom(name: "style", value: "--filter-width:220px")) {}

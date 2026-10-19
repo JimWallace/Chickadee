@@ -3,8 +3,11 @@
 // The LEARN group sync (docs/lab-groups.md, slice 6), against an in-memory
 // LEARN: a first sync makes the course's Sections and places its students; a
 // renamed section keeps its group; a student who moves changes group; a
-// section that disappears is removed, closes its session, and comes back as
-// the same group; a student the classlist cannot match is in no group; a
+// section that disappears is removed and comes back as the same group, unless
+// it held a session, when it keeps its group and loses its members; an empty
+// group list or classlist changes nothing; LEARN's names are cleaned and a
+// student in two groups goes to the first; a student the classlist cannot
+// match is in no group; a
 // group-category set reads its own category; a manual set is not synced; the
 // sweep reads only a bound course that is not archived; and the migration
 // makes a set from the old section category.
@@ -172,17 +175,11 @@ private struct FakeLearn: BrightSpaceGrading {
             let lab102 = BrightSpaceGroup(groupID: "71", name: "Lab 102", enrollments: ["502"])
             try await sync(f, learn([lab101, lab102]))
             let lab102ID = try #require(try await groups(f)["71"]?.id)
-            let courseID = try f.course.requireID()
-            try await makeTestSetup(on: app, id: "lsync_setup", courseID: courseID)
-            let assignment = try await makeTestAssignment(on: app, testSetupID: "lsync_setup", courseID: courseID)
-            let session = try await ActivitySessionStore.open(
-                assignmentID: try assignment.requireID(), groupID: lab102ID, by: nil, now: Date(), on: app.db)
 
             let result = try await sync(f, learn([lab101]))
             #expect(result?.removed == 1)
             #expect(try await groups(f)["71"]?.removedAt != nil)
             #expect(try await members(f)[f.alan] == nil)
-            #expect(try await APIActivitySession.find(session.id, on: app.db)?.closedAt != nil, "its session ends")
 
             let back = try await sync(f, learn([lab101, lab102]))
             #expect(back?.added == 1)
@@ -190,6 +187,70 @@ private struct FakeLearn: BrightSpaceGrading {
             #expect(restored.id == lab102ID)
             #expect(restored.removedAt == nil)
             #expect(try await members(f)[f.alan] == lab102ID)
+        }
+    }
+
+    @Test func aLabThatHeldASessionKeepsItsGroupWhenItDisappears() async throws {
+        try await withApp(app) { _ in
+            let f = try await fixture()
+            let lab101 = BrightSpaceGroup(groupID: "70", name: "Lab 101", enrollments: ["501"])
+            let lab102 = BrightSpaceGroup(groupID: "71", name: "Lab 102", enrollments: ["502"])
+            try await sync(f, learn([lab101, lab102]))
+            let lab102ID = try #require(try await groups(f)["71"]?.id)
+            let courseID = try f.course.requireID()
+            try await makeTestSetup(on: app, id: "lsync_setup", courseID: courseID)
+            let assignment = try await makeTestAssignment(on: app, testSetupID: "lsync_setup", courseID: courseID)
+            let session = try await ActivitySessionStore.open(
+                assignmentID: try assignment.requireID(), groupID: lab102ID, by: nil, now: Date(), on: app.db)
+
+            let result = try await sync(f, learn([lab101]))
+            #expect(result?.removed == 0)
+            #expect(try await groups(f)["71"]?.removedAt == nil, "its joins and its lab bonus still count")
+            #expect(try await members(f)[f.alan] == nil, "its members go")
+            #expect(try await APIActivitySession.find(session.id, on: app.db)?.closedAt == nil)
+        }
+    }
+
+    @Test func anEmptyAnswerChangesNothing() async throws {
+        try await withApp(app) { _ in
+            let f = try await fixture()
+            try await sync(f, learn([BrightSpaceGroup(groupID: "70", name: "Lab 101", enrollments: ["501"])]))
+            let before = try await members(f)
+
+            #expect(try await sync(f, learn([])) == nil)
+            #expect(try await groups(f)["70"]?.removedAt == nil)
+            #expect(try await members(f) == before)
+        }
+    }
+
+    @Test func anEmptyClasslistChangesNothing() async throws {
+        try await withApp(app) { _ in
+            let f = try await fixture()
+            let lab101 = BrightSpaceGroup(groupID: "70", name: "Lab 101", enrollments: ["501"])
+            try await sync(f, learn([lab101]))
+            let before = try await members(f)
+
+            #expect(try await sync(f, FakeLearn(classlist: [], sections: [lab101])) == nil)
+            #expect(try await members(f) == before)
+        }
+    }
+
+    @Test func learnNamesAreCleanedAndAStudentInTwoGroupsGoesToTheFirst() async throws {
+        try await withApp(app) { _ in
+            let f = try await fixture()
+            let long = String(repeating: "x", count: CourseGroupStore.nameLimit + 5)
+            try await sync(
+                f,
+                learn([
+                    BrightSpaceGroup(groupID: "72", name: "  ", enrollments: ["501"]),
+                    BrightSpaceGroup(groupID: "70", name: " \(long) ", enrollments: ["501", "502"]),
+                ]))
+            let rows = try await groups(f)
+            #expect(rows["72"]?.name == "72", "a blank name falls back to the external id")
+            #expect(rows["70"]?.name == String(long.prefix(CourseGroupStore.nameLimit)))
+            let labs = try await members(f)
+            #expect(labs[f.ada] == rows["72"]?.id, "the first group LEARN lists wins")
+            #expect(labs[f.alan] == rows["70"]?.id)
         }
     }
 

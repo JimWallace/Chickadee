@@ -18,7 +18,7 @@ struct MoveLearnSectionCategoryToGroupSet: ChickadeeMigration {
             .filter(\.$brightspaceSectionCategoryID != nil)
             .all()
         for course in courses {
-            let categoryID = course.brightspaceSectionCategoryID?.trimmingCharacters(in: .whitespaces) ?? ""
+            let categoryID = course.brightspaceSectionCategoryID?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
             guard let courseID = course.id, !categoryID.isEmpty else { continue }
             let hasSet = try await APICourseGroupSet.query(on: database).filter(\.$courseID == courseID).count() > 0
             guard !hasSet else { continue }

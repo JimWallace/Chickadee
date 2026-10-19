@@ -223,20 +223,36 @@ enum CourseGroupStore {
     /// Makes a synced set match LEARN: its groups match `remote` by external
     /// id, and each student of `members` (user id to the external id of their
     /// group) is in that group, and every other person in none. A new group
-    /// goes at the end, a renamed one takes the new name, a removed one that
-    /// LEARN lists again comes back, and one that LEARN no longer lists is
-    /// removed as `removeGroup` removes it.
+    /// goes at the end, a renamed one takes the new name, and a removed one
+    /// that LEARN lists again comes back.
+    ///
+    /// A group that LEARN no longer lists loses its members. It is removed,
+    /// as `removeGroup` removes it, only when it has no session: a lab that
+    /// held a session keeps its row active, so its joins, its rankings and
+    /// its students' class-goal bonus still count (`LabGoalGroups` reads
+    /// active groups only).
     static func applySync(
         _ remote: [SyncedGroup], members: [UUID: String], to set: APICourseGroupSet, now: Date,
         on db: any Database
     ) async throws -> SyncResult {
-        guard !set.acceptsManualEdits else { throw CourseGroupError.setNotSynced }
+        guard set.source == .learnGroups || set.source == .learnSections else {
+            throw CourseGroupError.setNotSynced
+        }
         let setID = try set.requireID()
         let existing = try await groups(inSet: setID, includingRemoved: true, on: db)
         let byExternalID = Dictionary(
             existing.compactMap { group in group.externalID.map { ($0, group) } },
             uniquingKeysWith: { first, _ in first })
         let listed = Set(remote.map(\.externalID))
+        let unlisted = existing.filter { group in
+            group.removedAt == nil && !(group.externalID.map(listed.contains) ?? false)
+        }
+        let heldSessions = Set(
+            try await APIActivitySession.query(on: db)
+                .filter(\.$groupID ~~ unlisted.compactMap(\.id))
+                .all()
+                .map(\.groupID))
+        let toRemove = unlisted.filter { group in group.id.map { !heldSessions.contains($0) } ?? false }
         let ordered = remote.sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
         return try await db.transaction { tx in
             var result = SyncResult()
@@ -265,10 +281,7 @@ enum CourseGroupStore {
                 try await group.save(on: tx)
                 groupIDByExternalID[item.externalID] = try group.requireID()
             }
-            let vanished = existing.filter { group in
-                group.removedAt == nil && !(group.externalID.map(listed.contains) ?? false)
-            }
-            for group in vanished {
+            for group in toRemove {
                 try await markRemoved(group, now: now, on: tx)
                 result.removed += 1
             }

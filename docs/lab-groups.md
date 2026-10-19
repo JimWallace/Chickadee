@@ -232,7 +232,6 @@ Nil means course-wide, which is what every existing row is.
 | D2L Sections through Valence | Every ten minutes | **The UW source**: the registrar assigns the labs and LEARN makes a Section per lab. `fetchSections`, a `learnSections` set. Slice 6a. Blocked on production credentials. |
 | LTI 1.3 | never | NRPS sends no group per member. D2L lists AGS, NRPS and Deep Linking as its LTI Advantage services, not the Course Groups Service. |
 
-
 ## Slices
 
 ### Slice 1: groups (built)
@@ -742,9 +741,15 @@ should be able to see it. The maintainer chose best effort on 2026-10-18.
   the result in one transaction:
   - a group matches by external ID, so a renamed section keeps its group;
   - a new group goes at the end, in natural name order;
-  - a group that LEARN no longer lists is removed as `removeGroup` removes
-    it: its members go and its open sessions end;
+  - a group that LEARN no longer lists loses its members. It is removed as
+    `removeGroup` removes it only when it never held a session. A lab that
+    held one stays active, because `LabGoalGroups` and the boards read active
+    groups only: removing it would take its joins, its board and its
+    students' class-goal bonus with it, and a sync must not do that;
   - a removed group that LEARN lists again comes back as the same row;
+  - an empty group list or an empty classlist changes nothing. A course
+    whose labs or students all vanish at once is far more likely a LEARN
+    fault than a real change;
   - every membership of the set is replaced, so a student who moved changes
     group, and a student whom the classlist cannot match is in no group;
   - a student in two groups of the set is placed in the first that LEARN
@@ -768,6 +773,17 @@ Known limits:
   picker.
 - The sync places students only. An enrolled TA is in no group of a synced
   set.
+- A lab that LEARN dropped after it held a session stays on the pickers with
+  no members, and its open session stays open. Nothing removes it yet: the
+  Groups tab does not edit a synced set.
+- A student placed only by membership, with no join, follows LEARN: a sync
+  after the deadline can move their lab. A graded student joined a session,
+  and a join up to the deadline decides their lab, so only a student who
+  submitted through `POST /api/v1/submissions`, which skips the session
+  gate, is exposed.
+- The migration makes a set with no groups until the first sync, and a
+  course that has a set already gets no synced set. Both need a course that
+  had the old category field set, which no form set.
 
 ### Slice 6b: the picker
 
