@@ -370,28 +370,41 @@ because line numbers go out of date.
   `changeDeclaredLanguage`. The restore writes the snapshot manifest as it was
   stored.
 
-### The notebook header: kernel names and `nbformat`
+### The notebook header, notebook parsing and cell source
 
 - **Readers:**
-  - `NotebookHeader` (`Sources/Core/NotebookHeader.swift`), a typed decode.
-    Its callers are `derivedDeclaration`, the notebook-functions scan route,
-    `submissionNotebookLanguage` (`Sources/Worker/SubmissionStaging.swift`)
-    and `inferredRawSubmissionExtension`.
-  - `Sources/Worker/NotebookExtractor.swift` and
-    `Sources/Worker/SubmissionPolicy.swift`, which still parse with
-    `JSONSerialization` and use the `[String: Any]` overload of
-    `fromNotebookMetadata`.
+  - `NotebookHeader` (`Sources/Core/NotebookHeader.swift`), a typed decode of
+    the header only. Its callers are `derivedDeclaration`, the
+    notebook-functions scan route, `submissionNotebookLanguage`
+    (`Sources/Worker/SubmissionStaging.swift`) and
+    `inferredRawSubmissionExtension`.
+  - The worker's `NotebookExtractor` and `SubmissionValidation.validatedNotebook`
+    (`Sources/Worker/SubmissionPolicy.swift`) parse the whole notebook with
+    `JSONValue.object(from:)` and read the kernel names through
+    `NotebookHeader.Metadata(_:)`.
+  - The server's validity gates (`notebookCellCount` on the notebook save,
+    the starter and solution checks in `PublishedAssignmentRoutes+SaveEdit`
+    and `TestSetupRoutes`) and the notebook rewriters still use
+    `JSONSerialization`.
 - **Rules:**
   - `NotebookHeader` is a sniff, not a validity check. It does not check the
-    parts that it skips. A validity gate, such as `notebookCellCount` on the
-    notebook save, uses `JSONSerialization`.
+    parts that it skips. A validity gate decodes every value: the worker with
+    `JSONValue.object(from:)`, the server with `JSONSerialization`.
   - A field of the wrong type reads as absent. Only input that is not a JSON
     object fails the read.
-  - Both `fromNotebookMetadata` overloads call `languageFromKernelNames`.
-- **Parallel paths:** the two parsers above. They differ on invalid JSON in a
-  skipped part, on UTF-32 input with a byte-order mark and on duplicate keys
-  (`NotebookHeaderTests`). A change to what counts as a notebook must go to
-  both until the worker extractor moves to typed JSON.
+  - `fromNotebookMetadata` has one overload, and it calls
+    `languageFromKernelNames`, the one sniff.
+- **Parallel paths:**
+  - Two parsers. `JSONDecoder` (`NotebookHeader`, `JSONValue.object(from:)`)
+    and `JSONSerialization` differ on UTF-32 input with a byte-order mark and
+    on duplicate keys (the first value wins in `JSONDecoder`, the last in
+    `JSONSerialization`). So the server can accept a notebook that the worker
+    reads differently. `NotebookHeaderTests` and `JSONValueAccessorsTests`
+    pin the differences. The server sites move to `JSONValue` in later steps.
+  - Two `NotebookCellSources.cellSource` overloads, over `[String: Any]` and
+    over `[String: JSONValue]`. An array source counts only when every element
+    is a string. A change to one must go to the other until the `[String: Any]`
+    one has no caller.
 
 ### Grading and submission mode: `effectiveGradingMode`, `effectiveSubmissionMode`
 
