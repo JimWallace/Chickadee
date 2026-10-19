@@ -21,7 +21,7 @@
 // consult the environment, so their behaviour does not change.
 // `ZipProcessEnvironmentTests` fails if a zip spawn stops passing it.
 
-import Foundation
+public import Foundation
 import Subprocess
 import SystemPackage
 

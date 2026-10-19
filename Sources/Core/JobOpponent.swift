@@ -12,7 +12,7 @@
 // submission, a champion) adds its own optional field beside `supportFile`
 // rather than a case a runner may not know.
 
-import Foundation
+public import Foundation
 
 /// The opponent staged beside a submission for one match job. Nil on the job
 /// means an ordinary run with no opponent directory and no match seed.

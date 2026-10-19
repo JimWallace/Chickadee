@@ -41,6 +41,9 @@ if swiftc -c -O -wmo -parse-as-library -module-name RunnerCore \
     -enable-experimental-feature Embedded \
     -enable-upcoming-feature ExistentialAny \
     -enable-upcoming-feature MemberImportVisibility \
+    -enable-upcoming-feature InternalImportsByDefault \
+    -enable-upcoming-feature InferIsolatedConformances \
+    -enable-upcoming-feature ImmutableWeakCaptures \
     -strict-memory-safety -warnings-as-errors \
     "${sources[@]}" -o "$out/RunnerCore.o" 2>"$out/stderr"; then
     echo "  OK: RunnerCore compiles as Embedded Swift (${#sources[@]} files)."

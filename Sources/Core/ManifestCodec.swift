@@ -1,4 +1,4 @@
-import Foundation
+public import Foundation
 
 /// Shared `JSONDecoder` and `JSONEncoder` instances for `TestProperties`
 /// (the instructor-authored manifest stored in `test.properties.json`).

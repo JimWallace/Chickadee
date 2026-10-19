@@ -4,7 +4,7 @@
 // CoreTests and once in WorkerTests, identical to the character, because
 // CoreTests had no shared support target to import.
 
-import Foundation
+public import Foundation
 
 /// Build a `URL` from a fixture string that's known-valid at the call site.
 /// `URL(string:)` returns Optional because the parser must allow for

@@ -15,7 +15,7 @@
 // class aggregation (how the class's results combine). The instructor never
 // sees the axes. They pick ONE kind, and the kind fixes both.
 
-import Foundation
+public import Foundation
 
 /// What else is in the workspace when a match script runs — the first of the
 /// two hidden axes. The kind fixes it; the instructor never chooses it.

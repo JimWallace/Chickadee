@@ -17,7 +17,7 @@
 // a build failure — advances the opponent, so a broken submission can never
 // stall a round.
 
-import Foundation
+public import Foundation
 
 /// How a tournament pairs its entrants.
 public enum TournamentSchedule: String, Codable, CaseIterable, Sendable {
