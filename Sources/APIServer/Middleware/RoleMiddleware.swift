@@ -27,14 +27,14 @@ struct RoleMiddleware: AsyncMiddleware {
             if request.prefersBrowser {
                 return request.redirect(to: "/login")
             }
-            throw Abort(.unauthorized)
+            throw AppError.unauthenticated
         }
 
         switch required {
         case .authenticated:
             break
         case .admin:
-            guard user.isAdmin else { throw Abort(.forbidden) }
+            guard user.isAdmin else { throw AppError.forbidden(action: "use the admin pages") }
         }
 
         return try await next.respond(to: request)

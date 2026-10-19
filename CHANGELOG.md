@@ -9,6 +9,24 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.746] - 2026-10-19
+
+### Changed
+
+- **Error pages name what failed.** The server's route errors are now cases of its own `AppError` type, not Vapor's generic `Abort`. Where a page used to say only "We couldn't find that page" or "You don't have permission to view this page", it now names the thing, for example "Submission not found" or "You do not have permission to view this submission." Every HTTP status is unchanged, and a 404 that hides whether something exists reads the same whether it is missing or hidden. Two server errors no longer show internal detail: the course export names the test setup instead of a server path, and a failed notebook save logs the error instead of showing it.
+
+
+## [0.5.745] - 2026-10-19
+
+### Changed
+
+- **Lab groups (slice 5b): item goals per lab.** When a class activity runs once per lab group, an "items covered" class goal is now counted per lab: an item counts for the lab of the session it was submitted in, and a lab's composite tiles and spares cover their slots in that lab. Each student earns their own lab's bonus. See `docs/lab-groups.md`.
+
+### Changed
+
+- **Typed throws in Core and the runner.** Functions whose set of errors is closed now declare it: the runner's notebook validation and extraction, MIME detection, disk-space and `make` checks, and result and heartbeat reporting; in Core, avatar customization and the v2 manifest checks. `executeTestSuites` throws nothing, so it no longer says `throws`. The rest stay untyped, because Foundation, Subprocess or network errors pass through them, or they are `Codable` requirements.
+
+
 ## [0.5.744] - 2026-10-19
 
 ### Changed

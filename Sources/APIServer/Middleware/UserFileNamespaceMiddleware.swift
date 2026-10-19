@@ -17,7 +17,7 @@ struct UserFileNamespaceMiddleware: AsyncMiddleware {
         }
 
         guard let caller = req.auth.get(APIUser.self) else {
-            throw Abort(.unauthorized)
+            throw AppError.unauthenticated
         }
         // The user-file namespace is deployment-wide: staff (TA+ in a course
         // that is not archived) or admin may reach any user's folder; everyone
@@ -27,7 +27,7 @@ struct UserFileNamespaceMiddleware: AsyncMiddleware {
             return try await next.respond(to: req)
         }
         guard let callerID = caller.id?.uuidString.lowercased(), callerID == requestedUser else {
-            throw Abort(.forbidden)
+            throw AppError.forbidden(action: "open another user's files")
         }
 
         return try await next.respond(to: req)

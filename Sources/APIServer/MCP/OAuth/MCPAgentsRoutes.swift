@@ -75,10 +75,10 @@ struct MCPAgentsRoutes: RouteCollection {
             let grantID = req.parameters.get("grantID", as: UUID.self),
             let grant = try await MCPGrant.find(grantID, on: req.db)
         else {
-            throw Abort(.notFound)
+            throw AppError.notFound(resource: "Agent grant")
         }
         guard user.isAdmin || grant.userID == user.id else {
-            throw Abort(.forbidden)
+            throw AppError.forbidden(action: "revoke this agent grant")
         }
         grant.revoked = true
         try await grant.save(on: req.db)

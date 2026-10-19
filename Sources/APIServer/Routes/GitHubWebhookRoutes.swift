@@ -48,13 +48,13 @@ struct GitHubWebhookRoutes: RouteCollection {
     @Sendable
     func receive(req: Request) async throws -> HTTPStatus {
         guard let secret = try await GitHubAppRegistration.resolve(req: req)?.secrets.webhookSecret else {
-            throw Abort(.notFound)
+            throw AppError.notFound(resource: "GitHub webhook")
         }
         let body = req.body.data.map { Data(buffer: $0) } ?? Data()
         guard
             GitHubWebhookSignature.isValid(
                 body: body, header: req.headers.first(name: "X-Hub-Signature-256"), secret: secret)
-        else { throw Abort(.unauthorized) }
+        else { throw AppError.unauthorized(reason: "The webhook signature is not valid.") }
 
         let event = req.headers.first(name: "X-GitHub-Event")
         if event == "installation" {
@@ -70,7 +70,7 @@ struct GitHubWebhookRoutes: RouteCollection {
         }
         guard event == "push" else { return .noContent }
         guard let push = try? JSONDecoder().decode(PushEvent.self, from: body) else {
-            throw Abort(.badRequest)
+            throw AppError.badRequest(reason: "The push event payload could not be read.")
         }
         // A deleted branch leaves no commit to show.
         let sha = push.after.lowercased()

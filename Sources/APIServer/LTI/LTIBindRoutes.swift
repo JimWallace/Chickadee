@@ -47,14 +47,14 @@ struct LTIBindRoutes: RouteCollection {
         let courseID = try await req.decodeContent(Body.self).courseID
         guard
             let course = try await Self.bindableCourses(for: user, on: req.db).first(where: { $0.id == courseID })
-        else { throw Abort(.forbidden, reason: "You can link only a course you teach that is not linked yet.") }
+        else { throw AppError.forbiddenReason(reason: "You can link only a course you teach that is not linked yet.") }
         let alreadyBound =
             try await APICourse.query(on: req.db)
             .filter(\.$ltiPlatformID == pending.platformID)
             .filter(\.$ltiContextID == pending.contextID)
             .first() != nil
         guard !alreadyBound else {
-            throw Abort(.conflict, reason: "This LMS course is already linked to a Chickadee course.")
+            throw AppError.conflict(reason: "This LMS course is already linked to a Chickadee course.")
         }
         try await LTICourseBinding.bind(
             course, platformID: pending.platformID, contextID: pending.contextID, on: req.db)
@@ -73,7 +73,9 @@ struct LTIBindRoutes: RouteCollection {
         guard
             let platform = req.session.data[LTIRoutes.pendingPlatformKey].flatMap(UUID.init(uuidString:)),
             let context = req.session.data[LTIRoutes.pendingContextKey]
-        else { throw Abort(.notFound, reason: "There is no LMS course to link. Open the link from the LMS again.") }
+        else {
+            throw AppError.notFoundReason(reason: "There is no LMS course to link. Open the link from the LMS again.")
+        }
         return Pending(
             platformID: platform, contextID: context,
             contextTitle: req.session.data[LTIRoutes.pendingContextTitleKey] ?? context)

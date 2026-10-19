@@ -17,7 +17,9 @@ extension WebRoutes {
     func sessionAttendancePage(req: Request) async throws -> Response {
         let (user, assignment, groupID) = try await requireGroupSession(
             req, groupID: req.query[String.self, at: "group"], toChange: false)
-        guard let group = try await APICourseGroup.find(groupID, on: req.db) else { throw Abort(.notFound) }
+        guard let group = try await APICourseGroup.find(groupID, on: req.db) else {
+            throw AppError.notFound(resource: "Group")
+        }
         let session = try await ActivitySessionStore.session(
             assignmentID: assignment.requireID(), groupID: groupID, on: req.db)
         let rows = try await attendeeRows(of: session, on: req.db)
@@ -46,7 +48,7 @@ extension WebRoutes {
                 assignmentID: assignment.requireID(), groupID: groupID, on: req.db),
             session.isOpen(at: Date()),
             try await ActivitySessionStore.remove(userID: studentID, from: session, on: req.db)
-        else { throw Abort(.notFound) }
+        else { throw AppError.notFound(resource: "Student in the open session") }
         await recordSessionChange(assignment, session: session, change: "removed", student: studentID, on: req)
         return req.redirect(
             to: "/testsetups/\(assignment.testSetupID)/sessions/attendance?group=\(groupID.uuidString)"

@@ -83,7 +83,7 @@ struct AuthRoutes: RouteCollection {
     @Sendable
     func login(req: Request) async throws -> Response {
         if req.application.authMode == .sso {
-            throw Abort(.notFound)
+            throw AppError.notFound(resource: "Password sign-in")
         }
 
         let body = try await req.decodeContent(LoginBody.self)
@@ -173,7 +173,7 @@ struct AuthRoutes: RouteCollection {
     @Sendable
     func registerForm(req: Request) async throws -> Response {
         if req.application.authMode == .sso {
-            throw Abort(.notFound)
+            throw AppError.notFound(resource: "Account registration")
         }
         if req.auth.has(APIUser.self) {
             return req.redirect(to: "/")
@@ -189,7 +189,7 @@ struct AuthRoutes: RouteCollection {
     @Sendable
     func register(req: Request) async throws -> Response {
         if req.application.authMode == .sso {
-            throw Abort(.notFound)
+            throw AppError.notFound(resource: "Account registration")
         }
         let body = try await req.decodeContent(RegisterBody.self)
 

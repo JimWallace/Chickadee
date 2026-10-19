@@ -33,7 +33,7 @@ struct MCPBearerVerification: Sendable {
 
     func verify(_ request: Request) async throws -> Outcome {
         guard let authority = request.application.mcpTokenAuthority else {
-            throw Abort(.internalServerError, reason: "MCP token authority is not configured.")
+            throw AppError.internalFailure(reason: "MCP token authority is not configured.")
         }
         guard let token = request.headers.bearerAuthorization?.token else {
             return .rejected(challenge(status: .unauthorized, error: nil, scope: nil))

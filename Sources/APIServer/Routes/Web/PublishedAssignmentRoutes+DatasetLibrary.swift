@@ -163,7 +163,7 @@ extension PublishedAssignmentRoutes {
         do {
             try await operation()
         } catch let error as CourseDatasetError {
-            throw Abort(.badRequest, reason: error.description)
+            throw AppError.badRequest(reason: error.description)
         }
     }
 }

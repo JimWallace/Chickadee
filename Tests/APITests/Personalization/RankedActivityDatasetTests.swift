@@ -141,7 +141,7 @@ import Vapor
         let app = try await makeTestApp()
         try await withApp(app) { app in
             let (_, setup) = try await fixture(on: app, code: "RKD1", activity: .kingOfTheHill, datasets: [])
-            await #expect(throws: Abort.self) {
+            await #expect(throws: AppError.self) {
                 try await applyDatasetsEdit(
                     setup: setup, datasets: [DatasetSpec(file: "cases.csv", sampleSize: 3)], on: app.db)
             }

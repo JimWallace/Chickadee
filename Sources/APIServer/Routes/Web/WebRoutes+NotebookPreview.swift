@@ -29,7 +29,7 @@ extension WebRoutes {
         assignment: APIAssignment,
         student: WorkbenchPreviewStudent
     ) async throws -> NotebookContext {
-        guard let viewerID = user.id, let setupID = setup.id else { throw Abort(.unauthorized) }
+        guard let viewerID = user.id, let setupID = setup.id else { throw AppError.unauthenticated }
         guard
             let data = await personalizedStarterNotebook(
                 setup: setup, userID: student.userID, on: req.db, application: req.application,
@@ -89,7 +89,9 @@ extension WebRoutes {
     ) async throws
         -> NotebookGuide
     {
-        guard let manifest = setup.decodedManifest(), let setupID = setup.id else { throw Abort(.notFound) }
+        guard let manifest = setup.decodedManifest(), let setupID = setup.id else {
+            throw AppError.notFound(resource: "Assignment manifest")
+        }
         // The student's own key for a guide with no attempt, on purpose: both
         // build from the same inputs (`guideInputs`, `attempt: nil`). If the
         // student's route ever reads anything more, this key must change too.

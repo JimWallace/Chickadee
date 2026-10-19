@@ -30,8 +30,7 @@ struct AdminMCPRoutes: RouteCollection {
     func handlePost(req: Request) async throws -> Response {
         try await transport.serve(req) { rpcRequest, era in
             guard let principal = req.adminMcpPrincipal else {
-                throw Abort(
-                    .unauthorized,
+                throw AppError.unauthorized(
                     reason: "Admin MCP request reached the transport without an authenticated principal.")
             }
             let context = AdminToolContext(
@@ -46,6 +45,6 @@ struct AdminMCPRoutes: RouteCollection {
     }
 
     func streamingUnsupported(req: Request) async throws -> Response {
-        throw Abort(.methodNotAllowed)
+        throw AppError.methodNotAllowed(reason: "The admin MCP endpoint accepts POST requests only.")
     }
 }

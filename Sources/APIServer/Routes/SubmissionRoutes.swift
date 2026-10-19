@@ -150,13 +150,13 @@ struct SubmissionDownloadRoute: RouteCollection {
         guard let subID = req.parameters.get("submissionID"),
             let submission = try await APISubmission.find(subID, on: req.db)
         else {
-            throw Abort(.notFound)
+            throw AppError.notFound(resource: "Submission")
         }
         // Course staff (TA+ or admin) may download any submission in their
         // course; everyone else only their own (#417 Slice G).
         let isStaff = try await isSubmissionStaff(caller, submission: submission, on: req.db)
         if !isStaff && submission.userID != caller.id {
-            throw Abort(.forbidden)
+            throw AppError.forbidden(action: "download this submission")
         }
         let downloadName =
             submission.filename

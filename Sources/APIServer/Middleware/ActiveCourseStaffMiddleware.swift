@@ -24,7 +24,7 @@ struct ActiveCourseStaffMiddleware: AsyncMiddleware {
     func respond(to request: Request, chainingTo next: any AsyncResponder) async throws -> Response {
         guard let user = request.auth.get(APIUser.self) else {
             if request.wantsBrowserRedirect { return request.redirect(to: "/login") }
-            throw Abort(.unauthorized)
+            throw AppError.unauthenticated
         }
 
         // Admins administer the whole deployment.
@@ -50,7 +50,7 @@ struct ActiveCourseStaffMiddleware: AsyncMiddleware {
 
         // Authenticated but not staff here: 403, matching the prior
         // RoleMiddleware behaviour for an insufficient role.
-        throw Abort(.forbidden)
+        throw AppError.forbidden(action: "use the staff pages of this course")
     }
 }
 

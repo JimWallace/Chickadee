@@ -23,7 +23,9 @@ struct EnrollmentRoutes: RouteCollection {
     @Sendable
     func enrollPage(req: Request) async throws -> Response {
         let user = try req.auth.require(APIUser.self)
-        guard let userID = user.id else { throw Abort(.internalServerError) }
+        guard let userID = user.id else {
+            throw AppError.internalFailure(reason: "Your account has no saved identity.")
+        }
 
         let allCourses = try await APICourse.query(on: req.db)
             .filter(\.$isArchived == false)
@@ -61,7 +63,9 @@ struct EnrollmentRoutes: RouteCollection {
     @Sendable
     func saveEnrollment(req: Request) async throws -> Response {
         let user = try req.auth.require(APIUser.self)
-        guard let userID = user.id else { throw Abort(.internalServerError) }
+        guard let userID = user.id else {
+            throw AppError.internalFailure(reason: "Your account has no saved identity.")
+        }
 
         struct EnrollBody: Content {
             var courseIDs: [String]?
@@ -98,13 +102,15 @@ struct EnrollmentRoutes: RouteCollection {
     @Sendable
     func activateCourse(req: Request) async throws -> Response {
         let user = try req.auth.require(APIUser.self)
-        guard let userID = user.id else { throw Abort(.internalServerError) }
+        guard let userID = user.id else {
+            throw AppError.internalFailure(reason: "Your account has no saved identity.")
+        }
 
         guard
             let idString = req.parameters.get("courseID"),
             let courseID = UUID(uuidString: idString)
         else {
-            throw Abort(.badRequest)
+            throw AppError.badRequest(reason: "The course ID is not valid.")
         }
 
         struct ActivateBody: Content {

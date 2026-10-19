@@ -26,7 +26,7 @@ extension WebRoutes {
             let activity = setup.decodedManifest()?.activity, activity.kind == .classComposite,
             let spec = activity.composite,
             let assignmentID = try await assignmentByTestSetupID(setupID, on: req.db)?.id
-        else { throw Abort(.notFound) }
+        else { throw AppError.notFound(resource: "Class composite") }
 
         let isStaff = try await isCourseStaff(user, inCourse: setup.courseID, db: req.db)
         if !isStaff {
@@ -43,7 +43,7 @@ extension WebRoutes {
                 groupID = try await CompositePool.dealtSlot(assignmentID: assignmentID, userID: userID, on: req.db)?
                     .pool.groupID
             }
-            guard groupID != nil else { throw Abort(.notFound) }
+            guard groupID != nil else { throw AppError.notFound(resource: "Group") }
         }
         let snapshot = try await CompositeSnapshot.build(
             .init(

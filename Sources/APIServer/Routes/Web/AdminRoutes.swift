@@ -254,7 +254,7 @@ struct AdminRoutes: RouteCollection {
             let uuid = UUID(uuidString: idString),
             let user = try await APIUser.find(uuid, on: req.db)
         else {
-            throw Abort(.notFound)
+            throw AppError.notFound(resource: "User account")
         }
 
         // An admin who demotes themselves may leave no way back. Another admin
@@ -413,7 +413,7 @@ struct AdminRoutes: RouteCollection {
             let userID = UUID(uuidString: idString),
             let user = try await APIUser.find(userID, on: req.db)
         else {
-            throw Abort(.notFound)
+            throw AppError.notFound(resource: "User account")
         }
 
         let allCourses = try await APICourse.query(on: req.db)
@@ -467,7 +467,7 @@ struct AdminRoutes: RouteCollection {
             let uuid = UUID(uuidString: idString),
             let user = try await APIUser.find(uuid, on: req.db)
         else {
-            throw Abort(.notFound)
+            throw AppError.notFound(resource: "User account")
         }
 
         let deletedUsername = user.username

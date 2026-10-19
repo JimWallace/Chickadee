@@ -116,7 +116,7 @@ struct InstructorWorkbenchRoutes: RouteCollection {
         // `workbenchNotebookContext` would fall back to the starter's bytes
         // under a "Solution" label, which reads as data loss.
         guard fileKind == .assignment || hasSolution else {
-            throw Abort(.notFound, reason: "This assignment has no reference solution.")
+            throw AppError.notFoundReason(reason: "This assignment has no reference solution.")
         }
 
         let user = try req.auth.require(APIUser.self)

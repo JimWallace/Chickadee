@@ -219,7 +219,7 @@ struct TestSetupRoutes: RouteCollection {
         guard let setupID = req.parameters.get("testSetupID"),
             let setup = try await APITestSetup.find(setupID, on: req.db)
         else {
-            throw Abort(.notFound)
+            throw AppError.notFound(resource: "Test setup")
         }
 
         // This streams the FULL setup zip — secret-tier test scripts and the
@@ -242,7 +242,7 @@ struct TestSetupRoutes: RouteCollection {
         let caller = try req.auth.require(APIUser.self)
         guard let setupID = req.parameters.get("testSetupID"),
             let setup = try await APITestSetup.find(setupID, on: req.db)
-        else { throw Abort(.notFound) }
+        else { throw AppError.notFound(resource: "Test setup") }
 
         try await requireCourseEnrollment(caller: caller, courseID: setup.courseID, db: req.db)
 
@@ -271,7 +271,7 @@ struct TestSetupRoutes: RouteCollection {
         let caller = try req.auth.require(APIUser.self)
         guard let setupID = req.parameters.get("testSetupID"),
             let setup = try await APITestSetup.find(setupID, on: req.db)
-        else { throw Abort(.notFound) }
+        else { throw AppError.notFound(resource: "Test setup") }
 
         try await requireCourseEnrollment(caller: caller, courseID: setup.courseID, db: req.db)
 
@@ -315,7 +315,7 @@ struct TestSetupRoutes: RouteCollection {
         guard let setupID = req.parameters.get("testSetupID"),
             let filename = req.parameters.get("filename"),
             let setup = try await APITestSetup.find(setupID, on: req.db)
-        else { throw Abort(.notFound) }
+        else { throw AppError.notFound(resource: "Test setup") }
 
         try await requireCourseEnrollment(caller: caller, courseID: setup.courseID, db: req.db)
 
@@ -335,7 +335,7 @@ struct TestSetupRoutes: RouteCollection {
         // canonical notebook name. Cached (#1156) — this previously spawned
         // a serialized `unzip` subprocess on the request thread per download.
         let allEntries = await req.application.zipEntryListCache.entries(zipPath: setup.zipPath)
-        guard allEntries.contains(filename) else { throw Abort(.notFound) }
+        guard allEntries.contains(filename) else { throw AppError.notFound(resource: "Support file") }
 
         let props = setup.decodedManifest()
         let testScripts = Set(props?.testSuites.map(\.script) ?? [])
@@ -353,7 +353,7 @@ struct TestSetupRoutes: RouteCollection {
         let zipPath = setup.zipPath
         let extracted = await extractZipEntry(zipPath: zipPath, entryName: filename)
         guard let bytes = extracted else {
-            throw Abort(.notFound)
+            throw AppError.notFound(resource: "Support file")
         }
 
         var headers = HTTPHeaders()
@@ -376,7 +376,7 @@ struct TestSetupRoutes: RouteCollection {
         guard let setupID = req.parameters.get("testSetupID"),
             let setup = try await APITestSetup.find(setupID, on: req.db)
         else {
-            throw Abort(.notFound)
+            throw AppError.notFound(resource: "Test setup")
         }
 
         // Overwriting the setup's notebook on disk is a per-course write: scope

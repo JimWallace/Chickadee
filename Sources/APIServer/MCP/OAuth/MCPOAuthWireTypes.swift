@@ -30,7 +30,7 @@ struct AuthorizeQuery {
             let clientID = req.query[String.self, at: "client_id"],
             let redirectURI = req.query[String.self, at: "redirect_uri"]
         else {
-            throw Abort(.badRequest, reason: "Missing client_id or redirect_uri.")
+            throw AppError.badRequest(reason: "Missing client_id or redirect_uri.")
         }
         self.clientID = clientID
         self.redirectURI = redirectURI

@@ -21,7 +21,7 @@ extension WebRoutes {
         let userID = try user.requireID()
         guard let setupID = req.parameters.get("testSetupID"),
             let setup = try await APITestSetup.find(setupID, on: req.db)
-        else { throw Abort(.notFound) }
+        else { throw AppError.notFound(resource: "Test setup") }
         let back = try await spareReturnPath(req: req, userID: userID)
 
         let assignment: APIAssignment?
@@ -30,7 +30,7 @@ extension WebRoutes {
         } catch is AssignmentSubmissionGateError {
             return req.redirect(to: back + "?spare=\(SpareFlash.closed.rawValue)")
         }
-        guard let assignment else { throw Abort(.notFound) }
+        guard let assignment else { throw AppError.notFound(resource: "Assignment") }
 
         let answer: SpareFlash
         do {
@@ -39,7 +39,7 @@ extension WebRoutes {
             answer = .queued
         } catch let error as CompositeSpares.RequestError {
             switch error {
-            case .notComposite: throw Abort(.notFound)
+            case .notComposite: throw AppError.notFound(resource: "Class composite")
             case .sessionClosed: answer = .closed
             case .noPassingTile: answer = .noTile
             case .inFlight: answer = .grading
