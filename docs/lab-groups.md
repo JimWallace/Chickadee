@@ -795,14 +795,15 @@ is open to TAs. The Sections are where the UW labs come from, and listing the
 group categories would call LEARN on every page load.
 
 - **The controls.** When the course is linked to a LEARN org unit and the
-  deployment has BrightSpace credentials, an instructor sees "From LEARN":
-  - in the "+ Add" menu of a manual set, and below "Create groups" when the
-    course has no set. It confirms, then reads the groups from the Sections
-    of the course.
-  - on a synced set: "Sync now", which reads them at once, and "Stop
-    syncing", which keeps the groups and makes the set manual again.
-  A synced set says where its groups come from and when LEARN last gave
-  them.
+  deployment has BrightSpace credentials, an instructor sees "Read from
+  LEARN":
+  - in the "+ Add" menu of a manual set, which confirms, because it replaces
+    the groups;
+  - below "Create groups" when the course has no set, with no confirm,
+    because nothing is lost.
+  A synced set says where its groups come from and when Chickadee last read
+  them (relative time). It has "Stop syncing", which keeps the groups and
+  makes the set manual again, and "Sync now" while the course is linked.
 - **The routes.** `POST /instructor/groups/source` (`source` is
   `learnSections` or `manual`) and `POST /instructor/groups/sync`, in
   `InstructorDashboardRoutes+GroupSource.swift`. Both write the active
@@ -810,18 +811,31 @@ group categories would call LEARN on every page load.
   other Groups writes do. `CourseGroupStore.setSource` makes the course's set
   when it has none, and changes only the source: the groups and the
   memberships change at the next sync. Choosing the Sections syncs at once.
+  When that first read fails, the route puts the set back as it was, or
+  deletes the set it made, so the groups stay editable and the error is
+  true.
+- **A switch keeps the labs.** `applySync` matches a group made in Chickadee
+  (no external ID) to the LEARN group of the same name, in any letter case,
+  and gives it that external ID. A lab keeps its row, its sessions, its joins
+  and its board when the set switches to LEARN, and no second lab of the
+  same name appears.
+- **A switch ends the join placements.** `setSource` clears
+  `placed_in_group` on every attendance row of the set's groups when the
+  source changes. A placement from before the change is no longer the join's
+  to undo, so Remove keeps a membership that LEARN or the old source gave.
 - **Tests.** `GroupSourceRoutesTests` drives the routes against a stubbed
   LEARN (`app.client`): read from the Sections, "Sync now", "Stop syncing",
-  a course that is not linked, and a TA. The page fixtures render each
-  state for the page guards.
+  a failed first read, a lab made in Chickadee that keeps its session, the
+  join placements, "Sync now" on a manual set, a course that is not linked,
+  and a TA. The page fixtures render each state for the page guards.
 
 Known limits:
 
 - A course whose set reads a group category (from the migration) keeps it
   and can sync it, but the tab cannot choose a category. Choosing the
   Sections replaces it.
-- When a manual set becomes a LEARN set, a manual group that held a session
-  stays, with no members, because LEARN never lists it.
+- When a manual set becomes a LEARN set, a manual group whose name no LEARN
+  Section has, and that held a session, stays with no members.
 
 ## Deferred: what the same model can carry later
 

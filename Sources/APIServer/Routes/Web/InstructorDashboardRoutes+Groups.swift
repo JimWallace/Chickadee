@@ -66,7 +66,7 @@ extension InstructorDashboardRoutes {
             case .groupAdded: "Group added."
             case .groupRemoved: "Group removed, and its students are in no group."
             case .learnSynced: "The groups were read from LEARN."
-            case .learnStopped: "LEARN no longer changes these groups. Edit them here."
+            case .learnStopped: "These groups are no longer read from LEARN. You can edit them here."
             }
         }
     }
@@ -141,7 +141,8 @@ extension InstructorDashboardRoutes {
         }
         return GroupSetPanel(
             id: setID.uuidString, name: set.name, isManual: set.acceptsManualEdits, source: set.source,
-            lastSyncedText: set.lastSyncedAt.map { waterlooDateTimeFormatter().string(from: $0) }, groups: rows,
+            lastSyncedText: set.lastSyncedAt.map { waterlooDateTimeFormatter().string(from: $0) },
+            lastSyncedISO: set.lastSyncedAt.map { iso8601String($0) }, groups: rows,
             studentCount: students.count, ungroupedCount: students.count - counts.values.reduce(0, +))
     }
 

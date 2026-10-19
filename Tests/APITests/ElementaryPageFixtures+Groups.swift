@@ -42,6 +42,7 @@ extension ElementaryPageFixtures {
         var synced = panel(isManual: false, groups: groups)
         synced.source = .learnSections
         synced.lastSyncedText = "Oct 19, 2026, 2:10 PM"
+        synced.lastSyncedISO = "2026-10-19T18:10:00Z"
         let taNote = "Only this course's instructors can change its groups."
         return ElementaryPageFixture(
             typeName: "InstructorGroupsPage",

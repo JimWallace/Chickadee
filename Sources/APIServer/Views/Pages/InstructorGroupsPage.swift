@@ -5,7 +5,7 @@
 // forms that make a set, add or remove a group, and import a CSV file. A
 // student moves between groups on the Students tab. A course linked to LEARN
 // can read its groups from the LEARN Sections instead (slice 6b): the set
-// then shows where its groups come from, "Sync now" and "Stop syncing".
+// then shows where its groups come from, "Stop syncing" and "Sync now".
 
 import Elementary
 
@@ -34,7 +34,7 @@ struct InstructorGroupsPage: HTML {
                 GroupSetSection(
                     csrfToken: page.csrfToken, panel: groupSet, canEdit: canEdit && groupSet.isManual,
                     canChangeSource: canEdit, learnLinked: learnLinked,
-                    readOnlyNote: groupSet.isManual ? readOnlyNote : Self.sourceNote(groupSet))
+                    readOnlyNote: groupSet.isManual ? readOnlyNote : nil)
             } else {
                 NoGroupSetSection(
                     csrfToken: page.csrfToken, courseCode: courseCode, canEdit: canEdit, learnLinked: learnLinked,
@@ -43,16 +43,31 @@ struct InstructorGroupsPage: HTML {
         }
     }
 
-    /// Where a synced set's groups come from, and when LEARN last gave them.
-    static func sourceNote(_ panel: GroupSetPanel) -> String {
-        let origin =
+}
+
+/// Where a synced set's groups come from, and when Chickadee last read them.
+private struct LearnSourceNote: HTML {
+    let panel: GroupSetPanel
+
+    var body: some HTML {
+        p(.class("section-note")) {
             switch panel.source {
-            case .learnSections: "These groups come from the Sections of this course in LEARN"
-            case .learnGroups: "These groups come from a group category in LEARN"
-            case .manual, nil: "These groups come from LEARN"
+            case .learnSections: "Read from the LEARN Sections of this course"
+            case .learnGroups: "Read from a LEARN group category"
+            case .manual, nil: "Read from LEARN"
             }
-        let read = panel.lastSyncedText.map { "Last read \($0)." } ?? "Not read yet."
-        return "\(origin), which updates them every ten minutes. \(read)"
+            if let text = panel.lastSyncedText {
+                ", last "
+                if let iso = panel.lastSyncedISO {
+                    span(.class("js-relative-time"), .data("iso", value: iso)) { text }
+                } else {
+                    text
+                }
+                "."
+            } else {
+                ", not read yet."
+            }
+        }
     }
 }
 
@@ -84,7 +99,13 @@ private struct NoGroupSetSection: HTML {
                         button(.class("btn btn-primary"), .type(.submit)) { "Create groups" }
                     }
                 }
-                if learnLinked { LearnSectionsForm(csrfToken: csrfToken, intro: "Or read the lab sections from LEARN.") }
+                if learnLinked {
+                    form(.method(.post), .action("/instructor/groups/source"), .class("toolbar")) {
+                        CSRFField(token: csrfToken)
+                        input(.type(.hidden), .name("source"), .value("learnSections"))
+                        button(.class("btn"), .type(.submit)) { "Read from LEARN Sections" }
+                    }
+                }
             } else {
                 p(.class("empty")) { "No groups yet." }
                 if let readOnlyNote { p(.class("section-note")) { readOnlyNote } }
@@ -113,20 +134,16 @@ private struct GroupSetSection: HTML {
                         "\(panel.studentCount) students · \(panel.ungroupedCount) in no group"
                     }
                 }
-                if canEdit { GroupAddMenu(learnLinked: learnLinked) }
-                if !panel.isManual && canChangeSource { LearnSyncActions(csrfToken: csrfToken) }
+                if canEdit { GroupAddMenu(csrfToken: csrfToken, learnLinked: learnLinked) }
+                if !panel.isManual && canChangeSource {
+                    LearnSyncActions(csrfToken: csrfToken, learnLinked: learnLinked)
+                }
             }
+            if !panel.isManual { LearnSourceNote(panel: panel) }
             if let readOnlyNote { p(.class("section-note")) { readOnlyNote } }
             if canEdit {
                 addPanel
                 importPanel
-                if learnLinked {
-                    div(.class("add-panel card"), .id("group-learn-panel")) {
-                        LearnSectionsForm(
-                            csrfToken: csrfToken,
-                            intro: "LEARN then replaces these groups and every student's group every ten minutes.")
-                    }
-                }
             }
             if panel.groups.isEmpty {
                 p(.class("empty")) { "No groups yet." }
@@ -191,6 +208,7 @@ private struct GroupSetSection: HTML {
 /// The one "+ Add" menu: a group by name, or groups from a file. Each item
 /// opens its add panel, as on the Students tab.
 private struct GroupAddMenu: HTML {
+    let csrfToken: String
     let learnLinked: Bool
 
     var body: some HTML {
@@ -223,15 +241,19 @@ private struct GroupAddMenu: HTML {
                     }
                 }
                 if learnLinked {
-                    a(
-                        .class("row-menu-item"), .href("#group-learn-panel"), .role("menuitem"),
-                        .data("add-target", value: "group-learn-panel")
+                    form(
+                        .method(.post), .action("/instructor/groups/source"),
+                        .data("confirm", value: "Replace these groups with the LEARN Sections of this course?")
                     ) {
-                        span(.class("item-tile"), .data("kind", value: "link")) { Icon("i-refresh") }
-                        span {
-                            "From LEARN"
-                            br()
-                            span(.class("card-meta")) { "The Sections of this course" }
+                        CSRFField(token: csrfToken)
+                        input(.type(.hidden), .name("source"), .value("learnSections"))
+                        button(.class("row-menu-item"), .type(.submit), .role("menuitem")) {
+                            span(.class("item-tile"), .data("kind", value: "outline")) { Icon("i-refresh") }
+                            span {
+                                "Read from LEARN"
+                                br()
+                                span(.class("card-meta")) { "The LEARN Sections" }
+                            }
                         }
                     }
                 }
@@ -240,46 +262,29 @@ private struct GroupAddMenu: HTML {
     }
 }
 
-/// The form that makes LEARN the source of the groups.
-private struct LearnSectionsForm: HTML {
-    let csrfToken: String
-    let intro: String
-
-    var body: some HTML {
-        form(
-            .method(.post), .action("/instructor/groups/source"), .class("form-stack"),
-            .data("confirm", value: "Replace these groups with the Sections of this course in LEARN?")
-        ) {
-            CSRFField(token: csrfToken)
-            input(.type(.hidden), .name("source"), .value("learnSections"))
-            p(.class("section-note")) { intro }
-            div(.class("toolbar")) {
-                button(.class("btn action-btn"), .type(.submit)) { "Read from LEARN" }
-            }
-        }
-    }
-}
-
-/// A synced set's actions: read it from LEARN now, or keep its groups and
-/// edit them here.
+/// A synced set's actions: stop reading it from LEARN, and read it now while
+/// the course is linked to LEARN.
 private struct LearnSyncActions: HTML {
     let csrfToken: String
+    let learnLinked: Bool
 
     var body: some HTML {
         div(.class("assignment-actions-cell")) {
-            form(.method(.post), .action("/instructor/groups/sync"), .class("inline-form")) {
-                CSRFField(token: csrfToken)
-                button(.class("btn btn-primary"), .type(.submit), .title("Read the groups from LEARN now")) {
-                    "Sync now"
-                }
-            }
             form(
                 .method(.post), .action("/instructor/groups/source"), .class("inline-form"),
-                .data("confirm", value: "Keep these groups and edit them here? LEARN will no longer change them.")
+                .data("confirm", value: "Stop reading these groups from LEARN? You can then edit them here.")
             ) {
                 CSRFField(token: csrfToken)
                 input(.type(.hidden), .name("source"), .value("manual"))
                 button(.class("btn action-btn"), .type(.submit)) { "Stop syncing" }
+            }
+            if learnLinked {
+                form(.method(.post), .action("/instructor/groups/sync"), .class("inline-form")) {
+                    CSRFField(token: csrfToken)
+                    button(.class("btn btn-primary"), .type(.submit), .title("Read the groups from LEARN now")) {
+                        "Sync now"
+                    }
+                }
             }
         }
     }

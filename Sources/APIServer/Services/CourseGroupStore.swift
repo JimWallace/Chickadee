@@ -209,6 +209,10 @@ enum CourseGroupStore {
     /// (`learnSections`). A course with no set gets one. The groups and the
     /// memberships stay as they are: a manual set keeps the groups that LEARN
     /// gave it, and a LEARN set changes at its next sync.
+    ///
+    /// A change of source ends every join placement of the set's groups
+    /// (`placed_in_group`): a membership from before the change is no longer
+    /// the join's to undo.
     @discardableResult
     static func setSource(
         _ source: CourseGroupSource, courseID: UUID, on db: any Database
@@ -216,9 +220,20 @@ enum CourseGroupStore {
         let set =
             try await sets(courseID: courseID, on: db).first
             ?? APICourseGroupSet(courseID: courseID, name: "Lab sections", source: source)
+        let changed = set.id != nil && set.sourceRaw != source.rawValue
         set.sourceRaw = source.rawValue
         set.externalID = nil
         try await set.save(on: db)
+        if changed {
+            let groupIDs = try await groups(inSet: try set.requireID(), includingRemoved: true, on: db).compactMap(\.id)
+            let sessionIDs = try await APIActivitySession.query(on: db).filter(\.$groupID ~~ groupIDs).all()
+                .compactMap(\.id)
+            try await APIActivitySessionAttendance.query(on: db)
+                .filter(\.$sessionID ~~ sessionIDs)
+                .filter(\.$placedInGroup == true)
+                .set(\.$placedInGroup, to: false)
+                .update()
+        }
         return set
     }
 
@@ -244,7 +259,9 @@ enum CourseGroupStore {
     /// goes at the end, a renamed one takes the new name, and a removed one
     /// that LEARN lists again comes back.
     ///
-    /// A group that LEARN no longer lists loses its members. It is removed,
+    /// A group made in Chickadee matches a LEARN group of the same name and
+    /// takes its external id. A group that LEARN no longer lists loses its
+    /// members. It is removed,
     /// as `removeGroup` removes it, only when it has no session: a lab that
     /// held a session keeps its row active, so its joins, its rankings and
     /// its students' class-goal bonus still count (`LabGoalGroups` reads
@@ -258,9 +275,22 @@ enum CourseGroupStore {
         }
         let setID = try set.requireID()
         let existing = try await groups(inSet: setID, includingRemoved: true, on: db)
-        let byExternalID = Dictionary(
+        var byExternalID = Dictionary(
             existing.compactMap { group in group.externalID.map { ($0, group) } },
             uniquingKeysWith: { first, _ in first })
+        // A group made in Chickadee takes the LEARN group of its name, so a
+        // set that switches to LEARN keeps its labs, their sessions and their
+        // joins. An active group wins over a removed one of the same name.
+        var madeHereByName = Dictionary(
+            existing.filter { $0.externalID == nil }.sorted { $0.removedAt == nil && $1.removedAt != nil }
+                .map { ($0.name.lowercased(), $0) },
+            uniquingKeysWith: { first, _ in first })
+        for item in remote where byExternalID[item.externalID] == nil {
+            guard let group = madeHereByName.removeValue(forKey: syncedName(item).lowercased()) else { continue }
+            group.externalID = item.externalID
+            byExternalID[item.externalID] = group
+        }
+        let known = byExternalID
         let listed = Set(remote.map(\.externalID))
         let unlisted = existing.filter { group in
             group.removedAt == nil && !(group.externalID.map(listed.contains) ?? false)
@@ -279,8 +309,8 @@ enum CourseGroupStore {
             for item in ordered where groupIDByExternalID[item.externalID] == nil {
                 let name = syncedName(item)
                 let group: APICourseGroup
-                if let known = byExternalID[item.externalID] {
-                    group = known
+                if let match = known[item.externalID] {
+                    group = match
                     if group.name != name {
                         group.name = name
                         result.renamed += 1
