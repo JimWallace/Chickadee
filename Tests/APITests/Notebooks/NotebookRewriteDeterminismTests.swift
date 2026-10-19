@@ -29,7 +29,8 @@ import Testing
         let object: [String: JSONValue] = [
             "b": .int(1), "a": .object(["z": .null, "y": .array([.object(["d": .bool(true), "c": .string("s")])])]),
         ]
-        let text = try #require(String(bytes: try #require(JSONValue.data(fromObject: object)), encoding: .utf8))
+        let data = try #require(JSONValue.data(fromObject: object))
+        let text = try #require(String(bytes: data, encoding: .utf8))
         #expect(text == #"{"a":{"y":[{"c":"s","d":true}],"z":null},"b":1}"#)
     }
 
@@ -66,7 +67,8 @@ import Testing
             throw IssueRecorded("Both notebooks have a matching template, so both restore.")
         }
         #expect(bytesA == bytesB)
-        #expect(try #require(String(bytes: bytesA, encoding: .utf8)).contains(#"n = {{n}}"#))
+        let text = try #require(String(bytes: bytesA, encoding: .utf8))
+        #expect(text.contains(#"n = {{n}}"#))
     }
 
     /// Documented difference: a number that a `Double` or an `Int` cannot
