@@ -62,7 +62,9 @@ struct SupportFileRow: HTML {
                     attributes: [.type(.checkbox), .class("js-dataset-toggle")] + (file.isDataset ? [.checked] : [])
                         + (isAttached || file.datasetPartCount != nil ? [.disabled] : [])
                         + (isAttached ? [.data("lock", value: "attached")] : []))
-                file.datasetPartCount == nil ? " Per-student sample" : " Per-student part"
+                // One label for a sample and a partition, so it stays true when
+                // the panel repaints a spec that changed after the page loaded.
+                " Per-student data"
             }
             " "
             span(attributes: [.class("dataset-size-field js-dataset-size-field")] + hiddenUnlessSampled) {

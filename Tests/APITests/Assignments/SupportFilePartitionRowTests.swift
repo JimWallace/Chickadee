@@ -55,7 +55,7 @@ import Testing
         #expect(
             html.contains("Split into <span class=\"js-dataset-part-count\">3</span> parts, dealt to students in turn"))
         // A partition is not a sample, so the toggle does not call it one.
-        #expect(html.contains("Per-student part"))
+        #expect(html.contains("Per-student data"))
         #expect(!html.contains("Per-student sample"))
         #expect(!(try openingTag(of: "js-dataset-partition-note", in: html)).contains("hidden"))
         #expect(try openingTag(of: "js-dataset-size-field", in: html).contains("hidden"))
@@ -71,7 +71,7 @@ import Testing
     @Test func aSampledRowHidesTheNoteAndKeepsItsToggle() throws {
         let html = SupportFileRow(file: row(partCount: nil)).render()
         #expect(try openingTag(of: "js-dataset-partition-note", in: html).contains("hidden"))
-        #expect(html.contains("Per-student sample"))
+        #expect(html.contains("Per-student data"))
         #expect(!(try openingTag(of: "js-dataset-toggle", in: html)).contains("disabled"))
     }
 

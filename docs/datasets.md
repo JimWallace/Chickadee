@@ -419,7 +419,7 @@ a disclosure:
 
 ```
 Support file   assignment4_vitaldb_cases.csv                          [Remove]
-               [x] Per-student sample  [ 500 ] rows per student        Saved
+               [x] Per-student data  [ 500 ] rows per student        Saved
 ```
 
 Persisted via `PUT /instructor/:id/datasets` (published) or
@@ -639,7 +639,7 @@ A dataset row carries the derivation step beside its sample size and stratum
 column:
 
 ```
-[x] Per-student sample  [ 500 ] rows per student  balanced across [ ward ]
+[x] Per-student data  [ 500 ] rows per student  balanced across [ ward ]
     blanking [ bp_systolic ] in [ 10 ] % of rows                    Saved
 ```
 
@@ -845,7 +845,7 @@ picker for the two to disagree about.
 **Authoring surfaces:** two, and they agree by construction.
 
 - The **Files-panel control** on both authoring pages: each support-file row
-  carries a "Per-student sample" toggle and a row count, saved in place with no
+  carries a "Per-student data" toggle and a row count, saved in place with no
   page reload. The create page writes through a draft-scoped
   `GET`/`PUT /instructor/new/draft/datasets`, the edit page through the
   published `GET`/`PUT /instructor/:id/datasets`; both pairs share one
