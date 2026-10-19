@@ -42,6 +42,12 @@ enum CompositeContributions {
     ///
     /// The contribution is the first one in suite order. A test script for a
     /// composite reports one; a second is ignored.
+    ///
+    /// For an activity that runs per group, the contribution fills the
+    /// student's slot in the group whose pool dealt it, whenever it is graded
+    /// (docs/lab-groups.md, slice 4). Only the whole class's image covers
+    /// class items: a per-group composite counts toward class goals from
+    /// slice 5.
     @discardableResult
     static func record(
         submission: APISubmission, collection: TestOutcomeCollection, on db: any Database
@@ -62,25 +68,20 @@ enum CompositeContributions {
             db.logger.warning("composite: discarded an invalid contribution from submission \(submissionID)")
             return .discarded
         }
-        guard
-            let slot = try await APICompositeSlot.query(on: db)
-                .filter(\.$assignmentID == assignmentID)
-                .filter(\.$userID == userID)
-                .first()?.slot
+        guard let (pool, slot) = try await CompositePool.dealtSlot(assignmentID: assignmentID, userID: userID, on: db)
         else {
             db.logger.warning("composite: submission \(submissionID) has no dealt slot")
             return .noSlot
         }
 
         let passed = outcome.status == .pass
-        let stored = try await upsert(
-            APICompositeContribution(
-                assignmentID: assignmentID, userID: userID, slot: slot, submissionID: submissionID,
-                submittedAt: submission.submittedAt ?? .distantPast, contribution: contribution, passed: passed),
-            on: db)
-        guard stored else { return .superseded }
+        let row = APICompositeContribution(
+            assignmentID: assignmentID, userID: userID, slot: slot, submissionID: submissionID,
+            submittedAt: submission.submittedAt ?? .distantPast, contribution: contribution, passed: passed)
+        row.groupID = pool.groupID
+        guard try await upsert(row, on: db) else { return .superseded }
 
-        if passed {
+        if passed, pool.groupID == nil {
             // First to cover the slot keeps it, as for every coverage item.
             let item = CompositeSpec.coverageItem(forSlot: slot)
             try await APIClassItemCoverage(
@@ -139,6 +140,7 @@ enum CompositeContributions {
             if try await studentRow().count() > 0 {
                 try await studentRow()
                     .filter(\.$submittedAt <= row.submittedAt)
+                    .set(\.$groupID, to: row.groupID)
                     .set(\.$slot, to: row.slot)
                     .set(\.$submissionID, to: row.submissionID)
                     .set(\.$submittedAt, to: row.submittedAt)

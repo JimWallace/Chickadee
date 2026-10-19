@@ -32,8 +32,23 @@ extension WebRoutes {
         if !isStaff {
             try await req.cachedRequireCourseEnrollment(caller: user, courseID: setup.courseID)
         }
+        // A composite that runs per lab group draws one group's image: the one
+        // staff ask for, or the one a student's slot is in
+        // (docs/lab-groups.md, slice 4).
+        var groupID: UUID?
+        if activity.isPerGroup {
+            if isStaff {
+                groupID = req.query[String.self, at: "group"].flatMap(UUID.init(uuidString:))
+            } else if let userID = user.id {
+                groupID = try await CompositePool.dealtSlot(assignmentID: assignmentID, userID: userID, on: req.db)?
+                    .pool.groupID
+            }
+            guard groupID != nil else { throw Abort(.notFound) }
+        }
         let snapshot = try await CompositeSnapshot.build(
-            .init(assignmentID: assignmentID, testSetupID: setupID, courseID: setup.courseID, spec: spec),
+            .init(
+                assignmentID: assignmentID, testSetupID: setupID, courseID: setup.courseID, spec: spec,
+                groupID: groupID),
             since: req.query[String.self, at: "since"].flatMap { Int64($0) },
             onlyUserID: isStaff ? nil : user.id,
             includeOwners: isStaff && req.query[String.self, at: "present"] != "1",

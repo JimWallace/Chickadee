@@ -486,7 +486,13 @@ because line numbers go out of date.
     scope supersedes the running runs of the other scope
     (`supersedeRunningTournaments`): `setActivity` and the MCP version
     restore. A new writer of `runsPerGroup` must do the same. Remove does
-    not touch a run in progress: its entrants are frozen. A per-group round robin
+    not touch a run in progress: its entrants are frozen.
+  - A class composite of a per-group activity deals each group its own
+    slots (`group_composite_slots`, slice 4a) through `CompositePool`. A
+    reader of slots goes through `CompositePool` (`dealt`, `dealtSlot`),
+    never straight to `composite_slots`, and a reader of the image passes a
+    group to `CompositeSnapshot.Scope`. A lab's tiles cover no class item
+    until slice 5, and a lab's composite has no spares until slice 4b. A per-group round robin
     awards no standings-leader record, and `setActivity` seeds none for it.
   - An activity whose kind compares students (`ActivityKind.comparesStudents`)
     accepts only shared data (`DatasetSpec.isShared`). The rule is in
@@ -509,8 +515,9 @@ because line numbers go out of date.
     writes a `login_attempts` row (scope `join_failure`).
   - `ActivitySessionStore.remove`, from the staff attendance page, sets
     `removed_at` on an attendance row, and deletes the student's rankings in
-    the group: `group_activity_champions`, `group_leaderboard_entries` and
-    their `activity_standings` row for that group.
+    the group: `group_activity_champions`, `group_leaderboard_entries`,
+    their `activity_standings` row for that group, and their
+    `group_composite_slots` row and composite tile in the group.
   - `ActivityAuthoring.setActivity` sets `ClassActivity.runsPerGroup`.
 - **Readers:**
   - The submission gate (`requireOpenGroupSession` in
@@ -524,8 +531,8 @@ because line numbers go out of date.
   - The data export (`gatherGroups`, `gatherSessionJoins`).
 - **Rules** (`docs/lab-groups.md`):
   - A per-group activity has no session window: each group's session is its
-    clock. `ActivityAuthoring` refuses both together, and refuses a class
-    composite.
+    clock. `ActivityAuthoring` refuses both together, and a class composite
+    that has dealt a slot cannot change scope.
   - Only attendance counts: membership does not let a student submit. A
     join from before a session's latest start, or a removed one, does not
     count. But membership limits the join: a member joins only their own

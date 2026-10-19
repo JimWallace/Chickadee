@@ -31,24 +31,26 @@ struct CompositeBoardPresentation {
     /// Every dealt slot, in slot order, then round.
     let holders: [Holder]
 
-    /// The staff board of a class composite, or nil for any other kind.
+    /// The staff board of a class composite, or nil for any other kind. For
+    /// a composite that runs per lab group, `groupID`'s image.
     static func build(
-        setup: APITestSetup, activity: ClassActivity, assignment: APIAssignment?, on db: any Database
+        setup: APITestSetup, activity: ClassActivity, assignment: APIAssignment?, groupID: UUID? = nil,
+        on db: any Database
     ) async throws -> CompositeBoardPresentation? {
         guard activity.kind == .classComposite, let spec = activity.composite, let assignmentID = assignment?.id,
-            let testSetupID = setup.id
+            let testSetupID = setup.id,
+            // A per-group composite with no group chosen shows no image.
+            !(activity.isPerGroup && groupID == nil)
         else { return nil }
         let courseID = setup.courseID
         // `since: .max` asks for the states only, with no pixels.
+        let scope = CompositeSnapshot.Scope(
+            assignmentID: assignmentID, testSetupID: testSetupID, courseID: courseID, spec: spec, groupID: groupID)
         let snapshot = try await CompositeSnapshot.build(
-            .init(assignmentID: assignmentID, testSetupID: testSetupID, courseID: courseID, spec: spec),
-            since: .max, onlyUserID: nil, includeOwners: false, on: db)
+            scope, since: .max, onlyUserID: nil, includeOwners: false, on: db)
         let stateBySlot = Dictionary(snapshot.slots.map { ($0.slot, $0) }) { first, _ in first }
 
-        let dealt = try await APICompositeSlot.query(on: db)
-            .filter(\.$assignmentID == assignmentID)
-            .sort(\.$slot).sort(\.$round)
-            .all()
+        let dealt = try await scope.pool.dealt(on: db).sorted { ($0.slot, $0.round) < ($1.slot, $1.round) }
         let userIDs = dealt.map(\.userID)
         let users = Dictionary(
             try await APIUser.query(on: db).filter(\.$id ~~ userIDs).all().compactMap { user in
@@ -83,7 +85,8 @@ struct CompositeBoardPresentation {
         }
         return CompositeBoardPresentation(
             stage: .board(
-                spec: spec, testSetupID: testSetupID, present: false, pollUntilISO: activity.window?.closesAtISO),
+                spec: spec, testSetupID: testSetupID, present: false, groupID: groupID,
+                pollUntilISO: activity.window?.closesAtISO),
             progressText: "\(snapshot.complete) of \(snapshot.total) \(spec.compositor.slotNoun) complete",
             holders: holders)
     }

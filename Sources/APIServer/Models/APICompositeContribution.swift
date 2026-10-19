@@ -21,6 +21,12 @@ final class APICompositeContribution: Model, @unchecked Sendable {
     @Field(key: "assignment_id")
     var assignmentID: UUID
 
+    /// The lab group whose image the student's slot is in, for a composite
+    /// that runs once per group (docs/lab-groups.md, slice 4); nil for the
+    /// whole class's image.
+    @OptionalField(key: "group_id")
+    var groupID: UUID?
+
     @Field(key: "user_id")
     var userID: UUID
 

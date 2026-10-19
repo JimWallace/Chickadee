@@ -578,6 +578,9 @@ func registerMigrations(on app: Application) {
     app.migrations.add(AddActivityStandingGroup())
     // Lab groups, slice 3d: the group of a tournament run.
     app.migrations.add(AddTournamentRunGroup())
+    // Lab groups, slice 4: each group's composite.
+    app.migrations.add(CreateGroupCompositeSlots())
+    app.migrations.add(AddCompositeContributionGroup())
 
     // ---------------------------------------------------------------------
     // DATA MIGRATIONS. Keep these at the end, and add every new schema
