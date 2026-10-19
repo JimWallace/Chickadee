@@ -29,7 +29,8 @@ on the `mutation-reports` branch for `trend.py`. Scope grew the way the config
 planned — one target at a time, after a green run: RunnerCore (runs 3–5), + Core
 (runs 6–8), + Worker after the 2026-08-25 sweep came back **366 killed / 6
 survived (98%)** and all six survivors were answered the same day. Worker's
-admission was measured by `mutation-baseline-probe.yml`: unprivileged, 20/20
+admission was measured by a baseline-probe workflow (removed in #2719;
+`repeat-test.yml` now runs a selection N times): unprivileged, 20/20
 baseline iterations failed deterministically on the sandbox's `unshare` being
 refused (a container capability — hence `--privileged` on the mutation jobs,
 matching worker-tests); privileged, 20/20 passed at 11–12s flat. The logic tier
