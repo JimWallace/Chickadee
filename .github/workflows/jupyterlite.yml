@@ -20,9 +20,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
+      # The default shallow checkout: every guard below reads committed files
+      # only, and none reads git history.
       - uses: actions/checkout@v7
-        with:
-          fetch-depth: 0
 
       # EVERY step below runs on EVERY event, deliberately.
       #
