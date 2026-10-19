@@ -19,7 +19,8 @@ today.
 | 0 | This design note | draft |
 | 1 | Groups: group sets, groups, memberships; the Groups tab; the CSV import; the Group column on the roster; groups in the data export | built |
 | 2 | Sessions: a session per (activity, group), started and ended from the present page; the submission gate reads the session; attendance by join code at `/join`; presence: a code for every student that changes every 30 seconds, the staff list of who joined, a limit on wrong codes, the "Other network" flag | built |
-| 3 | Rankings per group: leaderboard, standings, the hill, round-robin opponents, tournament runs, the present page per group | not started |
+| 3a | Rankings per group, the leaderboard: `group_leaderboard_entries`, a late result does not rank, the board and the present page per group; other kinds refuse the flag until their slice | built |
+| 3 | Rankings per group, the rest: standings, the hill, round-robin opponents, tournament runs | not started |
 | 4 | The composite per group, and the course gallery of every group's image | not started |
 | 5 | Group goals: the union and the corpus percent per group; a group achievement | not started |
 | 6 | The LEARN source: the existing group-category sweep writes the new tables; a D2L Sections reader; the category picker | not started |
@@ -119,7 +120,11 @@ activity_session_attendance
   UNIQUE(session_id, user_id)
 ```
 
-And one nullable `group_id` column on each ranking table:
+And, per ranking table, a per-group form: slice 3a made the leaderboard's a
+twin table, `group_leaderboard_entries` keyed (assignment, group, student),
+because a column under the existing (assignment, student) key strands a
+student who moves labs. The rest are still a nullable `group_id` in this
+plan:
 `leaderboard_entries`, `activity_standings`, `activity_champions`,
 `match_results`, `tournament_runs`, `composite_slots`,
 `composite_contributions`, `class_item_coverage`, `class_coverage_runs`.
@@ -136,13 +141,12 @@ Nil means course-wide, which is what every existing row is.
    ready. Content is versioned, exported in a course bundle and authored by
    MCP. A session is none of those. Keeping them apart is the same reason the
    window is not the deadline (docs/class-activities.md, slice 8).
-3. **Attendance beats membership.** A student who enters Lab 103's code plays
-   in Lab 103, even if LEARN puts them in Lab 101. The join code is the one
-   thing a TA can control from the front of the room. It also fills a group
-   with no source at all: a student with no group who joins a session becomes a
-   member of that group. That is the manual source that needs no form. Since
-   Presence, only attendance counts: a member who has not typed the code
-   does not play.
+3. **Membership decides the room; attendance decides who plays.** A member
+   of a group joins only that group's session (maintainer decision 4); a TA
+   moves a student who goes to another lab on the Groups tab. A student with
+   no group who joins a session becomes a member of that group: the manual
+   source that needs no form. Since Presence, only attendance counts: a
+   member who has not typed the code does not play.
 4. **The group is written at ingest and never recomputed.** A ranking row
    carries the group it was played in. A student who moves groups later keeps
    their place in the room they played in. This is the house pattern (every
@@ -267,10 +271,13 @@ the Sections reader.
   nothing. A reopen keeps the row and draws a new code secret. Sessions use
   the course's first group set, which in slice 2 is its only one; a start
   that names a group of another set is a 404.
-- Joining records attendance, or moves its time to now on a second join.
+- Joining records attendance, or moves its time to now on a join that moves
+  the student from another session. Typing the code of the session the
+  student already plays in changes nothing, so a submission made before it
+  still ranks when it is graded.
   A student in no group of a manual set becomes a member of the session's
-  group; a member of another group stays where they are and plays in the
-  session they joined. A removed group's session, and a session of an
+  group; a member of another group is refused ("This session is for Lab 103.
+  You are in Lab 101.", maintainer decision 4). A removed group's session, and a session of an
   activity that no longer runs per group, or of an archived course, refuse a
   join (an ended session shows no code to type). Removing a group ends its
   open sessions, and so does turning
@@ -364,14 +371,54 @@ should be able to see it. The maintainer chose best effort on 2026-10-18.
   whether one lab's joins share a network every time, which would make an
   optional refusal per course safe.
 
-### Slice 3: rankings per group
+### Slice 3a: the leaderboard per group (built)
+
+- `group_leaderboard_entries` (`CreateGroupLeaderboardEntries`): one best
+  row per (assignment, group, student), the per-group twin of
+  `leaderboard_entries`. A second table, not a column, so a student who
+  plays in two labs ranks in each, and a course-wide row from before the
+  activity ran per group blocks nothing. `recordLeaderboardEntry` writes a
+  per-group activity's result under the group of the session the student
+  had joined when they submitted (`ActivitySessionStore.sessionAtSubmission`:
+  by the submission's own time, and only a join made before it, so a
+  grading delay costs no student their place). A submission made with no
+  such session open grades and does not rank (decision 1). A retest after
+  the session restarted finds no session and leaves the board as it was.
+  The `highestMetric` class record stays course-wide.
+- `buildLeaderboard` takes a group. `LeaderboardGroupScope` picks it: staff
+  choose with `LeaderboardGroupControl` (`LabGroupSelect`, `?group=`,
+  landing on their own group); a student reads the group whose session they
+  last joined, else one they ranked in, else the one they are a member of,
+  and a student's `?group=` is ignored. A student in no group has no board
+  and a note that sends them to `/join`. The page refreshes while the shown group's session
+  is open. The staff "not ranked" count is the group's members.
+- The present page projects the selected group's board, and its refresh
+  and the leaderboard's Present link keep the group.
+- `ActivityKind.canRunPerGroup` (Core) is the one rule: a leaderboard kind
+  with no champion (Best metric, Beat the instructor). `ActivityAuthoring`
+  refuses the flag on every other kind (`runsPerGroupKindMessage`), the
+  edit page shows the checkbox only for these kinds, `set_activity` keeps a
+  stored flag only for them. `ClassActivity.isPerGroup` (the flag and the
+  kind rule) is what every reader reads: the gate, the session routes, the
+  present panel, the board and ingest. So an older per-group activity of
+  another kind reads as course-wide everywhere at once, and its students
+  are not asked for a code that ranks nowhere. A hill, standings, a bracket and the union
+  would mix the groups until their slices make them per group. A composite
+  keeps its own message.
+- The submission gate refuses only a student who never joined one of the
+  activity's sessions, or whom staff removed (`ActivitySessionStore.hasJoined`).
+  After the session a student joined closes, their submission grades and
+  does not rank (decision 1). A member of a group who missed their lab stays
+  refused.
+- The staff board's submission count stays the student's total for the
+  activity, not per group (maintainer decision 6).
+- Tests: `LeaderboardPerGroupTests`.
+
+### Slice 3: rankings per group, the rest
 
 - `group_id` on `leaderboard_entries`, `activity_standings`,
   `activity_champions`, `match_results` and `tournament_runs`. The ingest
   writers resolve the student's session group once and stamp it.
-- The submission gate refuses only a student who never joined a run of the
-  activity's sessions. After the session they joined closes, a submission
-  grades, as decision 1 says, and the ingest writers skip its ranking rows.
 - The hill's unique key becomes (assignment, group). `jobOpponent` stages the
   group's champion. `jobOpponentSet` lists the group's participants.
 - The leaderboard, standings and bracket pages filter by group. The present
@@ -456,6 +503,21 @@ The three questions the first draft left open are settled.
    would rank nowhere, and the room is where the activity happens. Presence
    (2026-10-18) widens this: no student submits without the code, a member
    of the group included.
+4. **A member joins only their own group's session** (later on 2026-10-18).
+   The registrar assigns the labs, so membership is reliable, and a door
+   into every lab weakens presence. A student in no group may still join
+   any session. A student who goes to another lab is moved by a TA on the
+   Groups tab (a synced set cannot be edited, so that case waits for a
+   "let in" action or slice 6). A student moved to another lab cannot type
+   the old lab's code again. A student in no group whose first join was in
+   the wrong lab is a member of that lab now: a TA presses Remove on that
+   session, which undoes the placement, or moves them on the Groups tab.
+5. **A student who joined still submits after the close.** The result
+   grades and does not rank, as decision 1 says. Only a student who never
+   joined, or whom staff removed, is refused.
+6. **The staff submission count is the student's total** for the activity,
+   not per group. Only a student who played in two labs shows a
+   difference, and a per-group count needs the session of each submission.
 
 One consequence of decision 1 to carry into slice 2: because each session is
 the lab's assigned slot, a session may later take a planned open and close

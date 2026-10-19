@@ -118,7 +118,7 @@ extension WebRoutes {
         } else {
             try await requireCourseRole(caller: user, courseID: setup.courseID, atLeast: .ta, db: req.db)
         }
-        guard setup.decodedManifest()?.activity?.runsPerGroup == true,
+        guard setup.decodedManifest()?.activity?.isPerGroup == true,
             let assignment = try await assignmentByTestSetupID(setupID, on: req.db)
         else { throw Abort(.notFound) }
         guard let groupID = rawGroupID.flatMap(UUID.init(uuidString:)),

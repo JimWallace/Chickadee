@@ -311,7 +311,9 @@ struct SetActivityTool: ContentTool {
                 // the kind is unchanged and seeds the starter otherwise.
                 .withComposite(input.composite)
                 .withRunsPerGroup(
-                    input.runsPerGroup ?? (current?.kind == block.kind ? current?.runsPerGroup == true : false))
+                    input.runsPerGroup
+                        ?? (current?.kind == block.kind && block.kind.canRunPerGroup
+                            ? current?.runsPerGroup == true : false))
         }
         do {
             try await ActivityAuthoring.setActivity(
@@ -335,7 +337,7 @@ struct SetActivityTool: ContentTool {
             opensAt: stored?.activity?.window?.opensAtISO,
             closesAt: stored?.activity?.window?.closesAtISO,
             composite: stored?.activity?.composite,
-            runsPerGroup: stored?.activity?.runsPerGroup == true)
+            runsPerGroup: stored?.activity?.isPerGroup == true)
     }
 
     /// The visibility the call means: the given value, or, when absent, the

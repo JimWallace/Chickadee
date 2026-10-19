@@ -232,6 +232,9 @@ struct ActivityEditFacts: Encodable {
     /// True when the activity runs once per lab group (docs/lab-groups.md):
     /// the session form's checkbox. Defaulted like `composite`.
     var runsPerGroup: Bool = false
+    /// True when the kind can run per group (`ActivityKind.canRunPerGroup`),
+    /// so the checkbox renders. Defaulted like `composite`.
+    var canRunPerGroup: Bool = false
 
     static func make(setup: APITestSetup, on db: any Database) async throws -> ActivityEditFacts {
         let activity = setup.decodedManifest()?.activity
@@ -269,7 +272,8 @@ struct ActivityEditFacts: Encodable {
             windowClosesAtLocal: dueAtLocalInputString(activity?.window?.closesAt),
             composite: composite,
             showsVisibilityToggle: activity?.kind != .classComposite,
-            runsPerGroup: activity?.runsPerGroup == true)
+            runsPerGroup: activity?.runsPerGroup == true,
+            canRunPerGroup: activity?.kind.canRunPerGroup == true)
     }
 }
 

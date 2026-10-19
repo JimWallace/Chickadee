@@ -39,7 +39,8 @@ enum ActivitySessionStore {
     /// The session `userID` plays in at `now`: the open session of this
     /// assignment they most recently joined, or nil. A join from before a
     /// session's latest start does not count: it was a join to an earlier
-    /// lab. A student whom staff removed does not count either.
+    /// lab. A student whom staff removed does not count either, nor a join
+    /// after `now`.
     static func currentSession(
         assignmentID: UUID, userID: UUID, now: Date = Date(), on db: any Database
     ) async throws -> APIActivitySession? {
@@ -50,10 +51,41 @@ enum ActivitySessionStore {
             .filter(\.$sessionID ~~ open.compactMap(\.id))
             .all()
         let current = attended.filter { row in
-            open.contains { row.counts(in: $0) }
+            row.joinedAt <= now && open.contains { row.counts(in: $0) }
         }
         guard let latest = current.max(by: { $0.joinedAt < $1.joinedAt }) else { return nil }
         return open.first { $0.id == latest.sessionID }
+    }
+
+    /// The session a submission was made in: the one the student played in
+    /// when they submitted, by the submission's own time, so a grading delay
+    /// costs no student their place. Nil when the submission is unknown or
+    /// was made with no session open.
+    static func sessionAtSubmission(
+        testSetupID: String, userID: UUID, submissionID: String, on db: any Database
+    ) async throws -> APIActivitySession? {
+        guard let submission = try await APISubmission.find(submissionID, on: db),
+            let submittedAt = submission.submittedAt,
+            let assignmentID = try await APIAssignment.query(on: db)
+                .filter(\.$testSetupID == testSetupID)
+                .first()?.id
+        else { return nil }
+        return try await currentSession(
+            assignmentID: assignmentID, userID: userID, now: submittedAt, on: db)
+    }
+
+    /// Whether the student has joined any session of the assignment by
+    /// code, in any run, and staff did not remove them since: what the
+    /// submission gate asks once the student is past the room
+    /// (docs/lab-groups.md, decision 1).
+    static func hasJoined(assignmentID: UUID, userID: UUID, on db: any Database) async throws -> Bool {
+        let sessionIDs = try await sessions(assignmentID: assignmentID, on: db).compactMap(\.id)
+        guard !sessionIDs.isEmpty else { return false }
+        return try await APIActivitySessionAttendance.query(on: db)
+            .filter(\.$userID == userID)
+            .filter(\.$sessionID ~~ sessionIDs)
+            .filter(\.$removedAt == nil)
+            .count() > 0
     }
 
     // MARK: - Writes
@@ -127,7 +159,7 @@ enum ActivitySessionStore {
 
     /// Whether the assignment's activity runs once per lab group.
     static func runsPerGroup(_ assignment: APIAssignment, on db: any Database) async throws -> Bool {
-        try await APITestSetup.find(assignment.testSetupID, on: db)?.decodedManifest()?.activity?.runsPerGroup
+        try await APITestSetup.find(assignment.testSetupID, on: db)?.decodedManifest()?.activity?.isPerGroup
             == true
     }
 }

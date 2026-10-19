@@ -17,8 +17,9 @@ enum AssignmentSubmissionGateError: AbortError, Equatable {
     /// false and would send a student looking for an extension that is not
     /// the thing standing in their way.
     case activityClosed(closedAtText: String)
-    /// A per-group activity (docs/lab-groups.md) whose student has joined no
-    /// open session. Every student joins by the code on the screen.
+    /// A per-group activity (docs/lab-groups.md) whose student has never
+    /// joined one of its sessions. Every student joins by the code on the
+    /// screen.
     case notInGroupSession
 
     var status: HTTPResponseStatus {

@@ -151,7 +151,7 @@ enum ActivityAuthoring {
             throw AppError.badRequest(reason: violation)
         }
         try await setManifestActivity(setup: setup, to: activity, on: db)
-        if activity?.runsPerGroup != true {
+        if activity?.isPerGroup != true {
             try await ActivitySessionStore.closeOpenSessions(testSetupID: setup.requireID(), on: lockDB)
         }
         if let activity, activity.kind.aggregation == .leaderboard {
@@ -222,6 +222,10 @@ enum ActivityAuthoring {
         guard activity.kind.aggregation != .composite else {
             throw AppError.badRequest(reason: runsPerGroupCompositeMessage)
         }
+        // Only a kind whose ranking is per group (slice 3a).
+        guard activity.kind.canRunPerGroup else {
+            throw AppError.badRequest(reason: runsPerGroupKindMessage)
+        }
         guard activity.window == nil else {
             throw AppError.badRequest(reason: runsPerGroupWithWindowMessage)
         }
@@ -234,6 +238,8 @@ enum ActivityAuthoring {
         "This course has no lab groups yet, so make them on the Groups tab first."
     static let runsPerGroupCompositeMessage =
         "A class composite cannot run once per lab group yet."
+    static let runsPerGroupKindMessage =
+        "Only a Best metric or Beat the instructor activity can run once per lab group yet."
     static let runsPerGroupWithWindowMessage =
         "Each group's session is the clock of a per-group activity, so clear the session window first."
 

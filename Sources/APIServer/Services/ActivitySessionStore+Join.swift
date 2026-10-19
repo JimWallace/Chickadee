@@ -19,10 +19,11 @@ extension ActivitySessionStore {
     static let joinFailureWindow: TimeInterval = 600
 
     /// Joins `userID` to the open session whose code at `now` (or just
-    /// before) is `code`. A second join moves the student back to this
-    /// session from any other they joined since. `network` is the network
-    /// part of the student's address (`ClientNetwork.prefix`), nil when
-    /// unknown.
+    /// before) is `code`. A student who is a member of a group joins only
+    /// that group's session; a student in no group joins any, and becomes a
+    /// member of it in a manual set. A second join of the session the student
+    /// is in changes nothing. `network` is the network part of the student's
+    /// address (`ClientNetwork.prefix`), nil when unknown.
     @discardableResult
     static func join(
         code: String, userID: UUID, network: String? = nil, now: Date = Date(), on db: any Database
@@ -72,6 +73,21 @@ extension ActivitySessionStore {
             .filter(\.$setID == setID)
             .filter(\.$userID == userID)
             .first()
+        // A member joins only their own group's session; a TA moves a
+        // student who goes to another lab on the Groups tab.
+        if let membership, membership.groupID != session.groupID {
+            let own = try await APICourseGroup.find(membership.groupID, on: db)?.name ?? "another lab"
+            throw ActivitySessionError.otherGroup(session: group.name, own: own)
+        }
+        // Typing the code of the session the student already plays in changes
+        // nothing: the join time stays, so a submission made before it still
+        // ranks when it is graded (`sessionAtSubmission`).
+        if let existing, existing.counts(in: session),
+            try await currentSession(assignmentID: session.assignmentID, userID: userID, now: now, on: db)?.id
+                == sessionID
+        {
+            return session
+        }
         let placed = set.acceptsManualEdits && membership == nil
         if placed {
             try await CourseGroupStore.setMembership(userID: userID, groupID: group.requireID(), in: set, on: db)

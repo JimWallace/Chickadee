@@ -570,6 +570,8 @@ func registerMigrations(on app: Application) {
     // The network part of the presenter's and each join's address
     // (docs/lab-groups.md, "Presence").
     app.migrations.add(AddActivitySessionNetworks())
+    // Lab groups, slice 3a: a per-group leaderboard's best rows.
+    app.migrations.add(CreateGroupLeaderboardEntries())
 
     // ---------------------------------------------------------------------
     // DATA MIGRATIONS. Keep these at the end, and add every new schema
