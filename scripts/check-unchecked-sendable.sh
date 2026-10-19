@@ -25,8 +25,9 @@ cd "$repo_root"
 # A comment that mentions the attribute is not a declaration; code_matches
 # skips it. Fluent models are exempt (see above): `Model` is a conformance on
 # the declaration line, before the attribute, with any others between.
-offenders=$(code_matches '@unchecked[[:space:]]+Sendable' Sources/ Tests/ \
-  | grep -vE '[:,][[:space:]]*Model[[:space:]]*,.*@unchecked[[:space:]]+Sendable' || true)
+hits=$(code_matches '@unchecked[[:space:]]+Sendable' Sources/ Tests/)
+offenders=$(printf '%s\n' "$hits" \
+  | grep -vE '[:,][[:space:]]*Model[[:space:]]*,.*@unchecked[[:space:]]+Sendable' | sed '/^$/d' || true)
 
 if [ -n "$offenders" ]; then
   echo "ERROR: @unchecked Sendable outside a Fluent model, with or without a comment."

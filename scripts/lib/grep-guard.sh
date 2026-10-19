@@ -10,7 +10,8 @@
 # paths after `--` are literal file paths whose hits are dropped.
 #
 # Prints nothing when nothing matches, so a guard tests the result with
-# `[ -n "$hits" ]`.
+# `[ -n "$hits" ]`. Returns 2 when a PATH does not exist, so a guard that
+# assigns the result under `set -e` stops instead of passing.
 code_matches() {
   local pattern="$1"
   shift
@@ -20,6 +21,18 @@ code_matches() {
     shift
   done
   [ "$#" -gt 0 ] && shift
+  # A missing path would read as "no match" and pass the guard, so fail.
+  if [ "${#paths[@]}" -eq 0 ]; then
+    echo "code_matches: no path to read" >&2
+    return 2
+  fi
+  local path
+  for path in "${paths[@]}"; do
+    if [ ! -e "$path" ]; then
+      echo "code_matches: $path does not exist; the guard reads nothing" >&2
+      return 2
+    fi
+  done
   local hits
   hits=$(grep -rnE --include='*.swift' --include='*.js' -- "$pattern" "${paths[@]}" 2>/dev/null \
     | grep -vE '^[^:]+:[0-9]+:[[:space:]]*//' || true)

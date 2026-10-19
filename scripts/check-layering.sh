@@ -84,5 +84,4 @@ if [ -n "$new_symbols" ]; then
   exit 1
 fi
 
-
 echo "check-layering: OK (no shared file names a symbol defined only under Routes/)"
