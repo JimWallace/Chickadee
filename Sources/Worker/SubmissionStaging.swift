@@ -28,9 +28,7 @@ func freeSpaceMB(at path: URL) -> Int? {
 /// as a proxy for a job's peak workspace footprint — accurate enough for
 /// the monotonically-growing workDir we care about.
 func directorySizeBytes(at directory: URL) -> Int? {
-    var isDirectory: ObjCBool = false
-    guard FileManager.default.fileExists(atPath: directory.path, isDirectory: &isDirectory),
-        isDirectory.boolValue
+    guard let status = try? Stat(FilePath(directory.path)), status.type == .directory
     else {
         return nil
     }

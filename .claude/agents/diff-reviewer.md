@@ -41,6 +41,9 @@ You review one uncommitted change to Chickadee against the project rules.
 - Course rules: no code-only course lookup.
 - Coding conventions: no force unwraps outside tests, explicit error enums,
   one primary type per file, file name matches the type.
+- Memory safety: each new `unsafe` mark needs a comment that says why no safe
+  API exists. Flag a mark where swift-system, NIO or the standard library has
+  a safe API for the same call.
 - View rules: no inline `<script>` or `on*=` attributes (the CSP blocks
   them), no `.style(` or `HTMLRaw(` in an Elementary view, and a fixture in
   `ElementaryPageFixtures` for every new page type.

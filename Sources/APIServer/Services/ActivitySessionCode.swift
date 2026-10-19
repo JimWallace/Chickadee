@@ -22,7 +22,8 @@ enum ActivitySessionCode {
 
     /// A new random secret for a session that starts or starts again.
     static func newSecret() -> String {
-        SymmetricKey(size: .bits256).withUnsafeBytes { Data($0) }.base64EncodedString()
+        // 256 bits from the system generator, which is cryptographically secure.
+        Data((0..<32).map { _ in UInt8.random(in: .min ... .max) }).base64EncodedString()
     }
 
     /// The code on the projector at `date`.

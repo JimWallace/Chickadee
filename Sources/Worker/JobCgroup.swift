@@ -4,6 +4,7 @@
 // JobCgroups.swift for how the runner finds the delegated subtree.
 
 import Foundation
+import SystemPackage
 
 /// Why a job cgroup could not be created.
 enum JobCgroupError: Error, Equatable, CustomStringConvertible {
@@ -13,9 +14,9 @@ enum JobCgroupError: Error, Equatable, CustomStringConvertible {
     var description: String {
         switch self {
         case .cannotCreate(let path, let code):
-            "cannot create \(path): \(String(cString: strerror(code)))"
+            "cannot create \(path): \(Errno(rawValue: code))"
         case .cannotWrite(let path, let code):
-            "cannot write \(path): \(String(cString: strerror(code)))"
+            "cannot write \(path): \(Errno(rawValue: code))"
         }
     }
 }
@@ -28,13 +29,13 @@ struct JobCgroup: Sendable, Equatable {
     /// written in place, never through a temporary file and a rename.
     func write(_ value: String, to file: String) throws(JobCgroupError) {
         let path = directory.appendingPathComponent(file).path
-        let descriptor = open(path, O_WRONLY)
-        guard descriptor >= 0 else { throw .cannotWrite(path, errno: errno) }
-        defer { close(descriptor) }
-        let bytes = Array(value.utf8)
-        guard bytes.withUnsafeBufferPointer({ Foundation.write(descriptor, $0.baseAddress, $0.count) }) == bytes.count
-        else {
-            throw .cannotWrite(path, errno: errno)
+        do {
+            let descriptor = try FileDescriptor.open(FilePath(path), .writeOnly)
+            defer { try? descriptor.close() }
+            _ = try descriptor.writeAll(value.utf8)
+        } catch {
+            // swift-system reports every failure as an `Errno`.
+            throw .cannotWrite(path, errno: (error as? Errno)?.rawValue ?? EIO)
         }
     }
 
@@ -75,13 +76,15 @@ struct JobCgroup: Sendable, Equatable {
         try? write("1", to: "cgroup.kill")
         var lastError: Int32 = 0
         for _ in 0..<20 {
-            if rmdir(directory.path) == 0 { return }
+            // A cgroup is removed with rmdir(2) only: FileManager would try to
+            // delete its control files first. No safe API exists for it.
+            if unsafe rmdir(directory.path) == 0 { return }
             lastError = errno
             if lastError == ENOENT { return }
             try? await Task.sleep(for: .milliseconds(50))
         }
         writeStructuredRunnerLog(
             event: "job_cgroup_not_removed",
-            fields: ["path": directory.path, "error": String(cString: strerror(lastError))])
+            fields: ["path": directory.path, "error": Errno(rawValue: lastError).description])
     }
 }

@@ -19,6 +19,7 @@
 // and the cache and isolation middlewares registered before it still decorate
 // it on the way back.
 
+import SystemPackage
 import Vapor
 
 struct PrecompressedAssetMiddleware: AsyncMiddleware {
@@ -45,9 +46,7 @@ struct PrecompressedAssetMiddleware: AsyncMiddleware {
         }
 
         let compressedPath = publicDirectory + path.dropFirst() + ".br"
-        var isDirectory: ObjCBool = false
-        guard FileManager.default.fileExists(atPath: compressedPath, isDirectory: &isDirectory),
-            !isDirectory.boolValue
+        guard let status = try? Stat(FilePath(compressedPath)), status.type != .directory
         else {
             return try await next.respond(to: request)
         }

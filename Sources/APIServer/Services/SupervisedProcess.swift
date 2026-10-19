@@ -112,7 +112,7 @@ final class SupervisedProcess: Sendable {
         if let log = try? FileDescriptor.open(path, .writeOnly, options: options, permissions: [.ownerReadWrite]) {
             return log
         }
-        return try FileDescriptor.open("/dev/null", .writeOnly, options: [.closeOnExec])
+        return try FileDescriptor.open(FilePath("/dev/null"), .writeOnly, options: [.closeOnExec])
     }
 
     /// A second descriptor for the same file, created close-on-exec in one
