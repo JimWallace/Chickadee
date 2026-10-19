@@ -36,9 +36,9 @@ extension CourseAdminRoutes {
             var defaultGradingMode: String
         }
         let user = try req.auth.require(APIUser.self)
-        let courseID = try await req.requireActiveCourseID(for: user, action: "managing sections")
-        try await requireCourseWriteAccess(
-            caller: user, courseID: courseID, atLeast: .instructor, db: req.db)
+        let courseID = try await req.requireActiveCourseForWrite(
+            user, atLeast: .instructor, action: "managing sections"
+        ).requireID()
         let body = try await req.decodeContent(CreateSectionBody.self)
         let name = body.name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !name.isEmpty else {
@@ -67,10 +67,8 @@ extension CourseAdminRoutes {
             var sectionIDs: [String]
         }
         let user = try req.auth.require(APIUser.self)
-        let courseState = try await req.resolveActiveCourse(for: user)
-        guard let courseID = courseState.activeCourseUUID else { return .ok }
-        try await requireCourseWriteAccess(
-            caller: user, courseID: courseID, atLeast: .instructor, db: req.db)
+        guard let course = try await req.activeCourseForWrite(user, atLeast: .instructor) else { return .ok }
+        let courseID = try course.requireID()
         let body = try await req.decodeContent(ReorderBody.self)
         let uuids = body.sectionIDs.compactMap { UUID(uuidString: $0) }
         guard uuids.count == body.sectionIDs.count, !uuids.isEmpty else {

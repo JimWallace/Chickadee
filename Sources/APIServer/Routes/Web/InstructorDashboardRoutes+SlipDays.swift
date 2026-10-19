@@ -99,16 +99,12 @@ extension InstructorDashboardRoutes {
     @Sendable
     func saveSlipDaySettings(req: Request) async throws -> Response {
         let user = try req.auth.require(APIUser.self)
-        let courseState = try await req.resolveActiveCourse(for: user)
-        guard let courseUUID = courseState.activeCourseUUID,
-            let course = try await APICourse.find(courseUUID, on: req.db)
-        else {
-            return req.redirect(to: "/instructor/slip-days?error=course")
-        }
         // Course-wide policy → per-course instructor floor (admin bypass,
         // archived-course block), like the MCP guide.
-        try await requireCourseWriteAccess(
-            caller: user, courseID: courseUUID, atLeast: .instructor, db: req.db)
+        guard let course = try await req.activeCourseForWrite(user, atLeast: .instructor) else {
+            return req.redirect(to: "/instructor/slip-days?error=course")
+        }
+        let courseUUID = try course.requireID()
 
         struct SettingsForm: Content {
             /// "on" when the checkbox is ticked; absent otherwise.
@@ -157,16 +153,12 @@ extension InstructorDashboardRoutes {
     @Sendable
     func adjustSlipDayBudget(req: Request) async throws -> Response {
         let user = try req.auth.require(APIUser.self)
-        let courseState = try await req.resolveActiveCourse(for: user)
-        guard let courseUUID = courseState.activeCourseUUID,
-            let course = try await APICourse.find(courseUUID, on: req.db)
-        else {
-            return req.redirect(to: "/instructor/slip-days?error=course")
-        }
         // A per-student budget adjustment is an individual accommodation,
         // sibling to the extension grant → `.ta` floor.
-        try await requireCourseWriteAccess(
-            caller: user, courseID: courseUUID, atLeast: .ta, db: req.db)
+        guard let course = try await req.activeCourseForWrite(user, atLeast: .ta) else {
+            return req.redirect(to: "/instructor/slip-days?error=course")
+        }
+        let courseUUID = try course.requireID()
 
         struct AdjustForm: Content {
             let userID: String
@@ -212,16 +204,12 @@ extension InstructorDashboardRoutes {
     @Sendable
     func refundSlipDaySpendAction(req: Request) async throws -> Response {
         let user = try req.auth.require(APIUser.self)
-        let courseState = try await req.resolveActiveCourse(for: user)
-        guard let courseUUID = courseState.activeCourseUUID,
-            let course = try await APICourse.find(courseUUID, on: req.db)
-        else {
-            return req.redirect(to: "/instructor/slip-days?error=course")
-        }
         // A refund is an individual accommodation, sibling to the extension
         // revoke → `.ta` floor.
-        try await requireCourseWriteAccess(
-            caller: user, courseID: courseUUID, atLeast: .ta, db: req.db)
+        guard let course = try await req.activeCourseForWrite(user, atLeast: .ta) else {
+            return req.redirect(to: "/instructor/slip-days?error=course")
+        }
+        let courseUUID = try course.requireID()
 
         struct RefundForm: Content {
             let spendID: String

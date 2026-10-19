@@ -371,11 +371,10 @@ struct GitHubCourseRoutes: RouteCollection {
         guard try await APIGitHubApp.query(on: req.db).count() > 0 else {
             throw AppError.notFound(resource: "GitHub App")
         }
-        guard let courseID = try await req.resolveActiveCourse(for: user).activeCourseUUID else {
+        guard let course = try await req.activeCourseForWrite(user, atLeast: .instructor) else {
             throw AppError.badRequest(reason: "No active course.")
         }
-        try await requireCourseWriteAccess(caller: user, courseID: courseID, atLeast: .instructor, db: req.db)
-        return courseID
+        return try course.requireID()
     }
 
     /// What the App's installation on the bound organization was granted, or

@@ -151,8 +151,9 @@ extension InstructorDashboardRoutes {
     @Sendable
     func createGroupSet(req: Request) async throws -> Response {
         let user = try req.auth.require(APIUser.self)
-        let courseID = try await req.requireActiveCourseID(for: user, action: "managing groups")
-        try await requireCourseWriteAccess(caller: user, courseID: courseID, atLeast: .instructor, db: req.db)
+        let courseID = try await req.requireActiveCourseForWrite(
+            user, atLeast: .instructor, action: "managing groups"
+        ).requireID()
         // Slice 1 shows one set per course, so a second is not made.
         if try await !CourseGroupStore.sets(courseID: courseID, on: req.db).isEmpty {
             return req.redirect(to: "/instructor/groups")

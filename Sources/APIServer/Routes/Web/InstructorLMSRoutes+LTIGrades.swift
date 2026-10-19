@@ -84,11 +84,11 @@ extension InstructorLMSRoutes {
     @Sendable
     func saveLTIGradeTransport(req: Request) async throws -> Response {
         let user = try req.auth.require(APIUser.self)
-        guard let courseID = try await req.resolveActiveCourse(for: user).activeCourseUUID,
-            let course = try await APICourse.find(courseID, on: req.db)
-        else { return req.redirect(to: "/instructor/lti-grades?error=course") }
         // The transport is a course setting: instructors only, like the org-unit binding.
-        try await requireCourseWriteAccess(caller: user, courseID: courseID, atLeast: .instructor, db: req.db)
+        guard let course = try await req.activeCourseForWrite(user, atLeast: .instructor) else {
+            return req.redirect(to: "/instructor/lti-grades?error=course")
+        }
+        let courseID = try course.requireID()
 
         struct TransportForm: Content {
             let transport: String
@@ -113,10 +113,10 @@ extension InstructorLMSRoutes {
     @Sendable
     func pushAllLTIGrades(req: Request) async throws -> Response {
         let user = try req.auth.require(APIUser.self)
-        guard let courseID = try await req.resolveActiveCourse(for: user).activeCourseUUID,
-            let course = try await APICourse.find(courseID, on: req.db)
-        else { return req.redirect(to: "/instructor/lti-grades?error=course") }
-        try await requireCourseWriteAccess(caller: user, courseID: courseID, atLeast: .ta, db: req.db)
+        guard let course = try await req.activeCourseForWrite(user, atLeast: .ta) else {
+            return req.redirect(to: "/instructor/lti-grades?error=course")
+        }
+        let courseID = try course.requireID()
         guard course.usesLTIGrades else { return req.redirect(to: "/instructor/lti-grades?error=transport") }
 
         let setupIDs = try await APIAssignment.query(on: req.db)
@@ -144,10 +144,10 @@ extension InstructorLMSRoutes {
     @Sendable
     func linkLTIStudents(req: Request) async throws -> Response {
         let user = try req.auth.require(APIUser.self)
-        guard let courseID = try await req.resolveActiveCourse(for: user).activeCourseUUID,
-            let course = try await APICourse.find(courseID, on: req.db)
-        else { return req.redirect(to: "/instructor/lti-grades?error=course") }
-        try await requireCourseWriteAccess(caller: user, courseID: courseID, atLeast: .instructor, db: req.db)
+        guard let course = try await req.activeCourseForWrite(user, atLeast: .instructor) else {
+            return req.redirect(to: "/instructor/lti-grades?error=course")
+        }
+        let courseID = try course.requireID()
         guard course.usesLTIGrades else { return req.redirect(to: "/instructor/lti-grades?error=transport") }
         guard let membershipsURL = course.ltiMembershipsURL, let platformID = course.ltiPlatformID,
             let platform = try await APILTIPlatform.find(platformID, on: req.db), platform.enabled

@@ -385,9 +385,9 @@ extension WebRoutes {
         // rather than failing when the course is read-only.
         var canSaveToAssignment = false
         if args.isAuthor {
-            let denial = try await evaluateCourseWrite(
+            let verdict = try await evaluateCourseWrite(
                 user: args.user, courseID: setup.courseID, atLeast: .ta, db: req.db)
-            canSaveToAssignment = denial == nil
+            canSaveToAssignment = verdict.denial == nil
         }
         // Staff-only view switch, offered only where the two views differ — an
         // assignment with no personalization reads identically in both, so the

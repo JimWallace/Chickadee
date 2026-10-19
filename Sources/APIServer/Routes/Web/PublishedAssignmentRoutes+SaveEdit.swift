@@ -36,7 +36,7 @@ extension PublishedAssignmentRoutes {
         // Save that changes one is refused before anything is written.
         let isInstructor =
             try await evaluateCourseWrite(
-                user: user, courseID: assignment.courseID, atLeast: .instructor, db: req.db) == nil
+                user: user, courseID: assignment.courseID, atLeast: .instructor, db: req.db).denial == nil
         if !isInstructor {
             let changed = instructorOnlyFieldsChanged(
                 form: form, title: title, due: due, starts: starts,

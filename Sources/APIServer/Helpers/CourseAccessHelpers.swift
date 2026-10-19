@@ -206,10 +206,26 @@ enum CourseWriteDenial: Equatable {
     case archived
 }
 
+/// The verdict of `evaluateCourseWrite`: the course it loaded, or why the
+/// write is denied. A caller that goes on to change the course uses the
+/// loaded row and does not load it again.
+enum CourseWriteVerdict {
+    /// The write is allowed. The course is nil only for an admin, who
+    /// bypasses the policy, when no course has the ID.
+    case allowed(APICourse?)
+    case denied(CourseWriteDenial)
+
+    /// Why the write is denied, or nil when it is allowed.
+    var denial: CourseWriteDenial? {
+        guard case .denied(let denial) = self else { return nil }
+        return denial
+    }
+}
+
 /// Evaluates the course write policy — admin bypass, per-course role floor,
-/// archived-course block — and returns why the write is denied, or nil when
-/// it is allowed. The ONE place the policy lives; the web and MCP wrappers
-/// only map the denial to their surface's error type.
+/// archived-course block — and returns the loaded course or why the write is
+/// denied. The ONE place the policy lives; the web and MCP wrappers only map
+/// the denial to their surface's error type.
 ///
 /// Role-floor convention (#417 Slice E / #1113 — every call site states its
 /// floor explicitly, there is no default):
@@ -222,16 +238,16 @@ enum CourseWriteDenial: Equatable {
 ///     sections, archive, BrightSpace binding.
 func evaluateCourseWrite(
     user: APIUser, courseID: UUID, atLeast minimum: CourseRole, db: any Database
-) async throws -> CourseWriteDenial? {
-    guard !user.isAdmin else { return nil }
-    guard let userID = user.id else { return .notEnrolled }
+) async throws -> CourseWriteVerdict {
+    guard !user.isAdmin else { return .allowed(try await APICourse.find(courseID, on: db)) }
+    guard let userID = user.id else { return .denied(.notEnrolled) }
     guard let role = try await courseRole(of: userID, inCourse: courseID, db: db) else {
-        return .notEnrolled
+        return .denied(.notEnrolled)
     }
-    guard role >= minimum else { return .roleTooLow(held: role, required: minimum) }
-    guard let course = try await APICourse.find(courseID, on: db) else { return .courseMissing }
-    guard !course.isArchived else { return .archived }
-    return nil
+    guard role >= minimum else { return .denied(.roleTooLow(held: role, required: minimum)) }
+    guard let course = try await APICourse.find(courseID, on: db) else { return .denied(.courseMissing) }
+    guard !course.isArchived else { return .denied(.archived) }
+    return .allowed(course)
 }
 
 /// Authorizes a *write* to a per-course resource (the web wrapper over
@@ -248,17 +264,21 @@ func evaluateCourseWrite(
 /// course can't drive a write against another by URL — the per-course
 /// authorization the `/instructor` group middleware (which only sees the
 /// caller's active course) can't enforce. See docs/multi-course-roles.md.
+///
+/// Returns the course that the check loaded. It is nil only for an admin when
+/// no course has the ID.
+@discardableResult
 func requireCourseWriteAccess(
     caller: APIUser, courseID: UUID, atLeast minimum: CourseRole, db: any Database
-) async throws {
+) async throws -> APICourse? {
     switch try await evaluateCourseWrite(user: caller, courseID: courseID, atLeast: minimum, db: db) {
-    case nil:
-        return
-    case .notEnrolled, .roleTooLow:
+    case .allowed(let course):
+        return course
+    case .denied(.notEnrolled), .denied(.roleTooLow):
         throw AppError.forbidden(action: "change this course")
-    case .courseMissing:
+    case .denied(.courseMissing):
         throw AppError.notFound(resource: "Course")
-    case .archived:
+    case .denied(.archived):
         throw AppError.forbidden(action: "change an archived course, which is read-only")
     }
 }
