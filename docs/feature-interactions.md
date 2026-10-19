@@ -472,7 +472,8 @@ because line numbers go out of date.
   - The round robin of a per-group activity plays the students in the
     challenger's session (`chooseClassmates`), and its standings row carries
     the session's group (`activity_standings.group_id`, slice 3c). A reader
-    of the standings passes a group to `rankedStandings`; the badge signal
+    of the standings passes a group to `rankedStandings` (nil reads only the
+    whole class's rows, never a lab's); the badge signal
     ranks a student in the group of their own row. A per-group round robin
     awards no standings-leader record, and `setActivity` seeds none for it.
   - An activity whose kind compares students (`ActivityKind.comparesStudents`)

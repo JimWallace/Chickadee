@@ -481,8 +481,9 @@ should be able to see it. The maintainer chose best effort on 2026-10-18.
   before the activity ran per group has no group: it is in no lab's
   standings, and that student's `standing` signal ranks them against every
   row until they play in a session. Turning the flag off leaves each row's
-  group on it, so the course-wide standings rank rows that were each played
-  in one lab, until each student submits again.
+  group on it, and the class standings read only rows with no group, so a
+  lab's row leaves the class board (and the standings-leader record) until
+  that student submits again.
 - A retest of a standing's own submission that finds no session (after a
   reopen, or after a Remove) deletes that standing: the retest voided the
   matches it counted.

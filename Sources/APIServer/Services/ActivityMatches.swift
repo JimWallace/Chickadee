@@ -451,15 +451,17 @@ private func recomputeStanding(
 
 /// The standings, best first: average match score, then wins, then matches
 /// played, then the earlier row. With `groupID`, one lab group's standings;
-/// without, every row.
+/// without, the whole class's rows only, so a lab's rows left from when the
+/// activity ran per group never mix into the class standings.
 func activityStandings(
     testSetupID: String, groupID: UUID? = nil, on db: any Database
 ) async throws
     -> [APIActivityStanding]
 {
-    let query = APIActivityStanding.query(on: db).filter(\.$testSetupID == testSetupID)
-    if let groupID { query.filter(\.$groupID == groupID) }
-    return try await query.all()
+    try await APIActivityStanding.query(on: db)
+        .filter(\.$testSetupID == testSetupID)
+        .filter(\.$groupID == groupID)
+        .all()
         .sorted { a, b in
             if a.averageScore != b.averageScore { return a.averageScore > b.averageScore }
             if a.wins != b.wins { return a.wins > b.wins }

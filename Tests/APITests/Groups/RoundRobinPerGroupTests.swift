@@ -181,6 +181,23 @@ import VaporTesting
         }
     }
 
+    @Test func aLabsRowsStayOffTheClassStandingsAfterTheFlagGoesOff() async throws {
+        try await withApp(app) { _ in
+            let f = try await fixture()
+            try await join(f, group: f.labA, userID: f.ada)
+            try await join(f, group: f.labA, userID: f.ben)
+            try await play(f, userID: f.ada, id: "rrg_a7")
+            try await play(f, userID: f.ben, id: "rrg_b7")
+            #expect(try await standing(f.ben)?.groupID == f.labA)
+
+            _ = try await ActivityAuthoring.setActivity(
+                setup: f.setup, to: ClassActivity(kind: .roundRobin), on: app.db)
+            let classStandings = try await rankedStandings(
+                testSetupID: setupID, courseID: f.setup.courseID, on: app.db)
+            #expect(classStandings.isEmpty, "a lab's row is not a class row")
+        }
+    }
+
     @Test func aRemovedStudentLeavesTheGroupsStandings() async throws {
         try await withApp(app) { _ in
             let f = try await fixture()
