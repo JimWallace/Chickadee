@@ -9,6 +9,33 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.732] - 2026-10-19
+
+### Added
+
+- **Lab groups (slice 3c): the round robin per group.** A Round robin activity can now run once per lab group. A challenger plays only the students in the session they joined, each lab has its own standings on the leaderboard page and the projector, and a submission made with no session open grades and leaves the standings as they were. See `docs/lab-groups.md`.
+
+
+## [0.5.731] - 2026-10-19
+
+### Fixed
+
+- **The MCP role can now use course content items.** `deploy/sql/mcp-least-privilege-role.sql` grants `SELECT, INSERT, UPDATE, DELETE` on `course_content_items` to `chickadee_mcp`. Before this, a deployment with a dedicated MCP database pool (`MCP_DATABASE_USER`) failed every content-item tool (`list_content_items`, `create_content_item`, `update_content_item`, `delete_content_item`, `reorder_content_items`, `reorder_section_items`) with "permission denied". `create_assignment`, `clone_assignment` and `set_assignment_course_section` failed too, because they read the table to put the new item last in its section. The table holds no student data. Operators who use the dedicated pool must re-run section 2 of the SQL file.
+- **A guard test for the MCP role grants.** `MCPAuthoringGrantCoverageTests` reads the Fluent models that the MCP tool files name and fails when a table they use has no grant in the SQL file. A table that the code reaches only on the owner pool is listed in the test, with the reason.
+
+### Fixed
+
+- **Three MCP tools work with the dedicated MCP database pool.** With `MCP_DATABASE_USER` set, `clone_assignment` failed when the source had a reference solution, `create_assignment` and `clone_assignment` did not record version 1, and `get_suite` never showed the starter run. Each of these steps used a table or rows that the `chickadee_mcp` role cannot use, so they now run on the owner pool, as the personalization seed already does. A new test stand-in, `MCPRoleDatabase`, models the role from the SQL file, so the tests run these tools as the role would.
+- **Version 1 of an MCP-created assignment keeps its language.** `create_assignment` recorded version 1 before it declared the language, so a restore to version 1 removed the language, and for an upload-only language also the submission mode. The language is now declared first.
+
+
+## [0.5.730] - 2026-10-19
+
+### Added
+
+- **Lab groups (slice 3b): the hill per group.** A Beat the champion activity can now run once per lab group. Each lab has its own hill: a challenger plays the champion of the group whose session they joined, a submission made with no session open moves no hill, and the leaderboard page and the projector show the hill of the group they show. See `docs/lab-groups.md`.
+
+
 ## [0.5.729] - 2026-10-19
 
 ### Added

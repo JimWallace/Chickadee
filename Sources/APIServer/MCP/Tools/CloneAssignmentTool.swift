@@ -144,7 +144,7 @@ struct CloneAssignmentTool: ContentTool {
                 directories: AuthoringDirectories(
                     setups: context.request.application.testSetupsDirectory,
                     submissions: context.request.application.submissionsDirectory),
-                on: context.db)
+                on: context.db, ownerDB: context.mainDB)
         } catch let error as AssignmentAuthoringError {
             switch error {
             case .setupCopyFailed(let reason):

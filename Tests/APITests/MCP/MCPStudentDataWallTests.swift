@@ -50,14 +50,8 @@ import Testing
 
     private static let boundaryFile = "MCPStudentDataBoundary.swift"
 
-    private func swiftFiles(in dir: URL) throws -> [URL] {
-        try FileManager.default
-            .contentsOfDirectory(at: dir, includingPropertiesForKeys: nil)
-            .filter { $0.pathExtension == "swift" }
-    }
-
     @Test func toolSurfaceReferencesStudentModelsOnlyThroughTheBoundary() throws {
-        let files = try swiftFiles(in: Self.toolsDirectory)
+        let files = try swiftFiles(under: Self.toolsDirectory)
         #expect(!files.isEmpty)  // sanity: the directory resolved
         for file in files where file.lastPathComponent != Self.boundaryFile {
             let source = try String(contentsOf: file, encoding: .utf8)
@@ -78,7 +72,7 @@ import Testing
     /// student-data model any more than a tool may.
     @Test func transportAndResourceLayersReferenceNoStudentModels() throws {
         for dir in Self.additionalContentDirectories {
-            for file in try swiftFiles(in: dir) {
+            for file in try swiftFiles(under: dir) {
                 let source = try String(contentsOf: file, encoding: .utf8)
                 for model in Self.forbiddenModels {
                     #expect(
@@ -109,7 +103,7 @@ import Testing
     @Test func identityModelsConfinedToTheAuthorizationLayer() throws {
         let directories = [Self.toolsDirectory] + Self.additionalContentDirectories
         for dir in directories {
-            for file in try swiftFiles(in: dir)
+            for file in try swiftFiles(under: dir)
             where !Self.identityAllowlist.contains(file.lastPathComponent) {
                 let source = try String(contentsOf: file, encoding: .utf8)
                 for model in Self.identityModels {
@@ -144,7 +138,7 @@ import Testing
     // writes, preview_personalization materializes through its own path).
     @Test func solutionNotebookResolverRestrictedToGetSolution() throws {
         let allowed = "GetSolutionTool.swift"
-        for file in try swiftFiles(in: Self.toolsDirectory)
+        for file in try swiftFiles(under: Self.toolsDirectory)
         where file.lastPathComponent != allowed {
             let source = try String(contentsOf: file, encoding: .utf8)
             // Match the call site, not a doc-comment mention of the resolver.
