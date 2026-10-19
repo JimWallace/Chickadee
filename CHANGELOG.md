@@ -9,6 +9,31 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.752] - 2026-10-19
+
+### Changed
+
+- **Typed reads of notebook headers.** A new `Core` type, `NotebookHeader`,
+  reads the kernel names and the `nbformat` key from a notebook with
+  `JSONDecoder`. It replaces `JSONSerialization` and `as?` casts at four
+  sniff sites: the language derivation at upload, the notebook-functions scan,
+  the worker's submission language sniff and the raw-submission extension
+  guess. The personalization result parse and the runner log capture also
+  decode typed values now. The notebook save guard stays on
+  `JSONSerialization`, because it must reject invalid JSON. The sniffs differ
+  from before in three edge cases: invalid JSON in a part that is not read no
+  longer stops the sniff, UTF-32 input with a byte-order mark is not read, and
+  the first of two duplicate keys wins.
+
+### Changed
+
+- **Smaller server and runner binaries, again.** The CI image build now also removes the symbol table from each release binary. The server binary goes from 171 MB to 121 MB and the runner from 80 MB to 64 MB, which makes each deploy pull about 10 MB less (compressed). The `debug-symbols-<tag>` artifact keeps the symbols, so a crash backtrace gets its function names when gdb loads that file.
+
+### Fixed
+
+- **Correct binary sizes for 0.5.748.** The 0.5.748 entry gave sizes that were not measured on the CI build. In CI, that change took the server binary from 301 MB to 171 MB and the runner from 98 MB to 80 MB, and each deploy pulls about 48 MB less (compressed).
+
+
 ## [0.5.751] - 2026-10-19
 
 ### Changed
