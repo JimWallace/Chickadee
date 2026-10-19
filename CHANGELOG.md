@@ -9,6 +9,13 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.741] - 2026-10-19
+
+### Added
+
+- **Lab groups (slice 4c): every lab's image.** The staff leaderboard of a Class composite that runs once per lab group now ends with "Every lab's image": one image per lab whose session has ended, side by side. See `docs/lab-groups.md`.
+
+
 ## [0.5.740] - 2026-10-19
 
 ### Added
