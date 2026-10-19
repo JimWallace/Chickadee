@@ -83,7 +83,7 @@ struct SetAssignmentLanguageTool: ContentTool {
         let language: AssignmentLanguage?
         do {
             language = try parseLanguageChoice(input.language)
-        } catch let error as AppError {
+        } catch {
             throw MCPToolError.invalidArguments(detail: error.reason)
         }
         // Which language an assignment is decides how every generated test

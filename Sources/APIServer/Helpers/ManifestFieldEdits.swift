@@ -298,7 +298,7 @@ let noLanguageChoice = "none"
 
 /// Parses a creation-time or edit-time language choice into the language to
 /// record — nil for `noLanguageChoice`.
-func parseLanguageChoice(_ raw: String) throws -> AssignmentLanguage? {
+func parseLanguageChoice(_ raw: String) throws(AppError) -> AssignmentLanguage? {
     let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
     if trimmed == noLanguageChoice { return nil }
     guard let parsed = AssignmentLanguage(rawValue: trimmed) else {

@@ -128,7 +128,7 @@ struct TestSetupRoutes: RouteCollection {
         // disk indefinitely.  (Subprocess — thread pool, #1158.)
         do {
             try await validateZipUploadSize(zipPath: zipPath)
-        } catch let error as ZipUploadValidationError {
+        } catch {
             try? FileManager.default.removeItem(atPath: zipPath)
             throw AppError.unprocessable(reason: String(describing: error))
         }
