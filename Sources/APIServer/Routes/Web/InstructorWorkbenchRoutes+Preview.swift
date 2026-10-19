@@ -62,7 +62,7 @@ extension InstructorWorkbenchRoutes {
         -> WorkbenchPreviewStudent
     {
         guard let student = students.first(where: { $0.token == token }) else {
-            throw Abort(.notFound, reason: "No student of this course has that link.")
+            throw AppError.notFoundReason(reason: "No student of this course has that link.")
         }
         return student
     }
@@ -77,7 +77,9 @@ extension InstructorWorkbenchRoutes {
     @Sendable
     func previewGuide(req: Request) async throws -> Response {
         let (_, setup) = try await loadAssignmentAndSetupForStaffRead(req)
-        guard let token = req.query[String.self, at: "as"] else { throw Abort(.badRequest) }
+        guard let token = req.query[String.self, at: "as"] else {
+            throw AppError.badRequest(reason: "Choose a student to preview.")
+        }
         let student = try await Self.previewStudent(token: token, courseID: setup.courseID, on: req.db)
         let guide = try await WebRoutes().previewGuide(req: req, setup: setup, student: student)
         let response = Response(status: .ok)

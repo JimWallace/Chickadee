@@ -57,7 +57,7 @@ extension InstructorDashboardRoutes {
     func feedbackReviewPage(req: Request) async throws -> Response {
         let assignment = try await loadAssignmentForWrite(req, atLeast: .ta)
         guard let setup = try await APITestSetup.find(assignment.testSetupID, on: req.db) else {
-            throw Abort(.notFound)
+            throw AppError.notFound(resource: "Test setup")
         }
         let latest = try await ReflectionFeedbackService.latestStudentSubmissions(for: assignment, on: req.db)
         let rows = try await ReflectionFeedbackService.ensureRows(
@@ -134,7 +134,7 @@ extension InstructorDashboardRoutes {
                 .filter(\.$handle == handle)
                 .first()
         else {
-            throw Abort(.notFound)
+            throw AppError.notFound(resource: "Feedback record")
         }
         let text = body.feedback ?? ""
 
@@ -172,7 +172,7 @@ extension InstructorDashboardRoutes {
             }
             return req.redirect(to: "\(pageURL)?notice=Draft+for+\(handle)+saved")
         default:
-            throw Abort(.badRequest)
+            throw AppError.badRequest(reason: "Unknown review action.")
         }
     }
 

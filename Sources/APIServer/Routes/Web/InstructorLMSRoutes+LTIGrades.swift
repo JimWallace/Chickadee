@@ -94,7 +94,7 @@ extension InstructorLMSRoutes {
             let transport: String
         }
         guard let transport = LTIGradeTransport(rawValue: try await req.decodeContent(TransportForm.self).transport)
-        else { throw Abort(.badRequest, reason: "Choose a grade route.") }
+        else { throw AppError.badRequest(reason: "Choose a grade route.") }
         if transport == .ags {
             guard course.ltiPlatformID != nil, course.ltiLineItemsURL != nil else {
                 return req.redirect(to: "/instructor/lti-grades?error=service")

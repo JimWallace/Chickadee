@@ -28,10 +28,10 @@ extension MCPOAuthRoutes {
             let client = try await MCPOAuthClient.query(on: req.db)
                 .filter(\.$clientID == query.clientID).first()
         else {
-            throw Abort(.badRequest, reason: "Unknown client_id.")
+            throw AppError.badRequest(reason: "Unknown client_id.")
         }
         guard client.redirectURIs.contains(query.redirectURI) else {
-            throw Abort(.badRequest, reason: "redirect_uri is not registered for this client.")
+            throw AppError.badRequest(reason: "redirect_uri is not registered for this client.")
         }
 
         // The Authorize button POSTs here and the server 303s to the client's
@@ -147,8 +147,7 @@ extension MCPOAuthRoutes {
                 .filter(\.$tokenHash == tokenHash).first(),
             record.expiresAt > Date()
         else {
-            throw Abort(
-                .badRequest,
+            throw AppError.badRequest(
                 reason: "This authorization request has expired or already been used. "
                     + "Restart the connection to try again.")
         }
@@ -159,8 +158,7 @@ extension MCPOAuthRoutes {
             try await SingleUseRecord.burn(
                 on: req.db, table: MCPConsentRequest.schema, hashColumn: "token_hash", hash: tokenHash)
         else {
-            throw Abort(
-                .badRequest,
+            throw AppError.badRequest(
                 reason: "This authorization request has expired or already been used. "
                     + "Restart the connection to try again.")
         }
@@ -173,7 +171,7 @@ extension MCPOAuthRoutes {
                 .filter(\.$clientID == record.clientID).first(),
             client.redirectURIs.contains(record.redirectURI)
         else {
-            throw Abort(.badRequest, reason: "Invalid client or redirect_uri.")
+            throw AppError.badRequest(reason: "Invalid client or redirect_uri.")
         }
         let state = record.state
         // The surface is fixed by the frozen consent record's scope (its
@@ -191,7 +189,7 @@ extension MCPOAuthRoutes {
             let user = try await APIUser.find(record.userID, on: req.db),
             try await surface.permits(user, db: req.db)
         else {
-            throw Abort(.forbidden, reason: "Only \(surface.permittedRoleLabel) may authorize agents.")
+            throw AppError.forbiddenReason(reason: "Only \(surface.permittedRoleLabel) may authorize agents.")
         }
         let scopes = resolveScopes(record.scope, ceiling: surface.scopeCeiling)
         guard !scopes.isEmpty, !record.codeChallenge.isEmpty, record.codeChallengeMethod == "S256" else {

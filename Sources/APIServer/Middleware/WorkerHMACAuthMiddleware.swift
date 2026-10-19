@@ -25,7 +25,7 @@ struct WorkerHMACAuthMiddleware: AsyncMiddleware {
 
         guard !sharedSecret.isEmpty else {
             request.logger.warning("Worker HMAC auth: RUNNER_SHARED_SECRET is not configured.")
-            throw Abort(.unauthorized, reason: "Worker auth is not configured.")
+            throw AppError.unauthorized(reason: "Worker auth is not configured.")
         }
 
         let timestampHeader = try request.requireWorkerHeader(WorkerHMACSigning.Header.timestamp)
@@ -35,12 +35,12 @@ struct WorkerHMACAuthMiddleware: AsyncMiddleware {
         let workerID = request.headers.first(name: WorkerHMACSigning.Header.workerID)
 
         guard let timestamp = Int64(timestampHeader) else {
-            throw Abort(.unauthorized, reason: "Invalid worker timestamp.")
+            throw AppError.unauthorized(reason: "Invalid worker timestamp.")
         }
 
         let now = Int64(Date().timeIntervalSince1970)
         guard abs(now - timestamp) <= maxClockSkewSeconds else {
-            throw Abort(.unauthorized, reason: "Worker request timestamp is outside the accepted window.")
+            throw AppError.unauthorized(reason: "Worker request timestamp is outside the accepted window.")
         }
 
         let nonceKey = (workerID ?? "_anonymous") + ":" + nonce
@@ -50,7 +50,7 @@ struct WorkerHMACAuthMiddleware: AsyncMiddleware {
             on: request.db
         )
         guard wasInserted else {
-            throw Abort(.unauthorized, reason: "Replay detected.")
+            throw AppError.unauthorized(reason: "Replay detected.")
         }
 
         let headers = WorkerHMACSigning.SignedHeaders(
@@ -68,7 +68,7 @@ struct WorkerHMACAuthMiddleware: AsyncMiddleware {
                 secret: sharedSecret
             )
         else {
-            throw Abort(.unauthorized, reason: "Invalid worker signature.")
+            throw AppError.unauthorized(reason: "Invalid worker signature.")
         }
 
         let response = try await next.respond(to: request)
@@ -143,7 +143,7 @@ enum WorkerNonceReplayGuard {
 private extension Request {
     func requireWorkerHeader(_ name: String) throws -> String {
         guard let value = headers.first(name: name), !value.isEmpty else {
-            throw Abort(.unauthorized, reason: "Missing worker auth header: \(name)")
+            throw AppError.unauthorized(reason: "Missing worker auth header: \(name)")
         }
         return value
     }

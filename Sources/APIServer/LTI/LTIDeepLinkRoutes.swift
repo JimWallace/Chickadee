@@ -206,8 +206,8 @@ struct LTIDeepLinkRoutes: RouteCollection {
 
     // MARK: - Helpers
 
-    static let requestGone = Abort(
-        .notFound, reason: "This LMS request has expired or was already answered. Open the LMS content picker again.")
+    static let requestGone = AppError.notFoundReason(
+        reason: "This LMS request has expired or was already answered. Open the LMS content picker again.")
 
     private static func renderPicker(
         ticket: String, course: APICourse, acceptMultiple: Bool, error: String?, req: Request

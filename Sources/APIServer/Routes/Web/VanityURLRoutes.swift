@@ -59,11 +59,11 @@ struct VanityURLRoutes: RouteCollection {
             let courseCode = req.parameters.get("courseCode"),
             let slug = req.parameters.get("assignmentSlug")
         else {
-            throw Abort(.notFound)
+            throw AppError.notFound(resource: "Assignment")
         }
 
         guard let course = try await findActiveCourse(byKey: courseCode, viewer: user.id, on: req.db) else {
-            throw Abort(.notFound)
+            throw AppError.notFound(resource: "Assignment")
         }
 
         let courseID = try course.requireID()
@@ -82,7 +82,7 @@ struct VanityURLRoutes: RouteCollection {
                 .filter(\.$course.$id == courseID)
                 .count() > 0
             guard enrolled else {
-                throw Abort(.notFound)
+                throw AppError.notFound(resource: "Assignment")
             }
         }
 
@@ -92,7 +92,7 @@ struct VanityURLRoutes: RouteCollection {
                 .filter(\.$slug == slug)
                 .first()
         else {
-            throw Abort(.notFound)
+            throw AppError.notFound(resource: "Assignment")
         }
 
         return assignment

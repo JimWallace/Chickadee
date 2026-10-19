@@ -18,12 +18,12 @@ extension WebRoutes {
     @Sendable
     func notebookGuide(req: Request) async throws -> Response {
         let user = try req.auth.require(APIUser.self)
-        guard let userID = user.id else { throw Abort(.unauthorized) }
+        guard let userID = user.id else { throw AppError.unauthenticated }
         guard
             let setupID = req.parameters.get("testSetupID"),
             let setup = try await APITestSetup.find(setupID, on: req.db)
         else {
-            throw Abort(.notFound)
+            throw AppError.notFound(resource: "Test setup")
         }
         try await req.cachedRequireCourseEnrollment(caller: user, courseID: setup.courseID)
         // The notebook source's gate: a student may not read a closed lab they
@@ -34,9 +34,9 @@ extension WebRoutes {
             !(try await isAssignmentEffectivelyOpen(assignment, for: user, req: req)),
             !(try await studentHasOpenedAssignment(assignment: assignment, userID: userID, on: req.db))
         {
-            throw Abort(.forbidden)
+            throw AppError.forbidden(action: "read the guide for an assignment that is not open")
         }
-        guard let manifest = setup.decodedManifest() else { throw Abort(.notFound) }
+        guard let manifest = setup.decodedManifest() else { throw AppError.notFound(resource: "Assignment manifest") }
 
         let latest = try await APISubmission.query(on: req.db)
             .filter(\.$testSetupID == setupID)

@@ -69,8 +69,8 @@ struct MCPRoutes: RouteCollection {
             // authenticates the caller and populates `request.mcpPrincipal` (or
             // rejects with 401/403) before dispatch ever runs.
             guard let principal = req.mcpPrincipal else {
-                throw Abort(
-                    .unauthorized, reason: "MCP request reached the transport without an authenticated principal.")
+                throw AppError.unauthorized(
+                    reason: "MCP request reached the transport without an authenticated principal.")
             }
             let context = ToolContext(
                 request: req,
@@ -107,7 +107,7 @@ struct MCPRoutes: RouteCollection {
         // are unused by the stateless model — there's no session to resume or
         // delete — so both stay 405.
         // https://modelcontextprotocol.io/specification/2025-11-25/basic/transports
-        throw Abort(.methodNotAllowed)
+        throw AppError.methodNotAllowed(reason: "The MCP endpoint accepts POST requests only.")
     }
 
     // MARK: - validate_assignment live progress stream

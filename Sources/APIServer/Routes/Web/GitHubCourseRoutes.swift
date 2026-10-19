@@ -56,7 +56,9 @@ struct GitHubCourseRoutes: RouteCollection {
     @Sendable
     func page(req: Request) async throws -> Response {
         let user = try req.auth.require(APIUser.self)
-        guard let app = try await APIGitHubApp.query(on: req.db).first() else { throw Abort(.notFound) }
+        guard let app = try await APIGitHubApp.query(on: req.db).first() else {
+            throw AppError.notFound(resource: "GitHub App")
+        }
         let courseState = try await req.resolveActiveCourse(for: user)
         var course: APICourse?
         if let courseID = courseState.activeCourseUUID {
@@ -283,7 +285,7 @@ struct GitHubCourseRoutes: RouteCollection {
         let courseID = try await Self.requireInstructorCourse(req)
         let body = try await req.decodeContent(TemplateBody.self)
         guard let setup = try await APITestSetup.find(body.testSetupID, on: req.db), setup.courseID == courseID
-        else { throw Abort(.notFound) }
+        else { throw AppError.notFound(resource: "Test setup") }
         let existing = try await APIGitHubAssignmentTemplate.query(on: req.db)
             .filter(\.$testSetupID == body.testSetupID).first()
         let templateID = body.templateID.flatMap { Int64($0) }
@@ -366,9 +368,11 @@ struct GitHubCourseRoutes: RouteCollection {
     /// App is registered. Course structure, so the per-course instructor floor.
     private static func requireInstructorCourse(_ req: Request) async throws -> UUID {
         let user = try req.auth.require(APIUser.self)
-        guard try await APIGitHubApp.query(on: req.db).count() > 0 else { throw Abort(.notFound) }
+        guard try await APIGitHubApp.query(on: req.db).count() > 0 else {
+            throw AppError.notFound(resource: "GitHub App")
+        }
         guard let courseID = try await req.resolveActiveCourse(for: user).activeCourseUUID else {
-            throw Abort(.badRequest, reason: "No active course.")
+            throw AppError.badRequest(reason: "No active course.")
         }
         try await requireCourseWriteAccess(caller: user, courseID: courseID, atLeast: .instructor, db: req.db)
         return courseID

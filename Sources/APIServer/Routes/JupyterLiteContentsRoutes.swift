@@ -57,7 +57,7 @@ struct JupyterLiteContentsRoutes: RouteCollection {
         let cleanRel = try scopedRelativePath(for: caller, requested: relativePath, isStaff: isStaff)
         let targetURL = baseURL.appendingPathComponent(cleanRel).standardizedFileURL
         guard targetURL.path.hasPrefix(baseURL.path) else {
-            throw Abort(.forbidden)
+            throw AppError.forbidden(action: "open files outside your own folder")
         }
         if let userRoot = try userRootPath(for: caller, isStaff: isStaff) {
             let userRootURL = baseURL.appendingPathComponent(userRoot, isDirectory: true).standardizedFileURL
@@ -65,7 +65,7 @@ struct JupyterLiteContentsRoutes: RouteCollection {
                 targetURL.path == userRootURL.path
                 || targetURL.path.hasPrefix(userRootURL.path + "/")
             guard withinUserRoot else {
-                throw Abort(.forbidden)
+                throw AppError.forbidden(action: "open files outside your own folder")
             }
         }
 
@@ -98,7 +98,7 @@ struct JupyterLiteContentsRoutes: RouteCollection {
         }
 
         guard fm.fileExists(atPath: targetURL.path) else {
-            throw Abort(.notFound)
+            throw AppError.notFound(resource: "File")
         }
 
         let attributes = attributesForItem(url: targetURL, fileManager: fm)
@@ -147,10 +147,10 @@ struct JupyterLiteContentsRoutes: RouteCollection {
             ? baseURL
             : baseURL.appendingPathComponent(cleanDir).standardizedFileURL
         guard directoryURL.path.hasPrefix(baseURL.path) else {
-            throw Abort(.forbidden)
+            throw AppError.forbidden(action: "open files outside your own folder")
         }
         guard fileManager.fileExists(atPath: directoryURL.path), isDirectory(url: directoryURL) else {
-            throw Abort(.notFound)
+            throw AppError.notFound(resource: "Folder")
         }
 
         let attributes = attributesForItem(url: directoryURL, fileManager: fileManager)
@@ -230,7 +230,7 @@ struct JupyterLiteContentsRoutes: RouteCollection {
             return nil
         }
         guard let userID = caller.id else {
-            throw Abort(.unauthorized)
+            throw AppError.unauthenticated
         }
         return "users/\(userID.uuidString.lowercased())"
     }
@@ -258,6 +258,6 @@ struct JupyterLiteContentsRoutes: RouteCollection {
         if clean == userRoot || clean.hasPrefix(userRoot + "/") {
             return clean
         }
-        throw Abort(.forbidden)
+        throw AppError.forbidden(action: "open files outside your own folder")
     }
 }

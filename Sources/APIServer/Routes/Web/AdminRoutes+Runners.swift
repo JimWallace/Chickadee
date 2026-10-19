@@ -33,7 +33,7 @@ extension AdminRoutes {
     @Sendable
     func runnerDetail(req: Request) async throws -> HTMLResponse<AdminRunnerPage> {
         guard let runnerID = req.parameters.get("runnerID"), !runnerID.isEmpty else {
-            throw Abort(.notFound)
+            throw AppError.notFound(resource: "Runner")
         }
 
         let worker = try await resolveWorkerRow(req: req, runnerID: runnerID)
@@ -102,7 +102,7 @@ extension AdminRoutes {
                 .sort(\.$recordedAt, .descending)
                 .first()
         else {
-            throw Abort(.notFound)
+            throw AppError.notFound(resource: "Runner")
         }
         let processedCount = try await APISubmission.query(on: req.db)
             .filter(\.$workerID == runnerID)

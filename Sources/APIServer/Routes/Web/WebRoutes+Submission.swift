@@ -166,7 +166,7 @@ extension WebRoutes {
             let setupID = req.parameters.get("testSetupID"),
             let setup = try await APITestSetup.find(setupID, on: req.db)
         else {
-            throw Abort(.notFound)
+            throw AppError.notFound(resource: "Test setup")
         }
         // Block cross-tenant info disclosure: an authenticated student
         // shouldn't be able to learn that a setupID exists in a course
@@ -245,7 +245,7 @@ extension WebRoutes {
             let setupID = req.parameters.get("testSetupID"),
             let setup = try await APITestSetup.find(setupID, on: req.db)
         else {
-            throw Abort(.notFound)
+            throw AppError.notFound(resource: "Test setup")
         }
 
         // Browser-graded assignments must be submitted from the notebook page.
@@ -313,12 +313,12 @@ extension WebRoutes {
     @Sendable
     func submissionHistoryPage(req: Request) async throws -> Response {
         let user = try req.auth.require(APIUser.self)
-        guard let userID = user.id else { throw Abort(.unauthorized) }
+        guard let userID = user.id else { throw AppError.unauthenticated }
         guard
             let setupID = req.parameters.get("testSetupID"),
             try await APITestSetup.find(setupID, on: req.db) != nil
         else {
-            throw Abort(.notFound)
+            throw AppError.notFound(resource: "Test setup")
         }
 
         let fmt = waterlooDateTimeFormatter()
@@ -370,14 +370,14 @@ extension WebRoutes {
 
         guard let subID = req.parameters.get("submissionID"),
             let submission = try await APISubmission.find(subID, on: req.db)
-        else { throw Abort(.notFound) }
+        else { throw AppError.notFound(resource: "Submission") }
 
         // Per-course staff (TA+ or admin) see instructor-level detail for this
         // submission's course; everyone else may view only their own
         // submission (#417 Slice G — was the global `user.isInstructor`).
         let isStaff = try await isSubmissionStaff(user, submission: submission, on: req.db)
         guard isStaff || submission.userID == user.id else {
-            throw Abort(.forbidden)
+            throw AppError.forbidden(action: "view this submission")
         }
 
         // Fetch the assignment for deadline-based output gating, and the test

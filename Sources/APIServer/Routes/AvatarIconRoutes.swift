@@ -37,9 +37,9 @@ struct AvatarIconRoutes: RouteCollection {
     func icon(req: Request) async throws -> Response {
         guard let file = req.parameters.get("file"), file.hasSuffix(".svg"),
             let version = req.parameters.get("version"), !version.isEmpty
-        else { throw Abort(.notFound) }
+        else { throw AppError.notFound(resource: "Avatar icon") }
         let key = String(file.dropLast(".svg".count))
-        guard let svg = try svg(forKey: key) else { throw Abort(.notFound) }
+        guard let svg = try svg(forKey: key) else { throw AppError.notFound(resource: "Avatar icon") }
         return response(svg, cacheControl: "public, max-age=31536000, immutable", on: req)
     }
 
@@ -47,7 +47,7 @@ struct AvatarIconRoutes: RouteCollection {
     /// changes the house bird reaches a bookmark the next day.
     @Sendable
     func houseIcon(req: Request) async throws -> Response {
-        guard let svg = try svg(forKey: AvatarIconKey.house) else { throw Abort(.notFound) }
+        guard let svg = try svg(forKey: AvatarIconKey.house) else { throw AppError.notFound(resource: "Avatar icon") }
         return response(svg, cacheControl: "public, max-age=86400", on: req)
     }
 

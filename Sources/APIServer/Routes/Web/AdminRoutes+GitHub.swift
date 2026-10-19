@@ -69,7 +69,7 @@ extension AdminRoutes {
     @Sendable
     func deleteGitHubApp(req: Request) async throws -> Response {
         guard let app = try await APIGitHubApp.query(on: req.db).first() else {
-            throw Abort(.notFound)
+            throw AppError.notFound(resource: "GitHub App")
         }
         let appID = String(app.appID)
         let slug = app.slug

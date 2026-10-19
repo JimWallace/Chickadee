@@ -32,7 +32,7 @@ struct CSRFMiddleware: AsyncMiddleware {
         let secret = Self.secret(for: request)
         let token = try await chickadeeCSRFTokenRetrieval(request)
         guard Self.isValid(token, secret: secret) else {
-            throw Abort(.forbidden, reason: "Invalid CSRF token.")
+            throw AppError.forbiddenReason(reason: "Invalid CSRF token.")
         }
         return try await next.respond(to: request)
     }

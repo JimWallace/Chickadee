@@ -125,7 +125,7 @@ extension InstructorDashboardRoutes {
             req.query[String.self, at: "slug"], courseID: activeDatasetCourse(req: req, user: user)?.id, on: req.db)
         var number = dataset.currentVersion
         if let raw = req.query[String.self, at: "version"] {
-            guard let parsed = Int(raw) else { throw Abort(.badRequest, reason: "The version is not a number.") }
+            guard let parsed = Int(raw) else { throw AppError.badRequest(reason: "The version is not a number.") }
             number = parsed
         }
         guard let version = try await CourseDatasetService.version(number, of: dataset, on: req.db) else {

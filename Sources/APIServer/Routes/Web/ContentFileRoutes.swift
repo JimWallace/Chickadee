@@ -41,7 +41,7 @@ struct ContentFileRoutes: RouteCollection {
             let attachRaw = req.parameters.get("attachmentID"),
             let attachmentID = UUID(uuidString: attachRaw),
             let item = try await APICourseContentItem.find(itemID, on: req.db)
-        else { throw Abort(.notFound) }
+        else { throw AppError.notFound(resource: "Attachment") }
 
         // Enrolled members of the item's course only (admins bypass inside the
         // helper); mirrors downloadSupportFile.
@@ -52,15 +52,15 @@ struct ContentFileRoutes: RouteCollection {
         // link — but gate the bytes directly rather than trusting that).
         if !item.isPublished {
             let isStaff = try await isCourseStaff(caller, inCourse: item.courseID, db: req.db)
-            guard isStaff else { throw Abort(.notFound) }
+            guard isStaff else { throw AppError.notFound(resource: "Attachment") }
         }
 
         guard let attachment = item.attachments.first(where: { $0.id == attachmentID }) else {
-            throw Abort(.notFound)
+            throw AppError.notFound(resource: "Attachment")
         }
         let path = ContentAttachmentStore.path(
             req.application, itemID: itemID, attachmentID: attachmentID)
-        guard FileManager.default.fileExists(atPath: path) else { throw Abort(.notFound) }
+        guard FileManager.default.fileExists(atPath: path) else { throw AppError.notFound(resource: "Attachment") }
 
         let safeName =
             attachment.originalName
@@ -95,7 +95,7 @@ struct ContentFileRoutes: RouteCollection {
     func viewContentFile(req: Request) async throws -> Response {
         let resolved = try await resolveAttachment(req: req)
         guard resolved.ext == "pdf", Self.beginsWithPDFMagic(atPath: resolved.path) else {
-            throw Abort(.notFound)
+            throw AppError.notFound(resource: "PDF attachment")
         }
         let response = try await req.fileio.asyncStreamFile(at: resolved.path)
         response.headers.contentType = .pdf

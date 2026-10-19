@@ -64,12 +64,12 @@ extension WebRoutes {
         }
 
         let user = try req.auth.require(APIUser.self)
-        guard let userID = user.id else { throw Abort(.unauthorized) }
+        guard let userID = user.id else { throw AppError.unauthenticated }
         guard
             let setupID = req.parameters.get("testSetupID"),
             let setup = try await APITestSetup.find(setupID, on: req.db)
         else {
-            throw Abort(.notFound)
+            throw AppError.notFound(resource: "Test setup")
         }
 
         // The same gate every other authoring write goes through: TA+ in this
@@ -90,12 +90,11 @@ extension WebRoutes {
         let viewMode = notebookViewMode(from: saveQuery?.view) ?? .personalized
 
         guard let buffer = req.body.data, buffer.readableBytes > 0 else {
-            throw Abort(.badRequest, reason: "The request body must be the notebook JSON.")
+            throw AppError.badRequest(reason: "The request body must be the notebook JSON.")
         }
         let raw = Data(buffer.readableBytesView)
         guard let cellCount = notebookCellCount(fromRaw: raw) else {
-            throw Abort(
-                .badRequest,
+            throw AppError.badRequest(
                 reason: "That does not look like a notebook — expected .ipynb JSON with a \"cells\" array.")
         }
         let asEdited = normalizeNotebookForJupyterLite(raw)
@@ -122,8 +121,7 @@ extension WebRoutes {
         case .restored(let restored):
             toStore = restored
         case .unmatched(let placeholders):
-            throw Abort(
-                .conflict,
+            throw AppError.conflict(
                 reason: """
                     This copy has per-student values substituted into it, and the \
                     original \(placeholders.map { "{{\($0)}}" }.joined(separator: ", ")) \
@@ -230,7 +228,10 @@ extension WebRoutes {
                 setupsDirectory: req.application.testSetupsDirectory,
                 on: req.db)
         } catch let error as AssignmentAuthoringError {
-            throw Abort(.internalServerError, reason: "Could not write the notebook: \(error)")
+            // The error can hold file-system detail, so it goes to the log,
+            // not to the page.
+            req.logger.error("notebook_save_failed setup=\(String(describing: setup.id)) error=\(error)")
+            throw AppError.internalFailure(reason: "The notebook could not be saved.")
         }
 
         guard let assignment else {

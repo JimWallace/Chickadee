@@ -87,12 +87,11 @@ enum WorkerJobError: AbortError, CustomStringConvertible {
 /// (`noActiveCourse`, `validationRequired`) were folded in here and
 /// `WebAssignmentError` is now a typealias (June 2026 audit).
 ///
-/// Adopted incrementally — sites with explicit `reason:` strings on
-/// `Abort(...)` convert one-to-one; sites that throw a bare
-/// `Abort(.X)` with no `reason:` may stay bare and rely on
-/// `ErrorPageMiddleware.friendlyReason` for the user-facing default,
-/// or convert to the typed case if they have meaningful context to
-/// add at the site.
+/// Every route and middleware in `APIServer` throws one of these (or an
+/// area enum such as `WorkerJobError`) rather than a bare `Abort`, so each
+/// refusal names what failed.  The one remaining `Abort` says why at its site.  The `…Reason` cases and `unauthorized` carry
+/// a verbatim reason for a status whose general case has a fixed sentence
+/// shape.
 enum AppError: AbortError, CustomStringConvertible {
     /// The caller is not signed in, or has no saved identity to check.
     case unauthenticated
@@ -128,6 +127,22 @@ enum AppError: AbortError, CustomStringConvertible {
     case validationRequired(reason: String)
     /// A server-side write or external operation failed unexpectedly.
     case internalFailure(reason: String)
+    /// 401 with a verbatim reason, for a credential check that names what was
+    /// wrong (e.g. "Invalid worker signature.", "Session timed out").  Use
+    /// `unauthenticated` when the caller simply is not signed in.
+    case unauthorized(reason: String)
+    /// 403 with a verbatim reason, for a refusal whose text does not read as
+    /// "You do not have permission to …" (e.g. "Invalid CSRF token.").
+    /// `ErrorPageMiddleware` matches CSRF refusals on this text, so it is
+    /// rendered unchanged.
+    case forbiddenReason(reason: String)
+    /// 404 with a verbatim reason, for a message that does not read as
+    /// "<resource> not found" (e.g. "This assignment has no reference solution.").
+    case notFoundReason(reason: String)
+    /// 405: the route exists but does not accept this HTTP method.
+    case methodNotAllowed(reason: String)
+    /// 426: the request must be repeated over another protocol (HTTPS).
+    case upgradeRequired(reason: String)
 
     var status: HTTPResponseStatus {
         switch self {
@@ -139,6 +154,11 @@ enum AppError: AbortError, CustomStringConvertible {
         case .conflict: return .conflict
         case .unprocessable: return .unprocessableEntity
         case .internalFailure: return .internalServerError
+        case .unauthorized: return .unauthorized
+        case .forbiddenReason: return .forbidden
+        case .notFoundReason: return .notFound
+        case .methodNotAllowed: return .methodNotAllowed
+        case .upgradeRequired: return .upgradeRequired
         }
     }
 
@@ -165,6 +185,9 @@ enum AppError: AbortError, CustomStringConvertible {
         case .validationRequired(let reason):
             return reason
         case .internalFailure(let reason):
+            return reason
+        case .unauthorized(let reason), .forbiddenReason(let reason), .notFoundReason(let reason),
+            .methodNotAllowed(let reason), .upgradeRequired(let reason):
             return reason
         }
     }
