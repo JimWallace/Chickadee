@@ -15,7 +15,11 @@
 -- content-edit re-grade, and the acting-user personalization-seed bookkeeping
 -- (assignment_personalization_seeds and course_personalization_seeds, via
 -- ToolContext.mainDB) all run on the
--- main (owner) pool, not this one -- so none of them need a grant here.
+-- main (owner) pool, not this one -- so none of them need a grant here. So do
+-- three steps of create_assignment, clone_assignment and get_suite: version v1
+-- (assignment_versions), the copied reference solution (an INSERT on
+-- submissions), and the starter run (a starterValidation submission, which the
+-- RLS policy below hides).
 --
 -- IMPORTANT: review and TEST this against your schema before production use.
 -- Grants must cover everything the MCP write tools do; a missing grant surfaces
@@ -35,9 +39,21 @@ END$$;
 GRANT USAGE ON SCHEMA public TO chickadee_mcp;
 
 -- 2. Authoring tables — full DML (the MCP tools create/edit this content).
+--
+--    course_content_items holds the ungraded reference material in a course
+--    section (links, documents, slides, headings) and its attachment metadata
+--    (attachments_json; the attachment bytes are files on disk, not rows). It
+--    holds no student data. The content-item tools (list_content_items,
+--    create_content_item, update_content_item, delete_content_item,
+--    reorder_content_items, reorder_section_items) read and write it, and
+--    create_assignment, clone_assignment and set_assignment_course_section read
+--    it to place the new item after the section's last one
+--    (nextSectionItemSortOrder). Deployments that applied this file before the
+--    grant was added must re-run this section, or those tools fail with
+--    "permission denied for table course_content_items".
 GRANT SELECT, INSERT, UPDATE, DELETE ON
     courses, course_sections, assignments, test_setups, assignment_requirements,
-    course_datasets, course_dataset_versions
+    course_datasets, course_dataset_versions, course_content_items
     TO chickadee_mcp;
 
 -- 3. Identity / enrolment — SELECT only, needed for authorization

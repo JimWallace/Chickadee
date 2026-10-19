@@ -87,14 +87,6 @@ import Vapor
         return found
     }
 
-    private func swiftFiles(under root: URL) throws -> [URL] {
-        guard
-            let enumerator = FileManager.default.enumerator(
-                at: root, includingPropertiesForKeys: nil)
-        else { return [] }
-        return enumerator.compactMap { $0 as? URL }.filter { $0.pathExtension == "swift" }
-    }
-
     @Test func everySchemaMutatingSuiteIsDeclared() throws {
         let files = try swiftFiles(under: Self.apiTestSources)
         #expect(!files.isEmpty)  // sanity: the directory resolved

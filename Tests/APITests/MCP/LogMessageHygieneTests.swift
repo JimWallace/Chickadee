@@ -31,14 +31,6 @@ import Testing
         #"submission=\("#, #"for user \("#, #"user '\("#, #"\(orgDefinedId"#,
     ]
 
-    private func swiftFiles(under root: URL) throws -> [URL] {
-        guard
-            let enumerator = FileManager.default.enumerator(
-                at: root, includingPropertiesForKeys: nil)
-        else { return [] }
-        return enumerator.compactMap { $0 as? URL }.filter { $0.pathExtension == "swift" }
-    }
-
     @Test func warningPlusLogMessagesInterpolateNoIdentifiers() throws {
         let files = try swiftFiles(under: Self.apiServerSources)
         #expect(!files.isEmpty)  // sanity: the directory resolved
