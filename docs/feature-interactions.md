@@ -382,29 +382,37 @@ because line numbers go out of date.
     (`Sources/Worker/SubmissionPolicy.swift`) parse the whole notebook with
     `JSONValue.object(from:)` and read the kernel names through
     `NotebookHeader.Metadata(_:)`.
+  - `NotebookCellView` (`Sources/Core/NotebookCellView.swift`), a typed
+    decode of each cell's type, source, id and tags that skips the outputs.
+    Its callers are read-only: `ReflectionCells`, the definition and function
+    scans, `SolutionNotebookExtractor` and the notebook guide's starter
+    sources. The guide indexes the cells by the indices that the definition
+    scan computes, so both must read the same cell list.
   - The server's validity gates (`notebookCellCount` on the notebook save,
     the starter and solution checks in `PublishedAssignmentRoutes+SaveEdit`
     and `TestSetupRoutes`) and the notebook rewriters still use
     `JSONSerialization`.
 - **Rules:**
-  - `NotebookHeader` is a sniff, not a validity check. It does not check the
-    parts that it skips. A validity gate decodes every value: the worker with
-    `JSONValue.object(from:)`, the server with `JSONSerialization`.
+  - `NotebookHeader` and `NotebookCellView` are reads, not validity checks.
+    They do not check the parts that they skip. A validity gate decodes
+    every value: the worker with `JSONValue.object(from:)`, the server with
+    `JSONSerialization`.
   - A field of the wrong type reads as absent. Only input that is not a JSON
     object fails the read.
   - `fromNotebookMetadata` has one overload, and it calls
     `languageFromKernelNames`, the one sniff.
 - **Parallel paths:**
-  - Two parsers. `JSONDecoder` (`NotebookHeader`, `JSONValue.object(from:)`)
-    and `JSONSerialization` differ on UTF-32 input with a byte-order mark and
+  - Two parsers. `JSONDecoder` (`NotebookHeader`, `NotebookCellView`,
+    `JSONValue.object(from:)`) and `JSONSerialization` differ on UTF-32 input with a byte-order mark and
     on duplicate keys (the first value wins in `JSONDecoder`, the last in
     `JSONSerialization`). So the server can accept a notebook that the worker
-    reads differently. `NotebookHeaderTests` and `JSONValueAccessorsTests`
-    pin the differences. The server sites move to `JSONValue` in later steps.
-  - Two `NotebookCellSources.cellSource` overloads, over `[String: Any]` and
-    over `[String: JSONValue]`. An array source counts only when every element
-    is a string. A change to one must go to the other until the `[String: Any]`
-    one has no caller.
+    reads differently. `NotebookHeaderTests`, `NotebookCellViewTests` and
+    `JSONValueAccessorsTests` pin the differences. The server sites move to `JSONValue` in later steps.
+  - Three readers of a cell's source: the two `NotebookCellSources.cellSource`
+    overloads, over `[String: Any]` and over `[String: JSONValue]`, and
+    `NotebookCellView.source`. An array source counts only when every element
+    is a string. A change to one must go to the others until only one is
+    left.
 
 ### Grading and submission mode: `effectiveGradingMode`, `effectiveSubmissionMode`
 
