@@ -9,6 +9,13 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.754] - 2026-10-19
+
+### Added
+
+- **Lab groups (slice 6b): read the groups from LEARN on the Groups tab.** When a course is linked to LEARN, an instructor can read its lab groups from the Sections of the course in LEARN. LEARN then updates them every ten minutes. "Sync now" reads them at once, and "Stop syncing" keeps the groups and makes them editable again. See `docs/lab-groups.md`.
+
+
 ## [0.5.753] - 2026-10-19
 
 ### Changed
