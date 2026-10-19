@@ -1,8 +1,8 @@
 // Core/NotebookHeader.swift
 //
 // The few top-level facts that callers read from a Jupyter notebook without
-// walking its cells: the kernel names in `metadata`, whether an `nbformat`
-// key is present, and how many cells there are.
+// walking its cells: the kernel names in `metadata`, and whether an
+// `nbformat` key is present.
 //
 // A typed decode, not a `[String: Any]` from `JSONSerialization` and not a
 // `JSONValue` tree. The decoder reads the fields below and skips the rest, so
@@ -12,6 +12,14 @@
 // Every field is lenient, the same as the `as?` casts it replaced: a field of
 // the wrong type reads as absent and does not fail the decode. Only input
 // that is not a JSON object fails (`init?(data:)` returns nil).
+//
+// This is a sniff, not a validity check. The decoder does not check the
+// parts that it skips, so a document with invalid JSON in a cell (a raw
+// control character in a string, for example) still has a header. A caller
+// that must reject invalid JSON uses `JSONSerialization`, as
+// `notebookCellCount` does. Two other differences from `JSONSerialization`:
+// UTF-32 input with a byte-order mark is not read, and when a key appears
+// twice the first value wins, not the last.
 
 public import Foundation
 
@@ -34,8 +42,6 @@ public struct NotebookHeader: Sendable, Equatable {
     public var metadata: Metadata?
     /// True when the top-level object has an `nbformat` key, whatever its value.
     public var hasNBFormatKey: Bool
-    /// The length of the `cells` array, or nil when `cells` is not an array.
-    public var cellCount: Int?
 
     /// Reads the header of `data`, or returns nil when `data` is not a JSON
     /// object.
@@ -58,19 +64,17 @@ extension NotebookHeader {
         let header: NotebookHeader
 
         private enum Keys: String, CodingKey {
-            case metadata, nbformat, cells
+            case metadata, nbformat
         }
 
         init(from decoder: any Decoder) throws {
             let container = try decoder.container(keyedBy: Keys.self)
             let metadata = try? container.decodeIfPresent(MetadataShape.self, forKey: .metadata)
-            let cells = try? container.decodeIfPresent([Skipped].self, forKey: .cells)
             header = NotebookHeader(
                 metadata: metadata.map {
                     Metadata(kernelName: $0.kernelspec?.name, languageInfoName: $0.languageInfo?.name)
                 },
-                hasNBFormatKey: container.contains(.nbformat),
-                cellCount: cells?.count
+                hasNBFormatKey: container.contains(.nbformat)
             )
         }
     }
@@ -105,15 +109,8 @@ extension NotebookHeader {
         }
     }
 
-    /// Any JSON value, read and discarded, so that `cells` is counted without
-    /// decoding its cells.
-    private struct Skipped: Decodable {
-        init(from decoder: any Decoder) throws {}
-    }
-
-    private init(metadata: Metadata?, hasNBFormatKey: Bool, cellCount: Int?) {
+    private init(metadata: Metadata?, hasNBFormatKey: Bool) {
         self.metadata = metadata
         self.hasNBFormatKey = hasNBFormatKey
-        self.cellCount = cellCount
     }
 }

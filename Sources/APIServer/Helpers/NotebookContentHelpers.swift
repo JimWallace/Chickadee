@@ -358,6 +358,16 @@ func extractNotebookFromZip(zipPath: String) async -> Data? {
 /// object carrying a `cells` array).  The web mirror of the MCP tools'
 /// `validateNotebookShape` guard: the same rejection, one step earlier, so a
 /// stray POST can never overwrite a notebook with something that isn't one.
+///
+/// This is a validity gate, so it stays on `JSONSerialization`, which rejects
+/// the whole document when any part of it is not valid JSON. `NotebookHeader`
+/// does not check the parts that it skips.
 func notebookCellCount(fromRaw raw: Data) -> Int? {
-    NotebookHeader(data: raw)?.cellCount
+    guard
+        let object = try? JSONSerialization.jsonObject(with: raw) as? [String: Any],
+        let cells = object["cells"] as? [Any]
+    else {
+        return nil
+    }
+    return cells.count
 }
