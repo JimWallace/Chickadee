@@ -9,6 +9,13 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.728] - 2026-10-18
+
+### Added
+
+- **Lab groups: the network flag.** "Who joined" now marks a join from another network than the room "Other network", for staff to check. Chickadee stores only the network part of each address (a /24 or a /64), for the presenter and for each join, and the student's data export lists it. It is a flag, never a refusal. See `docs/lab-groups.md`, "Presence".
+
+
 ## [0.5.727] - 2026-10-18
 
 ### Changed
