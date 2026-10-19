@@ -410,10 +410,10 @@ because line numbers go out of date.
     `languageFromKernelNames`, the one sniff.
 - **Parallel paths:**
   - Two parsers. `JSONDecoder` (`NotebookHeader`, `NotebookCellView`,
-    `JSONValue.object(from:)`) and `JSONSerialization` differ on UTF-32 input with a byte-order mark and
-    on duplicate keys (the first value wins in `JSONDecoder`, the last in
-    `JSONSerialization`). So the server can accept a notebook that the worker
-    reads differently. `NotebookHeaderTests`, `NotebookCellViewTests` and
+    `JSONValue.object(from:)`) and `JSONSerialization` differ on UTF-32
+    input with a byte-order mark and on duplicate keys (the first value wins
+    in `JSONDecoder`, the last in `JSONSerialization`). So a server validity
+    gate can accept a notebook that the rest of the code reads differently. `NotebookHeaderTests`, `NotebookCellViewTests` and
     `JSONValueAccessorsTests` pin the differences.
   - Two readers of a cell's source: `NotebookCellSources.cellSource` (over
     `[String: JSONValue]`) and `NotebookCellView.source`. An array source
