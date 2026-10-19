@@ -70,11 +70,7 @@ import {
         });
     }
 
-    function el(tag, attrs) {
-        var node = document.createElement(tag);
-        if (attrs) for (var k in attrs) if (Object.prototype.hasOwnProperty.call(attrs, k)) node.setAttribute(k, attrs[k]);
-        return node;
-    }
+    var el = global.ChickadeeUI.el;
 
     // ── Renderer state ───────────────────────────────────────────────────────
     var newControls = null;   // filename + template row (shown only for create)
