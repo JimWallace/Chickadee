@@ -6,7 +6,7 @@ enum DetectedSubmissionKind {
     case pythonScript
     // Carries the raw bytes + already-parsed notebook JSON so the handler
     // doesn't re-read or re-parse the same file.
-    case jupyterNotebook(data: Data, notebook: [String: Any])
+    case jupyterNotebook(data: Data, notebook: [String: JSONValue])
     case unsupported(String)
 }
 
@@ -203,7 +203,7 @@ struct SubmissionNormalizer {
         fileRelativePath: String,
         workspaceDirectory: URL,
         data: Data,
-        notebook: [String: Any],
+        notebook: [String: JSONValue],
         progress: inout NormalizationProgress
     ) throws {
         let extracted = try notebookExtractor.extractPythonSource(

@@ -18,18 +18,20 @@ struct NotebookExtractor {
     /// through a private second implementation here, so the exemption table
     /// governed six languages and Python answered to nothing. The two agreed by
     /// coincidence; a tightening of one would have silently skipped the other.
-    func notebookJSONObject(from data: Data, filename: String) throws(SubmissionNormalizationError) -> [String: Any] {
+    func notebookJSONObject(
+        from data: Data, filename: String
+    ) throws(SubmissionNormalizationError) -> [String: JSONValue] {
         try SubmissionValidation.validatedNotebook(
             data: data, filename: filename, language: .python)
     }
 
-    func isNotebookJSONObject(_ notebook: [String: Any]) -> Bool {
+    func isNotebookJSONObject(_ notebook: [String: JSONValue]) -> Bool {
         guard notebook["metadata"] != nil,
             notebook["nbformat"] != nil,
-            // `[Any]` alone: every `[[String: Any]]` is an `[Any]`, so the
-            // former disjunct could never change the answer (a 2026-09 mutation
-            // survivor said as much — flipping the connector was undetectable).
-            notebook["cells"] is [Any]
+            // Any array, not only an array of objects: the check was once
+            // `is [[String: Any]] || is [Any]`, and the first disjunct could
+            // never change the answer (a 2026-09 mutation survivor).
+            notebook["cells"]?.arrayValue != nil
         else {
             return false
         }
@@ -37,9 +39,9 @@ struct NotebookExtractor {
     }
 
     func extractPythonSource(
-        from notebook: [String: Any], filename: String
+        from notebook: [String: JSONValue], filename: String
     ) throws(SubmissionNormalizationError) -> NotebookExtraction {
-        guard let cells = notebook["cells"] as? [[String: Any]] else {
+        guard let cells = notebook["cells"]?.arrayOfObjects else {
             throw SubmissionNormalizationError.invalidSubmission(filename, .python)
         }
 
@@ -47,7 +49,7 @@ struct NotebookExtractor {
         // the (wasm) browser runner extract notebooks identically.
         let inputCells = cells.map { cell in
             NotebookCell(
-                cellType: (cell["cell_type"] as? String) ?? "",
+                cellType: cell["cell_type"]?.stringValue ?? "",
                 source: NotebookCellSources.cellSource(cell)
             )
         }
@@ -71,7 +73,7 @@ struct NotebookExtractor {
 /// not the student's own.
 private struct ResolvedNotebook {
     let language: AssignmentLanguage
-    let cells: [[String: Any]]
+    let cells: [[String: JSONValue]]
 }
 
 /// Read a notebook, decide its language, and apply the submission guarantees.
@@ -97,7 +99,7 @@ private func resolveNotebookForExtraction(
         }
         return nil
     }
-    let lenient = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
+    let lenient = JSONValue.object(from: data)
 
     // A caller-forced language wins over the notebook's own kernelspec;
     // otherwise sniff it with the shared detector.
@@ -116,7 +118,8 @@ private func resolveNotebookForExtraction(
     // done. Stating it here keeps that a local, visible choice.
     let language =
         forcedLanguage
-        ?? (lenient?["metadata"] as? [String: Any]).flatMap(AssignmentLanguage.fromNotebookMetadata)
+        ?? lenient?["metadata"]?.objectValue
+        .flatMap { AssignmentLanguage.fromNotebookMetadata(NotebookHeader.Metadata($0)) }
         ?? .python
 
     // For the student's own notebook the policy THROWS a message they can act
@@ -124,7 +127,7 @@ private func resolveNotebookForExtraction(
     // a job over an instructor's markdown-only helper would be a regression
     // dressed as a fix.
     guard isStudentSubmission else {
-        guard let cells = lenient?["cells"] as? [[String: Any]] else {
+        guard let cells = lenient?["cells"]?.arrayOfObjects else {
             if submissionGuaranteeApplies(.unsupportedFilesWarn, to: language) {
                 warnings.append(
                     "\(item.lastPathComponent) could not be read as a notebook and was skipped.")
@@ -136,8 +139,8 @@ private func resolveNotebookForExtraction(
 
     let validated = try SubmissionValidation.validatedNotebook(
         data: data, filename: item.lastPathComponent, language: language)
-    let cells = (validated["cells"] as? [[String: Any]]) ?? []
-    let codeCellCount = cells.count(where: { ($0["cell_type"] as? String) == "code" })
+    let cells = validated["cells"]?.arrayOfObjects ?? []
+    let codeCellCount = cells.count(where: { $0["cell_type"]?.stringValue == "code" })
     try SubmissionValidation.requireCodeCells(
         codeCellCount, filename: item.lastPathComponent, language: language)
     return ResolvedNotebook(language: language, cells: cells)
@@ -241,7 +244,7 @@ func protectedExtractionSkippedWarning(notebook: String, source: String) -> Stri
 
 /// The per-language assembly of one notebook's cells into a source module.
 private func assembleExtractedSource(
-    language: AssignmentLanguage, cells: [[String: Any]], filename: String
+    language: AssignmentLanguage, cells: [[String: JSONValue]], filename: String
 ) -> String {
     switch language {
     case .r, .lua, .octave, .cpp, .racket, .java:
@@ -256,7 +259,7 @@ private func assembleExtractedSource(
         // runner calls via wasm, so the two extractors cannot drift.
         let inputCells = cells.map { cell in
             NotebookCell(
-                cellType: (cell["cell_type"] as? String) ?? "",
+                cellType: cell["cell_type"]?.stringValue ?? "",
                 source: NotebookCellSources.cellSource(cell)
             )
         }
@@ -284,7 +287,7 @@ private func assembleExtractedSource(
     case .python:
         var assembled = "# Generated from \(filename)\n\n"
         for (index, cell) in cells.enumerated() {
-            guard cell["cell_type"] as? String == "code" else { continue }
+            guard cell["cell_type"]?.stringValue == "code" else { continue }
             var src = NotebookCellSources.cellSource(cell)
             while src.last?.isWhitespace == true { src.removeLast() }
             guard !src.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { continue }

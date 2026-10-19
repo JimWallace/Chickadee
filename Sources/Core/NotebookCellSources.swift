@@ -37,4 +37,18 @@ public enum NotebookCellSources {
         if let arr = cell["source"] as? [String] { return arr.joined() }
         return ""
     }
+
+    /// The same read over a cell parsed as `JSONValue`. An array form counts
+    /// only when every element is a string, the same as `as? [String]`.
+    public static func cellSource(_ cell: [String: JSONValue]) -> String {
+        switch cell["source"] {
+        case .string(let source):
+            return source
+        case .array(let parts):
+            let strings = parts.compactMap(\.stringValue)
+            return strings.count == parts.count ? strings.joined() : ""
+        default:
+            return ""
+        }
+    }
 }
