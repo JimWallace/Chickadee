@@ -22,7 +22,7 @@
 // All three mechanisms (family / check / script) register a renderer, so every
 // test type morphs in this one overlay — there is no hop to a separate editor.
 //
-// Host page: `window.initTestEditorModal({ csrfToken, getSectionID })`.
+// Host page: `window.initTestEditorModal({ getSectionID })`.
 // Returns `{ open(opts), close() }` where opts =
 //   { mechanism?, kind?, editing?: { mechanism, id, item } }.
 
@@ -125,7 +125,6 @@
 
     function initTestEditorModal(config) {
         config = config || {};
-        var csrfToken = config.csrfToken || '';
         // Looked up lazily (not cached): renderers self-register on
         // `window.ChickadeeTestRenderers`, and a `<script type="module">`
         // renderer (CodeMirror imports) registers AFTER this inline init runs.
@@ -230,7 +229,6 @@
 
         // Shared context handed to every renderer.
         var ctx = {
-            csrfToken: csrfToken,
             extractErrorMessage: extractErrorMessage,
             setStatus: setStatus,
             getSectionID: getSectionID

@@ -45,10 +45,10 @@
         var csrfToken = ChickadeeUI.getCsrfToken();
 
         wireHeader();
-        wireSuiteTable(assignmentID, csrfToken);
+        wireSuiteTable(assignmentID);
         dropParkedFamilyEditorBodies();
         wirePatternFamilyEditor(assignmentID, csrfToken);
-        wireTestEditor(assignmentID, csrfToken);
+        wireTestEditor(assignmentID);
         wireSupportFiles(assignmentID, csrfToken);
         wireSelfStartingEditors();
         wireBrightspacePicker();
@@ -105,10 +105,9 @@
     }
 
     // ── Unified suite table (Public/suite-table.js) ─────────────────────────
-    function wireSuiteTable(assignmentID, csrfToken) {
+    function wireSuiteTable(assignmentID) {
         var suiteTable = window.initSuiteTable({
             assignmentID: assignmentID,
-            csrfToken: csrfToken,
             formSelector: 'form.form',
             urls: {
                 putSuite: function () {
@@ -175,11 +174,10 @@
     }
 
     // ── Test Editor modal (shell + script renderer config) ──────────────────
-    function wireTestEditor(assignmentID, csrfToken) {
+    function wireTestEditor(assignmentID) {
         // Edit page: published-assignment script endpoints (test-renderer-script.js
         // reads this lazily at open time).
         window.ChickadeeScriptRendererConfig = {
-            csrfToken: csrfToken,
             scriptContentURL: function (name) {
                 return '/instructor/' + encodeURIComponent(assignmentID) + '/scripts/' + encodeURIComponent(name);
             },
@@ -188,7 +186,7 @@
 
         // The shell is built on the first call.  A later call keeps it and
         // upgrades the "+ Add Test" buttons of the current render.
-        modal = window.initTestEditorModal({ csrfToken: csrfToken });
+        modal = window.initTestEditorModal();
     }
 
     // ── Support files (Public/support-files.js) ─────────────────────────────

@@ -8,7 +8,6 @@
 // and new-assignment pages.
 //
 // Per-page config is read lazily from `window.ChickadeeScriptRendererConfig`:
-//   csrfToken          string
 //   scriptContentURL   function(name) -> URL  (edit-existing fetch; null if the
 //                                              page can't edit saved scripts)
 //   uploadFilesInputID string | null          (id of the <input type=file> for
@@ -113,9 +112,9 @@ import {
     function fetchTemplates() {
         if (templateCache) return Promise.resolve(templateCache);
         var language = global.ChickadeeLanguage && global.ChickadeeLanguage.facts().name;
-        return fetch(Core.templatesURL(language), { headers: { 'x-csrf-token': cfg().csrfToken || '' } })
-            .then(function (r) { return r.ok ? r.json() : Promise.reject(r.status); })
-            .then(function (data) { templateCache = data; return data; });
+        return global.ChickadeeUI.fetchJSON(Core.templatesURL(language), {
+            errorMessage: function (text, status) { return String(status); }
+        }).then(function (data) { templateCache = data; return data; });
     }
 
     var renderer = {
@@ -213,7 +212,7 @@ import {
                 if (tplKey === 'blank') { apply(''); return; }
                 fetchTemplates()
                     .then(function (t) { apply(Core.templateContent(t, tplKey)); })
-                    .catch(function (err) { statusFn('Could not load template: ' + err, 'error'); });
+                    .catch(function (err) { statusFn('Could not load template: ' + err.message, 'error'); });
             });
         },
 
@@ -255,7 +254,7 @@ import {
             freshView('Loading…', currentFilename);
             var urlFn = cfg().scriptContentURL;
             if (typeof urlFn === 'function') {
-                fetch(urlFn(currentFilename), { headers: { 'x-csrf-token': cfg().csrfToken || '' } })
+                fetch(urlFn(currentFilename), { headers: { 'x-csrf-token': global.ChickadeeUI.getCsrfToken() } })
                     .then(function (r) { return r.ok ? r.text() : r.text().then(function (t) { return Promise.reject(t); }); })
                     .then(function (content) { freshView(content, currentFilename); })
                     .catch(function (err) { statusFn('Could not load script: ' + err, 'error'); });

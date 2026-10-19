@@ -239,6 +239,9 @@
     // the extracted server message — the `if (!r.ok) return r.text()...`
     // boilerplate that repeated across the editors (#1126).  Resolves with
     // the parsed JSON body (null for 204 / non-JSON responses).
+    //
+    // `opts.errorMessage(text, status)` replaces the default message, for a
+    // call site whose users already read a message of another shape.
     function fetchJSON(url, opts) {
         opts = opts || {};
         var headers = {};
@@ -253,7 +256,9 @@
         }).then(function (r) {
             if (!r.ok && r.status !== 204) {
                 return r.text().then(function (t) {
-                    throw new Error(extractErrorMessage(t) || ('HTTP ' + r.status));
+                    throw new Error(opts.errorMessage
+                        ? opts.errorMessage(t, r.status)
+                        : (extractErrorMessage(t) || ('HTTP ' + r.status)));
                 });
             }
             if (r.status === 204) return null;

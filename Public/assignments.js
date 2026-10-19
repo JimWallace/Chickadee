@@ -97,12 +97,9 @@
             var order = currentSectionOrder();
             if (order.join(',') === sectionDragStartOrder) return;
             try {
-                var res = await fetch('/instructor/sections/reorder', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'x-csrf-token': csrfToken },
-                    body: JSON.stringify({ sectionIDs: order })
+                await ChickadeeUI.fetchJSON('/instructor/sections/reorder', {
+                    method: 'POST', body: { sectionIDs: order }
                 });
-                if (!res.ok) window.location.reload();
             } catch (_) { window.location.reload(); }
         };
 
