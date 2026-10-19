@@ -40,7 +40,7 @@ extension WorkerDaemon {
         diagnostics: WorkerExecutionDiagnostics,
         matches: [MatchReport]?,
         stageTimings: inout JobStageTimings
-    ) async throws {
+    ) async throws(ReporterError) {
         do {
             let resultReportStartedAt = Date()
             // Shielded from cancellation (SE-0504). `run()` fans the slots out
@@ -52,7 +52,8 @@ extension WorkerDaemon {
             // wait for a student whose result the runner was already holding.
             // The report is bounded by the reporter's own network timeouts, so
             // shielding it delays shutdown by that much at most.
-            try await withTaskCancellationShield {
+            // A closure does not infer its thrown type, so it names it.
+            try await withTaskCancellationShield { () async throws(ReporterError) in
                 try await reporter.report(
                     WorkerExecutionReport(collection: collection, diagnostics: diagnostics, matches: matches))
             }

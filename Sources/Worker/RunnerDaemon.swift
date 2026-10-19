@@ -390,7 +390,7 @@ actor WorkerDaemon {
     /// output rides the error into `compilerOutput` so the instructor can
     /// see why the build failed. Like test scripts, `make` inherits only the
     /// allowlisted environment (no worker secrets).
-    func runMake(in directory: URL, target: String?) async throws {
+    func runMake(in directory: URL, target: String?) async throws(WorkerDaemonError) {
         let timeLimitSeconds = max(1, config.makeTimeoutSeconds)
         // Through the job's script runner, so `--sandbox` covers `make` and
         // everything a makefile runs, as it covers the test scripts (#2250).
@@ -415,7 +415,7 @@ actor WorkerDaemon {
 
     // extractNotebooksToCode is a module-level function (NotebookExtractor.swift).
 
-    func reportProcessingFailure(job: Job, error: any Error) async throws {
+    func reportProcessingFailure(job: Job, error: any Error) async throws(ReporterError) {
         let message = String(describing: error)
         let collection = TestOutcomeCollection(
             submissionID: job.submissionID,
@@ -438,7 +438,7 @@ actor WorkerDaemon {
         try await reporter.report(collection)
     }
 
-    func sendHeartbeat() async throws {
+    func sendHeartbeat() async throws(ReporterError) {
         let payload = WorkerActivityPayload(
             workerID: workerID,
             hostname: ProcessInfo.processInfo.hostName,

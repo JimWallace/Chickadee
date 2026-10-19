@@ -307,7 +307,7 @@ struct SubmissionNormalizer {
         progress: NormalizationProgress,
         submissionFiles: [URL],
         workspaceDirectory: URL
-    ) throws {
+    ) throws(SubmissionNormalizationError) {
         guard progress.producedPythonFiles.isEmpty else { return }
         if submissionFiles.count == 1, let unsupportedOnlyFilename = progress.unsupportedOnlyFilename {
             throw SubmissionNormalizationError.invalidSubmission(unsupportedOnlyFilename, .python)

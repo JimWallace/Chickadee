@@ -228,7 +228,7 @@ extension ManifestV2 {
     /// number, like every in-memory manifest: the writer, not the value,
     /// decides the wire version.
     var testProperties: TestProperties {
-        get throws {
+        get throws(DecodingError) {
             var p = TestProperties(
                 schemaVersion: TestProperties.v1SchemaVersion,
                 gradingMode: gradingMode,
@@ -267,7 +267,7 @@ extension ManifestV2 {
     /// Refuses a hand-written v2 document whose meaning is not clear, rather
     /// than guess.  Nothing stores v2 that has not passed this check, so a
     /// refusal happens only while authoring.
-    private func validate() throws {
+    private func validate() throws(DecodingError) {
         func refuse(_ reason: String) -> DecodingError {
             DecodingError.dataCorrupted(DecodingError.Context(codingPath: [], debugDescription: reason))
         }
@@ -286,7 +286,7 @@ extension ManifestV2 {
         }
     }
 
-    private static func declaration(_ language: String?) throws -> LanguageDeclaration {
+    private static func declaration(_ language: String?) throws(DecodingError) -> LanguageDeclaration {
         guard let language else { return .undeclared }
         if language == noLanguage { return .noLanguage }
         guard let declared = AssignmentLanguage(rawValue: language) else {
