@@ -155,10 +155,9 @@ public struct NotebookFunctionScanEntry: Sendable {
 public func scanNotebookForSectionsAndFunctions(
     _ notebookData: Data, parsing language: AssignmentLanguage
 ) -> NotebookScanResult {
-    guard
-        let notebook = try? JSONSerialization.jsonObject(with: notebookData) as? [String: Any],
-        let cells = notebook["cells"] as? [[String: Any]]
-    else { return NotebookScanResult(sectionNames: [], functions: []) }
+    guard let cells = NotebookCellView.cells(from: notebookData) else {
+        return NotebookScanResult(sectionNames: [], functions: [])
+    }
 
     var sectionsInOrder: [String] = []
     var seenSections: Set<String> = []
@@ -167,8 +166,8 @@ public func scanNotebookForSectionsAndFunctions(
     var rawEntriesByName: [String: Int] = [:]  // for shadowing pass below
 
     for (cellIndex, cell) in cells.enumerated() {
-        let cellType = cell["cell_type"] as? String
-        let source = NotebookCellSources.cellSource(cell)
+        let cellType = cell.cellType
+        let source = cell.source
         if cellType == "markdown" {
             // Read through the same helper `notebookSectionNames` uses, so the
             // sections-only entry point cannot drift from this one.
@@ -223,14 +222,11 @@ public func scanNotebookForSectionsAndFunctions(
 /// One implementation, shared with `scanNotebookForSectionsAndFunctions`, so
 /// the two cannot disagree about what a section is.
 public func notebookSectionNames(_ notebookData: Data) -> [String] {
-    guard
-        let notebook = try? JSONSerialization.jsonObject(with: notebookData) as? [String: Any],
-        let cells = notebook["cells"] as? [[String: Any]]
-    else { return [] }
+    guard let cells = NotebookCellView.cells(from: notebookData) else { return [] }
     var inOrder: [String] = []
     var seen: Set<String> = []
-    for cell in cells where (cell["cell_type"] as? String) == "markdown" {
-        if let title = firstSectionHeading(in: NotebookCellSources.cellSource(cell)), seen.insert(title).inserted {
+    for cell in cells where cell.cellType == "markdown" {
+        if let title = firstSectionHeading(in: cell.source), seen.insert(title).inserted {
             inOrder.append(title)
         }
     }

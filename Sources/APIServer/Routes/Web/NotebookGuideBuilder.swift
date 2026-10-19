@@ -200,7 +200,7 @@ struct NotebookGuideBuilder {
     private func starterSources(
         for anchors: [NotebookGuide.Anchor], in scan: NotebookDefinitionScan
     ) -> [String: String] {
-        guard let starter, let cells = NotebookCellSources.cells(from: starter) else { return [:] }
+        guard let starter, let cells = NotebookCellView.cells(from: starter) else { return [:] }
         var sources: [String: String] = [:]
         for anchor in anchors {
             let isSection = anchor.kind == "section"
@@ -208,7 +208,7 @@ struct NotebookGuideBuilder {
                 isSection ? scan.firstCodeCell(inSection: anchor.name) : scan.definition(of: anchor.name)?.cellIndex
             guard let index, cells.indices.contains(index) else { continue }
             let key = isSection ? "section:\(anchor.name)" : anchor.name
-            sources[key] = Self.normalizedSource(NotebookCellSources.cellSource(cells[index]))
+            sources[key] = Self.normalizedSource(cells[index].source)
         }
         return sources
     }
