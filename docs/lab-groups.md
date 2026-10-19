@@ -27,7 +27,7 @@ today.
 | 4b | Spares per group: `group_composite_spares`, "Fill a hole" fills a hole in the image of the student's own lab while their session is open | built |
 | 4c | Every lab's image, side by side under the staff leaderboard, once each lab's session has ended | built |
 | 5a | Lab goals: a grade goal counted per lab, `group_achievement_results`, each student earns their own lab's bonus | built |
-| 5b | Lab goals, the items: `itemsCovered` goals per lab, so a lab's composite tiles and spares count | not started |
+| 5b | Lab goals, the items: `group_class_item_coverage`, `itemsCovered` goals per lab, a lab's composite tiles and spares count | built |
 | 5c | Lab goals, the corpus: `classCoverage` goals per lab, one corpus run per lab | not started |
 | 6 | The LEARN source: the existing group-category sweep writes the new tables; a D2L Sections reader; the category picker | not started |
 | later | Per-group deadlines; a TA's roster filtered to their groups; a `team` kind with a shared submission | not planned |
@@ -560,9 +560,8 @@ should be able to see it. The maintainer chose best effort on 2026-10-18.
   contribution. The run grades.
 - `composite_contributions.group_id` (`AddCompositeContributionGroup`): a
   contribution fills the image of the group whose pool dealt its slot,
-  whenever it is graded, also after the session closed. Only the whole
-  class's image covers class items; a lab's tiles count toward class goals
-  from slice 5.
+  whenever it is graded, also after the session closed. A lab's passing tile
+  covers its slot in that lab's coverage (slice 5b).
 - `CompositeSnapshot.Scope` takes a group. The JSON feed takes `?group=`
   for staff and reads a student's own slot's group; the staff board, the
   stage's poll URL and the present page pass the group they show. A
@@ -574,8 +573,7 @@ should be able to see it. The maintainer chose best effort on 2026-10-18.
   with their rankings, so they are dealt again in the lab they play in.
 - Known limits, accepted: a student holds one slot per assignment, so one
   who moves labs after being dealt keeps their tile in the first lab's image
-  until staff remove them there. A class goal on a per-group composite
-  cannot advance until slice 5 counts a lab's tiles.
+  until staff remove them there.
 - `canRunPerGroup` is now every kind but the union. Changed under the
   maintainer's direction: `ClassActivityIsPerGroupTests` (the composite
   joins the kinds) and `GroupSessionGateTests` (it no longer expects the
@@ -595,8 +593,7 @@ should be able to see it. The maintainer chose best effort on 2026-10-18.
   lab's open session (`CompositeSpares.playsInSession`). After the close,
   the result page offers no button, and a request returns "The class
   session is closed."
-- A lab's spare covers no class item before slice 5, as a lab's own tile
-  does not.
+- A lab's passing spare covers its slot in that lab's coverage (slice 5b).
 - Remove on "Who joined" also deletes the student's finished spares in the
   group, with their jobs. A spare that is still grading stays, so the
   runner's report finds its job, and its tile shows if it passes.
@@ -656,17 +653,32 @@ should be able to see it. The maintainer chose best effort on 2026-10-18.
   grade; "Push all" settles it.
 - Tests: `LabGoalTests`.
 
-### Slice 5b: lab goals, the items
+### Slice 5b: lab goals, the items (built)
 
-- `group_class_item_coverage`, the per-group twin of `class_item_coverage`
-  (unique on test setup and item, which every lab covers). A lab's composite
-  tile and spare write it; `recordClassItemCoverage` writes it for the
-  group of the session at submission.
-- The sweep counts an `itemsCovered` goal per lab. The instructor's
-  coverage view takes the lab.
-- `CompositePerGroupTests` and `CompositeSparesPerGroupTests` assert that a
-  lab's tile covers no class item; they change with the maintainer's
-  agreement.
+- `group_class_item_coverage` (`CreateGroupClassItemCoverage`): the
+  per-group twin of `class_item_coverage`, unique on (test setup, group,
+  item). A twin table, because `class_item_coverage` is unique on (test
+  setup, item) and every lab covers the same items. No foreign key to the
+  user, as in the class's table: coverage never retreats when a student
+  drops.
+- Writers, each first finder in the lab wins (`recordLabItemCoverage`):
+  - `recordClassItemCoverage` writes the items for the lab of the session
+    the student submitted in, and for nobody without one;
+  - a lab's passing composite tile covers its slot in its pool's lab, and
+    the holder's own tile takes the slot back from a spare there too
+    (`CompositeContributions.cover`);
+  - a lab's passing spare covers its slot in its pool's lab.
+- The sweep counts an `itemsCovered` goal per lab, over that lab's
+  coverage, with breadth over the lab's students (`isCountedPerLab` now
+  leaves out only a `classCoverage` goal).
+- Course delete removes the lab coverage (`LabGoalGroups.deleteClassGoalData`).
+- Known limit, accepted: the instructor's coverage section on the
+  assignment page shows the whole class's coverage only, so it is empty on
+  a per-group activity. A lab picker there is later work.
+- Changed under the maintainer's direction: `LabGoalTests` keeps its
+  whole-class case with a coverage goal, and `UserReferenceScanTests`
+  lists the new table's `user_id` as kept on purpose. New:
+  `LabItemGoalTests`.
 
 ### Slice 5c: lab goals, the corpus
 

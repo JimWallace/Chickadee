@@ -45,9 +45,8 @@ enum CompositeContributions {
     ///
     /// For an activity that runs per group, the contribution fills the
     /// student's slot in the group whose pool dealt it, whenever it is graded
-    /// (docs/lab-groups.md, slice 4). Only the whole class's image covers
-    /// class items: a per-group composite counts toward class goals from
-    /// slice 5.
+    /// (docs/lab-groups.md, slice 4), and a passing tile covers the slot in
+    /// that lab's coverage (slice 5b).
     @discardableResult
     static func record(
         submission: APISubmission, collection: TestOutcomeCollection, on db: any Database
@@ -81,25 +80,46 @@ enum CompositeContributions {
         row.groupID = pool.groupID
         guard try await upsert(row, on: db) else { return .superseded }
 
-        if passed, pool.groupID == nil {
-            // First to cover the slot keeps it, as for every coverage item.
-            let item = CompositeSpec.coverageItem(forSlot: slot)
-            try await APIClassItemCoverage(
-                testSetupID: submission.testSetupID, item: item, userID: userID, submissionID: submissionID
-            ).createIgnoringConflict(on: db)
-            // But the holder's own tile takes the slot back from a spare
-            // (slice 6b): the spare filled a hole the holder had left.
-            let spareJobs = try await APICompositeSpare.query(on: db)
-                .filter(\.$assignmentID == assignmentID).filter(\.$slot == slot).all().map(\.submissionID)
-            if !spareJobs.isEmpty {
-                try await APIClassItemCoverage.query(on: db)
-                    .filter(\.$testSetupID == submission.testSetupID).filter(\.$item == item)
-                    .filter(\.$submissionID ~~ spareJobs)
-                    .set(\.$userID, to: userID).set(\.$submissionID, to: submissionID)
-                    .update()
-            }
+        if passed {
+            try await cover(
+                slot: slot, in: pool, testSetupID: submission.testSetupID, userID: userID,
+                submissionID: submissionID, on: db)
         }
         return .stored(slot: slot, passed: passed)
+    }
+
+    /// Covers the slot's item for the student, in the class's coverage or in
+    /// the coverage of the lab whose pool dealt it (docs/lab-groups.md, slice
+    /// 5b). The first to cover a slot keeps it, as for every item, but the
+    /// holder's own tile takes the slot back from a spare (slice 6b): the
+    /// spare filled a hole the holder had left.
+    private static func cover(
+        slot: Int, in pool: CompositePool, testSetupID: String, userID: UUID, submissionID: String,
+        on db: any Database
+    ) async throws {
+        let item = CompositeSpec.coverageItem(forSlot: slot)
+        let spareJobs = try await pool.spares(on: db).filter { $0.slot == slot }.map(\.submissionID)
+        guard let groupID = pool.groupID else {
+            try await APIClassItemCoverage(
+                testSetupID: testSetupID, item: item, userID: userID, submissionID: submissionID
+            ).createIgnoringConflict(on: db)
+            guard !spareJobs.isEmpty else { return }
+            try await APIClassItemCoverage.query(on: db)
+                .filter(\.$testSetupID == testSetupID).filter(\.$item == item)
+                .filter(\.$submissionID ~~ spareJobs)
+                .set(\.$userID, to: userID).set(\.$submissionID, to: submissionID)
+                .update()
+            return
+        }
+        try await recordLabItemCoverage(
+            testSetupID: testSetupID, groupID: groupID, items: [item], userID: userID, submissionID: submissionID,
+            on: db)
+        guard !spareJobs.isEmpty else { return }
+        try await APIGroupClassItemCoverage.query(on: db)
+            .filter(\.$testSetupID == testSetupID).filter(\.$groupID == groupID).filter(\.$item == item)
+            .filter(\.$submissionID ~~ spareJobs)
+            .set(\.$userID, to: userID).set(\.$submissionID, to: submissionID)
+            .update()
     }
 
     /// Whether a contribution can fill a slot of this composite: the shape is

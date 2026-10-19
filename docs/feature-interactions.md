@@ -546,8 +546,8 @@ because line numbers go out of date.
     slots (`group_composite_slots`, slice 4a) through `CompositePool`. A
     reader of slots goes through `CompositePool` (`dealt`, `dealtSlot`),
     never straight to `composite_slots`, and a reader of the image passes a
-    group to `CompositeSnapshot.Scope`. A lab's tiles cover no class item
-    until slice 5. A lab's spares are in `group_composite_spares` (slice
+    group to `CompositeSnapshot.Scope`. A lab's tiles and spares cover their
+    slot in `group_class_item_coverage` (slice 5b). A lab's spares are in `group_composite_spares` (slice
     4b): a reader of spares goes through `CompositePool.spares` or
     `CompositePool.spare(submissionID:)`. A per-group round robin
     awards no standings-leader record, and `setActivity` seeds none for it.

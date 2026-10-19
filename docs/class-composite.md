@@ -427,7 +427,8 @@ a hole for the others.
 On a composite that runs once per lab group, a student fills holes in the
 image of their own lab, and only while they play in that lab's open session
 (`docs/lab-groups.md`, slice 4b). The spare's row is in
-`group_composite_spares`, and it covers no class item before slice 5.
+`group_composite_spares`, and a passing one covers its slot in the lab's
+coverage (slice 5b).
 
 The button grades the student's passing submission again with the inputs of
 the first hole. The job is a `compositeSpare` submission, owned by no student,
