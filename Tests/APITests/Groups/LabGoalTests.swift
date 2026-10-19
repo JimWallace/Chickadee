@@ -5,7 +5,7 @@
 // the group they are a member of; each lab's grade goal is counted over its own
 // students, with no whole-class snapshot; each student earns their own lab's
 // bonus on the result page, the LEARN push and the grades CSV, and a student in
-// no lab earns none; a removed lab counts for nobody; an item goal is still
+// no lab earns none; a removed lab counts for nobody; a coverage goal is still
 // counted for the whole class; a lab's snapshot freezes at the deadline; and
 // course delete removes the lab snapshots.
 
@@ -185,17 +185,17 @@ import VaporTesting
         }
     }
 
-    @Test func anItemGoalIsStillCountedForTheWholeClass() async throws {
+    @Test func aCoverageGoalIsStillCountedForTheWholeClass() async throws {
         try await withApp(app) { _ in
-            let items = Achievement(
-                id: "found", name: "Find the bugs", scope: .classWide,
-                conditions: [AchievementCondition(signal: .itemsCovered, comparator: .atLeast, value: 1)],
-                reward: AchievementReward(type: .points, label: "Bugs found", points: 1),
+            let corpus = Achievement(
+                id: "found", name: "Cover the reference", scope: .classWide,
+                conditions: [AchievementCondition(signal: .classCoverage, comparator: .atLeast, value: 50)],
+                reward: AchievementReward(type: .points, label: "Covered", points: 1),
                 classFraction: 1)
-            let f = try await fixture(extraGoals: [items])
+            let f = try await fixture(extraGoals: [corpus])
             _ = try await evaluateClassGoalAchievements(on: app.db, logger: app.logger)
             let classRows = try await APIAchievementResult.query(on: app.db).all().map(\.achievementID)
-            #expect(classRows == ["found"], "only the item goal has a whole-class snapshot")
+            #expect(classRows == ["found"], "only the coverage goal has a whole-class snapshot")
             let labRows = try await APIGroupAchievementResult.query(on: app.db).all().map(\.achievementID)
             #expect(Set(labRows) == ["all_in"])
 

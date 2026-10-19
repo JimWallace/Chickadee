@@ -86,7 +86,7 @@ extension WorkerDaemon {
         tempRoot: URL,
         freeDiskMBAtStart: Int?,
         job: Job
-    ) throws {
+    ) throws(WorkerDaemonError) {
         guard config.minFreeDiskMB > 0,
             let freeMB = freeDiskMBAtStart,
             freeMB < config.minFreeDiskMB

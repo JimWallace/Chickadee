@@ -218,10 +218,10 @@ enum CompositeSpares {
         }
     }
 
-    /// Stores what a spare job reported. A passing spare in the whole class's
-    /// image covers its slot for the student; the first to cover a slot
-    /// keeps it, as for every item. A lab's spare covers no class item before
-    /// slice 5, as a lab's own tile does not.
+    /// Stores what a spare job reported. A passing spare covers its slot for
+    /// the student, in the class's coverage or in its lab's
+    /// (docs/lab-groups.md, slice 5b); the first to cover a slot keeps it, as
+    /// for every item.
     static func record(
         submission: APISubmission, collection: TestOutcomeCollection, on db: any Database
     )
@@ -248,10 +248,15 @@ enum CompositeSpares {
         row.passed = outcome.status == .pass
         row.finished = true
         try await row.save(on: db)
-        if row.passed, spare.pool.groupID == nil {
+        guard row.passed else { return }
+        let item = CompositeSpec.coverageItem(forSlot: row.slot)
+        if let groupID = spare.pool.groupID {
+            try await recordLabItemCoverage(
+                testSetupID: submission.testSetupID, groupID: groupID, items: [item], userID: row.userID,
+                submissionID: submissionID, on: db)
+        } else {
             try await APIClassItemCoverage(
-                testSetupID: submission.testSetupID, item: CompositeSpec.coverageItem(forSlot: row.slot),
-                userID: row.userID, submissionID: submissionID
+                testSetupID: submission.testSetupID, item: item, userID: row.userID, submissionID: submissionID
             ).createIgnoringConflict(on: db)
         }
     }

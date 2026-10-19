@@ -394,6 +394,13 @@ greeting. The example below does so in R."
   `LocalRunnerAutoStartStore`, `LocalRunnerManager`).
 - All models in `Core/` must be `Codable`, `Sendable`, and have no Vapor imports.
 - Error types are explicit enums, not `String` or generic `Error` where avoidable.
+  Every thrown error is a domain enum: not Vapor's `Abort(...)`, not a
+  `String`. Declare `throws(E)` where the set of errors is closed: validators,
+  parsers, `Core`, `RunnerCore`, the runner's normalizers, and any function
+  whose caller catches one error type. Keep untyped `throws` only where
+  Fluent, Vapor, Foundation or NIO errors pass through, for example route
+  handlers and database code. The LTI validators (`throws(LTILaunchError)`)
+  show the shape.
 - No force unwraps except in tests.
 - Optionals are preferred over sentinel values (no `-1` for "missing").
 - File names match the primary type they contain.

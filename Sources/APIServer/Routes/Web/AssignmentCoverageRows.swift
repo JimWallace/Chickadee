@@ -17,6 +17,10 @@ import Foundation
 /// The coverage rows for one assignment, or `[]` when it is not a contribution
 /// assignment.
 ///
+/// It reads the whole class's coverage only. A lab's coverage, on an activity
+/// that runs per lab group, is in `group_class_item_coverage` and is not shown
+/// here yet (docs/lab-groups.md, slice 5b), so the section is empty there.
+///
 /// Emptiness is the gate. `recordClassItemCoverage` only writes rows for an
 /// assignment declaring contribution slots, so no rows means no section — an
 /// ordinary lab's page is unchanged, with no second signal to consult and no

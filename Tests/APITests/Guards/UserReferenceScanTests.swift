@@ -30,6 +30,7 @@ import VaporTesting
     /// a BrightSpace binding outlives the instructor who made it.
     static let keptOnPurpose: Set<String> = [
         "class_item_coverage.user_id",
+        "group_class_item_coverage.user_id",
         "brightspace_sync_log.user_id",
         "brightspace_credentials.user_id",
         "brightspace_credentials.captured_by_user_id",

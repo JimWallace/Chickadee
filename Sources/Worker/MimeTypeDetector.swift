@@ -26,7 +26,7 @@ struct MimeTypeDetector {
     ///
     /// `async` for that reason alone: the work is identical, but the spawn
     /// now suspends instead of blocking a cooperative-pool thread.
-    func detectMimeType(for fileURL: URL) async throws -> String {
+    func detectMimeType(for fileURL: URL) async throws(SubmissionNormalizationError) -> String {
         let run: BoundedRunResult?
         do {
             run = try await runBounded(

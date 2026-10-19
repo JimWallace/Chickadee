@@ -57,6 +57,20 @@ func recordClassItemCoverage(
         try await courseRole(of: userID, inCourse: setup.courseID, db: db) == .student
     else { return }
 
+    // On an activity that runs per lab group, the items count for the lab of
+    // the session the student submitted in, and with no such session for
+    // nobody (docs/lab-groups.md, slice 5b).
+    if setup.decodedManifest()?.activity?.isPerGroup == true {
+        guard
+            let session = try await ActivitySessionStore.sessionAtSubmission(
+                testSetupID: testSetupID, userID: userID, submissionID: submissionID, on: db)
+        else { return }
+        try await recordLabItemCoverage(
+            testSetupID: testSetupID, groupID: session.groupID, items: covered, userID: userID,
+            submissionID: submissionID, on: db)
+        return
+    }
+
     // One query for the whole submission rather than one per item: a suite can
     // carry dozens of variants and this runs on the result path.
     let alreadyCovered = try await APIClassItemCoverage.query(on: db)
@@ -87,6 +101,42 @@ func classItemCoverage(
         .filter(\.$testSetupID == testSetupID)
         .sort(\.$item)
         .all()
+}
+
+/// One covered item and the student who covered it first: a row of the
+/// class's coverage or of a lab's.
+struct CoveredItem: Equatable, Sendable {
+    let item: String
+    let userID: UUID
+}
+
+/// Records `items` as covered by one lab group (docs/lab-groups.md, slice
+/// 5b), with the rules of the class's union above: the first submission to
+/// cover an item in the lab keeps it, and a replay inserts nothing.
+func recordLabItemCoverage(
+    testSetupID: String, groupID: UUID, items: [String], userID: UUID, submissionID: String,
+    on db: any Database
+) async throws {
+    let seen = Set(
+        try await APIGroupClassItemCoverage.query(on: db)
+            .filter(\.$testSetupID == testSetupID)
+            .filter(\.$groupID == groupID)
+            .filter(\.$item ~~ items)
+            .all()
+            .map(\.item))
+    for item in items where !seen.contains(item) {
+        try await APIGroupClassItemCoverage(
+            testSetupID: testSetupID, groupID: groupID, item: item, userID: userID, submissionID: submissionID
+        ).createIgnoringConflict(on: db)
+    }
+}
+
+/// Every lab's coverage of one assignment, by lab.
+func labItemCoverage(testSetupID: String, on db: any Database) async throws -> [UUID: [CoveredItem]] {
+    let rows = try await APIGroupClassItemCoverage.query(on: db).filter(\.$testSetupID == testSetupID).all()
+    return Dictionary(grouping: rows, by: \.groupID).mapValues { rows in
+        rows.map { CoveredItem(item: $0.item, userID: $0.userID) }
+    }
 }
 
 /// How many contribution slots the assignment behind `testSetupID` declares, or

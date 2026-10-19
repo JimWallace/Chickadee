@@ -9,6 +9,24 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.745] - 2026-10-19
+
+### Changed
+
+- **Lab groups (slice 5b): item goals per lab.** When a class activity runs once per lab group, an "items covered" class goal is now counted per lab: an item counts for the lab of the session it was submitted in, and a lab's composite tiles and spares cover their slots in that lab. Each student earns their own lab's bonus. See `docs/lab-groups.md`.
+
+### Changed
+
+- **Typed throws in Core and the runner.** Functions whose set of errors is closed now declare it: the runner's notebook validation and extraction, MIME detection, disk-space and `make` checks, and result and heartbeat reporting; in Core, avatar customization and the v2 manifest checks. `executeTestSuites` throws nothing, so it no longer says `throws`. The rest stay untyped, because Foundation, Subprocess or network errors pass through them, or they are `Codable` requirements.
+
+
+## [0.5.744] - 2026-10-19
+
+### Changed
+
+- **Typed throws where a caller catches one error type.** `CLAUDE.md` now states the rule: every thrown error is a domain enum, and `throws(E)` is declared where the set of errors is closed. Three functions whose callers catch one error type are now typed, so those catches need no cast. The other 70 such sites also call database, HTTP or Foundation code, and keep their casts.
+
+
 ## [0.5.743] - 2026-10-19
 
 ### Changed

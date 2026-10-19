@@ -61,16 +61,15 @@ actor NotebookBytesCache {
             result = await pending.value
         } else {
             let resolving = Task<Result<Data, NotebookLookupError>, Never> {
-                do {
+                // A closure does not infer its thrown type, so the `do` names it.
+                do throws(NotebookLookupError) {
                     // Module-qualified: inside the actor, the bare name binds
                     // to this actor's own notebookData(for:) method.
                     // The call suspends rather than blocks, so it needs no
                     // thread-pool offload.
                     return .success(try await APIServer.notebookData(from: source))
-                } catch let error as NotebookLookupError {
-                    return .failure(error)
                 } catch {
-                    return .failure(.notFound(setupID: source.setupID ?? "unknown"))
+                    return .failure(error)
                 }
             }
             inFlight[key] = resolving

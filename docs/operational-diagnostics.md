@@ -455,7 +455,7 @@ the user row is hard-deleted via `POST /admin/users/:userID/delete`.
 | `class_achievements` | `user_id` | CASCADE | Derived per-user row; goes with the user. **Enforced by `AddUserFKConstraints` on Postgres; by `AdminRoutes.deleteUser` on SQLite.** |
 | `leaderboard_entries` | `user_id` | CASCADE | Derived per-user ranking row (class activities); goes with the user. DB-level cascade on both engines (the FK is declared at create time). |
 | `tournament_runs` | `started_by`, `winner_user_id` | SET NULL | Run row preserved (it is the bracket's history); who started it and who won it drop. No FK on either backend; **enforced by `AdminRoutes.deleteUser`** (#1808). |
-| `class_item_coverage` | `user_id` | **preserved** | Coverage never retreats when a student drops (docs/collaborative-class-assignments.md). No FK on either backend, on purpose. |
+| `class_item_coverage`, `group_class_item_coverage` | `user_id` | **preserved** | Coverage never retreats when a student drops (docs/collaborative-class-assignments.md; the second table is each lab's, docs/lab-groups.md slice 5b). No FK on either backend, on purpose. |
 | `brightspace_credentials`, `brightspace_sync_log`, `courses` | `user_id`, `captured_by_user_id`, `brightspace_sync_user_id` | **preserved** | A BrightSpace binding and its sync history outlive the instructor who made them. No FK on either backend. |
 | `activity_champions`, `activity_standings` | `user_id` | CASCADE | Class-activity rows for the user; go with the user. |
 | `group_leaderboard_entries` | `user_id` | CASCADE | A per-group leaderboard's best rows (docs/lab-groups.md, slice 3a); go with the user. DB-level cascade on both engines (the FK is declared at create time). |

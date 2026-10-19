@@ -182,6 +182,7 @@ CREATE POLICY mcp_ai_feedback_rows ON reflection_feedback
 --      job_execution_metrics, assignment_extensions, assignment_participations,
 --      assignment_personalization_seeds, course_personalization_seeds,
 --      class_achievements, achievement_results, group_achievement_results,
+--      group_class_item_coverage,
 --      user_activity_events, brightspace_sync_log, pre_enrollments, audit_log,
 --      request_metrics, runner_profiles, runner_snapshots, composite_slots,
 --      group_composite_slots, composite_contributions, composite_references,
