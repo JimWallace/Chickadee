@@ -228,6 +228,7 @@ import Testing
     /// Survivor `:217`. The source is handed back ignoring SIGTERM, before it
     /// is resumed. The child inherits SIGTERM at its default disposition
     /// (measured), so a deleted `signal(SIGTERM, SIG_IGN)` reads as `SIG_DFL`.
+    /// `sigaction` holds a C union and takes a pointer, so the read is `unsafe`.
     @Test func theTerminateSourceIgnoresSigtermBeforeItIsResumed() async {
         await #expect(processExitsWith: .success) {
             guard let apiBaseURL = URL(string: "http://127.0.0.1:9") else { exit(3) }
@@ -236,8 +237,8 @@ import Testing
                 apiBaseURL: apiBaseURL, workerID: "terminate-source", workerSecret: "secret", maxConcurrentJobs: 1)
             let source = WorkerCommand.terminateSource(draining: daemon)
             var action = sigaction()
-            sigaction(SIGTERM, nil, &action)
-            let ignored = unsafeBitCast(action.__sigaction_handler.sa_handler, to: Int.self) == 1
+            unsafe sigaction(SIGTERM, nil, &action)
+            let ignored = unsafe unsafeBitCast(action.__sigaction_handler.sa_handler, to: Int.self) == 1
             // A source that is released while suspended traps, so resume it
             // before it goes away.
             source.resume()

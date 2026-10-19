@@ -13,12 +13,11 @@ let sourceSettings: [SwiftSetting] =
     strictWarnings + [
         .enableUpcomingFeature("ExistentialAny"),
         .enableUpcomingFeature("MemberImportVisibility"),
+        // Strict memory safety (SE-0458): each unsafe construct needs an
+        // explicit `unsafe` mark, and `strictWarnings` makes a missing mark a
+        // build error.
+        .strictMemorySafety(),
     ]
-
-// Strict memory safety (SE-0458) for the product targets: each unsafe
-// construct needs an explicit `unsafe` mark, and `strictWarnings` makes a
-// missing mark a build error. The test targets do not use it yet (#2683).
-let productSettings: [SwiftSetting] = sourceSettings + [.strictMemorySafety()]
 
 let package = Package(
     name: "Chickadee",
@@ -94,7 +93,7 @@ let package = Package(
         .target(
             name: "RunnerCore",
             path: "Sources/RunnerCore",
-            swiftSettings: productSettings
+            swiftSettings: sourceSettings
         ),
 
         // MARK: - Core library
@@ -111,7 +110,7 @@ let package = Package(
             ],
             path: "Sources/Core",
             exclude: ["README.md"],
-            swiftSettings: productSettings
+            swiftSettings: sourceSettings
         ),
 
         // MARK: - API Server library
@@ -147,7 +146,7 @@ let package = Package(
             ],
             path: "Sources/APIServer",
             exclude: ["README.md", "CLAUDE.md", "MCP/CLAUDE.md", "Views/CLAUDE.md"],
-            swiftSettings: productSettings
+            swiftSettings: sourceSettings
         ),
 
         // MARK: - API Server executable (thin wrapper)
@@ -163,7 +162,7 @@ let package = Package(
                 .target(name: "CProcessHardening"),
             ],
             path: "Sources/chickadee-server",
-            swiftSettings: productSettings
+            swiftSettings: sourceSettings
         ),
 
         // MARK: - Process hardening (C)
@@ -189,7 +188,7 @@ let package = Package(
             ],
             path: "Sources/Worker",
             exclude: ["README.md", "CLAUDE.md"],
-            swiftSettings: productSettings,
+            swiftSettings: sourceSettings,
             // Compiles Tools/runner-support/* into the binary. Replaces 2,223
             // lines of hand-typed string literals that mirrored those files;
             // see the plugin for why this is codegen and not `resources:`.
@@ -211,7 +210,7 @@ let package = Package(
                 .product(name: "NIOHTTP1", package: "swift-nio"),
             ],
             path: "Sources/LoadTest",
-            swiftSettings: productSettings
+            swiftSettings: sourceSettings
         ),
 
         // MARK: - Build-tool plugins

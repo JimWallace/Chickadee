@@ -1,5 +1,6 @@
 import ChickadeeTestSupport
 import Foundation
+import Synchronization
 
 #if canImport(FoundationNetworking)
 import FoundationNetworking
@@ -39,45 +40,44 @@ final class MockURLProtocol: URLProtocol {
         }
     }
 
-    private static let stateQueue = DispatchQueue(label: "MockURLProtocol.state")
-    nonisolated(unsafe) private static var _queue: [StubResponse] = []
-    nonisolated(unsafe) private static var _captured: [URLRequest] = []
-    nonisolated(unsafe) private static var _bodies: [Data] = []
+    private struct State {
+        var queue: [StubResponse] = []
+        var captured: [URLRequest] = []
+        var bodies: [Data] = []
+    }
+
+    private static let state = Mutex(State())
 
     static func reset() {
-        stateQueue.sync {
-            _queue.removeAll()
-            _captured.removeAll()
-            _bodies.removeAll()
-        }
+        state.withLock { $0 = State() }
     }
 
     static func enqueue(_ response: StubResponse) {
-        stateQueue.sync { _queue.append(response) }
+        state.withLock { $0.queue.append(response) }
     }
 
     static var capturedRequests: [URLRequest] {
-        stateQueue.sync { _captured }
+        state.withLock { $0.captured }
     }
 
     /// Bodies captured separately because URLSession strips `httpBody` from
     /// the URLRequest passed to URLProtocol; it surfaces it via
     /// `httpBodyStream` instead.
     static var capturedBodies: [Data] {
-        stateQueue.sync { _bodies }
+        state.withLock { $0.bodies }
     }
 
     private static func popResponse() -> StubResponse? {
-        stateQueue.sync {
-            guard !_queue.isEmpty else { return nil }
-            return _queue.removeFirst()
+        state.withLock { state in
+            guard !state.queue.isEmpty else { return nil }
+            return state.queue.removeFirst()
         }
     }
 
     private static func record(request: URLRequest, body: Data) {
-        stateQueue.sync {
-            _captured.append(request)
-            _bodies.append(body)
+        state.withLock { state in
+            state.captured.append(request)
+            state.bodies.append(body)
         }
     }
 
@@ -136,13 +136,12 @@ final class MockURLProtocol: URLProtocol {
         stream.open()
         defer { stream.close() }
         var data = Data()
-        let bufferSize = 4096
-        let buffer = UnsafeMutablePointer<UInt8>.allocate(capacity: bufferSize)
-        defer { buffer.deallocate() }
+        var buffer = [UInt8](repeating: 0, count: 4096)
         while stream.hasBytesAvailable {
-            let read = stream.read(buffer, maxLength: bufferSize)
+            // `InputStream` reads only into a pointer; no safe API exists.
+            let read = unsafe stream.read(&buffer, maxLength: buffer.count)
             if read <= 0 { break }
-            data.append(buffer, count: read)
+            data.append(contentsOf: buffer[0..<read])
         }
         return data
     }
