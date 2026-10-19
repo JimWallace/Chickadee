@@ -69,7 +69,7 @@ struct SubmissionQueryRoutes: RouteCollection {
             let subID = req.parameters.get("submissionID"),
             let submission = try await APISubmission.find(subID, on: req.db)
         else {
-            throw Abort(.notFound)
+            throw AppError.notFound(resource: "Submission")
         }
         // Owner-first: this endpoint is polled every 2 s by every student
         // waiting on a grade, and only needs a view decision (no tier
@@ -77,7 +77,7 @@ struct SubmissionQueryRoutes: RouteCollection {
         // check costs a setup lookup + an enrollment-role query per poll.
         if submission.userID != caller.id {
             guard try await isSubmissionStaff(caller, submission: submission, on: req.db) else {
-                throw Abort(.forbidden)
+                throw AppError.forbidden(action: "view this submission")
             }
         }
         return SubmissionStatusResponse(submission: submission)
@@ -92,11 +92,11 @@ struct SubmissionQueryRoutes: RouteCollection {
             let subID = req.parameters.get("submissionID"),
             let submission = try await APISubmission.find(subID, on: req.db)
         else {
-            throw Abort(.notFound)
+            throw AppError.notFound(resource: "Submission")
         }
         let access = try await submissionAccess(caller: caller, submission: submission, on: req.db)
         guard access.canView else {
-            throw Abort(.forbidden)
+            throw AppError.forbidden(action: "view this submission")
         }
 
         guard

@@ -31,7 +31,7 @@ struct HTTPSRedirectMiddleware: AsyncMiddleware {
             )
         }
 
-        throw Abort(.upgradeRequired, reason: "HTTPS is required for this endpoint.")
+        throw AppError.upgradeRequired(reason: "HTTPS is required for this endpoint.")
     }
 
     /// Paths served over plain HTTP by internal callers, exempt from HTTPS

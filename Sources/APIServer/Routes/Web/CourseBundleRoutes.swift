@@ -46,7 +46,7 @@ struct CourseBundleRoutes: RouteCollection {
     @Sendable
     func exportCourse(req: Request) async throws -> Response {
         let caller = try req.auth.require(APIUser.self)
-        guard caller.isAdmin else { throw Abort(.forbidden) }
+        guard caller.isAdmin else { throw AppError.forbidden(action: "export a course") }
 
         guard let courseIDStr = req.parameters.get("courseID"),
             let courseUUID = UUID(uuidString: courseIDStr),
@@ -505,9 +505,11 @@ private func writeExportStaging(
         let dst = stagingDir.appendingPathComponent("testsetups/\(setup.id).zip")
         // A setup zip is the assignment's content. Without it the bundle
         // would name a file it does not hold and the import would refuse
-        // it, so the export fails here and names the path (#2165).
+        // it, so the export fails here and names the setup (#2165). The
+        // message shows no server path.
         guard FileManager.default.fileExists(atPath: src.path) else {
-            throw Abort(.internalServerError, reason: "Export: test setup zip missing at \(src.path)")
+            throw AppError.internalFailure(
+                reason: "The course cannot be exported: test setup \(setup.id) has no zip file.")
         }
         try FileManager.default.copyItem(at: src, to: dst)
         // The starter notebook as it is now, beside the zip (#1736).
@@ -538,8 +540,8 @@ private func writeDatasetStaging(stagingDir: URL, copies: [(src: String, bundleN
         at: stagingDir.appendingPathComponent("datasets"), withIntermediateDirectories: true)
     for copy in copies {
         guard FileManager.default.fileExists(atPath: copy.src) else {
-            throw Abort(
-                .internalServerError, reason: "Export: the bytes of dataset version \(copy.bundleName) are missing")
+            throw AppError.internalFailure(
+                reason: "Export: the bytes of dataset version \(copy.bundleName) are missing")
         }
         try FileManager.default.copyItem(
             at: URL(fileURLWithPath: copy.src), to: stagingDir.appendingPathComponent(copy.bundleName))

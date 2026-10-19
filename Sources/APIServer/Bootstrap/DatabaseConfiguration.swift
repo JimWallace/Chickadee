@@ -589,6 +589,7 @@ func registerMigrations(on app: Application) {
     // Lab groups, slice 5: each group's class-goal snapshot.
     app.migrations.add(CreateGroupAchievementResults())
     app.migrations.add(CreateGroupClassItemCoverage())
+    app.migrations.add(AddClassCoverageRunGroup())
 
     // ---------------------------------------------------------------------
     // DATA MIGRATIONS. Keep these at the end, and add every new schema

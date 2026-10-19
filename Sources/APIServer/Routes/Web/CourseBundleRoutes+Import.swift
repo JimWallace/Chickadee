@@ -32,7 +32,7 @@ extension CourseBundleRoutes {
     @Sendable
     func importCourse(req: Request) async throws -> Response {
         let caller = try req.auth.require(APIUser.self)
-        guard caller.isAdmin else { throw Abort(.forbidden) }
+        guard caller.isAdmin else { throw AppError.forbidden(action: "import a course") }
 
         let uploadBuffer = try await readUploadedBundleBuffer(req: req)
 
@@ -126,8 +126,7 @@ extension CourseBundleRoutes {
 
         let supported = CourseBundleManifest.supportedSchemaVersions
         guard supported.contains(manifest.schemaVersion) else {
-            throw Abort(
-                .badRequest,
+            throw AppError.badRequest(
                 reason: "Unsupported bundle schemaVersion \(manifest.schemaVersion); expected "
                     + "\(supported.lowerBound) to \(supported.upperBound)")
         }
@@ -146,8 +145,7 @@ extension CourseBundleRoutes {
                     extractDir: extractDir, path: setup.zipFilename, directory: "testsetups"),
                 FileManager.default.fileExists(atPath: path.path)
             else {
-                throw Abort(
-                    .badRequest,
+                throw AppError.badRequest(
                     reason: "Bundle is missing or has an invalid test setup file: \(setup.zipFilename)")
             }
         }
@@ -157,8 +155,7 @@ extension CourseBundleRoutes {
                     extractDir: extractDir, path: sub.submissionFilename, directory: "submissions"),
                 FileManager.default.fileExists(atPath: path.path)
             else {
-                throw Abort(
-                    .badRequest,
+                throw AppError.badRequest(
                     reason: "Bundle is missing or has an invalid submission file: \(sub.submissionFilename)")
             }
         }
@@ -169,8 +166,7 @@ extension CourseBundleRoutes {
                         extractDir: extractDir, path: version.bundleFilename, directory: "datasets"),
                     FileManager.default.fileExists(atPath: path.path)
                 else {
-                    throw Abort(
-                        .badRequest,
+                    throw AppError.badRequest(
                         reason: "Bundle is missing or has an invalid dataset file: \(version.bundleFilename)")
                 }
             }
@@ -182,8 +178,7 @@ extension CourseBundleRoutes {
                         extractDir: extractDir, bundleFilename: att.bundleFilename),
                     FileManager.default.fileExists(atPath: path.path)
                 else {
-                    throw Abort(
-                        .badRequest,
+                    throw AppError.badRequest(
                         reason:
                             "Bundle is missing or has an invalid content attachment file: "
                             + att.bundleFilename)
@@ -242,8 +237,7 @@ extension CourseBundleRoutes {
             if try await activeCourseCodeIsTaken(
                 manifest.course.code, term: bundledCourseTerm(manifest.course), excluding: nil, on: db)
             {
-                throw Abort(
-                    .conflict,
+                throw AppError.conflict(
                     reason: """
                         A course with code "\(manifest.course.code)" already exists and is active. \
                         Archive it first, then re-import.
@@ -493,7 +487,7 @@ private func importBundledDatasets(
             bytes: { try Data(contentsOf: directory.appendingPathComponent($0.sha256)) },
             blobs: AssignmentVersionBlobStore(testSetupsDirectory: dirs.setupsDir), on: db)
     } catch let error as CourseDatasetError {
-        throw Abort(.badRequest, reason: error.description)
+        throw AppError.badRequest(reason: error.description)
     }
 }
 
@@ -521,7 +515,7 @@ private func importBundledTestSetups(
             let srcZip = bundleEntryURL(
                 extractDir: extractDir, path: bundledSetup.zipFilename, directory: "testsetups")
         else {
-            throw Abort(.badRequest, reason: "Invalid test setup file: \(bundledSetup.zipFilename)")
+            throw AppError.badRequest(reason: "Invalid test setup file: \(bundledSetup.zipFilename)")
         }
         tally.createdPaths.append(newZipPath)
         try await runBlocking {
@@ -763,7 +757,7 @@ private func importBundledSubmissions(
             let srcFile = bundleEntryURL(
                 extractDir: extractDir, path: bundledSub.submissionFilename, directory: "submissions")
         else {
-            throw Abort(.badRequest, reason: "Invalid submission file: \(bundledSub.submissionFilename)")
+            throw AppError.badRequest(reason: "Invalid submission file: \(bundledSub.submissionFilename)")
         }
         let copied = try copySubmissionFile(from: srcFile.path, into: subsDir)
         tally.createdPaths.append(copied.path)
@@ -854,8 +848,7 @@ private func importBundledResults(
 /// the item and the kind (#2172).
 private func bundledContentItemKind(_ item: BundledContentItem) throws -> ContentItemKind {
     guard let kind = ContentItemKind(rawValue: item.kind) else {
-        throw Abort(
-            .badRequest,
+        throw AppError.badRequest(
             reason: "Bundle content item \"\(item.title)\" has an unknown kind: \(item.kind)")
     }
     return kind
@@ -865,8 +858,7 @@ private func bundledContentItemKind(_ item: BundledContentItem) throws -> Conten
 /// the section and the mode (#2172).
 private func bundledSectionGradingMode(_ section: BundledSection) throws -> GradingMode {
     guard let mode = GradingMode(rawValue: section.defaultGradingMode) else {
-        throw Abort(
-            .badRequest,
+        throw AppError.badRequest(
             reason: "Bundle section \"\(section.name)\" has an unknown grading mode: \(section.defaultGradingMode)")
     }
     return mode
@@ -901,6 +893,6 @@ func storableImportedManifest(_ manifest: String) throws -> String {
         let decoded = try ManifestCodec.decoder.decode(TestProperties.self, from: Data(manifest.utf8))
         return try encodeManifest(decoded)
     } catch {
-        throw Abort(.badRequest, reason: "A bundled test setup has an invalid version 2 manifest: \(error)")
+        throw AppError.badRequest(reason: "A bundled test setup has an invalid version 2 manifest: \(error)")
     }
 }

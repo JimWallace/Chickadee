@@ -28,17 +28,17 @@ extension WebRoutes {
         guard let setupID = req.parameters.get("testSetupID"),
             let setup = try await APITestSetup.find(setupID, on: req.db),
             let activity = setup.decodedManifest()?.activity
-        else { throw Abort(.notFound) }
+        else { throw AppError.notFound(resource: "Leaderboard") }
 
         let isStaff = try await isCourseStaff(user, inCourse: setup.courseID, db: req.db)
         if !isStaff {
             try await req.cachedRequireCourseEnrollment(caller: user, courseID: setup.courseID)
-            guard activity.leaderboardVisibleToStudents else { throw Abort(.notFound) }
+            guard activity.leaderboardVisibleToStudents else { throw AppError.notFound(resource: "Leaderboard") }
         }
 
         if req.query[String.self, at: "present"] == "1" {
             // Present mode is for the room, and only staff start it.
-            guard isStaff else { throw Abort(.notFound) }
+            guard isStaff else { throw AppError.notFound(resource: "Leaderboard") }
             return try await presentModeResponse(req: req, user: user, setup: setup, activity: activity)
         }
 

@@ -80,5 +80,5 @@ func chickadeeCSRFTokenRetrieval(_ request: Request) async throws -> String {
         content-type=\(contentType) content-length=\(contentLength)
         """
     )
-    throw Abort(.forbidden, reason: "No CSRF token provided.")
+    throw AppError.forbiddenReason(reason: "No CSRF token provided.")
 }

@@ -151,7 +151,7 @@ extension AdminRoutes {
             let raw = req.parameters.get("platformID"),
             let id = UUID(uuidString: raw),
             let platform = try await APILTIPlatform.find(id, on: req.db)
-        else { throw Abort(.notFound) }
+        else { throw AppError.notFound(resource: "LTI platform") }
         return platform
     }
 

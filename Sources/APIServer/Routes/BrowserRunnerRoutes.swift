@@ -46,7 +46,7 @@ struct BrowserRunnerRoutes: RouteCollection {
             let setupID = req.parameters.get("testSetupID"),
             let setup = try await APITestSetup.find(setupID, on: req.db)
         else {
-            throw Abort(.notFound)
+            throw AppError.notFound(resource: "Test setup")
         }
 
         // Gate on effective-open (enrollment + open/visible), not enrollment
@@ -106,7 +106,7 @@ struct BrowserRunnerRoutes: RouteCollection {
             let setupID = req.parameters.get("testSetupID"),
             let setup = try await APITestSetup.find(setupID, on: req.db)
         else {
-            throw Abort(.notFound)
+            throw AppError.notFound(resource: "Test setup")
         }
 
         // Effective-open gate (see downloadTestSetup): the manifest carries the
@@ -124,7 +124,7 @@ struct BrowserRunnerRoutes: RouteCollection {
         // values for every tier), dataset specs and grader-only file names.
         // The native runner never receives these either (`RunnerManifest`).
         guard let body = browserRunnerManifestJSON(setup.manifest) else {
-            throw Abort(.internalServerError, reason: "The test setup manifest could not be read.")
+            throw AppError.internalFailure(reason: "The test setup manifest could not be read.")
         }
         var headers = HTTPHeaders()
         headers.add(name: .contentType, value: "application/json; charset=utf-8")
@@ -156,7 +156,7 @@ struct BrowserRunnerRoutes: RouteCollection {
             let setupID = req.parameters.get("testSetupID"),
             let setup = try await APITestSetup.find(setupID, on: req.db)
         else {
-            throw Abort(.notFound)
+            throw AppError.notFound(resource: "Test setup")
         }
 
         // Effective-open gate (enrollment + open/visible): prevents a student

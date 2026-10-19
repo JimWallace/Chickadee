@@ -28,7 +28,7 @@ today.
 | 4c | Every lab's image, side by side under the staff leaderboard, once each lab's session has ended | built |
 | 5a | Lab goals: a grade goal counted per lab, `group_achievement_results`, each student earns their own lab's bonus | built |
 | 5b | Lab goals, the items: `group_class_item_coverage`, `itemsCovered` goals per lab, a lab's composite tiles and spares count | built |
-| 5c | Lab goals, the corpus: `classCoverage` goals per lab, one corpus run per lab | not started |
+| 5c | Lab goals, the corpus: `class_coverage_runs.group_id`, one corpus run per lab over its students, `classCoverage` goals per lab | built |
 | 6 | The LEARN source: the existing group-category sweep writes the new tables; a D2L Sections reader; the category picker | not started |
 | later | Per-group deadlines; a TA's roster filtered to their groups; a `team` kind with a shared submission | not planned |
 
@@ -635,10 +635,9 @@ should be able to see it. The maintainer chose best effort on 2026-10-18.
 - The sweep (`writeLabGoalSnapshots`) writes one snapshot set per lab of the
   course's first group set, over the enrolled students whose lab it is, and
   writes no whole-class snapshot. A lab's snapshot locks at the deadline.
-  Only a grade goal and a goal with no condition are counted per lab here
-  (`LabGoalGroups.isCountedPerLab`); an `itemsCovered` or `classCoverage`
-  goal is still counted for the whole class until 5b or 5c, and every
-  student reads its whole-class snapshot.
+  In 5a, a grade goal and a goal with no condition were counted per lab;
+  5b and 5c add the item and the corpus goals, so after 5c every goal of a
+  per-group activity is counted per lab.
 - The bonus: `classGoalBonusPoints(…, userID:)` reads the student's lab's
   snapshots on the result page and the LEARN push, and the grades CSV reads
   them through `ClassGoalBonusTable`. A student in no lab earns no lab
@@ -669,8 +668,7 @@ should be able to see it. The maintainer chose best effort on 2026-10-18.
     (`CompositeContributions.cover`);
   - a lab's passing spare covers its slot in its pool's lab.
 - The sweep counts an `itemsCovered` goal per lab, over that lab's
-  coverage, with breadth over the lab's students (`isCountedPerLab` now
-  leaves out only a `classCoverage` goal).
+  coverage, with breadth over the lab's students.
 - Course delete removes the lab coverage (`LabGoalGroups.deleteClassGoalData`).
 - Known limits, accepted:
   - The instructor's coverage section on the assignment page shows the
@@ -692,12 +690,37 @@ should be able to see it. The maintainer chose best effort on 2026-10-18.
   lists the new table's `user_id` as kept on purpose. New:
   `LabItemGoalTests`.
 
-### Slice 5c: lab goals, the corpus
+### Slice 5c: lab goals, the corpus (built)
 
-- `group_id` on `class_coverage_runs` (its only unique key is the
-  submission). One `classAggregate` run per lab, over the lab's students,
-  debounced per lab; `latestClassCoverageRun` reads the lab's.
-- The sweep counts a `classCoverage` goal per lab.
+- `class_coverage_runs.group_id` (`AddClassCoverageRunGroup`): nullable,
+  because the table's only unique key is the submission. nil is a run of
+  the whole class, which is every run made before the column.
+- A student's new result schedules the corpus run of the lab of the session
+  they submitted in, and none without one
+  (`scheduleClassCorpusRun(afterSubmission:…)`). A lab's corpus is
+  assembled from the students whose lab it is (`LabGoalGroups`), so the
+  corpus and the goal's breadth count the same people. Each lab is
+  debounced on its own, so two labs grade at once.
+- `latestClassCoverageRun(…, groupID:)` reads one lab's runs; with no group
+  it reads the whole class's only, never a lab's.
+- The sweep counts a `classCoverage` goal per lab, over the lab's latest
+  completed run. Every goal shape is now counted per lab, so a per-group
+  activity has no whole-class snapshot (`LabGoalGroups.classSnapshots` is
+  empty for it).
+- Known limits, accepted:
+  - A lab's corpus holds the latest submission of each of its students,
+    wherever it was made; a student who moved labs brings their work to the
+    new lab's corpus. The old lab's last run keeps their work until another
+    submission in that lab starts its next run.
+  - Remove on "Who joined" changes a lab's students, so the lab's next
+    corpus run leaves out a removed student's work, and the coverage number
+    can drop before the freeze. Item coverage keeps a removed student's
+    items. The run already completed keeps their work until the next one.
+  - A submission made after its session closed schedules no lab run, as it
+    covers no lab item and does not rank (decision 1). A later run in the
+    lab includes it, because the corpus reads each student's latest
+    submission.
+- Tests: `LabCorpusGoalTests`.
 
 ### Slice 6: the LEARN source
 

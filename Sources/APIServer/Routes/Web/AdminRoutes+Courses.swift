@@ -130,10 +130,12 @@ extension AdminRoutes {
             let courseID = UUID(uuidString: idString),
             let course = try await APICourse.find(courseID, on: req.db)
         else {
-            throw Abort(.notFound)
+            throw AppError.notFound(resource: "Course")
         }
         // An archived course takes no new people (the roster hides the form).
-        guard !course.isArchived else { throw Abort(.conflict) }
+        guard !course.isArchived else {
+            throw AppError.conflict(reason: "This course is archived and takes no new people.")
+        }
 
         let back = "/admin/courses/\(idString)"
         let body = try? await req.decodeContent(Body.self)
@@ -163,7 +165,7 @@ extension AdminRoutes {
             let courseID = UUID(uuidString: idString),
             let course = try await APICourse.find(courseID, on: req.db)
         else {
-            throw Abort(.notFound)
+            throw AppError.notFound(resource: "Course")
         }
         // Un-archiving re-enters the unique index over active courses. An
         // archived course may share a code and term with an active one (a
@@ -202,7 +204,7 @@ extension AdminRoutes {
             let courseID = UUID(uuidString: idString),
             let course = try await APICourse.find(courseID, on: req.db)
         else {
-            throw Abort(.notFound)
+            throw AppError.notFound(resource: "Course")
         }
         let body = try? await req.decodeContent(Body.self)
         course.enrollmentMode = CourseEnrollmentMode(rawValue: body?.enrollmentMode ?? "") ?? .open
@@ -225,7 +227,7 @@ extension AdminRoutes {
             let courseID = UUID(uuidString: idString),
             let course = try await APICourse.find(courseID, on: req.db)
         else {
-            throw Abort(.notFound)
+            throw AppError.notFound(resource: "Course")
         }
         let enabled = (try? await req.decodeContent(Body.self))?.enabled == "on"
         course.aiFeedbackEnabled = enabled
@@ -252,7 +254,7 @@ extension AdminRoutes {
             let courseID = UUID(uuidString: idString),
             let source = try await APICourse.find(courseID, on: req.db)
         else {
-            throw Abort(.notFound)
+            throw AppError.notFound(resource: "Course")
         }
         let newCode = try await uniqueCopyCode(base: source.code, term: source.term, db: req.db)
         let result = try await cloneCourse(
@@ -278,7 +280,7 @@ extension AdminRoutes {
             let courseID = UUID(uuidString: idString),
             let source = try await APICourse.find(courseID, on: req.db)
         else {
-            throw Abort(.notFound)
+            throw AppError.notFound(resource: "Course")
         }
         let body = try await req.decodeContent(CloneBody.self)
         let code = body.code.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -332,7 +334,7 @@ extension AdminRoutes {
             let idString = req.parameters.get("courseID"),
             let courseID = UUID(uuidString: idString),
             let course = try await APICourse.find(courseID, on: req.db)
-        else { throw Abort(.notFound) }
+        else { throw AppError.notFound(resource: "Course") }
 
         // Deletion is gated on the same retention window as Purge: a course
         // can only be deleted from the Retention tab once it has been archived
@@ -487,7 +489,7 @@ extension AdminRoutes {
             let courseID = UUID(uuidString: idString),
             let course = try await APICourse.find(courseID, on: req.db)
         else {
-            throw Abort(.notFound)
+            throw AppError.notFound(resource: "Course")
         }
 
         let body = try await req.decodeContent(EditCourseBody.self)
@@ -562,7 +564,7 @@ extension AdminRoutes {
             let userIDString = req.parameters.get("userID"),
             let userID = UUID(uuidString: userIDString)
         else {
-            throw Abort(.badRequest)
+            throw AppError.badRequest(reason: "The course or user ID is not valid.")
         }
 
         try await APICourseEnrollment.query(on: req.db)
@@ -596,13 +598,13 @@ extension AdminRoutes {
             let userIDString = req.parameters.get("userID"),
             let userID = UUID(uuidString: userIDString)
         else {
-            throw Abort(.badRequest)
+            throw AppError.badRequest(reason: "The course or user ID is not valid.")
         }
 
         struct Body: Content { var role: String? }
         let body = try? await req.decodeContent(Body.self)
         guard let newRole = CourseRole(rawValue: body?.role ?? "") else {
-            throw Abort(.badRequest, reason: "Unknown per-course role.")
+            throw AppError.badRequest(reason: "Unknown per-course role.")
         }
 
         guard
@@ -611,7 +613,7 @@ extension AdminRoutes {
                 .filter(\.$userID == userID)
                 .first()
         else {
-            throw Abort(.notFound)
+            throw AppError.notFound(resource: "Enrollment")
         }
         enrollment.role = newRole
         try await enrollment.save(on: req.db)
@@ -637,7 +639,7 @@ extension AdminRoutes {
             let courseID = UUID(uuidString: idString),
             let course = try await APICourse.find(courseID, on: req.db)
         else {
-            throw Abort(.notFound)
+            throw AppError.notFound(resource: "Course")
         }
 
         let courseRow = try await Self.courseDetailRow(
@@ -688,7 +690,7 @@ extension AdminRoutes {
             let userID = UUID(uuidString: idString),
             try await APIUser.find(userID, on: req.db) != nil
         else {
-            throw Abort(.notFound)
+            throw AppError.notFound(resource: "User account")
         }
 
         struct EnrollBody: Content { var courseID: String }
@@ -717,7 +719,7 @@ extension AdminRoutes {
             let courseIDString = req.parameters.get("courseID"),
             let courseID = UUID(uuidString: courseIDString)
         else {
-            throw Abort(.badRequest)
+            throw AppError.badRequest(reason: "The course or user ID is not valid.")
         }
 
         try await APICourseEnrollment.query(on: req.db)

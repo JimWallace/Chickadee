@@ -38,7 +38,7 @@ extension WebRoutes {
         guard let submissionID = req.parameters.get("submissionID"),
             try await isArenaEntrySubmission(submissionID, testSetupID: setup.id ?? "", on: req.db),
             let submission = try await APISubmission.find(submissionID, on: req.db)
-        else { throw Abort(.notFound) }
+        else { throw AppError.notFound(resource: "Arena submission") }
         return try await req.fileio.asyncStreamFile(at: submission.zipPath)
     }
 
@@ -48,7 +48,9 @@ extension WebRoutes {
     @Sendable
     func arenaMatchResult(req: Request) async throws -> HTTPStatus {
         let setup = try await requireArenaSetup(req)
-        guard let matchSubmissionID = req.parameters.get("submissionID") else { throw Abort(.notFound) }
+        guard let matchSubmissionID = req.parameters.get("submissionID") else {
+            throw AppError.notFound(resource: "Arena match")
+        }
         let body = try await req.decodeContent(ArenaResultBody.self)
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
@@ -63,7 +65,7 @@ extension WebRoutes {
         // The browser built the collection before it knew the match's ID;
         // reconcile it as the browser result route does.
         guard let match = try await APISubmission.find(matchSubmissionID, on: req.db) else {
-            throw Abort(.notFound)
+            throw AppError.notFound(resource: "Arena match")
         }
         let reconciled = BrowserResultRoutes.reconcileBrowserCollection(
             collection, submissionID: matchSubmissionID, attemptNumber: match.attemptNumber ?? 1)
@@ -72,9 +74,9 @@ extension WebRoutes {
                 matchSubmissionID: matchSubmissionID, testSetupID: setup.id ?? "", collection: reconciled,
                 application: req.application, on: req.db)
         } catch ArenaResultError.notAnArenaMatch {
-            throw Abort(.notFound)
+            throw AppError.notFound(resource: "Arena match")
         } catch ArenaResultError.alreadyPlayed {
-            throw Abort(.conflict, reason: "This match has been played already.")
+            throw AppError.conflict(reason: "This match has been played already.")
         }
         return .noContent
     }
@@ -87,7 +89,7 @@ extension WebRoutes {
             let setup = try await APITestSetup.find(setupID, on: req.db),
             setup.decodedManifest()?.activity?.kind.aggregation == .bracket,
             try await isCourseStaff(user, inCourse: setup.courseID, db: req.db)
-        else { throw Abort(.notFound) }
+        else { throw AppError.notFound(resource: "Tournament") }
         return setup
     }
 }

@@ -5,12 +5,10 @@
 // endpoints (/api/…, /worker/…) still receive a plain JSON error response so
 // machine clients are not broken.
 //
-// Both typed errors (`WebAssignmentError`, etc.) and bare `Abort(...)` flow
-// through here via the `AbortError` protocol.  When a bare `Abort` provides
-// no `reason:`, the protocol default returns the HTTP reason phrase (e.g.,
-// "Not Found"), which renders as a terse, unfriendly page.  `friendlyReason`
-// below substitutes a more humane default in that case, so the user-facing
-// output is consistent regardless of which error style the handler used.
+// Route errors are `AppError` cases (CLAUDE.md, Coding Conventions), and every
+// `AbortError` flows through here. When an error's reason is empty or is only
+// the HTTP reason phrase (e.g., "Not Found"), as a library's `Abort` can be,
+// `friendlyReason` below substitutes a more humane default.
 
 import Elementary
 import Vapor

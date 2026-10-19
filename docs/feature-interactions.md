@@ -242,6 +242,19 @@ because line numbers go out of date.
     goal counts from `class_item_coverage` again.
   - Course delete removes it (`LabGoalGroups.deleteClassGoalData`).
 
+### A class corpus run: `class_coverage_runs`
+
+- **Writers:** `scheduleClassCorpusRun`, from the result ingest
+  (`afterSubmission:`), and `recordClassCoverageRun` for the run's result.
+- **Readers:** the class-goal sweep (`latestClassCoverageRun`) and the
+  debounce in `scheduleClassCorpusRun`.
+- **Rules** (`docs/lab-groups.md`, slice 5c):
+  - `group_id` names a lab's run; nil is the whole class's. Every reader
+    filters on it, so a whole-class read never sees a lab's run.
+  - A lab's corpus is the lab's students (`LabGoalGroups`), the same
+    people the goal's breadth counts. Remove takes a student out of the
+    lab's next run; item coverage keeps their items.
+
 ### The class-goal bonus: `classGoalBonusPoints`
 
 - **Writers:** the sweep (`evaluateClassGoalAchievements`) writes

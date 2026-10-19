@@ -73,7 +73,9 @@ extension AccountRoutes {
     @Sendable
     func hatchAvatar(req: Request) async throws -> Response {
         let user = try req.auth.require(APIUser.self)
-        guard let term = AcademicTerm.current() else { throw Abort(.internalServerError) }
+        guard let term = AcademicTerm.current() else {
+            throw AppError.internalFailure(reason: "The current academic term could not be determined.")
+        }
         _ = try await AvatarStore.ensureSpec(for: user, on: req.db)
         let hatched = try await AvatarStore.hatch(for: user, term: term, on: req.db)
         return req.redirect(to: hatched ? "/account?avatar=hatched#bird" : "/account?avatar=nohatch#bird")

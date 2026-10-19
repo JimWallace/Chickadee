@@ -107,7 +107,7 @@ extension AdminRoutes {
             let user = try await APIUser.find(uuid, on: req.db),
             user.isMCPAgent
         else {
-            throw Abort(.notFound)
+            throw AppError.notFound(resource: "MCP service account")
         }
         return user
     }
