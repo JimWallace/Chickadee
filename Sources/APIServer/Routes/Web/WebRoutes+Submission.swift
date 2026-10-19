@@ -434,7 +434,7 @@ extension WebRoutes {
 
         try await applyClassGoalBonus(
             to: &processed, setupProps: setupProps,
-            testSetupID: submission.testSetupID, on: req.db)
+            testSetupID: submission.testSetupID, userID: submission.userID, on: req.db)
 
         let badges = try await submissionBadges(
             req: req, submission: submission, displayCollection: displayCollection, setupProps: setupProps,
@@ -468,7 +468,7 @@ extension WebRoutes {
         }
 
         let classGoals = try await loadClassGoalViews(
-            testSetupID: submission.testSetupID, props: setupProps, on: req.db)
+            testSetupID: submission.testSetupID, props: setupProps, userID: submission.userID, on: req.db)
 
         let links = try await studentFacingLinks(
             submission: submission, assignment: submissionAssignment, props: setupProps,
@@ -622,11 +622,12 @@ extension WebRoutes {
         to processed: inout ProcessedCollection,
         setupProps: TestProperties?,
         testSetupID: String,
+        userID: UUID?,
         on db: any Database
     ) async throws {
         guard processed.totalPoints > 0 else { return }
         let bonus = try await classGoalBonusPoints(
-            testSetupID: testSetupID, props: setupProps, on: db)
+            testSetupID: testSetupID, props: setupProps, userID: userID, on: db)
         guard bonus > 0 else { return }
         let bonused = earnedWithClassGoalBonus(
             earned: processed.rawEarnedPoints,

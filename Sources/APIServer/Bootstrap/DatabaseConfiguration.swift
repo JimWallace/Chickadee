@@ -586,6 +586,8 @@ func registerMigrations(on app: Application) {
     app.migrations.add(CreateGroupCompositeSlots())
     app.migrations.add(AddCompositeContributionGroup())
     app.migrations.add(CreateGroupCompositeSpares())
+    // Lab groups, slice 5: each group's class-goal snapshot.
+    app.migrations.add(CreateGroupAchievementResults())
 
     // ---------------------------------------------------------------------
     // DATA MIGRATIONS. Keep these at the end, and add every new schema

@@ -113,7 +113,8 @@ func bestGradeForStudent(
         basePoints = earned
     }
     // Class-goal bonus: true extra credit, which may exceed the suite total.
-    let bonus = try await classGoalBonusPoints(testSetupID: testSetupID, props: setupProps, on: db)
+    let bonus = try await classGoalBonusPoints(
+        testSetupID: testSetupID, props: setupProps, userID: userID, on: db)
     let points = earnedWithClassGoalBonus(earned: basePoints, total: total, bonus: bonus)
     return StudentGrade(points: points, total: total)
 }

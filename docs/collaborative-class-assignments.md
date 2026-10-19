@@ -165,7 +165,9 @@ parts that are tedious to get right:
   achievement);
 - snapshots **lock** at the deadline and then freeze;
 - `ClassGoalBonus.swift` applies the bonus as uncapped extra credit at all three
-  grade-of-record sites (submission page, BrightSpace push, grades CSV);
+  grade-of-record sites (submission page, BrightSpace push, grades CSV); on an
+  activity that runs per lab group, a grade goal is counted per lab and each
+  student earns their own lab's bonus (`docs/lab-groups.md`, slice 5a);
 - `requeueFrozenClassGoalBonusPushes` re-pushes every student's grade to LEARN
   at the freeze, so early submitters are not permanently under-credited by
   whatever the class progress happened to be when their own run was graded.

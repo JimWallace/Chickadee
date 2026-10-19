@@ -17,31 +17,38 @@
 //
 // 0 when the assignment defines no points-rewarded class goals (the common
 // case), so this is a no-op for ordinary assignments.
+//
+// For an activity that runs once per lab group, each lab's goal is counted
+// from that lab's own work, and a student earns their own lab's bonus
+// (`LabGoalGroups`; docs/lab-groups.md, slice 5).
 
 import Core
 import Fluent
 import Foundation
 
-/// Total class-goal bonus points for an assignment: Σ over its points-rewarded
-/// class goals of `reward.points × current class progress`.
+/// Total class-goal bonus points that `userID` earns on an assignment: Σ over
+/// its points-rewarded class goals of `reward.points × progress`, where the
+/// progress is the class's, or for an activity that runs per lab group, the
+/// student's lab's.
 ///
 /// Takes the caller's already-decoded manifest (#1128): every call site has
 /// the setup row in hand, so this no longer re-fetches and re-decodes it.
 func classGoalBonusPoints(
-    testSetupID: String, props: TestProperties?, on db: any Database
+    testSetupID: String, props: TestProperties?, userID: UUID?, on db: any Database
 ) async throws -> Double {
     guard let props else { return 0 }
     let goals = props.achievements.filter(\.isClassGoal)
     guard !goals.isEmpty else { return 0 }
+    let snapshots = try await LabGoalGroups.snapshots(
+        testSetupID: testSetupID, props: props, userID: userID, on: db)
+    return classGoalBonusPoints(goals: goals, snapshots: snapshots)
+}
 
-    let rows = try await APIAchievementResult.query(on: db)
-        .filter(\.$testSetupID == testSetupID)
-        .all()
-    var progressByID: [String: Double] = [:]
-    for row in rows { progressByID[row.achievementID] = row.progress }
-
-    return goals.reduce(0.0) { sum, goal in
-        sum + Double(goal.reward.points ?? 0) * (progressByID[goal.id] ?? 0)
+/// Σ over `goals` of `reward.points × progress`, from snapshots by
+/// achievement. A goal with no snapshot yet adds nothing.
+func classGoalBonusPoints(goals: [Achievement], snapshots: [String: any ClassGoalSnapshot]) -> Double {
+    goals.reduce(0.0) { sum, goal in
+        sum + Double(goal.reward.points ?? 0) * (snapshots[goal.id]?.progress ?? 0)
     }
 }
 

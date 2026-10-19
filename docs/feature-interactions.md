@@ -220,6 +220,27 @@ because line numbers go out of date.
   Its bonus reaches LEARN only through "Push all"
   (`docs/brightspace-setup.md`, "What triggers a push").
 
+### The class-goal bonus: `classGoalBonusPoints`
+
+- **Writers:** the sweep (`evaluateClassGoalAchievements`) writes
+  `achievement_results`. For an activity that runs per lab group it writes
+  `group_achievement_results` instead, one set per lab
+  (`writeLabGoalSnapshots`; `docs/lab-groups.md`, slice 5a).
+- **Readers:** the result page (`applyClassGoalBonus`,
+  `loadClassGoalViews`), the LEARN push (`bestGradeForStudent`) and the
+  grades CSV (`ClassGoalBonusTable`).
+- **Rules:**
+  - The bonus belongs to a student: pass the student. On a per-group
+    activity it is the student's lab's (`LabGoalGroups`), and a student in
+    no lab earns none.
+  - A new grade-of-record site reads the bonus through
+    `classGoalBonusPoints` or `ClassGoalBonusTable`, never a snapshot table.
+  - A new reader of a student's lab for a goal uses `LabGoalGroups`
+    (`byStudent`, or `lab(of:)` for one student), so the sweep and the bonus
+    agree. `LeaderboardGroupScope.studentGroup`, which picks the board a
+    student sees, is the one parallel reader: it reads the same join first,
+    then a group the student ranked in, and ranking needs a join.
+
 ---
 
 ## The grading pipeline

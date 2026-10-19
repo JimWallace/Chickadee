@@ -151,13 +151,28 @@ func evaluateClassGoalAchievements(
 
     for entry in goalCarrying {
         let assignment = entry.assignment
-        let goals = entry.goals
+        var goals = entry.goals
         guard let setupID = entry.setup.id else { continue }
+
+        // An activity that runs per lab group counts each lab's grade goals
+        // on its own (docs/lab-groups.md, slice 5a); its other goals are still
+        // counted for the whole class below.
+        if entry.properties.activity?.isPerGroup == true {
+            let lab = try await writeLabGoalSnapshots(
+                entry: entry, enrolledStudents: studentIDsByCourse[assignment.courseID] ?? [], now: now, on: db,
+                logger: logger)
+            written += lab.written
+            if lab.bonusFroze {
+                try await requestGradePush(.allStudents(assignment, logger: logger), testSetupID: setupID, on: db)
+            }
+            goals = goals.filter { !LabGoalGroups.isCountedPerLab($0) }
+            if goals.isEmpty { continue }
+        }
 
         let existing = try await APIAchievementResult.query(on: db)
             .filter(\.$testSetupID == setupID)
             .all()
-        var rowByAchievement: [String: APIAchievementResult] = [:]
+        var rowByAchievement: [String: any ClassGoalSnapshot] = [:]
         for row in existing { rowByAchievement[row.achievementID] = row }
 
         // Every goal here already frozen → nothing to recompute for this setup.
@@ -186,6 +201,11 @@ func evaluateClassGoalAchievements(
         let outcome = try await writeClassGoalSnapshots(
             goals: goals,
             rowByAchievement: rowByAchievement,
+            newRow: { goal in
+                APIAchievementResult(
+                    testSetupID: setupID, achievementID: goal.id, studentsMeeting: 0, denominator: 0, progress: 0,
+                    locked: false, evaluatedAt: now)
+            },
             evaluation: ClassGoalEvaluation(
                 setupID: setupID,
                 properties: entry.properties,
@@ -367,7 +387,8 @@ private func corpusGoalMetric(
 /// cannot re-trigger the re-push.
 private func writeClassGoalSnapshots(
     goals: [Achievement],
-    rowByAchievement: [String: APIAchievementResult],
+    rowByAchievement: [String: any ClassGoalSnapshot],
+    newRow: (Achievement) -> any ClassGoalSnapshot,
     evaluation: ClassGoalEvaluation,
     on db: any Database,
     logger: Logger
@@ -400,38 +421,75 @@ private func writeClassGoalSnapshots(
         let studentsMeeting = metric.studentsMeeting
         let progress = metric.progress
 
-        if let row = rowByAchievement[goal.id] {
-            row.studentsMeeting = studentsMeeting
-            row.denominator = denominator
-            row.progress = progress
-            row.locked = locked
-            row.evaluatedAt = now
-            row.itemsCovered = metric.itemsCovered
-            row.itemsRequired = metric.itemsRequired
-            row.coveragePercent = metric.coveragePercent
-            row.coverageRequired = metric.coverageRequired
-            try await row.save(on: db)
-        } else {
-            try await APIAchievementResult(
-                testSetupID: setupID,
-                achievementID: goal.id,
-                studentsMeeting: studentsMeeting,
-                denominator: denominator,
-                progress: progress,
-                locked: locked,
-                evaluatedAt: now,
-                itemsCovered: metric.itemsCovered,
-                itemsRequired: metric.itemsRequired,
-                coveragePercent: metric.coveragePercent,
-                coverageRequired: metric.coverageRequired
-            ).save(on: db)
-        }
+        let row = rowByAchievement[goal.id] ?? newRow(goal)
+        row.studentsMeeting = studentsMeeting
+        row.denominator = denominator
+        row.progress = progress
+        row.locked = locked
+        row.evaluatedAt = now
+        row.itemsCovered = metric.itemsCovered
+        row.itemsRequired = metric.itemsRequired
+        row.coveragePercent = metric.coveragePercent
+        row.coverageRequired = metric.coverageRequired
+        try await row.save(on: db)
         outcome.written += 1
         // A goal awarding no points moves no grade, so its freeze is not a
         // reason to re-push the class.
         if locked, (goal.reward.points ?? 0) > 0 { outcome.bonusFroze = true }
     }
 
+    return outcome
+}
+
+// MARK: - Lab goals
+
+/// Writes the class-goal snapshots of an activity that runs per lab group, one
+/// set per lab (docs/lab-groups.md, slice 5). Each lab's goal is counted over
+/// the enrolled students whose lab it is (`LabGoalGroups`), and each of them
+/// earns that lab's bonus. A grade goal and a goal with no condition are
+/// counted per lab; an item or a corpus goal is still counted for the whole
+/// class (`LabGoalGroups.isCountedPerLab`).
+private func writeLabGoalSnapshots(
+    entry: GoalCarryingAssignment, enrolledStudents: Set<UUID>, now: Date, on db: any Database, logger: Logger
+) async throws -> ClassGoalWriteOutcome {
+    var outcome = ClassGoalWriteOutcome(written: 0, bonusFroze: false)
+    guard let setupID = entry.setup.id,
+        let setID = try await CourseGroupStore.sets(courseID: entry.assignment.courseID, on: db).first?.id
+    else { return outcome }
+    let goals = entry.goals.filter(LabGoalGroups.isCountedPerLab)
+    guard !goals.isEmpty else { return outcome }
+    let groupIDs = try await CourseGroupStore.groups(inSet: setID, on: db).compactMap(\.id)
+    let existing = Dictionary(
+        grouping: try await APIGroupAchievementResult.query(on: db).filter(\.$testSetupID == setupID).all(),
+        by: \.groupID)
+    // Every lab's goals already frozen: nothing to recompute.
+    let frozen = groupIDs.allSatisfy { groupID in
+        let rows = existing[groupID] ?? []
+        return goals.allSatisfy { goal in rows.contains { $0.achievementID == goal.id && $0.locked } }
+    }
+    if frozen { return outcome }
+
+    let locked = entry.assignment.dueAt.map { $0 <= now } ?? false
+    let labs = try await LabGoalGroups.byStudent(assignment: entry.assignment, on: db)
+        .filter { enrolledStudents.contains($0.key) }
+    let bestByStudent = try await bestAssignmentGradeByStudent(testSetupID: setupID, on: db)
+    for groupID in groupIDs {
+        let members = Set(labs.filter { $0.value == groupID }.keys)
+        let rows = Dictionary(
+            (existing[groupID] ?? []).map { ($0.achievementID, $0 as any ClassGoalSnapshot) },
+            uniquingKeysWith: { first, _ in first })
+        let lab = try await writeClassGoalSnapshots(
+            goals: goals,
+            rowByAchievement: rows,
+            newRow: { APIGroupAchievementResult(testSetupID: setupID, groupID: groupID, achievementID: $0.id) },
+            evaluation: ClassGoalEvaluation(
+                setupID: setupID, properties: entry.properties,
+                bestByStudent: bestByStudent.filter { members.contains($0.key) }, coverage: [], corpusRun: nil,
+                enrolledStudents: members, denominator: members.count, locked: locked, now: now),
+            on: db, logger: logger)
+        outcome.written += lab.written
+        outcome.bonusFroze = outcome.bonusFroze || lab.bonusFroze
+    }
     return outcome
 }
 
