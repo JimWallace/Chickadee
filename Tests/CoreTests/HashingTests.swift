@@ -62,10 +62,7 @@ struct HashingTests {
             .appendingPathComponent("hash-stream-\(UUID().uuidString).bin")
         defer { try? FileManager.default.removeItem(at: tmp) }
         // Big enough to span multiple 1 MiB chunks.
-        var bytes = Data(count: 2_500_000)
-        bytes.withUnsafeMutableBytes { buffer in
-            for index in 0..<buffer.count { buffer[index] = UInt8(index % 251) }
-        }
+        let bytes = Data((0..<2_500_000).map { UInt8($0 % 251) })
         try bytes.write(to: tmp)
 
         let prefix = Data("manifest|zip=".utf8)

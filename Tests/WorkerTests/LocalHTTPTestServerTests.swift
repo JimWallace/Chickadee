@@ -10,7 +10,8 @@ import Foundation
 import Testing
 
 @Suite(.timeLimit(.minutes(2))) struct LocalHTTPTestServerTests {
-    /// True while something accepts TCP connections on `port`.
+    /// True while something accepts TCP connections on `port`. `connect`
+    /// takes a pointer, and no safe API exists for it.
     private static func isListening(_ port: Int) -> Bool {
         let descriptor = socket(AF_INET, Int32(SOCK_STREAM.rawValue), 0)
         guard descriptor >= 0 else { return false }
@@ -18,10 +19,10 @@ import Testing
         var address = sockaddr_in()
         address.sin_family = sa_family_t(AF_INET)
         address.sin_port = in_port_t(UInt16(port).bigEndian)
-        address.sin_addr.s_addr = inet_addr("127.0.0.1")
+        address.sin_addr.s_addr = UInt32(0x7F00_0001).bigEndian  // 127.0.0.1
         let result = withUnsafePointer(to: &address) { pointer in
-            pointer.withMemoryRebound(to: sockaddr.self, capacity: 1) {
-                connect(descriptor, $0, socklen_t(MemoryLayout<sockaddr_in>.size))
+            unsafe pointer.withMemoryRebound(to: sockaddr.self, capacity: 1) {
+                unsafe connect(descriptor, $0, socklen_t(MemoryLayout<sockaddr_in>.size))
             }
         }
         return result == 0

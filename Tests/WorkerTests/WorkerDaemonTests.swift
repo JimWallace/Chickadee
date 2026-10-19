@@ -824,10 +824,11 @@ import Testing
     // A concurrent `getenv` walking an array `setenv` is rewriting is a
     // segfault, not a stale read, which is why the process-wide env lock
     // existed. With no writer left in this process the lock is gone.
+    // `setenv` takes C strings, and no safe API exists, so it is `unsafe`.
     @Test func workerDaemonRetriesPollingAfterTransientHTTP500() async throws {
         await #expect(processExitsWith: .success) {
-            setenv("RUNNER_RETRY_BASE_DELAY_MS", "10", 1)
-            setenv("RUNNER_RETRY_MAX_DELAY_MS", "20", 1)
+            unsafe setenv("RUNNER_RETRY_BASE_DELAY_MS", "10", 1)
+            unsafe setenv("RUNNER_RETRY_MAX_DELAY_MS", "20", 1)
             let poller = FlakyPoller(failuresRemaining: 2, failureMode: .http500)
             let reporter = MockReporter()
             let runner = MockRunner(
@@ -859,8 +860,8 @@ import Testing
 
     @Test func workerDaemonRetriesPollingAfterTransientHTTP401() async throws {
         await #expect(processExitsWith: .success) {
-            setenv("RUNNER_RETRY_BASE_DELAY_MS", "10", 1)
-            setenv("RUNNER_RETRY_MAX_DELAY_MS", "20", 1)
+            unsafe setenv("RUNNER_RETRY_BASE_DELAY_MS", "10", 1)
+            unsafe setenv("RUNNER_RETRY_MAX_DELAY_MS", "20", 1)
             let poller = FlakyPoller(failuresRemaining: 2, failureMode: .http401)
             let reporter = MockReporter()
             let runner = MockRunner(
@@ -892,8 +893,8 @@ import Testing
 
     @Test func workerDaemonRetriesPollingAfterDuplicateWorkerIDConflict() async throws {
         await #expect(processExitsWith: .success) {
-            setenv("RUNNER_RETRY_BASE_DELAY_MS", "10", 1)
-            setenv("RUNNER_RETRY_MAX_DELAY_MS", "20", 1)
+            unsafe setenv("RUNNER_RETRY_BASE_DELAY_MS", "10", 1)
+            unsafe setenv("RUNNER_RETRY_MAX_DELAY_MS", "20", 1)
             let poller = FlakyPoller(failuresRemaining: 2, failureMode: .duplicateWorkerID)
             let reporter = MockReporter()
             let runner = MockRunner(

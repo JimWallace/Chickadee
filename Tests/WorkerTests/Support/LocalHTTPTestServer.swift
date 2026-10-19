@@ -115,13 +115,14 @@ final class LocalHTTPTestServer: Sendable {
         var chunk = [UInt8](repeating: 0, count: 4096)
         while Date() < deadline {
             var pollDescriptor = pollfd(fd: descriptor, events: Int16(POLLIN), revents: 0)
-            let readyCount = poll(&pollDescriptor, 1, 100)
+            // `poll` and `read` take pointers, and no safe API exists for them.
+            let readyCount = unsafe poll(&pollDescriptor, 1, 100)
             if readyCount == -1 {
                 if errno == EINTR { continue }
                 return nil
             }
             if readyCount == 0 { continue }  // quiet tick; deadline re-checked at loop top
-            let bytesRead = read(descriptor, &chunk, chunk.count)
+            let bytesRead = unsafe read(descriptor, &chunk, chunk.count)
             if bytesRead > 0 {
                 buffer.append(contentsOf: chunk[0..<bytesRead])
                 guard let newline = buffer.firstIndex(of: 0x0A) else { continue }
@@ -319,10 +320,9 @@ private final class HandshakePipe: Sendable {
     private let readEndOpen = Mutex(true)
 
     init() {
-        var descriptors: (Int32, Int32) = (-1, -1)
-        _ = withUnsafeMutablePointer(to: &descriptors) { pointer in
-            pointer.withMemoryRebound(to: Int32.self, capacity: 2) { pipe($0) }
-        }
+        // If the pipe cannot be made, both ends are -1.
+        let ends = try? FileDescriptor.pipe()
+        let descriptors = (ends?.readEnd.rawValue ?? -1, ends?.writeEnd.rawValue ?? -1)
         for descriptor in [descriptors.0, descriptors.1] {
             let flags = fcntl(descriptor, F_GETFD)
             if flags != -1 { _ = fcntl(descriptor, F_SETFD, flags | FD_CLOEXEC) }

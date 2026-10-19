@@ -374,14 +374,13 @@ greeting. The example below does so in R."
   wrappers are what the compiler cannot check). Use an actor or a `Mutex`
   instead. `scripts/check-unchecked-sendable.sh` fails `format-lint` on any
   other site, with or without a comment.
-- Strict memory safety (SE-0458) is on for every product target
-  (`productSettings` in `Package.swift`), so an unsafe construct without an
+- Strict memory safety (SE-0458) is on for every target, tests included
+  (`sourceSettings` in `Package.swift`), so an unsafe construct without an
   `unsafe` mark does not build. Use a safe API first: swift-system
   (`FileDescriptor`, `FilePath`, `Stat`, `Errno`) for POSIX calls, a NIO type for
   addresses. A `String` given to a C function is an unsafe pointer conversion,
   and so is `FileManager.fileExists(atPath:isDirectory:)`. Mark `unsafe` only
-  where no safe API exists, with a comment that says why. The test targets are
-  not on it yet (#2683).
+  where no safe API exists, with a comment that says why.
 - `async/await` throughout. No completion handlers.
 - Swift APIs over their Foundation predecessors: a regex literal or `Regex`, not
   `NSRegularExpression`; `FilePath`, not `NSString` path calls;

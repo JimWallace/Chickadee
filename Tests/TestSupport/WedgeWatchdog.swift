@@ -69,6 +69,7 @@
 
 import Foundation
 import Synchronization
+import SystemPackage
 
 #if canImport(Glibc)
 import Glibc
@@ -243,19 +244,13 @@ public enum WedgeWatchdog {
     private static func persist(_ report: String) {
         let path = FileManager.default.temporaryDirectory
             .appendingPathComponent("\(dumpFilePrefix)\(getpid()).txt").path
-        let descriptor = open(path, O_WRONLY | O_CREAT | O_TRUNC, 0o644)
-        guard descriptor >= 0 else { return }
-        defer { close(descriptor) }
-        let bytes = Array(report.utf8)
-        var offset = 0
-        while offset < bytes.count {
-            let written = bytes[offset...].withUnsafeBytes { buffer -> Int in
-                guard let base = buffer.baseAddress else { return -1 }
-                return write(descriptor, base, buffer.count)
-            }
-            if written <= 0 { return }
-            offset += written
-        }
+        guard
+            let descriptor = try? FileDescriptor.open(
+                FilePath(path), .writeOnly, options: [.create, .truncate],
+                permissions: [.ownerReadWrite, .groupRead, .otherRead])
+        else { return }
+        defer { try? descriptor.close() }
+        _ = try? descriptor.writeAll(report.utf8)
     }
 
     /// Every thread's kernel-visible state: run state, the kernel wait it is

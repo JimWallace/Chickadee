@@ -56,11 +56,10 @@ import VaporTesting
         // directory this suite is about.
         try await withApp(app) { app in
             let root = try #require(app.testDataDirectory)
-            var isDirectory: ObjCBool = false
+            let values = try? URL(fileURLWithPath: root).resourceValues(forKeys: [.isDirectoryKey])
             #expect(
-                FileManager.default.fileExists(atPath: root, isDirectory: &isDirectory),
+                values?.isDirectory == true,
                 "the recorded test data directory must actually exist — it is what teardown removes")
-            #expect(isDirectory.boolValue)
 
             // Each configured directory must live INSIDE the recorded root. This is
             // the assertion the sibling bug fails: `.../<uuid>results/` does not

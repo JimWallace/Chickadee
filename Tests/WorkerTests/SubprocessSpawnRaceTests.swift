@@ -28,18 +28,19 @@ import SystemPackage
     }
 
     /// Launches `/bin/true` with posix_spawn and waits for it, until `stop` is set.
+    /// The race needs a raw `posix_spawn`, which takes pointers, so it is unsafe.
     private static func spawnUntilStopped(_ stop: StopFlag) {
         let path = "/bin/true"
         while !stop.isSet.load(ordering: .relaxed) {
             var pid: pid_t = 0
             let status = path.withCString { cPath -> Int32 in
-                var argv: [UnsafeMutablePointer<CChar>?] = [strdup(cPath), nil]
-                defer { free(argv[0]) }
-                return posix_spawn(&pid, cPath, nil, nil, &argv, nil)
+                var argv: [UnsafeMutablePointer<CChar>?] = unsafe [strdup(cPath), nil]
+                defer { unsafe free(argv[0]) }
+                return unsafe posix_spawn(&pid, cPath, nil, nil, &argv, nil)
             }
             guard status == 0 else { continue }
             var exitStatus: Int32 = 0
-            _ = waitpid(pid, &exitStatus, 0)
+            _ = unsafe waitpid(pid, &exitStatus, 0)
         }
     }
 
