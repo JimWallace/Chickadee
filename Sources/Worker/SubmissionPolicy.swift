@@ -144,7 +144,7 @@ enum SubmissionValidation {
         data: Data,
         filename: String,
         language: AssignmentLanguage
-    ) throws -> [String: Any] {
+    ) throws(SubmissionNormalizationError) -> [String: Any] {
         guard submissionGuaranteeApplies(.validNotebookJSON, to: language) else {
             // Exempt: parse leniently and let the caller skip on failure.
             reportSkippedGuarantee(.validNotebookJSON, language: language, filename: filename)
@@ -173,7 +173,7 @@ enum SubmissionValidation {
         _ count: Int,
         filename: String,
         language: AssignmentLanguage
-    ) throws {
+    ) throws(SubmissionNormalizationError) {
         guard submissionGuaranteeApplies(.notebookHasCodeCells, to: language) else {
             reportSkippedGuarantee(.notebookHasCodeCells, language: language, filename: filename)
             return

@@ -82,7 +82,7 @@ public enum AvatarCustomization {
     public static func applying(
         _ choices: [String: String], to spec: AvatarSpec, isStaff: Bool,
         season: TermSeason = .current(), unlocked: Set<WardrobeItem> = []
-    ) throws
+    ) throws(AvatarCustomizationError)
         -> AvatarSpec
     {
         var updated = spec
