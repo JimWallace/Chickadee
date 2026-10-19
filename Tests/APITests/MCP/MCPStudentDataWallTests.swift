@@ -44,7 +44,7 @@ import Testing
     private static let forbiddenModels = [
         "APISubmission", "APIResult", "APIGradeOverride", "APIClientDiagnostic",
         "APISubmissionDiagnostics", "JobExecutionMetric", "APIClassAchievement",
-        "APIAchievementResult", "APIUserActivityEvent", "APIBrightSpaceSyncLog",
+        "APIAchievementResult", "APIGroupAchievementResult", "APIUserActivityEvent", "APIBrightSpaceSyncLog",
         "APIPreEnrollment", "APIAssignmentParticipation", "APIAssignmentExtension",
     ]
 

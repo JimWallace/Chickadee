@@ -169,8 +169,9 @@ student `APIResult` (grades), `APIGradeOverride`, `APIAssignmentExtension`,
 `APIAssignmentParticipation`, `APIAssignmentPersonalizationSeed` and
 `APICoursePersonalizationSeed` content,
 `APIClientDiagnostic`, `APISubmissionDiagnostics`, `JobExecutionMetric`,
-`APIClassAchievement`, `APIUserActivityEvent`, `APIBrightSpaceSyncLog`,
-`APIPreEnrollment`, `APIUserActivityEvent`, and the lab-group tables
+`APIClassAchievement`, `APIAchievementResult`, `APIGroupAchievementResult`
+(each lab group's class-goal snapshot), `APIUserActivityEvent`,
+`APIBrightSpaceSyncLog`, `APIPreEnrollment`, and the lab-group tables
 `APICourseGroupSet`, `APICourseGroup`, `APICourseGroupMembership`,
 `APIActivitySession` and `APIActivitySessionAttendance` (docs/lab-groups.md,
 decision 11: membership and attendance are enrollment data; they store the

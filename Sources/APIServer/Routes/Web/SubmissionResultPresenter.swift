@@ -528,7 +528,7 @@ extension WebRoutes {
 ///
 /// Formatted by the same helper the instructor coverage section uses, so the
 /// two views cannot drift into naming one number two ways.
-private func classGoalCoverageSummary(_ row: APIAchievementResult?) -> String? {
+private func classGoalCoverageSummary(_ row: (any ClassGoalSnapshot)?) -> String? {
     if let percent = row?.coveragePercent, let required = row?.coverageRequired {
         return corpusCoverageSummary(percent: percent, required: required)
     }
@@ -540,18 +540,17 @@ private func classGoalCoverageSummary(_ row: APIAchievementResult?) -> String? {
 /// `APIAchievementResult` snapshot, for the student-facing "Achievements"
 /// section.  Returns `[]` when the manifest carries no class goals.  Takes the
 /// caller's already-decoded manifest (#1128) instead of re-fetching the setup.
+/// For an activity that runs per lab group, the goals show the progress of
+/// `userID`'s lab (docs/lab-groups.md, slice 5).
 func loadClassGoalViews(
-    testSetupID: String, props: TestProperties?, on db: any Database
+    testSetupID: String, props: TestProperties?, userID: UUID?, on db: any Database
 ) async throws -> [ClassGoalView] {
     guard let props else { return [] }
     let goals = props.achievements.filter(\.isClassGoal)
     guard !goals.isEmpty else { return [] }
 
-    let rows = try await APIAchievementResult.query(on: db)
-        .filter(\.$testSetupID == testSetupID)
-        .all()
-    var rowByAchievement: [String: APIAchievementResult] = [:]
-    for row in rows { rowByAchievement[row.achievementID] = row }
+    let rowByAchievement = try await LabGoalGroups.snapshots(
+        testSetupID: testSetupID, props: props, userID: userID, on: db)
 
     return goals.map { goal in
         let row = rowByAchievement[goal.id]

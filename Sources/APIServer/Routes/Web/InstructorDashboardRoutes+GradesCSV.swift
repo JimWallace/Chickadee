@@ -91,19 +91,22 @@ extension InstructorDashboardRoutes {
         // Class-goal bonus: true extra credit for every graded submission on a
         // setup with class goals — it may take a student above the suite total.
         // Overrides are authoritative, so a key an override already set is left
-        // untouched.
+        // untouched. On an activity that runs per lab group, each student
+        // earns their own lab's bonus (docs/lab-groups.md, slice 5).
+        let assignmentBySetup = Dictionary(
+            assignments.map { ($0.testSetupID, $0) }, uniquingKeysWith: { first, _ in first })
         for setupID in setupIDs {
-            guard let setup = setupByID[setupID] else { continue }
+            guard let setup = setupByID[setupID], let assignment = assignmentBySetup[setupID] else { continue }
             let props = setup.decodedManifest()
-            let bonus = try await classGoalBonusPoints(
-                testSetupID: setupID, props: props, on: req.db)
-            guard bonus > 0, let total = suiteTotalPoints(props: props)
+            guard let bonus = try await ClassGoalBonusTable.load(assignment: assignment, props: props, on: req.db),
+                let total = suiteTotalPoints(props: props)
             else { continue }
             let suffix = "::\(setupID)"
             for (mapKey, points) in bestPointsByUserAndSetup
             where mapKey.hasSuffix(suffix) && !overrideKeys.contains(mapKey) {
+                guard let userID = UUID(uuidString: String(mapKey.dropLast(suffix.count))) else { continue }
                 bestPointsByUserAndSetup[mapKey] = earnedWithClassGoalBonus(
-                    earned: points, total: total, bonus: bonus)
+                    earned: points, total: total, bonus: bonus.points(for: userID))
             }
         }
 

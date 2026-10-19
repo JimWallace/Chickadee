@@ -26,7 +26,9 @@ today.
 | 4a | The composite per group: `group_composite_slots`, each group deals its own slots in its session, contributions fill the group's image, the board and the present page per group | built |
 | 4b | Spares per group: `group_composite_spares`, "Fill a hole" fills a hole in the image of the student's own lab while their session is open | built |
 | 4c | Every lab's image, side by side under the staff leaderboard, once each lab's session has ended | built |
-| 5 | Group goals: the union and the corpus percent per group; a group achievement | not started |
+| 5a | Lab goals: a grade goal counted per lab, `group_achievement_results`, each student earns their own lab's bonus | built |
+| 5b | Lab goals, the items: `itemsCovered` goals per lab, so a lab's composite tiles and spares count | not started |
+| 5c | Lab goals, the corpus: `classCoverage` goals per lab, one corpus run per lab | not started |
 | 6 | The LEARN source: the existing group-category sweep writes the new tables; a D2L Sections reader; the category picker | not started |
 | later | Per-group deadlines; a TA's roster filtered to their groups; a `team` kind with a shared submission | not planned |
 
@@ -179,10 +181,12 @@ Nil means course-wide, which is what every existing row is.
    group, round, slot). A 6 × 8 starter grid suits a lab of 25 with spares
    for the fast students. The staff leaderboard shows every group's image
    side by side, which is the end-of-term artefact.
-8. **A group goal is the same goal, counted per group.** The union and the
-   corpus percent read their rows filtered by group; breadth is the fraction
-   of the group's current members. The achievement is awarded to the group's
-   participants. The sweep stays blob-free and reconciles per group.
+8. **A group goal is the same goal, counted per group.** Each lab's goal is
+   counted over the students whose lab it is, and each of them earns that
+   lab's bonus (the maintainer's decision, slice 5). A student's lab is the
+   group of the session they joined last, else the group they are a member
+   of (`LabGoalGroups`), so a student counts in one lab only. The sweep
+   stays blob-free and writes one snapshot per lab.
 9. **Staff are never gated and may run any group's session.** A TA assigned
    to a group gets that group's present page by default. Any staff member can
    open any group's board, because the instructor walks between rooms.
@@ -195,9 +199,12 @@ Nil means course-wide, which is what every existing row is.
     attendance row (`Sources/APIServer/MCP/CLAUDE.md`). `set_activity` may
     set `runsPerGroup`, because that is content. Add the five tables to the
     "never touches" list in `docs/compliance/data-flow-inventory.md`.
-12. **Grades do not change.** A submission's grade, its LEARN push and the
-    assignment's deadline read nothing here. Only ranking, aggregation and the
-    live clock become per group.
+12. **Grades do not change, except the class-goal bonus.** A submission's
+    grade, its LEARN push and the assignment's deadline read nothing here,
+    with one exception the maintainer chose: on an activity that runs per
+    lab group, the class-goal bonus is the student's lab's (decision 8).
+    Only ranking, aggregation, the live clock and that bonus become per
+    group.
 
 ## What changes on each surface
 
@@ -608,20 +615,65 @@ should be able to see it. The maintainer chose best effort on 2026-10-18.
   past. The board's 5-second refresh does not build the section. The name
   is "labs", not "gallery", because the gallery is a compositor kind.
 - Staff only, as the composite board is: a student sees only their own tile.
-  Whether students see every lab's image at the end of term is a decision for
-  later.
+  The maintainer decided that this stays staff-only.
 - `CompositeStage` takes the slider's id, so two animated stages on one page
   do not share one.
 - Tests: `CompositeLabsTests`.
 
-### Slice 5: group goals
+### Slice 5a: lab goals (built)
 
-- `group_id` on `class_item_coverage` and `class_coverage_runs`. The sweep
-  evaluates a class goal once per group when the assignment runs per group,
-  and awards it to that group's participants.
-- The corpus run becomes one `classAggregate` submission per group.
-- Tests: coverage per group, breadth over the group's members, an award that
-  reaches only the group.
+- The maintainer's decision: each lab's goal is counted from that lab's own
+  work, and each student earns their own lab's bonus. One lab's result does
+  not depend on another's.
+- `group_achievement_results` (`CreateGroupAchievementResults`): the
+  per-group twin of `achievement_results`, unique on (test setup, group,
+  achievement). A twin table, because `achievement_results` is unique on
+  (test setup, achievement) and SQLite cannot drop that key.
+- `LabGoalGroups`: a student's lab is the group of the session they joined
+  last, else the group they are a member of. A removed join, a join after
+  the deadline and a removed lab do not count, so a student's lab, and with
+  it their bonus, cannot move after the goal freezes. The sweep and every
+  grade path read this one rule; one student's lab reads only that
+  student's rows (`lab(of:)`), so the LEARN push stays cheap.
+- The sweep (`writeLabGoalSnapshots`) writes one snapshot set per lab of the
+  course's first group set, over the enrolled students whose lab it is, and
+  writes no whole-class snapshot. A lab's snapshot locks at the deadline.
+  Only a grade goal and a goal with no condition are counted per lab here
+  (`LabGoalGroups.isCountedPerLab`); an `itemsCovered` or `classCoverage`
+  goal is still counted for the whole class until 5b or 5c, and every
+  student reads its whole-class snapshot.
+- The bonus: `classGoalBonusPoints(…, userID:)` reads the student's lab's
+  snapshots on the result page and the LEARN push, and the grades CSV reads
+  them through `ClassGoalBonusTable`. A student in no lab earns no lab
+  bonus. The result page's goals show the student's lab
+  (`loadClassGoalViews(…, userID:)`).
+- Course delete removes both snapshot tables.
+- Known limits, accepted: turning `runsPerGroup` off resumes the whole-class
+  snapshot, which the sweep did not update while the activity ran per
+  group. A removed group's snapshot stays as it was, and its students count
+  in no lab. A staff edit after the deadline (Remove on "Who joined", a
+  removed lab) can change a student's lab, and nothing re-pushes the
+  grade; "Push all" settles it.
+- Tests: `LabGoalTests`.
+
+### Slice 5b: lab goals, the items
+
+- `group_class_item_coverage`, the per-group twin of `class_item_coverage`
+  (unique on test setup and item, which every lab covers). A lab's composite
+  tile and spare write it; `recordClassItemCoverage` writes it for the
+  group of the session at submission.
+- The sweep counts an `itemsCovered` goal per lab. The instructor's
+  coverage view takes the lab.
+- `CompositePerGroupTests` and `CompositeSparesPerGroupTests` assert that a
+  lab's tile covers no class item; they change with the maintainer's
+  agreement.
+
+### Slice 5c: lab goals, the corpus
+
+- `group_id` on `class_coverage_runs` (its only unique key is the
+  submission). One `classAggregate` run per lab, over the lab's students,
+  debounced per lab; `latestClassCoverageRun` reads the lab's.
+- The sweep counts a `classCoverage` goal per lab.
 
 ### Slice 6: the LEARN source
 
