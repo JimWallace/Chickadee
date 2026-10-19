@@ -9,6 +9,20 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.749] - 2026-10-19
+
+### Changed
+
+- **The wasm bridge builds with the root package settings.** `wasm/Package.swift`
+  now treats warnings as errors and turns on the same upcoming features as the
+  root package. Two settings stay off, because the code that BridgeJS generates
+  does not build with them: `InternalImportsByDefault` and strict memory
+  safety. The built wasm is byte-identical.
+- **`count(where:)` replaces `filter(_:).count` in `Sources/`.** The new form
+  does not make a temporary array. A SwiftLint rule (`legacy_filter_count`)
+  stops new uses in `Sources/`.
+
+
 ## [0.5.748] - 2026-10-19
 
 ### Changed
