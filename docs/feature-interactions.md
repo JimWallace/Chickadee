@@ -600,6 +600,10 @@ because line numbers go out of date.
   - `CourseGroupStore`: the Groups tab, the roster import and the Students
     tab's Group column write memberships. `removeGroup` also ends the
     group's open sessions.
+  - `CourseGroupStore.applySync`, from the LEARN group sync
+    (`LearnGroupSyncService`, every ten minutes), replaces a synced set's
+    groups and all its memberships. A group that LEARN no longer lists is
+    removed as `removeGroup` removes it, so its open sessions end.
   - `ActivitySessionStore.open` and `close`, from the present page's Start
     and End (`WebRoutes+Sessions.swift`).
   - `ActivitySessionStore.join` (`/join`) writes attendance, and places a
@@ -645,6 +649,10 @@ because line numbers go out of date.
     network part of an address (`ClientNetwork.prefix`), never the address.
     The "Other network" mark is a flag for staff; no gate reads it.
   - Sessions read the course's first group set only.
+  - Only a manual set is written by hand, and only a synced set by the
+    LEARN sync (`setNotEditable`, `setNotSynced`). A sync replaces every
+    membership of its set, so a new writer of a synced set's memberships
+    loses its rows at the next sync.
   - Staff are never gated, as with the window.
   - Every write that turns `runsPerGroup` off ends the open sessions:
     `ActivityAuthoring.setActivity` and the MCP version restore. A new writer

@@ -1,14 +1,15 @@
 // APIServer/Services/CourseGroupStore.swift
 //
 // Every read and write of a course's groups (docs/lab-groups.md, slice 1). The
-// Groups tab, the roster's group select and the CSV import write through here,
-// and so will the LEARN sweep (slice 6).
+// Groups tab, the roster's group select, the CSV import and the LEARN group
+// sync (slice 6) write through here.
 //
 // Rules the store keeps:
 //
 //   * A person is in at most one group of a set. The database enforces it
 //     with the unique key (set, user); `setMembership` replaces the row.
-//   * Only a manual set is written by hand (`CourseGroupError.setNotEditable`).
+//   * Only a manual set is written by hand (`CourseGroupError.setNotEditable`),
+//     and only a synced set is written by the LEARN sync (`setNotSynced`).
 //   * A removed group keeps its row and loses its members.
 //   * A membership names a person enrolled in the set's course when it is
 //     written. A membership of a person who later leaves the course stays,
@@ -89,20 +90,8 @@ enum CourseGroupStore {
         try requireEditable(set)
         guard group.setID == set.id else { throw CourseGroupError.groupNotInSet }
         guard group.removedAt == nil else { return }
-        let groupID = try group.requireID()
         let now = Date()
-        try await db.transaction { tx in
-            try await APICourseGroupMembership.query(on: tx).filter(\.$groupID == groupID).delete()
-            // Its open sessions end with it, so no submission lands in a
-            // group nobody can see.
-            try await APIActivitySession.query(on: tx)
-                .filter(\.$groupID == groupID)
-                .filter(\.$closedAt == nil)
-                .set(\.$closedAt, to: now)
-                .update()
-            group.removedAt = now
-            try await group.save(on: tx)
-        }
+        try await db.transaction { tx in try await markRemoved(group, now: now, on: tx) }
     }
 
     /// Puts one person in `groupID`, or in no group of the set when it is
@@ -213,7 +202,108 @@ enum CourseGroupStore {
         return names.sorted { $0.localizedStandardCompare($1) == .orderedAscending }
     }
 
+    // MARK: - LEARN sync
+
+    /// One group or section as LEARN lists it.
+    struct SyncedGroup: Equatable, Sendable {
+        let externalID: String
+        let name: String
+    }
+
+    /// What a sync changed, for the log.
+    struct SyncResult: Equatable, Sendable {
+        /// Students placed in a group.
+        var placed = 0
+        /// Groups made, and removed groups that LEARN lists again.
+        var added = 0
+        var renamed = 0
+        var removed = 0
+    }
+
+    /// Makes a synced set match LEARN: its groups match `remote` by external
+    /// id, and each student of `members` (user id to the external id of their
+    /// group) is in that group, and every other person in none. A new group
+    /// goes at the end, a renamed one takes the new name, a removed one that
+    /// LEARN lists again comes back, and one that LEARN no longer lists is
+    /// removed as `removeGroup` removes it.
+    static func applySync(
+        _ remote: [SyncedGroup], members: [UUID: String], to set: APICourseGroupSet, now: Date,
+        on db: any Database
+    ) async throws -> SyncResult {
+        guard !set.acceptsManualEdits else { throw CourseGroupError.setNotSynced }
+        let setID = try set.requireID()
+        let existing = try await groups(inSet: setID, includingRemoved: true, on: db)
+        let byExternalID = Dictionary(
+            existing.compactMap { group in group.externalID.map { ($0, group) } },
+            uniquingKeysWith: { first, _ in first })
+        let listed = Set(remote.map(\.externalID))
+        let ordered = remote.sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
+        return try await db.transaction { tx in
+            var result = SyncResult()
+            var inSet = existing
+            var groupIDByExternalID: [String: UUID] = [:]
+            for item in ordered where groupIDByExternalID[item.externalID] == nil {
+                let name = syncedName(item)
+                let group: APICourseGroup
+                if let known = byExternalID[item.externalID] {
+                    group = known
+                    if group.name != name {
+                        group.name = name
+                        result.renamed += 1
+                    }
+                    if group.removedAt != nil {
+                        group.removedAt = nil
+                        result.added += 1
+                    }
+                } else {
+                    group = APICourseGroup(
+                        setID: setID, name: name, sortOrder: nextSortOrder(after: inSet),
+                        externalID: item.externalID)
+                    inSet.append(group)
+                    result.added += 1
+                }
+                try await group.save(on: tx)
+                groupIDByExternalID[item.externalID] = try group.requireID()
+            }
+            let vanished = existing.filter { group in
+                group.removedAt == nil && !(group.externalID.map(listed.contains) ?? false)
+            }
+            for group in vanished {
+                try await markRemoved(group, now: now, on: tx)
+                result.removed += 1
+            }
+            let assignments = members.compactMapValues { groupIDByExternalID[$0] }
+            try await replaceMemberships(in: set, assignments: assignments, on: tx)
+            set.lastSyncedAt = now
+            try await set.save(on: tx)
+            result.placed = assignments.count
+            return result
+        }
+    }
+
+    /// A LEARN name as a group name: trimmed and cut to `nameLimit`. A blank
+    /// name falls back to the external id.
+    private static func syncedName(_ group: SyncedGroup) -> String {
+        let name = group.name.trimmingCharacters(in: .whitespacesAndNewlines)
+        return name.isEmpty ? group.externalID : String(name.prefix(nameLimit))
+    }
+
     // MARK: - Helpers
+
+    /// Marks `group` removed: its members are in no group of the set, and its
+    /// open sessions end with it, so no submission lands in a group nobody
+    /// can see.
+    private static func markRemoved(_ group: APICourseGroup, now: Date, on db: any Database) async throws {
+        let groupID = try group.requireID()
+        try await APICourseGroupMembership.query(on: db).filter(\.$groupID == groupID).delete()
+        try await APIActivitySession.query(on: db)
+            .filter(\.$groupID == groupID)
+            .filter(\.$closedAt == nil)
+            .set(\.$closedAt, to: now)
+            .update()
+        group.removedAt = now
+        try await group.save(on: db)
+    }
 
     private static func requireEditable(_ set: APICourseGroupSet) throws {
         guard set.acceptsManualEdits else { throw CourseGroupError.setNotEditable }

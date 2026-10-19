@@ -105,7 +105,7 @@ func bootstrapAppServices(_ app: Application, appConfig: AppConfig) async throws
         app.brightSpaceGradeSyncSlot = BrightSpaceGradeSyncSlot()
         app.lifecycle.use(PeriodicSweepLifecycleHandler { $0.brightSpaceGradeSyncMonitor })
         app.lifecycle.use(PeriodicSweepLifecycleHandler { $0.learnRosterReadinessMonitor })
-        app.lifecycle.use(PeriodicSweepLifecycleHandler { $0.learnSectionSyncMonitor })
+        app.lifecycle.use(PeriodicSweepLifecycleHandler { $0.learnGroupSyncMonitor })
     }
 
     if appConfig.auth.mode != .local {

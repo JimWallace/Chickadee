@@ -73,9 +73,10 @@ final class APICourseEnrollment: Model, Content, @unchecked Sendable {
     @OptionalField(key: "brightspace_sync_detail")
     var brightspaceSyncDetail: String?
 
-    /// The LEARN group name this student belongs to in the course's configured
-    /// section category (e.g. "Lab 3"). Populated by the periodic section-sync
-    /// sweep. Nil until the sweep has run or the student isn't in any group.
+    /// Retired by lab groups slice 6: the LEARN group name that the old
+    /// section sweep wrote. The LEARN group sync writes group memberships
+    /// instead, and `MoveLearnSectionCategoryToGroupSet` cleared the old
+    /// names, so this is nil. The data export still names the field.
     @OptionalField(key: "brightspace_section")
     var brightspaceSection: String?
 
