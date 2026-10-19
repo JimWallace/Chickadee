@@ -94,5 +94,5 @@ func corpusCoverageSummary(percent: Double, required: Double) -> String {
 
 /// The section's summary chip.
 func assignmentCoverageSummary(_ rows: [AssignmentCoverageRow]) -> String {
-    coverageFoundSummary(covered: rows.filter(\.found).count, total: rows.count)
+    coverageFoundSummary(covered: rows.count(where: \.found), total: rows.count)
 }

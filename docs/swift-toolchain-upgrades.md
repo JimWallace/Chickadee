@@ -88,6 +88,7 @@ The pins live in these places:
 | Site | What it holds |
 |---|---|
 | `Package.swift` line 1 | the swift-tools-version |
+| `wasm/Package.swift` line 1 | the swift-tools-version of the wasm bridge, the same as the root |
 | `Dockerfile` compile stage | `swift:<X.Y>-resolute` |
 | `.github/docker/ci-image/Dockerfile` | `BASE_IMAGE`, and the comment above it |
 | `.github/workflows/mirror-images.yml` | the mirror source, the derived tag, the comments |
@@ -102,7 +103,6 @@ Leave these alone. They are records, not pins:
 
 - `CHANGELOG.md` and `CHANGELOG-0.4.md`
 - `docs/archive/` and any audit that describes a past state
-- `wasm/Package.swift`, which declares tools version 6.0 and still resolves
 
 Compute the wasm checksum from the artifact that you download. Do not copy a
 number from a note.

@@ -48,7 +48,7 @@ func aggregateMatrixRuns(_ runs: [MatrixRun]) -> [TestOutcome] {
         } else {
             status = meanScore >= 0.5 ? .pass : .fail
         }
-        let passed = samples.filter { $0.1.status == .pass }.count
+        let passed = samples.count(where: { $0.1.status == .pass })
         let detail = samples.compactMap { opponent, outcome -> String? in
             guard let text = outcome.longResult, !text.isEmpty else { return nil }
             return "--- opponent \(opponent.identity) ---\n\(text)"

@@ -420,8 +420,8 @@ private func recomputeStanding(
         .filter(\.$completedAt != nil)
         .filter(\.$opponentIdentity != JobOpponent.noOpponentIdentity)
         .all()
-    let wins = rows.filter { $0.won == true }.count
-    let draws = rows.filter { $0.won != true && $0.score == 0.5 }.count
+    let wins = rows.count(where: { $0.won == true })
+    let draws = rows.count(where: { $0.won != true && $0.score == 0.5 })
     let losses = rows.count - wins - draws
     let scoreSum = rows.compactMap(\.score).reduce(0, +)
     let existing = try await APIActivityStanding.query(on: db)

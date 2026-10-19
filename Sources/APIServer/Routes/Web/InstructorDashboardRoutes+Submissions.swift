@@ -239,10 +239,10 @@ extension InstructorDashboardRoutes {
         let windowStart = now.addingTimeInterval(-24 * 60 * 60)
         let submittedRows = rows.filter { $0.latest.submissionCount > 0 }
         let submittedCount = submittedRows.count
-        let submissions24h = submissions.filter { submission in
+        let submissions24h = submissions.count(where: { submission in
             guard let submittedAt = submission.submittedAt else { return false }
             return submittedAt >= windowStart
-        }.count
+        })
         let gradedRows = rows.compactMap(\.bestGradePercent)
         let medianBestGrade: String
         if gradedRows.isEmpty {
@@ -286,7 +286,7 @@ extension InstructorDashboardRoutes {
         // with none, the page renders identically to the pre-feature layout.
         let passingCard: [AssignmentStatCard] =
             passingThresholdPercent.map { threshold in
-                let passingCount = rows.filter(\.isPassing).count
+                let passingCount = rows.count(where: \.isPassing)
                 return [
                     AssignmentStatCard(
                         label: "Passing (\(threshold)%)",

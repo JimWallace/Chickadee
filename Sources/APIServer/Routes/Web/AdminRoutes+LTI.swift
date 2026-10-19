@@ -202,7 +202,7 @@ extension AdminRoutes {
                 launchURL: endpoints.launchURL,
                 jwksURL: endpoints.jwksURL,
                 platforms: rows,
-                enabledPlatformCount: rows.filter(\.enabled).count,
+                enabledPlatformCount: rows.count(where: \.enabled),
                 newPlatformOpen: newForm != nil || rows.isEmpty,
                 newFields: LTIPlatformFields(
                     idPrefix: "lti-new", form: newForm?.form ?? .empty, error: newForm?.error))

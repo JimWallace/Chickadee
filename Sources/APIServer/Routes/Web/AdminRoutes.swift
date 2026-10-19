@@ -149,7 +149,7 @@ struct AdminRoutes: RouteCollection {
                 page: PageRequestContext(request: req),
                 users: userRows,
                 userCount: userRows.count,
-                adminCount: userRows.filter { $0.role == UserRole.admin.rawValue }.count
+                adminCount: userRows.count(where: { $0.role == UserRole.admin.rawValue })
             )
         }
     }

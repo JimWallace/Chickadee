@@ -13,7 +13,7 @@ struct AdminRetentionPage: HTML {
     /// eligible.
     let rows: [AdminRetentionRow]
 
-    private var deletableCount: Int { rows.filter(\.isDeletable).count }
+    private var deletableCount: Int { rows.count(where: \.isDeletable) }
 
     var body: some HTML {
         BaseLayout(title: "Retention", page: page, flash: flash) {

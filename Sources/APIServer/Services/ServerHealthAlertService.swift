@@ -357,13 +357,13 @@ private func evaluateErrorRateSpike(
 
     guard recent.count >= configuration.errorRateMinimumSamples else { return .ok }
 
-    let bad = recent.filter {
+    let bad = recent.count(where: {
         JobFailureClassification.isSystemFailure(
             finalStatus: $0.finalStatus,
             testsErrored: $0.testsErrored,
             testsTimedOut: $0.testsTimedOut
         )
-    }.count
+    })
     let ratio = Double(bad) / Double(recent.count)
     guard ratio >= configuration.errorRateThreshold else { return .ok }
 

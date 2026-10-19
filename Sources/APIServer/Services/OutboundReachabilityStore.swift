@@ -80,8 +80,8 @@ actor OutboundReachabilityStore {
         let recent = attempts.filter { $0.at >= cutoff }
         let failing = Set(recent.filter { !$0.succeeded }.map(\.destination.humanReadable))
         return Snapshot(
-            failuresInWindow: recent.filter { !$0.succeeded }.count,
-            successesInWindow: recent.filter(\.succeeded).count,
+            failuresInWindow: recent.count(where: { !$0.succeeded }),
+            successesInWindow: recent.count(where: \.succeeded),
             destinationsFailing: failing.sorted(),
             lastSuccessAt: lastSuccessAt
         )

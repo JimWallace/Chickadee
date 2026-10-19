@@ -442,10 +442,10 @@ struct TierSummary: Encodable {
 
     init(outcomes: [TestOutcome], isRelease: Bool) {
         total = outcomes.count
-        passCount = outcomes.filter { $0.status == .pass }.count
-        failCount = outcomes.filter { $0.status == .fail }.count
-        errorCount = outcomes.filter { $0.status == .error }.count
-        timeoutCount = outcomes.filter { $0.status == .timeout }.count
+        passCount = outcomes.count(where: { $0.status == .pass })
+        failCount = outcomes.count(where: { $0.status == .fail })
+        errorCount = outcomes.count(where: { $0.status == .error })
+        timeoutCount = outcomes.count(where: { $0.status == .timeout })
         self.isRelease = isRelease
     }
 }

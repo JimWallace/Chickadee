@@ -281,7 +281,7 @@ extension ManifestV2 {
                 throw refuse("File \"\(file.name)\" has a dataset for \"\(dataset.file)\"")
             }
         }
-        guard files.filter({ $0.starterNotebook == true }).count <= 1 else {
+        guard files.count(where: { $0.starterNotebook == true }) <= 1 else {
             throw refuse("More than one file is marked as the starter notebook")
         }
     }

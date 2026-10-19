@@ -20,7 +20,7 @@ struct SessionAttendancePage: HTML {
     let canRemove: Bool
     let rows: [SessionAttendeeRow]
 
-    private var joinedCount: Int { rows.filter { !$0.isRemoved }.count }
+    private var joinedCount: Int { rows.count(where: { !$0.isRemoved }) }
     /// Remove needs an open session in a course that is not archived.
     private var showsActions: Bool { canRemove && isOpen }
 

@@ -90,6 +90,6 @@ func enrolledStudentCount(forCourse courseID: UUID, on db: any Database) async t
         .filter(\.$course.$id == courseID)
         .count()
     let (enrollments, preCount) = try await (enrollmentsFetch, preCountFetch)
-    let studentCount = enrollments.filter { $0.role == .student }.count
+    let studentCount = enrollments.count(where: { $0.role == .student })
     return studentCount + preCount
 }

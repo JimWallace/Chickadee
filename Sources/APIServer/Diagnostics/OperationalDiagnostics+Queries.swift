@@ -235,7 +235,7 @@ extension OperationalDiagnosticsService {
     }
 
     func skippedCount(in outcomes: [TestOutcome]) -> Int {
-        outcomes.filter { $0.shortResult.localizedCaseInsensitiveContains("skipped:") }.count
+        outcomes.count(where: { $0.shortResult.localizedCaseInsensitiveContains("skipped:") })
     }
 
     func normalizedTestID(for outcome: TestOutcome) -> String {

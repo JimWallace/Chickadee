@@ -75,6 +75,6 @@ struct SlipDayTotals: Equatable {
     init(rows: [SlipDayStudentRow]) {
         spent = rows.reduce(0) { $0 + $1.used }
         budget = rows.reduce(0) { $0 + $1.total }
-        studentsWithSpends = rows.filter { $0.used > 0 }.count
+        studentsWithSpends = rows.count(where: { $0.used > 0 })
     }
 }
