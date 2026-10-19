@@ -280,12 +280,7 @@ private struct LearnSyncActions: HTML {
             if learnLinked {
                 form(.method(.post), .action("/instructor/groups/sync"), .class("inline-form")) {
                     CSRFField(token: csrfToken)
-                    button(
-                        .class("btn btn-primary"), .type(.submit),
-                        .title("Replace the groups and every student's group with those in LEARN")
-                    ) {
-                        "Sync now"
-                    }
+                    button(.class("btn btn-primary"), .type(.submit)) { "Sync now" }
                 }
             }
         }
