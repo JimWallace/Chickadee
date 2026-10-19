@@ -1,0 +1,122 @@
+name: Claude agent
+description: >
+  Runs one Claude agent for a CI workflow, read-only. It checks for the API
+  secret first: without one it writes a warning and the step summary, and
+  passes. Every agent workflow uses this action, and this is the only file
+  that names anthropics/claude-code-action (scripts/check-agent-workflows.sh
+  enforces it).
+
+  Three rules hold for every caller (#2711):
+
+  * The agent gets the job's own GITHUB_TOKEN (the github-token input), so it
+    has only the permissions of its job, and every model job is read-only.
+    Without that token, claude-code-action trades the job's OIDC token for a
+    Claude GitHub App token with contents, pull-requests and issues WRITE,
+    whatever the job declares. A model job needs no `id-token: write`.
+  * The agent posts nothing. It returns structured output, and a separate job
+    with no model posts it through scripts/ci-agent-sanitize.sh.
+  * Every agent has an explicit --disallowedTools list: the base list below
+    plus the caller's own disallowed-tools.
+
+  This was ten copies of the credential check and of the action setup, and
+  the copies had drifted: four deny lists, and three jobs with none.
+
+inputs:
+  name:
+    description: "The workflow's agent name, for the warning lines and the step summary."
+    required: true
+  anthropic-api-key:
+    description: "secrets.ANTHROPIC_API_KEY"
+    required: false
+    default: ""
+  claude-code-oauth-token:
+    description: "secrets.CLAUDE_CODE_OAUTH_TOKEN"
+    required: false
+    default: ""
+  github-token:
+    description: "The job's own github.token. The job's permissions must be read-only."
+    required: true
+  prompt:
+    description: "The prompt."
+    required: true
+  model:
+    description: "A model family alias (haiku, sonnet, opus), never a dated ID."
+    required: true
+  max-turns:
+    description: "The turn limit."
+    required: true
+  allowed-tools:
+    description: "The --allowedTools list."
+    required: true
+  disallowed-tools:
+    description: >
+      Tools to deny on top of the base list, for example "Bash,WebFetch". The
+      base list does not deny Bash or WebFetch, because the PR reviews need
+      a few git commands and the weekly digest reads release notes.
+    required: true
+  json-schema:
+    description: "The JSON schema of the structured output, on one line, with no single quote."
+    required: true
+
+outputs:
+  ran:
+    description: "'true' when an API secret was present, so the agent step ran."
+    value: ${{ steps.credentials.outputs.present }}
+  outcome:
+    description: "The agent step's outcome: success, failure, or skipped when no secret was present."
+    value: ${{ steps.agent.outcome }}
+  structured-output:
+    description: "The agent's structured output, as JSON."
+    value: ${{ steps.agent.outputs.structured_output }}
+
+runs:
+  using: composite
+  steps:
+    - name: Check for credentials
+      id: credentials
+      shell: bash
+      env:
+        NAME: ${{ inputs.name }}
+        ANTHROPIC_API_KEY: ${{ inputs.anthropic-api-key }}
+        CLAUDE_CODE_OAUTH_TOKEN: ${{ inputs.claude-code-oauth-token }}
+        AGENT_GITHUB_TOKEN: ${{ inputs.github-token }}
+      run: |
+        # An empty token would let claude-code-action fall back to the App
+        # token with write scopes. Refuse to run the agent instead.
+        if [ -z "$AGENT_GITHUB_TOKEN" ]; then
+          echo "::error::The claude-agent action needs github-token (the job's own github.token)."
+          exit 1
+        fi
+        if [ -n "$ANTHROPIC_API_KEY" ] || [ -n "$CLAUDE_CODE_OAUTH_TOKEN" ]; then
+          echo "present=true" >> "$GITHUB_OUTPUT"
+        else
+          echo "present=false" >> "$GITHUB_OUTPUT"
+          echo "::warning::No ANTHROPIC_API_KEY or CLAUDE_CODE_OAUTH_TOKEN secret is set, so $NAME did not run. Add one repository secret to enable it."
+          {
+            echo "## $NAME"
+            echo
+            echo "Did not run: no ANTHROPIC_API_KEY or CLAUDE_CODE_OAUTH_TOKEN repository secret is set."
+          } >> "$GITHUB_STEP_SUMMARY"
+        fi
+
+    # continue-on-error: a model outage or a timeout is not a verdict. The
+    # caller reads `outcome` and says so.
+    - name: Run the agent
+      id: agent
+      if: steps.credentials.outputs.present == 'true'
+      continue-on-error: true
+      uses: anthropics/claude-code-action@v1
+      with:
+        anthropic_api_key: ${{ inputs.anthropic-api-key }}
+        claude_code_oauth_token: ${{ inputs.claude-code-oauth-token }}
+        github_token: ${{ inputs.github-token }}
+        prompt: ${{ inputs.prompt }}
+        # The base deny list: no file writes, no web search, and none of the
+        # places where a credential can sit (/proc, the runner's temp files,
+        # the home directory, the git config).
+        claude_args: |
+          --model ${{ inputs.model }}
+          --max-turns ${{ inputs.max-turns }}
+          --allowedTools "${{ inputs.allowed-tools }}"
+          --disallowedTools "Edit,Write,NotebookEdit,WebSearch,Read(//proc/**),Read(//sys/**),Read(//etc/**),Read(//tmp/**),Read(//github/**),Read(//root/**),Read(//home/runner/work/_temp/**),Read(~/.*/**),Read(./.git/**),${{ inputs.disallowed-tools }}"
+          --json-schema '${{ inputs.json-schema }}'

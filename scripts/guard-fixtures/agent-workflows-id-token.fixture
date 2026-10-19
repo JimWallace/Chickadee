@@ -1,0 +1,9 @@
+# An agent workflow that asks for an OIDC token, which is the way to the
+# Claude App token with write scopes.
+guard="scripts/check-agent-workflows.sh"
+files=".github/workflows/docs-audit.yml"
+description="id-token: write in an agent workflow"
+expect="asks for id-token: write"
+apply() {
+    sed -i 's/^      issues: read$/      issues: read\n      id-token: write/' .github/workflows/docs-audit.yml
+}

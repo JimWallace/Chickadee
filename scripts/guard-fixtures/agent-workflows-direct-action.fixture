@@ -1,0 +1,8 @@
+# A workflow that runs claude-code-action itself, past the shared setup.
+guard="scripts/check-agent-workflows.sh"
+files=".github/workflows/weekly-digest.yml"
+description="anthropics/claude-code-action outside the claude-agent action"
+expect="names anthropics/claude-code-action"
+apply() {
+    sed -i 's|uses: ./.github/actions/claude-agent|uses: anthropics/claude-code-action@v1|' .github/workflows/weekly-digest.yml
+}
