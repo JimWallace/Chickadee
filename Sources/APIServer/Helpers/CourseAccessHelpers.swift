@@ -60,11 +60,7 @@ func requireCourseEnrollment(caller: APIUser, courseID: UUID, db: any Database) 
 /// The caller's per-course role in `courseID`, or nil if they hold no
 /// enrollment there. The single role read behind `requireCourseRole`.
 func courseRole(of userID: UUID, inCourse courseID: UUID, db: any Database) async throws -> CourseRole? {
-    try await APICourseEnrollment.query(on: db)
-        .filter(\.$userID == userID)
-        .filter(\.$course.$id == courseID)
-        .first()?
-        .role
+    try await CourseRoster.enrollment(of: userID, in: courseID, on: db)?.role
 }
 
 /// True when the user holds an enrollment row in course `courseID`. The single
@@ -72,10 +68,7 @@ func courseRole(of userID: UUID, inCourse courseID: UUID, db: any Database) asyn
 /// `authorizeCourseAccess`. Deliberately carries no role bypass — role policy
 /// stays with the callers.
 func userIsEnrolled(userID: UUID, inCourse courseID: UUID, db: any Database) async throws -> Bool {
-    try await APICourseEnrollment.query(on: db)
-        .filter(\.$userID == userID)
-        .filter(\.$course.$id == courseID)
-        .count() > 0
+    try await CourseRoster.enrollment(of: userID, in: courseID, on: db) != nil
 }
 
 /// The courses the user can act on, dashboard-style: the non-archived courses

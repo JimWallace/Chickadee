@@ -50,12 +50,6 @@ enum CourseGroupStore {
         return Dictionary(rows.map { ($0.userID, $0.groupID) }, uniquingKeysWith: { first, _ in first })
     }
 
-    /// The ids of the students enrolled in `courseID` now.
-    static func enrolledStudentIDs(courseID: UUID, on db: any Database) async throws -> Set<UUID> {
-        let enrollments = try await APICourseEnrollment.query(on: db).filter(\.$course.$id == courseID).all()
-        return Set(enrollments.filter { $0.role == .student }.map(\.userID))
-    }
-
     // MARK: - Writes
 
     /// Creates a manual set in `courseID`.
@@ -101,11 +95,9 @@ enum CourseGroupStore {
     ) async throws {
         try requireEditable(set)
         let setID = try set.requireID()
-        let enrolled = try await APICourseEnrollment.query(on: db)
-            .filter(\.$course.$id == set.courseID)
-            .filter(\.$userID == userID)
-            .first()
-        guard enrolled != nil else { throw CourseGroupError.notEnrolled }
+        guard try await CourseRoster.enrollment(of: userID, in: set.courseID, on: db) != nil else {
+            throw CourseGroupError.notEnrolled
+        }
         if let groupID { try await requireActiveGroup(groupID, inSet: setID, on: db) }
         try await db.transaction { tx in
             try await APICourseGroupMembership.query(on: tx)
@@ -156,7 +148,7 @@ enum CourseGroupStore {
     ) async throws -> ImportResult {
         try requireEditable(set)
         let setID = try set.requireID()
-        let studentIDs = try await enrolledStudentIDs(courseID: set.courseID, on: db)
+        let studentIDs = try await CourseRoster.studentIDs(in: set.courseID, on: db)
         let students = try await APIUser.query(on: db).filter(\.$id ~~ Array(studentIDs)).all()
         let studentIDByUsername = Dictionary(
             students.compactMap { user in user.id.map { (user.username.lowercased(), $0) } },

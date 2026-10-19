@@ -166,11 +166,8 @@ extension InstructorDashboardRoutes {
         }
         let form = try await req.decodeContent(AdjustForm.self)
         guard let studentUUID = UUID(uuidString: form.userID), [-1, 1].contains(form.delta),
-            let enrollment = try await APICourseEnrollment.query(on: req.db)
-                .filter(\.$userID == studentUUID)
-                .filter(\.$course.$id == courseUUID)
-                .first(),
-            enrollment.role == .student,
+            let enrollment = try await CourseRoster.enrollment(of: studentUUID, in: courseUUID, on: req.db),
+            CourseRoster.isStudent(enrollment),
             let student = try await APIUser.find(studentUUID, on: req.db)
         else {
             return req.redirect(to: "/instructor/slip-days?error=student")
@@ -256,10 +253,7 @@ extension InstructorDashboardRoutes {
     static func loadSlipDayStudentRows(
         courseUUID: UUID, policy: SlipDayPolicy, canManageLedger: Bool, db: any Database
     ) async throws -> [SlipDayStudentRow] {
-        let enrollments = try await APICourseEnrollment.query(on: db)
-            .filter(\.$course.$id == courseUUID)
-            .all()
-        let studentEnrollments = enrollments.filter { $0.role == .student }
+        let studentEnrollments = try await CourseRoster.studentEnrollments(in: courseUUID, on: db)
         guard !studentEnrollments.isEmpty else { return [] }
 
         // Same roster conventions as the Students tab: join in Swift and

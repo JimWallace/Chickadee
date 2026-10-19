@@ -135,7 +135,7 @@ extension InstructorDashboardRoutes {
     ) async throws -> [APIUser] {
         if let activeCourseUUID {
             // Students are `.student`-role enrollments now (#417 Slice G2).
-            let studentUserIDs = try await studentUserIDsInCourse(activeCourseUUID, on: req.db)
+            let studentUserIDs = try await CourseRoster.studentIDs(in: activeCourseUUID, on: req.db)
             guard !studentUserIDs.isEmpty else { return [] }
             return try await APIUser.query(on: req.db)
                 .filter(\.$id ~~ Array(studentUserIDs))

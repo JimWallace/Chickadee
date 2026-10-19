@@ -409,10 +409,7 @@ func buildChampionPresentation(
     guard activity.kind.opponentSource == .champion, let hill,
         let champion = try await hill.holder(on: db),
         let user = try await APIUser.find(champion.userID, on: db),
-        let enrollment = try await APICourseEnrollment.query(on: db)
-            .filter(\.$course.$id == setup.courseID)
-            .filter(\.$userID == champion.userID)
-            .first()
+        let enrollment = try await CourseRoster.enrollment(of: champion.userID, in: setup.courseID, on: db)
     else { return nil }
     let handle = try await AvatarStore.ensureHandle(for: user, on: db) ?? ""
     let spec = try await AvatarStore.ensureSpec(for: user, on: db)
@@ -622,11 +619,7 @@ private func leaderboardSubmissionCounts(setupID: String, on db: any Database) a
 private func unrankedStudentCount(
     setup: APITestSetup, ranked: [APILeaderboardEntry], groupID: UUID?, on db: any Database
 ) async throws -> Int {
-    var students = try await APICourseEnrollment.query(on: db)
-        .filter(\.$course.$id == setup.courseID)
-        .all()
-        .filter { $0.role == .student }
-        .map(\.userID)
+    var students = try await CourseRoster.studentIDs(in: setup.courseID, on: db)
     if let groupID {
         let members = try await APICourseGroupMembership.query(on: db).filter(\.$groupID == groupID).all()
         let memberIDs = Set(members.map(\.userID))
@@ -647,10 +640,7 @@ struct ViewerIdentity {
     /// nil when the viewer is not enrolled in the setup's course.
     static func load(viewer: APIUser, setup: APITestSetup, on db: any Database) async throws -> ViewerIdentity? {
         guard let viewerID = viewer.id,
-            let enrollment = try await APICourseEnrollment.query(on: db)
-                .filter(\.$course.$id == setup.courseID)
-                .filter(\.$userID == viewerID)
-                .first()
+            let enrollment = try await CourseRoster.enrollment(of: viewerID, in: setup.courseID, on: db)
         else { return nil }
         let handle = try await AvatarStore.ensureHandle(for: viewer, on: db) ?? ""
         let spec = try await AvatarStore.ensureSpec(for: viewer, on: db)

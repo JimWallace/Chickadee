@@ -130,7 +130,7 @@ extension InstructorDashboardRoutes {
     ) async throws -> GroupSetPanel {
         let setID = try set.requireID()
         let groups = try await CourseGroupStore.groups(inSet: setID, on: db)
-        let students = try await CourseGroupStore.enrolledStudentIDs(courseID: courseID, on: db)
+        let students = try await CourseRoster.studentIDs(in: courseID, on: db)
         let groupByUser = try await CourseGroupStore.groupIDsByUser(inSet: setID, on: db)
         var counts: [UUID: Int] = [:]
         for student in students {

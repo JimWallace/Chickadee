@@ -63,16 +63,9 @@ func latestStudentSubmissionsByUser(
     setup: APITestSetup, excluding excluded: UUID? = nil, on db: any Database
 ) async throws -> [UUID: APISubmission] {
     guard let setupID = setup.id else { return [:] }
-    // NULL role is a pre-migration student (the `role` accessor's default).
-    let students = try await APICourseEnrollment.query(on: db)
-        .filter(\.$course.$id == setup.courseID)
-        .group(.or) { or in
-            or.filter(\.$roleRaw == CourseRole.student.rawValue)
-            or.filter(\.$roleRaw == .null)
-        }
-        .all()
-        .map(\.userID)
-        .filter { $0 != excluded }
+    var studentSet = try await CourseRoster.studentIDs(in: setup.courseID, on: db)
+    if let excluded { studentSet.remove(excluded) }
+    let students = Array(studentSet)
     guard !students.isEmpty else { return [:] }
     let candidates = try await APISubmission.query(on: db)
         .filter(\.$testSetupID == setupID)

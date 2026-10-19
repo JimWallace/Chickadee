@@ -167,7 +167,7 @@ extension InstructorLMSRoutes {
             return req.redirect(to: "/instructor/lti-grades?error=numbers")
         }
 
-        let studentIDs = Array(try await studentUserIDsInCourse(courseID, on: req.db))
+        let studentIDs = Array(try await CourseRoster.studentIDs(in: courseID, on: req.db))
         var students: [APIUser] = []
         var linkedUserIDs = Set<UUID>()
         for chunk in chunkedForInFilter(studentIDs) {

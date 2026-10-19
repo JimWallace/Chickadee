@@ -272,12 +272,9 @@ enum SlipDayStore {
             ).first()
             guard locked != nil else { throw SlipDayError.notEnrolled }
         }
-        guard
-            let enrollment = try await APICourseEnrollment.query(on: tx)
-                .filter(\.$userID == userID)
-                .filter(\.$course.$id == courseID)
-                .first()
-        else { throw SlipDayError.notEnrolled }
+        guard let enrollment = try await CourseRoster.enrollment(of: userID, in: courseID, on: tx) else {
+            throw SlipDayError.notEnrolled
+        }
         return enrollment.slipDaysAdjustment ?? 0
     }
 
@@ -466,12 +463,9 @@ func slipDayClaimWindowCeiling(
     let policy = course.slipDayPolicy
     guard policy.enabled else { return nil }
 
-    guard
-        let enrollment = try await APICourseEnrollment.query(on: db)
-            .filter(\.$userID == userID)
-            .filter(\.$course.$id == assignment.courseID)
-            .first()
-    else { return nil }
+    guard let enrollment = try await CourseRoster.enrollment(of: userID, in: assignment.courseID, on: db) else {
+        return nil
+    }
     let adjustment = enrollment.slipDaysAdjustment ?? 0
 
     let spentInCourse = try await SlipDayStore.unrefundedCount(

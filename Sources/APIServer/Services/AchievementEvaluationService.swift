@@ -147,7 +147,7 @@ func evaluateClassGoalAchievements(
     // count toward `studentsMeeting` — staff test submissions and students who
     // dropped used to inflate it (the denominator already excludes them),
     // which could grant unearned bonus points all the way to the CSV/LMS.
-    let studentIDsByCourse = try await studentUserIDsByCourse(courseIDs: goalCourseIDs, on: db)
+    let studentIDsByCourse = try await CourseRoster.studentIDsByCourse(goalCourseIDs, on: db)
 
     for entry in goalCarrying {
         let assignment = entry.assignment
