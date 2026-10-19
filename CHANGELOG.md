@@ -9,6 +9,13 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.730] - 2026-10-19
+
+### Added
+
+- **Lab groups (slice 3b): the hill per group.** A Beat the champion activity can now run once per lab group. Each lab has its own hill: a challenger plays the champion of the group whose session they joined, a submission made with no session open moves no hill, and the leaderboard page and the projector show the hill of the group they show. See `docs/lab-groups.md`.
+
+
 ## [0.5.729] - 2026-10-19
 
 ### Added
