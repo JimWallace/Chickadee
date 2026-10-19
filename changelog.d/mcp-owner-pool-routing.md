@@ -1,4 +1,0 @@
-### Fixed
-
-- **Three MCP tools work with the dedicated MCP database pool.** With `MCP_DATABASE_USER` set, `clone_assignment` failed when the source had a reference solution, `create_assignment` and `clone_assignment` did not record version 1, and `get_suite` never showed the starter run. Each of these steps used a table or rows that the `chickadee_mcp` role cannot use, so they now run on the owner pool, as the personalization seed already does. A new test stand-in, `MCPRoleDatabase`, models the role from the SQL file, so the tests run these tools as the role would.
-- **Version 1 of an MCP-created assignment keeps its language.** `create_assignment` recorded version 1 before it declared the language, so a restore to version 1 removed the language, and for an upload-only language also the submission mode. The language is now declared first.
