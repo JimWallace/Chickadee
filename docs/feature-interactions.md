@@ -388,10 +388,17 @@ because line numbers go out of date.
     scans, `SolutionNotebookExtractor` and the notebook guide's starter
     sources. The guide indexes the cells by the indices that the definition
     scan computes, so both must read the same cell list.
+  - The notebook rewriters (`normalizeNotebookForJupyterLite`,
+    `mergeNotebook`, `filterNotebook`, `NotebookSubstitution.apply`,
+    `PersonalizedCellRestoration`, the class corpus) parse with
+    `JSONValue.object(from:)` and write with `JSONValue.data(fromObject:)`,
+    which sorts keys. Their output is stored, and assignment versioning
+    hashes it, so it must stay deterministic: a rewriter must not encode
+    any other way.
   - The server's validity gates (`notebookCellCount` on the notebook save,
     the starter and solution checks in `PublishedAssignmentRoutes+SaveEdit`
-    and `TestSetupRoutes`) and the notebook rewriters still use
-    `JSONSerialization`.
+    and `TestSetupRoutes`) use `JSONSerialization`, on purpose: they keep
+    nothing from the parse.
 - **Rules:**
   - `NotebookHeader` and `NotebookCellView` are reads, not validity checks.
     They do not check the parts that they skip. A validity gate decodes
@@ -407,12 +414,11 @@ because line numbers go out of date.
     on duplicate keys (the first value wins in `JSONDecoder`, the last in
     `JSONSerialization`). So the server can accept a notebook that the worker
     reads differently. `NotebookHeaderTests`, `NotebookCellViewTests` and
-    `JSONValueAccessorsTests` pin the differences. The server sites move to `JSONValue` in later steps.
-  - Three readers of a cell's source: the two `NotebookCellSources.cellSource`
-    overloads, over `[String: Any]` and over `[String: JSONValue]`, and
-    `NotebookCellView.source`. An array source counts only when every element
-    is a string. A change to one must go to the others until only one is
-    left.
+    `JSONValueAccessorsTests` pin the differences.
+  - Two readers of a cell's source: `NotebookCellSources.cellSource` (over
+    `[String: JSONValue]`) and `NotebookCellView.source`. An array source
+    counts only when every element is a string. A change to one must go to
+    the other.
 
 ### Grading and submission mode: `effectiveGradingMode`, `effectiveSubmissionMode`
 
