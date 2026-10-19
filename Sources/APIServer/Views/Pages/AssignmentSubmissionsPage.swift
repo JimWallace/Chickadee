@@ -164,8 +164,23 @@ struct AssignmentSubmissionsPage: HTML {
                     }
                     " "
                 }
-                p(.class("field-note field-note--muted")) {
-                    "Every student's latest complete submission enters, seeded in submission order."
+                if !tournament.groupOptions.isEmpty {
+                    label(.class("form-label")) {
+                        "Lab group"
+                        select(.class("form-input"), .name("group")) {
+                            for group in tournament.groupOptions {
+                                option(.value(group.id)) { group.name }
+                            }
+                        }
+                        " "
+                    }
+                    p(.class("field-note field-note--muted")) {
+                        "The students who joined the group's session enter, seeded in submission order."
+                    }
+                } else {
+                    p(.class("field-note field-note--muted")) {
+                        "Every student's latest complete submission enters, seeded in submission order."
+                    }
                 }
                 button(.class("btn btn-primary"), .type(.submit)) { "Run tournament" }
             }

@@ -182,14 +182,37 @@ struct TournamentControlFacts: Encodable {
     let hasRunInProgress: Bool
     /// The schedule select: every `TournamentSchedule`, the bracket selected.
     let scheduleOptions: [SelectOption]
+    /// The lab groups that can play, for an activity that runs once per
+    /// group (docs/lab-groups.md, slice 3d); empty otherwise.
+    var groupOptions: [GroupOption] = []
     let leaderboardURL: String
 
     static let none = TournamentControlFacts(
-        isTournamentKind: false, statusText: "", hasRunInProgress: false, scheduleOptions: [], leaderboardURL: "")
+        isTournamentKind: false, statusText: "", hasRunInProgress: false, scheduleOptions: [], groupOptions: [],
+        leaderboardURL: "")
 
     static func make(setup: APITestSetup, on db: any Database) async throws -> TournamentControlFacts {
-        guard let setupID = setup.id, setup.decodedManifest()?.activity?.kind.aggregation == .bracket else {
+        guard let setupID = setup.id, let activity = setup.decodedManifest()?.activity,
+            activity.kind.aggregation == .bracket
+        else {
             return .none
+        }
+        let leaderboardURL = "/testsetups/\(setupID)/leaderboard"
+        if activity.isPerGroup {
+            // Each lab plays its own run; the bracket page shows one at a time.
+            var groups: [APICourseGroup] = []
+            if let setID = try await CourseGroupStore.sets(courseID: setup.courseID, on: db).first?.id {
+                groups = try await CourseGroupStore.groups(inSet: setID, on: db)
+            }
+            return TournamentControlFacts(
+                isTournamentKind: true,
+                statusText: "Each lab group plays its own tournament.",
+                hasRunInProgress: false,
+                scheduleOptions: TournamentScheduleOption.options(),
+                groupOptions: groups.compactMap { group in
+                    group.id.map { GroupOption(id: $0.uuidString, name: group.name) }
+                },
+                leaderboardURL: leaderboardURL)
         }
         let latest = try await latestTournament(testSetupID: setupID, on: db)
         return TournamentControlFacts(
@@ -197,7 +220,8 @@ struct TournamentControlFacts: Encodable {
             statusText: latest.map { tournamentStatusText(run: $0.run) } ?? "No tournament has been run yet.",
             hasRunInProgress: latest?.run.status == APITournamentRun.Status.running,
             scheduleOptions: TournamentScheduleOption.options(),
-            leaderboardURL: "/testsetups/\(setupID)/leaderboard")
+            groupOptions: [],
+            leaderboardURL: leaderboardURL)
     }
 }
 

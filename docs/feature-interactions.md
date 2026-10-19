@@ -475,7 +475,13 @@ because line numbers go out of date.
     of the standings passes a group to `rankedStandings` (nil reads only the
     whole class's rows, never a lab's); the badge signal
     ranks a student in the group of their own row while the activity runs
-    per group, and among the class rows otherwise. A per-group round robin
+    per group, and among the class rows otherwise.
+  - A tournament of a per-group activity is one run per lab group
+    (`tournament_runs.group_id`, slice 3d), entered by the group's session.
+    A new run supersedes only its group's run; a reader passes a group to
+    `latestTournament` (nil reads only whole-class runs). The arena plays
+    every running run of the assignment. A lab's winner holds no class
+    record, and MCP `run_tournament` starts no per-group run. A per-group round robin
     awards no standings-leader record, and `setActivity` seeds none for it.
   - An activity whose kind compares students (`ActivityKind.comparesStudents`)
     accepts only shared data (`DatasetSpec.isShared`). The rule is in
