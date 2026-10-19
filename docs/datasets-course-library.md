@@ -434,6 +434,14 @@ as `<slug>-v<n>.csv`.
   is not archived (`requireCourseWriteAccess(atLeast: .ta)`), as a content
   item does. An archived course is never the active course, so its tab does
   not open.
+- **Each write that succeeds records one audit row** (#2724), through
+  `AuditLogger.recordDatasetWrite`: `dataset.created`, `dataset.version_added`,
+  `dataset.metadata_changed`, `dataset.dictionary_changed`,
+  `dataset.visibility_changed` and `dataset.deleted`, in the Courses category.
+  The row names the course, the slug and the dataset name, and a version or the
+  published state where the write has one. It holds no part of the file. A
+  refused write records no row. The MCP dataset tools record
+  `mcp.tool_called` only.
 - **A blank slug is made from the name** (`CourseDatasetService.suggestedSlug`):
   lowercase ASCII letters and digits, one hyphen for each run of other
   characters.
@@ -443,7 +451,7 @@ as `<slug>-v<n>.csv`.
 - The pages use shared classes only, so the page `<style>` ratchet does not
   move.
 
-Tests: `InstructorDatasetsTabTests`, and the two fixtures in
+Tests: `InstructorDatasetsTabTests`, `InstructorDatasetsAuditTests`, and the two fixtures in
 `ElementaryPageFixtures+Datasets.swift`.
 
 **The Files panel (5b, built).** The edit page's Files panel reaches the

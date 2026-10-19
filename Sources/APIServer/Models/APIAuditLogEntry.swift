@@ -153,6 +153,16 @@ enum AuditAction: String, Sendable, CaseIterable {
     case courseBundleImported = "course.bundle_imported"
     case courseBundleExported = "course.bundle_exported"
 
+    // The course dataset library, written from the web Datasets tab
+    // (docs/datasets-course-library.md). The MCP dataset tools are recorded
+    // as `mcp.tool_called`.
+    case datasetCreated = "dataset.created"
+    case datasetVersionAdded = "dataset.version_added"
+    case datasetMetadataChanged = "dataset.metadata_changed"
+    case datasetDictionaryChanged = "dataset.dictionary_changed"
+    case datasetVisibilityChanged = "dataset.visibility_changed"
+    case datasetDeleted = "dataset.deleted"
+
     // Enrollment
     case enrollmentBulkAdded = "enrollment.bulk_added"
     case enrollmentRemoved = "enrollment.removed"
@@ -281,7 +291,10 @@ enum AuditAction: String, Sendable, CaseIterable {
             .userDataExportRequested, .userDataExportDownloaded:
             return .users
         case .courseCreated, .courseCloned, .courseArchived, .courseUnarchived, .courseDeleted,
-            .courseBundleImported, .courseBundleExported:
+            .courseBundleImported, .courseBundleExported,
+            // A dataset is course content, kept in the course's own library.
+            .datasetCreated, .datasetVersionAdded, .datasetMetadataChanged, .datasetDictionaryChanged,
+            .datasetVisibilityChanged, .datasetDeleted:
             return .courses
         case .enrollmentBulkAdded, .enrollmentRemoved, .enrollmentRoleChanged, .enrollmentHandleChanged,
             .enrollmentGroupsChanged:
@@ -339,6 +352,8 @@ enum AuditAction: String, Sendable, CaseIterable {
             .userProvisioned, .userRoleChanged, .userDeleted, .userDataExportRequested,
             .userDataExportDownloaded, .courseCreated, .courseCloned, .courseArchived, .courseUnarchived,
             .courseDeleted, .courseBundleImported, .courseBundleExported,
+            .datasetCreated, .datasetVersionAdded, .datasetMetadataChanged, .datasetDictionaryChanged,
+            .datasetVisibilityChanged, .datasetDeleted,
             .enrollmentBulkAdded, .enrollmentRemoved, .enrollmentRoleChanged, .enrollmentHandleChanged,
             .enrollmentGroupsChanged, .assignmentCreated, .assignmentCloned, .assignmentDeleted,
             .assignmentVisibilityChanged, .assignmentDueDateChanged, .submissionsPurged,
@@ -393,6 +408,12 @@ enum AuditAction: String, Sendable, CaseIterable {
         case .courseDeleted: return "Course deleted"
         case .courseBundleImported: return "Course bundle imported"
         case .courseBundleExported: return "Course bundle exported"
+        case .datasetCreated: return "Dataset created"
+        case .datasetVersionAdded: return "Dataset version added"
+        case .datasetMetadataChanged: return "Dataset details changed"
+        case .datasetDictionaryChanged: return "Dataset dictionary changed"
+        case .datasetVisibilityChanged: return "Dataset visibility changed"
+        case .datasetDeleted: return "Dataset deleted"
         case .enrollmentBulkAdded: return "Bulk enrollment"
         case .enrollmentRemoved: return "Unenrolled"
         case .enrollmentRoleChanged: return "Per-course role changed"
@@ -540,6 +561,7 @@ enum AuditTargetType: String, Sendable {
     case auth
     case assignment
     case course
+    case dataset
     case enrollment
     case oauthClient = "oauth_client"
     case ltiPlatform = "lti_platform"
