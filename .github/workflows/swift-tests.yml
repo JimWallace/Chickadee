@@ -227,8 +227,8 @@ jobs:
   # `.build/` sound.  That was left over from the `restore-keys` design and
   # did nothing under exact-match caching: neither outcome above reads a
   # source mtime.  It cost about two minutes per run (an apt-get install plus
-  # the mtime walk) and is gone.  `docker-build.yml` keeps the step because
-  # its release cache still restores by prefix.
+  # the mtime walk) and is gone.  `docker-build.yml` dropped it for the same
+  # reason when its release cache moved to an exact match (#2712).
   build:
     runs-on: ubuntu-latest
     timeout-minutes: 25
