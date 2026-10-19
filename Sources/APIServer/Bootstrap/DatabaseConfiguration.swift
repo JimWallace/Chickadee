@@ -574,6 +574,8 @@ func registerMigrations(on app: Application) {
     app.migrations.add(CreateGroupLeaderboardEntries())
     // Lab groups, slice 3b: each group's hill.
     app.migrations.add(CreateGroupActivityChampions())
+    // Lab groups, slice 3c: the group of a round robin's standings row.
+    app.migrations.add(AddActivityStandingGroup())
     // The deal numbers behind the partition datasets
     // (docs/datasets-course-library.md §4.11).
     app.migrations.add(CreateDatasetDeals())

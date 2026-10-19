@@ -60,7 +60,7 @@ import Vapor
                 .save(on: app.db)
 
             let authored = try await AssignmentAuthoringService.createAssignment(
-                courseID: courseID, title: "New Lab", notebookData: Data(Self.notebook.utf8),
+                courseID: courseID, title: "New Lab", language: .python, notebookData: Data(Self.notebook.utf8),
                 setupsDirectory: app.testSetupsDirectory, on: app.db)
 
             #expect(authored.assignment.sortOrder == 6)

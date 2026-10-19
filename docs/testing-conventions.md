@@ -60,8 +60,9 @@ keeps the short form and points here.
   `.requiresMake`, are in `Tests/WorkerTests/Support/WorkerTestSkip.swift`.
   Add a new one there, not in a suite. The probes behind them
   (`cachedToolIsAvailable`) are in the same support target, which also holds
-  `IssueRecorded`, `testURL` and `AsyncPermits` (the one async lock and
-  throttle) for all three targets. Swift Testing then
+  `IssueRecorded`, `testURL`, `AsyncPermits` (the one async lock and
+  throttle) and `swiftFiles(under:)` (the one source-file walk for a suite
+  that scans code) for all three targets. Swift Testing then
   reports the test as skipped with that reason, in the log and in the xUnit report, and
   `scripts/check-no-skipped-tests.sh` fails every CI test lane on any skip,
   because the CI image carries every interpreter. That closed the silent-skip

@@ -297,9 +297,13 @@ struct GetSuiteTool: ContentTool {
             assignmentPublicID: assignment.publicID, sections: sections, items: items,
             timeLimitSeconds: defaultTimeLimit,
             minimumRunnerVersion: manifest?.minimumRunnerVersion,
-            starterRun: try await Self.starterRun(setupID: setup.requireID(), on: context.db))
+            starterRun: try await Self.starterRun(setupID: setup.requireID(), on: context.mainDB))
     }
 
+    /// Read on the owner pool: the row-level security policy shows the
+    /// least-privilege MCP role only `validation` submissions, and a starter
+    /// run is a `starterValidation` one. The boundary still filters by kind,
+    /// so no student row is read.
     private static func starterRun(setupID: String, on db: any Database) async throws -> Output.StarterRun? {
         guard let run = try await MCPStudentDataBoundary.starterRun(setupID: setupID, on: db) else { return nil }
         return Output.StarterRun(
