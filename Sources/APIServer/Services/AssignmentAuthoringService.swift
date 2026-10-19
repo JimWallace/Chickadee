@@ -181,10 +181,10 @@ enum AssignmentAuthoringService {
     /// `CourseCloneService`, the web clone route and MCP `clone_assignment`)
     /// runs this one function, so the copies cannot drift.
     ///
-    /// `ownerDB` takes the three steps that the least-privilege MCP role
-    /// cannot run: the copied solution (a `submissions` insert), the library
-    /// dataset check (`course_datasets`) and version v1 (`assignment_versions`).
-    /// MCP passes `ToolContext.mainDB`; the web callers leave it nil.
+    /// `ownerDB` takes the two steps that the least-privilege MCP role cannot
+    /// run: the copied solution (a `submissions` insert) and version v1
+    /// (`assignment_versions`). MCP passes `ToolContext.mainDB`; the web
+    /// callers leave it nil.
     static func cloneAssignment(
         source: APIAssignment,
         sourceSetup: APITestSetup,
@@ -223,7 +223,7 @@ enum AssignmentAuthoringService {
         let clonedManifest: String
         do {
             clonedManifest = try await CourseDatasetService.reconciledManifestText(
-                try cloneManifest(of: sourceSetup), courseID: targetCourseID, zipPath: dstZip, on: ownerDB)
+                try cloneManifest(of: sourceSetup), courseID: targetCourseID, zipPath: dstZip, on: db)
         } catch {
             try? fm.removeItem(atPath: dstZip)
             if let newNotebookPath { try? fm.removeItem(atPath: newNotebookPath) }
@@ -402,11 +402,15 @@ enum AssignmentAuthoringService {
     /// Empty suite ⇒ no validation is queued, so a from-scratch assignment can
     /// be opened by the instructor without a runner once it has content.
     ///
+    /// `language` is declared before version v1 is recorded, so a restore to
+    /// v1 keeps the author's language (nil declares "no language").
+    ///
     /// `ownerDB` takes version v1 (`assignment_versions`), which the
     /// least-privilege MCP role cannot write. MCP passes `ToolContext.mainDB`.
     static func createAssignment(
         courseID: UUID,
         title: String,
+        language: AssignmentLanguage?,
         notebookData: Data,
         setupsDirectory: String,
         on db: any Database,
@@ -437,6 +441,7 @@ enum AssignmentAuthoringService {
                     sortOrder: try await nextSectionItemSortOrder(
                         courseID: courseID, sectionID: nil, db: db)),
                 on: db)
+            try await declareManifestLanguage(setup: setup, to: language, on: db)
             await AssignmentVersionStore.seedInitialVersion(
                 setup: setup, origin: AssignmentVersionOrigin.create,
                 testSetupsDirectory: setupsDirectory, on: ownerDB ?? db)

@@ -61,8 +61,9 @@ import Vapor
     }
 
     /// Gap 3: the first version was saved on `context.db`, where
-    /// `assignment_versions` is not granted, and `try?` hid the failure.
-    @Test func createAssignmentRecordsVersionOne() async throws {
+    /// `assignment_versions` is not granted, and `try?` hid the failure. It
+    /// must also carry the declared language, or a restore to v1 drops it.
+    @Test func createAssignmentRecordsVersionOneWithTheLanguage() async throws {
         let app = try await makeTestApp()
         try await withApp(app) { app in
             try app.useMCPRoleDatabase()
@@ -72,11 +73,17 @@ import Vapor
                 CreateAssignmentTool.Input(
                     courseCode: "CS246", title: "New Lab",
                     notebook: try JSONDecoder().decode(JSONValue.self, from: Data(notebook.utf8)),
-                    language: "python"),
+                    language: "java"),
                 context(app))
 
             let created = try #require(try await assignmentByPublicID(output.publicID, on: app.db))
-            #expect(try await versionCount(of: created.testSetupID, on: app) == 1)
+            let versions = try await APIAssignmentVersion.query(on: app.db)
+                .filter(\.$testSetupID == created.testSetupID).all()
+            let versionOne = try #require(versions.first)
+            #expect(versions.count == 1)
+            let manifest = try #require(decodeManifest(fromJSON: versionOne.manifest))
+            #expect(manifest.languageDeclaration == .language(.java))
+            #expect(manifest.submissionMode == .uploadOnly)
         }
     }
 
@@ -112,8 +119,9 @@ import Vapor
         }
     }
 
-    /// Gap 2: a library dataset makes the clone read `course_datasets`, which
-    /// the role cannot read.
+    /// A library dataset makes the clone read `course_datasets` on the MCP
+    /// pool. The role was granted that table with the dataset library tools,
+    /// so this read needs no owner pool; the test keeps it that way.
     @Test func cloneAssignmentKeepsALibraryDataset() async throws {
         let app = try await makeTestApp()
         try await withApp(app) { app in

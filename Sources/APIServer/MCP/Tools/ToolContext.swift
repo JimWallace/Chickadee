@@ -82,11 +82,10 @@ struct ToolContext {
     /// its RLS policy hides, where the data is the instructor's own and an
     /// in-app filter already selects it: `create_assignment` and
     /// `clone_assignment` record version v1 (`assignment_versions`),
-    /// `clone_assignment` saves the copied reference solution and reads the
-    /// course dataset library, and `get_suite` reads the starter run (a
-    /// `starterValidation` submission, selected by kind in
-    /// `StarterValidationRun.latest`). No student row comes back through any
-    /// of them. `MCPOwnerPoolRoutingTests` runs each one as the role would.
+    /// `clone_assignment` saves the copied reference solution, and `get_suite`
+    /// reads the starter run (a `starterValidation` submission, selected by
+    /// kind in `StarterValidationRun.latest`). No student row comes back
+    /// through any of them. `MCPOwnerPoolRoutingTests` runs each one as the role would.
     /// With no dedicated MCP pool configured this is the same connection as
     /// `db`, so behaviour is unchanged.
     var mainDB: any Database { request.db }

@@ -630,6 +630,27 @@ because line numbers go out of date.
     not appear (`docs/admin-mcp.md`). Nothing checks that a new admin tool has
     that test.
 
+### The MCP owner pool: `ToolContext.mainDB`
+
+- **Writers and readers:** everything on the owner pool, as `mainDB` or as
+  `request.db`: the personalization seeds (`update_global_inputs`,
+  `update_section_variables`, `preview_personalization`), the content-edit
+  re-grade, version capture, the version tools and restore, the
+  `set_activity` lock count, version v1 of `create_assignment` and
+  `clone_assignment`, the copied reference solution of `clone_assignment`,
+  and the starter run of `get_suite`.
+- **Rules:**
+  - A step that the `chickadee_mcp` role is denied runs on `mainDB`, not on
+    `ToolContext.db`. A new MCP step on an ungranted table needs a choice:
+    a grant in `deploy/sql/mcp-least-privilege-role.sql`, or `mainDB`.
+  - `mainDB` has no row-level security. A read there that returns rows to
+    the agent must select the instructor's own rows with an in-app filter,
+    and a test must show that a student row does not come back
+    (`MCPOwnerPoolRoutingTests`).
+  - `MCPRoleDatabase` models the role in tests. A tool that touches a table
+    the role cannot use passes on the test databases unless a test runs it
+    through the stand-in.
+
 ### The avatar handle: `users.avatar_handle`
 
 - **Writers:** `AvatarStore.ensureHandle` and `redrawHandle`.
