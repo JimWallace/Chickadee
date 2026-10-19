@@ -1,0 +1,190 @@
+// Tests/APITests/Groups/GroupSourceRoutesTests.swift
+//
+// Where the Groups tab's groups come from (docs/lab-groups.md, slice 6b): an
+// instructor of a course linked to LEARN reads its groups from the LEARN
+// Sections, syncs them again, and stops the sync, which keeps the groups and
+// makes them editable; a course not linked to LEARN is refused; a TA may not
+// change the source; and the tab shows each state's controls. LEARN is a
+// stubbed `app.client` that answers the Sections and the classlist routes.
+
+import Core
+import Fluent
+import Foundation
+import NIOConcurrencyHelpers
+import NIOCore
+import Testing
+import Vapor
+import VaporTesting
+
+@testable import APIServer
+
+/// A `Client` stub that answers each request with the body of the first route
+/// its path contains, and 404 for any other path (the version negotiation then
+/// falls back to the pinned version).
+private final class LearnStub: Client, Sendable {
+    let eventLoop: any EventLoop
+    let routes: [(path: String, body: String)]
+
+    init(eventLoop: any EventLoop, routes: [(path: String, body: String)]) {
+        self.eventLoop = eventLoop
+        self.routes = routes
+    }
+
+    func delegating(to eventLoop: any EventLoop) -> any Client {
+        LearnStub(eventLoop: eventLoop, routes: routes)
+    }
+
+    func send(_ request: ClientRequest) -> EventLoopFuture<ClientResponse> {
+        guard let route = routes.first(where: { request.url.string.contains($0.path) }) else {
+            return eventLoop.makeSucceededFuture(ClientResponse(status: .notFound, headers: [:], body: nil))
+        }
+        let headers = HTTPHeaders([("Content-Type", "application/json")])
+        return eventLoop.makeSucceededFuture(
+            ClientResponse(status: .ok, headers: headers, body: ByteBuffer(string: route.body)))
+    }
+}
+
+@Suite struct GroupSourceRoutesTests {
+
+    private static let credentials = BrightSpaceAppCredentials(
+        baseURL: "https://learn.test", appID: "a", appKey: "k", debounceSecs: 90)
+
+    /// LEARN for org unit 900: Lab 101 holds D2L user 501, the classlist's
+    /// `gsrc_ada`.
+    private static let routes: [(path: String, body: String)] = [
+        (
+            "/900/sections/",
+            #"[{"SectionId": 70, "Name": "Lab 101", "Code": "L101", "Description": {"Text": "", "Html": ""}, "Enrollments": [501]}]"#
+        ),
+        (
+            "/900/classlist/paged/",
+            #"{"Objects": [{"Identifier": "501", "Username": "gsrc_ada", "OrgDefinedId": null}], "Next": null}"#
+        ),
+    ]
+
+    /// Connects the deployment to the stubbed LEARN and links the shared
+    /// course to org unit 900, unless `linked` is false. Returns the course.
+    private func connect(_ app: Application, linked: Bool = true) async throws -> APICourse {
+        app.brightSpaceAppCredentials = Self.credentials
+        app.brightSpaceSyncConfig = BrightSpaceSyncConfig(app: Self.credentials, userID: "svc", userKey: "svc-key")
+        let routes = Self.routes
+        app.clients.use { app in LearnStub(eventLoop: app.eventLoopGroup.next(), routes: routes) }
+        let courseID = try await app.testCourseID(enrollmentMode: .auto)
+        let course = try #require(try await APICourse.find(courseID, on: app.db))
+        if linked {
+            course.brightspaceOrgUnitID = "900"
+            try await course.save(on: app.db)
+        }
+        let ada = try await arInsertStudent(username: "gsrc_ada", on: app)
+        try await arEnrollStudentInTestCourse(ada, on: app)
+        return course
+    }
+
+    private func post(
+        _ path: String, fields: [String: String], cookie: String, on app: Application
+    ) async throws -> (status: HTTPStatus, location: String?, body: String) {
+        let (token, boundCookie) = try await csrfFields(for: "/instructor/groups", cookie: cookie, on: app)
+        var result: (HTTPStatus, String?, String) = (.ok, nil, "")
+        try await app.asyncTest(
+            .POST, path,
+            beforeRequest: { req in
+                req.headers.add(name: .cookie, value: boundCookie)
+                try req.content.encode(fields.merging(["_csrf": token]) { first, _ in first }, as: .urlEncodedForm)
+            },
+            afterResponse: { res in
+                result = (res.status, res.headers.first(name: .location), res.body.string)
+            })
+        return result
+    }
+
+    private func labSet(_ course: APICourse, on app: Application) async throws -> APICourseGroupSet? {
+        try await CourseGroupStore.sets(courseID: try course.requireID(), on: app.db).first
+    }
+
+    @Test func aLinkedCourseReadsItsGroupsFromTheLearnSections() async throws {
+        try await withAssignmentRoutesApp { app in
+            let course = try await connect(app)
+            let cookie = try await arLoginAsInstructor(on: app)
+
+            let response = try await post(
+                "/instructor/groups/source", fields: ["source": "learnSections"], cookie: cookie, on: app)
+            #expect(response.status == .seeOther)
+            #expect(response.location == "/instructor/groups?notice=learn")
+
+            let set = try #require(try await labSet(course, on: app))
+            #expect(set.source == .learnSections)
+            #expect(set.lastSyncedAt != nil)
+            let groups = try await CourseGroupStore.groups(inSet: try set.requireID(), on: app.db)
+            #expect(groups.map(\.name) == ["Lab 101"])
+            let ada = try #require(try await APIUser.query(on: app.db).filter(\.$username == "gsrc_ada").first())
+            let members = try await CourseGroupStore.groupIDsByUser(inSet: try set.requireID(), on: app.db)
+            #expect(members[try ada.requireID()] == groups.first?.id)
+
+            let html = try await getHTML("/instructor/groups", cookie: cookie, on: app)
+            #expect(html.contains("These groups come from the Sections of this course in LEARN"))
+            #expect(html.contains("/instructor/groups/sync"))
+            #expect(html.contains("Stop syncing"))
+        }
+    }
+
+    @Test func syncNowReadsTheLearnSectionsAgain() async throws {
+        try await withAssignmentRoutesApp { app in
+            let course = try await connect(app)
+            let cookie = try await arLoginAsInstructor(on: app)
+            try await CourseGroupStore.setSource(.learnSections, courseID: try course.requireID(), on: app.db)
+
+            let response = try await post("/instructor/groups/sync", fields: [:], cookie: cookie, on: app)
+            #expect(response.location == "/instructor/groups?notice=learn")
+            let set = try #require(try await labSet(course, on: app))
+            #expect(
+                try await CourseGroupStore.groups(inSet: try set.requireID(), on: app.db).map(\.name) == ["Lab 101"])
+        }
+    }
+
+    @Test func stopSyncingKeepsTheGroupsAndMakesThemEditable() async throws {
+        try await withAssignmentRoutesApp { app in
+            let course = try await connect(app)
+            let cookie = try await arLoginAsInstructor(on: app)
+            _ = try await post(
+                "/instructor/groups/source", fields: ["source": "learnSections"], cookie: cookie, on: app)
+
+            let response = try await post(
+                "/instructor/groups/source", fields: ["source": "manual"], cookie: cookie, on: app)
+            #expect(response.location == "/instructor/groups?notice=manual")
+            let set = try #require(try await labSet(course, on: app))
+            #expect(set.source == .manual)
+            #expect(
+                try await CourseGroupStore.groups(inSet: try set.requireID(), on: app.db).map(\.name) == ["Lab 101"])
+
+            let html = try await getHTML("/instructor/groups", cookie: cookie, on: app)
+            #expect(html.contains("/instructor/groups/add"), "the groups are editable again")
+            #expect(html.contains("From LEARN"), "the course can read them from LEARN again")
+        }
+    }
+
+    @Test func aCourseNotLinkedToLearnIsRefused() async throws {
+        try await withAssignmentRoutesApp { app in
+            let course = try await connect(app, linked: false)
+            let cookie = try await arLoginAsInstructor(on: app)
+
+            let response = try await post(
+                "/instructor/groups/source", fields: ["source": "learnSections"], cookie: cookie, on: app)
+            #expect(response.status == .ok)
+            #expect(response.body.contains("Link this course to LEARN on the LEARN tab first."))
+            #expect(try await labSet(course, on: app) == nil)
+            #expect(!(try await getHTML("/instructor/groups", cookie: cookie, on: app)).contains("From LEARN"))
+        }
+    }
+
+    @Test func aTAMayNotChangeTheSource() async throws {
+        try await withAssignmentRoutesApp { app in
+            let course = try await connect(app)
+            let cookie = try await loginAsCourseTA("gsrc_ta", on: app)
+
+            let response = try await post(
+                "/instructor/groups/source", fields: ["source": "learnSections"], cookie: cookie, on: app)
+            #expect(response.status == .forbidden)
+            #expect(try await labSet(course, on: app) == nil)
+        }
+    }
+}

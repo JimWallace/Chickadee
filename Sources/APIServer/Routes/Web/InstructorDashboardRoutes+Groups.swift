@@ -9,6 +9,8 @@
 //   POST /instructor/groups/remove      → remove a group
 //   POST /instructor/groups/import      → replace a set's memberships from a CSV file
 //   POST /instructor/groups/membership  → put one student in a group (the Students tab)
+//   POST /instructor/groups/source      → read the groups from LEARN, or stop (slice 6b)
+//   POST /instructor/groups/sync        → read them from LEARN now (slice 6b)
 //
 // No route takes a path parameter. Each write names its set or group in the
 // form and is authorized against that row's own course, at the instructor
@@ -51,16 +53,20 @@ extension InstructorDashboardRoutes {
 
     /// The success messages a redirect may name. A code, not text, so a
     /// crafted link cannot put words in the banner.
-    private enum GroupsNotice: String {
+    enum GroupsNotice: String {
         case setCreated = "set"
         case groupAdded = "added"
         case groupRemoved = "removed"
+        case learnSynced = "learn"
+        case learnStopped = "manual"
 
         var text: String {
             switch self {
             case .setCreated: "Group set created."
             case .groupAdded: "Group added."
             case .groupRemoved: "Group removed, and its students are in no group."
+            case .learnSynced: "The groups were read from LEARN."
+            case .learnStopped: "LEARN no longer changes these groups. Edit them here."
             }
         }
     }
@@ -73,6 +79,8 @@ extension InstructorDashboardRoutes {
         r.post("groups", "remove", use: removeGroup)
         r.on(.POST, "groups", "import", body: .collect(maxSize: "2mb"), use: importGroups)
         r.post("groups", "membership", use: setGroupMembership)
+        r.post("groups", "source", use: setGroupSource)
+        r.post("groups", "sync", use: syncGroupsFromLearn)
     }
 
     // MARK: - Page
@@ -86,7 +94,7 @@ extension InstructorDashboardRoutes {
     /// The Groups tab for the active course, with `flash` above it. Every
     /// write that fails renders through here, so its message is the store's
     /// own sentence and never a query parameter.
-    private func renderGroupsPage(req: Request, flash: FlashMessages) async throws -> Response {
+    func renderGroupsPage(req: Request, flash: FlashMessages) async throws -> Response {
         let user = try req.auth.require(APIUser.self)
         let courseState = try await req.resolveActiveCourse(for: user)
         var course: APICourse?
@@ -107,11 +115,12 @@ extension InstructorDashboardRoutes {
         if let courseID = course?.id, let set = try await CourseGroupStore.sets(courseID: courseID, on: req.db).first {
             panel = try await Self.groupSetPanel(for: set, courseID: courseID, on: req.db)
         }
+        let learnLinked = course.map { Self.learnLinked($0, on: req.application) } ?? false
         let page = try await PageRequestContext.courseAware(req)
         return try await HTMLResponse {
             InstructorGroupsPage(
                 page: page, flash: flash, hasActiveCourse: course != nil, courseCode: course?.code ?? "",
-                canEdit: readOnlyNote == nil, readOnlyNote: readOnlyNote, groupSet: panel)
+                canEdit: readOnlyNote == nil, readOnlyNote: readOnlyNote, groupSet: panel, learnLinked: learnLinked)
         }.encodeResponse(for: req)
     }
 
@@ -131,7 +140,8 @@ extension InstructorDashboardRoutes {
             group.id.map { GroupSetPanel.Row(id: $0.uuidString, name: group.name, memberCount: counts[$0] ?? 0) }
         }
         return GroupSetPanel(
-            id: setID.uuidString, name: set.name, isManual: set.acceptsManualEdits, groups: rows,
+            id: setID.uuidString, name: set.name, isManual: set.acceptsManualEdits, source: set.source,
+            lastSyncedText: set.lastSyncedAt.map { waterlooDateTimeFormatter().string(from: $0) }, groups: rows,
             studentCount: students.count, ungroupedCount: students.count - counts.values.reduce(0, +))
     }
 
@@ -289,7 +299,7 @@ extension InstructorDashboardRoutes {
             success: text, notice: "No student of this course has these usernames: \(shown)\(more).")
     }
 
-    private static func auditGroups(
+    static func auditGroups(
         change: String, title: String, courseID: UUID, extra: [String: String] = [:], on req: Request
     ) async {
         var metadata = ["change": change, "title": title, "course_id": courseID.uuidString]

@@ -30,7 +30,7 @@ today.
 | 5b | Lab goals, the items: `group_class_item_coverage`, `itemsCovered` goals per lab, a lab's composite tiles and spares count | built |
 | 5c | Lab goals, the corpus: `class_coverage_runs.group_id`, one corpus run per lab over its students, `classCoverage` goals per lab | built |
 | 6a | The LEARN source, the sync: a D2L Sections reader, the group-category reader fixed, `LearnGroupSyncService` writes a synced set through `CourseGroupStore`, the old section category becomes a set | built |
-| 6b | The LEARN source, the picker: the BrightSpace tab chooses the lab set's source, and "Sync now" | not started |
+| 6b | The LEARN source, the picker: the Groups tab reads the groups from the LEARN Sections, "Sync now" and "Stop syncing" | built |
 | later | Per-group deadlines; a TA's roster filtered to their groups; a `team` kind with a shared submission | not planned |
 
 ## The problem
@@ -771,8 +771,7 @@ should be able to see it. The maintainer chose best effort on 2026-10-18.
 
 Known limits:
 
-- Nothing makes a synced set yet, except the migration. Slice 6b adds the
-  picker.
+- Until slice 6b, only the migration made a synced set.
 - The sync places students only. An enrolled TA is in no group of a synced
   set.
 - A lab that LEARN dropped after it held a session stays on the pickers with
@@ -787,11 +786,42 @@ Known limits:
   course that has a set already gets no synced set. Both need a course that
   had the old category field set, which no form set.
 
-### Slice 6b: the picker
+### Slice 6b: the picker (built)
 
-- The BrightSpace tab chooses the source of the course's lab set: the
-  Sections, a group category (`fetchGroupCategories`), or manual, and a
-  "Sync now" button runs `syncLearnGroupSet` for the set at once.
+The maintainer chose the Groups tab, not the BrightSpace tab, and the Sections
+only (2026-10-19). The Groups tab shows the groups that a source fills and
+already has the instructor gate that a group change needs. The BrightSpace tab
+is open to TAs. The Sections are where the UW labs come from, and listing the
+group categories would call LEARN on every page load.
+
+- **The controls.** When the course is linked to a LEARN org unit and the
+  deployment has BrightSpace credentials, an instructor sees "From LEARN":
+  - in the "+ Add" menu of a manual set, and below "Create groups" when the
+    course has no set. It confirms, then reads the groups from the Sections
+    of the course.
+  - on a synced set: "Sync now", which reads them at once, and "Stop
+    syncing", which keeps the groups and makes the set manual again.
+  A synced set says where its groups come from and when LEARN last gave
+  them.
+- **The routes.** `POST /instructor/groups/source` (`source` is
+  `learnSections` or `manual`) and `POST /instructor/groups/sync`, in
+  `InstructorDashboardRoutes+GroupSource.swift`. Both write the active
+  course, at the instructor floor, in a course that is not archived, as the
+  other Groups writes do. `CourseGroupStore.setSource` makes the course's set
+  when it has none, and changes only the source: the groups and the
+  memberships change at the next sync. Choosing the Sections syncs at once.
+- **Tests.** `GroupSourceRoutesTests` drives the routes against a stubbed
+  LEARN (`app.client`): read from the Sections, "Sync now", "Stop syncing",
+  a course that is not linked, and a TA. The page fixtures render each
+  state for the page guards.
+
+Known limits:
+
+- A course whose set reads a group category (from the migration) keeps it
+  and can sync it, but the tab cannot choose a category. Choosing the
+  Sections replaces it.
+- When a manual set becomes a LEARN set, a manual group that held a session
+  stays, with no members, because LEARN never lists it.
 
 ## Deferred: what the same model can carry later
 

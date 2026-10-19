@@ -3,7 +3,9 @@
 // GET /instructor/groups: the Groups tab (docs/lab-groups.md, slice 1). The
 // active course's group set, its groups with their student counts, and the
 // forms that make a set, add or remove a group, and import a CSV file. A
-// student moves between groups on the Students tab.
+// student moves between groups on the Students tab. A course linked to LEARN
+// can read its groups from the LEARN Sections instead (slice 6b): the set
+// then shows where its groups come from, "Sync now" and "Stop syncing".
 
 import Elementary
 
@@ -18,6 +20,8 @@ struct InstructorGroupsPage: HTML {
     let readOnlyNote: String?
     /// The course's group set, or nil before one is made.
     let groupSet: GroupSetPanel?
+    /// The course can read its groups from LEARN: it is linked to an org unit.
+    var learnLinked = false
 
     var body: some HTML {
         BaseLayout(title: "Groups", page: page, flash: flash) {
@@ -29,12 +33,26 @@ struct InstructorGroupsPage: HTML {
             } else if let groupSet {
                 GroupSetSection(
                     csrfToken: page.csrfToken, panel: groupSet, canEdit: canEdit && groupSet.isManual,
-                    readOnlyNote: groupSet.isManual ? readOnlyNote : "These groups come from LEARN.")
+                    canChangeSource: canEdit, learnLinked: learnLinked,
+                    readOnlyNote: groupSet.isManual ? readOnlyNote : Self.sourceNote(groupSet))
             } else {
                 NoGroupSetSection(
-                    csrfToken: page.csrfToken, courseCode: courseCode, canEdit: canEdit, readOnlyNote: readOnlyNote)
+                    csrfToken: page.csrfToken, courseCode: courseCode, canEdit: canEdit, learnLinked: learnLinked,
+                    readOnlyNote: readOnlyNote)
             }
         }
+    }
+
+    /// Where a synced set's groups come from, and when LEARN last gave them.
+    static func sourceNote(_ panel: GroupSetPanel) -> String {
+        let origin =
+            switch panel.source {
+            case .learnSections: "These groups come from the Sections of this course in LEARN"
+            case .learnGroups: "These groups come from a group category in LEARN"
+            case .manual, nil: "These groups come from LEARN"
+            }
+        let read = panel.lastSyncedText.map { "Last read \($0)." } ?? "Not read yet."
+        return "\(origin), which updates them every ten minutes. \(read)"
     }
 }
 
@@ -44,6 +62,7 @@ private struct NoGroupSetSection: HTML {
     let csrfToken: String
     let courseCode: String
     let canEdit: Bool
+    let learnLinked: Bool
     let readOnlyNote: String?
 
     var body: some HTML {
@@ -65,6 +84,7 @@ private struct NoGroupSetSection: HTML {
                         button(.class("btn btn-primary"), .type(.submit)) { "Create groups" }
                     }
                 }
+                if learnLinked { LearnSectionsForm(csrfToken: csrfToken, intro: "Or read the lab sections from LEARN.") }
             } else {
                 p(.class("empty")) { "No groups yet." }
                 if let readOnlyNote { p(.class("section-note")) { readOnlyNote } }
@@ -77,7 +97,11 @@ private struct NoGroupSetSection: HTML {
 private struct GroupSetSection: HTML {
     let csrfToken: String
     let panel: GroupSetPanel
+    /// The viewer may edit the groups: an instructor, and a manual set.
     let canEdit: Bool
+    /// The viewer may change where the groups come from: an instructor.
+    let canChangeSource: Bool
+    let learnLinked: Bool
     let readOnlyNote: String?
 
     var body: some HTML {
@@ -89,12 +113,20 @@ private struct GroupSetSection: HTML {
                         "\(panel.studentCount) students · \(panel.ungroupedCount) in no group"
                     }
                 }
-                if canEdit { GroupAddMenu() }
+                if canEdit { GroupAddMenu(learnLinked: learnLinked) }
+                if !panel.isManual && canChangeSource { LearnSyncActions(csrfToken: csrfToken) }
             }
             if let readOnlyNote { p(.class("section-note")) { readOnlyNote } }
             if canEdit {
                 addPanel
                 importPanel
+                if learnLinked {
+                    div(.class("add-panel card"), .id("group-learn-panel")) {
+                        LearnSectionsForm(
+                            csrfToken: csrfToken,
+                            intro: "LEARN then replaces these groups and every student's group every ten minutes.")
+                    }
+                }
             }
             if panel.groups.isEmpty {
                 p(.class("empty")) { "No groups yet." }
@@ -159,6 +191,8 @@ private struct GroupSetSection: HTML {
 /// The one "+ Add" menu: a group by name, or groups from a file. Each item
 /// opens its add panel, as on the Students tab.
 private struct GroupAddMenu: HTML {
+    let learnLinked: Bool
+
     var body: some HTML {
         details(.class("add-section-details popup-anchor")) {
             summary(.class("btn action-btn summary-btn")) {
@@ -188,6 +222,64 @@ private struct GroupAddMenu: HTML {
                         span(.class("card-meta")) { "Usernames and groups" }
                     }
                 }
+                if learnLinked {
+                    a(
+                        .class("row-menu-item"), .href("#group-learn-panel"), .role("menuitem"),
+                        .data("add-target", value: "group-learn-panel")
+                    ) {
+                        span(.class("item-tile"), .data("kind", value: "link")) { Icon("i-refresh") }
+                        span {
+                            "From LEARN"
+                            br()
+                            span(.class("card-meta")) { "The Sections of this course" }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// The form that makes LEARN the source of the groups.
+private struct LearnSectionsForm: HTML {
+    let csrfToken: String
+    let intro: String
+
+    var body: some HTML {
+        form(
+            .method(.post), .action("/instructor/groups/source"), .class("form-stack"),
+            .data("confirm", value: "Replace these groups with the Sections of this course in LEARN?")
+        ) {
+            CSRFField(token: csrfToken)
+            input(.type(.hidden), .name("source"), .value("learnSections"))
+            p(.class("section-note")) { intro }
+            div(.class("toolbar")) {
+                button(.class("btn action-btn"), .type(.submit)) { "Read from LEARN" }
+            }
+        }
+    }
+}
+
+/// A synced set's actions: read it from LEARN now, or keep its groups and
+/// edit them here.
+private struct LearnSyncActions: HTML {
+    let csrfToken: String
+
+    var body: some HTML {
+        div(.class("assignment-actions-cell")) {
+            form(.method(.post), .action("/instructor/groups/sync"), .class("inline-form")) {
+                CSRFField(token: csrfToken)
+                button(.class("btn btn-primary"), .type(.submit), .title("Read the groups from LEARN now")) {
+                    "Sync now"
+                }
+            }
+            form(
+                .method(.post), .action("/instructor/groups/source"), .class("inline-form"),
+                .data("confirm", value: "Keep these groups and edit them here? LEARN will no longer change them.")
+            ) {
+                CSRFField(token: csrfToken)
+                input(.type(.hidden), .name("source"), .value("manual"))
+                button(.class("btn action-btn"), .type(.submit)) { "Stop syncing" }
             }
         }
     }

@@ -204,6 +204,24 @@ enum CourseGroupStore {
 
     // MARK: - LEARN sync
 
+    /// Sets where the course's group set reads its groups: made in Chickadee
+    /// (`manual`) or the LEARN Sections of the course offering
+    /// (`learnSections`). A course with no set gets one. The groups and the
+    /// memberships stay as they are: a manual set keeps the groups that LEARN
+    /// gave it, and a LEARN set changes at its next sync.
+    @discardableResult
+    static func setSource(
+        _ source: CourseGroupSource, courseID: UUID, on db: any Database
+    ) async throws -> APICourseGroupSet {
+        let set =
+            try await sets(courseID: courseID, on: db).first
+            ?? APICourseGroupSet(courseID: courseID, name: "Lab sections", source: source)
+        set.sourceRaw = source.rawValue
+        set.externalID = nil
+        try await set.save(on: db)
+        return set
+    }
+
     /// One group or section as LEARN lists it.
     struct SyncedGroup: Equatable, Sendable {
         let externalID: String

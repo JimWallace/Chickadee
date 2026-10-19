@@ -600,6 +600,9 @@ because line numbers go out of date.
   - `CourseGroupStore`: the Groups tab, the roster import and the Students
     tab's Group column write memberships. `removeGroup` also ends the
     group's open sessions.
+  - `CourseGroupStore.setSource`, from the Groups tab (`POST
+    /instructor/groups/source`), changes where the course's set reads its
+    groups. Choosing the LEARN Sections syncs at once.
   - `CourseGroupStore.applySync`, from the LEARN group sync
     (`LearnGroupSyncService`, every ten minutes), replaces a synced set's
     groups and all its memberships. A group that LEARN no longer lists
