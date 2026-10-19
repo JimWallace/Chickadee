@@ -89,42 +89,35 @@ if [ -n "$inline_violations" ]; then
   echo
 fi
 
-# ── 3. No new native alert() in a Swift view ────────────────────────────────
-# At ZERO as of the S9 feedback-channel consolidation: every blocking error
-# now uses the inline .form-error banner (ChickadeeUI.showActionError). The
-# baseline may only go DOWN, so from here the rule is absolute.  A view could
-# only carry one in an attribute value or an inline script, and both are
-# refused on the rendered page too; this reads the source, so it also sees a
-# branch that no fixture renders.
-ALERT_BASELINE=0
-alert_count="$( { grep -rho 'alert(' "${views[@]}" || true; } | wc -l | tr -d ' ')"
-if [ "$alert_count" -gt "$ALERT_BASELINE" ]; then
+# ── 3. No native alert() in a Swift view ───────────────────────────────────
+# At zero since the S9 feedback-channel consolidation: every blocking error
+# uses the inline .form-error banner (ChickadeeUI.showActionError), and the
+# rule is absolute.  A view could only carry one in an attribute value or an
+# inline script, and both are refused on the rendered page too; this reads
+# the source, so it also sees a branch that no fixture renders.
+view_alerts="$(grep -n 'alert(' "${views[@]}" || true)"
+if [ -n "$view_alerts" ]; then
   status=1
-  echo "ERROR: new native alert() in a Swift view (found ${alert_count}, baseline ${ALERT_BASELINE})."
+  echo "ERROR: new native alert() in a Swift view."
   echo "       Surface errors with the inline .form-error pattern instead."
-  grep -rn 'alert(' "${views[@]}" | sed 's/^/  /'
+  printf '%s\n' "$view_alerts" | sed 's/^/  /'
   echo
-elif [ "$alert_count" -lt "$ALERT_BASELINE" ]; then
-  echo "note: alert() count dropped to ${alert_count}; lower ALERT_BASELINE in scripts/check-styles.sh."
 fi
 
-# ── 3a. No new native alert() in first-party JS ─────────────────────────────
-# Same rule, same direction, for Public/*.js.  The view ratchet alone was
-# leaky: the inline-script rule (3b) pushes page JS out into Public/*.js,
-# which the view scan never sees — so an alert() could be laundered out of
-# scope by the very move 3b encourages.  Top-level Public/*.js only; the
-# vendored/generated trees (Public/pyodide, Public/jupyterlite, Public/vendor,
-# Public/runner-wasm) are not ours to lint.  Also at ZERO as of S9.
-JS_ALERT_BASELINE=0
-js_alert_count="$( { grep -ho 'alert(' Public/*.js || true; } | wc -l | tr -d ' ')"
-if [ "$js_alert_count" -gt "$JS_ALERT_BASELINE" ]; then
+# ── 3a. No native alert() in first-party JS ────────────────────────────────
+# Same rule for Public/*.js.  The view rule alone was leaky: the
+# inline-script rule (3b) pushes page JS out into Public/*.js, which the view
+# scan never sees — so an alert() could be laundered out of scope by the very
+# move 3b encourages.  Top-level Public/*.js only; the vendored/generated
+# trees (Public/jupyterlite, Public/vendor, Public/runner-wasm) are not ours
+# to lint.  Also at zero since S9.
+js_alerts="$(grep -n 'alert(' Public/*.js || true)"
+if [ -n "$js_alerts" ]; then
   status=1
-  echo "ERROR: new native alert() in first-party JS (found ${js_alert_count}, baseline ${JS_ALERT_BASELINE})."
+  echo "ERROR: new native alert() in first-party JS."
   echo "       Surface errors with the inline .form-error pattern instead."
-  grep -n 'alert(' Public/*.js | sed 's/^/  /'
+  printf '%s\n' "$js_alerts" | sed 's/^/  /'
   echo
-elif [ "$js_alert_count" -lt "$JS_ALERT_BASELINE" ]; then
-  echo "note: JS alert() count dropped to ${js_alert_count}; lower JS_ALERT_BASELINE in scripts/check-styles.sh."
 fi
 
 # ── 3b. Inline <script> is closed (#1135; last holdout retired by #1516) ────
@@ -656,7 +649,7 @@ scripts/check-class-resolution.sh || status=1
 scripts/check-ui-vocabulary.sh || status=1
 
 if [ "$status" -eq 0 ]; then
-  echo "check-styles: OK (no disallowed inline styles; alert()s within baseline; no duplicated selectors; ratchets within baseline)"
+  echo "check-styles: OK (no disallowed inline styles; no native alert(); no duplicated selectors; ratchets within baseline)"
 fi
 
 exit "$status"

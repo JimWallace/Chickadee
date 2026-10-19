@@ -18,14 +18,12 @@ set -euo pipefail
 # its name appears. Comments and string literals, including the multi-line
 # ones that hold generated Python and R, are skipped.
 #
-# The uses that predate the guard are listed in `scripts/layering-baseline.txt`.
-# The list may only shrink: a new symbol fails, and a listed symbol that is no
-# longer used fails too, so the list is cut down the day a use goes away.
+# The rule is absolute. The uses that predated it were listed in a shrink-only
+# baseline, which has been empty since #2143.
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$repo_root"
 
-baseline_file="scripts/layering-baseline.txt"
 shared_dirs=(Sources/APIServer/Services Sources/APIServer/Helpers Sources/APIServer/Utilities Sources/APIServer/BrightSpace Sources/APIServer/GitHub)
 
 work="$(mktemp -d)"
@@ -71,11 +69,7 @@ FNR == 1 { in_multiline = 0 }
   }
 }' > "$work/uses"
 
-cut -f1 "$work/uses" | sort -u > "$work/used"
-{ grep -vE '^[[:space:]]*(#|$)' "$baseline_file" || true; } | sort -u > "$work/baseline"
-
-new_symbols="$(comm -23 "$work/used" "$work/baseline")"
-stale_symbols="$(comm -13 "$work/used" "$work/baseline")"
+new_symbols="$(cut -f1 "$work/uses" | sort -u)"
 
 if [ -n "$new_symbols" ]; then
   echo "ERROR: shared code names a symbol defined only under Routes/."
@@ -90,13 +84,5 @@ if [ -n "$new_symbols" ]; then
   exit 1
 fi
 
-if [ -n "$stale_symbols" ]; then
-  echo "ERROR: $baseline_file lists a symbol that shared code no longer uses."
-  echo
-  printf '%s\n' "$stale_symbols" | sed 's/^/  /'
-  echo
-  echo "The baseline only shrinks. Delete these lines from $baseline_file."
-  exit 1
-fi
 
-echo "check-layering: OK ($(wc -l < "$work/baseline" | tr -d ' ') baselined symbol(s), no new ones)"
+echo "check-layering: OK (no shared file names a symbol defined only under Routes/)"

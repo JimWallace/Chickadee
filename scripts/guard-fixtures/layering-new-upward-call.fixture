@@ -1,6 +1,5 @@
 # Services/, Helpers/ and Utilities/ sit below Routes/ (#1726). A shared file
-# that calls a function declared only under Routes/ must fail the guard
-# unless the symbol is in the shrink-only baseline.
+# that calls a function declared only under Routes/ must fail the guard.
 guard="scripts/check-layering.sh"
 files="Sources/APIServer/Services/PeriodicSweepMonitor.swift"
 description="a service that calls a function declared only under Routes/"
