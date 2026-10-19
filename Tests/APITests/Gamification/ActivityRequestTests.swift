@@ -10,6 +10,7 @@ import Fluent
 import Foundation
 import Testing
 import Vapor
+import VaporTesting
 
 @testable import APIServer
 

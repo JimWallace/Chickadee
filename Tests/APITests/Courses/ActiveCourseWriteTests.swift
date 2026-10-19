@@ -9,6 +9,7 @@ import Core
 import Fluent
 import Testing
 import Vapor
+import VaporTesting
 
 @testable import APIServer
 
