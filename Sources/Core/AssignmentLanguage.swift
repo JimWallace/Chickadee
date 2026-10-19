@@ -144,6 +144,13 @@ public enum AssignmentLanguage: String, Codable, Sendable, CaseIterable {
     /// The ONE implementation of the sniff. `isRNotebookMetadata` is a thin
     /// equality on top of it rather than a second copy, so a new language is a
     /// `notebookKernelNames` arm and nothing else.
+    public static func fromNotebookMetadata(_ metadata: NotebookHeader.Metadata) -> AssignmentLanguage? {
+        languageFromKernelNames(metadata.kernelName, metadata.languageInfoName)
+    }
+
+    /// The same sniff over an already-parsed `metadata` dictionary, for the
+    /// worker's notebook extractor, which still parses with
+    /// `JSONSerialization`. Remove it when that extractor moves to typed JSON.
     public static func fromNotebookMetadata(_ metadata: [String: Any]) -> AssignmentLanguage? {
         languageFromKernelNames(
             (metadata["kernelspec"] as? [String: Any])?["name"] as? String,
@@ -432,16 +439,14 @@ extension AssignmentLanguage {
     ) -> AssignmentLanguage? {
         if let fromManifest = derivedDeclaration(manifest: manifest) { return fromManifest }
         guard let data = notebookData(),
-            let notebook = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
-            let metadata = notebook["metadata"] as? [String: Any]
+            let metadata = NotebookHeader(data: data)?.metadata
         else {
             return nil
         }
         return derivedDeclaration(
             manifest: manifest,
-            notebookKernelName: (metadata["kernelspec"] as? [String: Any])?["name"] as? String,
-            notebookLanguageInfoName: (metadata["language_info"] as? [String: Any])?["name"]
-                as? String
+            notebookKernelName: metadata.kernelName,
+            notebookLanguageInfoName: metadata.languageInfoName
         )
     }
 

@@ -359,11 +359,5 @@ func extractNotebookFromZip(zipPath: String) async -> Data? {
 /// `validateNotebookShape` guard: the same rejection, one step earlier, so a
 /// stray POST can never overwrite a notebook with something that isn't one.
 func notebookCellCount(fromRaw raw: Data) -> Int? {
-    guard
-        let object = try? JSONSerialization.jsonObject(with: raw) as? [String: Any],
-        let cells = object["cells"] as? [Any]
-    else {
-        return nil
-    }
-    return cells.count
+    NotebookHeader(data: raw)?.cellCount
 }

@@ -283,9 +283,7 @@ func inferredRawSubmissionExtension(data: Data, uploadFilename: String?) -> Stri
     }
 
     // Heuristic: notebook uploads are JSON with "nbformat" key.
-    if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-        json["nbformat"] != nil
-    {
+    if NotebookHeader(data: data)?.hasNBFormatKey == true {
         return "ipynb"
     }
 
