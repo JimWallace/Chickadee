@@ -144,18 +144,15 @@ extension InstructorDashboardRoutes {
         }
         // No active course: every student across the deployment — the union of
         // all `.student`-role enrollments (#417 Slice G2; the global role no
-        // longer distinguishes students). Filtered DB-side (#1160): the
-        // unscoped fetch grows with every past term. NULL role means
-        // pre-migration student (the computed `role` accessor's default), so
-        // the predicate must keep NULL rows.
+        // longer distinguishes students). Only the two columns are read
+        // (#1160): the unscoped fetch grows with every past term. The rule
+        // is `CourseRoster.isStudent`, so a NULL or unknown role is a student
+        // here too (#2720).
         let studentEnrollments = try await APICourseEnrollment.query(on: req.db)
-            .group(.or) { or in
-                or.filter(\.$roleRaw == CourseRole.student.rawValue)
-                or.filter(\.$roleRaw == .null)
-            }
             .field(\.$userID)
+            .field(\.$roleRaw)
             .all()
-        let studentUserIDs = Set(studentEnrollments.map(\.userID))
+        let studentUserIDs = Set(studentEnrollments.filter(CourseRoster.isStudent).map(\.userID))
         guard !studentUserIDs.isEmpty else { return [] }
         return try await APIUser.query(on: req.db)
             .filter(\.$id ~~ Array(studentUserIDs))

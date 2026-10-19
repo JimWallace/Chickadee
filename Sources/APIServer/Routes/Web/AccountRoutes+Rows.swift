@@ -36,7 +36,7 @@ extension AccountRoutes {
         let course = enrollment.course
         let policy = course.slipDayPolicy
         let slipDaysText: String?
-        if policy.enabled, enrollment.role == .student {
+        if policy.enabled, CourseRoster.isStudent(enrollment) {
             let total = policy.daysPerStudent + (enrollment.slipDaysAdjustment ?? 0)
             slipDaysText = "\(max(total - slipDaysUsed, 0)) of \(total) slip days left"
         } else {

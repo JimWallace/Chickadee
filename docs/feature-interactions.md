@@ -936,7 +936,10 @@ because line numbers go out of date.
   `/instructor` and `/courses`. So:
   - Use `isCourseStaff` and the `AvatarStore` handles. An activity page
     starts with `ActivityRequest.resolve` and names students through
-    `AvatarIdentity`.
+    `AvatarIdentity`. Two activity routes do not start there: the
+    group-session routes authorize the caller first (`requireGroupSession`),
+    and the composite spare is for students only
+    (`requireOpenStudentAssignment`).
   - Add a test that asserts that a classmate's username is not on the page,
     as `LeaderboardPageTests` does.
 - **Trap:** a new aggregation set the metric board flag by accident (#1745).

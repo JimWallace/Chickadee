@@ -192,7 +192,7 @@ extension InstructorDashboardRoutes {
     /// Why LEARN cannot receive this student's grade, or nil. Reads what the
     /// readiness sweep stored; nothing is fetched here.
     static func learnFlag(for enrollment: APICourseEnrollment?) -> LearnUnreachableReason? {
-        guard let enrollment, enrollment.role == .student,
+        guard let enrollment, CourseRoster.isStudent(enrollment),
             enrollment.learnSyncReadiness == .unreachable
         else { return nil }
         return LearnUnreachableReason(storedDetail: enrollment.brightspaceSyncDetail)
