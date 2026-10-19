@@ -1,8 +1,8 @@
 // Tests/CoreTests/ClassActivityIsPerGroupTests.swift
 //
 // The one rule for whether an activity behaves per lab group
-// (docs/lab-groups.md, slice 3a): the flag, and a kind whose ranking is per
-// group. A flag stored on any other kind reads as course-wide.
+// (docs/lab-groups.md, slices 3a to 3c): the flag, and a kind whose ranking
+// is per group. A flag stored on any other kind reads as course-wide.
 
 import Testing
 
@@ -17,7 +17,10 @@ import Testing
         #expect(!ClassActivity(kind: kind).isPerGroup, "no flag, no groups")
     }
 
-    @Test func theKindsThatCanRunPerGroupAreTheLeaderboardsWithNoChampion() {
-        #expect(ActivityKind.allCases.filter(\.canRunPerGroup) == [.beatTheInstructor, .bestMetric])
+    @Test func theKindsThatCanRunPerGroupAreTheLeaderboardsAndTheRoundRobin() {
+        #expect(
+            ActivityKind.allCases.filter(\.canRunPerGroup) == [
+                .beatTheInstructor, .bestMetric, .kingOfTheHill, .roundRobin,
+            ])
     }
 }

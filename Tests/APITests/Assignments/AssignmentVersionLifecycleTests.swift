@@ -110,7 +110,7 @@ import Vapor
         try await withApp(app) { app in
             let courseID = try await makeCourse(app, code: "VLNEW")
             let created = try await AssignmentAuthoringService.createAssignment(
-                courseID: courseID, title: "From scratch",
+                courseID: courseID, title: "From scratch", language: .python,
                 notebookData: Data("{\"cells\":[],\"nbformat\":4}".utf8),
                 setupsDirectory: app.testSetupsDirectory, on: app.db)
 

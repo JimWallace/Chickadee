@@ -413,7 +413,7 @@ private struct EditActivityBlock: HTML {
                     }
                 } else {
                     p(.class("field-note field-note--muted")) {
-                        ActivityAuthoring.runsPerGroupKindMessage
+                        ActivityAuthoring.runsPerGroupKindNote
                     }
                 }
                 " "

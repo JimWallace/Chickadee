@@ -20,7 +20,9 @@ today.
 | 1 | Groups: group sets, groups, memberships; the Groups tab; the CSV import; the Group column on the roster; groups in the data export | built |
 | 2 | Sessions: a session per (activity, group), started and ended from the present page; the submission gate reads the session; attendance by join code at `/join`; presence: a code for every student that changes every 30 seconds, the staff list of who joined, a limit on wrong codes, the "Other network" flag | built |
 | 3a | Rankings per group, the leaderboard: `group_leaderboard_entries`, a late result does not rank, the board and the present page per group; other kinds refuse the flag until their slice | built |
-| 3 | Rankings per group, the rest: standings, the hill, round-robin opponents, tournament runs | not started |
+| 3b | Rankings per group, the hill: `group_activity_champions`, a challenger plays their group's champion, the page and the present page show the group's hill | built |
+| 3c | Rankings per group, the round robin: classmates are the students in the challenger's session, `activity_standings.group_id`, standings per group on the page and the present page | built |
+| 3 | Rankings per group, the rest: tournament runs | not started |
 | 4 | The composite per group, and the course gallery of every group's image | not started |
 | 5 | Group goals: the union and the corpus percent per group; a group achievement | not started |
 | 6 | The LEARN source: the existing group-category sweep writes the new tables; a D2L Sections reader; the category picker | not started |
@@ -123,9 +125,12 @@ activity_session_attendance
 And, per ranking table, a per-group form: slice 3a made the leaderboard's a
 twin table, `group_leaderboard_entries` keyed (assignment, group, student),
 because a column under the existing (assignment, student) key strands a
-student who moves labs. The rest are still a nullable `group_id` in this
-plan:
-`leaderboard_entries`, `activity_standings`, `activity_champions`,
+student who moves labs. Slice 3b made the hill's a twin table too,
+`group_activity_champions` keyed (assignment, group). Slice 3c gave
+`activity_standings` a nullable `group_id` under its (assignment, student)
+key: a standings row is the student's latest submission, never a best, so a
+student who moves labs moves with it. The rest are still a nullable
+`group_id` in this plan:
 `match_results`, `tournament_runs`, `composite_slots`,
 `composite_contributions`, `class_item_coverage`, `class_coverage_runs`.
 Nil means course-wide, which is what every existing row is.
@@ -152,11 +157,11 @@ Nil means course-wide, which is what every existing row is.
    their place in the room they played in. This is the house pattern (every
    accumulator is materialised at ingest, docs/class-activities.md decision
    7), and it is why the ranking pages need no join on memberships.
-5. **One unique key changes.** `activity_champions` is unique on the
-   assignment alone today. One hill per group needs (assignment, group). That
-   is the one non-additive migration in the plan, and the reason the hill is
-   in slice 3 rather than a later one: the rest of the ranking tables keep
-   their (assignment, student) keys, since a student has one group per set.
+5. **No unique key changes.** `activity_champions` is unique on the
+   assignment alone. One hill per group needs (assignment, group), so slice
+   3b added a twin table, `group_activity_champions`, rather than changing
+   that key: a nullable group under a unique key admits two course-wide
+   rows on Postgres, and the migration stays additive.
 6. **Opponents come from the group.** A round robin plays the group's
    classmates. The hill's champion is the group's champion. A tournament's
    entrants are the group's participants. The bundled bot still stands in
@@ -395,14 +400,16 @@ should be able to see it. The maintainer chose best effort on 2026-10-18.
 - The present page projects the selected group's board, and its refresh
   and the leaderboard's Present link keep the group.
 - `ActivityKind.canRunPerGroup` (Core) is the one rule: a leaderboard kind
-  with no champion (Best metric, Beat the instructor). `ActivityAuthoring`
-  refuses the flag on every other kind (`runsPerGroupKindMessage`), the
-  edit page shows the checkbox only for these kinds, `set_activity` keeps a
-  stored flag only for them. `ClassActivity.isPerGroup` (the flag and the
+  (Best metric, Beat the instructor, and since slice 3b Beat the champion),
+  and since slice 3c the Round robin.
+  `ActivityAuthoring` refuses the flag on every other kind
+  (`runsPerGroupKindMessage`), the edit page shows the checkbox only for
+  these kinds, `set_activity` keeps a stored flag only for them.
+  `ClassActivity.isPerGroup` (the flag and the
   kind rule) is what every reader reads: the gate, the session routes, the
   present panel, the board and ingest. So an older per-group activity of
   another kind reads as course-wide everywhere at once, and its students
-  are not asked for a code that ranks nowhere. A hill, standings, a bracket and the union
+  are not asked for a code that ranks nowhere. A bracket and the union
   would mix the groups until their slices make them per group. A composite
   keeps its own message.
 - The submission gate refuses only a student who never joined one of the
@@ -414,13 +421,84 @@ should be able to see it. The maintainer chose best effort on 2026-10-18.
   activity, not per group (maintainer decision 6).
 - Tests: `LeaderboardPerGroupTests`.
 
+### Slice 3b: the hill per group (built)
+
+- `group_activity_champions` (`CreateGroupActivityChampions`): one row per
+  (assignment, group), the per-group twin of `activity_champions`. `Hill`
+  (`Services/Hill.swift`) names the hill a match plays for: the
+  assignment's, or the group of the session the student had joined when
+  they submitted (`Hill.of`, through `sessionAtSubmission`). The rules of
+  the hill are unchanged and live once, in `recordActivityMatch`; only the
+  row that holds the hill differs (`HillHolder`).
+- At claim, `chooseOpponent` stages the champion of the student's group. A
+  submission made with no session open plays the bot, or nobody, and its
+  result moves no hill (decision 1). The result path resolves the same hill
+  from the same submission, so the champion check reads the row the claim
+  read.
+- The champion class record is not awarded for a per-group hill: a record
+  has one holder, and the activity has a hill in every lab. So the
+  authoring door seeds no champion record on a per-group hill, and removes
+  a seeded one when the flag goes on (an instructor-authored one stays). The
+  `highestMetric` record stays course-wide, as in slice 3a.
+- Remove on "Who joined" forgets the removed student's rankings in that
+  group: the hill when they hold it, and (with slice 3c) their group
+  leaderboard row and their standing. So no challenger plays a student who
+  was not in the room, and no board shows them. A result that lands after
+  its student was removed finds no session and moves no hill.
+- The two hill tables are independent. Turning the flag on leaves the
+  course-wide champion in place, and turning it off leaves each group's;
+  the hill that `Hill.of` picks is the only one read, and turning the flag
+  back brings the earlier hill back.
+- The leaderboard page and the present page show the champion of the group
+  they show (`buildChampionPresentation(groupID:)`); a student in no group
+  sees no hill. The metric board under the hill is the slice 3a board.
+- `ActivityKind.canRunPerGroup` is now every leaderboard kind: Best metric,
+  Beat the instructor and Beat the champion.
+- Tests: `HillPerGroupTests`.
+
+### Slice 3c: the round robin per group (built)
+
+- `chooseClassmates` plays the students in the session the challenger
+  submitted in: that run's attendance, removed students left out, each
+  with their latest complete submission. A submission made with no session
+  open plays only the bot, or nobody.
+- `activity_standings.group_id` (`AddActivityStandingGroup`): the group of
+  the session the row's submission was made in. A standings row stays the
+  student's latest submission, so it moves with a student who plays in
+  another lab. A result that lands with no session open grades and leaves
+  the student's standing as it was.
+- `rankedStandings` and `buildStandingsBoard` take a group; the leaderboard
+  page and the present page show the group they show, and a student in no
+  group sees no standings. A student's `standing` badge signal is their
+  place on the board the page shows: in the group of their own row while
+  the activity runs per group, among the class rows otherwise.
+- The standings-leader class record is not awarded for a per-group round
+  robin, as with the hill (slice 3b): every lab has a leader. So
+  `setActivity` seeds none on a per-group round robin, and removes a seeded
+  one when the flag goes on.
+- Known limits, accepted: an opponent's latest submission may have been
+  made in another lab or after a session, because "latest" is the one
+  definition the union and the tournaments share. A standings row written
+  before the activity ran per group has no group: it is in no lab's
+  standings, and that student's `standing` signal ranks them among the
+  other rows with no group until they play in a session. Turning the flag
+  off leaves each row's group on it, and the class standings read only rows
+  with no group, so a lab's row leaves the class board, the badge signal
+  and the standings-leader record until that student submits again.
+- A retest of a standing's own submission that finds no session (after a
+  reopen, or after a Remove) deletes that standing: the retest voided the
+  matches it counted.
+- Tests changed with the maintainer's direction (each activity can be
+  scoped to the whole class or a lab): the round robin joins the kinds that
+  can run per group in `ClassActivityIsPerGroupTests` and leaves the refused
+  kinds in `LeaderboardPerGroupTests`. New: `RoundRobinPerGroupTests`.
+
 ### Slice 3: rankings per group, the rest
 
-- `group_id` on `leaderboard_entries`, `activity_standings`,
-  `activity_champions`, `match_results` and `tournament_runs`. The ingest
+- `group_id` on `match_results` and `tournament_runs`. The ingest
   writers resolve the student's session group once and stamp it.
-- The hill's unique key becomes (assignment, group). `jobOpponent` stages the
-  group's champion. `jobOpponentSet` lists the group's participants.
+- Tournament entrants are the group's participants (the hill is slice 3b,
+  the round robin slice 3c).
 - The leaderboard, standings and bracket pages filter by group. The present
   page takes a group; a TA with a group membership lands on it.
 - "Run tournament" and the arena routes take the group. `run_tournament` on

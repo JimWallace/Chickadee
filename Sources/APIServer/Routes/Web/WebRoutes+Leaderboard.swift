@@ -57,14 +57,11 @@ extension WebRoutes {
         // unless they ask for the rest.
         let showingAll = isStaff || req.query[String.self, at: "all"] == "1"
         let reader = LeaderboardReader.page(user: user, isStaff: isStaff)
-        let (board, groupScope) = try await metricBoard(
+        let (board, standingsBoard, groupScope) = try await rankingBoards(
             req: req, reader: reader, setup: setup, activity: activity, assignment: assignment, showAll: showingAll)
-        let standingsBoard =
-            showsStandings
-            ? try await buildStandingsBoard(setup: setup, reader: reader, showAll: showingAll, on: req.db)
-            : StandingsBoard.empty
         let champion = try await buildChampionPresentation(
-            setup: setup, activity: activity, viewerID: user.id, includeNames: isStaff, on: req.db)
+            setup: setup, activity: activity, groupID: groupScope?.groupID, viewerID: user.id,
+            includeNames: isStaff, on: req.db)
         let tournament =
             showsBracket
             ? try await buildTournamentPresentation(setup: setup, viewerID: user.id, includeNames: isStaff, on: req.db)
@@ -370,13 +367,19 @@ func buildTournamentPresentation(
 }
 
 /// The hill's holder for the page, or nil when the activity has no hill or
-/// no student holds it yet (the bot, or nobody, does). Same handle-and-bird
-/// identity as a ranking row; staff also see the name.
+/// no student holds it yet (the bot, or nobody, does). For an activity that
+/// runs per group, the hill of `groupID`, and none without a group. Same
+/// handle-and-bird identity as a ranking row; staff also see the name.
 func buildChampionPresentation(
-    setup: APITestSetup, activity: ClassActivity, viewerID: UUID?, includeNames: Bool, on db: any Database
+    setup: APITestSetup, activity: ClassActivity, groupID: UUID?, viewerID: UUID?, includeNames: Bool,
+    on db: any Database
 ) async throws -> ChampionPresentation? {
-    guard activity.kind.opponentSource == .champion,
-        let champion = try await currentChampion(testSetupID: setup.id ?? "", on: db),
+    let setupID = setup.id ?? ""
+    let hill: Hill? =
+        activity.isPerGroup
+        ? groupID.map { .group(testSetupID: setupID, groupID: $0) } : .course(testSetupID: setupID)
+    guard activity.kind.opponentSource == .champion, let hill,
+        let champion = try await hill.holder(on: db),
         let user = try await APIUser.find(champion.userID, on: db),
         let enrollment = try await APICourseEnrollment.query(on: db)
             .filter(\.$course.$id == setup.courseID)
@@ -417,18 +420,27 @@ struct LeaderboardBoard: Sendable {
 // MARK: - Rows
 
 extension WebRoutes {
-    /// The metric board, empty for any other aggregation, and for a per-group
-    /// activity the lab group it shows.
-    fileprivate func metricBoard(
+    /// The metric board and the standings, each empty for any other
+    /// aggregation, and for a per-group activity the lab group they show.
+    fileprivate func rankingBoards(
         req: Request, reader: LeaderboardReader, setup: APITestSetup, activity: ClassActivity,
         assignment: APIAssignment?, showAll: Bool
-    ) async throws -> (LeaderboardBoard, LeaderboardGroupScope?) {
+    ) async throws -> (LeaderboardBoard, StandingsBoard, LeaderboardGroupScope?) {
         let scope = try await LeaderboardGroupScope.resolve(
             req: req, user: reader.user, isStaff: reader.isStaff, activity: activity, setup: setup,
             assignment: assignment)
-        guard activity.kind.aggregation == .leaderboard else { return (.empty, scope) }
-        let board = try await buildLeaderboard(setup: setup, reader: reader, showAll: showAll, scope: scope, on: req.db)
-        return (board, scope)
+        switch activity.kind.aggregation {
+        case .leaderboard:
+            let board = try await buildLeaderboard(
+                setup: setup, reader: reader, showAll: showAll, scope: scope, on: req.db)
+            return (board, .empty, scope)
+        case .standings:
+            let standings = try await buildStandingsBoard(
+                setup: setup, reader: reader, showAll: showAll, scope: scope, on: req.db)
+            return (.empty, standings, scope)
+        case .bracket, .union, .composite:
+            return (.empty, .empty, scope)
+        }
     }
 }
 
@@ -705,12 +717,27 @@ struct StandingsBoard: Sendable {
 
 /// The standings for a round robin, best first (`activityStandings`), under
 /// the same handle-and-bird identity as a ranking row.
+/// The standings for a per-group activity's `scope`, as `buildLeaderboard`
+/// takes one: the scope's group, or none for a student in no lab group.
+/// Every other activity's whole standings.
 func buildStandingsBoard(
-    setup: APITestSetup, reader: LeaderboardReader, showAll: Bool, on db: any Database
+    setup: APITestSetup, reader: LeaderboardReader, showAll: Bool, scope: LeaderboardGroupScope?,
+    on db: any Database
+) async throws -> StandingsBoard {
+    guard let scope else {
+        return try await buildStandingsBoard(setup: setup, reader: reader, showAll: showAll, on: db)
+    }
+    guard let groupID = scope.groupID else { return .empty }
+    return try await buildStandingsBoard(setup: setup, reader: reader, showAll: showAll, groupID: groupID, on: db)
+}
+
+func buildStandingsBoard(
+    setup: APITestSetup, reader: LeaderboardReader, showAll: Bool, groupID: UUID? = nil, on db: any Database
 ) async throws -> StandingsBoard {
     let viewer = reader.user
     let isStaff = reader.isStaff
-    let ranked = try await rankedStandings(testSetupID: setup.id ?? "", courseID: setup.courseID, on: db)
+    let ranked = try await rankedStandings(
+        testSetupID: setup.id ?? "", courseID: setup.courseID, groupID: groupID, on: db)
     let identities = try await RankedIdentities.load(
         userIDs: ranked.map(\.standing.userID), courseID: setup.courseID, on: db)
 

@@ -462,6 +462,21 @@ because line numbers go out of date.
     the raw `runsPerGroup` flag. The `highestMetric` class record stays
     course-wide on purpose: a per-group result can take it from a student in
     another lab.
+  - The hill of a per-group activity is the group's
+    (`group_activity_champions`, slice 3b). The claim and the result path
+    both resolve it with `Hill.of`, from the same submission, so the champion
+    check reads the row the claim staged. A new reader or writer of a hill
+    goes through `Hill`, never straight to `activity_champions`. A per-group
+    hill awards no champion class record, and `ActivityAuthoring.setActivity`
+    seeds none for it.
+  - The round robin of a per-group activity plays the students in the
+    challenger's session (`chooseClassmates`), and its standings row carries
+    the session's group (`activity_standings.group_id`, slice 3c). A reader
+    of the standings passes a group to `rankedStandings` (nil reads only the
+    whole class's rows, never a lab's); the badge signal
+    ranks a student in the group of their own row while the activity runs
+    per group, and among the class rows otherwise. A per-group round robin
+    awards no standings-leader record, and `setActivity` seeds none for it.
   - An activity whose kind compares students (`ActivityKind.comparesStudents`)
     accepts only shared data (`DatasetSpec.isShared`). The rule is in
     `ManifestCoherence`. A new door that writes an activity or a dataset spec
@@ -482,7 +497,9 @@ because line numbers go out of date.
     student in no group of a manual set in the session's group. A wrong code
     writes a `login_attempts` row (scope `join_failure`).
   - `ActivitySessionStore.remove`, from the staff attendance page, sets
-    `removed_at` on an attendance row.
+    `removed_at` on an attendance row, and deletes the student's rankings in
+    the group: `group_activity_champions`, `group_leaderboard_entries` and
+    their `activity_standings` row for that group.
   - `ActivityAuthoring.setActivity` sets `ClassActivity.runsPerGroup`.
 - **Readers:**
   - The submission gate (`requireOpenGroupSession` in
@@ -491,6 +508,7 @@ because line numbers go out of date.
   - Ranking, through `ActivitySessionStore.sessionAtSubmission` and
     `currentSession`.
   - `LeaderboardGroupScope.studentGroup`, which picks a student's board.
+  - `chooseClassmates`, which plays the students of the challenger's session.
   - `GroupSessionPanel` on the present page, and `SessionAttendancePage`.
   - The data export (`gatherGroups`, `gatherSessionJoins`).
 - **Rules** (`docs/lab-groups.md`):
@@ -673,6 +691,27 @@ because line numbers go out of date.
     builds by hand. The test for each tool asserts that a seeded student does
     not appear (`docs/admin-mcp.md`). Nothing checks that a new admin tool has
     that test.
+
+### The MCP owner pool: `ToolContext.mainDB`
+
+- **Writers and readers:** everything on the owner pool, as `mainDB` or as
+  `request.db`: the personalization seeds (`update_global_inputs`,
+  `update_section_variables`, `preview_personalization`), the content-edit
+  re-grade, version capture, the version tools and restore, the
+  `set_activity` lock count, version v1 of `create_assignment` and
+  `clone_assignment`, the copied reference solution of `clone_assignment`,
+  and the starter run of `get_suite`.
+- **Rules:**
+  - A step that the `chickadee_mcp` role is denied runs on `mainDB`, not on
+    `ToolContext.db`. A new MCP step on an ungranted table needs a choice:
+    a grant in `deploy/sql/mcp-least-privilege-role.sql`, or `mainDB`.
+  - `mainDB` has no row-level security. A read there that returns rows to
+    the agent must select the instructor's own rows with an in-app filter,
+    and a test must show that a student row does not come back
+    (`MCPOwnerPoolRoutingTests`).
+  - `MCPRoleDatabase` models the role in tests. A tool that touches a table
+    the role cannot use passes on the test databases unless a test runs it
+    through the stand-in.
 
 ### The avatar handle: `users.avatar_handle`
 

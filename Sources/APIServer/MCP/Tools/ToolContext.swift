@@ -74,10 +74,20 @@ struct ToolContext {
     /// or course cohort seed (`course_personalization_seeds`), tables the
     /// `chickadee_mcp` role is deliberately denied. This mirrors
     /// the content-edit re-grade in `ContentEditClose.swift`, which likewise
-    /// runs its student-row regrade on `request.db`. All *content* reads and
-    /// writes stay on `db` (the `.mcp` pool when configured) so the
-    /// student-data wall holds. With no dedicated MCP pool configured this is
-    /// the same connection as `db`, so behaviour is unchanged.
+    /// runs its student-row regrade on `request.db`. Content reads and writes
+    /// stay on `db` (the `.mcp` pool when configured) so the student-data
+    /// wall holds.
+    ///
+    /// The exceptions are content steps on tables the role is denied or rows
+    /// its RLS policy hides, where the data is the instructor's own and an
+    /// in-app filter already selects it: `create_assignment` and
+    /// `clone_assignment` record version v1 (`assignment_versions`),
+    /// `clone_assignment` saves the copied reference solution, and `get_suite`
+    /// reads the starter run (a `starterValidation` submission, selected by
+    /// kind in `StarterValidationRun.latest`). No student row comes back
+    /// through any of them. `MCPOwnerPoolRoutingTests` runs each one as the role would.
+    /// With no dedicated MCP pool configured this is the same connection as
+    /// `db`, so behaviour is unchanged.
     var mainDB: any Database { request.db }
 
     var logger: Logger { request.logger }

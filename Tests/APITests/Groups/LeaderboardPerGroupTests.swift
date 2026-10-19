@@ -237,7 +237,7 @@ import VaporTesting
 
     // MARK: - Authoring
 
-    @Test(arguments: [ActivityKind.roundRobin, .testsVersusImplementations, .kingOfTheHill])
+    @Test(arguments: [ActivityKind.testsVersusImplementations])
     func aKindThatDoesNotRankPerGroupRefusesTheFlag(kind: ActivityKind) async throws {
         try await withApp(app) { app in
             _ = try await fixture(on: app)

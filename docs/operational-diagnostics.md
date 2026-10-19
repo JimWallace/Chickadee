@@ -459,6 +459,7 @@ the user row is hard-deleted via `POST /admin/users/:userID/delete`.
 | `brightspace_credentials`, `brightspace_sync_log`, `courses` | `user_id`, `captured_by_user_id`, `brightspace_sync_user_id` | **preserved** | A BrightSpace binding and its sync history outlive the instructor who made them. No FK on either backend. |
 | `activity_champions`, `activity_standings` | `user_id` | CASCADE | Class-activity rows for the user; go with the user. |
 | `group_leaderboard_entries` | `user_id` | CASCADE | A per-group leaderboard's best rows (docs/lab-groups.md, slice 3a); go with the user. DB-level cascade on both engines (the FK is declared at create time). |
+| `group_activity_champions` | `user_id` | CASCADE | A lab group's hill (docs/lab-groups.md, slice 3b); goes with the user. DB-level cascade on both engines (the FK is declared at create time). |
 | `activity_session_attendance` | `user_id` | CASCADE | Who joined a lab group's session by code (docs/lab-groups.md); goes with the user. DB-level cascade on both engines (the FK is declared at create time). |
 | `login_attempts` (scope `join_failure`) | `attempt_key` (user id as text) | **preserved, then swept** | A wrong join code (docs/lab-groups.md, "Presence"). No FK; the login-attempt sweep removes every row after an hour. |
 | `activity_sessions` | `opened_by` | SET NULL | The session row is the group's clock and stays; who started it drops. DB-level on both engines. |

@@ -164,19 +164,24 @@ enum ActivityAuthoring {
         // other aggregation's record goes FIRST, since the seeder declines
         // while any `tournamentWinner` record is on the manifest.
         let aggregation = activity?.kind.aggregation
-        if aggregation != .standings {
+        // A per-group round robin has a leader in every lab, and a record has
+        // one holder, so it seeds none (docs/lab-groups.md, slice 3c).
+        let seedsStandingsRecord = aggregation == .standings && activity?.isPerGroup != true
+        if !seedsStandingsRecord {
             try await removeSeededRecord(setup: setup, id: seededWinnerRecordID, on: db)
         }
         if aggregation != .bracket {
             try await removeSeededRecord(setup: setup, id: seededTournamentRecordID, on: db)
         }
-        if aggregation == .standings {
+        if seedsStandingsRecord {
             try await seedWinnerRecord(setup: setup, record: seededWinnerRecord, on: db)
         }
         if aggregation == .bracket {
             try await seedWinnerRecord(setup: setup, record: seededTournamentRecord, on: db)
         }
-        if activity?.kind.opponentSource == .champion {
+        // A per-group hill has a champion in every lab, and a record has one
+        // holder, so it seeds none (docs/lab-groups.md, slice 3b).
+        if activity?.kind.opponentSource == .champion, activity?.isPerGroup != true {
             try await seedChampionRecord(setup: setup, on: db)
         } else {
             // A kind change away from the hill (or clearing) takes its
@@ -238,8 +243,17 @@ enum ActivityAuthoring {
         "This course has no lab groups yet, so make them on the Groups tab first."
     static let runsPerGroupCompositeMessage =
         "A class composite cannot run once per lab group yet."
-    static let runsPerGroupKindMessage =
-        "Only a Best metric or Beat the instructor activity can run once per lab group yet."
+    /// The edit page's note under the checkbox, and the first sentence of
+    /// the refusal on save: one wording for one rule.
+    static let runsPerGroupKindNote = "This kind of activity cannot run once per lab group yet."
+    /// The refusal on save. It names every kind that can run per group, so a
+    /// slice that adds one changes no copy.
+    static var runsPerGroupKindMessage: String {
+        let names = ActivityKind.allCases.filter(\.canRunPerGroup).map(\.displayName)
+        let list =
+            names.count > 1 ? names.dropLast().joined(separator: ", ") + " or " + (names.last ?? "") : names.joined()
+        return "\(runsPerGroupKindNote) The kinds that can are \(list)."
+    }
     static let runsPerGroupWithWindowMessage =
         "Each group's session is the clock of a per-group activity, so clear the session window first."
 

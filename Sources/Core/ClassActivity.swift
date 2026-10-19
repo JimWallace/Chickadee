@@ -245,11 +245,12 @@ public enum ActivityKind: String, Codable, CaseIterable, Sendable {
     }
 
     /// Whether the kind can run once per lab group (docs/lab-groups.md): its
-    /// ranking is per group. Today the leaderboard kinds with no champion;
-    /// a hill, standings, a bracket, the union and the composite would mix
-    /// the groups until their slices make them per group.
+    /// ranking is per group. Today the leaderboard kinds, the hill included
+    /// (each group has its own), and the round robin's standings; a bracket,
+    /// the union and the composite would mix the groups until their slices
+    /// make them per group.
     public var canRunPerGroup: Bool {
-        aggregation == .leaderboard && opponentSource != .champion
+        aggregation == .leaderboard || aggregation == .standings
     }
 
     /// True when the kind ranks or matches students against each other, so
