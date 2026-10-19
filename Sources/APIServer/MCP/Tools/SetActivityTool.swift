@@ -137,6 +137,8 @@ struct SetActivityTool: ContentTool {
         + "leaderboard stays hidden from students: it is for the projector. runsPerGroup true "
         + "runs the activity once per lab group: each group's session, started by course staff on "
         + "the present page, replaces the window, so it needs the course's groups and no window. "
+        + "A per-group tournament's runs start on the assignment's submissions page, one per group; "
+        + "run_tournament refuses one. "
         + "Absent keeps the stored value while the kind is unchanged, else false. Each test "
         + "script reports its rendering as the footer's `composite` object, which never changes a "
         + "grade. No regrade or close. Read "

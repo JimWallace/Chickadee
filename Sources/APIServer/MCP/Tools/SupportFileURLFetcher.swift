@@ -202,37 +202,37 @@ enum SupportFileURLFetcher {
 
     /// Resolves a hostname to every numeric address it maps to (v4 and v6).
     /// Blocking (getaddrinfo); call on a thread-pool, not the event loop.
+    ///
+    /// This stays unsafe C interop. The guard must see every address, and no
+    /// safe resolver returns them all: NIO's public one returns only the first.
     static func resolveHostAddresses(_ host: String) throws -> [String] {
-        var hints = addrinfo()
-        hints.ai_family = AF_UNSPEC
-        hints.ai_socktype = 0
-        hints.ai_protocol = 0
+        var hints = unsafe addrinfo()
+        unsafe hints.ai_family = AF_UNSPEC
+        unsafe hints.ai_socktype = 0
+        unsafe hints.ai_protocol = 0
 
         var result: UnsafeMutablePointer<addrinfo>?
-        let status = getaddrinfo(host, nil, &hints, &result)
-        guard status == 0, let head = result else {
+        let status = unsafe getaddrinfo(host, nil, &hints, &result)
+        guard status == 0, let head = unsafe result else {
             throw SupportFileFetchError.dnsFailed(host: host)
         }
-        defer { freeaddrinfo(head) }
+        defer { unsafe freeaddrinfo(head) }
 
         var addresses: [String] = []
-        var node: UnsafeMutablePointer<addrinfo>? = head
-        while let current = node {
-            defer { node = current.pointee.ai_next }
-            guard let sockaddr = current.pointee.ai_addr else { continue }
+        var node: UnsafeMutablePointer<addrinfo>? = unsafe head
+        while let current = unsafe node {
+            defer { unsafe node = current.pointee.ai_next }
+            guard let sockaddr = unsafe current.pointee.ai_addr else { continue }
             var buffer = [CChar](repeating: 0, count: Int(NI_MAXHOST))
-            let rc = getnameinfo(
+            let rc = unsafe getnameinfo(
                 sockaddr, current.pointee.ai_addrlen,
                 &buffer, socklen_t(buffer.count),
                 nil, 0, NI_NUMERICHOST)
             guard rc == 0 else { continue }
-            // `String(cString: [CChar])` is deprecated; the pointer overload is
-            // not. getnameinfo writes a NUL-terminated string into `buffer`.
-            let ip = buffer.withUnsafeBufferPointer { raw -> String in
-                guard let base = raw.baseAddress else { return "" }
-                return String(cString: base)
-            }
-            if !ip.isEmpty, !addresses.contains(ip) { addresses.append(ip) }
+            // getnameinfo writes a NUL-terminated string into `buffer`.
+            let bytes = buffer.prefix { $0 != 0 }.map { UInt8(bitPattern: $0) }
+            guard let ip = String(validating: bytes, as: UTF8.self), !ip.isEmpty else { continue }
+            if !addresses.contains(ip) { addresses.append(ip) }
         }
         return addresses
     }
@@ -312,19 +312,20 @@ enum BlockedIPClassifier {
         return s
     }
 
+    // NIO parses with inet_pton, as this guard always has. A literal with a
+    // "%scope" goes through getaddrinfo with AI_NUMERICHOST instead, which does
+    // no DNS lookup; every caller removes the scope first. A literal that NIO
+    // reads as the other family is not a match.
+
     static func parseIPv4(_ s: String) -> [UInt8]? {
-        var addr = in_addr()
-        let ok = s.withCString { inet_pton(AF_INET, $0, &addr) }
-        guard ok == 1 else { return nil }
-        var net = addr.s_addr  // network byte order: bytes are the octets in order
-        return withUnsafeBytes(of: &net) { Array($0) }
+        guard case .v4(let address) = try? SocketAddress(ipAddress: s, port: 0) else { return nil }
+        let value = UInt32(bigEndian: address.address.sin_addr.s_addr)
+        return [24, 16, 8, 0].map { UInt8(truncatingIfNeeded: value >> $0) }
     }
 
     static func parseIPv6(_ s: String) -> [UInt8]? {
-        var addr = in6_addr()
-        let ok = s.withCString { inet_pton(AF_INET6, $0, &addr) }
-        guard ok == 1 else { return nil }
-        let bytes = withUnsafeBytes(of: &addr) { Array($0) }
-        return bytes.count == 16 ? bytes : nil
+        guard case .v6(let address) = try? SocketAddress(ipAddress: s, port: 0) else { return nil }
+        // `in6_addr` is a C union, so its 16 bytes can be read only unsafely.
+        return withUnsafeBytes(of: address.address.sin6_addr) { unsafe Array($0) }
     }
 }

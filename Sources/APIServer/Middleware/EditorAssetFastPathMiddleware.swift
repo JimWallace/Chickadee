@@ -42,6 +42,7 @@
 // exactly today's behaviour.
 
 import Core
+import SystemPackage
 import Vapor
 
 struct EditorAssetFastPathMiddleware: AsyncMiddleware {
@@ -107,15 +108,19 @@ struct EditorAssetFastPathMiddleware: AsyncMiddleware {
         guard request.method == .GET || request.method == .HEAD,
             let path = request.url.path.removingPercentEncoding,
             !path.contains(".."),
+            // A NUL survives percent-decoding, and the file APIs stop at it:
+            // `stable.js%00.<hash>.js` would serve `stable.js` as immutable.
+            // `FilePath` also drops a trailing slash, so `file.js/` would pass
+            // the check below and then fail to stream.
+            !path.contains("\0"),
+            !path.hasSuffix("/"),
             Self.fastPathPrefixes.contains(where: { path.hasPrefix($0) })
         else {
             return try await next.respond(to: request)
         }
 
         let absolutePath = publicDirectory + path.dropFirst()
-        var isDirectory: ObjCBool = false
-        guard FileManager.default.fileExists(atPath: absolutePath, isDirectory: &isDirectory),
-            !isDirectory.boolValue
+        guard let status = try? Stat(FilePath(absolutePath)), status.type != .directory
         else {
             return try await next.respond(to: request)
         }

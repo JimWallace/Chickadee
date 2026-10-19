@@ -19,7 +19,9 @@
 -- three steps of create_assignment, clone_assignment and get_suite: version v1
 -- (assignment_versions), the copied reference solution (an INSERT on
 -- submissions), and the starter run (a starterValidation submission, which the
--- RLS policy below hides).
+-- RLS policy below hides). run_tournament starts its run there too: it reads
+-- the students' latest submissions and writes tournament_runs,
+-- tournament_matches and the match submissions, and returns only counts.
 --
 -- IMPORTANT: review and TEST this against your schema before production use.
 -- Grants must cover everything the MCP write tools do; a missing grant surfaces

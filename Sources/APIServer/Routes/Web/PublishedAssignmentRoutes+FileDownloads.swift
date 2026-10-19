@@ -120,9 +120,7 @@ private func streamedFileResponse(
     req: Request, path: String, filename: String
 ) async throws -> Response? {
     let exists: Bool = try await runBlocking {
-        var isDirectory = ObjCBool(false)
-        guard FileManager.default.fileExists(atPath: path, isDirectory: &isDirectory),
-            !isDirectory.boolValue,
+        guard let status = try? Stat(FilePath(path)), status.type != .directory,
             let attrs = try? FileManager.default.attributesOfItem(atPath: path),
             (attrs[.size] as? UInt64 ?? 0) > 0
         else { return false }

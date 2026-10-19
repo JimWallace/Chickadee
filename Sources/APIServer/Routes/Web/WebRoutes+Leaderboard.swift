@@ -64,7 +64,8 @@ extension WebRoutes {
             includeNames: isStaff, on: req.db)
         let tournament =
             showsBracket
-            ? try await buildTournamentPresentation(setup: setup, viewerID: user.id, includeNames: isStaff, on: req.db)
+            ? try await buildTournamentPresentation(
+                setup: setup, viewerID: user.id, includeNames: isStaff, scope: groupScope, on: req.db)
             : nil
         let union =
             showsUnion
@@ -285,15 +286,29 @@ private func buildUnionYouCard(
         privacyLine: identity.privacyLine, submitURL: identity.submitURL)
 }
 
+/// The bracket for a per-group activity's `scope`, as `buildLeaderboard`
+/// takes one: the scope's group's run, or none for a student in no lab
+/// group. Every other activity's latest run.
+func buildTournamentPresentation(
+    setup: APITestSetup, viewerID: UUID?, includeNames: Bool, scope: LeaderboardGroupScope?, on db: any Database
+) async throws -> TournamentPresentation? {
+    if let scope, scope.groupID == nil { return nil }
+    return try await buildTournamentPresentation(
+        setup: setup, viewerID: viewerID, includeNames: includeNames, groupID: scope?.groupID, on: db)
+}
+
 /// The latest tournament run as the page shows it: its status, the winner
 /// once there is one, and every round's matches by handle and bird. Nil
 /// when no run has been started. Entrants are named from the run's frozen
 /// snapshot, so a student who has since dropped still appears in the
-/// bracket they played.
+/// bracket they played. With `groupID`, that lab group's latest run; a
+/// per-group tournament with no group has none.
 func buildTournamentPresentation(
-    setup: APITestSetup, viewerID: UUID?, includeNames: Bool, on db: any Database
+    setup: APITestSetup, viewerID: UUID?, includeNames: Bool, groupID: UUID? = nil, on db: any Database
 ) async throws -> TournamentPresentation? {
-    guard let (run, slots) = try await latestTournament(testSetupID: setup.id ?? "", on: db) else { return nil }
+    if groupID == nil, setup.decodedManifest()?.activity?.isPerGroup == true { return nil }
+    guard let (run, slots) = try await latestTournament(testSetupID: setup.id ?? "", groupID: groupID, on: db)
+    else { return nil }
     let entrants = run.entrants
     let identities = try await RankedIdentities.load(
         userIDs: entrants.map(\.userID), courseID: setup.courseID, on: db)

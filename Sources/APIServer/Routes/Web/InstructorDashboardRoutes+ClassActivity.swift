@@ -269,9 +269,11 @@ extension InstructorDashboardRoutes {
 
     /// Starts a tournament on the class as it stands (docs/class-activities.md,
     /// "Tournaments"): snapshots every student's latest submission and
-    /// enqueues the first round. Instructor-level, like the kind itself. A
-    /// refusal — not a tournament kind, fewer than two entrants — comes back
-    /// as the submissions page's error banner.
+    /// enqueues the first round. Instructor-level, like the kind itself. For
+    /// an activity that runs per lab group, the form names the group whose
+    /// session plays (docs/lab-groups.md, slice 3d). A refusal — not a
+    /// tournament kind, no group, fewer than two entrants — comes back as the
+    /// submissions page's error banner.
     @Sendable
     func runTournament(req: Request) async throws -> Response {
         let (assignment, setup) = try await loadAssignmentAndSetupForWrite(req, atLeast: .instructor)
@@ -279,14 +281,18 @@ extension InstructorDashboardRoutes {
         let submissionsPath = "/instructor/\(assignment.publicID)/submissions"
         struct RunBody: Content {
             var schedule: String?
+            var group: String?
         }
-        let token = (try? await req.decodeContent(RunBody.self))?.schedule ?? TournamentSchedule.bracket.rawValue
+        let body = try? await req.decodeContent(RunBody.self)
+        let token = body?.schedule ?? TournamentSchedule.bracket.rawValue
+        let groupID = body?.group.flatMap(UUID.init(uuidString:))
         guard let schedule = TournamentSchedule(rawValue: token) else {
             return req.redirect(to: submissionsPath + "?error=Choose+a+tournament+schedule")
         }
         let run: APITournamentRun
         do {
-            run = try await startTournament(setup: setup, schedule: schedule, startedBy: caller.id, on: req.db)
+            run = try await startTournament(
+                setup: setup, schedule: schedule, startedBy: caller.id, groupID: groupID, on: req.db)
         } catch let error as TournamentStartError {
             let encoded = error.reason.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
             return req.redirect(to: submissionsPath + "?error=" + encoded)

@@ -22,7 +22,7 @@ today.
 | 3a | Rankings per group, the leaderboard: `group_leaderboard_entries`, a late result does not rank, the board and the present page per group; other kinds refuse the flag until their slice | built |
 | 3b | Rankings per group, the hill: `group_activity_champions`, a challenger plays their group's champion, the page and the present page show the group's hill | built |
 | 3c | Rankings per group, the round robin: classmates are the students in the challenger's session, `activity_standings.group_id`, standings per group on the page and the present page | built |
-| 3 | Rankings per group, the rest: tournament runs | not started |
+| 3d | Rankings per group, the tournament: `tournament_runs.group_id`, a group's run is entered by its session, labs play at once, the bracket per group, the run control takes the group | built |
 | 4 | The composite per group, and the course gallery of every group's image | not started |
 | 5 | Group goals: the union and the corpus percent per group; a group achievement | not started |
 | 6 | The LEARN source: the existing group-category sweep writes the new tables; a D2L Sections reader; the category picker | not started |
@@ -129,9 +129,10 @@ student who moves labs. Slice 3b made the hill's a twin table too,
 `group_activity_champions` keyed (assignment, group). Slice 3c gave
 `activity_standings` a nullable `group_id` under its (assignment, student)
 key: a standings row is the student's latest submission, never a best, so a
-student who moves labs moves with it. The rest are still a nullable
-`group_id` in this plan:
-`match_results`, `tournament_runs`, `composite_slots`,
+student who moves labs moves with it. Slice 3d gave `tournament_runs` a
+nullable `group_id`: a run is one lab's, and its slots and matches follow
+the run. The rest are still a nullable `group_id` in this plan:
+`composite_slots`,
 `composite_contributions`, `class_item_coverage`, `class_coverage_runs`.
 Nil means course-wide, which is what every existing row is.
 
@@ -409,7 +410,7 @@ should be able to see it. The maintainer chose best effort on 2026-10-18.
   kind rule) is what every reader reads: the gate, the session routes, the
   present panel, the board and ingest. So an older per-group activity of
   another kind reads as course-wide everywhere at once, and its students
-  are not asked for a code that ranks nowhere. A bracket and the union
+  are not asked for a code that ranks nowhere. The union
   would mix the groups until their slices make them per group. A composite
   keeps its own message.
 - The submission gate refuses only a student who never joined one of the
@@ -493,22 +494,41 @@ should be able to see it. The maintainer chose best effort on 2026-10-18.
   can run per group in `ClassActivityIsPerGroupTests` and leaves the refused
   kinds in `LeaderboardPerGroupTests`. New: `RoundRobinPerGroupTests`.
 
-### Slice 3: rankings per group, the rest
+### Slice 3d: the tournament per group (built)
 
-- `group_id` on `match_results` and `tournament_runs`. The ingest
-  writers resolve the student's session group once and stamp it.
-- Tournament entrants are the group's participants (the hill is slice 3b,
-  the round robin slice 3c).
-- The leaderboard, standings and bracket pages filter by group. The present
-  page takes a group; a TA with a group membership lands on it.
-- "Run tournament" and the arena routes take the group. `run_tournament` on
-  MCP refuses a `runsPerGroup` assignment, because choosing a group is choosing
-  students.
-- A result that lands after the group's session closed grades and does not
-  rank (maintainer decision 1).
-- Tests: an entry stamped with the right group, the hill per group, a round
-  robin that plays only the group, two groups' tournaments running at once,
-  a late result that grades but leaves the board as it was.
+- `tournament_runs.group_id` (`AddTournamentRunGroup`). For an activity
+  that runs per group, `startTournament` takes a group: its entrants are the
+  students who joined the group's session (the latest run, removed students
+  left out), each with their latest complete submission, seeded in
+  submission order. It refuses with no group (`noGroupChosen`), a group
+  that never started its session (`noSession`) and fewer than two entrants.
+- A new run supersedes only its own group's run in progress, so two labs
+  play at once. `latestTournament` takes a group; with none it reads only
+  whole-class runs.
+- Slots, matches, the claim and the result need no group: each resolves
+  through the run.
+- The projector arena plays the matches of every running run of the
+  assignment, so any presenter's browser can play any lab's match; a match
+  is decided by the code, not by the room.
+- The leaderboard page and the present page show the bracket of the group
+  they show; a student in no group sees none.
+- The run control on the submissions page takes a lab group for a per-group
+  activity. MCP `run_tournament` refuses one (decision 11: choosing a group
+  is choosing students).
+- A lab's winner holds no class record, as with the hill and the round
+  robin, and `setActivity` seeds none on a per-group tournament.
+- Every write that changes the scope (`setActivity`, the MCP version
+  restore) supersedes the running runs of the other scope
+  (`supersedeRunningTournaments`), so no run plays on where no page shows
+  it. The present page projects no bracket for a per-group tournament with
+  no group chosen.
+- Known limits, accepted: a run's entrants are frozen at its start, so a
+  student whom staff remove afterwards stays in that bracket. A tournament
+  that carried `runsPerGroup` from before slice 3a, which read as
+  course-wide until now, runs per group from this slice on.
+- Changed under the maintainer's direction: the tournament joins the kinds
+  that can run per group in `ClassActivityIsPerGroupTests`. New:
+  `TournamentPerGroupTests`.
 
 ### Slice 4: the composite per group
 

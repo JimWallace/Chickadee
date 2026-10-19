@@ -56,7 +56,7 @@ extension WebRoutes {
             title = "Tests · most faults found"
         case .bracket:
             tournament = try await buildTournamentPresentation(
-                setup: setup, viewerID: nil, includeNames: false, on: req.db)
+                setup: setup, viewerID: nil, includeNames: false, groupID: groupID, on: req.db)
             // A title is a noun phrase; where the run stands goes in the clock's place.
             title = tournament.map { "Tournament · \($0.scheduleName.lowercased())" } ?? "Tournament"
         case .composite:
