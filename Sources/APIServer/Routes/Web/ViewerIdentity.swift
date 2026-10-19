@@ -5,6 +5,7 @@
 // of `WebRoutes+Leaderboard.swift` (#2720).
 
 import Core
+import Fluent
 import Foundation
 
 /// Who the viewer is to the page: their handle and hero bird, from the same
