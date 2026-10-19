@@ -30,9 +30,9 @@ name: Mutation testing (weekly)
 # existed because the 48 timing-sensitive sandbox and timeout tests were
 # believed unable to survive this one-process configuration, and mutating
 # Sources/Worker while they were skipped would have reported survivors in
-# exactly the code they cover. Two probe runs settled it
-# (mutation-baseline-probe.yml): unprivileged, 20/20 iterations failed
-# deterministically on the sandbox's `unshare` being refused -- a container
+# exactly the code they cover. Two probe runs settled it (a one-off
+# baseline-probe workflow, removed in #2719): unprivileged, 20/20 iterations
+# failed deterministically on the sandbox's `unshare` being refused -- a container
 # CAPABILITY, hence `--privileged` on the mutate job below -- and privileged,
 # 20/20 passed at 11-12s flat. The skip is gone from config.json's testArgs.
 #
@@ -151,9 +151,11 @@ jobs:
         uses: actions/cache@v6
         with:
           path: /tmp/muter-src
-          # Keyed on the pin AND the patch, so editing either rebuilds rather
-          # than silently reusing a Muter that no longer carries the fix.
-          key: muter-${{ runner.os }}-7f1f258-${{ hashFiles('Tools/mutation/0001-restore-parse-tree-cache.patch') }}
+          # Keyed on the script that holds the pin (MUTER_REF) AND the patch,
+          # so editing either rebuilds rather than silently reusing a Muter
+          # that no longer carries the fix. Any other edit to the script also
+          # rebuilds, which is the price of not copying the pin into this key.
+          key: muter-${{ runner.os }}-${{ hashFiles('scripts/mutation-run.sh', 'Tools/mutation/0001-restore-parse-tree-cache.patch') }}
 
       - name: Run shard ${{ matrix.shard }}
         run: |
