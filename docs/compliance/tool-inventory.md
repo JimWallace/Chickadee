@@ -62,7 +62,7 @@ source of truth; a census re-count is required whenever either changes
 | `set_assignment_language` | `SetAssignmentLanguageTool.swift:39` | `assignmentPublicID` | course-enrol (`:87`) | `APITestSetup` manifest (declared language) |
 | `set_assignment_concept` | `SetAssignmentConceptTool.swift` | `assignmentPublicID` | course-enrol write (instructor) | `APIAssignment` (`concept`: the lab concept for a wardrobe ring; authoring data, not student data) |
 | `set_activity` | `SetActivityTool.swift:16` | `assignmentPublicID` | course-enrol (`:96`) | `APITestSetup` manifest (activity block + seeded record achievement) |
-| `run_tournament` | `RunTournamentTool.swift:16` | `assignmentPublicID` | course-enrol (`:86`) | new `tournament_runs` / `tournament_matches` rows; new `tournamentMatch` `APISubmission` rows (frozen copies of entrants' uploads, never a grade of record) |
+| `run_tournament` | `RunTournamentTool.swift:16` | `assignmentPublicID` | course-enrol (`:88`) | on the owner pool (`ToolContext.mainDB`): new `tournament_runs` / `tournament_matches` rows; new `tournamentMatch` `APISubmission` rows (frozen copies of entrants' uploads, never a grade of record) |
 | `update_suite` | `UpdateSuiteTool.swift:46` | `assignmentPublicID` | course-enrol (`:116`) | `APITestSetup` manifest (suite metadata) |
 | `author_script` | `AuthorScriptTool.swift:58` | `assignmentPublicID` + `filename` | course-enrol (`:194`) | **verbatim file into setup zip** (escape hatch — see below) |
 | `delete_suite_item` | `DeleteSuiteItemTool.swift:49` | `assignmentPublicID` + item | course-enrol (`:103`) | `APITestSetup` manifest + zip |

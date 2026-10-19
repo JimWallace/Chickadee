@@ -711,7 +711,7 @@ because line numbers go out of date.
   re-grade, version capture, the version tools and restore, the
   `set_activity` lock count, version v1 of `create_assignment` and
   `clone_assignment`, the copied reference solution of `clone_assignment`,
-  and the starter run of `get_suite`.
+  the starter run of `get_suite`, and the start of a `run_tournament` run.
 - **Rules:**
   - A step that the `chickadee_mcp` role is denied runs on `mainDB`, not on
     `ToolContext.db`. A new MCP step on an ungranted table needs a choice:
