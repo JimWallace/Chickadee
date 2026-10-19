@@ -29,7 +29,7 @@ enum MCPActivityProse {
         let exempt = ActivityKind.allCases.filter { !$0.comparesStudents }.map { "\"\($0.rawValue)\"" }
         return "An activity whose kind ranks or matches students (every kind but "
             + LanguageProse.list(exempt) + ") accepts only a dataset that gives every student the whole "
-            + "file, with no sample and no transforms: the pair is refused from either side."
+            + "file, with no sample, no transforms and no partCount: the pair is refused from either side."
     }
 
     /// One clause per kind: `"beatTheInstructor — …; bestMetric — …"`.

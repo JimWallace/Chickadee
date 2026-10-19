@@ -2,8 +2,9 @@
 //
 // The dataset files one student receives in one assignment, made by the same
 // call the worker and the editor make: `DatasetResolver.resolve` with the
-// student's assignment seed and, for a course-scoped dataset, the course seed,
-// over the setup's shared support directory
+// student's assignment seed, for a course-scoped dataset the course seed, and
+// for a partition the student's deal number, over the setup's shared support
+// directory
 // (docs/datasets-course-library.md §4.6). The student's "my rows" download
 // serves these bytes, so a student reads exactly what is graded.
 
@@ -31,6 +32,9 @@ enum StudentDatasetDelivery {
             userID: userID, assignmentID: try assignment.requireID(), on: db)
         let courseSeedHex = try await CourseSeedStore.seedIfNeeded(
             manifest: manifest, userID: userID, courseID: setup.courseID, on: db)
+        let dealNumber = try await DatasetDeals.dealNumber(
+            manifest: manifest, courseID: setup.courseID, assignmentID: try assignment.requireID(), userID: userID,
+            on: db)
 
         let sharedDir = testSetupsDirectory + "shared/\(setupID)/"
         if !FileManager.default.fileExists(atPath: sharedDir + filename) {
@@ -38,8 +42,9 @@ enum StudentDatasetDelivery {
         }
         let files = try await runBlocking {
             DatasetResolver.resolve(
-                manifest: manifest, seedHex: seedHex, courseSeedHex: courseSeedHex, sourceDirectory: sharedDir)
+                manifest: manifest, seedHex: seedHex, courseSeedHex: courseSeedHex, dealNumber: dealNumber,
+                sourceDirectory: sharedDir)
         }
-        return files?[filename]
+        return DatasetDeals.withholdingUndealtParts(files, manifest: manifest, dealNumber: dealNumber)?[filename]
     }
 }

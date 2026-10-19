@@ -9,6 +9,34 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.738] - 2026-10-19
+
+### Added
+
+- **The dealt partition dataset.** A per-student dataset can now split its file into a number of disjoint parts and give each student one part: data row `i` is in part `i mod partCount`, so every part spans the whole file in order. A student's part comes from a deal number, dealt on first use, so the class fills the parts in turn; on a class composite the student's slot is the number. Course staff, validation and the preview read part 0, the four validation variants read parts 0 to 3, and a job with no student reads the whole file, so the class corpus run can check the combined parts against the complete data. It is authored through MCP `set_dataset` with `partCount`; the Files panel shows a partition as a note. A ranked class activity refuses a partition, as it refuses a sample.
+
+
+## [0.5.737] - 2026-10-19
+
+### Changed
+
+- **Strict memory safety for the tests.** The test targets now build with strict memory safety too, so every target uses one setting list. `MockURLProtocol` keeps its state in a `Mutex` instead of `nonisolated(unsafe)` statics, and the test helpers use swift-system for raw writes, pipes and `fstat`. The socket, `posix_spawn`, `setenv` and `sigaction` calls that remain are marked `unsafe`, with a reason (#2683).
+
+
+## [0.5.736] - 2026-10-19
+
+### Added
+
+- **Lab groups (slice 4a): the class composite per group.** A Class composite activity can now run once per lab group. Each lab deals its own slots to the students who joined its session, their tiles fill their lab's image, and the leaderboard page and the projector show the image of the lab they show. See `docs/lab-groups.md`.
+
+
+## [0.5.735] - 2026-10-19
+
+### Fixed
+
+- **`run_tournament` works with the dedicated MCP database pool.** With `MCP_DATABASE_USER` set, the `chickadee_mcp` role could not see the students' submissions, so `run_tournament` always refused with "at least two students" and found 0. It could also not write the run. The tool now starts the run on the owner pool. It still returns only the number of entrants and rounds.
+
+
 ## [0.5.734] - 2026-10-19
 
 ### Added

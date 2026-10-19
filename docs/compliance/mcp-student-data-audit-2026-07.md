@@ -151,8 +151,9 @@ is layered:
    `ToolContext.requireEligibleSubject` re-refuses a plain-student subject on
    every call, so the guarantee does not rest on token issuance alone.
 
-5. **Deliberate, bounded wall crossings.** Two side effects intentionally
-   touch student rows and are explicitly routed to the privileged pool
+5. **Deliberate, bounded wall crossings.** At the time of this audit, two
+   side effects intentionally touched student rows (later additions follow
+   the list) and are explicitly routed to the privileged pool
    (`ToolContext.mainDB` / `request.db`), never the MCP pool, and return no
    row data to the agent:
    - the **content-edit auto-regrade** (`ContentEditClose.swift`
@@ -176,6 +177,13 @@ is layered:
    `MCPOwnerPoolRoutingTests` runs these tools against a stand-in for the
    `chickadee_mcp` role, including a check that a student run never shows as
    the starter run.
+
+   Also added 2026-10: `run_tournament` starts its bracket on the privileged
+   pool. It reads each
+   student's latest submission to seed the entrants and writes the run and
+   its first matches. It returns only the number of entrants and rounds; the
+   entrants stay in the run row and never reach the agent.
+   `RunTournamentToolTests` runs the tool against the same stand-in.
 
 6. **Per-student personalization exposes no student.** Seeds are 32 CSPRNG
    bytes per (user, assignment) (`AssignmentSeedStore.generateSeedHex`) —

@@ -164,9 +164,16 @@ Deterministic and server-side, exactly like today's personalization.
 **MCP surface:** built as the course dataset library tools; see
 [datasets-course-library.md](datasets-course-library.md) §4.7.
 
+**The dealt partition.** A spec of kind `partition` with `partCount: N` splits
+the file into N disjoint parts and gives each student one part: data row `i`
+is in part `i mod N`. The part is dealt, not drawn from the seed, so the class
+fills the parts in turn, and a job with no student (the class corpus run) gets
+the whole file. A solution run gets part 0. See
+[datasets-course-library.md](datasets-course-library.md) §4.11.
+
 **Class activities.** An activity that ranks or matches students accepts only
-a dataset that gives every student the same bytes: no sample and no
-transforms. Every authoring door that saves a dataset spec or an activity
+a dataset that gives every student the same bytes: no sample, no transforms
+and no partition. Every authoring door that saves a dataset spec or an activity
 refuses the pair. A bundle import, a version restore and a clone copy the
 manifest as it is. A class composite accepts personal data. See
 [datasets-course-library.md](datasets-course-library.md) §4.11.
@@ -412,7 +419,7 @@ a disclosure:
 
 ```
 Support file   assignment4_vitaldb_cases.csv                          [Remove]
-               [x] Per-student sample  [ 500 ] rows per student        Saved
+               [x] Per-student data  [ 500 ] rows per student        Saved
 ```
 
 Persisted via `PUT /instructor/:id/datasets` (published) or
@@ -632,7 +639,7 @@ A dataset row carries the derivation step beside its sample size and stratum
 column:
 
 ```
-[x] Per-student sample  [ 500 ] rows per student  balanced across [ ward ]
+[x] Per-student data  [ 500 ] rows per student  balanced across [ ward ]
     blanking [ bp_systolic ] in [ 10 ] % of rows                    Saved
 ```
 
@@ -838,7 +845,7 @@ picker for the two to disagree about.
 **Authoring surfaces:** two, and they agree by construction.
 
 - The **Files-panel control** on both authoring pages: each support-file row
-  carries a "Per-student sample" toggle and a row count, saved in place with no
+  carries a "Per-student data" toggle and a row count, saved in place with no
   page reload. The create page writes through a draft-scoped
   `GET`/`PUT /instructor/new/draft/datasets`, the edit page through the
   published `GET`/`PUT /instructor/:id/datasets`; both pairs share one

@@ -19,7 +19,9 @@
 -- three steps of create_assignment, clone_assignment and get_suite: version v1
 -- (assignment_versions), the copied reference solution (an INSERT on
 -- submissions), and the starter run (a starterValidation submission, which the
--- RLS policy below hides).
+-- RLS policy below hides). run_tournament starts its run there too: it reads
+-- the students' latest submissions and writes tournament_runs,
+-- tournament_matches and the match submissions, and returns only counts.
 --
 -- IMPORTANT: review and TEST this against your schema before production use.
 -- Grants must cover everything the MCP write tools do; a missing grant surfaces
@@ -184,7 +186,7 @@ CREATE POLICY mcp_ai_feedback_rows ON reflection_feedback
 --      request_metrics, runner_profiles, runner_snapshots, composite_slots,
 --      group_composite_slots, composite_contributions, composite_references,
 --      composite_spares, group_composite_spares,
---      oauth_* ...
+--      dataset_deals, oauth_* ...
 --
 --    composite_slots and group_composite_slots map each student to their
 --    class-composite slot (the second per lab group). The one MCP use of
@@ -196,6 +198,8 @@ CREATE POLICY mcp_ai_feedback_rows ON reflection_feedback
 --    composite_spares and group_composite_spares hold the tiles students
 --    render for empty slots (the second per lab group). No MCP tool reads
 --    them.
+--    dataset_deals maps each student to the part of a partition dataset they
+--    receive (docs/datasets-course-library.md). No MCP tool reads it.
 --    Do NOT add blanket "GRANT ... ON ALL TABLES" — that would defeat the wall.
 --
 --    assignment_personalization_seeds STAYS DENIED. The MCP personalization
@@ -233,3 +237,4 @@ CREATE POLICY mcp_ai_feedback_rows ON reflection_feedback
 --                                                   -- must ERROR: permission denied
 --      SELECT * FROM composite_contributions LIMIT 1;
 --                                                   -- must ERROR: permission denied
+--      SELECT * FROM dataset_deals LIMIT 1;         -- must ERROR: permission denied

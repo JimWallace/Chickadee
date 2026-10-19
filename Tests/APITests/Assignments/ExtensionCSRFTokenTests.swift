@@ -181,7 +181,9 @@ import Glibc
 /// Sends raw bytes to 127.0.0.1:`port` and returns the full response read
 /// until the server closes the connection (`Connection: close` request).
 /// Plain blocking POSIX sockets — the point is to exercise the real server
-/// pipeline, which VaporTesting's in-memory transport bypasses.
+/// pipeline, which VaporTesting's in-memory transport bypasses. The socket
+/// calls take pointers, and no safe API exists for them, so they are marked
+/// `unsafe`.
 private func rawLoopbackHTTPExchange(port: Int, request: String) throws -> String {
     #if os(Linux)
     let sockStream = Int32(SOCK_STREAM.rawValue)
@@ -198,20 +200,17 @@ private func rawLoopbackHTTPExchange(port: Int, request: String) throws -> Strin
     // request still in flight, which crashed the whole process.
     let receiveTimeoutSeconds = 60
     var receiveTimeout = timeval(tv_sec: receiveTimeoutSeconds, tv_usec: 0)
-    let timeoutSet = setsockopt(
+    let timeoutSet = unsafe setsockopt(
         fd, SOL_SOCKET, SO_RCVTIMEO, &receiveTimeout, socklen_t(MemoryLayout<timeval>.size))
     try #require(timeoutSet == 0, "setsockopt(SO_RCVTIMEO) failed: errno \(errno)")
 
     var addr = sockaddr_in()
     addr.sin_family = sa_family_t(AF_INET)
     addr.sin_port = in_port_t(port).bigEndian
-    try #require(
-        inet_pton(AF_INET, "127.0.0.1", &addr.sin_addr) == 1,
-        "inet_pton failed"
-    )
+    addr.sin_addr.s_addr = UInt32(0x7F00_0001).bigEndian  // 127.0.0.1
     let connectResult = withUnsafePointer(to: &addr) { pointer in
-        pointer.withMemoryRebound(to: sockaddr.self, capacity: 1) { sockaddrPointer in
-            connect(fd, sockaddrPointer, socklen_t(MemoryLayout<sockaddr_in>.size))
+        unsafe pointer.withMemoryRebound(to: sockaddr.self, capacity: 1) { sockaddrPointer in
+            unsafe connect(fd, sockaddrPointer, socklen_t(MemoryLayout<sockaddr_in>.size))
         }
     }
     try #require(connectResult == 0, "connect() failed: errno \(errno)")
@@ -219,8 +218,8 @@ private func rawLoopbackHTTPExchange(port: Int, request: String) throws -> Strin
     let bytes = Array(request.utf8)
     var sent = 0
     while sent < bytes.count {
-        let n = bytes.withUnsafeBytes { raw in
-            send(fd, raw.baseAddress.map { $0 + sent }, bytes.count - sent, 0)
+        let n = bytes[sent...].withUnsafeBytes { raw in
+            unsafe send(fd, raw.baseAddress, raw.count, 0)
         }
         try #require(n > 0, "send() failed: errno \(errno)")
         sent += n
@@ -230,7 +229,7 @@ private func rawLoopbackHTTPExchange(port: Int, request: String) throws -> Strin
     var chunk = [UInt8](repeating: 0, count: 4096)
     while true {
         let n = chunk.withUnsafeMutableBytes { raw in
-            recv(fd, raw.baseAddress, raw.count, 0)
+            unsafe recv(fd, raw.baseAddress, raw.count, 0)
         }
         if n == 0 { break }
         // A timed-out recv() is a failure, not an empty response.

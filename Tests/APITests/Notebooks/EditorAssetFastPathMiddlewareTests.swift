@@ -274,11 +274,9 @@ import VaporTesting
         let vendored = try FileManager.default.contentsOfDirectory(atPath: xeusDir.path)
             .filter { $0.hasPrefix("chickadee-") }
             .filter { environment in
-                var isDirectory: ObjCBool = false
-                let packages = xeusDir.appendingPathComponent("\(environment)/kernel_packages").path
-                let exists = FileManager.default.fileExists(
-                    atPath: packages, isDirectory: &isDirectory)
-                return exists && isDirectory.boolValue
+                let packages = xeusDir.appendingPathComponent("\(environment)/kernel_packages")
+                return (try? packages.resolvingSymlinksInPath().resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory
+                    == true
             }
             .sorted()
 

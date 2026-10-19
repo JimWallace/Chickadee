@@ -124,8 +124,12 @@ struct PreviewPersonalizationTool: ContentTool {
         let supportDir = context.request.application.testSetupsDirectory + "shared/\(assignment.testSetupID)/"
         let courseSeedHex = try await resolveCourseSeed(
             input: input, seedHex: seedHex, setup: setup, manifest: manifest, context: context)
+        // A preview reads a partition as a solution run does: part 0
+        // (docs/datasets-course-library.md §4.11). A dealt number is a
+        // student's, and the MCP role cannot read them.
         let resolution = await PersonalizationSubstitution.resolve(
             manifest: manifest, seedHex: seedHex, courseSeedHex: courseSeedHex,
+            dealNumber: manifest.hasPartitionedDatasets ? 0 : nil,
             supportFilesDirectory: supportDir, language: AssignmentLanguage.resolve(manifest: manifest))
 
         let placeholders = await Self.placeholderAudit(

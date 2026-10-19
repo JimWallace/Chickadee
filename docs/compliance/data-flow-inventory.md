@@ -79,7 +79,7 @@ Classification column references `policy46-classification.md`.
 | `update_assignment` | assignment | echo of saved metadata | No | Confidential |
 | `set_grading_mode` | assignment, setup | echo of mode | No | Confidential |
 | `set_activity` | assignment, setup | echo of the activity block | No | Confidential |
-| `run_tournament` | assignment, setup, enrollments, submissions (ids only) | run id, schedule, entrant and round counts, status — no student identifier | No | Confidential |
+| `run_tournament` | assignment, setup, enrollments, submissions (read on the owner pool; ids only stored in the run) | run id, schedule, entrant and round counts, status — no student identifier | No | Confidential |
 | `update_suite` | manifest | reconciled suite state | No | Restricted |
 | `author_script` | setup zip | echo (filename, tier, validation status) | No | Restricted |
 | `delete_suite_item` | manifest + zip | reconciled suite state | No | Restricted |
@@ -162,7 +162,9 @@ username → id → role only), and `APISubmission`/`APIResult` **filtered to
 `kind == .validation`** (the instructor's own reference-solution runs;
 `GetValidationResultTool.swift:166-180`, `loadExistingSolution`).
 
-**Never touched by any tool:** student `APISubmission` (non-validation),
+**Never touched by any tool:** student `APISubmission` (non-validation;
+the one exception is `run_tournament`, which reads each student's latest
+submission on the owner pool to seed a bracket and returns only counts),
 student `APIResult` (grades), `APIGradeOverride`, `APIAssignmentExtension`,
 `APIAssignmentParticipation`, `APIAssignmentPersonalizationSeed` and
 `APICoursePersonalizationSeed` content,

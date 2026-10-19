@@ -499,6 +499,21 @@ public struct TestProperties: Codable, Equatable, Sendable {
         hasExpressions || !datasets.isEmpty
     }
 
+    /// True when a job with no student cannot grade what the class received:
+    /// a per-student `=` expression, or a dataset that is not a plain
+    /// partition. A job with no student gets the whole file of a partition, so
+    /// a class corpus run over everyone's parts checks the combined work
+    /// against the complete data (docs/datasets-course-library.md §4.11). A
+    /// partition with a transform still varies by seed, so it counts.
+    public var variesBeyondPartitions: Bool {
+        hasExpressions || datasets.contains { $0.kind != .partition || !$0.transforms.isEmpty }
+    }
+
+    /// True when some dataset is a partition, so a student needs a deal number.
+    public var hasPartitionedDatasets: Bool {
+        datasets.contains { $0.kind == .partition }
+    }
+
     /// Instructor-authored achievements / goals / awards for this assignment —
     /// the generalized form of the hardcoded badge + class-achievement system.
     /// Server-evaluated and display-only; `runnerSanitized()` strips them so a

@@ -70,7 +70,8 @@ extension DatasetDiagnostics {
 
     /// Per-column divergence between student slices and the pool, measured
     /// over `seedCount` preflight seeds via `DatasetMaterializer.materialize`.
-    /// Columns are reported in header order.
+    /// Columns are reported in header order. The `index`-th preflight student
+    /// is dealt number `index`, so a partition is measured part by part.
     ///
     /// A column's distribution is that of its *observed* (non-empty) values:
     /// a `missingValues` hole is thinning, not a value, and the question this
@@ -92,7 +93,7 @@ extension DatasetDiagnostics {
         var samples: [[Double]] = Array(repeating: [], count: pool.names.count)
         for seed in 0..<seedCount {
             let materialized = DatasetMaterializer.materialize(
-                source: sourceCSV, spec: spec, seedHex: preflightSeed(seed))
+                source: sourceCSV, spec: spec, seedHex: preflightSeed(seed), dealNumber: seed)
             guard let slice = ParsedColumns(csv: materialized, foldingColumns: folded) else { continue }
             for index in pool.names.indices where index < slice.observed.count {
                 let observed = slice.observed[index]

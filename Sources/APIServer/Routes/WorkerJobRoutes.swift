@@ -325,6 +325,33 @@ struct WorkerJobRoutes: RouteCollection {
             }
         }
 
+        // A class composite's slot travels with the inputs
+        // (docs/class-composite.md): slot 0 for a validation run, the
+        // reference row's slot for a reference job, the student's dealt slot
+        // otherwise. Asked before the deal number, because it deals the slot
+        // that a partition's deal number reads on a composite.
+        let compositeInputs = await CompositeSlots.jobInputs(
+            manifest: claimed.manifest, courseID: setup.courseID, assignmentID: claimed.assignmentID,
+            submission: submission, on: req.db)
+
+        // The deal number for the partition datasets
+        // (docs/datasets-course-library.md §4.11). A pinned run carries its
+        // own, a reference job takes its slot, any other run takes its kind's
+        // number, and a job with no student has none, so it grades the whole
+        // file.
+        let dealNumber: Int?
+        do {
+            dealNumber = try await DatasetDeals.jobDealNumber(
+                manifest: claimed.manifest, courseID: setup.courseID, assignmentID: claimed.assignmentID,
+                submission: submission, pinned: materialization?.dealNumber, on: req.db)
+        } catch {
+            // Grading on, without it, would grade a partition on the whole
+            // file the student never saw. As for the course seed, the
+            // stale-claim sweep retries the job.
+            req.logger.error("Failed to deal a dataset part: \(error)")
+            throw WorkerJobError.internalInconsistency(reason: "Could not resolve the dataset deal number")
+        }
+
         guard let submissionID = submission.id, let setupID = setup.id else {
             throw WorkerJobError.internalInconsistency(reason: "Claimed submission or test setup missing id")
         }
@@ -358,17 +385,9 @@ struct WorkerJobRoutes: RouteCollection {
             let supportDir = req.application.testSetupsDirectory + "shared/\(setupID)/"
             personalizedInputs = await PersonalizationSubstitution.gradingInputs(
                 manifest: claimed.manifest, seedHex: assignmentSeed, courseSeedHex: courseSeed,
-                supportFilesDirectory: supportDir, language: language)
+                dealNumber: dealNumber, supportFilesDirectory: supportDir, language: language)
         }
-        // A class composite's slot travels with the inputs
-        // (docs/class-composite.md): slot 0 for a validation run, the
-        // reference row's slot for a reference job, the student's dealt slot
-        // otherwise.
-        personalizedInputs = CompositeSlots.merged(
-            personalizedInputs,
-            with: await CompositeSlots.jobInputs(
-                manifest: claimed.manifest, courseID: setup.courseID, assignmentID: claimed.assignmentID,
-                submission: submission, on: req.db))
+        personalizedInputs = CompositeSlots.merged(personalizedInputs, with: compositeInputs)
 
         // Resolve per-student dataset slices (Phase 1 datasets) for this seed.
         // Cheap and deterministic (a file read + in-memory sample, no
@@ -380,7 +399,7 @@ struct WorkerJobRoutes: RouteCollection {
         // the dataset specs; only the resolved bytes travel, in `personalizedFiles`.
         let datasetSharedDir = req.application.testSetupsDirectory + "shared/\(setupID)/"
         let personalizedFiles = DatasetResolver.resolve(
-            manifest: claimed.manifest, seedHex: assignmentSeed, courseSeedHex: courseSeed,
+            manifest: claimed.manifest, seedHex: assignmentSeed, courseSeedHex: courseSeed, dealNumber: dealNumber,
             sourceDirectory: datasetSharedDir)
 
         let opponentSet = try await Self.jobOpponentSet(

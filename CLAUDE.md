@@ -374,14 +374,13 @@ greeting. The example below does so in R."
   wrappers are what the compiler cannot check). Use an actor or a `Mutex`
   instead. `scripts/check-unchecked-sendable.sh` fails `format-lint` on any
   other site, with or without a comment.
-- Strict memory safety (SE-0458) is on for every product target
-  (`productSettings` in `Package.swift`), so an unsafe construct without an
+- Strict memory safety (SE-0458) is on for every target, tests included
+  (`sourceSettings` in `Package.swift`), so an unsafe construct without an
   `unsafe` mark does not build. Use a safe API first: swift-system
   (`FileDescriptor`, `FilePath`, `Stat`, `Errno`) for POSIX calls, a NIO type for
   addresses. A `String` given to a C function is an unsafe pointer conversion,
   and so is `FileManager.fileExists(atPath:isDirectory:)`. Mark `unsafe` only
-  where no safe API exists, with a comment that says why. The test targets are
-  not on it yet (#2683).
+  where no safe API exists, with a comment that says why.
 - `async/await` throughout. No completion handlers.
 - Swift APIs over their Foundation predecessors: a regex literal or `Regex`, not
   `NSRegularExpression`; `FilePath`, not `NSString` path calls;
@@ -643,7 +642,7 @@ One line per document. Each document holds its own rules and evidence.
 - `docs/course-terms.md` — course year and term, the two course-code resolvers, cloning for a new term
 - `docs/solution-visibility.md` — the post-deadline solution reveal and its slip-day ceiling
 - `docs/datasets.md` — per-student datasets (#1083)
-- `docs/datasets-course-library.md` — the per-course dataset library: versions and dictionary, attachments, the course cohort seed, the student Data page, the MCP tools, clone and bundle; slices 10 and 11 in progress; opens with a Status table
+- `docs/datasets-course-library.md` — the per-course dataset library: versions and dictionary, attachments, the course cohort seed, the student Data page, the MCP tools, clone and bundle, `formatNoise`, the ranked-activity refusal and the dealt partition; opens with a Status table
 - `docs/admin-mcp.md` — the read-only admin diagnostics MCP surface
 - `docs/ai-assisted-feedback.md` — an instructor's own AI agent drafts feedback on written reasoning through MCP, behind two opt-in gates and staff review
 - `docs/compliance/` — the UW approval package: student-data audits, tool and data-flow inventories

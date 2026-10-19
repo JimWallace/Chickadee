@@ -222,6 +222,11 @@ student's. A staff member's own submission is stored as a student submission,
 so `CompositeSlots.gradingInputs` checks the course role on both grading paths.
 Opening the page as staff deals nothing.
 
+**A partition dataset uses the slot.** On a class composite, the deal number
+of a partition dataset is the student's slot, so a student whose part count
+equals the slot count holds the rows of their own tile
+(docs/datasets-course-library.md §4.11).
+
 **The MCP lock reads the owner pool.** The least-privilege MCP database role
 cannot read `composite_slots` (it maps students to slots), and it reads
 `submissions` filtered to validation runs. So `set_activity` answers both lock

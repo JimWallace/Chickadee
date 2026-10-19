@@ -37,6 +37,7 @@
 // Protocol: docs/mutation-triage.md -- SURVIVED confirmed before, KILLED after.
 
 import Foundation
+import SystemPackage
 import Testing
 
 @testable import chickadee_runner
@@ -54,9 +55,8 @@ import Glibc
 
     /// The file a descriptor refers to, or nil when the descriptor is closed.
     private static func fileIdentity(_ descriptor: Int32) -> FileIdentity? {
-        var status = stat()
-        guard fstat(descriptor, &status) == 0 else { return nil }
-        return FileIdentity(device: UInt64(status.st_dev), inode: UInt64(status.st_ino))
+        guard let status = try? FileDescriptor(rawValue: descriptor).stat() else { return nil }
+        return FileIdentity(device: UInt64(status.deviceID.rawValue), inode: UInt64(status.inode.rawValue))
     }
 
     private struct FileIdentity: Equatable {
