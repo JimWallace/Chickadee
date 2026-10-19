@@ -76,7 +76,7 @@ extension WebRoutes {
             title = "Leaderboard · highest metric"
         }
         let champion = try await buildChampionPresentation(
-            setup: setup, activity: activity, viewerID: nil, includeNames: false, on: req.db)
+            setup: setup, activity: activity, groupID: groupID, viewerID: nil, includeNames: false, on: req.db)
         // The hill's holder is not always first on the metric board, so the
         // kicker goes on the place that holds it. A handle names one student
         // in a course; an empty one (an exhausted handle space) matches none.

@@ -176,7 +176,9 @@ enum ActivityAuthoring {
         if aggregation == .bracket {
             try await seedWinnerRecord(setup: setup, record: seededTournamentRecord, on: db)
         }
-        if activity?.kind.opponentSource == .champion {
+        // A per-group hill has a champion in every lab, and a record has one
+        // holder, so it seeds none (docs/lab-groups.md, slice 3b).
+        if activity?.kind.opponentSource == .champion, activity?.isPerGroup != true {
             try await seedChampionRecord(setup: setup, on: db)
         } else {
             // A kind change away from the hill (or clearing) takes its
@@ -239,7 +241,7 @@ enum ActivityAuthoring {
     static let runsPerGroupCompositeMessage =
         "A class composite cannot run once per lab group yet."
     static let runsPerGroupKindMessage =
-        "Only a Best metric or Beat the instructor activity can run once per lab group yet."
+        "Only a Best metric, Beat the instructor or Beat the champion activity can run once per lab group yet."
     static let runsPerGroupWithWindowMessage =
         "Each group's session is the clock of a per-group activity, so clear the session window first."
 
