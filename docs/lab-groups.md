@@ -23,7 +23,8 @@ today.
 | 3b | Rankings per group, the hill: `group_activity_champions`, a challenger plays their group's champion, the page and the present page show the group's hill | built |
 | 3c | Rankings per group, the round robin: classmates are the students in the challenger's session, `activity_standings.group_id`, standings per group on the page and the present page | built |
 | 3d | Rankings per group, the tournament: `tournament_runs.group_id`, a group's run is entered by its session, labs play at once, the bracket per group, the run control takes the group | built |
-| 4 | The composite per group, and the course gallery of every group's image | not started |
+| 4a | The composite per group: `group_composite_slots`, each group deals its own slots in its session, contributions fill the group's image, the board and the present page per group | built |
+| 4b | The composite per group, the rest: spares ("Fill a hole") per group, and the course gallery of every group's image | not started |
 | 5 | Group goals: the union and the corpus percent per group; a group achievement | not started |
 | 6 | The LEARN source: the existing group-category sweep writes the new tables; a D2L Sections reader; the category picker | not started |
 | later | Per-group deadlines; a TA's roster filtered to their groups; a `team` kind with a shared submission | not planned |
@@ -131,9 +132,13 @@ student who moves labs. Slice 3b made the hill's a twin table too,
 key: a standings row is the student's latest submission, never a best, so a
 student who moves labs moves with it. Slice 3d gave `tournament_runs` a
 nullable `group_id`: a run is one lab's, and its slots and matches follow
-the run. The rest are still a nullable `group_id` in this plan:
-`composite_slots`,
-`composite_contributions`, `class_item_coverage`, `class_coverage_runs`.
+the run. Slice 4a made the composite's slots a twin table,
+`group_composite_slots` keyed (assignment, group, round, slot), because
+SQLite cannot drop the unique key that `composite_slots` holds on
+(assignment, round, slot); and gave `composite_contributions` a nullable
+`group_id` under its (assignment, student) key, since a student holds one
+slot per assignment. The rest are still a nullable `group_id` in this plan:
+`composite_spares`, `class_item_coverage`, `class_coverage_runs`.
 Nil means course-wide, which is what every existing row is.
 
 ## Decisions
@@ -411,8 +416,7 @@ should be able to see it. The maintainer chose best effort on 2026-10-18.
   present panel, the board and ingest. So an older per-group activity of
   another kind reads as course-wide everywhere at once, and its students
   are not asked for a code that ranks nowhere. The union
-  would mix the groups until their slices make them per group. A composite
-  keeps its own message.
+  would mix the groups until its slice makes it per group.
 - The submission gate refuses only a student who never joined one of the
   activity's sessions, or whom staff removed (`ActivitySessionStore.hasJoined`).
   After the session a student joined closes, their submission grades and
@@ -530,15 +534,44 @@ should be able to see it. The maintainer chose best effort on 2026-10-18.
   that can run per group in `ClassActivityIsPerGroupTests`. New:
   `TournamentPerGroupTests`.
 
-### Slice 4: the composite per group
+### Slice 4a: the composite per group (built)
 
-- `group_id` on `composite_slots` and `composite_contributions`; the slot key
-  becomes (assignment, group, round, slot). `CompositeSlots` deals within the
-  student's session group.
-- The composite view takes a group. The course page shows a gallery of every
-  group's image once their sessions have closed.
-- Tests: two groups dealt the same slot numbers, a student who joined another
-  group's session dealt there, the gallery order.
+- `group_composite_slots` (`CreateGroupCompositeSlots`): the per-group twin
+  of `composite_slots`, unique on (assignment, student) and on (assignment,
+  group, round, slot). `CompositePool` names the pool a slot is dealt from:
+  the assignment's, or a lab group's. `CompositeSlots` deals in the pool of
+  the session the student plays in (`CompositePool.forDeal`): on open, the
+  session they play in now; at the grading backstop, the session they
+  submitted in. Every pool deals in the assignment's one order, so each
+  group's image fills the same way. A student holds one slot per
+  assignment, in whichever pool dealt it.
+- A student with no slot and no session is dealt nothing: opening the page
+  deals nothing, and a grading run renders slot 0 and records no
+  contribution. The run grades.
+- `composite_contributions.group_id` (`AddCompositeContributionGroup`): a
+  contribution fills the image of the group whose pool dealt its slot,
+  whenever it is graded, also after the session closed. Only the whole
+  class's image covers class items; a lab's tiles count toward class goals
+  from slice 5.
+- `CompositeSnapshot.Scope` takes a group. The JSON feed takes `?group=`
+  for staff and reads a student's own slot's group; the staff board, the
+  stage's poll URL and the present page pass the group they show. A
+  per-group composite with no group chosen shows no image.
+- A lab's composite has no spares yet: the tile panel offers none, and a
+  request is refused (slice 4b).
+- `canRunPerGroup` is now every kind but the union. Changed under the
+  maintainer's direction: `ClassActivityIsPerGroupTests` (the composite
+  joins the kinds) and `GroupSessionGateTests` (it no longer expects the
+  composite's refusal). New: `CompositePerGroupTests`.
+
+### Slice 4b: the composite per group, the rest
+
+- `composite_spares` per group: `holes`, `request` and the snapshot's spare
+  fill read the group. A twin table again, for the same reason as the
+  slots: the unique key on (assignment, slot).
+- The course page shows a gallery of every group's image once their
+  sessions have closed.
+- Tests: a spare fills a hole in its own group only, the gallery order.
 
 ### Slice 5: group goals
 

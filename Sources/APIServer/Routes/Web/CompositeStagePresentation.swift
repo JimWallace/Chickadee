@@ -24,12 +24,15 @@ struct CompositeStagePresentation: Encodable {
     var pollUntilISO = ""
 
     /// The staff leaderboard page, or present mode when `present` is true.
+    /// For a composite that runs per lab group, `groupID`'s image.
     static func board(
-        spec: CompositeSpec, testSetupID: String, present: Bool, pollUntilISO: String?
+        spec: CompositeSpec, testSetupID: String, present: Bool, groupID: UUID? = nil, pollUntilISO: String?
     )
         -> CompositeStagePresentation
     {
-        let url = "/testsetups/\(testSetupID)/composite" + (present ? "?present=1" : "")
+        var query = present ? ["present=1"] : []
+        if let groupID { query.append("group=\(groupID.uuidString)") }
+        let url = "/testsetups/\(testSetupID)/composite" + (query.isEmpty ? "" : "?" + query.joined(separator: "&"))
         return CompositeStagePresentation(
             spec: spec, snapshotURL: url, pixels: nil, pixelsState: "", showsOwners: !present,
             pollUntilISO: pollUntilISO ?? "")

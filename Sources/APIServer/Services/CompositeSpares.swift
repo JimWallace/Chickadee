@@ -47,6 +47,8 @@ enum CompositeSpares {
             let activity = setup.decodedManifest()?.activity, activity.kind == .classComposite,
             let spec = activity.composite
         else { throw RequestError.notComposite }
+        // A lab's composite has no spares yet (docs/lab-groups.md, slice 4b).
+        guard !activity.isPerGroup else { throw RequestError.noHole }
         guard
             let own = try await APICompositeContribution.query(on: db)
                 .filter(\.$assignmentID == assignmentID).filter(\.$userID == userID).first(),

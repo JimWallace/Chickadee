@@ -227,12 +227,7 @@ enum ActivityAuthoring {
         of activity: ClassActivity, courseID: UUID, on db: any Database
     ) async throws {
         guard activity.runsPerGroup else { return }
-        // A composite deals its slots course-wide until slice 4 deals them
-        // per group, so it cannot run per group yet.
-        guard activity.kind.aggregation != .composite else {
-            throw AppError.badRequest(reason: runsPerGroupCompositeMessage)
-        }
-        // Only a kind whose ranking is per group (slice 3a).
+        // Only a kind whose ranking, or image, is per group (slices 3 and 4).
         guard activity.kind.canRunPerGroup else {
             throw AppError.badRequest(reason: runsPerGroupKindMessage)
         }
@@ -246,8 +241,6 @@ enum ActivityAuthoring {
 
     static let runsPerGroupNeedsGroupsMessage =
         "This course has no lab groups yet, so make them on the Groups tab first."
-    static let runsPerGroupCompositeMessage =
-        "A class composite cannot run once per lab group yet."
     /// The edit page's note under the checkbox, and the first sentence of
     /// the refusal on save: one wording for one rule.
     static let runsPerGroupKindNote = "This kind of activity cannot run once per lab group yet."

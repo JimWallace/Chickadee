@@ -46,10 +46,7 @@ struct CompositeTilePanel: Encodable {
             let contribution = outcome.composite,
             CompositeContributions.isValid(contribution, for: spec.contribution),
             let assignmentID = assignment?.id, let userID = submission.userID,
-            let slot = try await APICompositeSlot.query(on: db)
-                .filter(\.$assignmentID == assignmentID)
-                .filter(\.$userID == userID)
-                .first()?.slot
+            let slot = try await CompositePool.dealtSlot(assignmentID: assignmentID, userID: userID, on: db)?.slot
         else { return nil }
 
         let passed = outcome.status == .pass
@@ -72,7 +69,8 @@ struct CompositeTilePanel: Encodable {
         let ownPassed =
             try await APICompositeContribution.query(on: db)
             .filter(\.$assignmentID == assignmentID).filter(\.$userID == userID).first()?.passed ?? false
-        if ownPassed, assignment.isOpen, activity.acceptsSubmissions(at: Date()),
+        // A lab's composite has no spares yet (docs/lab-groups.md, slice 4b).
+        if ownPassed, !activity.isPerGroup, assignment.isOpen, activity.acceptsSubmissions(at: Date()),
             !spares.contains(where: \.grading),
             try await !CompositeSpares.holes(assignmentID: assignmentID, spec: spec, on: db).isEmpty
         {

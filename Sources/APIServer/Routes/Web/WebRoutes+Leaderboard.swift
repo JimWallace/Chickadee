@@ -122,7 +122,8 @@ extension WebRoutes {
                 // The composite is for the projector: only staff read its board.
                 compositeBoard: isStaff
                     ? try await CompositeBoardPresentation.build(
-                        setup: setup, activity: activity, assignment: assignment, on: req.db) : nil,
+                        setup: setup, activity: activity, assignment: assignment, groupID: groupScope?.groupID,
+                        on: req.db) : nil,
                 hasWindow: session != nil,
                 window: session,
                 // Two decisions, deliberately not one nil. Whether the page

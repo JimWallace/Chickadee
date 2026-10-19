@@ -88,7 +88,7 @@ extension WebRoutes {
             }
         }
         let compositeProgress = try await compositeProgress(
-            setup: setup, activity: activity, assignment: assignment, on: req.db)
+            setup: setup, activity: activity, assignment: assignment, groupID: groupID, on: req.db)
         let podium = PresentPlace.podiumOrder(places)
         let winner = tournament?.winner
 
@@ -174,20 +174,26 @@ extension WebRoutes {
     }
 
     /// A class composite's stage, and its progress for the clock's place:
-    /// "Tiles complete" over "31 of 48". Nil on every other kind.
+    /// "Tiles complete" over "31 of 48". Nil on every other kind. For a
+    /// composite that runs per lab group, `groupID`'s image, and nil with no
+    /// group chosen.
     private func compositeProgress(
-        setup: APITestSetup, activity: ClassActivity, assignment: APIAssignment?, on db: any Database
+        setup: APITestSetup, activity: ClassActivity, assignment: APIAssignment?, groupID: UUID?,
+        on db: any Database
     ) async throws -> (stage: CompositeStagePresentation, label: String, value: String)? {
         guard activity.kind == .classComposite, let spec = activity.composite, let assignmentID = assignment?.id,
-            let setupID = setup.id
+            let setupID = setup.id, !(activity.isPerGroup && groupID == nil)
         else { return nil }
         let snapshot = try await CompositeSnapshot.build(
-            .init(assignmentID: assignmentID, testSetupID: setupID, courseID: setup.courseID, spec: spec),
+            .init(
+                assignmentID: assignmentID, testSetupID: setupID, courseID: setup.courseID, spec: spec,
+                groupID: groupID),
             since: .max, onlyUserID: nil, includeOwners: false, on: db)
         let noun = spec.compositor.slotNoun
         let label = "\(noun.prefix(1).uppercased())\(noun.dropFirst()) complete"
         let stage = CompositeStagePresentation.board(
-            spec: spec, testSetupID: setupID, present: true, pollUntilISO: activity.window?.closesAtISO)
+            spec: spec, testSetupID: setupID, present: true, groupID: groupID,
+            pollUntilISO: activity.window?.closesAtISO)
         return (stage, label, "\(snapshot.complete) of \(snapshot.total)")
     }
 

@@ -486,7 +486,13 @@ because line numbers go out of date.
     scope supersedes the running runs of the other scope
     (`supersedeRunningTournaments`): `setActivity` and the MCP version
     restore. A new writer of `runsPerGroup` must do the same. Remove does
-    not touch a run in progress: its entrants are frozen. A per-group round robin
+    not touch a run in progress: its entrants are frozen.
+  - A class composite of a per-group activity deals each group its own
+    slots (`group_composite_slots`, slice 4a) through `CompositePool`. A
+    reader of slots goes through `CompositePool` (`dealt`, `dealtSlot`),
+    never straight to `composite_slots`, and a reader of the image passes a
+    group to `CompositeSnapshot.Scope`. A lab's tiles cover no class item
+    until slice 5, and a lab's composite has no spares until slice 4b. A per-group round robin
     awards no standings-leader record, and `setActivity` seeds none for it.
   - An activity whose kind compares students (`ActivityKind.comparesStudents`)
     accepts only shared data (`DatasetSpec.isShared`). The rule is in

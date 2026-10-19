@@ -10,6 +10,11 @@
 // a deleted student is dealt again, and a second round starts only when every
 // slot of the first is taken.
 //
+// For an activity that runs once per lab group, each group deals its own
+// slots (`CompositePool`, docs/lab-groups.md slice 4): a student is dealt in
+// the group of the session they play in. A student holds one slot per
+// assignment, in whichever pool dealt it.
+//
 // Dealing writes on a page load, so it is safe under a race: the unique keys
 // on `composite_slots` refuse a second row for a student and a second student
 // for a (round, slot). A loser re-reads its own row, or tries the next free
@@ -23,26 +28,32 @@ import Vapor
 
 enum CompositeSlots {
 
-    /// The student's slot, dealing one if they have none.
+    /// The student's slot in the whole class's image, dealing one if they
+    /// have none.
     static func slot(
         assignmentID: UUID, userID: UUID, spec: CompositeSpec, on db: any Database
     ) async throws -> Int {
+        try await slot(in: .course(assignmentID: assignmentID), userID: userID, spec: spec, on: db)
+    }
+
+    /// The student's slot, dealing one in `pool` if they have none in any
+    /// pool. Every pool deals in the assignment's one order, so each group's
+    /// image fills the same way.
+    static func slot(
+        in pool: CompositePool, userID: UUID, spec: CompositeSpec, on db: any Database
+    ) async throws -> Int {
+        let assignmentID = pool.assignmentID
         if let existing = try await dealtSlot(assignmentID: assignmentID, userID: userID, on: db) {
             return existing
         }
         let sequence = spec.dealSequence(shuffleSeed: shuffleSeed(for: assignmentID))
         var attempt = 0
         while true {
-            let taken = try await APICompositeSlot.query(on: db)
-                .filter(\.$assignmentID == assignmentID)
-                .all()
-                .map { DealtPosition(round: $0.round, slot: $0.slot) }
+            let taken = try await pool.dealt(on: db).map { DealtPosition(round: $0.round, slot: $0.slot) }
             let next = firstFree(in: sequence, taken: Set(taken))
-            let row = APICompositeSlot(
-                assignmentID: assignmentID, userID: userID, slot: next.slot, round: next.round)
             do {
-                try await row.create(on: db)
-                return row.slot
+                try await pool.insert(userID: userID, slot: next.slot, round: next.round, on: db)
+                return next.slot
             } catch let error where isInsertConflict(error) && attempt < 8 {
                 attempt += 1
                 // A concurrent request may have dealt this student first.
@@ -54,8 +65,9 @@ enum CompositeSlots {
     }
 
     /// Deals a slot when a student opens a class-composite assignment inside
-    /// its session window. Never fails the page: a dealing error is logged,
-    /// and the grading backstop deals the slot later.
+    /// its session window, or for an activity that runs per group, while
+    /// they play in a group's session. Never fails the page: a dealing error
+    /// is logged, and the grading backstop deals the slot later.
     static func dealOnOpen(
         setup: APITestSetup, assignment: APIAssignment, userID: UUID, now: Date = Date(),
         on db: any Database
@@ -66,7 +78,12 @@ enum CompositeSlots {
             activity.acceptsSubmissions(at: now)
         else { return }
         do {
-            _ = try await slot(assignmentID: assignmentID, userID: userID, spec: spec, on: db)
+            guard
+                let pool = try await CompositePool.forDeal(
+                    activity: activity, assignmentID: assignmentID, testSetupID: assignment.testSetupID,
+                    userID: userID, submissionID: nil, now: now, on: db)
+            else { return }
+            _ = try await slot(in: pool, userID: userID, spec: spec, on: db)
         } catch {
             db.logger.error("composite: dealing a slot on open failed: \(error)")
         }
@@ -75,7 +92,9 @@ enum CompositeSlots {
     /// True once any slot of the assignment has been dealt. With a student
     /// submission, this locks the composite's structure.
     static func hasDealtSlots(assignmentID: UUID, on db: any Database) async throws -> Bool {
-        try await APICompositeSlot.query(on: db).filter(\.$assignmentID == assignmentID).count() > 0
+        let course = try await APICompositeSlot.query(on: db).filter(\.$assignmentID == assignmentID).count()
+        let groups = try await APIGroupCompositeSlot.query(on: db).filter(\.$assignmentID == assignmentID).count()
+        return course + groups > 0
     }
 
     /// The composite inputs for one grading run, rendered in the manifest's
@@ -89,11 +108,17 @@ enum CompositeSlots {
     /// deal, so it ignores the session window: a first submission after the
     /// window (under an extension, say) is still dealt a slot.
     ///
+    /// For an activity that runs per group, the backstop deals in the group
+    /// of the session `submissionID` was made in (or, with no submission yet,
+    /// the one the student plays in now). A student with no slot and no such
+    /// session renders slot 0 and is dealt nothing: the run grades, and its
+    /// contribution has no slot to fill.
+    ///
     /// Never fails grading: an error is logged, and the run grades without
     /// the inputs (the test script then fails closed on its own).
     static func gradingInputs(
         manifest: TestProperties, courseID: UUID, assignmentID: UUID?, userID: UUID?,
-        usesReferenceSlot: Bool, on db: any Database
+        submissionID: String? = nil, usesReferenceSlot: Bool, on db: any Database
     ) async -> [String: String]? {
         guard let activity = manifest.activity, activity.kind == .classComposite,
             let spec = activity.composite, let language = AssignmentLanguage.resolve(manifest: manifest)
@@ -108,8 +133,16 @@ enum CompositeSlots {
                     try await isCourseStaff(user, inCourse: courseID, db: db)
                 {
                     slot = 0
+                } else if let existing = try await dealtSlot(assignmentID: assignmentID, userID: userID, on: db) {
+                    slot = existing
+                } else if let testSetupID = try await APIAssignment.find(assignmentID, on: db)?.testSetupID,
+                    let pool = try await CompositePool.forDeal(
+                        activity: activity, assignmentID: assignmentID, testSetupID: testSetupID, userID: userID,
+                        submissionID: submissionID, on: db)
+                {
+                    slot = try await Self.slot(in: pool, userID: userID, spec: spec, on: db)
                 } else {
-                    slot = try await Self.slot(assignmentID: assignmentID, userID: userID, spec: spec, on: db)
+                    slot = 0
                 }
             }
         } catch {
@@ -136,6 +169,7 @@ enum CompositeSlots {
             manifest: manifest, courseID: courseID, assignmentID: assignmentID,
             // Only a student's own submission is dealt a slot.
             userID: submission.kind == APISubmission.Kind.student ? submission.userID : nil,
+            submissionID: submission.id,
             usesReferenceSlot: submission.kind == APISubmission.Kind.validation
                 || submission.kind == APISubmission.Kind.starterValidation, on: db)
     }
@@ -155,12 +189,9 @@ enum CompositeSlots {
         let slot: Int
     }
 
+    /// The student's slot in any pool of the assignment.
     private static func dealtSlot(assignmentID: UUID, userID: UUID, on db: any Database) async throws -> Int? {
-        try await APICompositeSlot.query(on: db)
-            .filter(\.$assignmentID == assignmentID)
-            .filter(\.$userID == userID)
-            .first()?
-            .slot
+        try await CompositePool.dealtSlot(assignmentID: assignmentID, userID: userID, on: db)?.slot
     }
 
     /// The first (round, slot) in deal order that nobody holds.
