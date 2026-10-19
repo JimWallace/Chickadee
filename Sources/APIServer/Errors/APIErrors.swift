@@ -89,7 +89,7 @@ enum WorkerJobError: AbortError, CustomStringConvertible {
 ///
 /// Every route and middleware in `APIServer` throws one of these (or an
 /// area enum such as `WorkerJobError`) rather than a bare `Abort`, so each
-/// refusal names what failed.  The one remaining `Abort` says why at its site.  The `…Reason` cases and `unauthorized` carry
+/// refusal names what failed.  The `…Reason` cases and `unauthorized` carry
 /// a verbatim reason for a status whose general case has a fixed sentence
 /// shape.
 enum AppError: AbortError, CustomStringConvertible {
