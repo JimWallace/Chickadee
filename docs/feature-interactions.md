@@ -370,6 +370,25 @@ because line numbers go out of date.
   `changeDeclaredLanguage`. The restore writes the snapshot manifest as it was
   stored.
 
+### The notebook header: kernel names, `nbformat` and the cell count
+
+- **Readers:**
+  - `NotebookHeader` (`Sources/Core/NotebookHeader.swift`), a typed decode.
+    Its callers are `derivedDeclaration`, the notebook-functions scan route,
+    `submissionNotebookLanguage` (`Sources/Worker/SubmissionStaging.swift`),
+    `inferredRawSubmissionExtension` and `notebookCellCount`.
+  - `Sources/Worker/NotebookExtractor.swift` and
+    `Sources/Worker/SubmissionPolicy.swift`, which still parse with
+    `JSONSerialization` and use the `[String: Any]` overload of
+    `fromNotebookMetadata`.
+- **Rules:**
+  - A field of the wrong type reads as absent. Only input that is not a JSON
+    object fails the read.
+  - Both `fromNotebookMetadata` overloads call `languageFromKernelNames`.
+- **Parallel paths:** the two parsers above. `JSONDecoder` does not read
+  UTF-32 input, and `JSONSerialization` does. A change to what counts as a
+  notebook must go to both until the worker extractor moves to typed JSON.
+
 ### Grading and submission mode: `effectiveGradingMode`, `effectiveSubmissionMode`
 
 - **Rule:** every consumer reads the effective value, not the raw field. Only

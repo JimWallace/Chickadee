@@ -141,9 +141,9 @@ public enum AssignmentLanguage: String, Codable, Sendable, CaseIterable {
     /// declares nothing recognisable; the caller then asks the author. Checks
     /// `kernelspec.name` first, then `language_info.name`.
     ///
-    /// The ONE implementation of the sniff. `isRNotebookMetadata` is a thin
-    /// equality on top of it rather than a second copy, so a new language is a
-    /// `notebookKernelNames` arm and nothing else.
+    /// Both overloads call `languageFromKernelNames`, the one implementation
+    /// of the sniff, so a new language is a `notebookKernelNames` arm and
+    /// nothing else.
     public static func fromNotebookMetadata(_ metadata: NotebookHeader.Metadata) -> AssignmentLanguage? {
         languageFromKernelNames(metadata.kernelName, metadata.languageInfoName)
     }
