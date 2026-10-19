@@ -62,7 +62,7 @@ struct SupportFileRow: HTML {
                     attributes: [.type(.checkbox), .class("js-dataset-toggle")] + (file.isDataset ? [.checked] : [])
                         + (isAttached || file.datasetPartCount != nil ? [.disabled] : [])
                         + (isAttached ? [.data("lock", value: "attached")] : []))
-                " Per-student sample"
+                file.datasetPartCount == nil ? " Per-student sample" : " Per-student part"
             }
             " "
             span(attributes: [.class("dataset-size-field js-dataset-size-field")] + hiddenUnlessSampled) {
@@ -107,7 +107,7 @@ struct SupportFileRow: HTML {
             ) {
                 "Split into "
                 span(.class("js-dataset-part-count")) { file.datasetPartCount.map(String.init) ?? "" }
-                " parts, one per student — edit it with set_dataset."
+                " parts, dealt to students in turn — edit it with set_dataset."
             }
             " "
             if file.datasetPartCount == nil, !file.datasetTransformsEditable {

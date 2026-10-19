@@ -52,7 +52,11 @@ import Testing
 
     @Test func aPartitionRowShowsTheNoteAndHidesTheSampleFields() throws {
         let html = SupportFileRow(file: row(partCount: 3)).render()
-        #expect(html.contains("Split into <span class=\"js-dataset-part-count\">3</span> parts, one per student"))
+        #expect(
+            html.contains("Split into <span class=\"js-dataset-part-count\">3</span> parts, dealt to students in turn"))
+        // A partition is not a sample, so the toggle does not call it one.
+        #expect(html.contains("Per-student part"))
+        #expect(!html.contains("Per-student sample"))
         #expect(!(try openingTag(of: "js-dataset-partition-note", in: html)).contains("hidden"))
         #expect(try openingTag(of: "js-dataset-size-field", in: html).contains("hidden"))
         // One click must not end a partition, and the lock is not an
@@ -67,6 +71,7 @@ import Testing
     @Test func aSampledRowHidesTheNoteAndKeepsItsToggle() throws {
         let html = SupportFileRow(file: row(partCount: nil)).render()
         #expect(try openingTag(of: "js-dataset-partition-note", in: html).contains("hidden"))
+        #expect(html.contains("Per-student sample"))
         #expect(!(try openingTag(of: "js-dataset-toggle", in: html)).contains("disabled"))
     }
 
