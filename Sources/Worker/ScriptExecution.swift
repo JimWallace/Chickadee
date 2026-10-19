@@ -226,11 +226,13 @@ private func runScriptWatchdog<Input: InputProtocol, Output: OutputProtocol, Err
 /// nonzero `si_signo` (`SIGCHLD`) is the answer. `si_pid` would be the usual
 /// test, but on Glibc it is a C macro that Swift cannot see.
 private func processHasExited(_ process: ProcessIdentifier) -> Bool {
-    var info = siginfo_t()
-    while waitid(P_PID, id_t(process.value), &info, WEXITED | WNOHANG | WNOWAIT) == -1 {
+    // `siginfo_t` holds a C union, and swift-system has no `waitid`, so this
+    // check stays unsafe.
+    var info = unsafe siginfo_t()
+    while unsafe waitid(P_PID, id_t(process.value), &info, WEXITED | WNOHANG | WNOWAIT) == -1 {
         if errno != EINTR { return true }
     }
-    return info.si_signo != 0
+    return unsafe info.si_signo != 0
 }
 
 /// One-way flag the watchdog raises before tearing the child down. A class
@@ -366,10 +368,9 @@ final class ScriptCapture: Sendable {
     /// Subprocess's own pipes do not set the flag, which is why we supply
     /// ours rather than using `.sequence`.
     private static func makeStream() -> Stream {
-        var descriptors: (Int32, Int32) = (-1, -1)
-        _ = withUnsafeMutablePointer(to: &descriptors) { pointer in
-            pointer.withMemoryRebound(to: Int32.self, capacity: 2) { pipe($0) }
-        }
+        // If the pipe cannot be made, both ends are -1.
+        let ends = try? FileDescriptor.pipe()
+        let descriptors = (ends?.readEnd.rawValue ?? -1, ends?.writeEnd.rawValue ?? -1)
         for descriptor in [descriptors.0, descriptors.1] {
             let flags = fcntl(descriptor, F_GETFD)
             if flags != -1 { _ = fcntl(descriptor, F_SETFD, flags | FD_CLOEXEC) }
@@ -464,7 +465,9 @@ final class ScriptCapture: Sendable {
     private func drainToEOF(_ stream: Stream) {
         var chunk = [UInt8](repeating: 0, count: 65_536)
         while true {
-            let bytesRead = read(stream.readEnd, &chunk, chunk.count)
+            // swift-system can read only into an unsafe buffer, so this stays
+            // unsafe until it can read into a span.
+            let bytesRead = unsafe read(stream.readEnd, &chunk, chunk.count)
             if bytesRead > 0 {
                 stream.buffer.append(Data(chunk[0..<bytesRead]))
                 continue

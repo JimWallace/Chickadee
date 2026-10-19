@@ -9,6 +9,20 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.734] - 2026-10-19
+
+### Added
+
+- **Lab groups (slice 3d): the tournament per group.** A Tournament activity can now run once per lab group. Staff choose the lab group when they run a tournament on the submissions page, the students who joined that group's session enter, two labs can play at once, and the leaderboard page and the projector show the bracket of the group they show. See `docs/lab-groups.md`.
+
+
+## [0.5.733] - 2026-10-19
+
+### Changed
+
+- **Strict memory safety for the server and runner.** The product targets build with Swift's strict memory safety mode, so unsafe code that is not marked `unsafe` does not compile. Most of the old unsafe calls now use safe swift-system and NIO APIs. The marks that remain (DNS resolution, `waitid`, the stream read, cgroup `mkdir`/`rmdir`) each have a comment that says why (#2683).
+
+
 ## [0.5.732] - 2026-10-19
 
 ### Added
