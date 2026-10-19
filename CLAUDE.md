@@ -622,7 +622,7 @@ One line per document. Each document holds its own rules and evidence.
 - `docs/runner-capability-profiles.md` — runner capability matching, the language gate, `minimumRunnerVersion`
 - `docs/swift-toolchain-upgrades.md` — the semi-annual Swift upgrade: where the pins live, its traps, the verification gauntlet
 - `docs/vapor-5-migration.md` — what Vapor 5 changes, the Vapor 4 preparation already done, and what is left for the move
-- `docs/runner-wasm-migration.md` — the plan that made RunnerCore one grading core for the worker and the browser
+- `docs/archive/runner-wasm-migration.md` — the plan that made RunnerCore one grading core for the worker and the browser
 - `docs/runner-wasm-swift-6-4-review.md` — what the Swift 6.4 move changed for the browser wasm, measured
 - `docs/personalization-phase1.md` — the per-student seed contract (`CHICKADEE_ASSIGNMENT_SEED`)
 - `docs/inputs.md` — global and section inputs: literals, `=` expressions, `$name` references
@@ -644,8 +644,8 @@ One line per document. Each document holds its own rules and evidence.
 - `docs/testing-conventions.md` — the test rules in full, with the reason for each
 - `docs/r-support.md` — first-class R: runtime, personalization, renderers
 - `docs/language-declaration.md` — language is declared, never inferred, and the per-site `?? .python` table
-- `docs/language-handling-review.md` — design review of language dispatch, scored against the real third language
-- `docs/ui-consistency-audit.md` — the 2026-08 widget-layer UI audit and its consolidation plan
+- `docs/archive/language-handling-review.md` — design review of language dispatch, scored against the real third language
+- `docs/archive/ui-consistency-audit.md` — the 2026-08 widget-layer UI audit and its consolidation plan
 - `docs/multi-course-roles.md` — per-course roles (#417): enrollment-row `CourseRole`, gates, staff invites
 - `docs/assignment-versioning.md` — content version history: capture, read, restore
 - `docs/slip-days.md` — student-managed slip days (#1228)
@@ -666,10 +666,10 @@ One line per document. Each document holds its own rules and evidence.
 - `docs/result-celebration.md` — the result-page celebration: the 100% moment, the bird, and the Earned toast
 - `docs/student-avatars.md` — generated avatars and the per-course pseudonymous handle
 - `docs/avatar-species.md` — eleven avatar species on one shared skeleton, the colourway decides the species, the trait weights, the prototype findings; opens with a Status table
-- `docs/browser-freeze-investigation.md` — the 2026-08 editor freeze, its root cause, the freeze tracer
+- `docs/archive/browser-freeze-investigation.md` — the 2026-08 editor freeze, its root cause, the freeze tracer
 - `docs/ci-flakiness.md` — CI flake families; start here before chasing a red check on an unrelated PR
 - `docs/feature-interactions.md` — the shared objects that several features read or write, and the rule for each; the `interaction-review` agent's map
-- `docs/abstraction-survey.md` — the 2026-10 survey of parallel code paths that need a shared abstraction (#2259)
+- `docs/archive/abstraction-survey.md` — the 2026-10 survey of parallel code paths that need a shared abstraction (#2259)
 - `docs/elementary-spike.md` — the finished Leaf-to-Elementary migration: where the views live, the traps, the guards, the known remainder
 - `docs/manifest-format-v2.md` — proposed: the manifest (`TestProperties`) review, the v2 envelope and its phased rollout
 - `docs/grading-integrity.md` — what a submission can do to its own grade today, the decisions, and the four-phase plan (#2223)

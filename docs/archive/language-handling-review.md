@@ -284,7 +284,7 @@ fix follows from the zero-callers fact:
 > language existed. Lua has since been added, so the prediction below can be
 > checked rather than trusted. It held up well; the misses are recorded at the
 > end of this section under "What the census got wrong", and the operational
-> runbook is [docs/adding-a-xeus-kernel.md](adding-a-xeus-kernel.md).
+> runbook is [docs/adding-a-xeus-kernel.md](../adding-a-xeus-kernel.md).
 
 Census of every `Sources/` file referencing `AssignmentLanguage`, bucketed by
 what a third language demands of it.

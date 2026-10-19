@@ -1067,7 +1067,7 @@ finding.
 When the same finding occurs on three or more pages, do not report it again
 each month. Make it a rule elsewhere in this document, and a guard when the
 rule is mechanical. That is how the widget audit turned ten findings into
-five guards (`docs/ui-consistency-audit.md`).
+five guards (`docs/archive/ui-consistency-audit.md`).
 
 ### Who uses the UI, and for what
 
@@ -1452,7 +1452,7 @@ tell you.
   remove it from `SPACING_STEPS` in `scripts/check-design-tokens.sh` in the
   same PR.
 - **Migration queue** — superseded as an inventory by
-  [ui-consistency-audit.md](ui-consistency-audit.md) (2026-08), which
+  [ui-consistency-audit.md](archive/ui-consistency-audit.md) (2026-08), which
   audited the whole widget layer, found this queue's five entries were an
   undercount (seven titlebar clones, seventeen action-row names, fourteen
   muted-hint names, …), and carries the sliced conversion plan. Convert

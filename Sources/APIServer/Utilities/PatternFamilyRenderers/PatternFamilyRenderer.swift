@@ -138,7 +138,7 @@ func existenceGuard(
     let tier = family.defaults.tier
     let label = "\(family.functionName) is defined"
     // Exhaustive so a future language cannot silently receive Python bytes
-    // (docs/language-handling-review.md §4).
+    // (docs/archive/language-handling-review.md §4).
     //
     // Only the SOURCE differs per language — every arm built an identical
     // `GeneratedScript` around it, so the shared construction is hoisted below.

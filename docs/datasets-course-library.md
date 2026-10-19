@@ -172,7 +172,7 @@ bytes `DatasetResolver` delivers to the grader, made by the same call. Staff
 can download the pool. A grader-only file is never on either page.
 
 **D10. One copier owns the clone.** The September audit (item 8 in
-`docs/audit-2026-09.md`) found three copy paths with three part lists. The
+`docs/archive/audit-2026-09.md`) found three copy paths with three part lists. The
 library is added to `CourseCloneService` and to the bundle in one place each,
 and a test asserts that a cloned course's assignments resolve their
 `DatasetSource` in the new course.

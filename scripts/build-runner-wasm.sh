@@ -10,7 +10,7 @@
 # runtime — so the browser runner can call the SAME extraction code instead of
 # a hand-written JS copy.
 #
-# Prerequisites (one-time, see docs/runner-wasm-migration.md):
+# Prerequisites (one-time, see docs/archive/runner-wasm-migration.md):
 #   * Swift toolchain matching the wasm SDK (6.4.0 — pinned by the swiftly
 #     version in .github/workflows/runner-wasm-vendor.yml)
 #   * The Embedded Swift WebAssembly SDK installed and named via SWIFT_WASM_SDK

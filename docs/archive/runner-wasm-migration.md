@@ -179,14 +179,14 @@ compiler chases every `import`, and we never create a type we later discard.
   in-browser smoke verified via Preview.
 
 - **Stage 5 — Swift→Wasm review. DONE.** Ran the
-  [Swift → Wasm PR Review Checklist](swift-wasm-review-checklist.md) over the
-  migration. Report: [runner-wasm-review.md](archive/runner-wasm-review.md). No blocking
+  [Swift → Wasm PR Review Checklist](../swift-wasm-review-checklist.md) over the
+  migration. Report: [runner-wasm-review.md](runner-wasm-review.md). No blocking
   findings; concerns (dynamic JS interop [forced by Embedded], no `wasm-opt`, no
   per-PR wasm-SDK CI build [artifact vendored], no WasmKit test run) are
   documented trade-offs/follow-ups. The `JSFunction`-deprecation warning was
   fixed (unified `JSObject`) so the release build is warning-clean.
   Three of those four concerns have since moved, all measured in
-  [runner-wasm-swift-6-4-review.md](runner-wasm-swift-6-4-review.md):
+  [runner-wasm-swift-6-4-review.md](../runner-wasm-swift-6-4-review.md):
   `wasm-opt` runs (and, from Swift 6.4, strips the DWARF that made the artifact
   five times its real size); a per-PR Embedded compile of RunnerCore now runs
   on the host toolchain with no wasm SDK

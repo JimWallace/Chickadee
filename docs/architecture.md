@@ -83,7 +83,7 @@ Targets, as declared in `Package.swift`:
   WebAssembly through a JS bridge. The artifact is vendored and checked in at
   `Public/runner-wasm/` (`RunnerWasm.<contenthash>.wasm` + `runner-core.js`),
   immutably cached (`RunnerWasmCacheMiddleware`), and size-guarded in CI. See
-  [`runner-wasm-migration.md`](runner-wasm-migration.md) and
+  [`runner-wasm-migration.md`](archive/runner-wasm-migration.md) and
   [`runner-wasm-serving.md`](runner-wasm-serving.md).
 
 `chickadee-server` and `chickadee-runner` communicate over HTTP. The runner
@@ -771,7 +771,7 @@ carries `io.modelcontextprotocol/protocolVersion` gets the 2026-07-28
 revision's semantics (mandatory `server/discover`, `resultType` + server
 `_meta`, mirrored protocol headers); anything else keeps the legacy
 `initialize` handshake behaviour. See
-[`mcp-2026-07-28-revision.md`](mcp-2026-07-28-revision.md) and the tool index
+[`mcp-2026-07-28-revision.md`](archive/mcp-2026-07-28-revision.md) and the tool index
 in [`mcp-authoring-roadmap.md`](mcp-authoring-roadmap.md).
 
 ### Admin diagnostics (`POST /admin-mcp`)

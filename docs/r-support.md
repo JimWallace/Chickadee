@@ -23,7 +23,7 @@ Once resolved, the answer is **recorded** on the manifest
 see "How the language is resolved and remembered" below.
 
 `AssignmentLanguage.resolve(manifest:notebookKernelName:notebookLanguageInfoName:)`
-is the single resolver, and since the docs/language-handling-review.md §3
+is the single resolver, and since the docs/archive/language-handling-review.md §3
 hardening it is internal to Core. Server-side callers read
 `AssignmentLanguage.resolve(manifest:)`, which returns the declared language and
 nothing else: the kernelspec sniff this section once described is gone
@@ -333,7 +333,7 @@ So the R extraction writes an inert marker comment ahead of each cell:
 (the grading runtime) splits on it, with base R and no dependency. The writer —
 the whole flattening, in fact — lives in RunnerCore
 (`extractR`, `Sources/RunnerCore/NotebookExtraction.swift`), hoisted out of the
-worker per docs/language-handling-review.md §1 so the browser runner calls the
+worker per docs/archive/language-handling-review.md §1 so the browser runner calls the
 same implementation through the wasm bridge (`runnerExtractR`) instead of its
 former verbatim stub. The two spellings are separate — `Tools/runner-support/test_runtime.R`
 is a byte-for-byte mirror and cannot interpolate a Swift constant — so

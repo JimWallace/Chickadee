@@ -344,7 +344,7 @@ func manifestOwningLanguage(_ manifest: RunnerManifest) -> AssignmentLanguage? {
 
 /// Which normalization this submission needs.
 ///
-/// The bucket-C inversion (docs/language-handling-review.md §4) applied to the
+/// The bucket-C inversion (docs/archive/language-handling-review.md §4) applied to the
 /// one site that had resisted it. It used to read "R, or else Python", with
 /// Python reached by falling through extension and content probes rather than
 /// by being named — so a third language was normalized as Python with no

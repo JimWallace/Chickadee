@@ -24,7 +24,7 @@ references in ~32 files, and while most are generic or compiler-enforced, a
 working language also needs new *artifacts*: a literal renderer, a pattern-family
 renderer, a notebook-check renderer, a personalization driver and seed runtime, a
 `test_runtime.<x>`, an extraction branch. Those are the feature, not overhead;
-no seam removes them. [docs/language-handling-review.md](language-handling-review.md)
+no seam removes them. [docs/archive/language-handling-review.md](archive/language-handling-review.md)
 §4 has the full census, bucketed.
 
 So: **you can have a language grading `.lua` scripts in the browser in a day, and
@@ -381,7 +381,7 @@ an uncaught error with its message on stderr, and — if the language has packag
   unconditionally; they cost well under a second.
 - **Do not add a `default:` arm to a language switch.** The compiler producing
   the worklist is the entire reason the count of touched files is acceptable.
-  See `docs/language-handling-review.md` §4.
+  See `docs/archive/language-handling-review.md` §4.
 - **Every language's literal renderer has exactly one trap, and it is never the
   same one.** Find yours before writing the renderer, and make it the first case
   in the shared fixture. What the four have cost so far:
@@ -452,7 +452,7 @@ swift build 2>&1 | grep "error:" | sort -u
 
 Every `switch` over `AssignmentLanguage` is deliberately exhaustive with no
 `default:` arm, for exactly this reason (see
-[docs/language-handling-review.md](language-handling-review.md) §4). Adding
+[docs/archive/language-handling-review.md](archive/language-handling-review.md) §4). Adding
 `case lua` to `Sources/Core/AssignmentLanguage.swift` and rebuilding produced,
 in three passes, the complete census below. Each pass fixes one layer and
 reveals the next, because a target only type-checks once its dependency does:

@@ -164,7 +164,7 @@ func notebookCheckFieldUnsupportedReason(
 /// Rendering Python for an R assignment would emit a `.py` script the R suite
 /// can never run, and the failure would surface as a confusing grading error
 /// rather than an authoring mistake. Exhaustive so a future language cannot
-/// silently skip kind-support validation (docs/language-handling-review.md §4).
+/// silently skip kind-support validation (docs/archive/language-handling-review.md §4).
 private func validateKindSupport(_ check: NotebookCheck, language: AssignmentLanguage) throws {
     switch language {
     case .python, .r, .lua, .octave:
