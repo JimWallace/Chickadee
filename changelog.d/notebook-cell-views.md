@@ -7,6 +7,7 @@
   notebook guide use it in place of `[[String: Any]]` from
   `JSONSerialization`. On a 2.8 MB notebook the read takes 0.07 s, where it
   took 0.25 s. It is a read, not a validity check: invalid JSON in a part
-  that is not read no longer stops it. As with `NotebookHeader`, UTF-32 input
+  that is not read (a malformed number or string escape in an output, for
+  example) no longer stops it. As with `NotebookHeader`, UTF-32 input
   with a byte-order mark is not read, and the first of two duplicate keys
   wins.

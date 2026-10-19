@@ -12,10 +12,15 @@
 // The same rules as the `as?` casts that it replaces: a field of the wrong
 // type reads as absent, and `cells(from:)` returns nil unless `cells` is an
 // array of objects. Like `NotebookHeader`, this is a read, not a validity
-// check: the decoder does not check the parts that it skips, so a validity
-// gate must not use it. Two other differences from `JSONSerialization`:
-// UTF-32 input with a byte-order mark is not read, and when a key appears
-// twice the first value wins, not the last.
+// check: the decoder does not check the parts that it skips (a raw control
+// character or an invalid escape in a string, a malformed or overflowing
+// number), so a validity gate must not use it. Its callers are read-only:
+// `ReflectionCells`, the definition and function scans,
+// `SolutionNotebookExtractor` and the notebook guide.
+//
+// Two other differences from `JSONSerialization`: UTF-32 input with a
+// byte-order mark is not read, and when a key appears twice the first value
+// wins, not the last.
 
 public import Foundation
 

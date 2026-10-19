@@ -71,8 +71,13 @@ import Testing
 
     /// Documented difference: invalid JSON in a part that is not read does not
     /// stop the read. `JSONSerialization` rejects the whole document.
-    @Test func invalidJSONInAnOutputStillReadsTheCells() throws {
-        let json = "{\"cells\": [{\"cell_type\": \"code\", \"source\": \"x\", \"outputs\": [\"a\nb\"]}]}"
+    @Test(arguments: [
+        "[\"a\nb\"]",  // a raw newline in a string
+        "[01]",  // a number with a leading zero
+        "[\"\\q\"]",  // an invalid escape
+    ])
+    func invalidJSONInAnOutputStillReadsTheCells(_ outputs: String) throws {
+        let json = "{\"cells\": [{\"cell_type\": \"code\", \"source\": \"x\", \"outputs\": \(outputs)}]}"
         #expect((try? JSONSerialization.jsonObject(with: Data(json.utf8))) == nil)
         #expect(try #require(cells(json)).map(\.source) == ["x"])
     }
