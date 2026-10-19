@@ -45,6 +45,6 @@ enum StudentDatasetDelivery {
                 manifest: manifest, seedHex: seedHex, courseSeedHex: courseSeedHex, dealNumber: dealNumber,
                 sourceDirectory: sharedDir)
         }
-        return files?[filename]
+        return DatasetDeals.withholdingUndealtParts(files, manifest: manifest, dealNumber: dealNumber)?[filename]
     }
 }

@@ -101,6 +101,14 @@ public enum DatasetMaterializer {
         return hadTrailingNewline ? result + "\n" : result
     }
 
+    /// `csv` with its header row and no data rows: a partition held back
+    /// from a student who holds no part yet. The trailing newline is mirrored.
+    public static func headerOnly(_ csv: String) -> String {
+        let (lines, hadTrailingNewline) = normalizedLines(of: csv)
+        guard let header = lines.first else { return csv }
+        return hadTrailingNewline ? header + "\n" : String(header)
+    }
+
     /// The data rows of `csv` whose position modulo `partCount` is `part`, with
     /// the header, in file order. Data row 0 is the first row after the header.
     /// The same envelope as `sampleRows`: LF output, the trailing newline

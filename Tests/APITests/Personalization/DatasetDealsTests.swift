@@ -267,4 +267,28 @@ import VaporTesting
             }
         }
     }
+
+    /// On a composite, a student with no slot yet reads no rows of a
+    /// partition from the download: they are graded on a part they do not
+    /// hold yet, so the file is held back to its header. Once the slot is
+    /// dealt, the download serves the slot's part.
+    @Test func theDownloadHoldsBackAPartitionUntilTheSlotIsDealt() async throws {
+        try await withApp(app) { app in
+            let fx = try await fixture(
+                "h", activity: ClassActivity(kind: .classComposite, composite: .starter))
+            let user = try await student("dd_h1", in: fx)
+            let setup = try #require(try await APITestSetup.find(fx.setupID, on: app.db))
+            let assignment = try #require(try await APIAssignment.find(fx.assignmentID, on: app.db))
+            func download() async throws -> String? {
+                try await StudentDatasetDelivery.file(
+                    named: "cases.csv", setup: setup, assignment: assignment, userID: user,
+                    testSetupsDirectory: app.testSetupsDirectory, on: app.db)
+            }
+            #expect(try await download() == "id,ward\n")
+
+            let slot = try await CompositeSlots.slot(
+                assignmentID: fx.assignmentID, userID: user, spec: .starter, on: app.db)
+            #expect(try await download() == part(slot))
+        }
+    }
 }

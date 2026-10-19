@@ -34,8 +34,9 @@ enum DatasetDeals {
     /// dealt here: the composite deals its slots itself, on open and as the
     /// grading backstop, in the pool of the student's group
     /// (`CompositeSlots`). A grading path asks the composite for its inputs
-    /// first, so the slot exists by then. A student with no slot yet gets nil
-    /// and the whole file.
+    /// first, so the slot exists by then. A student with no slot yet gets
+    /// nil: a grading path then grades the whole file, and a path that does
+    /// not grade holds the partition back (`withholdingUndealtParts`).
     static func dealNumber(
         manifest: TestProperties, courseID: UUID, assignmentID: UUID?, userID: UUID?, on db: any Database
     ) async throws -> Int? {
@@ -48,6 +49,23 @@ enum DatasetDeals {
             return try await CompositePool.dealtSlot(assignmentID: assignmentID, userID: userID, on: db)?.slot
         }
         return try await deal(assignmentID: assignmentID, userID: userID, on: db)
+    }
+
+    /// `files` with each partition cut to its header row while the student
+    /// holds no part yet: a class composite deals the slot later, on open in
+    /// the session window or when the first submission is graded. For the
+    /// paths that do not grade (the editor copy, the "my rows" download), so
+    /// a student never reads rows they will not be graded on. The editor
+    /// copy's fingerprint folds in the deal number, so it is written again
+    /// once the slot is dealt.
+    static func withholdingUndealtParts(
+        _ files: [String: String]?, manifest: TestProperties, dealNumber: Int?
+    ) -> [String: String]? {
+        guard var files, dealNumber == nil, manifest.activity?.kind == .classComposite else { return files }
+        for spec in manifest.datasets where spec.kind == .partition {
+            files[spec.file] = files[spec.file].map(DatasetMaterializer.headerOnly)
+        }
+        return files
     }
 
     /// The deal number of one grading job, by its kind: the slot it renders

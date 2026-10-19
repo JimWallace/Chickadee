@@ -792,7 +792,11 @@ As built (11b):
   grading backstop, in the pool of the student's lab group. So the worker job
   and the browser seed ask the composite for its inputs before they read the
   deal number. A path that does not grade (the editor copy, the "my rows"
-  download) reads a slot already dealt, or gets the whole file.
+  download) reads a slot already dealt. Until there is one, it holds each
+  partition back to its header row (`DatasetDeals.withholdingUndealtParts`),
+  so a student never reads rows they will not be graded on. The editor copy
+  is written again once the slot is dealt. A grading run for a student with
+  no slot, which the composite renders as slot 0, grades the whole file.
 - **Who gets which number** (`DatasetDeals`):
 
   | Run | Deal number | Rows |

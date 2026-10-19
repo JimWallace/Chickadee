@@ -406,7 +406,8 @@ because line numbers go out of date.
   - On a class composite, `DatasetDeals` reads the slot and never deals
     one; the composite deals it in its own pool (`CompositeSlots`, per lab
     group). A grading path asks the composite for its inputs before the deal
-    number.
+    number. A path that does not grade holds a partition back to its header
+    until the slot is dealt (`DatasetDeals.withholdingUndealtParts`).
   - A partition refuses the course scope.
   - The upload page names a partition as "one part of N"
     (`SubmitDatasetLink`).

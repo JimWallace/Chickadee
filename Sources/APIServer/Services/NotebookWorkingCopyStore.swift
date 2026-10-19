@@ -801,9 +801,11 @@ func writeDatasetFiles(
     let wrote: Bool =
         (try? await runBlocking {
             guard
-                let files = DatasetResolver.resolve(
-                    manifest: props, seedHex: seedHex, courseSeedHex: courseSeedHex, dealNumber: dealNumber,
-                    sourceDirectory: sharedDir)
+                let files = DatasetDeals.withholdingUndealtParts(
+                    DatasetResolver.resolve(
+                        manifest: props, seedHex: seedHex, courseSeedHex: courseSeedHex, dealNumber: dealNumber,
+                        sourceDirectory: sharedDir),
+                    manifest: props, dealNumber: dealNumber)
             else { return false }
 
             for (filename, content) in files {

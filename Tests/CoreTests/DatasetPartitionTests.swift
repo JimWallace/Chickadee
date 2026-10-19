@@ -61,6 +61,11 @@ import Testing
         #expect(DatasetMaterializer.materialize(source: pool, spec: partition(3), seedHex: "ab") == pool)
     }
 
+    @Test func aHeldBackPartitionKeepsOnlyItsHeader() {
+        #expect(DatasetMaterializer.headerOnly(pool) == "id,ward\n")
+        #expect(DatasetMaterializer.headerOnly("id,ward\r\n1,A") == "id,ward")
+    }
+
     @Test func lineEndingsAreNormalizedAndTheTrailingNewlineIsMirrored() {
         let crlf = "id,ward\r\n1,A\r\n2,B\r\n3,A"
         #expect(
