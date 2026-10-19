@@ -259,7 +259,7 @@ for env_name in sorted(set(kernel_envs.values())):
     )
 PY
 
-# 6. The pyodide-http payload in the Python env must carry the streaming-path
+# 7. The pyodide-http payload in the Python env must carry the streaming-path
 #    patch (scripts/patch-xeus-python-http.py). pyodide-http selects a
 #    Pyodide-specific streaming implementation whenever `crossOriginIsolated` is
 #    true; it is not pyjs-compatible, so on an isolated engine the kernel never
