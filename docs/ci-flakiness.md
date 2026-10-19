@@ -1,4 +1,4 @@
-# CI flakiness — state of knowledge (2026-07-02, last extended 2026-10-03)
+# CI flakiness — state of knowledge (2026-07-02, last extended 2026-10-18)
 
 Handoff document for the flakiness work. Families 1–3 are the original
 2026-07-02 body; **Family 4 (2026-08-05), Family 5 (2026-08-09), Family 6
@@ -7,7 +7,8 @@ is where this started, not where it ends. Check the newest families first —
 they are the ones still open.
 
 **Family 5 is closed for monitoring as of 2026-09-28** (acceptance run: 88
-`main` runs, no recurrence). **Family 6 is root-caused and fixed** — the
+`main` runs, no recurrence; re-checked 2026-10-18 over 335 more runs, still no
+recurrence). **Family 6 is root-caused and fixed** — the
 ceiling-wedges after the resolute move. The two look identical from the
 outside and are opposite shapes: Family 5 runs slowly and keeps finishing
 tests, Family 6 stops completely. The `[ci-pressure]` telemetry separates them
@@ -917,6 +918,10 @@ Four things this settles, two of them against what was written above.
    to RAM cannot reach it. The tmpfs stays on that lane: it still takes the
    per-application temp trees off disk, and two lanes running the same target
    are worth more identical than micro-tuned.
+
+   **Superseded (2026-10-18).** This `io_full` reading is from before
+   `MigratedPostgresSchemaPool` (below). The lane now runs at `io_full`
+   0.0–4.0 % per window. See "Re-check (2026-10-18)".
 4. **The host-versus-cgroup PSI split works, and it is not theoretical.** On
    the sqlite lane `cg_cpu_some` tracks host `cpu_some` almost exactly
    (12.4 vs 13.2, 30.1 vs 30.5, 70.8 vs 71.9) — all the pressure is ours. On
@@ -1297,6 +1302,53 @@ race-free. The global counter keeps its job as the monitor's arming signal;
 the test still pins a same-instant floor (`activeTrackedScopes >= 1` from
 inside the scope, which concurrent activity can only raise).
 
+### Re-check (2026-10-18): still no recurrence — 335 more runs
+
+`swift-tests.yml` push runs on `main`, 2026-10-05 14:17 → 2026-10-18 21:10:
+600 completed runs. About 335 of them started the test lanes. The others were
+concurrency-cancelled before the lanes started. The statistics use successful
+jobs only and the test-step duration, as above, so `n` differs a little per
+lane: a run counts for a lane only where that lane's job succeeded (`build`
+is lowest because the test lanes reuse a cached build when `build` itself is
+cancelled or fails).
+
+| lane | n | step median | p90 | max | max/med | ≥2× median | acceptance median |
+|---|---|---|---|---|---|---|---|
+| `build` (control) | 319 | 722 s | 840 s | 901 s | 1.25 | 0 | 630 s |
+| **`api-tests`** | 334 | **220 s** | 246 s | 275 s | 1.25 | **0** | 156 s |
+| `api-tests-postgres` | 337 | **277 s** | 309 s | 555 s | 2.0 | 1 (2.0×, borderline) | 198 s |
+| `worker-tests` | 340 | 24 s | 26 s | 40 s | 1.67 | 0 | 21 s |
+| `core-tests` | 339 | 13 s | 18 s | 21 s | 1.62 | 0 | 9 s |
+
+**Established.**
+
+1. **The collapse has not recurred.** No lane was killed at its ceiling. The
+   `api-tests` spread (max/median 1.25) is the same as the `build` control's.
+2. **The medians grew, and suite growth explains only part of it.**
+   `APITests` went from 4,794 tests (2026-10-14) to 5,223 (2026-10-18), +9 %.
+   The `api-tests` step went from about 210 s (2026-10-05) to 253 s
+   (2026-10-18), +20 %, over a longer window, so the two are not directly
+   comparable. Per-test cost was not measured; it is the open question if the
+   median keeps rising faster than the test count. The ≥2×-median metric is
+   scale-free, so a growing median does not hide a collapse.
+3. **The postgres lane's disk stall is gone.** `[ci-pressure]` on four healthy
+   jobs (117793605259, 117780902286, 117774969153, 115629655627) shows
+   `io_full` 0.0–4.0 % per window, mostly 0.1–1.0 %. The 10.5–14.7 % above was
+   measured before `MigratedPostgresSchemaPool` removed the per-test
+   migrations. A tmpfs data directory for the postgres service container is
+   therefore not worth adding.
+4. **The longest postgres job was not slow tests.** Job duration 1312 s, of
+   which 968 s was "Initialize containers" (image pull and service start); its
+   test step was ordinary. The longest test *step*, 555 s (the one
+   borderline 2.0× row in the table), is a different job and was not
+   inspected.
+5. **The failed jobs were real test failures, not collapses** (276–431 s each):
+   `APITestsLayoutTests.theTopLevelHoldsSharedHelpersOnly` (10-17, 10-18, both
+   lanes), `AccountSpeciesPickerTests` (10-14), and
+   `CppPersonalizationDriverTests.theDriverSeedEqualsTheRuntimeSeed`
+   (`.timedOut` after 128.5 s, 10-18, job 117780902302, while `io_full` was
+   0.0–0.6 %). Watch the last one: if it times out again under low I/O
+   pressure, it is a new family.
 
 ---
 
@@ -1881,6 +1933,12 @@ it reads this file from `main` on each run.
   same machine and build: `/tmp` on disk 287.6 s / 274.9 s with PSI
   `io_full` 20-27 %; `/tmp` on tmpfs 165.7 s / 162.1 s with `io_full`
   0.0-0.2 %; peak tmpfs occupancy 4 MiB.
+- `swift-tests.yml` run history on `main`, 2026-09-16 → 2026-09-28 (Family 5
+  acceptance population) — 117 completed runs, 88 started jobs.
+- `swift-tests.yml` run history on `main`, 2026-10-05 → 2026-10-18 (Family 5
+  re-check) — 600 completed push runs, about 335 started the test lanes;
+  `[ci-pressure]` from jobs 117793605259, 117780902286, 117774969153,
+  115629655627.
 - PR #1678 (Family 7) — run 36826739310, `build` attempt 1 job 110253994905
   (`failure`, exit 139 at `[Planning 1 / 3660]`, step 84 s) vs attempt 2 job
   110254985713 (`success`, build step 10 m 27 s) on the same commit `76c711c`.
