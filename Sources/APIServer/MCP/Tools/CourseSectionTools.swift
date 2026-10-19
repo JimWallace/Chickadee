@@ -534,9 +534,9 @@ struct ReorderCourseSectionsTool: ContentTool {
         } catch let error as ReorderError {
             throw MCPToolError.invalidArguments(detail: "orderedSectionIDs: \(error.reason)")
         }
-        let ordered = sections.map { section in
+        let ordered = try sections.map { section in
             Output.Section(
-                sectionID: section.id?.uuidString ?? "", name: section.name, sortOrder: section.sortOrder)
+                sectionID: try section.requireID().uuidString, name: section.name, sortOrder: section.sortOrder)
         }
         return Output(
             courseCode: course.code, courseKey: course.urlKey, courseTerm: course.term?.displayName,

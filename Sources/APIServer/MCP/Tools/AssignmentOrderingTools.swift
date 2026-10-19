@@ -135,16 +135,16 @@ struct ReorderSectionItemsTool: ContentTool {
                 try SortOrderItem.parse(type: ref.type, id: ref.id)
             }
         }
-        let ordered = renumbered.map { row in
+        let ordered = try renumbered.enumerated().map { index, row in
             switch row {
             case .assignment(let assignment):
                 Output.Item(
                     type: SectionItemKind.assignment.rawValue, id: assignment.publicID,
-                    title: assignment.title, sortOrder: assignment.sortOrder ?? 0)
+                    title: assignment.title, sortOrder: index + 1)
             case .content(let item):
                 Output.Item(
-                    type: SectionItemKind.content.rawValue, id: item.id?.uuidString ?? "",
-                    title: item.title, sortOrder: item.sortOrder)
+                    type: SectionItemKind.content.rawValue, id: try item.requireID().uuidString,
+                    title: item.title, sortOrder: index + 1)
             }
         }
         return Output(
@@ -238,12 +238,12 @@ struct ReorderAssignmentsTool: ContentTool {
         ) { () throws(ReorderError) in
             try input.orderedAssignmentPublicIDs.map(SortOrderItem.parseAssignment)
         }
-        let ordered = renumbered.compactMap { row -> Output.Assignment? in
+        let ordered = renumbered.enumerated().compactMap { index, row -> Output.Assignment? in
             guard case .assignment(let assignment) = row else { return nil }
             return Output.Assignment(
                 publicID: assignment.publicID,
                 title: assignment.title,
-                sortOrder: assignment.sortOrder ?? 0,
+                sortOrder: index + 1,
                 sectionID: assignment.sectionID?.uuidString ?? "")
         }
         return Output(

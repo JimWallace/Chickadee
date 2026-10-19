@@ -3,7 +3,8 @@
 // One entry in a course section's display order (#2713). Assignments and
 // content items share one per-section `sort_order` sequence, so a section
 // reorder is a list of these. `RenumberedSectionItem` is the row after the
-// reorder wrote its new position.
+// reorder wrote its new position. The three types are small and are used only
+// together, so they share this file.
 
 import Foundation
 
