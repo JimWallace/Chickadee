@@ -96,6 +96,14 @@ import VaporTesting
         return chosen
     }
 
+    private func leaderboardRow(_ userID: UUID, in group: UUID) async throws -> APIGroupLeaderboardEntry? {
+        try await APIGroupLeaderboardEntry.query(on: app.db)
+            .filter(\.$testSetupID == setupID)
+            .filter(\.$groupID == group)
+            .filter(\.$userID == userID)
+            .first()
+    }
+
     private func holder(_ group: UUID) async throws -> (any HillHolder)? {
         try await Hill.group(testSetupID: setupID, groupID: group).holder(on: app.db)
     }
@@ -168,9 +176,15 @@ import VaporTesting
                 on: app.db)
             #expect(try await holder(f.labA)?.userID == f.ada)
 
-            // Removing the champion empties the hill.
+            // Removing the champion empties the hill and takes their row off
+            // the group's leaderboard.
+            try await recordLeaderboardEntry(
+                testSetupID: setupID, userID: f.ada, submissionID: "hpg_a4", outcomes: [outcome(won: true)],
+                on: app.db)
+            #expect(try await leaderboardRow(f.ada, in: f.labA) != nil)
             #expect(try await ActivitySessionStore.remove(userID: f.ada, from: session, on: app.db))
             #expect(try await holder(f.labA) == nil)
+            #expect(try await leaderboardRow(f.ada, in: f.labA) == nil)
         }
     }
 

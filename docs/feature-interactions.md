@@ -469,6 +469,14 @@ because line numbers go out of date.
     goes through `Hill`, never straight to `activity_champions`. A per-group
     hill awards no champion class record, and `ActivityAuthoring.setActivity`
     seeds none for it.
+  - The round robin of a per-group activity plays the students in the
+    challenger's session (`chooseClassmates`), and its standings row carries
+    the session's group (`activity_standings.group_id`, slice 3c). A reader
+    of the standings passes a group to `rankedStandings` (nil reads only the
+    whole class's rows, never a lab's); the badge signal
+    ranks a student in the group of their own row while the activity runs
+    per group, and among the class rows otherwise. A per-group round robin
+    awards no standings-leader record, and `setActivity` seeds none for it.
   - An activity whose kind compares students (`ActivityKind.comparesStudents`)
     accepts only shared data (`DatasetSpec.isShared`). The rule is in
     `ManifestCoherence`. A new door that writes an activity or a dataset spec
@@ -489,8 +497,9 @@ because line numbers go out of date.
     student in no group of a manual set in the session's group. A wrong code
     writes a `login_attempts` row (scope `join_failure`).
   - `ActivitySessionStore.remove`, from the staff attendance page, sets
-    `removed_at` on an attendance row, and empties the group's hill
-    (`group_activity_champions`) when the removed student holds it.
+    `removed_at` on an attendance row, and deletes the student's rankings in
+    the group: `group_activity_champions`, `group_leaderboard_entries` and
+    their `activity_standings` row for that group.
   - `ActivityAuthoring.setActivity` sets `ClassActivity.runsPerGroup`.
 - **Readers:**
   - The submission gate (`requireOpenGroupSession` in
@@ -499,6 +508,7 @@ because line numbers go out of date.
   - Ranking, through `ActivitySessionStore.sessionAtSubmission` and
     `currentSession`.
   - `LeaderboardGroupScope.studentGroup`, which picks a student's board.
+  - `chooseClassmates`, which plays the students of the challenger's session.
   - `GroupSessionPanel` on the present page, and `SessionAttendancePage`.
   - The data export (`gatherGroups`, `gatherSessionJoins`).
 - **Rules** (`docs/lab-groups.md`):

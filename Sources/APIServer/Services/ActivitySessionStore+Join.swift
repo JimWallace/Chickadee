@@ -141,9 +141,10 @@ extension ActivitySessionStore {
     /// Removes a student from the session's current run: they stop playing,
     /// and cannot join again until the session starts again. A group
     /// placement that their join made is undone, so the Groups tab shows them
-    /// as in no group again, and the group's hill is emptied when they hold
-    /// it, so no challenger plays them. False when the student is not in the
-    /// current run, so nothing changed.
+    /// as in no group again, and their rankings in the group are forgotten:
+    /// the hill when they hold it, their leaderboard row and their standing,
+    /// so no challenger plays them and no board shows them. False when the
+    /// student is not in the current run, so nothing changed.
     @discardableResult
     static func remove(
         userID: UUID, from session: APIActivitySession, now: Date = Date(), on db: any Database
@@ -162,13 +163,31 @@ extension ActivitySessionStore {
         }
         try await row.save(on: db)
         if let testSetupID = try await APIAssignment.find(session.assignmentID, on: db)?.testSetupID {
-            try await APIGroupActivityChampion.query(on: db)
-                .filter(\.$testSetupID == testSetupID)
-                .filter(\.$groupID == session.groupID)
-                .filter(\.$userID == userID)
-                .delete()
+            try await forgetRankings(of: userID, testSetupID: testSetupID, groupID: session.groupID, on: db)
         }
         return true
+    }
+
+    /// Deletes the student's rows in one lab group's rankings of the
+    /// assignment: the hill, the leaderboard and the standings.
+    private static func forgetRankings(
+        of userID: UUID, testSetupID: String, groupID: UUID, on db: any Database
+    ) async throws {
+        try await APIGroupActivityChampion.query(on: db)
+            .filter(\.$testSetupID == testSetupID)
+            .filter(\.$groupID == groupID)
+            .filter(\.$userID == userID)
+            .delete()
+        try await APIGroupLeaderboardEntry.query(on: db)
+            .filter(\.$testSetupID == testSetupID)
+            .filter(\.$groupID == groupID)
+            .filter(\.$userID == userID)
+            .delete()
+        try await APIActivityStanding.query(on: db)
+            .filter(\.$testSetupID == testSetupID)
+            .filter(\.$groupID == groupID)
+            .filter(\.$userID == userID)
+            .delete()
     }
 
     /// Takes the student out of `groupID` when that is still their group in a

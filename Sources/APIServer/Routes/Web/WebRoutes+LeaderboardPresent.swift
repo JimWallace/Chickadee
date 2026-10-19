@@ -38,7 +38,7 @@ extension WebRoutes {
         switch aggregation {
         case .standings:
             let board = try await buildStandingsBoard(
-                setup: setup, reader: reader, showAll: true, on: req.db)
+                setup: setup, reader: reader, showAll: true, groupID: groupID, on: req.db)
             places = board.rows.map {
                 PresentPlace(
                     rank: $0.rank, rankText: $0.rankText, rankTier: $0.rankTier, handle: $0.handle,

@@ -2,7 +2,9 @@
 //
 // One row per (assignment, student) in a round robin's standings
 // (docs/class-activities.md): the matches their LATEST submission played,
-// won, drew and lost, and its average match score. Recomputed at ingest from
+// won, drew and lost, and its average match score. For an activity that runs
+// once per lab group, the row carries the group its submission was played
+// in (docs/lab-groups.md, slice 3c). Recomputed at ingest from
 // that submission's completed `match_results` rows — never best-so-far, since
 // a resubmission replaces the row — and read by the leaderboard page, the
 // staff standings panel and the `standing` / `matchesWon` badge signals.
@@ -22,6 +24,11 @@ final class APIActivityStanding: Model, Content, @unchecked Sendable {
 
     @Field(key: "user_id")
     var userID: UUID
+
+    /// The lab group whose session the submission was made in; nil for an
+    /// activity that ranks the whole class.
+    @OptionalField(key: "group_id")
+    var groupID: UUID?
 
     /// The submission the row was computed from — the student's latest.
     @Field(key: "submission_id")
@@ -51,9 +58,10 @@ final class APIActivityStanding: Model, Content, @unchecked Sendable {
 
     init(
         testSetupID: String, userID: UUID, submissionID: String,
-        played: Int, wins: Int, draws: Int, losses: Int, scoreSum: Double, updatedAt: Date
+        played: Int, wins: Int, draws: Int, losses: Int, scoreSum: Double, updatedAt: Date, groupID: UUID? = nil
     ) {
         self.testSetupID = testSetupID
+        self.groupID = groupID
         self.userID = userID
         self.submissionID = submissionID
         self.played = played
