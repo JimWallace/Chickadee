@@ -526,7 +526,8 @@ private struct StandingKey: Equatable {
 /// standings, for the `standing` / `matchesWon` badge signals; nil when they
 /// have no row, or have left the course. The place is the page's
 /// (`rankedStandings`): in a per-group round robin, the place in the lab
-/// group of the student's row.
+/// group of the student's row; otherwise the place among the class rows,
+/// so a lab row left from a per-group run has no place.
 func standingSignals(
     testSetupID: String, userID: UUID, on db: any Database
 ) async throws -> (standing: Int, matchesWon: Int)? {
@@ -536,8 +537,11 @@ func standingSignals(
             .filter(\.$userID == userID)
             .first()
     else { return nil }
+    // The board the page shows: the row's lab while the activity runs per
+    // group, the whole class's rows otherwise (where a lab row is absent).
+    let isPerGroup = setup.decodedManifest()?.activity?.isPerGroup == true
     let ranked = try await rankedStandings(
-        testSetupID: testSetupID, courseID: setup.courseID, groupID: own.groupID, on: db)
+        testSetupID: testSetupID, courseID: setup.courseID, groupID: isPerGroup ? own.groupID : nil, on: db)
     guard let row = ranked.first(where: { $0.standing.userID == userID }) else { return nil }
     return (row.rank, row.standing.wins)
 }

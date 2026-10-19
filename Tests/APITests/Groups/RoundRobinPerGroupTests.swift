@@ -195,6 +195,9 @@ import VaporTesting
             let classStandings = try await rankedStandings(
                 testSetupID: setupID, courseID: f.setup.courseID, on: app.db)
             #expect(classStandings.isEmpty, "a lab's row is not a class row")
+            #expect(
+                try await standingSignals(testSetupID: setupID, userID: f.ben, on: app.db) == nil,
+                "the badge reads the board the page shows")
         }
     }
 

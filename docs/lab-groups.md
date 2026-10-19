@@ -470,7 +470,8 @@ should be able to see it. The maintainer chose best effort on 2026-10-18.
 - `rankedStandings` and `buildStandingsBoard` take a group; the leaderboard
   page and the present page show the group they show, and a student in no
   group sees no standings. A student's `standing` badge signal is their
-  place in the group of their own row.
+  place on the board the page shows: in the group of their own row while
+  the activity runs per group, among the class rows otherwise.
 - The standings-leader class record is not awarded for a per-group round
   robin, as with the hill (slice 3b): every lab has a leader. So
   `setActivity` seeds none on a per-group round robin, and removes a seeded
@@ -479,11 +480,11 @@ should be able to see it. The maintainer chose best effort on 2026-10-18.
   made in another lab or after a session, because "latest" is the one
   definition the union and the tournaments share. A standings row written
   before the activity ran per group has no group: it is in no lab's
-  standings, and that student's `standing` signal ranks them against every
-  row until they play in a session. Turning the flag off leaves each row's
-  group on it, and the class standings read only rows with no group, so a
-  lab's row leaves the class board (and the standings-leader record) until
-  that student submits again.
+  standings, and that student's `standing` signal ranks them among the
+  other rows with no group until they play in a session. Turning the flag
+  off leaves each row's group on it, and the class standings read only rows
+  with no group, so a lab's row leaves the class board, the badge signal
+  and the standings-leader record until that student submits again.
 - A retest of a standing's own submission that finds no session (after a
   reopen, or after a Remove) deletes that standing: the retest voided the
   matches it counted.

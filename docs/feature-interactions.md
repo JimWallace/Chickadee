@@ -474,7 +474,8 @@ because line numbers go out of date.
     the session's group (`activity_standings.group_id`, slice 3c). A reader
     of the standings passes a group to `rankedStandings` (nil reads only the
     whole class's rows, never a lab's); the badge signal
-    ranks a student in the group of their own row. A per-group round robin
+    ranks a student in the group of their own row while the activity runs
+    per group, and among the class rows otherwise. A per-group round robin
     awards no standings-leader record, and `setActivity` seeds none for it.
   - An activity whose kind compares students (`ActivityKind.comparesStudents`)
     accepts only shared data (`DatasetSpec.isShared`). The rule is in
