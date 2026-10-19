@@ -9,6 +9,13 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.738] - 2026-10-19
+
+### Added
+
+- **The dealt partition dataset.** A per-student dataset can now split its file into a number of disjoint parts and give each student one part: data row `i` is in part `i mod partCount`, so every part spans the whole file in order. A student's part comes from a deal number, dealt on first use, so the class fills the parts in turn; on a class composite the student's slot is the number. Course staff, validation and the preview read part 0, the four validation variants read parts 0 to 3, and a job with no student reads the whole file, so the class corpus run can check the combined parts against the complete data. It is authored through MCP `set_dataset` with `partCount`; the Files panel shows a partition as a note. A ranked class activity refuses a partition, as it refuses a sample.
+
+
 ## [0.5.737] - 2026-10-19
 
 ### Changed
