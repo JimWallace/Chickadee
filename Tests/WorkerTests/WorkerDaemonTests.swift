@@ -818,110 +818,59 @@ import Testing
         #expect(FileManager.default.fileExists(atPath: destination.path))
     }
 
-    // The three retry tests below set RUNNER_RETRY_* for the daemon to read
-    // back. Each body runs in a child process (an exit test), so the `setenv`
-    // reaches no other test's `environ`: nothing to restore, nothing to lock.
-    // A concurrent `getenv` walking an array `setenv` is rewriting is a
-    // segfault, not a stale read, which is why the process-wide env lock
-    // existed. With no writer left in this process the lock is gone.
-    // `setenv` takes C strings, and no safe API exists, so it is `unsafe`.
+    // The three retry tests below give the daemon short retry delays through
+    // its `config`, so they change no process environment and need no exit
+    // test or environment lock.
     @Test func workerDaemonRetriesPollingAfterTransientHTTP500() async throws {
-        await #expect(processExitsWith: .success) {
-            unsafe setenv("RUNNER_RETRY_BASE_DELAY_MS", "10", 1)
-            unsafe setenv("RUNNER_RETRY_MAX_DELAY_MS", "20", 1)
-            let poller = FlakyPoller(failuresRemaining: 2, failureMode: .http500)
-            let reporter = MockReporter()
-            let runner = MockRunner(
-                output: ScriptOutput(exitCode: 0, stdout: "", stderr: "", executionTimeMs: 1, timedOut: false))
-            let daemon = WorkerDaemon(
-                poller: poller,
-                reporter: reporter,
-                runner: runner,
-                apiBaseURL: testURL("http://localhost:8080"),
-                workerID: "worker-http500-retry",
-                workerSecret: "secret",
-                maxConcurrentJobs: 1,
-                runnerProfile: nil
-            )
-
-            let task = Task {
-                try await daemon.run()
-            }
-
-            let didKeepPolling = await waitUntil(timeoutSeconds: 10) {
-                await poller.observedRequestCount() >= 3
-            }
-            #expect(didKeepPolling, "Runner should keep polling after transient HTTP 500 responses")
-
-            let shutDown = await awaitCancelledDaemon(task)
-            #expect(shutDown, "daemon did not shut down within 30s of cancellation")
-        }
+        let keptPolling = await Self.daemonKeepsPolling(after: .http500, workerID: "worker-http500-retry")
+        #expect(keptPolling, "Runner should keep polling after transient HTTP 500 responses")
     }
 
     @Test func workerDaemonRetriesPollingAfterTransientHTTP401() async throws {
-        await #expect(processExitsWith: .success) {
-            unsafe setenv("RUNNER_RETRY_BASE_DELAY_MS", "10", 1)
-            unsafe setenv("RUNNER_RETRY_MAX_DELAY_MS", "20", 1)
-            let poller = FlakyPoller(failuresRemaining: 2, failureMode: .http401)
-            let reporter = MockReporter()
-            let runner = MockRunner(
-                output: ScriptOutput(exitCode: 0, stdout: "", stderr: "", executionTimeMs: 1, timedOut: false))
-            let daemon = WorkerDaemon(
-                poller: poller,
-                reporter: reporter,
-                runner: runner,
-                apiBaseURL: testURL("http://localhost:8080"),
-                workerID: "worker-http401-retry",
-                workerSecret: "secret",
-                maxConcurrentJobs: 1,
-                runnerProfile: nil
-            )
-
-            let task = Task {
-                try await daemon.run()
-            }
-
-            let didKeepPolling = await waitUntil(timeoutSeconds: 10) {
-                await poller.observedRequestCount() >= 3
-            }
-            #expect(didKeepPolling, "Runner should keep polling after transient HTTP 401 responses")
-
-            let shutDown = await awaitCancelledDaemon(task)
-            #expect(shutDown, "daemon did not shut down within 30s of cancellation")
-        }
+        let keptPolling = await Self.daemonKeepsPolling(after: .http401, workerID: "worker-http401-retry")
+        #expect(keptPolling, "Runner should keep polling after transient HTTP 401 responses")
     }
 
     @Test func workerDaemonRetriesPollingAfterDuplicateWorkerIDConflict() async throws {
-        await #expect(processExitsWith: .success) {
-            unsafe setenv("RUNNER_RETRY_BASE_DELAY_MS", "10", 1)
-            unsafe setenv("RUNNER_RETRY_MAX_DELAY_MS", "20", 1)
-            let poller = FlakyPoller(failuresRemaining: 2, failureMode: .duplicateWorkerID)
-            let reporter = MockReporter()
-            let runner = MockRunner(
-                output: ScriptOutput(exitCode: 0, stdout: "", stderr: "", executionTimeMs: 1, timedOut: false))
-            let daemon = WorkerDaemon(
-                poller: poller,
-                reporter: reporter,
-                runner: runner,
-                apiBaseURL: testURL("http://localhost:8080"),
-                workerID: "worker-duplicate-id-retry",
-                workerSecret: "secret",
-                maxConcurrentJobs: 1,
-                runnerProfile: nil
-            )
+        let keptPolling = await Self.daemonKeepsPolling(
+            after: .duplicateWorkerID, workerID: "worker-duplicate-id-retry")
+        #expect(keptPolling, "Runner should keep polling after duplicate worker ID conflicts")
+    }
 
-            let task = Task {
-                try await daemon.run()
-            }
+    /// Runs a daemon against a poller that fails twice in `failureMode`, and
+    /// returns whether it polled a third time. The daemon is shut down before
+    /// this returns.
+    private static func daemonKeepsPolling(
+        after failureMode: FlakyPoller.FailureMode, workerID: String
+    ) async -> Bool {
+        let poller = FlakyPoller(failuresRemaining: 2, failureMode: failureMode)
+        let daemon = WorkerDaemon(
+            poller: poller,
+            reporter: MockReporter(),
+            runner: MockRunner(
+                output: ScriptOutput(exitCode: 0, stdout: "", stderr: "", executionTimeMs: 1, timedOut: false)),
+            apiBaseURL: testURL("http://localhost:8080"),
+            workerID: workerID,
+            workerSecret: "secret",
+            maxConcurrentJobs: 1,
+            runnerProfile: nil,
+            config: .loadFromEnvironment([
+                "RUNNER_RETRY_BASE_DELAY_MS": "10",
+                "RUNNER_RETRY_MAX_DELAY_MS": "20",
+            ])
+        )
 
-            let didKeepPolling = await waitUntil(timeoutSeconds: 10) {
-                await poller.observedRequestCount() >= 3
-            }
-            #expect(didKeepPolling, "Runner should keep polling after duplicate worker ID conflicts")
-
-            let shutDown = await awaitCancelledDaemon(task)
-            #expect(shutDown, "daemon did not shut down within 30s of cancellation")
+        let task = Task {
+            try await daemon.run()
         }
+
+        let didKeepPolling = await waitUntil(timeoutSeconds: 10) {
+            await poller.observedRequestCount() >= 3
+        }
+
+        let shutDown = await awaitCancelledDaemon(task)
+        #expect(shutDown, "daemon did not shut down within 30s of cancellation")
+        return didKeepPolling
     }
 
     // MARK: - Concurrency / state-transition coverage (round 2)

@@ -270,6 +270,7 @@ let package = Package(
                 .product(name: "FluentPostgresDriver", package: "fluent-postgres-driver"),
                 .product(name: "FluentSQLiteDriver", package: "fluent-sqlite-driver"),
                 .product(name: "Elementary", package: "elementary"),
+                .product(name: "AsyncHTTPClient", package: "async-http-client"),
             ],
             path: "Tests/APITests",
             swiftSettings: sourceSettings
@@ -294,6 +295,8 @@ let package = Package(
                 // Subprocess, like the runner (docs/ci-flakiness.md Family 6).
                 .product(name: "Subprocess", package: "swift-subprocess"),
                 .product(name: "SystemPackage", package: "swift-system"),
+                .product(name: "NIOCore", package: "swift-nio"),
+                .product(name: "NIOPosix", package: "swift-nio"),
             ],
             path: "Tests/WorkerTests",
             swiftSettings: sourceSettings

@@ -7,34 +7,29 @@
 // siblings are running.
 
 import Foundation
+import NIOCore
+import NIOPosix
 import Testing
 
 @Suite(.timeLimit(.minutes(2))) struct LocalHTTPTestServerTests {
-    /// True while something accepts TCP connections on `port`. `connect`
-    /// takes a pointer, and no safe API exists for it.
-    private static func isListening(_ port: Int) -> Bool {
-        let descriptor = socket(AF_INET, Int32(SOCK_STREAM.rawValue), 0)
-        guard descriptor >= 0 else { return false }
-        defer { close(descriptor) }
-        var address = sockaddr_in()
-        address.sin_family = sa_family_t(AF_INET)
-        address.sin_port = in_port_t(UInt16(port).bigEndian)
-        address.sin_addr.s_addr = UInt32(0x7F00_0001).bigEndian  // 127.0.0.1
-        let result = withUnsafePointer(to: &address) { pointer in
-            unsafe pointer.withMemoryRebound(to: sockaddr.self, capacity: 1) {
-                unsafe connect(descriptor, $0, socklen_t(MemoryLayout<sockaddr_in>.size))
-            }
+    /// True while something accepts TCP connections on `port`.
+    private static func isListening(_ port: Int) async -> Bool {
+        let bootstrap = ClientBootstrap(group: MultiThreadedEventLoopGroup.singleton)
+            .connectTimeout(.seconds(2))
+        guard let channel = try? await bootstrap.connect(host: "127.0.0.1", port: port).get() else {
+            return false
         }
-        return result == 0
+        try? await channel.close()
+        return true
     }
 
     private static func waitUntilClosed(_ port: Int, seconds: TimeInterval = 10) async -> Bool {
         let deadline = Date().addingTimeInterval(seconds)
         while Date() < deadline {
-            if !isListening(port) { return true }
+            if await !isListening(port) { return true }
             try? await Task.sleep(for: .milliseconds(50))
         }
-        return !isListening(port)
+        return await !isListening(port)
     }
 
     /// The socket descriptors held by each child of this process serving
@@ -100,7 +95,7 @@ import Testing
         defer { try? FileManager.default.removeItem(at: directory) }
 
         let server = try await LocalHTTPTestServer.staticFiles(directory: directory)
-        #expect(Self.isListening(server.port))
+        #expect(await Self.isListening(server.port))
 
         server.stop()
 
@@ -127,7 +122,7 @@ import Testing
             server.stop()
             #expect(await Self.waitUntilClosed(server.port), "server \(index) is still listening")
             for sibling in servers[(index + 1)...] {
-                #expect(Self.isListening(sibling.port), "stopping one server stopped a sibling")
+                #expect(await Self.isListening(sibling.port), "stopping one server stopped a sibling")
             }
         }
     }

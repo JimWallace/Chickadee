@@ -27,6 +27,7 @@
 // port and POSTs the extension form with `Transfer-Encoding: chunked`, which
 // the decoder deterministically dispatches as a stream.
 
+import AsyncHTTPClient
 import Core
 import Fluent
 import Foundation
@@ -34,10 +35,6 @@ import Testing
 import VaporTesting
 
 @testable import APIServer
-
-#if canImport(Glibc)
-import Glibc
-#endif
 
 @Suite(.timeLimit(.minutes(2))) struct ExtensionCSRFTokenTests {
 
@@ -139,35 +136,21 @@ import Glibc
                 .replacingOccurrences(of: ":", with: "%3A")
             let formBody = "_csrf=\(pageToken)&extendedDueAt=\(due)&note=streamed"
             let path = "/TEST101/students/\(token)/assignments/\(assignment.publicID)/extension"
-            let request =
-                "POST \(path) HTTP/1.1\r\n"
-                + "Host: 127.0.0.1\r\n"
-                + "Connection: close\r\n"
-                + "Cookie: \(cookiePair)\r\n"
-                + "Content-Type: application/x-www-form-urlencoded\r\n"
-                + "Transfer-Encoding: chunked\r\n"
-                + "\r\n"
-                + String(formBody.utf8.count, radix: 16) + "\r\n"
-                + formBody + "\r\n"
-                + "0\r\n\r\n"
 
             // The sync `shutdown()` is `noasync`, and `defer` can't await —
             // shut down explicitly on both exits instead.
             try await app.server.start(address: .hostname("127.0.0.1", port: 0))
-            let response: String
+            let status: HTTPResponseStatus
             do {
                 let port = try #require(app.http.server.shared.localAddress?.port)
-                response = try rawLoopbackHTTPExchange(port: port, request: request)
+                status = try await postChunkedForm(
+                    to: "http://127.0.0.1:\(port)\(path)", cookie: cookiePair, body: formBody)
             } catch {
                 await app.server.shutdown()
                 throw error
             }
             await app.server.shutdown()
-            let statusLine = response.components(separatedBy: "\r\n")[0]
-            #expect(
-                statusLine.contains("303"),
-                "Streamed-body extension save must pass CSRF (got '\(statusLine)')"
-            )
+            #expect(status == .seeOther, "Streamed-body extension save must pass CSRF (got \(status))")
 
             let saved = try await APIAssignmentExtension.query(on: app.db)
                 .filter(\.$assignmentID == assignment.requireID())
@@ -178,66 +161,32 @@ import Glibc
     }
 }
 
-/// Sends raw bytes to 127.0.0.1:`port` and returns the full response read
-/// until the server closes the connection (`Connection: close` request).
-/// Plain blocking POSIX sockets — the point is to exercise the real server
-/// pipeline, which VaporTesting's in-memory transport bypasses. The socket
-/// calls take pointers, and no safe API exists for them, so they are marked
-/// `unsafe`.
-private func rawLoopbackHTTPExchange(port: Int, request: String) throws -> String {
-    #if os(Linux)
-    let sockStream = Int32(SOCK_STREAM.rawValue)
-    #else
-    let sockStream = SOCK_STREAM
-    #endif
-    let fd = socket(AF_INET, sockStream, 0)
-    try #require(fd >= 0, "socket() failed: errno \(errno)")
-    defer { close(fd) }
-    // A suite time limit cancels the task but cannot interrupt a blocking
-    // recv(), so the socket itself gives up (#2361). Sixty seconds stays under
-    // the suite's two-minute limit and above a loaded CI runner's answer time:
-    // ten seconds timed out there, and the test then tore the app down under a
-    // request still in flight, which crashed the whole process.
-    let receiveTimeoutSeconds = 60
-    var receiveTimeout = timeval(tv_sec: receiveTimeoutSeconds, tv_usec: 0)
-    let timeoutSet = unsafe setsockopt(
-        fd, SOL_SOCKET, SO_RCVTIMEO, &receiveTimeout, socklen_t(MemoryLayout<timeval>.size))
-    try #require(timeoutSet == 0, "setsockopt(SO_RCVTIMEO) failed: errno \(errno)")
-
-    var addr = sockaddr_in()
-    addr.sin_family = sa_family_t(AF_INET)
-    addr.sin_port = in_port_t(port).bigEndian
-    addr.sin_addr.s_addr = UInt32(0x7F00_0001).bigEndian  // 127.0.0.1
-    let connectResult = withUnsafePointer(to: &addr) { pointer in
-        unsafe pointer.withMemoryRebound(to: sockaddr.self, capacity: 1) { sockaddrPointer in
-            unsafe connect(fd, sockaddrPointer, socklen_t(MemoryLayout<sockaddr_in>.size))
-        }
+/// POSTs `body` as a form to the real server and returns the status. The
+/// point is to exercise the real server pipeline, which VaporTesting's
+/// in-memory transport bypasses. A body of unknown length makes
+/// AsyncHTTPClient send it chunked, which is what makes Vapor stream it. The
+/// 303 is the answer, so redirects are not followed.
+private func postChunkedForm(to url: String, cookie: String, body: String) async throws -> HTTPResponseStatus {
+    // Sixty seconds stays under the suite's two-minute limit and above a
+    // loaded CI runner's answer time (#2361).
+    let client = HTTPClient(
+        configuration: .init(redirectConfiguration: .disallow, timeout: .init(read: .seconds(60))))
+    var request = HTTPClientRequest(url: url)
+    request.method = .POST
+    request.headers.add(name: "Cookie", value: cookie)
+    request.headers.add(name: "Content-Type", value: "application/x-www-form-urlencoded")
+    let chunks = AsyncStream<ByteBuffer> { continuation in
+        continuation.yield(ByteBuffer(string: body))
+        continuation.finish()
     }
-    try #require(connectResult == 0, "connect() failed: errno \(errno)")
+    request.body = .stream(chunks, length: .unknown)
 
-    let bytes = Array(request.utf8)
-    var sent = 0
-    while sent < bytes.count {
-        let n = bytes[sent...].withUnsafeBytes { raw in
-            unsafe send(fd, raw.baseAddress, raw.count, 0)
-        }
-        try #require(n > 0, "send() failed: errno \(errno)")
-        sent += n
+    let outcome: Result<HTTPResponseStatus, any Error>
+    do {
+        outcome = .success(try await client.execute(request, timeout: .seconds(60)).status)
+    } catch {
+        outcome = .failure(error)
     }
-
-    var response: [UInt8] = []
-    var chunk = [UInt8](repeating: 0, count: 4096)
-    while true {
-        let n = chunk.withUnsafeMutableBytes { raw in
-            unsafe recv(fd, raw.baseAddress, raw.count, 0)
-        }
-        if n == 0 { break }
-        // A timed-out recv() is a failure, not an empty response.
-        try #require(n > 0, "recv() failed (timeout \(receiveTimeoutSeconds) s): errno \(errno)")
-        response.append(contentsOf: chunk[0..<n])
-    }
-    return try #require(
-        String(bytes: response, encoding: .utf8),
-        "Response was not valid UTF-8"
-    )
+    try? await client.shutdown()
+    return try outcome.get()
 }
