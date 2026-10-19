@@ -29,7 +29,8 @@ today.
 | 5a | Lab goals: a grade goal counted per lab, `group_achievement_results`, each student earns their own lab's bonus | built |
 | 5b | Lab goals, the items: `group_class_item_coverage`, `itemsCovered` goals per lab, a lab's composite tiles and spares count | built |
 | 5c | Lab goals, the corpus: `class_coverage_runs.group_id`, one corpus run per lab over its students, `classCoverage` goals per lab | built |
-| 6 | The LEARN source: the existing group-category sweep writes the new tables; a D2L Sections reader; the category picker | not started |
+| 6a | The LEARN source, the sync: a D2L Sections reader, the group-category reader fixed, `LearnGroupSyncService` writes a synced set through `CourseGroupStore`, the old section category becomes a set | built |
+| 6b | The LEARN source, the picker: the BrightSpace tab chooses the lab set's source, and "Sync now" | not started |
 | later | Per-group deadlines; a TA's roster filtered to their groups; a `team` kind with a shared submission | not planned |
 
 ## The problem
@@ -69,7 +70,7 @@ itself must be able to make and fill a group.
 | The opponents | `WorkerJobRoutes.jobOpponentSet` / `jobOpponents` | Every classmate's latest submission in the course. |
 | The present page | `GET /testsetups/:id/leaderboard?present=1`, `LeaderboardPresentPage` | One board per assignment, polled by the projector. |
 | The arena | `WebRoutes+TournamentArena.swift` | Plays a browser-graded tournament in the presenter's browser. |
-| A LEARN section sync | `LearnSectionSyncService`, `APICourse.brightspaceSectionCategoryID`, `APICourseEnrollment.brightspaceSection` | Writes a free-text group name per enrollment every ten minutes. No form sets the category, no page reads the name, no test covers it. |
+| A LEARN section sync | `LearnSectionSyncService`, `APICourse.brightspaceSectionCategoryID`, `APICourseEnrollment.brightspaceSection` | Wrote a free-text group name per enrollment every ten minutes. No form set the category, no page read the name, no test covered it. Slice 6a replaced it with `LearnGroupSyncService`. |
 
 The ranking rows are all materialised at ingest (`recordLeaderboardEntry`,
 `recordClassItemCoverage` and their siblings, wired at both ingest paths). That
@@ -227,12 +228,9 @@ Nil means course-wide, which is what every existing row is.
 | The join code on the projector | During the session, by the students in the room | Slice 2. Needs nothing outside Chickadee. |
 | A CSV of `username,group` | Before the term, by the instructor; also the LEARN Groups export (group name, username, org-defined ID) | Slice 1. |
 | The Groups tab | Any time, by an instructor | Slice 1. |
-| A D2L group category through Valence | Every ten minutes | The reader exists (`fetchGroups`). Blocked on production credentials. Slice 6. |
-| D2L Sections through Valence | Every ten minutes | **The UW source**: the registrar assigns the labs and LEARN makes a Section per lab. No reader yet. Verify the route and the member field against the Valence reference first; the public search did not reach the page. Slice 6. |
+| A D2L group category through Valence | Every ten minutes | `fetchGroups`, a `learnGroups` set. Slice 6a. Blocked on production credentials. |
+| D2L Sections through Valence | Every ten minutes | **The UW source**: the registrar assigns the labs and LEARN makes a Section per lab. `fetchSections`, a `learnSections` set. Slice 6a. Blocked on production credentials. |
 | LTI 1.3 | never | NRPS sends no group per member. D2L lists AGS, NRPS and Deep Linking as its LTI Advantage services, not the Course Groups Service. |
-
-The existing reader handles group categories only, so slice 6 starts with
-the Sections reader.
 
 ## Slices
 
@@ -722,19 +720,78 @@ should be able to see it. The maintainer chose best effort on 2026-10-18.
     submission.
 - Tests: `LabCorpusGoalTests`.
 
-### Slice 6: the LEARN source
+### Slice 6a: the LEARN sync (built)
 
-- `LearnSectionSyncService` becomes `LearnGroupSyncService`, writes through
-  `CourseGroupStore`, upserts by external ID, marks a vanished group removed,
-  and stops writing `brightspaceSection`. A migration makes one `learnGroups`
-  set from a non-null `brightspaceSectionCategoryID`.
-- The BrightSpace tab gets the category and section picker and a "Sync now"
-  button.
-- `BrightSpaceAPIClient.fetchSections` first, after the route is verified:
-  it is the source the UW labs come from.
-- Tests with a fake `BrightSpaceGrading`: a first sync, a rename, a member who
-  moves, a group that disappears, a student the classlist cannot match. Today
-  the sweep has no tests at all.
+- **The readers.** `BrightSpaceAPIClient.fetchSections` reads
+  `GET /d2l/api/lp/(version)/(orgUnitId)/sections/`. The Valence reference
+  (`res/groups.html`) gives its return as a JSON array of `SectionData` in
+  the Fetch form: `SectionId`, `Name`, `Code`, `Description` and
+  `Enrollments`, the D2L user IDs of the explicitly enrolled users. Only that
+  form carries `Enrollments`. The paged section list (`sections/paged`) does
+  not, so the reader does not use it. The group-category and group lists
+  return a bare JSON array too. The old readers expected a paging envelope,
+  so they could not decode a real response. They now read the bare array
+  (`fetchArray`). `BrightSpaceGroupReaderTests` stubs the documented shapes.
+- **The sync.** `LearnGroupSyncService` replaces `LearnSectionSyncService`.
+  Every ten minutes it reads each synced set of a course that is bound to a
+  LEARN org unit and is not archived: a `learnSections` set reads the
+  Sections, a `learnGroups` set reads the category that its external ID names.
+  The classlist maps each member to a student of the course, as the grade
+  push does (`BrightSpaceIdentityIndex`). `CourseGroupStore.applySync` writes
+  the result in one transaction:
+  - a group matches by external ID, so a renamed section keeps its group;
+  - a new group goes at the end, in natural name order;
+  - a group that LEARN no longer lists loses its members. It is removed as
+    `removeGroup` removes it only when it never held a session. A lab that
+    held one stays active, because `LabGoalGroups` and the boards read active
+    groups only: removing it would take its joins, its board and its
+    students' class-goal bonus with it, and a sync must not do that;
+  - a removed group that LEARN lists again comes back as the same row;
+  - an empty group list or an empty classlist changes nothing. A course
+    whose labs or students all vanish at once is far more likely a LEARN
+    fault than a real change;
+  - every membership of the set is replaced, so a student who moved changes
+    group, and a student whom the classlist cannot match is in no group;
+  - a student in two groups of the set is placed in the first that LEARN
+    lists.
+  Only a synced set is written (`CourseGroupError.setNotSynced`), and only a
+  manual set is written by hand, as before.
+- **The migration.** `MoveLearnSectionCategoryToGroupSet` makes one
+  `learnGroups` set from a course's `brightspaceSectionCategoryID`, when the
+  course has no set yet. The lab features read the course's first set, so a
+  course that has a set keeps it. The sync no longer writes
+  `APICourseEnrollment.brightspaceSection`, and the migration clears the old
+  names. Both fields stay in the schema, and nothing else reads them. The
+  data export drops its `learnSection` field: the student's groups carry
+  the lab.
+- Tests: `LearnGroupSyncTests`, with a fake `BrightSpaceGrading`: a first
+  sync, a rename, a member who moves, a section that disappears and comes
+  back, a student the classlist cannot match, a group-category set, a manual
+  set, the sweep, and the migration.
+
+Known limits:
+
+- Nothing makes a synced set yet, except the migration. Slice 6b adds the
+  picker.
+- The sync places students only. An enrolled TA is in no group of a synced
+  set.
+- A lab that LEARN dropped after it held a session stays on the pickers with
+  no members, and its open session stays open. Nothing removes it yet: the
+  Groups tab does not edit a synced set.
+- A student placed only by membership, with no join, follows LEARN: a sync
+  after the deadline can move their lab. A graded student joined a session,
+  and a join up to the deadline decides their lab, so only a student who
+  submitted through `POST /api/v1/submissions`, which skips the session
+  gate, is exposed.
+- The migration makes a set with no groups until the first sync, and a
+  course that has a set already gets no synced set. Both need a course that
+  had the old category field set, which no form set.
+
+### Slice 6b: the picker
+
+- The BrightSpace tab chooses the source of the course's lab set: the
+  Sections, a group category (`fetchGroupCategories`), or manual, and a
+  "Sync now" button runs `syncLearnGroupSet` for the set at once.
 
 ## Deferred: what the same model can carry later
 

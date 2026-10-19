@@ -27,7 +27,7 @@ enum LearnRosterReconciler {
     ///
     /// Membership + normalization come from the shared
     /// `BrightSpaceIdentityIndex` (#1117), so the reconciler can never drift
-    /// from the grade-push / section-sync classlist matching.
+    /// from the grade-push / group-sync classlist matching.
     static func classify(
         candidateKeys: [String?],
         hasIdentityKey: Bool,

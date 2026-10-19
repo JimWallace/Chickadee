@@ -117,7 +117,6 @@ struct DataExportEnrollment: Codable, Sendable {
     let courseName: String
     let role: String
     let enrolledAt: Date?
-    let learnSection: String?
     /// The student's group in each of the course's group sets
     /// (docs/lab-groups.md). Empty when the course has none.
     var groups: [DataExportGroup] = []
@@ -321,7 +320,6 @@ private func gatherEnrollments(
                 courseName: row.course.name,
                 role: row.role.rawValue,
                 enrolledAt: row.enrolledAt,
-                learnSection: row.brightspaceSection,
                 groups: groupsByCourse[row.$course.id] ?? [],
                 sessionsJoined: sessionsByCourse[row.$course.id] ?? [],
                 avatarHandle: row.legacyAvatarHandle

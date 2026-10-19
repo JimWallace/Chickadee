@@ -63,6 +63,7 @@ enum BrightSpaceSyncError: Error, CustomStringConvertible, LocalizedError {
     case classlistFetchFailed(orgUnitID: String, status: Int)
     case groupCategoriesFetchFailed(orgUnitID: String, status: Int)
     case groupsFetchFailed(orgUnitID: String, categoryID: String, status: Int)
+    case sectionsFetchFailed(orgUnitID: String, status: Int)
 
     /// D2L response bodies are embedded in descriptions only up to this many
     /// characters. The body is D2L-controlled text that can echo user-specific
@@ -100,6 +101,8 @@ enum BrightSpaceSyncError: Error, CustomStringConvertible, LocalizedError {
             return "BrightSpace group-categories fetch for org unit '\(id)' failed (HTTP \(s))"
         case .groupsFetchFailed(let id, let cat, let s):
             return "BrightSpace groups fetch for org unit '\(id)' category '\(cat)' failed (HTTP \(s))"
+        case .sectionsFetchFailed(let id, let s):
+            return "BrightSpace sections fetch for org unit '\(id)' failed (HTTP \(s))"
         }
     }
 
@@ -180,15 +183,15 @@ struct GradeObjectJSON: Decodable {
 }
 
 /// A D2L group category (e.g. "Lab Sections"), which contains a set of groups
-/// (e.g. "Lab 1", "Lab 2", …). One category per course is designated as the
-/// section source via `APICourse.brightspaceSectionCategoryID`.
+/// (e.g. "Lab 1", "Lab 2", …). A `learnGroups` group set names one category
+/// by its external ID.
 struct BrightSpaceGroupCategory: Content, Sendable {
     let categoryID: String
     let name: String
 }
 
-/// One group within a D2L group category, together with the D2L internal user
-/// IDs of its current members.
+/// One group within a D2L group category, or one D2L Section, together with
+/// the D2L internal user IDs of its current members.
 struct BrightSpaceGroup: Content, Sendable {
     let groupID: String
     let name: String

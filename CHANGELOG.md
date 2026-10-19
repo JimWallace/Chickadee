@@ -9,6 +9,68 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.752] - 2026-10-19
+
+### Changed
+
+- **Typed reads of notebook headers.** A new `Core` type, `NotebookHeader`,
+  reads the kernel names and the `nbformat` key from a notebook with
+  `JSONDecoder`. It replaces `JSONSerialization` and `as?` casts at four
+  sniff sites: the language derivation at upload, the notebook-functions scan,
+  the worker's submission language sniff and the raw-submission extension
+  guess. The personalization result parse and the runner log capture also
+  decode typed values now. The notebook save guard stays on
+  `JSONSerialization`, because it must reject invalid JSON. The sniffs differ
+  from before in three edge cases: invalid JSON in a part that is not read no
+  longer stops the sniff, UTF-32 input with a byte-order mark is not read, and
+  the first of two duplicate keys wins.
+
+### Changed
+
+- **Smaller server and runner binaries, again.** The CI image build now also removes the symbol table from each release binary. The server binary goes from 171 MB to 121 MB and the runner from 80 MB to 64 MB, which makes each deploy pull about 10 MB less (compressed). The `debug-symbols-<tag>` artifact keeps the symbols, so a crash backtrace gets its function names when gdb loads that file.
+
+### Fixed
+
+- **Correct binary sizes for 0.5.748.** The 0.5.748 entry gave sizes that were not measured on the CI build. In CI, that change took the server binary from 301 MB to 171 MB and the runner from 98 MB to 80 MB, and each deploy pulls about 48 MB less (compressed).
+
+
+## [0.5.751] - 2026-10-19
+
+### Changed
+
+- **The browser grader loader is minified.** `scripts/build-runner-wasm.sh` now
+  runs esbuild with `--minify`. The vendored `Public/runner-wasm/runner-core.js`
+  goes from 128,889 to about 58,000 bytes (21,057 to about 14,800 gzip -9). The
+  wasm module does not change. The runner-wasm vendor workflow re-vendors the
+  loader after the merge.
+
+
+## [0.5.750] - 2026-10-19
+
+### Changed
+
+- **Lab groups (slice 6a): lab groups from LEARN.** A synced group set now reads its groups from LEARN every ten minutes: the D2L Sections of the course offering, or one D2L group category. The sync keeps a renamed group, moves a student who changed group, removes a group that LEARN no longer lists (a lab that held a session keeps its group and loses its members), and writes through the same group store as the Groups tab. The old section sweep, which wrote a free-text name per enrollment, is replaced, and a course's configured section category becomes a synced set. A picker on the BrightSpace tab follows in slice 6b. See `docs/lab-groups.md`.
+- The data export no longer has the `learnSection` field of an enrollment. Nothing writes it now; the export's group list carries a student's lab.
+
+### Fixed
+
+- The LEARN group-category and group readers now decode the bare JSON array that Valence returns. They expected a paging envelope, so they could not read a real response.
+
+
+## [0.5.749] - 2026-10-19
+
+### Changed
+
+- **The wasm bridge builds with the root package settings.** `wasm/Package.swift`
+  now treats warnings as errors and turns on the same upcoming features as the
+  root package. Two settings stay off, because the code that BridgeJS generates
+  does not build with them: `InternalImportsByDefault` and strict memory
+  safety. The built wasm is byte-identical.
+- **`count(where:)` replaces `filter(_:).count` in `Sources/`.** The new form
+  does not make a temporary array. A SwiftLint rule (`legacy_filter_count`)
+  stops new uses in `Sources/`.
+
+
 ## [0.5.748] - 2026-10-19
 
 ### Changed

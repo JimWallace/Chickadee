@@ -863,8 +863,10 @@ version 2 course bundle carry the library. See
 
 Multi-stage `Dockerfile` compiles both binaries with `--static-swift-stdlib`
 so no Swift toolchain is needed on the host. Each binary goes into the image
-without its debug data (`strip --strip-debug`); a tag build keeps that data as a
-`debug-symbols-<tag>` workflow artifact for 90 days. `docker-compose.yml` runs three
+without its debug data. The CI image build also removes the symbol table
+(`strip --strip-all`); a tag build keeps the debug data and the symbols as a
+`debug-symbols-<tag>` workflow artifact for 90 days. A local `Dockerfile` build
+keeps the symbols in the binary (`strip --strip-debug`). `docker-compose.yml` runs three
 services:
 
 | Service | Role |
