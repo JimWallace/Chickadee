@@ -489,7 +489,8 @@ most of this is one struct to write rather than a dozen arms to find. The
 current fields: display name, script extensions, generated extension, **source
 file extension**, inputs filename, kernel aliases, `editorSupport`, interpreter
 probe, `moduleResolution`, `workingDirectoryIsOnDefaultSearchPath`,
-`capabilityRequiresExecutableOutput` and `gradingCompilesBeforeRunning`.
+`executableOutputProbe` (read as `capabilityRequiresExecutableOutput`) and
+`gradingCompilesBeforeRunning`.
 
 Three of those are worth knowing before you write the literal, because each was
 added when a language broke on it:
@@ -503,9 +504,12 @@ added when a language broke on it:
   the four kernel facts behind it, or `.uploadOnly`. It is what lets a
   kernel-less language be expressed at all, and answering it `.uploadOnly` makes
   the language upload-only and native-worker-only by construction.
-- **`capabilityRequiresExecutableOutput`** — true only when grading *executes*
-  something it just built. `g++ --version` succeeds on a runner whose work
-  directory is mounted `noexec`; the compile then works and the `exec` does not.
+- **`executableOutputProbe`** — non-nil only when grading *executes*
+  something it just built, and then it is the trivial program that the runner
+  compiles and runs to prove it can. `capabilityRequiresExecutableOutput` is
+  derived from it, so the flag cannot be set without a probe (#2714).
+  `g++ --version` succeeds on a runner whose work directory is mounted
+  `noexec`; the compile then works and the `exec` does not.
 - **`gradingCompilesBeforeRunning`** is the *other* build question — does a
   compile step come first at all — and Java is why they are two: it compiles
   (`true`) but its `.class` files are read by the JVM, never exec'd (`false`).

@@ -343,6 +343,38 @@ because line numbers go out of date.
   made family dependencies "sticky", with references to deleted files that no
   edit could remove.
 
+### Does a pattern kind call a function: `PatternKind.callsFunction`
+
+- **Writer:** only the exhaustive switch in
+  `Sources/Core/Models/PatternFamily.swift`. It has no `default:` arm (#2714).
+- **Readers:**
+  - The identifier check on `functionName` and the reserved existence-guard
+    case key (`PatternFamilyValidator`).
+  - The existence guard and the generated filename list
+    (`PatternFamilyRenderer`).
+  - The notebook anchor (`NotebookTestAnchoring.familyTarget`).
+- **Rule:** the validator, the existence guard and the anchor must agree on
+  which kinds call a function. All three read this one value.
+  `PatternKindCallsFunctionTests` pins the answer for each kind.
+- **Parallel path:** `Public/pattern-family-editor.js` names
+  `variable_equality` and `program_io` for its case and stdin columns. It does
+  not read `callsFunction`. A new kind that calls no function must also go
+  there.
+
+### Compiled output that grading execs: `LanguageDescriptor.executableOutputProbe`
+
+- **Writer:** the language literals in `Sources/Core/LanguageDescriptor.swift`.
+  Only C++ sets a probe.
+- **Readers:**
+  - `capabilityRequiresExecutableOutput`, which is derived from it.
+  - The runner exec probe (`Sources/Worker/RunnerProfileDetector.swift`). A
+    runner that cannot compile and run the probe does not advertise the
+    language.
+  - The compiled-solution shape in `Utilities/TestScriptTemplates.swift`.
+- **Rule:** a language that needs executable output always has a probe
+  program, so the runner never advertises an unchecked capability
+  (`ExecutableOutputProbeTests`, #2714).
+
 ### The declared language and `languagesRequiredToGrade`
 
 - **Writers:**

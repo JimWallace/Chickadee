@@ -435,7 +435,21 @@ public struct LanguageDescriptor: Equatable, Sendable {
     /// test script and gets debugged as one. The descriptor used to claim
     /// "probe and invocation cannot skew" because both run `g++`; they skew on
     /// the step after `g++`.
-    public let capabilityRequiresExecutableOutput: Bool
+    ///
+    /// Derived from `executableOutputProbe`, so a language cannot need
+    /// executable output and have no program to prove it with.
+    public var capabilityRequiresExecutableOutput: Bool { executableOutputProbe != nil }
+
+    /// The trivial program whose compile-and-exec proves that a runner can run
+    /// what this language's compiler writes, or nil when grading never execs
+    /// build output. A non-nil value is what `capabilityRequiresExecutableOutput`
+    /// means.
+    ///
+    /// The fact used to be a `Bool` here and a separate per-language switch in
+    /// the runner. A language that set the `Bool` and had no probe program got
+    /// "nothing to prove", and the runner advertised a capability it never
+    /// checked. One optional value makes that state impossible to write.
+    public let executableOutputProbe: ExecutableOutputProbe?
 
     /// Whether grading BUILDS the submission before it runs it.
     ///
@@ -475,6 +489,17 @@ public struct LanguageDescriptor: Equatable, Sendable {
         }
     }
 
+    /// A source file that compiles to a binary which exits 0.
+    public struct ExecutableOutputProbe: Equatable, Sendable {
+        public let filename: String
+        public let source: String
+
+        public init(filename: String, source: String) {
+            self.filename = filename
+            self.source = source
+        }
+    }
+
     public init(
         displayName: String,
         scriptExtensions: Set<String>,
@@ -491,7 +516,7 @@ public struct LanguageDescriptor: Equatable, Sendable {
         scriptRunCommand: String,
         moduleResolution: ModuleResolution,
         workingDirectoryIsOnDefaultSearchPath: Bool,
-        capabilityRequiresExecutableOutput: Bool,
+        executableOutputProbe: ExecutableOutputProbe?,
         gradingCompilesBeforeRunning: Bool
     ) {
         self.displayName = displayName
@@ -509,7 +534,7 @@ public struct LanguageDescriptor: Equatable, Sendable {
         self.scriptRunCommand = scriptRunCommand
         self.moduleResolution = moduleResolution
         self.workingDirectoryIsOnDefaultSearchPath = workingDirectoryIsOnDefaultSearchPath
-        self.capabilityRequiresExecutableOutput = capabilityRequiresExecutableOutput
+        self.executableOutputProbe = executableOutputProbe
         self.gradingCompilesBeforeRunning = gradingCompilesBeforeRunning
     }
 }
@@ -630,7 +655,7 @@ extension AssignmentLanguage {
         workingDirectoryIsOnDefaultSearchPath: false,
         // Interpreted: the runner spawns the probed interpreter on a
         // script, so probing IS invoking. Nothing is produced to execute.
-        capabilityRequiresExecutableOutput: false,
+        executableOutputProbe: nil,
         // Interpreted: the runner hands the source to the interpreter it
         // probed for, and nothing is built first.
         gradingCompilesBeforeRunning: false
@@ -663,7 +688,7 @@ extension AssignmentLanguage {
         workingDirectoryIsOnDefaultSearchPath: true,
         // Interpreted: the runner spawns the probed interpreter on a
         // script, so probing IS invoking. Nothing is produced to execute.
-        capabilityRequiresExecutableOutput: false,
+        executableOutputProbe: nil,
         // Interpreted: the runner hands the source to the interpreter it
         // probed for, and nothing is built first.
         gradingCompilesBeforeRunning: false
@@ -700,7 +725,7 @@ extension AssignmentLanguage {
         workingDirectoryIsOnDefaultSearchPath: true,
         // Interpreted: the runner spawns the probed interpreter on a
         // script, so probing IS invoking. Nothing is produced to execute.
-        capabilityRequiresExecutableOutput: false,
+        executableOutputProbe: nil,
         // Interpreted: the runner hands the source to the interpreter it
         // probed for, and nothing is built first.
         gradingCompilesBeforeRunning: false
@@ -743,7 +768,7 @@ extension AssignmentLanguage {
         workingDirectoryIsOnDefaultSearchPath: true,
         // Interpreted: the runner spawns the probed interpreter on a
         // script, so probing IS invoking. Nothing is produced to execute.
-        capabilityRequiresExecutableOutput: false,
+        executableOutputProbe: nil,
         // Interpreted: the runner hands the source to the interpreter it
         // probed for, and nothing is built first.
         gradingCompilesBeforeRunning: false
@@ -799,7 +824,8 @@ extension AssignmentLanguage {
         // The generated wrapper compiles a binary and `exec`s it, so a
         // runner must be able to run what g++ writes into its work
         // directory — not merely own a g++. See the property's doc.
-        capabilityRequiresExecutableOutput: true,
+        executableOutputProbe: LanguageDescriptor.ExecutableOutputProbe(
+            filename: "probe.cpp", source: "int main(void) { return 0; }\n"),
         // The wrapper runs g++ before anything of the student's executes.
         gradingCompilesBeforeRunning: true
     )
@@ -853,7 +879,7 @@ extension AssignmentLanguage {
         workingDirectoryIsOnDefaultSearchPath: true,
         // Interpreted: the runner hands a file to `racket`. Nothing is
         // built, so there is no second capability to prove.
-        capabilityRequiresExecutableOutput: false,
+        executableOutputProbe: nil,
         // Interpreted: the runner hands the source to the interpreter it
         // probed for, and nothing is built first.
         gradingCompilesBeforeRunning: false
@@ -936,7 +962,7 @@ extension AssignmentLanguage {
         // nothing is ever handed to the kernel as an executable. The
         // capability this language can genuinely lack is the compiler, and
         // that is covered by probing `javac` above.
-        capabilityRequiresExecutableOutput: false,
+        executableOutputProbe: nil,
         // True even though the fact above is false, and the pair is the point:
         // grading runs `javac` first, but what it produces is loaded by the
         // JVM rather than exec'd. A scaffold keyed on the exec fact alone put

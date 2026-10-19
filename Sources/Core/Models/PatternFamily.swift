@@ -128,6 +128,29 @@ public enum PatternKind: String, Codable, Sendable, Equatable, CaseIterable {
     case programIO = "program_io"
 }
 
+extension PatternKind {
+    /// Whether this kind calls `PatternFamily.functionName`. When true, the
+    /// name must be a valid call target in the assignment's language, the
+    /// generated script guards that it exists, and a notebook check anchors on
+    /// it. When false (`.variableEquality` reads a module-level variable,
+    /// `.programIO` runs the whole program), `functionName` is ignored.
+    ///
+    /// EXHAUSTIVE, with no `default:`, so a new kind must state its answer.
+    /// The fact used to be a protocol-extension default of `true` on the
+    /// kind handler and a `default:` arm in `NotebookTestAnchoring`: a new
+    /// kind that called no function got an identifier check and an anchor on
+    /// a name it never reads.
+    public var callsFunction: Bool {
+        switch self {
+        case .boundaryEquality, .approximateEquality, .returnTypeCheck, .exceptionExpected,
+            .performanceThreshold, .stdoutEquality, .unorderedEquality, .differential:
+            return true
+        case .variableEquality, .programIO:
+            return false
+        }
+    }
+}
+
 /// How a `.programIO` case's expected text is matched against what the
 /// program printed. Family-level: one program, many inputs, compared the
 /// same way — a family that needs two comparisons is two families.
