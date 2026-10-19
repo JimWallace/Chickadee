@@ -9,6 +9,17 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.751] - 2026-10-19
+
+### Changed
+
+- **The browser grader loader is minified.** `scripts/build-runner-wasm.sh` now
+  runs esbuild with `--minify`. The vendored `Public/runner-wasm/runner-core.js`
+  goes from 128,889 to about 58,000 bytes (21,057 to about 14,800 gzip -9). The
+  wasm module does not change. The runner-wasm vendor workflow re-vendors the
+  loader after the merge.
+
+
 ## [0.5.750] - 2026-10-19
 
 ### Changed
