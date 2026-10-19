@@ -9,6 +9,13 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.740] - 2026-10-19
+
+### Added
+
+- **Lab groups (slice 4b): spares per group.** On a Class composite that runs once per lab group, "Fill a hole" now fills a hole in the image of the student's own lab, while they play in that lab's open session. Remove on "Who joined" also deletes the student's finished spares in the group. See `docs/lab-groups.md`.
+
+
 ## [0.5.739] - 2026-10-19
 
 ### Changed
