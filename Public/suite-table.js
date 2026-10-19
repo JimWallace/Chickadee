@@ -180,8 +180,9 @@
         // target means a full-container `querySelectorAll` to clear indicators
         // and a `getBoundingClientRect()` — a forced synchronous reflow — for
         // an answer that cannot have changed. Reflow-per-event is the shape
-        // that caused the post-boot editor freeze (docs/browser-freeze-
-        // investigation.md); it does not belong on a hot path here either.
+        // that caused the post-boot editor freeze
+        // (docs/archive/browser-freeze-investigation.md); it does not belong
+        // on a hot path here either.
         var dragItem      = null;   // the dragged row's item, resolved once
         var dragIsCheck   = false;  // …and whether it is a check
         var lastOverKey   = null;   // target row + section + zone last decided

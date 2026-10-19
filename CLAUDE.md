@@ -122,8 +122,8 @@ notebook page spawns must be in `NotebookAssetIsolationMiddleware.isolatedWorker
 |---|---|---|---|
 | Python | xeus-python kernel | `.py` | `docs/architecture.md` |
 | R | xeus-r kernel | `.R` | `docs/r-support.md` |
-| Lua | xeus-lua kernel | `.lua` | `docs/adding-a-xeus-kernel.md` |
-| Octave | xeus-octave kernel | `.m` | `docs/adding-a-xeus-kernel.md` |
+| Lua | xeus-lua kernel | `.lua` | `docs/archive/xeus-kernel-postmortems.md` |
+| Octave | xeus-octave kernel | `.m` | `docs/archive/xeus-kernel-postmortems.md` |
 | C++ | upload-only (a decision) | `.sh` wrapper | `docs/cpp-support.md` |
 | Racket | upload-only (no kernel exists) | `.rkt` | `docs/multi-language-audit.md` |
 | Java | upload-only (both reasons) | `.sh` wrapper | `docs/java-support.md` |
@@ -519,7 +519,7 @@ MCP tool count.
 **Feature backlog:** more personalization and notebook checks (for example
 per-student refs in pattern kinds beyond the three equality kinds); pattern
 kinds beyond the ten in `PatternKind`; SSO tests with providers other than
-UWaterloo DUO; refresh-token handling; more gamification (leaderboards, badges
+UWaterloo DUO; refresh-token handling; more gamification (badges
 beyond First-Try Perfect).
 
 ---
