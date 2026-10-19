@@ -19,28 +19,19 @@ set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$repo_root"
+# shellcheck source=lib/grep-guard.sh
+. "scripts/lib/grep-guard.sh"
 
-offenders=""
-checked=0
-while IFS= read -r hit; do
-  [ -z "$hit" ] && continue
-  file="${hit%%:*}"
-  rest="${hit#*:}"
-  line="${rest%%:*}"
-  text="${rest#*:}"
-  # A comment that mentions the attribute is not a declaration.
-  if printf '%s' "$text" | grep -qE '^[[:space:]]*//'; then continue; fi
-  # Fluent models are exempt (see above): `Model` is a conformance on the
-  # declaration line, before the attribute, with any others between.
-  if printf '%s' "$text" | grep -qE '(^|[:,])[[:space:]]*Model[[:space:]]*,.*@unchecked[[:space:]]+Sendable'; then continue; fi
-  checked=$((checked + 1))
-  offenders+="  $file:$line"$'\n'
-done < <(grep -rnF --include='*.swift' '@unchecked Sendable' Sources/ Tests/ || true)
+# A comment that mentions the attribute is not a declaration; code_matches
+# skips it. Fluent models are exempt (see above): `Model` is a conformance on
+# the declaration line, before the attribute, with any others between.
+offenders=$(code_matches '@unchecked[[:space:]]+Sendable' Sources/ Tests/ \
+  | grep -vE '[:,][[:space:]]*Model[[:space:]]*,.*@unchecked[[:space:]]+Sendable' || true)
 
 if [ -n "$offenders" ]; then
   echo "ERROR: @unchecked Sendable outside a Fluent model, with or without a comment."
   echo
-  printf '%s' "$offenders"
+  printf '%s\n' "$offenders" | sed 's/^/  /'
   echo
   echo "The attribute turns the compiler's data-race check off. Make the type"
   echo "an actor, give its state a Mutex, or make it plainly Sendable. Fluent"

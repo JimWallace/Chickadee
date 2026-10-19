@@ -24,6 +24,8 @@ repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$repo_root"
 # shellcheck source=lib/css.sh
 . "scripts/lib/css.sh"
+# shellcheck source=lib/grep-guard.sh
+. "scripts/lib/grep-guard.sh"
 
 # Every page is an Elementary view (docs/elementary-spike.md). The rules below
 # that grep markup source read the view files; the rules that need rendered
@@ -95,7 +97,7 @@ fi
 # rule is absolute.  A view could only carry one in an attribute value or an
 # inline script, and both are refused on the rendered page too; this reads
 # the source, so it also sees a branch that no fixture renders.
-view_alerts="$(grep -n 'alert(' "${views[@]}" || true)"
+view_alerts="$(code_matches 'alert\(' "${views[@]}")"
 if [ -n "$view_alerts" ]; then
   status=1
   echo "ERROR: new native alert() in a Swift view."
@@ -111,7 +113,7 @@ fi
 # move 3b encourages.  Top-level Public/*.js only; the vendored/generated
 # trees (Public/jupyterlite, Public/vendor, Public/runner-wasm) are not ours
 # to lint.  Also at zero since S9.
-js_alerts="$(grep -n 'alert(' Public/*.js || true)"
+js_alerts="$(code_matches 'alert\(' Public/*.js)"
 if [ -n "$js_alerts" ]; then
   status=1
   echo "ERROR: new native alert() in first-party JS."

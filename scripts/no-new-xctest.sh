@@ -17,8 +17,10 @@ set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$repo_root"
+# shellcheck source=lib/grep-guard.sh
+. "scripts/lib/grep-guard.sh"
 
-actual=$(grep -rlE "^import (XCTest|XCTVapor)$" Tests/ 2>/dev/null | sort || true)
+actual=$(code_matches '^import (XCTest|XCTVapor)$' Tests/)
 
 if [ -n "$actual" ]; then
   echo "ERROR: New file(s) import XCTest/XCTVapor. Use Swift Testing + VaporTesting:"
