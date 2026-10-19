@@ -3,8 +3,10 @@
 // Coverage goals of an activity that runs once per lab group
 // (docs/lab-groups.md, slice 5c): a lab's corpus holds only its own students
 // and is debounced on its own; a student's result schedules the run of the
-// lab of the session they submitted in, and none without one; and each lab's
-// coverage goal reads its own latest run, never the whole class's.
+// lab of the session they submitted in, and none without one, and on a
+// whole-class activity the class's run; each lab's coverage goal reads its
+// own latest run, never the whole class's; and course delete removes the
+// lab runs.
 
 import Core
 import Fluent
@@ -51,8 +53,9 @@ import VaporTesting
     }
 
     /// A per-group bug hunt with two slots and a coverage goal, two labs, and
-    /// one student in each lab's open session.
-    private func fixture(_ app: Application) async throws -> Fixture {
+    /// one student in each lab's open session; with `runsPerGroup` off, the
+    /// same bug hunt for the whole class, with no session.
+    private func fixture(_ app: Application, runsPerGroup: Bool = true) async throws -> Fixture {
         let courseID = try await app.testCourseID(enrollmentMode: .auto)
         let setupID = "lcorp_setup"
         let starter = notebookJSON(cells: [
@@ -64,7 +67,7 @@ import VaporTesting
         let props = TestProperties(
             testSuites: [TestSuiteEntry(tier: .pub, script: "test_corpus.sh")],
             language: nil,
-            activity: ClassActivity(kind: .bestMetric, runsPerGroup: true),
+            activity: ClassActivity(kind: .bestMetric, runsPerGroup: runsPerGroup),
             achievements: [
                 Achievement(
                     id: "cov", name: "Lab coverage", scope: .classWide,
@@ -88,7 +91,7 @@ import VaporTesting
         for (name, lab) in [("lcorp_ada", labA), ("lcorp_alan", labB), ("lcorp_grace", nil)] {
             let user = try await arInsertStudent(username: name, on: app)
             try await arEnrollStudentInTestCourse(user, on: app)
-            if let lab {
+            if runsPerGroup, let lab {
                 let session = try await ActivitySessionStore.open(
                     assignmentID: assignmentID, groupID: lab, by: nil, now: Date().addingTimeInterval(-60),
                     on: app.db)
@@ -158,6 +161,20 @@ import VaporTesting
         }
     }
 
+    @Test func aResultOnAWholeClassActivitySchedulesTheClassRun() async throws {
+        try await withAssignmentRoutesApp { app in
+            let f = try await fixture(app, runsPerGroup: false)
+            try await submit(app, f, user: f.ada, id: "lcorp_a")
+            try await submit(app, f, user: f.grace, id: "lcorp_g")
+            await scheduleClassCorpusRun(
+                afterSubmission: "lcorp_g", userID: try f.grace.requireID(), setupID: f.setupID, app: app,
+                on: app.db, logger: app.logger)
+            let classRuns = try await runs(app, group: nil)
+            #expect(classRuns.count == 1, "a session does not matter for the whole class")
+            #expect(Set(classRuns.first?.contributors ?? []) == [try f.ada.requireID(), try f.grace.requireID()])
+        }
+    }
+
     @Test func eachLabsCoverageGoalReadsItsOwnRun() async throws {
         try await withAssignmentRoutesApp { app in
             let f = try await fixture(app)
@@ -188,6 +205,33 @@ import VaporTesting
             #expect(try await percent(f.labA) == 90)
             #expect(try await percent(f.labB) == 40)
             #expect(try await APIAchievementResult.query(on: app.db).count() == 0, "no whole-class snapshot")
+        }
+    }
+
+    @Test func deletingTheCourseRemovesTheLabRuns() async throws {
+        try await withAssignmentRoutesApp { app in
+            let cookie = try await loginAsAdmin("lcorp_admin", on: app)
+            let f = try await fixture(app)
+            try await submit(app, f, user: f.ada, id: "lcorp_a")
+            await scheduleClassCorpusRun(setupID: f.setupID, groupID: f.labA, app: app, on: app.db, logger: app.logger)
+            #expect(try await runs(app, group: f.labA).count == 1)
+
+            let courseID = try await app.testCourseID(enrollmentMode: .auto)
+            let course = try #require(try await APICourse.find(courseID, on: app.db))
+            course.isArchived = true
+            // Past the 365-day retention window, so deletion is permitted.
+            course.archivedAt = Date().addingTimeInterval(-400 * 86_400)
+            try await course.save(on: app.db)
+            let path = "/admin/courses/\(courseID.uuidString)"
+            let (token, boundCookie) = try await csrfFields(for: path, cookie: cookie, on: app)
+            try await app.asyncTest(
+                .POST, "\(path)/delete",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: boundCookie)
+                    try req.content.encode(["_csrf": token], as: .urlEncodedForm)
+                },
+                afterResponse: { res in #expect(res.status == .seeOther) })
+            #expect(try await APIClassCoverageRun.query(on: app.db).count() == 0, "a lab run names its contributors")
         }
     }
 }

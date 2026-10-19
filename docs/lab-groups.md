@@ -707,9 +707,19 @@ should be able to see it. The maintainer chose best effort on 2026-10-18.
   completed run. Every goal shape is now counted per lab, so a per-group
   activity has no whole-class snapshot (`LabGoalGroups.classSnapshots` is
   empty for it).
-- Known limit, accepted: a lab's corpus holds the latest submission of each
-  of its students, wherever it was made; a student who moved labs brings
-  their work to the new lab's corpus.
+- Known limits, accepted:
+  - A lab's corpus holds the latest submission of each of its students,
+    wherever it was made; a student who moved labs brings their work to the
+    new lab's corpus. The old lab's last run keeps their work until another
+    submission in that lab starts its next run.
+  - Remove on "Who joined" changes a lab's students, so the lab's next
+    corpus run leaves out a removed student's work, and the coverage number
+    can drop before the freeze. Item coverage keeps a removed student's
+    items. The run already completed keeps their work until the next one.
+  - A submission made after its session closed schedules no lab run, as it
+    covers no lab item and does not rank (decision 1). A later run in the
+    lab includes it, because the corpus reads each student's latest
+    submission.
 - Tests: `LabCorpusGoalTests`.
 
 ### Slice 6: the LEARN source
