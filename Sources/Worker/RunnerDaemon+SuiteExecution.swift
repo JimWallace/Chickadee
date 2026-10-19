@@ -23,7 +23,7 @@ extension WorkerDaemon {
         opponentDir: URL?,
         opponentDirs: [URL],
         job: Job
-    ) async throws -> (outcomes: [TestOutcome], matches: [MatchReport]?) {
+    ) async -> (outcomes: [TestOutcome], matches: [MatchReport]?) {
         // Phase 1 of issue #461 — surface the per-(student, assignment) seed to
         // the grading subprocess. Nil/empty seed means non-personalized job;
         // leaving the env var unset preserves legacy behaviour.

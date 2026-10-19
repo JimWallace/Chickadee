@@ -72,7 +72,7 @@ extension WorkerDaemon {
         defer { removeWorkspaceItem(at: prepared.testSetupDir, label: "test_setup_dir", job: job) }
 
         let testExecutionStartedAt = Date()
-        let (outcomes, matches) = try await executeTestSuites(
+        let (outcomes, matches) = await executeTestSuites(
             manifest: prepared.manifest,
             testSetupDir: prepared.testSetupDir,
             opponentDir: prepared.opponentDir,

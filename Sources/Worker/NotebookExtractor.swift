@@ -18,7 +18,7 @@ struct NotebookExtractor {
     /// through a private second implementation here, so the exemption table
     /// governed six languages and Python answered to nothing. The two agreed by
     /// coincidence; a tightening of one would have silently skipped the other.
-    func notebookJSONObject(from data: Data, filename: String) throws -> [String: Any] {
+    func notebookJSONObject(from data: Data, filename: String) throws(SubmissionNormalizationError) -> [String: Any] {
         try SubmissionValidation.validatedNotebook(
             data: data, filename: filename, language: .python)
     }
@@ -36,7 +36,9 @@ struct NotebookExtractor {
         return true
     }
 
-    func extractPythonSource(from notebook: [String: Any], filename: String) throws -> NotebookExtraction {
+    func extractPythonSource(
+        from notebook: [String: Any], filename: String
+    ) throws(SubmissionNormalizationError) -> NotebookExtraction {
         guard let cells = notebook["cells"] as? [[String: Any]] else {
             throw SubmissionNormalizationError.invalidSubmission(filename, .python)
         }
@@ -83,7 +85,7 @@ private func resolveNotebookForExtraction(
     forcedLanguage: AssignmentLanguage?,
     isStudentSubmission: Bool,
     warnings: inout [String]
-) throws -> ResolvedNotebook? {
+) throws(SubmissionNormalizationError) -> ResolvedNotebook? {
     // The language has to be known before the file can be validated, because
     // the guarantees are declared per language — so the bytes are read
     // leniently first and validated once the language is settled.
