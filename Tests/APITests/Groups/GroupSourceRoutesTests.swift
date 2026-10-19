@@ -5,7 +5,8 @@
 // Sections, syncs them again, and stops the sync, which keeps the groups and
 // makes them editable; a failed first read puts the set back; a lab made in
 // Chickadee keeps its row and its session when the set switches to LEARN; a
-// source change ends the join placements; "Sync now" refuses a manual set; a
+// source change ends the join placements, and a failed read keeps them;
+// "Sync now" refuses a manual set; a
 // course not linked to LEARN is refused; a TA may not change the source; and
 // the tab shows each state's controls. LEARN is a stubbed `app.client` that
 // answers the Sections and the classlist routes of org unit 900 only.
@@ -233,34 +234,57 @@ private final class LearnStub: Client, Sendable {
         }
     }
 
+    /// A manual set with "Lab 101", an open per-group session for it, and
+    /// ada placed in it by her join. Returns the set.
+    private func joinPlacement(_ app: Application, course: APICourse) async throws -> APICourseGroupSet {
+        let courseID = try course.requireID()
+        let set = try await CourseGroupStore.createSet(courseID: courseID, name: "Labs", on: app.db)
+        let lab = try await CourseGroupStore.addGroup(named: "Lab 101", to: set, on: app.db)
+        // The join places a student only for an activity run per group.
+        let props = TestProperties(
+            testSuites: [TestSuiteEntry(tier: .pub, script: "t.py")], language: .python,
+            activity: ClassActivity(kind: .bestMetric, runsPerGroup: true))
+        let manifest = try #require(String(data: JSONEncoder().encode(props), encoding: .utf8))
+        try await makeTestSetup(on: app, id: "gsrc_setup", courseID: courseID, manifest: manifest)
+        let assignment = try await makeTestAssignment(on: app, testSetupID: "gsrc_setup", courseID: courseID)
+        let session = try await ActivitySessionStore.open(
+            assignmentID: try assignment.requireID(), groupID: try lab.requireID(), by: nil,
+            now: Date().addingTimeInterval(-60), on: app.db)
+        let ada = try #require(try await APIUser.query(on: app.db).filter(\.$username == "gsrc_ada").first())
+        let joinedAt = Date().addingTimeInterval(-30)
+        try await ActivitySessionStore.join(
+            code: ActivitySessionCode.code(secret: session.codeSecret, at: joinedAt),
+            userID: try ada.requireID(), now: joinedAt, on: app.db)
+        #expect(try await placed(app) == [true], "the join placed ada in the manual set")
+        return set
+    }
+
+    private func placed(_ app: Application) async throws -> [Bool] {
+        try await APIActivitySessionAttendance.query(on: app.db).all().map(\.placedInGroup)
+    }
+
     @Test func aSourceChangeEndsTheJoinPlacements() async throws {
         try await withAssignmentRoutesApp { app in
             let course = try await connect(app)
-            let courseID = try course.requireID()
-            let set = try await CourseGroupStore.createSet(courseID: courseID, name: "Labs", on: app.db)
-            let lab = try await CourseGroupStore.addGroup(named: "Lab 101", to: set, on: app.db)
-            // The join places a student only for an activity run per group.
-            let props = TestProperties(
-                testSuites: [TestSuiteEntry(tier: .pub, script: "t.py")], language: .python,
-                activity: ClassActivity(kind: .bestMetric, runsPerGroup: true))
-            let manifest = try #require(String(data: JSONEncoder().encode(props), encoding: .utf8))
-            try await makeTestSetup(on: app, id: "gsrc_setup", courseID: courseID, manifest: manifest)
-            let assignment = try await makeTestAssignment(on: app, testSetupID: "gsrc_setup", courseID: courseID)
-            let session = try await ActivitySessionStore.open(
-                assignmentID: try assignment.requireID(), groupID: try lab.requireID(), by: nil,
-                now: Date().addingTimeInterval(-60), on: app.db)
-            let ada = try #require(try await APIUser.query(on: app.db).filter(\.$username == "gsrc_ada").first())
-            let joinedAt = Date().addingTimeInterval(-30)
-            try await ActivitySessionStore.join(
-                code: ActivitySessionCode.code(secret: session.codeSecret, at: joinedAt),
-                userID: try ada.requireID(), now: joinedAt, on: app.db)
-            func placed() async throws -> [Bool] {
-                try await APIActivitySessionAttendance.query(on: app.db).all().map(\.placedInGroup)
-            }
-            #expect(try await placed() == [true], "the join placed ada in the manual set")
+            let cookie = try await arLoginAsInstructor(on: app)
+            _ = try await joinPlacement(app, course: course)
 
-            try await CourseGroupStore.setSource(.learnSections, courseID: courseID, on: app.db)
-            #expect(try await placed() == [false])
+            _ = try await post(
+                "/instructor/groups/source", fields: ["source": "learnSections"], cookie: cookie, on: app)
+            #expect(try await placed(app) == [false])
+        }
+    }
+
+    @Test func aFailedReadKeepsTheJoinPlacements() async throws {
+        try await withAssignmentRoutesApp { app in
+            let course = try await connect(app, orgUnit: "901")
+            let cookie = try await arLoginAsInstructor(on: app)
+            let set = try await joinPlacement(app, course: course)
+
+            _ = try await post(
+                "/instructor/groups/source", fields: ["source": "learnSections"], cookie: cookie, on: app)
+            #expect(try await APICourseGroupSet.find(set.id, on: app.db)?.source == .manual)
+            #expect(try await placed(app) == [true], "Remove can still undo the join's placement")
         }
     }
 

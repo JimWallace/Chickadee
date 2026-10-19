@@ -819,9 +819,9 @@ group categories would call LEARN on every page load.
   and gives it that external ID. A lab keeps its row, its sessions, its joins
   and its board when the set switches to LEARN, and no second lab of the
   same name appears.
-- **A switch ends the join placements.** `setSource` clears
-  `placed_in_group` on every attendance row of the set's groups when the
-  source changes. A placement from before the change is no longer the join's
+- **A switch ends the join placements.** After a source change succeeds,
+  `CourseGroupStore.endJoinPlacements` clears `placed_in_group` on every
+  attendance row of the set's groups. A failed first read keeps them. A placement from before the change is no longer the join's
   to undo, so Remove keeps a membership that LEARN or the old source gave.
 - **Tests.** `GroupSourceRoutesTests` drives the routes against a stubbed
   LEARN (`app.client`): read from the Sections, "Sync now", "Stop syncing",

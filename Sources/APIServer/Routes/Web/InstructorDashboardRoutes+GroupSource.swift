@@ -53,10 +53,17 @@ extension InstructorDashboardRoutes {
                 }
                 return try await renderGroupsPage(req: req, flash: FlashMessages(error: problem))
             }
+            if restore?.source != CourseGroupSource.learnSections.rawValue {
+                try await CourseGroupStore.endJoinPlacements(in: set, on: req.db)
+            }
             await Self.auditGroups(change: "source_learn_sections", title: set.name, courseID: courseID, on: req)
             return req.redirect(to: "/instructor/groups?notice=\(GroupsNotice.learnSynced.rawValue)")
         case CourseGroupSource.manual.rawValue:
+            let previous = try await CourseGroupStore.sets(courseID: courseID, on: req.db).first?.sourceRaw
             let set = try await CourseGroupStore.setSource(.manual, courseID: courseID, on: req.db)
+            if previous != CourseGroupSource.manual.rawValue {
+                try await CourseGroupStore.endJoinPlacements(in: set, on: req.db)
+            }
             await Self.auditGroups(change: "source_manual", title: set.name, courseID: courseID, on: req)
             return req.redirect(to: "/instructor/groups?notice=\(GroupsNotice.learnStopped.rawValue)")
         default:

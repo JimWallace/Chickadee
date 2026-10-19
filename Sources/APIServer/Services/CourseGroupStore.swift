@@ -208,11 +208,8 @@ enum CourseGroupStore {
     /// (`manual`) or the LEARN Sections of the course offering
     /// (`learnSections`). A course with no set gets one. The groups and the
     /// memberships stay as they are: a manual set keeps the groups that LEARN
-    /// gave it, and a LEARN set changes at its next sync.
-    ///
-    /// A change of source ends every join placement of the set's groups
-    /// (`placed_in_group`): a membership from before the change is no longer
-    /// the join's to undo.
+    /// gave it, and a LEARN set changes at its next sync. A caller whose
+    /// change succeeds ends the join placements (`endJoinPlacements`).
     @discardableResult
     static func setSource(
         _ source: CourseGroupSource, courseID: UUID, on db: any Database
@@ -220,21 +217,24 @@ enum CourseGroupStore {
         let set =
             try await sets(courseID: courseID, on: db).first
             ?? APICourseGroupSet(courseID: courseID, name: "Lab sections", source: source)
-        let changed = set.id != nil && set.sourceRaw != source.rawValue
         set.sourceRaw = source.rawValue
         set.externalID = nil
         try await set.save(on: db)
-        if changed {
-            let groupIDs = try await groups(inSet: try set.requireID(), includingRemoved: true, on: db).compactMap(\.id)
-            let sessionIDs = try await APIActivitySession.query(on: db).filter(\.$groupID ~~ groupIDs).all()
-                .compactMap(\.id)
-            try await APIActivitySessionAttendance.query(on: db)
-                .filter(\.$sessionID ~~ sessionIDs)
-                .filter(\.$placedInGroup == true)
-                .set(\.$placedInGroup, to: false)
-                .update()
-        }
         return set
+    }
+
+    /// Ends every join placement of the set's groups (`placed_in_group`)
+    /// after a change of source: a membership from before the change is no
+    /// longer the join's to undo, so Remove keeps it.
+    static func endJoinPlacements(in set: APICourseGroupSet, on db: any Database) async throws {
+        let groupIDs = try await groups(inSet: try set.requireID(), includingRemoved: true, on: db).compactMap(\.id)
+        let sessionIDs = try await APIActivitySession.query(on: db).filter(\.$groupID ~~ groupIDs).all()
+            .compactMap(\.id)
+        try await APIActivitySessionAttendance.query(on: db)
+            .filter(\.$sessionID ~~ sessionIDs)
+            .filter(\.$placedInGroup == true)
+            .set(\.$placedInGroup, to: false)
+            .update()
     }
 
     /// One group or section as LEARN lists it.

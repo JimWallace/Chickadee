@@ -662,9 +662,10 @@ because line numbers go out of date.
     must not remove a group that held a session.
   - A source change (`CourseGroupStore.setSource`) changes only the source:
     the groups and memberships change at the next sync, and a group made in
-    Chickadee keeps its row by matching a LEARN group of its name. It clears
-    `placed_in_group` on the set's attendance rows, because the join places
-    a student only while the set is manual.
+    Chickadee keeps its row by matching a LEARN group of its name. When the
+    change succeeds, `endJoinPlacements` clears `placed_in_group` on the
+    set's attendance rows, because the join places a student only while the
+    set is manual. A failed first read keeps them.
   - `APICourseEnrollment.brightspaceSection` and
     `APICourse.brightspaceSectionCategoryID` are retired: only
     `MoveLearnSectionCategoryToGroupSet` reads them. A student's lab goes
