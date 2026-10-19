@@ -31,13 +31,18 @@ extension ElementaryPageFixtures {
         }
         func render(
             hasCourse: Bool = true, canEdit: Bool = true, note: String? = nil, set: GroupSetPanel? = nil,
-            flash: FlashMessages = FlashMessages()
+            flash: FlashMessages = FlashMessages(), learnLinked: Bool = false
         ) -> String {
             InstructorGroupsPage(
                 page: page(currentUser: signedInAdmin), flash: flash, hasActiveCourse: hasCourse,
-                courseCode: "CS135", canEdit: canEdit, readOnlyNote: note, groupSet: set
+                courseCode: "CS135", canEdit: canEdit, readOnlyNote: note, groupSet: set, learnLinked: learnLinked
             ).render()
         }
+        // Slice 6b: a set read from the LEARN Sections.
+        var synced = panel(isManual: false, groups: groups)
+        synced.source = .learnSections
+        synced.lastSyncedText = "Oct 19, 2026, 2:10 PM"
+        synced.lastSyncedISO = "2026-10-19T18:10:00Z"
         let taNote = "Only this course's instructors can change its groups."
         return ElementaryPageFixture(
             typeName: "InstructorGroupsPage",
@@ -50,6 +55,10 @@ extension ElementaryPageFixtures {
                 render(set: panel(groups: groups), flash: FlashMessages(success: "Group added.")),
                 render(canEdit: false, note: taNote, set: panel(groups: groups)),
                 render(set: panel(isManual: false, groups: groups)),
+                render(learnLinked: true),
+                render(set: panel(groups: groups), learnLinked: true),
+                render(set: synced, learnLinked: true),
+                render(canEdit: false, note: taNote, set: synced, learnLinked: true),
                 render(
                     set: panel(groups: groups),
                     flash: FlashMessages(

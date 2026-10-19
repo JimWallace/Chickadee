@@ -204,6 +204,39 @@ enum CourseGroupStore {
 
     // MARK: - LEARN sync
 
+    /// Sets where the course's group set reads its groups: made in Chickadee
+    /// (`manual`) or the LEARN Sections of the course offering
+    /// (`learnSections`). A course with no set gets one. The groups and the
+    /// memberships stay as they are: a manual set keeps the groups that LEARN
+    /// gave it, and a LEARN set changes at its next sync. A caller whose
+    /// change succeeds ends the join placements (`endJoinPlacements`).
+    @discardableResult
+    static func setSource(
+        _ source: CourseGroupSource, courseID: UUID, on db: any Database
+    ) async throws -> APICourseGroupSet {
+        let set =
+            try await sets(courseID: courseID, on: db).first
+            ?? APICourseGroupSet(courseID: courseID, name: "Lab sections", source: source)
+        set.sourceRaw = source.rawValue
+        set.externalID = nil
+        try await set.save(on: db)
+        return set
+    }
+
+    /// Ends every join placement of the set's groups (`placed_in_group`)
+    /// after a change of source: a membership from before the change is no
+    /// longer the join's to undo, so Remove keeps it.
+    static func endJoinPlacements(in set: APICourseGroupSet, on db: any Database) async throws {
+        let groupIDs = try await groups(inSet: try set.requireID(), includingRemoved: true, on: db).compactMap(\.id)
+        let sessionIDs = try await APIActivitySession.query(on: db).filter(\.$groupID ~~ groupIDs).all()
+            .compactMap(\.id)
+        try await APIActivitySessionAttendance.query(on: db)
+            .filter(\.$sessionID ~~ sessionIDs)
+            .filter(\.$placedInGroup == true)
+            .set(\.$placedInGroup, to: false)
+            .update()
+    }
+
     /// One group or section as LEARN lists it.
     struct SyncedGroup: Equatable, Sendable {
         let externalID: String
@@ -226,7 +259,9 @@ enum CourseGroupStore {
     /// goes at the end, a renamed one takes the new name, and a removed one
     /// that LEARN lists again comes back.
     ///
-    /// A group that LEARN no longer lists loses its members. It is removed,
+    /// An active group made in Chickadee matches a LEARN group of the same
+    /// name and takes its external id. A group that LEARN no longer lists loses its
+    /// members. It is removed,
     /// as `removeGroup` removes it, only when it has no session: a lab that
     /// held a session keeps its row active, so its joins, its rankings and
     /// its students' class-goal bonus still count (`LabGoalGroups` reads
@@ -240,9 +275,22 @@ enum CourseGroupStore {
         }
         let setID = try set.requireID()
         let existing = try await groups(inSet: setID, includingRemoved: true, on: db)
-        let byExternalID = Dictionary(
+        var byExternalID = Dictionary(
             existing.compactMap { group in group.externalID.map { ($0, group) } },
             uniquingKeysWith: { first, _ in first })
+        // An active group made in Chickadee takes the LEARN group of its
+        // name, so a set that switches to LEARN keeps its labs, their sessions
+        // and their joins. A removed one stays removed: a removed group counts
+        // for nobody, and LEARN gets a new group instead.
+        var madeHereByName = Dictionary(
+            existing.filter { $0.externalID == nil && $0.removedAt == nil }.map { ($0.name.lowercased(), $0) },
+            uniquingKeysWith: { first, _ in first })
+        for item in remote where byExternalID[item.externalID] == nil {
+            guard let group = madeHereByName.removeValue(forKey: syncedName(item).lowercased()) else { continue }
+            group.externalID = item.externalID
+            byExternalID[item.externalID] = group
+        }
+        let known = byExternalID
         let listed = Set(remote.map(\.externalID))
         let unlisted = existing.filter { group in
             group.removedAt == nil && !(group.externalID.map(listed.contains) ?? false)
@@ -261,8 +309,8 @@ enum CourseGroupStore {
             for item in ordered where groupIDByExternalID[item.externalID] == nil {
                 let name = syncedName(item)
                 let group: APICourseGroup
-                if let known = byExternalID[item.externalID] {
-                    group = known
+                if let match = known[item.externalID] {
+                    group = match
                     if group.name != name {
                         group.name = name
                         result.renamed += 1

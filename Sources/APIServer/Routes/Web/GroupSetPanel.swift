@@ -17,6 +17,13 @@ struct GroupSetPanel: Sendable {
     let name: String
     /// True for a manual set, the only kind Chickadee edits.
     let isManual: Bool
+    /// Where the groups come from, or nil for a source this build does not
+    /// know.
+    var source: CourseGroupSource?
+    /// When the LEARN sync last read a synced set, or nil before it has: as
+    /// text, and as ISO 8601 for the relative time.
+    var lastSyncedText: String?
+    var lastSyncedISO: String?
     let groups: [Row]
     /// Enrolled students, and those of them in no group of the set.
     let studentCount: Int

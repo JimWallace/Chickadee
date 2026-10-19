@@ -636,6 +636,9 @@ because line numbers go out of date.
   - `CourseGroupStore`: the Groups tab, the roster import and the Students
     tab's Group column write memberships. `removeGroup` also ends the
     group's open sessions.
+  - `CourseGroupStore.setSource`, from the Groups tab (`POST
+    /instructor/groups/source`), changes where the course's set reads its
+    groups. Choosing the LEARN Sections syncs at once.
   - `CourseGroupStore.applySync`, from the LEARN group sync
     (`LearnGroupSyncService`, every ten minutes), replaces a synced set's
     groups and all its memberships. A group that LEARN no longer lists
@@ -693,6 +696,12 @@ because line numbers go out of date.
     loses its rows at the next sync. A removed group counts for nobody (its
     joins, its board and its class-goal bonus go), so an automatic writer
     must not remove a group that held a session.
+  - A source change (`CourseGroupStore.setSource`) changes only the source:
+    the groups and memberships change at the next sync, and a group made in
+    Chickadee keeps its row by matching a LEARN group of its name. When the
+    change succeeds, `endJoinPlacements` clears `placed_in_group` on the
+    set's attendance rows, because the join places a student only while the
+    set is manual. A failed first read keeps them.
   - `APICourseEnrollment.brightspaceSection` and
     `APICourse.brightspaceSectionCategoryID` are retired: only
     `MoveLearnSectionCategoryToGroupSet` reads them. A student's lab goes
