@@ -1,8 +1,8 @@
 name: Browser probe setup
 description: >
   Shared scaffold for the browser probe / smoke / visual jobs: get
-  chickadee-server (download the workflow's one build, or build it here), and
-  install Node + Playwright (engine download cached). Callers run
+  chickadee-server (download the workflow's one build, or build it here),
+  install Node, and run playwright-setup. Callers run
   actions/checkout first, inside the ghcr.io/jimwallace/chickadee/swift
   container. The build cache in build-probe-server matches exactly or not at
   all, so no git mtime restore is needed and a shallow checkout is enough.
@@ -54,11 +54,11 @@ runs:
     # an unauthenticated plain-HTTP fetch of ~40 packages from a mirror we do not
     # control — so when it does run it retries. On 2026-08-04 it was unreachable,
     # the step exited 100, and the required editor-smoke gate went red because of
-    # an Ubuntu mirror. `npm ci` stays outside the loop: it hits a different
-    # registry, and a genuine lockfile problem should fail once and clearly.
-    - name: Install Node and npm dependencies
+    # an Ubuntu mirror. `npm ci` is in playwright-setup, outside the loop: it
+    # hits a different registry, and a lockfile problem must fail once and
+    # clearly.
+    - name: Install Node
       shell: bash
-      working-directory: ${{ inputs.node-project }}
       env:
         # Playwright's floor. Raise when Playwright raises its engine requirement.
         MIN_NODE_MAJOR: "20"
@@ -125,19 +125,8 @@ runs:
           hash -r
           echo "installed node $(node --version) and npm $(npm --version)"
         fi
-        npm ci
 
-    # The engine download (~150 MB) is the slow, network-dependent part of
-    # `playwright install`; cache it keyed on the lockfile so probe legs stop
-    # re-downloading it every run. `--with-deps` still apt-installs the
-    # engine's system libraries each run (not cacheable inside the container).
-    - name: Cache Playwright ${{ inputs.browser }} download
-      uses: actions/cache@v6
+    - uses: ./.github/actions/playwright-setup
       with:
-        path: ~/.cache/ms-playwright
-        key: playwright-${{ inputs.browser }}-${{ hashFiles(format('{0}/package-lock.json', inputs.node-project)) }}
-
-    - name: Install Playwright ${{ inputs.browser }} engine
-      shell: bash
-      working-directory: ${{ inputs.node-project }}
-      run: npx playwright install --with-deps ${{ inputs.browser }}
+        browser: ${{ inputs.browser }}
+        node-project: ${{ inputs.node-project }}
