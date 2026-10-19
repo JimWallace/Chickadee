@@ -301,10 +301,12 @@ func buildTournamentPresentation(
 /// once there is one, and every round's matches by handle and bird. Nil
 /// when no run has been started. Entrants are named from the run's frozen
 /// snapshot, so a student who has since dropped still appears in the
-/// bracket they played. With `groupID`, that lab group's latest run.
+/// bracket they played. With `groupID`, that lab group's latest run; a
+/// per-group tournament with no group has none.
 func buildTournamentPresentation(
     setup: APITestSetup, viewerID: UUID?, includeNames: Bool, groupID: UUID? = nil, on db: any Database
 ) async throws -> TournamentPresentation? {
+    if groupID == nil, setup.decodedManifest()?.activity?.isPerGroup == true { return nil }
     guard let (run, slots) = try await latestTournament(testSetupID: setup.id ?? "", groupID: groupID, on: db)
     else { return nil }
     let entrants = run.entrants
