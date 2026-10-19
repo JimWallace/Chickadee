@@ -30,10 +30,12 @@ final class RunnerLogCapture: Sendable {
     /// The `event` of every captured line, in order.
     var events: [String] {
         capturedLines.compactMap { line in
-            guard let data = line.data(using: .utf8),
-                let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
-            else { return nil }
-            return object["event"] as? String
+            (try? JSONDecoder().decode(EventField.self, from: Data(line.utf8)))?.event
         }
     }
+}
+
+/// The one field of a structured log line that `events` reads.
+private struct EventField: Decodable {
+    let event: String
 }

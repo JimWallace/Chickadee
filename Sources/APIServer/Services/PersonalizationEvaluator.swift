@@ -204,9 +204,7 @@ enum PersonalizationEvaluator {
             .split(separator: "\n", omittingEmptySubsequences: true)
             .last
             .map(String.init) ?? ""
-        guard let data = lastLine.data(using: .utf8),
-            let obj = try? JSONSerialization.jsonObject(with: data) as? [String: String]
-        else {
+        guard let obj = try? JSONDecoder().decode([String: String].self, from: Data(lastLine.utf8)) else {
             throw PersonalizationEvaluatorError.malformedOutput(stdout: stdout)
         }
 

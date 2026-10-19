@@ -68,14 +68,8 @@ extension PublishedAssignmentRoutes {
         // notebook's own kernelspec, then Python.
         let requestedLanguage = req.query[String.self, at: "language"]
             .flatMap(AssignmentLanguage.init(rawValue:))
-        let notebookLanguage: AssignmentLanguage? = {
-            guard
-                let object = (try? JSONSerialization.jsonObject(with: notebookData))
-                    as? [String: Any],
-                let metadata = object["metadata"] as? [String: Any]
-            else { return nil }
-            return AssignmentLanguage.fromNotebookMetadata(metadata)
-        }()
+        let notebookLanguage = NotebookHeader(data: notebookData)?.metadata
+            .flatMap(AssignmentLanguage.fromNotebookMetadata)
         // FALL BACK TO PYTHON when neither says anything, which is this
         // endpoint's historical contract. Refusing on "unknown" would be a
         // regression with no upside: the languages this fix is for all declare

@@ -276,8 +276,7 @@ func submissionNotebookLanguage(
 
     guard let notebookURL,
         let data = try? Data(contentsOf: notebookURL),
-        let notebook = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-        let meta = notebook["metadata"] as? [String: Any]
+        let meta = NotebookHeader(data: data)?.metadata
     else {
         return nil
     }
