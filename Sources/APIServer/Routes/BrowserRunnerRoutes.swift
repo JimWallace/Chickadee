@@ -195,11 +195,18 @@ struct BrowserRunnerRoutes: RouteCollection {
             // (docs/datasets-course-library.md, slice 4), as the worker uses.
             let courseSeed = try await CourseSeedStore.seedIfNeeded(
                 manifest: manifest, userID: userID, courseID: setup.courseID, on: req.db)
+            // The class composite's slot, as the worker sends it. Staff get
+            // the reference slot 0 and are never dealt one
+            // (`CompositeSlots.gradingInputs` decides, for both paths). Asked
+            // first: it deals the slot that a partition's deal number reads.
+            let compositeInputs = await CompositeSlots.gradingInputs(
+                manifest: manifest, courseID: setup.courseID, assignmentID: assignmentID,
+                userID: userID, usesReferenceSlot: false, on: req.db)
             // The student's deal number for partition datasets (§4.11), as
             // the worker uses: 0 for staff, the dealt number otherwise.
             let dealNumber = try await DatasetDeals.dealNumber(
                 manifest: manifest, courseID: setup.courseID, assignmentID: assignmentID, userID: userID,
-                grading: true, on: req.db)
+                on: req.db)
             opponent = manifest.activity?.browserStagedBot.map { BrowserRunnerOpponent(botFile: $0) }
             let sharedDir = req.application.testSetupsDirectory + "shared/\(setupID)/"
             // nil language yields no grading inputs (there is no syntax to
@@ -211,14 +218,7 @@ struct BrowserRunnerRoutes: RouteCollection {
                 manifest: manifest, seedHex: seed, courseSeedHex: courseSeed, dealNumber: dealNumber,
                 supportFilesDirectory: sharedDir,
                 language: resolved)
-            // The class composite's slot, as the worker sends it. Staff get
-            // the reference slot 0 and are never dealt one
-            // (`CompositeSlots.gradingInputs` decides, for both paths).
-            personalizedInputs = CompositeSlots.merged(
-                personalizedInputs,
-                with: await CompositeSlots.gradingInputs(
-                    manifest: manifest, courseID: setup.courseID, assignmentID: assignmentID,
-                    userID: userID, usesReferenceSlot: false, on: req.db))
+            personalizedInputs = CompositeSlots.merged(personalizedInputs, with: compositeInputs)
             // Resolve per-student dataset slices (Phase 1 datasets) — returns nil when
             // the manifest declares no datasets, which is the common case.
             personalizedFiles = DatasetResolver.resolve(

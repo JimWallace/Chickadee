@@ -22,9 +22,10 @@ import Testing
         defer { try? FileManager.default.removeItem(atPath: Self.dumpDirectory) }
 
         await #expect(processExitsWith: .signal(SIGABRT)) {
-            // Both are read once, on first use, so they are set first.
-            setenv("TMPDIR", WedgeWatchdogDumpFileTests.dumpDirectory, 1)
-            setenv("CHICKADEE_WORKERTESTS_STALL_SECONDS", "1", 1)
+            // Both are read once, on first use, so they are set first. `setenv`
+            // takes C strings, and no safe API exists, so it is `unsafe`.
+            unsafe setenv("TMPDIR", WedgeWatchdogDumpFileTests.dumpDirectory, 1)
+            unsafe setenv("CHICKADEE_WORKERTESTS_STALL_SECONDS", "1", 1)
             try await WedgeWatchdog.track {
                 try await Task.sleep(for: .seconds(120))
             }

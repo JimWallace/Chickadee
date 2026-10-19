@@ -785,13 +785,14 @@ As built (11b):
   balanced if the part count changes after the deal. The dealer gives the
   lowest free number, so a freed number is dealt again, as a freed slot is.
 - **A class composite deals one slot for both.** On a class composite the deal
-  number is the student's slot (`CompositeSlots.slot`), and no `dataset_deals`
-  row is written. When the part count equals the slot count, a student's tile
-  and their rows agree. The slot keeps its own dealing rule: a grading path
-  deals it as the backstop, and a path that does not grade (the editor copy,
-  the "my rows" download) deals it only while the session window is open, as
-  opening the page does. Outside the window such a path reads a slot already
-  dealt, or gets the whole file.
+  number is the student's slot, and no `dataset_deals` row is written. When
+  the part count equals the slot count, a student's tile and their rows agree.
+  `DatasetDeals` only reads the slot (`CompositePool.dealtSlot`). The composite
+  deals it, with its own rules: on open inside the session window, and as the
+  grading backstop, in the pool of the student's lab group. So the worker job
+  and the browser seed ask the composite for its inputs before they read the
+  deal number. A path that does not grade (the editor copy, the "my rows"
+  download) reads a slot already dealt, or gets the whole file.
 - **Who gets which number** (`DatasetDeals`):
 
   | Run | Deal number | Rows |

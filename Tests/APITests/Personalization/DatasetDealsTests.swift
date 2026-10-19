@@ -59,10 +59,9 @@ import VaporTesting
         return try user.requireID()
     }
 
-    private func deal(_ fx: Fixture, _ userID: UUID?, grading: Bool = true) async throws -> Int? {
+    private func deal(_ fx: Fixture, _ userID: UUID?) async throws -> Int? {
         try await DatasetDeals.dealNumber(
-            manifest: fx.manifest, courseID: fx.courseID, assignmentID: fx.assignmentID, userID: userID,
-            grading: grading, on: app.db)
+            manifest: fx.manifest, courseID: fx.courseID, assignmentID: fx.assignmentID, userID: userID, on: app.db)
     }
 
     private func dealRows(_ fx: Fixture) async throws -> Int {
@@ -136,8 +135,7 @@ import VaporTesting
             let user = try await student("dd_n1", in: fx)
             #expect(
                 try await DatasetDeals.dealNumber(
-                    manifest: plain, courseID: fx.courseID, assignmentID: fx.assignmentID, userID: user,
-                    grading: true, on: app.db)
+                    manifest: plain, courseID: fx.courseID, assignmentID: fx.assignmentID, userID: user, on: app.db)
                     == nil)
             #expect(try await deal(fx, nil) == nil)
             #expect(try await dealRows(fx) == 0)
@@ -145,33 +143,21 @@ import VaporTesting
     }
 
     /// On a class composite the slot is the number, so a student's tile and
-    /// their rows agree.
-    @Test func aCompositesSlotIsTheDealNumber() async throws {
+    /// their rows agree. The composite deals the slot itself, in its own
+    /// pool; the deal number only reads it, so a student with no slot yet
+    /// gets nil (the whole file) and nothing is dealt.
+    @Test func aCompositesSlotIsTheDealNumberAndIsNeverDealtHere() async throws {
         try await withApp(app) { app in
             let fx = try await fixture(
                 "k", activity: ClassActivity(kind: .classComposite, composite: .starter))
             let user = try await student("dd_k1", in: fx)
-            let number = try #require(try await deal(fx, user))
+            #expect(try await deal(fx, user) == nil)
+            #expect(try await CompositeSlots.hasDealtSlots(assignmentID: fx.assignmentID, on: app.db) == false)
+
             let slot = try await CompositeSlots.slot(
                 assignmentID: fx.assignmentID, userID: user, spec: .starter, on: app.db)
-            #expect(number == slot)
+            #expect(try await deal(fx, user) == slot)
             #expect(try await dealRows(fx) == 0)
-        }
-    }
-
-    /// Before the session window opens, only a grading path deals a slot, as
-    /// for the composite itself. A download or the editor copy reads the
-    /// whole file until then.
-    @Test func outsideTheWindowOnlyGradingDealsACompositeSlot() async throws {
-        try await withApp(app) { app in
-            let later = LiveSessionWindow(opensAt: Date().addingTimeInterval(3_600), closesAt: nil)
-            let fx = try await fixture(
-                "z", activity: ClassActivity(kind: .classComposite, window: later, composite: .starter))
-            let user = try await student("dd_z1", in: fx)
-            #expect(try await deal(fx, user, grading: false) == nil)
-            #expect(try await CompositeSlots.hasDealtSlots(assignmentID: fx.assignmentID, on: app.db) == false)
-            let dealt = try #require(try await deal(fx, user, grading: true))
-            #expect(try await deal(fx, user, grading: false) == dealt)
         }
     }
 

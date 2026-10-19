@@ -325,6 +325,15 @@ struct WorkerJobRoutes: RouteCollection {
             }
         }
 
+        // A class composite's slot travels with the inputs
+        // (docs/class-composite.md): slot 0 for a validation run, the
+        // reference row's slot for a reference job, the student's dealt slot
+        // otherwise. Asked before the deal number, because it deals the slot
+        // that a partition's deal number reads on a composite.
+        let compositeInputs = await CompositeSlots.jobInputs(
+            manifest: claimed.manifest, courseID: setup.courseID, assignmentID: claimed.assignmentID,
+            submission: submission, on: req.db)
+
         // The deal number for the partition datasets
         // (docs/datasets-course-library.md §4.11). A pinned run carries its
         // own, a reference job takes its slot, any other run takes its kind's
@@ -378,15 +387,7 @@ struct WorkerJobRoutes: RouteCollection {
                 manifest: claimed.manifest, seedHex: assignmentSeed, courseSeedHex: courseSeed,
                 dealNumber: dealNumber, supportFilesDirectory: supportDir, language: language)
         }
-        // A class composite's slot travels with the inputs
-        // (docs/class-composite.md): slot 0 for a validation run, the
-        // reference row's slot for a reference job, the student's dealt slot
-        // otherwise.
-        personalizedInputs = CompositeSlots.merged(
-            personalizedInputs,
-            with: await CompositeSlots.jobInputs(
-                manifest: claimed.manifest, courseID: setup.courseID, assignmentID: claimed.assignmentID,
-                submission: submission, on: req.db))
+        personalizedInputs = CompositeSlots.merged(personalizedInputs, with: compositeInputs)
 
         // Resolve per-student dataset slices (Phase 1 datasets) for this seed.
         // Cheap and deterministic (a file read + in-memory sample, no

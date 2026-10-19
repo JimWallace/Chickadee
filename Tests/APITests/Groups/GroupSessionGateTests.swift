@@ -150,9 +150,6 @@ import VaporTesting
             #expect(
                 await refusal(current.withRunsPerGroup(true)) == ActivityAuthoring.runsPerGroupNeedsGroupsMessage)
             _ = try await CourseGroupStore.createSet(courseID: courseID, name: "Lab sections", on: app.db)
-            #expect(
-                await refusal(ClassActivity(kind: .classComposite, runsPerGroup: true))
-                    == ActivityAuthoring.runsPerGroupCompositeMessage)
             let window = LiveSessionWindow(opensAt: Date(), closesAt: nil)
             #expect(
                 await refusal(current.withWindow(window).withRunsPerGroup(true))

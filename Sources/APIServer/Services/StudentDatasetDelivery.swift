@@ -34,7 +34,7 @@ enum StudentDatasetDelivery {
             manifest: manifest, userID: userID, courseID: setup.courseID, on: db)
         let dealNumber = try await DatasetDeals.dealNumber(
             manifest: manifest, courseID: setup.courseID, assignmentID: try assignment.requireID(), userID: userID,
-            grading: false, on: db)
+            on: db)
 
         let sharedDir = testSetupsDirectory + "shared/\(setupID)/"
         if !FileManager.default.fileExists(atPath: sharedDir + filename) {

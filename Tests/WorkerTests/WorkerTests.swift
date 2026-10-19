@@ -138,7 +138,7 @@ import Testing
         // raw env-var expansion; an unset var expands to an empty string.
         //
         // An exit test: the body runs in a child process, so the `unsetenv`
-        // reaches no other test's `environ` — nothing to lock, nothing to
+        // (C strings, so `unsafe`) reaches no other test's `environ` — nothing to lock, nothing to
         // restore. A child cannot use this instance's `tmpDir`, so it makes
         // its own scratch directory.
         await #expect(processExitsWith: .success) {
@@ -152,7 +152,7 @@ import Testing
                 """, in: workDir)
             let runner = UnsandboxedScriptRunner()
             // Ensure parent doesn't have the var set in this test's environment.
-            unsetenv("CHICKADEE_ASSIGNMENT_SEED")
+            unsafe unsetenv("CHICKADEE_ASSIGNMENT_SEED")
             let output = await runScriptRobustly(
                 runner,
                 script: script,
@@ -176,7 +176,8 @@ import Testing
         // execve() with a parent-built envp replaces the environment outright.
         //
         // An exit test, for the same reason as `scriptEnvVarUnsetWhenNoOverride`:
-        // the `setenv` happens in a child process of the test runner.
+        // the `setenv` (C strings, so `unsafe`) happens in a child process of
+        // the test runner.
         await #expect(processExitsWith: .success) {
             let workDir = try WorkerTests.makeScratchDirectory()
             defer { try? FileManager.default.removeItem(at: workDir) }
@@ -187,7 +188,7 @@ import Testing
                 exit 0
                 """, in: workDir)
             let runner = UnsandboxedScriptRunner()
-            setenv("WORKER_SECRET_CANARY", "leaked-worker-secret", 1)
+            unsafe setenv("WORKER_SECRET_CANARY", "leaked-worker-secret", 1)
             let output = await runScriptRobustly(
                 runner,
                 script: script,

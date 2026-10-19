@@ -47,12 +47,18 @@ struct CompositeSnapshot: Content, Equatable {
     let slots: [Slot]
     let pixels: [Pixels]
 
-    /// The assignment a snapshot is of.
+    /// The assignment a snapshot is of, and for a composite that runs per
+    /// lab group, the group whose image it is (docs/lab-groups.md, slice 4).
     struct Scope {
         let assignmentID: UUID
         let testSetupID: String
         let courseID: UUID
         let spec: CompositeSpec
+        var groupID: UUID?
+
+        var pool: CompositePool {
+            groupID.map { .group(assignmentID: assignmentID, groupID: $0) } ?? .course(assignmentID: assignmentID)
+        }
     }
 
     /// Builds the snapshot of one assignment's composite.
@@ -67,14 +73,12 @@ struct CompositeSnapshot: Content, Equatable {
         let testSetupID = scope.testSetupID
         let courseID = scope.courseID
         let spec = scope.spec
-        var rowQuery = APICompositeContribution.query(on: db).filter(\.$assignmentID == assignmentID)
-        var slotQuery = APICompositeSlot.query(on: db).filter(\.$assignmentID == assignmentID)
-        if let onlyUserID {
-            rowQuery = rowQuery.filter(\.$userID == onlyUserID)
-            slotQuery = slotQuery.filter(\.$userID == onlyUserID)
-        }
+        let rowQuery = APICompositeContribution.query(on: db)
+            .filter(\.$assignmentID == assignmentID)
+            .filter(\.$groupID == scope.groupID)
+        if let onlyUserID { rowQuery.filter(\.$userID == onlyUserID) }
         let rows = try await rowQuery.all()
-        let dealt = try await slotQuery.all()
+        let dealt = try await scope.pool.dealt(onlyUserID: onlyUserID, on: db)
         let slotByUser = Dictionary(dealt.map { ($0.userID, $0.slot) }) { first, _ in first }
         // The holder a slot names when it shows no contribution: the newest
         // round, then the lowest user ID, so every poll and every server
@@ -174,8 +178,11 @@ struct CompositeSnapshot: Content, Equatable {
 
         var fills = Fills()
         let filled = Set(shown.filter(\.value.passed).keys)
-        for row in try await APICompositeSpare.query(on: db).filter(\.$assignmentID == scope.assignmentID).all()
-        where row.passed && !filled.contains(row.slot) && fits(row.slot, row.data) {
+        // Spares fill the whole class's image only: a lab's spares are slice 4b.
+        let spares =
+            scope.groupID == nil
+            ? try await APICompositeSpare.query(on: db).filter(\.$assignmentID == scope.assignmentID).all() : []
+        for row in spares where row.passed && !filled.contains(row.slot) && fits(row.slot, row.data) {
             fills.spares[row.slot] = row
         }
         guard spec.emptySlots == .reference else { return fills }

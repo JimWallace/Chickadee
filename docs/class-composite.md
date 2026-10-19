@@ -23,6 +23,7 @@ of all parts together.
 | 5 | The composite view on the leaderboard page, with all four compositors | shipped |
 | 6a | Reference renders and `emptySlots: reference` | shipped |
 | 6b | Spare slots | shipped |
+| groups | One image per lab group (`docs/lab-groups.md`, slices 4a and 4b) | 4a shipped |
 
 Slice 5 is the first slice that a class can use. Slices 1 to 4 only supply data
 to it. Run one session with TAs after slice 5, before slice 6.

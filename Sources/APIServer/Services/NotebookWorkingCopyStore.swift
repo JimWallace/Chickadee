@@ -513,8 +513,7 @@ private func applyNotebookSubstitutionsIfNeeded(
             courseSeedHex = try await CourseSeedStore.seedIfNeeded(
                 manifest: manifest, userID: userID, courseID: setup.courseID, on: db)
             dealNumber = try await DatasetDeals.dealNumber(
-                manifest: manifest, courseID: setup.courseID, assignmentID: assignmentID, userID: userID,
-                grading: false, on: db)
+                manifest: manifest, courseID: setup.courseID, assignmentID: assignmentID, userID: userID, on: db)
         } catch {
             logger.warning(
                 Logger.Message(
@@ -769,7 +768,7 @@ func writeDatasetFiles(
             manifest: props, userID: userID, courseID: setup.courseID, on: db)
         dealNumber = try await DatasetDeals.dealNumber(
             manifest: props, courseID: setup.courseID, assignmentID: assignmentID, userID: userID,
-            grading: false, on: db)
+            on: db)
     } catch {
         return
     }

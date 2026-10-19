@@ -37,7 +37,8 @@ extension WebRoutes {
             answer = .queued
         } catch let error as CompositeSpares.RequestError {
             switch error {
-            case .notComposite: throw Abort(.notFound)
+            // The page offers no spare on a per-group composite.
+            case .notComposite, .perGroup: throw Abort(.notFound)
             case .noPassingTile: answer = .noTile
             case .inFlight: answer = .grading
             case .noHole: answer = .noHole

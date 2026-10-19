@@ -30,26 +30,22 @@ enum DatasetDeals {
     /// is a student's, and a staff member's submission is stored as a student
     /// one.
     ///
-    /// On a class composite the number is the student's slot, and the slot
-    /// keeps its own dealing rule: a grading path (`grading`) deals one as the
-    /// backstop, and any other path (the editor copy, the download) deals one
-    /// only while the session window is open, as opening the page does. Outside
-    /// the window such a path reads a slot already dealt, or gets nil and the
-    /// whole file.
+    /// On a class composite the number is the student's slot, read and never
+    /// dealt here: the composite deals its slots itself, on open and as the
+    /// grading backstop, in the pool of the student's group
+    /// (`CompositeSlots`). A grading path asks the composite for its inputs
+    /// first, so the slot exists by then. A student with no slot yet gets nil
+    /// and the whole file.
     static func dealNumber(
-        manifest: TestProperties, courseID: UUID, assignmentID: UUID?, userID: UUID?, grading: Bool,
-        now: Date = Date(), on db: any Database
+        manifest: TestProperties, courseID: UUID, assignmentID: UUID?, userID: UUID?, on db: any Database
     ) async throws -> Int? {
         guard manifest.hasPartitionedDatasets, let assignmentID, let userID else { return nil }
         if let user = try await APIUser.find(userID, on: db), try await isCourseStaff(user, inCourse: courseID, db: db)
         {
             return 0
         }
-        if let activity = manifest.activity, activity.kind == .classComposite, let spec = activity.composite {
-            guard grading || activity.acceptsSubmissions(at: now) else {
-                return try await CompositeSlots.dealtSlot(assignmentID: assignmentID, userID: userID, on: db)
-            }
-            return try await CompositeSlots.slot(assignmentID: assignmentID, userID: userID, spec: spec, on: db)
+        if manifest.activity?.kind == .classComposite {
+            return try await CompositePool.dealtSlot(assignmentID: assignmentID, userID: userID, on: db)?.slot
         }
         return try await deal(assignmentID: assignmentID, userID: userID, on: db)
     }
@@ -78,7 +74,7 @@ enum DatasetDeals {
         case APISubmission.Kind.student:
             return try await dealNumber(
                 manifest: manifest, courseID: courseID, assignmentID: assignmentID, userID: submission.userID,
-                grading: true, on: db)
+                on: db)
         default:
             return nil
         }

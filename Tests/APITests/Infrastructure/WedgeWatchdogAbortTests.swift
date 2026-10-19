@@ -23,13 +23,14 @@ import Testing
 
     /// A tracked scope that reports no activity past the stall limit ends the
     /// process with SIGABRT, and the thread dump names the limit that fired.
+    /// `setenv` takes C strings, and no safe API exists, so it is `unsafe`.
     @Test func aSilentTrackedScopeAbortsWithAThreadDump() async throws {
         let result = try await #require(
             processExitsWith: .signal(SIGABRT), observing: [\.standardErrorContent]
         ) {
             // `stallLimitSeconds` reads the variable once, on first use, so it
             // is set before this child's first tracked scope.
-            setenv("CHICKADEE_WORKERTESTS_STALL_SECONDS", "1", 1)
+            unsafe setenv("CHICKADEE_WORKERTESTS_STALL_SECONDS", "1", 1)
             try await WedgeWatchdog.track {
                 // Longer than the limit and than the monitor's wake interval.
                 // The abort ends this sleep.
@@ -47,7 +48,7 @@ import Testing
     /// silent scope, longer than the monitor's wake interval, ends normally.
     @Test func aZeroStallLimitDisablesTheAbort() async {
         await #expect(processExitsWith: .success) {
-            setenv("CHICKADEE_WORKERTESTS_STALL_SECONDS", "0", 1)
+            unsafe setenv("CHICKADEE_WORKERTESTS_STALL_SECONDS", "0", 1)  // C strings; no safe API
             try await WedgeWatchdog.track {
                 try await Task.sleep(for: .seconds(20))
             }

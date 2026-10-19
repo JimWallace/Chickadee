@@ -405,6 +405,8 @@ extension AdminRoutes {
                     .filter(\.$assignmentID ~~ assignmentIDs).delete()
                 try await APICompositeSlot.query(on: db)
                     .filter(\.$assignmentID ~~ assignmentIDs).delete()
+                try await APIGroupCompositeSlot.query(on: db)
+                    .filter(\.$assignmentID ~~ assignmentIDs).delete()
                 try await APICompositeReference.query(on: db)
                     .filter(\.$assignmentID ~~ assignmentIDs).delete()
                 try await APICompositeSpare.query(on: db)
