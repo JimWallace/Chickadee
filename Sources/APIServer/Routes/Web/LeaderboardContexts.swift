@@ -112,6 +112,9 @@ struct LeaderboardPresentation {
     /// and nobody closed the tab. An open-ended session has none, and then
     /// polls while the tab is open, as the three dashboards already do.
     let pollUntilISO: String
+    /// The lab group shown, for an activity that runs per group
+    /// (docs/lab-groups.md); nil for any other activity.
+    var groupScope: LeaderboardGroupScope?
 }
 
 /// The live-session line above the results, and what the page needs to keep

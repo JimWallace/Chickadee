@@ -115,15 +115,18 @@ import VaporTesting
         }
     }
 
-    @Test func joiningAnotherLabKeepsTheStudentsOwnGroup() async throws {
+    @Test func aMemberCannotJoinAnotherLabsSession() async throws {
         let app = try await makeTestApp()
         try await withApp(app) { app in
             let f = try await fixture(on: app)
             let session = try await ActivitySessionStore.open(
                 assignmentID: f.assignmentID, groupID: f.labB, by: nil, on: app.db)
-            try await ActivitySessionStore.join(code: code(session), userID: f.ada, on: app.db)
+            await #expect(throws: ActivitySessionError.otherGroup(session: "Lab 102", own: "Lab 101")) {
+                try await ActivitySessionStore.join(code: code(session), userID: f.ada, on: app.db)
+            }
             let byUser = try await CourseGroupStore.groupIDsByUser(inSet: f.set.requireID(), on: app.db)
-            #expect(byUser[f.ada] == f.labA, "attendance does not move a member")
+            #expect(byUser[f.ada] == f.labA, "the refusal does not move a member")
+            #expect(try await APIActivitySessionAttendance.query(on: app.db).count() == 0)
         }
     }
 
@@ -210,8 +213,8 @@ import VaporTesting
 
             try await ActivitySessionStore.join(code: code(labA), userID: f.ada, on: app.db)
             #expect(try await current(f.ada) == f.labA)
-            try await ActivitySessionStore.join(code: code(labA), userID: f.alan, on: app.db)
-            #expect(try await current(f.alan) == f.labA, "the code puts alan in Lab 101's session")
+            try await ActivitySessionStore.join(code: code(labA), userID: f.grace, on: app.db)
+            #expect(try await current(f.grace) == f.labA, "the code puts grace, in no group, in Lab 101's session")
 
             try await ActivitySessionStore.close(labA, on: app.db)
             #expect(try await current(f.ada, at: Date().addingTimeInterval(1)) == nil, "an ended session has no one")
@@ -232,19 +235,26 @@ import VaporTesting
                 assignmentID: f.assignmentID, groupID: f.labA, by: nil, now: start, on: app.db)
             let labB = try await ActivitySessionStore.open(
                 assignmentID: f.assignmentID, groupID: f.labB, by: nil, now: start, on: app.db)
-            try await ActivitySessionStore.join(code: code(labB, at: at(10)), userID: f.ada, now: at(10), on: app.db)
-            #expect(try await current(at: 11) == f.labB)
-            try await ActivitySessionStore.join(code: code(labA, at: at(20)), userID: f.ada, now: at(20), on: app.db)
-            #expect(try await current(at: 21) == f.labA, "the latest join wins")
-            try await ActivitySessionStore.join(code: code(labB, at: at(30)), userID: f.ada, now: at(30), on: app.db)
-            #expect(try await current(at: 31) == f.labB, "a second join moves the student back")
+            // A member joins only their own lab, so a TA moves ada between
+            // the groups on the Groups tab before each join.
+            func move(to group: UUID) async throws {
+                try await CourseGroupStore.setMembership(userID: f.ada, groupID: group, in: f.set, on: app.db)
+            }
+            try await ActivitySessionStore.join(code: code(labA, at: at(10)), userID: f.ada, now: at(10), on: app.db)
+            #expect(try await current(at: 11) == f.labA)
+            try await move(to: f.labB)
+            try await ActivitySessionStore.join(code: code(labB, at: at(20)), userID: f.ada, now: at(20), on: app.db)
+            #expect(try await current(at: 21) == f.labB, "the latest join wins")
+            try await move(to: f.labA)
+            try await ActivitySessionStore.join(code: code(labA, at: at(30)), userID: f.ada, now: at(30), on: app.db)
+            #expect(try await current(at: 31) == f.labA, "a second join moves the student back")
 
-            // Lab 102 ends and starts again for its next lab: ada's join to the
-            // earlier lab no longer counts, so ada plays in Lab 101's.
-            try await ActivitySessionStore.close(labB, now: at(40), on: app.db)
+            // Lab 101 ends and starts again for its next lab: ada's join to the
+            // earlier lab no longer counts, so ada plays in Lab 102's.
+            try await ActivitySessionStore.close(labA, now: at(40), on: app.db)
             _ = try await ActivitySessionStore.open(
-                assignmentID: f.assignmentID, groupID: f.labB, by: nil, now: at(50), on: app.db)
-            #expect(try await current(at: 51) == f.labA)
+                assignmentID: f.assignmentID, groupID: f.labA, by: nil, now: at(50), on: app.db)
+            #expect(try await current(at: 51) == f.labB)
         }
     }
 
@@ -289,12 +299,14 @@ import VaporTesting
             let f = try await fixture(on: app)
             let session = try await ActivitySessionStore.open(
                 assignmentID: f.assignmentID, groupID: f.labB, by: nil, on: app.db)
+            let adaSession = try await ActivitySessionStore.open(
+                assignmentID: f.assignmentID, groupID: f.labA, by: nil, on: app.db)
             try await ActivitySessionStore.join(code: code(session), userID: f.grace, on: app.db)
-            try await ActivitySessionStore.join(code: code(session), userID: f.ada, on: app.db)
+            try await ActivitySessionStore.join(code: code(adaSession), userID: f.ada, on: app.db)
             #expect(try await ActivitySessionStore.remove(userID: f.grace, from: session, on: app.db))
-            #expect(try await ActivitySessionStore.remove(userID: f.ada, from: session, on: app.db))
+            #expect(try await ActivitySessionStore.remove(userID: f.ada, from: adaSession, on: app.db))
             #expect(
-                try await !ActivitySessionStore.remove(userID: f.ada, from: session, on: app.db),
+                try await !ActivitySessionStore.remove(userID: f.ada, from: adaSession, on: app.db),
                 "a second Remove changes nothing")
 
             let byUser = try await CourseGroupStore.groupIDsByUser(inSet: f.set.requireID(), on: app.db)
@@ -332,7 +344,7 @@ import VaporTesting
         try await withApp(app) { app in
             let f = try await fixture(on: app)
             let session = try await ActivitySessionStore.open(
-                assignmentID: f.assignmentID, groupID: f.labB, by: nil, on: app.db)
+                assignmentID: f.assignmentID, groupID: f.labA, by: nil, on: app.db)
             // A whole second, so the time survives the database's precision.
             let joinedAt = Date(timeIntervalSince1970: (Date().timeIntervalSince1970 + 1).rounded())
             try await ActivitySessionStore.join(
@@ -342,7 +354,7 @@ import VaporTesting
             let content = try await gatherDataExportContent(for: student, on: app.db)
             #expect(
                 content.enrollments.first?.sessionsJoined
-                    == [DataExportSessionJoin(assignment: assignment.title, group: "Lab 102", joinedAt: joinedAt)])
+                    == [DataExportSessionJoin(assignment: assignment.title, group: "Lab 101", joinedAt: joinedAt)])
 
             let removedAt = joinedAt.addingTimeInterval(5)
             try await ActivitySessionStore.remove(userID: f.ada, from: session, now: removedAt, on: app.db)

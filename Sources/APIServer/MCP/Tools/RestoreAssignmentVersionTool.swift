@@ -146,7 +146,7 @@ struct RestoreAssignmentVersionTool: ContentTool {
         // A restored activity that does not run per group ends its sessions,
         // as `ActivityAuthoring.setActivity` does. The group tables are
         // outside the MCP role, so this writes on the main pool.
-        if setup.decodedManifest()?.activity?.runsPerGroup != true {
+        if setup.decodedManifest()?.activity?.isPerGroup != true {
             try await ActivitySessionStore.closeOpenSessions(testSetupID: setup.requireID(), on: context.mainDB)
         }
 

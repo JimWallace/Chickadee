@@ -36,6 +36,11 @@ final class APIActivitySessionAttendance: Model, Content, @unchecked Sendable {
     @Field(key: "placed_in_group")
     var placedInGroup: Bool
 
+    /// The network of the latest join (`ClientNetwork.prefix`), never the
+    /// full address. Nil when unknown.
+    @OptionalField(key: "join_network")
+    var joinNetwork: String?
+
     init() {}
 
     init(sessionID: UUID, userID: UUID, joinedAt: Date) {

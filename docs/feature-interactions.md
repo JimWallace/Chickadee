@@ -483,6 +483,23 @@ because line numbers go out of date.
   - Connect a new accumulator at both ingest paths. An accumulator on one
     path shows only the half of the class that one substrate grades, as if it
     were the whole class.
+  - For an activity that runs per lab group, a leaderboard result goes to
+    `group_leaderboard_entries` under the group of the session the student
+    submitted in, and a submission with no open joined session does not
+    rank (docs/lab-groups.md, slice 3a). A new ranking writer must read
+    `ActivitySessionStore.sessionAtSubmission` the same way, or
+    `ActivityKind.canRunPerGroup` must stay false for its kind. Every
+    reader of the per-group behaviour reads `ClassActivity.isPerGroup`, never
+    the raw `runsPerGroup` flag. The `highestMetric` class record stays
+    course-wide on purpose: a per-group result can take it from a student in
+    another lab.
+  - The hill of a per-group activity is the group's
+    (`group_activity_champions`, slice 3b). The claim and the result path
+    both resolve it with `Hill.of`, from the same submission, so the champion
+    check reads the row the claim staged. A new reader or writer of a hill
+    goes through `Hill`, never straight to `activity_champions`. A per-group
+    hill awards no champion class record, and `ActivityAuthoring.setActivity`
+    seeds none for it.
   - An activity whose kind compares students (`ActivityKind.comparesStudents`)
     accepts only shared data (`DatasetSpec.isShared`). The rule is in
     `ManifestCoherence`. A new door that writes an activity or a dataset spec
@@ -503,11 +520,16 @@ because line numbers go out of date.
     student in no group of a manual set in the session's group. A wrong code
     writes a `login_attempts` row (scope `join_failure`).
   - `ActivitySessionStore.remove`, from the staff attendance page, sets
-    `removed_at` on an attendance row.
+    `removed_at` on an attendance row, and empties the group's hill
+    (`group_activity_champions`) when the removed student holds it.
   - `ActivityAuthoring.setActivity` sets `ClassActivity.runsPerGroup`.
 - **Readers:**
-  - `requireOpenActivityWindow` in `Routes/StudentAssignmentRequestGates.swift`,
-    through `ActivitySessionStore.currentSession`.
+  - The submission gate (`requireOpenGroupSession` in
+    `Routes/StudentAssignmentRequestGates.swift`), through
+    `ActivitySessionStore.hasJoined`.
+  - Ranking, through `ActivitySessionStore.sessionAtSubmission` and
+    `currentSession`.
+  - `LeaderboardGroupScope.studentGroup`, which picks a student's board.
   - `GroupSessionPanel` on the present page, and `SessionAttendancePage`.
   - The data export (`gatherGroups`, `gatherSessionJoins`).
 - **Rules** (`docs/lab-groups.md`):
@@ -516,11 +538,19 @@ because line numbers go out of date.
     composite.
   - Only attendance counts: membership does not let a student submit. A
     join from before a session's latest start, or a removed one, does not
-    count.
+    count. But membership limits the join: a member joins only their own
+    group's session, and the join refuses another lab's code
+    (`ActivitySessionError.otherGroup`). The gate lets in any student who has
+    ever joined one of the activity's sessions and was not removed; ranking
+    still needs an open joined session at the submission's time. A new reader
+    of attendance must skip a row with `removed_at` set.
   - The join code is derived from the session's secret and the time; it is
     never stored. A reopen draws a new secret.
   - Remove undoes a group placement that the student's join made
     (`placed_in_group`), and only while that is still their group.
+  - The network columns (`presenter_network`, `join_network`) hold the
+    network part of an address (`ClientNetwork.prefix`), never the address.
+    The "Other network" mark is a flag for staff; no gate reads it.
   - Sessions read the course's first group set only.
   - Staff are never gated, as with the window.
   - Every write that turns `runsPerGroup` off ends the open sessions:
@@ -530,6 +560,21 @@ because line numbers go out of date.
   - A clone and a bundle import clear the flag (see Cloning).
 - **Gap:** `POST /api/v1/submissions` checks enrollment only, so it skips
   this gate, as it skips the window.
+
+### The client address: `clientIPAddress` and `Request.clientNetwork`
+
+- **Readers:** the login rate limit (`ip` key), the MCP OAuth rate limit,
+  the audit log's `remote_addr` (`auditRemoteAddress`), and the lab-group
+  session networks (`Request.clientNetwork`).
+- **Rules:**
+  - `X-Forwarded-For` is read only when `trustForwardedProto` is set.
+  - `clientIPAddress` takes the FIRST entry, which the client can choose:
+    the deployment's nginx appends the real peer
+    (`$proxy_add_x_forwarded_for`) after what the client sent.
+  - `Request.clientNetwork` takes the LAST entry, the one nginx appended,
+    because a session network is evidence that staff read.
+  - A change to either reading changes every reader of it. A front proxy
+    other than the repository's nginx can change which entry is real.
 
 ### Rate-limit rows: `login_attempts`
 

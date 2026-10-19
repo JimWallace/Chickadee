@@ -9,6 +9,35 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.730] - 2026-10-19
+
+### Added
+
+- **Lab groups (slice 3b): the hill per group.** A Beat the champion activity can now run once per lab group. Each lab has its own hill: a challenger plays the champion of the group whose session they joined, a submission made with no session open moves no hill, and the leaderboard page and the projector show the hill of the group they show. See `docs/lab-groups.md`.
+
+
+## [0.5.729] - 2026-10-19
+
+### Added
+
+- **Lab groups (slice 3a): the leaderboard per group.** A leaderboard activity that runs once per lab group now ranks each group on its own board. Each ranked result carries the group of the session the student joined, a submission made after that session closed grades and does not rank, staff pick a group's board on the leaderboard page, and the projector shows the selected group. Other activity kinds refuse "Run once per lab group" until their rankings are per group. See `docs/lab-groups.md`.
+- **Lab groups: who joins which lab, and submissions after a lab.** A student who is a member of a lab group can join only that group's session; a student in no group can still join any, and a TA moves a student who goes to another lab on the Groups tab. A student who joined a session can still submit after it closes: the result grades and does not rank.
+
+
+## [0.5.728] - 2026-10-18
+
+### Added
+
+- **Lab groups: the network flag.** "Who joined" now marks a join from another network than the room "Other network", for staff to check. Chickadee stores only the network part of each address (a /24 or a /64), for the presenter and for each join, and the student's data export lists it. It is a flag, never a refusal. See `docs/lab-groups.md`, "Presence".
+
+
+## [0.5.727] - 2026-10-18
+
+### Changed
+
+- **A ranked class activity accepts only shared data.** An activity that ranks or matches students (every kind but a class composite) now refuses a dataset that gives each student their own rows: a sample or a transform. A ranking of a metric that each student computed on different rows compares nothing. The refusal names the file and the ways to share it. Every authoring door that saves a dataset spec or an activity refuses the pair: the zip upload, `set_activity`, the edit page, the `/datasets` editors, `set_dataset` and the library attach. The MCP descriptions of these tools state the rule. An assignment that already has the pair can still be edited toward the rule. A class composite accepts personal data.
+
+
 ## [0.5.726] - 2026-10-18
 
 ### Changed

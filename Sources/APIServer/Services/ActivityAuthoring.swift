@@ -151,7 +151,7 @@ enum ActivityAuthoring {
             throw AppError.badRequest(reason: violation)
         }
         try await setManifestActivity(setup: setup, to: activity, on: db)
-        if activity?.runsPerGroup != true {
+        if activity?.isPerGroup != true {
             try await ActivitySessionStore.closeOpenSessions(testSetupID: setup.requireID(), on: lockDB)
         }
         if let activity, activity.kind.aggregation == .leaderboard {
@@ -176,7 +176,9 @@ enum ActivityAuthoring {
         if aggregation == .bracket {
             try await seedWinnerRecord(setup: setup, record: seededTournamentRecord, on: db)
         }
-        if activity?.kind.opponentSource == .champion {
+        // A per-group hill has a champion in every lab, and a record has one
+        // holder, so it seeds none (docs/lab-groups.md, slice 3b).
+        if activity?.kind.opponentSource == .champion, activity?.isPerGroup != true {
             try await seedChampionRecord(setup: setup, on: db)
         } else {
             // A kind change away from the hill (or clearing) takes its
@@ -222,6 +224,10 @@ enum ActivityAuthoring {
         guard activity.kind.aggregation != .composite else {
             throw AppError.badRequest(reason: runsPerGroupCompositeMessage)
         }
+        // Only a kind whose ranking is per group (slice 3a).
+        guard activity.kind.canRunPerGroup else {
+            throw AppError.badRequest(reason: runsPerGroupKindMessage)
+        }
         guard activity.window == nil else {
             throw AppError.badRequest(reason: runsPerGroupWithWindowMessage)
         }
@@ -234,6 +240,8 @@ enum ActivityAuthoring {
         "This course has no lab groups yet, so make them on the Groups tab first."
     static let runsPerGroupCompositeMessage =
         "A class composite cannot run once per lab group yet."
+    static let runsPerGroupKindMessage =
+        "Only a Best metric, Beat the instructor or Beat the champion activity can run once per lab group yet."
     static let runsPerGroupWithWindowMessage =
         "Each group's session is the clock of a per-group activity, so clear the session window first."
 

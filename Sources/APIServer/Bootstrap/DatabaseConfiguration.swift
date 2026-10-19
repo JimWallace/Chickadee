@@ -567,6 +567,13 @@ func registerMigrations(on app: Application) {
     app.migrations.add(CreateCourseGroups())
     // Lab groups, slice 2: per-group activity sessions and their attendance.
     app.migrations.add(CreateActivitySessions())
+    // The network part of the presenter's and each join's address
+    // (docs/lab-groups.md, "Presence").
+    app.migrations.add(AddActivitySessionNetworks())
+    // Lab groups, slice 3a: a per-group leaderboard's best rows.
+    app.migrations.add(CreateGroupLeaderboardEntries())
+    // Lab groups, slice 3b: each group's hill.
+    app.migrations.add(CreateGroupActivityChampions())
     // The deal numbers behind the partition datasets
     // (docs/datasets-course-library.md §4.11).
     app.migrations.add(CreateDatasetDeals())

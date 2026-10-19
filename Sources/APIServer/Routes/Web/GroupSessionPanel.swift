@@ -39,7 +39,7 @@ struct GroupSessionPanel: Sendable {
     static func make(
         req: Request, user: APIUser, activity: ClassActivity, assignment: APIAssignment?, courseID: UUID
     ) async throws -> GroupSessionPanel? {
-        guard activity.runsPerGroup, let assignmentID = assignment?.id,
+        guard activity.isPerGroup, let assignmentID = assignment?.id,
             let set = try await CourseGroupStore.sets(courseID: courseID, on: req.db).first,
             let setID = set.id
         else { return nil }
@@ -57,6 +57,11 @@ struct GroupSessionPanel: Sendable {
         let openSession = session.flatMap { $0.isOpen(at: now) ? $0 : nil }
         var joinedCount = 0
         if let openSession {
+            // The staff member who started the session is the presenter; a
+            // colleague who opens the same page elsewhere does not move it.
+            if openSession.openedBy == user.id {
+                try await ActivitySessionStore.notePresenterNetwork(req.clientNetwork, for: openSession, on: req.db)
+            }
             joinedCount = try await ActivitySessionStore.joinedCount(of: openSession, on: req.db)
         }
         return GroupSessionPanel(

@@ -56,7 +56,7 @@ extension ElementaryPageFixtures {
         let rows = [
             SessionAttendeeRow(
                 userID: "u1", name: "Ada Lovelace", username: "alovelace", joinedAtText: "Oct 18, 2026 at 2:31 PM",
-                isRemoved: false),
+                isRemoved: false, isOtherNetwork: true),
             SessionAttendeeRow(
                 userID: "u2", name: "Alan Turing", username: "aturing", joinedAtText: "Oct 18, 2026 at 2:33 PM",
                 isRemoved: true),

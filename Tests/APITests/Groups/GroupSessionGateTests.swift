@@ -1,9 +1,10 @@
 // Tests/APITests/Groups/GroupSessionGateTests.swift
 //
 // A per-group activity's submission gate and its authoring rules
-// (docs/lab-groups.md, slice 2 and "Presence"). The gate: no student submits
-// before joining an open session by code, a member of the group included;
-// any student who joined does, whatever their group; staff are never gated.
+// (docs/lab-groups.md, slices 2 and 3a, and "Presence"). The gate: no student
+// submits before joining one of the activity's sessions by code, a member of
+// the group included; a member joins only their own lab's session; a student
+// who joined still submits after the close; staff are never gated.
 // Then the refusals at save, on the web path and through set_activity, and
 // what a clone and an import keep.
 
@@ -99,13 +100,20 @@ import VaporTesting
             #expect(await refusal(app, f, f.member) == .notInGroupSession, "a member types the code too")
 
             let code = ActivitySessionCode.code(secret: session.codeSecret, at: Date())
-            for student in [f.member, f.other, f.loner] {
+            for student in [f.member, f.loner] {
                 try await ActivitySessionStore.join(code: code, userID: student.requireID(), on: app.db)
                 try await gate(app, f, student)
             }
+            await #expect(throws: ActivitySessionError.otherGroup(session: "Lab 101", own: "Lab 102")) {
+                try await ActivitySessionStore.join(code: code, userID: f.other.requireID(), on: app.db)
+            }
+            #expect(await refusal(app, f, f.other) == .notInGroupSession, "a member of another lab stays out")
 
+            // After the close, a student who joined still submits for a grade;
+            // the result does not rank (decision 1).
             try await ActivitySessionStore.close(session, now: Date().addingTimeInterval(-1), on: app.db)
-            #expect(await refusal(app, f, f.member) == .notInGroupSession)
+            try await gate(app, f, f.member)
+            #expect(await refusal(app, f, f.other) == .notInGroupSession)
         }
     }
 

@@ -305,7 +305,7 @@ struct GetAssignmentTool: ContentTool {
                     opensAt: activity.window?.opensAtISO,
                     closesAt: activity.window?.closesAtISO,
                     composite: activity.composite,
-                    runsPerGroup: activity.runsPerGroup)
+                    runsPerGroup: activity.isPerGroup)
             },
             datasets: (manifest?.datasets ?? []).compactMap(AttachedDatasetDTO.init)
         )

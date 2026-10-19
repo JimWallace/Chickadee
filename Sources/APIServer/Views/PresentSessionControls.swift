@@ -14,16 +14,9 @@ struct PresentSessionControls: HTML {
     let csrfToken: String
 
     var body: some HTML {
-        form(.method(.get), .action(boardURL), .class("inline-form form-flush")) {
-            input(.type(.hidden), .name("present"), .value("1"))
-            label(.class("visually-hidden"), .for("present-group")) { "Lab group" }
-            select(.id("present-group"), .name("group"), .class("form-input"), .dataFlag("ck-submit-on-change")) {
-                for choice in panel.groups {
-                    option(.value(choice.id)) { choice.name }
-                        .attributes(.selected, when: choice.id == panel.selectedGroupID)
-                }
-            }
-        }
+        LabGroupSelect(
+            id: "present-group", action: boardURL, options: panel.groups, selectedID: panel.selectedGroupID,
+            keep: [("present", "1")])
         " "
         form(
             .method(.post),

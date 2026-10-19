@@ -57,16 +57,15 @@ extension WebRoutes {
         // unless they ask for the rest.
         let showingAll = isStaff || req.query[String.self, at: "all"] == "1"
         let reader = LeaderboardReader.page(user: user, isStaff: isStaff)
-        let board =
-            showsMetricBoard
-            ? try await buildLeaderboard(setup: setup, reader: reader, showAll: showingAll, on: req.db)
-            : LeaderboardBoard.empty
+        let (board, groupScope) = try await metricBoard(
+            req: req, reader: reader, setup: setup, activity: activity, assignment: assignment, showAll: showingAll)
         let standingsBoard =
             showsStandings
             ? try await buildStandingsBoard(setup: setup, reader: reader, showAll: showingAll, on: req.db)
             : StandingsBoard.empty
         let champion = try await buildChampionPresentation(
-            setup: setup, activity: activity, viewerID: user.id, includeNames: isStaff, on: req.db)
+            setup: setup, activity: activity, groupID: groupScope?.groupID, viewerID: user.id,
+            includeNames: isStaff, on: req.db)
         let tournament =
             showsBracket
             ? try await buildTournamentPresentation(setup: setup, viewerID: user.id, includeNames: isStaff, on: req.db)
@@ -78,15 +77,15 @@ extension WebRoutes {
                 allURL: "\(boardURL)?all=1", on: req.db)
             : nil
 
-        let pollsLive = activity.window.map { $0.state(at: Date()) != .afterClose } ?? false
+        let pollsLive =
+            groupScope?.isLive ?? activity.window.map { $0.state(at: Date()) != .afterClose } ?? false
         let listedCount = showsStandings ? standingsBoard.rankedCount : board.rankedCount
         let session = LiveSessionPresentation.make(activity)
         let presentation =
             LeaderboardPresentation(
                 testSetupID: setupID,
                 assignmentTitle: assignment?.title ?? setupID,
-                courseLabel: course.map { [$0.code, $0.term?.shortLabel].compactMap(\.self).joined(separator: " ") }
-                    ?? "",
+                courseLabel: course?.tabLabel ?? "",
                 assignmentPublicID: assignment?.publicID ?? "",
                 kindLabel: activity.kind.displayName,
                 isStaff: isStaff,
@@ -106,8 +105,8 @@ extension WebRoutes {
                 // the box; a still one has it from the threshold up.
                 showFilter: showingAll && (listedCount >= LeaderboardBoard.filterThreshold || pollsLive),
                 filterPlaceholder: isStaff ? "Filter by handle or name…" : "Filter by handle…",
-                pollURL: showingAll && !isStaff
-                    ? "\(boardURL)?fragment=body&all=1" : "\(boardURL)?fragment=body",
+                pollURL: "\(boardURL)?fragment=body\(showingAll && !isStaff ? "&all=1" : "")"
+                    + (groupScope?.groupQuery ?? ""),
                 metricLabel: "metric",
                 hasHill: activity.kind.opponentSource == .champion,
                 champion: champion,
@@ -136,7 +135,8 @@ extension WebRoutes {
                 // an open-ended session emphatically can.
                 pollsLive: pollsLive,
                 hasPollUntil: activity.window?.closesAtISO != nil,
-                pollUntilISO: activity.window?.closesAtISO ?? "")
+                pollUntilISO: activity.window?.closesAtISO ?? "",
+                groupScope: groupScope)
 
         // Two representations, one query, the shape every polled page here
         // uses: `?fragment=body` renders the SAME view the page rendered
@@ -371,13 +371,19 @@ func buildTournamentPresentation(
 }
 
 /// The hill's holder for the page, or nil when the activity has no hill or
-/// no student holds it yet (the bot, or nobody, does). Same handle-and-bird
-/// identity as a ranking row; staff also see the name.
+/// no student holds it yet (the bot, or nobody, does). For an activity that
+/// runs per group, the hill of `groupID`, and none without a group. Same
+/// handle-and-bird identity as a ranking row; staff also see the name.
 func buildChampionPresentation(
-    setup: APITestSetup, activity: ClassActivity, viewerID: UUID?, includeNames: Bool, on db: any Database
+    setup: APITestSetup, activity: ClassActivity, groupID: UUID?, viewerID: UUID?, includeNames: Bool,
+    on db: any Database
 ) async throws -> ChampionPresentation? {
-    guard activity.kind.opponentSource == .champion,
-        let champion = try await currentChampion(testSetupID: setup.id ?? "", on: db),
+    let setupID = setup.id ?? ""
+    let hill: Hill? =
+        activity.isPerGroup
+        ? groupID.map { .group(testSetupID: setupID, groupID: $0) } : .course(testSetupID: setupID)
+    guard activity.kind.opponentSource == .champion, let hill,
+        let champion = try await hill.holder(on: db),
         let user = try await APIUser.find(champion.userID, on: db),
         let enrollment = try await APICourseEnrollment.query(on: db)
             .filter(\.$course.$id == setup.courseID)
@@ -417,6 +423,33 @@ struct LeaderboardBoard: Sendable {
 
 // MARK: - Rows
 
+extension WebRoutes {
+    /// The metric board, empty for any other aggregation, and for a per-group
+    /// activity the lab group it shows.
+    fileprivate func metricBoard(
+        req: Request, reader: LeaderboardReader, setup: APITestSetup, activity: ClassActivity,
+        assignment: APIAssignment?, showAll: Bool
+    ) async throws -> (LeaderboardBoard, LeaderboardGroupScope?) {
+        let scope = try await LeaderboardGroupScope.resolve(
+            req: req, user: reader.user, isStaff: reader.isStaff, activity: activity, setup: setup,
+            assignment: assignment)
+        guard activity.kind.aggregation == .leaderboard else { return (.empty, scope) }
+        let board = try await buildLeaderboard(setup: setup, reader: reader, showAll: showAll, scope: scope, on: req.db)
+        return (board, scope)
+    }
+}
+
+/// The board for a per-group activity's `scope`: the scope's group, or no
+/// board for a student in no lab group. Every other activity's whole board.
+func buildLeaderboard(
+    setup: APITestSetup, reader: LeaderboardReader, showAll: Bool, scope: LeaderboardGroupScope?,
+    on db: any Database
+) async throws -> LeaderboardBoard {
+    guard let scope else { return try await buildLeaderboard(setup: setup, reader: reader, showAll: showAll, on: db) }
+    guard let groupID = scope.groupID else { return .empty }
+    return try await buildLeaderboard(setup: setup, reader: reader, showAll: showAll, groupID: groupID, on: db)
+}
+
 /// The metric board for `setup`: the ranked rows, the list a viewer is shown,
 /// and the viewer's own card. Handles and avatars are materialised on first
 /// view (`AvatarStore`), so a student who has never opened their account page
@@ -427,20 +460,22 @@ struct LeaderboardBoard: Sendable {
 /// once per student for the life of the course.
 ///
 /// `isStaff` decides whether names, usernames and submission counts are built
-/// at all — a student's page never holds them.
+/// at all — a student's page never holds them. With `groupID`, one lab
+/// group's board (docs/lab-groups.md, slice 3).
 func buildLeaderboard(
-    setup: APITestSetup, reader: LeaderboardReader, showAll: Bool, on db: any Database
+    setup: APITestSetup, reader: LeaderboardReader, showAll: Bool, groupID: UUID? = nil, on db: any Database
 ) async throws -> LeaderboardBoard {
     let viewer = reader.user
     let isStaff = reader.isStaff
     let setupID = setup.id ?? ""
-    let allEntries = try await leaderboardEntries(testSetupID: setupID, on: db)
+    let allEntries = try await leaderboardEntries(testSetupID: setupID, groupID: groupID, on: db)
     let identities = try await RankedIdentities.load(
         userIDs: allEntries.map(\.userID), courseID: setup.courseID, on: db)
     // Ranked against the roster: a student who has dropped takes no place.
     let entries = allEntries.filter { identities.isOnRoster($0.userID) }
     let counts = isStaff ? try await leaderboardSubmissionCounts(setupID: setupID, on: db) : [:]
-    let unranked = isStaff ? try await unrankedStudentCount(setup: setup, ranked: entries, on: db) : 0
+    let unranked =
+        isStaff ? try await unrankedStudentCount(setup: setup, ranked: entries, groupID: groupID, on: db) : 0
 
     // Competition ranking over the roster.
     var ranks: [Int] = []
@@ -549,16 +584,23 @@ private func leaderboardSubmissionCounts(setupID: String, on db: any Database) a
     return counts
 }
 
-/// Enrolled students with no row on the board.
+/// Enrolled students with no row on the board; with `groupID`, the group's
+/// enrolled members with no row on its board.
 private func unrankedStudentCount(
-    setup: APITestSetup, ranked: [APILeaderboardEntry], on db: any Database
+    setup: APITestSetup, ranked: [APILeaderboardEntry], groupID: UUID?, on db: any Database
 ) async throws -> Int {
-    let students = try await APICourseEnrollment.query(on: db)
+    var students = try await APICourseEnrollment.query(on: db)
         .filter(\.$course.$id == setup.courseID)
         .all()
         .filter { $0.role == .student }
+        .map(\.userID)
+    if let groupID {
+        let members = try await APICourseGroupMembership.query(on: db).filter(\.$groupID == groupID).all()
+        let memberIDs = Set(members.map(\.userID))
+        students = students.filter(memberIDs.contains)
+    }
     let rankedIDs = Set(ranked.map(\.userID))
-    return students.filter { !rankedIDs.contains($0.userID) }.count
+    return students.filter { !rankedIDs.contains($0) }.count
 }
 
 /// Who the viewer is to the page: their handle and hero bird, from the same
@@ -809,4 +851,10 @@ func formatLeaderboardMetric(_ metric: Double) -> String {
     while text.hasSuffix("0") { text.removeLast() }
     if text.hasSuffix(".") { text.removeLast() }
     return text
+}
+
+extension APICourse {
+    /// The course as its course tab names it: the code and the short term,
+    /// e.g. "CS135 F26".
+    fileprivate var tabLabel: String { [code, term?.shortLabel].compactMap(\.self).joined(separator: " ") }
 }

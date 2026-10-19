@@ -171,7 +171,8 @@ student `APIResult` (grades), `APIGradeOverride`, `APIAssignmentExtension`,
 `APIPreEnrollment`, `APIUserActivityEvent`, and the lab-group tables
 `APICourseGroupSet`, `APICourseGroup`, `APICourseGroupMembership`,
 `APIActivitySession` and `APIActivitySessionAttendance` (docs/lab-groups.md,
-decision 11: membership and attendance are enrollment data). `set_activity`
+decision 11: membership and attendance are enrollment data; they store the
+network part of an address, a /24 or a /64, never the full address). `set_activity`
 sets only the `runsPerGroup` flag, which is content; its group-set check reads
 on the owner pool.
 

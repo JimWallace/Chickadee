@@ -27,7 +27,9 @@ struct ChosenOpponent {
 
 /// Who a challenger plays right now: the current champion's submission,
 /// unless the challenger IS that submission (a re-test of the champion plays
-/// the bot, never itself), else the bundled bot, else nobody.
+/// the bot, never itself), else the bundled bot, else nobody. For an
+/// activity that runs per group, the champion is the hill's of the group the
+/// student submitted in (`Hill.of`).
 ///
 /// A champion who RESUBMITS does play their own earlier entry: beating it
 /// moves the hill's submission forward, losing to it changes nothing.
@@ -38,11 +40,12 @@ func chooseOpponent(
         champion: nil,
         identity: activity.opponentFile.map(JobOpponent.supportFileIdentity)
             ?? JobOpponent.noOpponentIdentity)
-    guard activity.kind.opponentSource == .champion,
-        let champion = try await APIActivityChampion.query(on: db)
-            .filter(\.$testSetupID == submission.testSetupID)
-            .first(),
-        champion.submissionID != submission.id,
+    guard activity.kind.opponentSource == .champion, let submissionID = submission.id,
+        let hill = try await Hill.of(
+            submissionID: submissionID, testSetupID: submission.testSetupID, userID: submission.userID,
+            activity: activity, on: db),
+        let champion = try await hill.holder(on: db),
+        champion.submissionID != submissionID,
         let championSubmission = try await APISubmission.find(champion.submissionID, on: db)
     else { return bot }
     return ChosenOpponent(
@@ -221,10 +224,11 @@ func recordActivityMatch(
     match.completedAt = Date()
     try await match.update(on: db)
 
-    guard try await courseRole(of: userID, inCourse: setup.courseID, db: db) == .student else { return }
-    let current = try await APIActivityChampion.query(on: db)
-        .filter(\.$testSetupID == testSetupID)
-        .first()
+    guard try await courseRole(of: userID, inCourse: setup.courseID, db: db) == .student,
+        let hill = try await Hill.of(
+            submissionID: submissionID, testSetupID: testSetupID, userID: userID, activity: activity, on: db)
+    else { return }
+    let current = try await hill.holder(on: db)
     // The champion's own re-test played the bot; the hill does not move.
     if current?.submissionID == submissionID { return }
     // What the job played must still be what holds the hill.
@@ -245,36 +249,25 @@ func recordActivityMatch(
             // Two first crownings can land together: both read an empty hill
             // and both reach this insert. The unique index keeps one, and the
             // record must name the same student (#1752).
-            guard
-                try await crownFirstChampion(
-                    testSetupID: testSetupID, userID: userID, submissionID: submissionID, on: db)
-            else { return }
+            guard try await hill.crownFirst(userID: userID, submissionID: submissionID, on: db) else { return }
         }
-        try await awardChampionRecords(setup: setup, userID: userID, submissionID: submissionID, on: db)
+        // A class record has one holder, and an activity run per group has a
+        // hill in every lab: no lab's champion holds it.
+        if case .course = hill {
+            try await awardChampionRecords(setup: setup, userID: userID, submissionID: submissionID, on: db)
+        }
     } else if let current, current.userID != userID {
         current.defences += 1
         try await current.update(on: db)
     }
 }
 
-/// Inserts the first champion row of a setup. Returns false when another
-/// crowning landed first and the unique index on `test_setup_id` kept
-/// theirs; any other failure is rethrown.
+/// Inserts the first champion row of a setup's course-wide hill
+/// (`Hill.crownFirst`).
 func crownFirstChampion(
     testSetupID: String, userID: UUID, submissionID: String, on db: any Database
 ) async throws -> Bool {
-    do {
-        try await APIActivityChampion(
-            testSetupID: testSetupID, userID: userID, submissionID: submissionID, crownedAt: Date()
-        ).save(on: db)
-        return true
-    } catch {
-        let taken = try await APIActivityChampion.query(on: db)
-            .filter(\.$testSetupID == testSetupID)
-            .first()
-        guard taken != nil else { throw error }
-        return false
-    }
+    try await Hill.course(testSetupID: testSetupID).crownFirst(userID: userID, submissionID: submissionID, on: db)
 }
 
 // MARK: - Round robin
@@ -484,10 +477,8 @@ func standingSignals(
     return (row.rank, row.standing.wins)
 }
 
-/// The hill's current holder, for the leaderboard page; nil when the bot or
-/// nobody holds it.
+/// The course-wide hill's current holder; nil when the bot or nobody holds
+/// it. A lab group's hill is read through `Hill.group`.
 func currentChampion(testSetupID: String, on db: any Database) async throws -> APIActivityChampion? {
-    try await APIActivityChampion.query(on: db)
-        .filter(\.$testSetupID == testSetupID)
-        .first()
+    try await Hill.course(testSetupID: testSetupID).holder(on: db) as? APIActivityChampion
 }

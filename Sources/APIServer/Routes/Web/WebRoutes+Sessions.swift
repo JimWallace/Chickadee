@@ -47,7 +47,8 @@ extension WebRoutes {
         let (user, assignment, groupID) = try await requireGroupSession(req, groupID: form.groupID, toChange: true)
         let now = Date()
         let session = try await ActivitySessionStore.open(
-            assignmentID: assignment.requireID(), groupID: groupID, by: user.id, now: now, on: req.db)
+            assignmentID: assignment.requireID(), groupID: groupID, by: user.id, network: req.clientNetwork,
+            now: now, on: req.db)
         // A Start on an open session changes nothing, so it is not audited.
         if session.openedAt == now {
             await recordSessionChange(assignment, session: session, change: "started", on: req)
@@ -83,7 +84,7 @@ extension WebRoutes {
         let form = try await req.decodeContent(JoinForm.self)
         do {
             let session = try await ActivitySessionStore.join(
-                code: form.code ?? "", userID: user.requireID(), on: req.db)
+                code: form.code ?? "", userID: user.requireID(), network: req.clientNetwork, on: req.db)
             guard let assignment = try await APIAssignment.find(session.assignmentID, on: req.db),
                 let course = try await APICourse.find(assignment.courseID, on: req.db)
             else { throw Abort(.notFound) }
@@ -117,7 +118,7 @@ extension WebRoutes {
         } else {
             try await requireCourseRole(caller: user, courseID: setup.courseID, atLeast: .ta, db: req.db)
         }
-        guard setup.decodedManifest()?.activity?.runsPerGroup == true,
+        guard setup.decodedManifest()?.activity?.isPerGroup == true,
             let assignment = try await assignmentByTestSetupID(setupID, on: req.db)
         else { throw Abort(.notFound) }
         guard let groupID = rawGroupID.flatMap(UUID.init(uuidString:)),
