@@ -1,9 +1,11 @@
 // Core/NotebookCellSources.swift
 //
-// Minimal helpers shared by every Jupyter-notebook cell walker in the
-// codebase.  Each consumer (Worker's `NotebookExtractor`, Server's
-// `SolutionNotebookExtractor`, the kernel-language detector inside
-// `extractNotebooksToCode`) layers its own post-processing on top —
+// Minimal helpers for the Jupyter-notebook cell walkers that change cells or
+// that must reject invalid JSON. A read-only walker uses `NotebookCellView`
+// instead, which is typed and does not decode the outputs.
+//
+// Each consumer (Worker's `NotebookExtractor`, the kernel-language detector
+// inside `extractNotebooksToCode`) layers its own post-processing on top —
 // IPython-magic stripping, `if __name__ == "__main__":` wrapping,
 // comment headers, etc.  Lifting only the parsing + cell iteration
 // preserves each side's intent while removing the shape duplication

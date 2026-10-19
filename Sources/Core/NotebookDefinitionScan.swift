@@ -88,14 +88,14 @@ public struct NotebookDefinitionScan: Sendable, Equatable {
 public func scanNotebookDefinitions(
     _ notebookData: Data, language: AssignmentLanguage?
 ) -> NotebookDefinitionScan {
-    guard let cells = NotebookCellSources.cells(from: notebookData) else {
+    guard let cells = NotebookCellView.cells(from: notebookData) else {
         return NotebookDefinitionScan(definitions: [], sections: [], codeCellIndices: [])
     }
     var sections: [NotebookSectionHeading] = []
     var codeCells: [(index: Int, source: String)] = []
     for (index, cell) in cells.enumerated() {
-        let source = NotebookCellSources.cellSource(cell)
-        switch cell["cell_type"] as? String {
+        let source = cell.source
+        switch cell.cellType {
         case "markdown":
             if let title = firstSectionHeading(in: source) {
                 sections.append(NotebookSectionHeading(name: title, cellIndex: index))

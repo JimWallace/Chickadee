@@ -40,8 +40,8 @@ public enum ReflectionCells {
     /// `submission`. Returns `[]` when the starter is not a notebook or tags
     /// no cell. A submission that is not a notebook yields nil responses.
     public static func pairs(starter: Data, submission: Data?) -> [ReflectionPair] {
-        guard let starterCells = NotebookCellSources.cells(from: starter) else { return [] }
-        let submittedTagged = submission.flatMap(NotebookCellSources.cells(from:))?.filter(isTagged) ?? []
+        guard let starterCells = NotebookCellView.cells(from: starter) else { return [] }
+        let submittedTagged = submission.flatMap(NotebookCellView.cells(from:))?.filter(isTagged) ?? []
         let submittedByID = Dictionary(
             submittedTagged.compactMap { cell in cellID(cell).map { ($0, cell) } },
             uniquingKeysWith: { first, _ in first })
@@ -59,7 +59,7 @@ public enum ReflectionCells {
                         index: position + 1,
                         prompt: lastMarkdown,
                         response: match.map(trimmedSource)))
-            } else if cell["cell_type"] as? String == "markdown" {
+            } else if cell.cellType == "markdown" {
                 lastMarkdown = trimmedSource(cell)
             }
         }
@@ -68,22 +68,19 @@ public enum ReflectionCells {
 
     /// True when `notebook` tags at least one cell `reflection`.
     public static func hasTaggedCells(_ notebook: Data) -> Bool {
-        NotebookCellSources.cells(from: notebook)?.contains(where: isTagged) ?? false
+        NotebookCellView.cells(from: notebook)?.contains(where: isTagged) ?? false
     }
 
-    private static func isTagged(_ cell: [String: Any]) -> Bool {
-        guard let metadata = cell["metadata"] as? [String: Any],
-            let tags = metadata["tags"] as? [String]
-        else { return false }
-        return tags.contains(tag)
+    private static func isTagged(_ cell: NotebookCellView) -> Bool {
+        cell.tags?.contains(tag) ?? false
     }
 
-    private static func cellID(_ cell: [String: Any]) -> String? {
-        guard let id = cell["id"] as? String, !id.isEmpty else { return nil }
+    private static func cellID(_ cell: NotebookCellView) -> String? {
+        guard let id = cell.id, !id.isEmpty else { return nil }
         return id
     }
 
-    private static func trimmedSource(_ cell: [String: Any]) -> String {
-        NotebookCellSources.cellSource(cell).trimmingCharacters(in: .whitespacesAndNewlines)
+    private static func trimmedSource(_ cell: NotebookCellView) -> String {
+        cell.source.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 }

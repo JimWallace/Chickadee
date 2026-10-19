@@ -48,12 +48,10 @@ enum SolutionNotebookExtractor {
     ///    error, surfacing as a baffling `name 'solution' is not defined` at the
     ///    first `solution.<fn>` reference instead of a localized failure.
     static func extractCodeToPython(notebookData: Data) -> String? {
-        guard let cells = NotebookCellSources.cells(from: notebookData) else { return nil }
+        guard let cells = NotebookCellView.cells(from: notebookData) else { return nil }
 
         let inputCells = cells.map { cell in
-            NotebookCell(
-                cellType: (cell["cell_type"] as? String) ?? "",
-                source: NotebookCellSources.cellSource(cell))
+            NotebookCell(cellType: cell.cellType ?? "", source: cell.source)
         }
         let extracted = extractPython(cells: inputCells, filename: "solution.ipynb")
         guard extracted.codeCellCount > 0 else { return nil }
@@ -162,11 +160,9 @@ enum SolutionNotebookExtractor {
             guard let py = extractCodeToPython(notebookData: notebookData) else { return nil }
             return (py, filename)
         }
-        guard let cells = NotebookCellSources.cells(from: notebookData) else { return nil }
+        guard let cells = NotebookCellView.cells(from: notebookData) else { return nil }
         let inputCells = cells.map { cell in
-            NotebookCell(
-                cellType: (cell["cell_type"] as? String) ?? "",
-                source: NotebookCellSources.cellSource(cell))
+            NotebookCell(cellType: cell.cellType ?? "", source: cell.source)
         }
         // Exhaustive so a seventh language cannot inherit another's extractor —
         // the `isRNotebook(nb) ? .r : .python` shape one size smaller.
