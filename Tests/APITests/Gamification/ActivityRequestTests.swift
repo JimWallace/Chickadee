@@ -37,7 +37,7 @@ import VaporTesting
     /// which accepts only a bracket activity when `bracket=1`. It answers
     /// "staff" or "student".
     private func registerProbe(on app: Application) {
-        app.get("test", "activity", ":testSetupID") { req async throws -> String in
+        app.grouped(UserSessionAuthenticator()).get("test", "activity", ":testSetupID") { req async throws -> String in
             let audience: ActivityRequest.Audience =
                 req.query[String.self, at: "audience"] == "staff" ? .staff : .course
             let bracketOnly = req.query[String.self, at: "bracket"] == "1"

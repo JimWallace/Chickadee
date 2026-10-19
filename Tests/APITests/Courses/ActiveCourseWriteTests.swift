@@ -19,7 +19,7 @@ import VaporTesting
     /// answers the active course's code, or "none" when the optional helper
     /// gives nil.
     private func registerProbe(on app: Application) {
-        app.get("test", "active-write") { req async throws -> String in
+        app.grouped(UserSessionAuthenticator()).get("test", "active-write") { req async throws -> String in
             let user = try req.auth.require(APIUser.self)
             let floor: CourseRole = req.query[String.self, at: "floor"] == "ta" ? .ta : .instructor
             if req.query[String.self, at: "require"] == "1" {
