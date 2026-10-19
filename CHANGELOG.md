@@ -9,6 +9,13 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.742] - 2026-10-19
+
+### Changed
+
+- **Three more Swift 7 features.** Every target now builds with `InternalImportsByDefault`, `InferIsolatedConformances` and `ImmutableWeakCaptures`. An import is internal unless the file writes `public import`, so the compiler shows each module that appears in a public API: Foundation in 20 `Core` files, and swift-subprocess in `BoundedSubprocess.swift`. The other two features needed no change. `NonisolatedNonsendingByDefault` waits for the Vapor 5 move (#1523).
+
+
 ## [0.5.741] - 2026-10-19
 
 ### Added
