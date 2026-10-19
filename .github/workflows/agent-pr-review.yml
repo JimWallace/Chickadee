@@ -121,7 +121,7 @@ jobs:
           model: sonnet
           max-turns: ${{ inputs.max-turns }}
           allowed-tools: ${{ inputs.allowed-tools }}
-          disallowed-tools: "WebFetch,Bash(curl:*),Bash(wget:*),Bash(gh api:*),Bash(gh pr comment:*),Bash(gh pr review:*),mcp__github_inline_comment__create_inline_comment"
+          disallowed-tools: "WebFetch,Bash(curl:*),Bash(wget:*),Bash(git diff --no-index:*),Bash(gh api:*),Bash(gh pr comment:*),Bash(gh pr review:*),mcp__github_inline_comment__create_inline_comment"
           json-schema: '{"type":"object","properties":{"verdict":{"type":"string","enum":["pass","findings","changes requested"]},"summary":{"type":"string"},"report":{"type":"string"},"comments":{"type":"array","items":{"type":"object","properties":{"path":{"type":"string"},"line":{"type":"integer"},"body":{"type":"string"}},"required":["path","line","body"]}}},"required":["verdict","summary","report","comments"]}'
 
   post:
@@ -161,10 +161,16 @@ jobs:
             } >> "$GITHUB_STEP_SUMMARY"
             exit 0
           fi
+          # Only the three verdicts the schema allows. The summary is one
+          # line with no `::`, so it cannot start a workflow command in the
+          # echo lines below, and it goes through the same cleanup as a post.
           verdict="$(jq -r '.verdict // "none"' <<< "${RESULT:-null}")"
-          # One line, and no `::`, so the summary cannot start a workflow
-          # command in the echo lines below.
-          summary="$(jq -r '.summary // ""' <<< "${RESULT:-null}" | tr '\r\n' '  ' | sed 's/::/: :/g' | head -c 500)"
+          case "$verdict" in pass | findings | "changes requested") ;; *) verdict="none" ;; esac
+          jq -r '.summary // empty' <<< "${RESULT:-null}" | tr '\r\n' '  ' | sed 's/::/: :/g' > summary.raw
+          summary=""
+          if scripts/ci-agent-sanitize.sh --max-chars 500 summary.raw summary.md 2> /dev/null; then
+            summary="$(head -n 1 summary.md)"
+          fi
           jq -r '.report // empty' <<< "${RESULT:-null}" > raw.md
 
           # The inline findings, as one review. Each body is cleaned on its
@@ -181,7 +187,8 @@ jobs:
                 "inline/$n.raw" "inline/$n.md" 2> /dev/null; then
               jq -c --rawfile body "inline/$n.md" \
                 '{path: (.path | tostring), line: (.line | floor), side: "RIGHT", body: $body}' \
-                <<< "$finding" >> inline/kept.jsonl
+                <<< "$finding" >> inline/kept.jsonl \
+                || echo "::warning::Inline finding $n has no usable line number, so it was not posted."
             else
               echo "::warning::Inline finding $n was refused or empty, so it was not posted."
             fi

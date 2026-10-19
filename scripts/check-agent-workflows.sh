@@ -62,7 +62,8 @@ while IFS= read -r file; do
       if ($0 ~ /^[[:space:]]*- /) step_indent += 2
     }
     in_step && /^[[:space:]]+github-token:[[:space:]]*\$\{\{ github\.token \}\}/ { token = 1 }
-    in_step && /^[[:space:]]+disallowed-tools:[[:space:]]*[^[:space:]]/ { deny = 1 }
+    in_step && /^[[:space:]]+disallowed-tools:[[:space:]]*[^[:space:]"\047]/ { deny = 1 }
+    in_step && /^[[:space:]]+disallowed-tools:[[:space:]]*["\047][^"\047[:space:]]/ { deny = 1 }
     END { check() }
   ' "$file")"
   [ -n "$missing" ] && add "$missing"

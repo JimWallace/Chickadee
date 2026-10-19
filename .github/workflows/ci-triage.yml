@@ -38,9 +38,11 @@ name: CI failure triage
 # bisect. It runs for `main` only: a dispatch from another branch is not the
 # canary.
 #
-# NOT FOR A VISUAL-REGRESSION PR RUN. visual-diff-explainer.yml explains that
-# failure from the images, so a second comment from here would only repeat the
-# job name. A visual-regression failure on `main` is still triaged here.
+# NOT FOR A VISUAL-REGRESSION PR RUN WITH DIFF IMAGES. When that run uploaded
+# its `visual-diffs` artifact, visual-diff-explainer.yml explains the failure
+# from the images, so a second comment from here would only repeat the job
+# name. A run with no artifact (a build error, a dead runner) and a
+# visual-regression failure on `main` are still triaged here.
 #
 # A FORK'S PR gets no triage today. claude-code-action runs only for an actor
 # with write access, and widening that to everybody is not worth it for a
@@ -77,7 +79,6 @@ jobs:
     if: >-
       github.event.workflow_run.conclusion == 'failure' &&
       github.event.workflow_run.event != 'merge_group' &&
-      !(github.event.workflow_run.name == 'Visual regression' && github.event.workflow_run.event == 'pull_request') &&
       (github.event.workflow_run.name != 'Nightly Clean Build & Coverage' || github.event.workflow_run.head_branch == 'main')
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -138,6 +139,16 @@ jobs:
             [ -n "$pr" ] && target="pr:$pr"
           elif [ "$EVENT" = "push" ] && [ "$HEAD_BRANCH" = "main" ]; then
             target="commit:$HEAD_SHA"
+          fi
+          # visual-diff-explainer.yml takes a PR run that has diff images.
+          if [ "$WORKFLOW" = "Visual regression" ] && [ "$EVENT" = "pull_request" ]; then
+            artifacts="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$RUN_ID/artifacts" \
+              --jq '.artifacts[].name')"
+            if grep -qx 'visual-diffs' <<< "$artifacts"; then
+              echo "::notice::The run has diff images, so visual-diff-explainer.yml explains it."
+              echo "go=false" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
           fi
           if [ -z "$target" ]; then
             echo "::notice::No PR, main commit or tracking issue to comment on (workflow $WORKFLOW, event $EVENT, branch $HEAD_BRANCH)."
