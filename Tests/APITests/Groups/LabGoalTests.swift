@@ -86,12 +86,7 @@ import VaporTesting
 
     /// Opens the group's session, unless it is open, and joins `userID`.
     private func join(assignmentID: UUID, group: UUID, userID: UUID) async throws {
-        let session = try await ActivitySessionStore.open(
-            assignmentID: assignmentID, groupID: group, by: nil, now: Date().addingTimeInterval(-60), on: app.db)
-        let joinedAt = Date().addingTimeInterval(-30)
-        try await ActivitySessionStore.join(
-            code: ActivitySessionCode.code(secret: session.codeSecret, at: joinedAt), userID: userID,
-            now: joinedAt, on: app.db)
+        try await joinSession(assignmentID: assignmentID, groupID: group, userID: userID, on: app.db)
     }
 
     private func grade(_ userID: UUID, earned: Int) async throws {

@@ -25,63 +25,22 @@ import VaporTesting
         self.app = try await makeTestApp(prefix: "chickadee-robin-groups")
     }
 
-    private struct Fixture {
-        let setup: APITestSetup
-        let activity: ClassActivity
-        let assignmentID: UUID
-        let labA: UUID
-        let labB: UUID
-        let ada: UUID
-        let ben: UUID
-        let alan: UUID
-        let ari: UUID
-    }
+    private typealias Fixture = PerGroupActivityFixture
 
     private let setupID = "rrg_setup"
 
     /// A per-group round robin with ada and ben in Lab 101 and alan and ari
     /// in Lab 102.
     private func fixture() async throws -> Fixture {
-        let course = try await makeTestCourse(on: app, code: "RRG1", mode: .closed)
-        let courseID = try course.requireID()
-        let set = try await CourseGroupStore.createSet(courseID: courseID, name: "Lab sections", on: app.db)
-        let labA = try await CourseGroupStore.addGroup(named: "Lab 101", to: set, on: app.db).requireID()
-        let labB = try await CourseGroupStore.addGroup(named: "Lab 102", to: set, on: app.db).requireID()
-        let props = TestProperties(
-            testSuites: [TestSuiteEntry(tier: .pub, script: "match.sh")], language: nil,
+        try await .make(
+            on: app, code: "RRG1", setupID: setupID,
             activity: ClassActivity(kind: .roundRobin, runsPerGroup: true),
-            achievements: [ActivityAuthoring.seededWinnerRecord])
-        let manifest = try #require(String(data: JSONEncoder().encode(props), encoding: .utf8))
-        let setup = try await makeTestSetup(on: app, id: setupID, courseID: courseID, manifest: manifest)
-        let assignment = try await makeTestAssignment(on: app, testSetupID: setupID, courseID: courseID)
-        var students: [UUID] = []
-        for (name, group) in [("rrg_ada", labA), ("rrg_ben", labA), ("rrg_alan", labB), ("rrg_ari", labB)] {
-            let id = try await makeTestStudent(on: app, username: name).requireID()
-            try await makeTestEnrollment(on: app, userID: id, courseID: courseID)
-            try await CourseGroupStore.setMembership(userID: id, groupID: group, in: set, on: app.db)
-            students.append(id)
-        }
-        return Fixture(
-            setup: setup, activity: try #require(setup.decodedManifest()?.activity),
-            assignmentID: try assignment.requireID(), labA: labA, labB: labB,
-            ada: students[0], ben: students[1], alan: students[2], ari: students[3])
+            achievements: [ActivityAuthoring.seededWinnerRecord],
+            students: [("rrg_ada", .a), ("rrg_ben", .a), ("rrg_alan", .b), ("rrg_ari", .b)])
     }
 
     private func outcome() -> TestOutcome {
-        TestOutcome(
-            testName: "match", testClass: nil, tier: .pub, status: .pass, shortResult: "passed", longResult: nil,
-            metric: 1, executionTimeMs: 1, memoryUsageBytes: nil, attemptNumber: 1, isFirstPassSuccess: false)
-    }
-
-    /// Opens the group's session a minute ago, unless it is open, and joins
-    /// `userID` to it.
-    private func join(_ f: Fixture, group: UUID, userID: UUID) async throws {
-        let session = try await ActivitySessionStore.open(
-            assignmentID: f.assignmentID, groupID: group, by: nil, now: Date().addingTimeInterval(-60), on: app.db)
-        let joinedAt = Date().addingTimeInterval(-30)
-        try await ActivitySessionStore.join(
-            code: ActivitySessionCode.code(secret: session.codeSecret, at: joinedAt), userID: userID,
-            now: joinedAt, on: app.db)
+        .stub(metric: 1)
     }
 
     /// Runs one challenger's job as the claim and result paths do: choose the
@@ -119,7 +78,7 @@ import VaporTesting
         try await withApp(app) { _ in
             let f = try await fixture()
             for (student, group) in [(f.ada, f.labA), (f.ben, f.labA), (f.alan, f.labB), (f.ari, f.labB)] {
-                try await join(f, group: group, userID: student)
+                try await f.join(student, to: group, on: app.db)
             }
             #expect(try await play(f, userID: f.ada, id: "rrg_a1").isEmpty)
             #expect(try await play(f, userID: f.alan, id: "rrg_l1").isEmpty, "Lab 102 plays nobody from Lab 101")
@@ -132,7 +91,7 @@ import VaporTesting
         try await withApp(app) { _ in
             let f = try await fixture()
             for (student, group) in [(f.ada, f.labA), (f.ben, f.labA), (f.alan, f.labB), (f.ari, f.labB)] {
-                try await join(f, group: group, userID: student)
+                try await f.join(student, to: group, on: app.db)
             }
             try await play(f, userID: f.ada, id: "rrg_a2")
             try await play(f, userID: f.ben, id: "rrg_b2")
@@ -184,8 +143,8 @@ import VaporTesting
     @Test func aLabsRowsStayOffTheClassStandingsAfterTheFlagGoesOff() async throws {
         try await withApp(app) { _ in
             let f = try await fixture()
-            try await join(f, group: f.labA, userID: f.ada)
-            try await join(f, group: f.labA, userID: f.ben)
+            try await f.join(f.ada, to: f.labA, on: app.db)
+            try await f.join(f.ben, to: f.labA, on: app.db)
             try await play(f, userID: f.ada, id: "rrg_a7")
             try await play(f, userID: f.ben, id: "rrg_b7")
             #expect(try await standing(f.ben)?.groupID == f.labA)
@@ -204,8 +163,8 @@ import VaporTesting
     @Test func aRemovedStudentLeavesTheGroupsStandings() async throws {
         try await withApp(app) { _ in
             let f = try await fixture()
-            try await join(f, group: f.labA, userID: f.ada)
-            try await join(f, group: f.labA, userID: f.ben)
+            try await f.join(f.ada, to: f.labA, on: app.db)
+            try await f.join(f.ben, to: f.labA, on: app.db)
             try await play(f, userID: f.ada, id: "rrg_a5")
             try await play(f, userID: f.ben, id: "rrg_b5")
             #expect(try await standing(f.ben) != nil)
@@ -221,8 +180,8 @@ import VaporTesting
     @Test func aSubmissionWithNoSessionPlaysNobodyAndLeavesTheStandings() async throws {
         try await withApp(app) { _ in
             let f = try await fixture()
-            try await join(f, group: f.labA, userID: f.ada)
-            try await join(f, group: f.labA, userID: f.ben)
+            try await f.join(f.ada, to: f.labA, on: app.db)
+            try await f.join(f.ben, to: f.labA, on: app.db)
             try await play(f, userID: f.ada, id: "rrg_a3")
             try await play(f, userID: f.ben, id: "rrg_b3")
             let before = try #require(try await standing(f.ben))
@@ -236,4 +195,11 @@ import VaporTesting
             #expect(try await standing(f.ben)?.submissionID == "rrg_b3")
         }
     }
+}
+
+private extension PerGroupActivityFixture {
+    var ada: UUID { students[0] }
+    var ben: UUID { students[1] }
+    var alan: UUID { students[2] }
+    var ari: UUID { students[3] }
 }

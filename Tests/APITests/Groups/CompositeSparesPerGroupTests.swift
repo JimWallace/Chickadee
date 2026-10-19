@@ -58,12 +58,7 @@ import VaporTesting
         let user = try await makeTestStudent(on: app, username: name)
         try await wrEnrollUser(user, on: app)
         let id = try user.requireID()
-        let session = try await ActivitySessionStore.open(
-            assignmentID: f.assignmentID, groupID: group, by: nil, now: Date().addingTimeInterval(-60), on: app.db)
-        let joinedAt = Date().addingTimeInterval(-30)
-        try await ActivitySessionStore.join(
-            code: ActivitySessionCode.code(secret: session.codeSecret, at: joinedAt), userID: id, now: joinedAt,
-            on: app.db)
+        try await joinSession(assignmentID: f.assignmentID, groupID: group, userID: id, on: app.db)
         await CompositeSlots.dealOnOpen(setup: f.setup, assignment: f.assignment, userID: id, on: app.db)
         let slot = try #require(try await CompositePool.dealtSlot(assignmentID: f.assignmentID, userID: id, on: app.db))
         let submissionID = "sub_\(name)"

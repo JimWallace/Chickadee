@@ -92,13 +92,8 @@ import VaporTesting
             let user = try await arInsertStudent(username: name, on: app)
             try await arEnrollStudentInTestCourse(user, on: app)
             if runsPerGroup, let lab {
-                let session = try await ActivitySessionStore.open(
-                    assignmentID: assignmentID, groupID: lab, by: nil, now: Date().addingTimeInterval(-60),
-                    on: app.db)
-                let joinedAt = Date().addingTimeInterval(-30)
-                try await ActivitySessionStore.join(
-                    code: ActivitySessionCode.code(secret: session.codeSecret, at: joinedAt),
-                    userID: try user.requireID(), now: joinedAt, on: app.db)
+                try await joinSession(
+                    assignmentID: assignmentID, groupID: lab, userID: try user.requireID(), on: app.db)
             }
             users.append(user)
         }
