@@ -162,6 +162,6 @@ func unionTally(setup: APITestSetup, on db: any Database) async throws -> UnionT
     return UnionTally(
         kills: kills,
         defences: defences,
-        defeatedCount: defences.filter(\.defeated).count,
+        defeatedCount: defences.count(where: \.defeated),
         targetCount: defences.count)
 }

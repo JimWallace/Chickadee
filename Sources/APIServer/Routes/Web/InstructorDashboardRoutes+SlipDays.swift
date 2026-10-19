@@ -302,7 +302,7 @@ extension InstructorDashboardRoutes {
         for enrollment in studentEnrollments {
             guard let user = userByID[enrollment.userID] else { continue }
             let spends = spendsByUserID[enrollment.userID] ?? []
-            let used = spends.filter { $0.refundedAt == nil }.count
+            let used = spends.count(where: { $0.refundedAt == nil })
             let adjustment = enrollment.slipDaysAdjustment ?? 0
             let total = policy.daysPerStudent + adjustment
             let spendRows = spends.map { spend in

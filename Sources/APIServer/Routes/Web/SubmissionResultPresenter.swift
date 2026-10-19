@@ -271,7 +271,7 @@ extension WebRoutes {
         }
         // Counted from the rendered rows: "skipped" is a short-result pattern
         // rather than a status, so the collection cannot report it.
-        processed.skippedCount = processed.outcomes.filter(\.isSkipped).count
+        processed.skippedCount = processed.outcomes.count(where: \.isSkipped)
         // Open the first failure's output and leave the rest closed.
         if let first = processed.outcomes.firstIndex(where: {
             $0.status != "pass" && !$0.isSkipped && $0.longResult != nil
@@ -441,8 +441,8 @@ extension WebRoutes {
         outcomes: [OutcomeRow], hasDelta: Bool, currentAttempt: Int
     ) -> String? {
         guard hasDelta else { return nil }
-        let improved = outcomes.filter(\.deltaImproved).count
-        let regressed = outcomes.filter(\.deltaRegressed).count
+        let improved = outcomes.count(where: \.deltaImproved)
+        let regressed = outcomes.count(where: \.deltaRegressed)
         var parts: [String] = []
         if improved > 0 { parts.append("↑ fixed \(improved) test\(improved  == 1 ? "" : "s")") }
         if regressed > 0 { parts.append("↓ broke \(regressed) test\(regressed == 1 ? "" : "s")") }

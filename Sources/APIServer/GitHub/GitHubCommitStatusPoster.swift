@@ -27,7 +27,7 @@ enum GitHubCommitStatusPoster {
                 state: .failure, description: "Build failed", context: context, targetURL: targetURL)
         }
         let publicOutcomes = collection.outcomes.filter { $0.tier == .pub }
-        let passed = publicOutcomes.filter { $0.status == .pass }.count
+        let passed = publicOutcomes.count(where: { $0.status == .pass })
         let description =
             publicOutcomes.isEmpty
             ? "No public tests"

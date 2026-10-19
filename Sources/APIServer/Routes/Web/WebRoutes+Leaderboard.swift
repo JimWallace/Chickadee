@@ -250,7 +250,7 @@ func buildUnionPresentation(
     // who has since dropped keeps no row here (their enrollment carried the
     // handle), and a denominator that counted them would not match the
     // table under it.
-    let defeated = defences.filter { $0.statusText == "defeated" }.count
+    let defeated = defences.count(where: { $0.statusText == "defeated" })
     let viewerIndex = kills.firstIndex(where: \.isViewer)
     let you =
         isStaff
@@ -633,7 +633,7 @@ private func unrankedStudentCount(
         students = students.filter(memberIDs.contains)
     }
     let rankedIDs = Set(ranked.map(\.userID))
-    return students.filter { !rankedIDs.contains($0) }.count
+    return students.count(where: { !rankedIDs.contains($0) })
 }
 
 /// Who the viewer is to the page: their handle and hero bird, from the same

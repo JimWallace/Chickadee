@@ -51,7 +51,7 @@ extension InstructorLMSRoutes {
         var rows: [APILTIGradeSync] = []
         if let course { rows = try await ltiGradeSyncRows(course: course, on: req.db) }
 
-        let failedCount = rows.filter { !$0.pending && $0.error != nil }.count
+        let failedCount = rows.count(where: { !$0.pending && $0.error != nil })
         let page = try await PageRequestContext.courseAware(req)
         let flash = FlashMessages(
             success: Self.ltiGradesNotice(
@@ -71,8 +71,8 @@ extension InstructorLMSRoutes {
                 canChooseTransport: isInstructor && writable && platform != nil && hasGradeService,
                 canPushAll: writable && usesAGS,
                 canLinkStudents: isInstructor && writable && usesAGS && course?.ltiMembershipsURL != nil,
-                sentCount: rows.filter { !$0.pending && $0.error == nil && $0.syncedAt != nil }.count,
-                waitingCount: rows.filter(\.pending).count,
+                sentCount: rows.count(where: { !$0.pending && $0.error == nil && $0.syncedAt != nil }),
+                waitingCount: rows.count(where: \.pending),
                 failedCount: failedCount,
                 failures: failures,
                 failuresTruncated: failedCount > Self.ltiFailureListLimit)

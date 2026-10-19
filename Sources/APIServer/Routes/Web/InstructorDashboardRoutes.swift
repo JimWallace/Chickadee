@@ -303,7 +303,7 @@ struct InstructorDashboardRoutes: RouteCollection {
                 name: "items", reason: "invalid assignment ID in reorder payload")
         }
         guard
-            contentUUIDs.count == body.items.filter({ $0.type == "content" }).count
+            contentUUIDs.count == body.items.count(where: { $0.type == "content" })
         else {
             throw WebAssignmentError.invalidParameter(
                 name: "items", reason: "invalid content-item ID in reorder payload")

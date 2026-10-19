@@ -166,6 +166,6 @@ enum CompositeReferences {
     static func progress(assignmentID: UUID, on db: any Database) async throws -> (ready: Int, total: Int)? {
         let rows = try await APICompositeReference.query(on: db).filter(\.$assignmentID == assignmentID).all()
         guard !rows.isEmpty else { return nil }
-        return (rows.filter { $0.passed && $0.data != nil }.count, rows.count)
+        return (rows.count(where: { $0.passed && $0.data != nil }), rows.count)
     }
 }

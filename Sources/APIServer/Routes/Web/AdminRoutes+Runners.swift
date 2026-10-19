@@ -303,7 +303,7 @@ extension AdminRoutes {
         let cacheFlagged = recentJobs.compactMap(\.testSetupCacheHit)
         let cacheHitRateFormatted: String? = {
             guard !cacheFlagged.isEmpty else { return nil }
-            let hits = cacheFlagged.filter(\.self).count
+            let hits = cacheFlagged.count(where: \.self)
             let pct = Int((Double(hits) / Double(cacheFlagged.count) * 100).rounded())
             return "\(pct)% (\(hits)/\(cacheFlagged.count))"
         }()

@@ -316,7 +316,7 @@ private func classGoalMetric(
     }
     guard let requirement = goal.coveredItemsRequirement else {
         let threshold = goal.gradeThresholdFraction ?? 1
-        let meeting = evaluation.bestByStudent.values.filter { $0 >= threshold }.count
+        let meeting = evaluation.bestByStudent.values.count(where: { $0 >= threshold })
         return ClassGoalMetric(
             studentsMeeting: meeting,
             progress: classGoalProgress(

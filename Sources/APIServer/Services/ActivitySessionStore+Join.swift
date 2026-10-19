@@ -135,7 +135,7 @@ extension ActivitySessionStore {
 
     /// How many students play in the session's current run.
     static func joinedCount(of session: APIActivitySession, on db: any Database) async throws -> Int {
-        try await attendance(of: session, on: db).filter { $0.removedAt == nil }.count
+        try await attendance(of: session, on: db).count(where: { $0.removedAt == nil })
     }
 
     /// Removes a student from the session's current run: they stop playing,

@@ -51,8 +51,8 @@ public enum LineDiff {
     /// Added and removed line counts for a summary line.
     public static func counts(_ rows: [LineDiffRow]) -> (added: Int, removed: Int) {
         (
-            rows.filter { $0.kind == .added }.count,
-            rows.filter { $0.kind == .removed }.count
+            rows.count(where: { $0.kind == .added }),
+            rows.count(where: { $0.kind == .removed })
         )
     }
 

@@ -185,7 +185,7 @@ extension InstructorDashboardRoutes {
         )
         let showsGroups = try await Self.applyGroupColumn(to: &rows, courseID: activeCourseUUID, on: req.db)
         let activeStudentCount =
-            enrolledUsers.compactMap(\.id).filter { rolesByUserID[$0] == .student }.count
+            enrolledUsers.compactMap(\.id).count(where: { rolesByUserID[$0] == .student })
         return (rows, activeStudentCount + pendingPreEnrollments.count, showsGroups)
     }
 

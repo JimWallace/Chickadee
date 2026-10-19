@@ -106,7 +106,7 @@ extension InstructorDashboardRoutes {
                 gatesOpen: gatesOpen,
                 prompts: prompts,
                 rows: reviewRows,
-                reviewCount: reviewRows.filter(\.needsReview).count,
+                reviewCount: reviewRows.count(where: \.needsReview),
                 maxDraftLength: ReflectionFeedbackService.maxDraftLength)
         }.encodeResponse(for: req)
     }

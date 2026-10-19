@@ -71,7 +71,7 @@ extension InstructorLMSRoutes {
         unverifiable += pending.compactMap { $0.id?.uuidString }
 
         let checked = students.count + pending.count
-        let activeMembers = members.filter(\.isActive).count
+        let activeMembers = members.count(where: \.isActive)
         var message =
             "Checked \(checked) against \(activeMembers) in the LMS: \(notOnLearn.count) not in the LMS course"
         if !unverifiable.isEmpty {

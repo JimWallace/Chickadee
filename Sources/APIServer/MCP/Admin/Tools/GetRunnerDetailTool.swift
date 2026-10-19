@@ -180,7 +180,7 @@ struct GetRunnerDetailTool: DiagnosticTool {
     private func timingSummary(recentJobs: [JobExecutionMetric]) -> TimingSummary {
         let stageBreakdowns = recentJobs.map(stageBreakdown(for:))
         let cacheFlagged = recentJobs.compactMap(\.testSetupCacheHit)
-        let cacheHits = cacheFlagged.filter(\.self).count
+        let cacheHits = cacheFlagged.count(where: \.self)
         var statusCounts: [String: Int] = [:]
         for job in recentJobs {
             guard let status = job.finalStatus else { continue }

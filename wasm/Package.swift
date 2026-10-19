@@ -1,4 +1,4 @@
-// swift-tools-version:6.0
+// swift-tools-version:6.4
 import PackageDescription
 
 // Separate package so JavaScriptKit (wasm-only) never enters the main
@@ -30,6 +30,29 @@ import PackageDescription
 //     Embedded SDK with the Node output-contract harness green.
 //   * Links libswiftUnicodeDataTables, which the embedded SDK ships but does
 //     not auto-link (JavaScriptKit's string handling needs the Unicode tables).
+//   * Most of the root package's `sourceSettings`: warnings are errors, and
+//     the same upcoming features. This package is where data from JS comes
+//     in, so it follows the same rules as the code it calls. A manifest
+//     cannot import another manifest, so the list is a copy. Two root
+//     settings are not here, because the code that the BridgeJS plugin
+//     generates (BridgeJS.swift, compiled into this target) does not build
+//     with them, and we cannot edit it. Measured on JavaScriptKit 0.59 and
+//     the 6.4 Embedded SDK:
+//       - InternalImportsByDefault: the generated file imports JavaScriptKit
+//         without `public`, but declares public conformances to its
+//         protocols (107 errors).
+//       - strictMemorySafety(): the generated file has unsafe expressions
+//         with no `unsafe` mark (13 errors).
+//     Try them again when JavaScriptKit is updated.
+
+let sourceSettings: [SwiftSetting] = [
+    .treatAllWarnings(as: .error),
+    .enableUpcomingFeature("ExistentialAny"),
+    .enableUpcomingFeature("MemberImportVisibility"),
+    .enableUpcomingFeature("InferIsolatedConformances"),
+    .enableUpcomingFeature("ImmutableWeakCaptures"),
+]
+
 let package = Package(
     name: "RunnerWasm",
     // The same floor as the root package, which this one depends on.
@@ -46,7 +69,7 @@ let package = Package(
                 "JavaScriptKit",
                 .product(name: "JavaScriptEventLoop", package: "JavaScriptKit"),
             ],
-            swiftSettings: [.enableExperimentalFeature("Extern"), .unsafeFlags(["-Osize"])],
+            swiftSettings: sourceSettings + [.enableExperimentalFeature("Extern"), .unsafeFlags(["-Osize"])],
             linkerSettings: [.unsafeFlags(["-lswiftUnicodeDataTables"])],
             plugins: [.plugin(name: "BridgeJS", package: "JavaScriptKit")]
         )

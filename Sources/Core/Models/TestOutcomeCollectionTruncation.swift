@@ -64,7 +64,7 @@ extension TestOutcomeCollection {
     ///
     /// Internal, not private, so the tests can see it; it is not API.
     var outputCarrierCount: Int {
-        outcomes.filter { ($0.longResult?.isEmpty == false) }.count
+        outcomes.count(where: { ($0.longResult?.isEmpty == false) })
             + ((compilerOutput?.isEmpty == false) ? 1 : 0)
     }
 

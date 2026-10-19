@@ -150,7 +150,7 @@ struct CompositeSnapshot: Content, Equatable {
 
         return CompositeSnapshot(
             cursor: String(cursor),
-            complete: shown.values.filter(\.passed).count + spares.count,
+            complete: shown.values.count(where: \.passed) + spares.count,
             total: spec.layout.slotCount,
             slots: slots,
             pixels: pixels)

@@ -84,7 +84,7 @@ extension InstructorDashboardRoutes {
         }()
 
         let (staffRows, studentRows) = Self.splitRoster(enrolledStudents)
-        let pendingCount = studentRows.filter(\.isPending).count
+        let pendingCount = studentRows.count(where: \.isPending)
         let page = try await PageRequestContext.courseAware(req)
         return try await HTMLResponse {
             InstructorStudentsPage(

@@ -284,7 +284,7 @@ func familySuiteRowsForSetup(_ setup: APITestSetup) -> [FamilySuiteRow] {
             name: family.name,
             functionName: family.functionName,
             tier: family.defaults.tier.rawValue,
-            caseCount: family.cases.filter(\.enabled).count,
+            caseCount: family.cases.count(where: \.enabled),
             totalPoints: totalPoints
         )
     }

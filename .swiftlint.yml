@@ -215,6 +215,15 @@ custom_rules:
     excluded_match_kinds: [comment, doccomment, string]
     message: "Use Task.sleep(for: .seconds(n)) or another Duration."
     severity: error
+  legacy_filter_count:
+    name: "count(where:), not filter(_:).count"
+    included: "Sources/.*\\.swift"
+    # A Fluent query's `.filter(...).count()` is a database count, so a call
+    # (an open parenthesis after `count`) does not match.
+    regex: "\\.filter\\s*(\\{[^{}\\n]*\\}|\\([^()\\n]*\\))\\.count\\b(?!\\s*\\()"
+    excluded_match_kinds: [comment, doccomment, string]
+    message: "Use count(where:) (SE-0220). It does not make a temporary array."
+    severity: error
   elementary_no_inline_style:
     name: "No inline style in a view"
     included: "Sources/APIServer/Views/.*\\.swift"

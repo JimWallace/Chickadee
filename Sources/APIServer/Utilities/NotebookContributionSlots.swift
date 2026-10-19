@@ -67,7 +67,7 @@ enum NotebookContributionSlots {
     /// that as "apply no bound" — which is what keeps every existing
     /// assignment byte-identical through this path.
     static func declaredSlotCount(inInstructorCells cells: [[String: Any]]) -> Int {
-        cells.filter(isSlotCell).count
+        cells.count(where: isSlotCell)
     }
 
     /// The student's cells, reduced to what their contribution is allowed to
