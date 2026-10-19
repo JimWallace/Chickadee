@@ -16,7 +16,7 @@
 // used to guard these calls are gone with Foundation's `Process`; see that
 // file for what remains and why.
 
-import Foundation
+public import Foundation
 
 // MARK: - Errors
 

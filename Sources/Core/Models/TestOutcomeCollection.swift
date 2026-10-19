@@ -1,6 +1,6 @@
 // Core/Models/TestOutcomeCollection.swift
 
-import Foundation
+public import Foundation
 
 /// Build status at the collection (submission) level.
 public enum BuildStatus: String, Codable, Sendable {

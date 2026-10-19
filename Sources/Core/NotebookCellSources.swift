@@ -14,7 +14,7 @@
 // return `nil` / `[]` on malformed input rather than throwing, since
 // every existing caller already wraps their parse step in `try?`.
 
-import Foundation
+public import Foundation
 
 public enum NotebookCellSources {
 

@@ -20,7 +20,7 @@
 // Password hashes are never included. User entries carry only
 // username, displayName, email, and role.
 
-import Foundation
+public import Foundation
 
 // MARK: - Top-level manifest
 

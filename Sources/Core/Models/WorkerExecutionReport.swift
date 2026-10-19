@@ -1,4 +1,4 @@
-import Foundation
+public import Foundation
 
 public struct WorkerExecutionStageTimings: Codable, Sendable, Equatable {
     public let workdirSetupMs: Int?

@@ -1,5 +1,5 @@
 import Crypto
-import Foundation
+public import Foundation
 
 /// Lowercase-hex SHA-256 digest of `data`. Output is a stable 64-character
 /// string. Used as a content fingerprint for manifest cache keys, the

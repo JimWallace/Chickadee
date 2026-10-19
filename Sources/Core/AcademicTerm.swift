@@ -9,7 +9,7 @@
 // reads as "no term recorded" — never as a term guessed from its creation
 // date.
 
-import Foundation
+public import Foundation
 
 /// One of the three Waterloo terms.  Declared in calendar order, so
 /// `allCases` is also the order of the terms within one year.

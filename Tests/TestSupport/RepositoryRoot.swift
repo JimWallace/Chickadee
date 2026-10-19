@@ -5,7 +5,7 @@
 // with its own count of `deletingLastPathComponent`, and four read the
 // working directory instead.
 
-import Foundation
+public import Foundation
 
 /// The repository root: the directory that holds `Tests/`.
 public let repositoryRoot = URL(fileURLWithPath: #filePath)

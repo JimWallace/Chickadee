@@ -6,7 +6,7 @@
 // dispatches on one resolved value instead of re-sniffing file extensions or
 // notebook kernelspecs at each call site.
 
-import Foundation
+public import Foundation
 
 public enum AssignmentLanguage: String, Codable, Sendable, CaseIterable {
     case python
