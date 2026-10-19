@@ -392,9 +392,14 @@ because line numbers go out of date.
     `mergeNotebook`, `filterNotebook`, `NotebookSubstitution.apply`,
     `PersonalizedCellRestoration`, the class corpus) parse with
     `JSONValue.object(from:)` and write with `JSONValue.data(fromObject:)`,
-    which sorts keys. Their output is stored, and assignment versioning
-    hashes it, so it must stay deterministic: a rewriter must not encode
-    any other way.
+    which sorts keys. The saves store their output, and assignment
+    versioning hashes it, so it must stay deterministic: a rewriter must not
+    encode any other way. The read-time uses (`filterNotebook` and
+    `normalizeNotebookForJupyterLite` on page open, `NotebookSubstitution`
+    for working copies) are not hashed.
+  - `sameNotebookContent` compares decoded `JSONValue` objects, so key order
+    does not count, but an `Int` and a `Double` of the same value do: `1` and
+    `1.0` compare unequal, and that means one refresh of a staff copy.
   - The server's validity gates (`notebookCellCount` on the notebook save,
     the starter and solution checks in `PublishedAssignmentRoutes+SaveEdit`
     and `TestSetupRoutes`) use `JSONSerialization`, on purpose: they keep

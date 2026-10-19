@@ -217,7 +217,8 @@ func workingCopyMtimeEpoch(absolutePath: String) -> Int {
 /// normalized and a personalized starter is substituted on every read, and a
 /// copy written before those steps sorted their keys has its keys in another
 /// order, so an unchanged notebook can come back as different bytes. The two
-/// sides are compared as decoded `JSONValue` documents.
+/// sides are compared as decoded `JSONValue` objects. Anything that is not a
+/// JSON object compares unequal, which means a refresh: the safe direction.
 private func sameNotebookContent(_ lhs: Data, _ rhs: Data) -> Bool {
     if lhs == rhs { return true }
     guard let left = JSONValue.object(from: lhs), let right = JSONValue.object(from: rhs) else { return false }

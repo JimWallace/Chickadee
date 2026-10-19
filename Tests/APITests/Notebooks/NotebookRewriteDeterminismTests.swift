@@ -8,6 +8,7 @@
 // dictionary order, so an unchanged notebook could hash differently from one
 // save to the next.
 
+import ChickadeeTestSupport
 import Core
 import Foundation
 import Testing
@@ -28,7 +29,7 @@ import Testing
         let object: [String: JSONValue] = [
             "b": .int(1), "a": .object(["z": .null, "y": .array([.object(["d": .bool(true), "c": .string("s")])])]),
         ]
-        let text = String(decoding: try #require(JSONValue.data(fromObject: object)), as: UTF8.self)
+        let text = try #require(String(bytes: try #require(JSONValue.data(fromObject: object)), encoding: .utf8))
         #expect(text == #"{"a":{"y":[{"c":"s","d":true}],"z":null},"b":1}"#)
     }
 
@@ -48,6 +49,39 @@ import Testing
             mergeNotebook(student: ordered, instructor: reordered)
                 == mergeNotebook(student: reordered, instructor: ordered))
         #expect(filterNotebook(ordered, hiddenTiers: ["secret"]) == filterNotebook(reordered, hiddenTiers: ["secret"]))
+    }
+
+    @Test func restoringTemplatesGivesTheSameBytesInAnyKeyOrder() throws {
+        func notebook(_ cell: String) -> Data {
+            Data(#"{"cells":[\#(cell)],"metadata":{},"nbformat":4}"#.utf8)
+        }
+        let canonical = notebook(#"{"cell_type":"code","id":"c1","metadata":{},"source":"n = {{n}}"}"#)
+        let a = notebook(
+            #"{"cell_type":"code","id":"c1","metadata":{"chickadee_personalized":"n"},"source":"n = 3"}"#)
+        let b = notebook(
+            #"{"source":"n = 3","metadata":{"chickadee_personalized":"n"},"id":"c1","cell_type":"code"}"#)
+        let fromA = PersonalizedCellRestoration.restoreTemplates(in: a, canonical: canonical)
+        let fromB = PersonalizedCellRestoration.restoreTemplates(in: b, canonical: canonical)
+        guard case .restored(let bytesA) = fromA, case .restored(let bytesB) = fromB else {
+            throw IssueRecorded("Both notebooks have a matching template, so both restore.")
+        }
+        #expect(bytesA == bytesB)
+        #expect(try #require(String(bytes: bytesA, encoding: .utf8)).contains(#"n = {{n}}"#))
+    }
+
+    /// Documented difference: a number that a `Double` or an `Int` cannot
+    /// hold exactly is rounded on a rewrite. `JSONSerialization` kept the
+    /// digits. Source cells are strings, so only output data and metadata
+    /// can carry such a number.
+    @Test(arguments: [
+        ("9223372036854775808", "9.223372036854776e+18"),
+        ("3.141592653589793238", "3.141592653589793"),
+        ("-0.0", "0"),
+    ])
+    func aNumberBeyondDoublePrecisionIsRounded(_ written: String, _ stored: String) throws {
+        let json = #"{"cells":[],"metadata":{"kernelspec":{"name":"python3"},"n":\#(written)},"nbformat":4}"#
+        let out = try #require(String(bytes: normalizeNotebookForJupyterLite(Data(json.utf8)), encoding: .utf8))
+        #expect(out.contains(#""n":\#(stored)"#))
     }
 
     @Test func substitutionGivesTheSameBytesInAnyKeyOrder() throws {
