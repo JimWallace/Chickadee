@@ -499,7 +499,10 @@ duplicate.
   frame polls in the `json` mode of `table-poll.js`, outside any polled region.
   Present mode wraps it in `.present-composite`, which makes it as large as the
   screen permits, and puts the progress in the clock's place. The result page
-  wraps it in `.composite-tile`, which shows one student's contribution. In the
+  wraps it in `.composite-tile`, which shows one student's contribution. The
+  staff leaderboard of a composite that runs per lab group puts one stage per
+  lab in a `.composite-labs` grid, each in a `.composite-labs-item` with
+  the lab's name and progress, and gives each stage's range its own id. In the
   strip, passed is `--green` and failed is `--red`, the test-status pair, and
   reference is `--gray-300`, between empty and passed in both themes.
 - **`.fieldset-plain`** — the unstyled `<fieldset>` + bold `<legend>` that

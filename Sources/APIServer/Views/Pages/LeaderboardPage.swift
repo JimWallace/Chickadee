@@ -87,16 +87,19 @@ struct LeaderboardPage: HTML {
                 .attributes(
                     .data("poll-until", value: board.pollUntilISO), when: board.pollsLive && board.hasPollUntil)
             }
+            if let labs = board.compositeLabs {
+                CompositeLabsSection(presentation: labs)
+            }
             if board.showFilter {
                 script(.src(page.asset("/list-filter.js"))) {}
             }
-            if board.compositeBoard != nil {
+            if board.compositeBoard != nil || board.compositeLabs != nil {
                 script(.src(page.asset("/class-composite-core.js"))) {}
                 script(.src(page.asset("/class-composite.js"))) {}
             }
             // The results region and the composite canvas refresh only
             // through table-poll.js, which the base layout does not load.
-            if board.pollsLive || board.compositeBoard != nil {
+            if board.pollsLive || board.compositeBoard != nil || board.compositeLabs != nil {
                 script(.src(page.asset("/table-poll.js"))) {}
             }
         }

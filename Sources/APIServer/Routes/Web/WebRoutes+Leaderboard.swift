@@ -124,6 +124,8 @@ extension WebRoutes {
                     ? try await CompositeBoardPresentation.build(
                         setup: setup, activity: activity, assignment: assignment, groupID: groupScope?.groupID,
                         on: req.db) : nil,
+                compositeLabs: try await compositeLabs(
+                    req: req, isStaff: isStaff, setup: setup, activity: activity, assignment: assignment),
                 hasWindow: session != nil,
                 window: session,
                 // Two decisions, deliberately not one nil. Whether the page
@@ -144,6 +146,16 @@ extension WebRoutes {
             return try await HTMLResponse { page }.encodeResponse(for: req)
         }
         return Response.pollFragment(html: LeaderboardBody(board: presentation).render(), for: req)
+    }
+
+    /// Every lab's image, for staff on the full page only: it sits outside
+    /// the polled region, so the body refresh renders none of it.
+    private func compositeLabs(
+        req: Request, isStaff: Bool, setup: APITestSetup, activity: ClassActivity, assignment: APIAssignment?
+    ) async throws -> CompositeLabsPresentation? {
+        guard isStaff, req.query[String.self, at: "fragment"] != "body" else { return nil }
+        return try await CompositeLabsPresentation.build(
+            setup: setup, activity: activity, assignment: assignment, on: req.db)
     }
 }
 

@@ -2902,6 +2902,10 @@ body:has(.notebook-header .nb-title-block) .nav {
 .present-composite .composite-slots--strip { max-width: none; }
 /* A student's own tile, on the result page. */
 .composite-tile .composite-frame { max-width: 16rem; }
+/* Every lab's image, side by side, under a per-group composite's staff board. */
+.composite-labs { display: grid; grid-template-columns: repeat(auto-fill, minmax(16rem, 1fr)); gap: 1.5rem; }
+.composite-labs-item { display: flex; flex-direction: column; gap: .5rem; }
+.composite-labs-item > h3, .composite-labs-item > p { margin: 0; }
 @media (prefers-reduced-motion: reduce) {
     .composite-slot--rendering, .composite-slot--arrived { animation: none; }
 }

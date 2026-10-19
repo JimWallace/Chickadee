@@ -566,6 +566,8 @@ because line numbers go out of date.
   - `LeaderboardGroupScope.studentGroup`, which picks a student's board.
   - `chooseClassmates`, which plays the students of the challenger's session.
   - `GroupSessionPanel` on the present page, and `SessionAttendancePage`.
+  - `CompositeLabsPresentation` on the staff leaderboard (slice 4c), which
+    shows each lab whose session has ended (`closed_at` in the past).
   - The data export (`gatherGroups`, `gatherSessionJoins`).
 - **Rules** (`docs/lab-groups.md`):
   - A per-group activity has no session window: each group's session is its
@@ -790,6 +792,10 @@ because line numbers go out of date.
   - Classmates see a handle and a bird, never a name.
   - Hidden is the default.
   - Names show only to staff, and never in present mode.
+  - The whole composite image is for staff and the projector: a student
+    reads only their own tile. Every lab's image on the leaderboard
+    (`CompositeLabsPresentation`) is staff-only too, until the maintainer
+    decides otherwise (`docs/lab-groups.md`, slice 4c).
 - **No guard:** no generic check finds a new page that shows student data to
   classmates. `RouteAuthorizationMatrixTests` does not cover routes outside
   `/instructor` and `/courses`. So:
