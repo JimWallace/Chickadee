@@ -5,15 +5,14 @@
 // three returned nothing for a directory they could not read.
 
 import Foundation
+import SystemPackage
 
 /// The Swift files under `directory`, at any depth, sorted by path.
 ///
 /// Throws when `directory` is not a directory, so a wrong path fails the test
 /// rather than scanning nothing and passing.
 public func swiftFiles(under directory: URL) throws -> [URL] {
-    var isDirectory: ObjCBool = false
-    guard FileManager.default.fileExists(atPath: directory.path, isDirectory: &isDirectory),
-        isDirectory.boolValue,
+    guard let status = try? Stat(FilePath(directory.path)), status.type == .directory,
         let enumerator = FileManager.default.enumerator(at: directory, includingPropertiesForKeys: nil)
     else { throw IssueRecorded("Cannot read the directory \(directory.path)") }
     return enumerator.compactMap { $0 as? URL }
