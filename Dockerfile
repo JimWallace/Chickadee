@@ -56,8 +56,14 @@ COPY Tools/runner-support ./Tools/runner-support
 # deprecated and warns; drop this flag once the default engine links statically.
 RUN swift build -c release --static-swift-stdlib --build-system native --product chickadee-server
 RUN swift build -c release --static-swift-stdlib --build-system native --product chickadee-runner
+# A release build links with -g, and the debug data is most of each binary
+# (measured on 6.4: server 237 MB, 101 MB without it; runner 28 MB, 10 MB).
+# --strip-debug keeps the symbol table, so a crash still names its functions.
+# The same step is in the build-release job of docker-build.yml, which also
+# keeps the full debug data of each tag build as a workflow artifact.
 RUN mkdir -p /out \
-    && cp .build/release/chickadee-server .build/release/chickadee-runner /out/
+    && strip --strip-debug -o /out/chickadee-server .build/release/chickadee-server \
+    && strip --strip-debug -o /out/chickadee-runner .build/release/chickadee-runner
 
 # ── Prebuilt binaries from the build context ────────────────
 # Only built when BINARIES=prebuilt; its COPY paths are not evaluated
