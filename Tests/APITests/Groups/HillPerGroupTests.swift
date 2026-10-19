@@ -4,7 +4,7 @@
 // slice 3b): each lab has its own hill, a challenger plays the champion of
 // the group whose session they submitted in, a submission made with no
 // session open takes no hill, no lab's champion holds the course's class
-// record, a student whom staff removed loses the hill and cannot take it, and
+// record and a per-group hill seeds none, a student whom staff removed loses the hill and cannot take it, and
 // the page shows the champion of the group it shows.
 
 import Core
@@ -171,6 +171,24 @@ import VaporTesting
             // Removing the champion empties the hill.
             #expect(try await ActivitySessionStore.remove(userID: f.ada, from: session, on: app.db))
             #expect(try await holder(f.labA) == nil)
+        }
+    }
+
+    @Test func aPerGroupHillSeedsNoChampionRecord() async throws {
+        try await withApp(app) { _ in
+            let f = try await fixture()
+            func hasChampionRecord() async throws -> Bool {
+                let setup = try #require(try await APITestSetup.find(setupID, on: app.db))
+                return setup.decodedManifest()?.achievements.contains { $0.recordDimension == .champion } == true
+            }
+            #expect(try await hasChampionRecord(), "the fixture carries the seeded record")
+            _ = try await ActivityAuthoring.setActivity(
+                setup: f.setup, to: ClassActivity(kind: .kingOfTheHill, runsPerGroup: true), on: app.db)
+            #expect(try await !hasChampionRecord())
+            let setup = try #require(try await APITestSetup.find(setupID, on: app.db))
+            _ = try await ActivityAuthoring.setActivity(
+                setup: setup, to: ClassActivity(kind: .kingOfTheHill), on: app.db)
+            #expect(try await hasChampionRecord(), "the whole class's hill seeds it again")
         }
     }
 

@@ -176,7 +176,9 @@ enum ActivityAuthoring {
         if aggregation == .bracket {
             try await seedWinnerRecord(setup: setup, record: seededTournamentRecord, on: db)
         }
-        if activity?.kind.opponentSource == .champion {
+        // A per-group hill has a champion in every lab, and a record has one
+        // holder, so it seeds none (docs/lab-groups.md, slice 3b).
+        if activity?.kind.opponentSource == .champion, activity?.isPerGroup != true {
             try await seedChampionRecord(setup: setup, on: db)
         } else {
             // A kind change away from the hill (or clearing) takes its

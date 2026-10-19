@@ -432,9 +432,9 @@ should be able to see it. The maintainer chose best effort on 2026-10-18.
   from the same submission, so the champion check reads the row the claim
   read.
 - The champion class record is not awarded for a per-group hill: a record
-  has one holder, and the activity has a hill in every lab. The authoring
-  door still seeds the record on a hill, so on a per-group hill it stays
-  unheld (or with its earlier holder) until per-group records exist. The
+  has one holder, and the activity has a hill in every lab. So the
+  authoring door seeds no champion record on a per-group hill, and removes
+  a seeded one when the flag goes on (an instructor-authored one stays). The
   `highestMetric` record stays course-wide, as in slice 3a.
 - Remove on "Who joined" empties the group's hill when the removed student
   holds it, so no challenger plays a student who was not in the room. A

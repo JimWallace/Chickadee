@@ -467,7 +467,8 @@ because line numbers go out of date.
     both resolve it with `Hill.of`, from the same submission, so the champion
     check reads the row the claim staged. A new reader or writer of a hill
     goes through `Hill`, never straight to `activity_champions`. A per-group
-    hill awards no champion class record.
+    hill awards no champion class record, and `ActivityAuthoring.setActivity`
+    seeds none for it.
   - An activity whose kind compares students (`ActivityKind.comparesStudents`)
     accepts only shared data (`DatasetSpec.isShared`). The rule is in
     `ManifestCoherence`. A new door that writes an activity or a dataset spec
