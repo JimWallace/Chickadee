@@ -794,7 +794,8 @@ As built (11b):
   deal number. A path that does not grade (the editor copy, the "my rows"
   download) reads a slot already dealt. Until there is one, it holds each
   partition back to its header row (`DatasetDeals.withholdingUndealtParts`),
-  so a student never reads rows they will not be graded on. The editor copy
+  and the starter notebook leaves its `=` expressions out, so a student never
+  reads rows they will not be graded on. The editor copy
   is written again once the slot is dealt. A grading run for a student with
   no slot, which the composite renders as slot 0, grades the whole file.
 - **Who gets which number** (`DatasetDeals`):

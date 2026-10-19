@@ -291,4 +291,18 @@ import VaporTesting
             #expect(try await download() == part(slot))
         }
     }
+
+    /// Only a composite student with no slot holds no part yet; a student
+    /// with a number, or an assignment that is not a composite, holds one.
+    @Test func onlyAnUndealtCompositeStudentHoldsNoPart() async throws {
+        try await withApp(app) { _ in
+            var manifest = TestProperties(language: .python, datasets: [spec])
+            #expect(!DatasetDeals.holdsNoPartYet(manifest: manifest, dealNumber: nil))
+            manifest.activity = ClassActivity(kind: .classComposite, composite: .starter)
+            #expect(DatasetDeals.holdsNoPartYet(manifest: manifest, dealNumber: nil))
+            #expect(!DatasetDeals.holdsNoPartYet(manifest: manifest, dealNumber: 2))
+            manifest.datasets = [DatasetSpec(file: "cases.csv", sampleSize: 3)]
+            #expect(!DatasetDeals.holdsNoPartYet(manifest: manifest, dealNumber: nil))
+        }
+    }
 }

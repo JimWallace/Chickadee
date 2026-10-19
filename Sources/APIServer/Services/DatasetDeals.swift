@@ -51,6 +51,14 @@ enum DatasetDeals {
         return try await deal(assignmentID: assignmentID, userID: userID, on: db)
     }
 
+    /// True when a student of a class composite holds no part of a
+    /// partition yet, because the composite has not dealt their slot. A path
+    /// that does not grade then shows no rows of the partition, and evaluates
+    /// no expression on them.
+    static func holdsNoPartYet(manifest: TestProperties, dealNumber: Int?) -> Bool {
+        dealNumber == nil && manifest.hasPartitionedDatasets && manifest.activity?.kind == .classComposite
+    }
+
     /// `files` with each partition cut to its header row while the student
     /// holds no part yet: a class composite deals the slot later, on open in
     /// the session window or when the first submission is graded. For the
@@ -61,7 +69,7 @@ enum DatasetDeals {
     static func withholdingUndealtParts(
         _ files: [String: String]?, manifest: TestProperties, dealNumber: Int?
     ) -> [String: String]? {
-        guard var files, dealNumber == nil, manifest.activity?.kind == .classComposite else { return files }
+        guard var files, holdsNoPartYet(manifest: manifest, dealNumber: dealNumber) else { return files }
         for spec in manifest.datasets where spec.kind == .partition {
             files[spec.file] = files[spec.file].map(DatasetMaterializer.headerOnly)
         }

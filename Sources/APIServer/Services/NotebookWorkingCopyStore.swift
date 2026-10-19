@@ -514,6 +514,9 @@ private func applyNotebookSubstitutionsIfNeeded(
                 manifest: manifest, userID: userID, courseID: setup.courseID, on: db)
             dealNumber = try await DatasetDeals.dealNumber(
                 manifest: manifest, courseID: setup.courseID, assignmentID: assignmentID, userID: userID, on: db)
+            // A composite student whose slot is not dealt yet holds no part,
+            // so an expression that reads a partition has no rows to read.
+            if DatasetDeals.holdsNoPartYet(manifest: manifest, dealNumber: dealNumber) { seedHex = nil }
         } catch {
             logger.warning(
                 Logger.Message(
