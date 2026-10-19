@@ -259,8 +259,8 @@ enum CourseGroupStore {
     /// goes at the end, a renamed one takes the new name, and a removed one
     /// that LEARN lists again comes back.
     ///
-    /// A group made in Chickadee matches a LEARN group of the same name and
-    /// takes its external id. A group that LEARN no longer lists loses its
+    /// An active group made in Chickadee matches a LEARN group of the same
+    /// name and takes its external id. A group that LEARN no longer lists loses its
     /// members. It is removed,
     /// as `removeGroup` removes it, only when it has no session: a lab that
     /// held a session keeps its row active, so its joins, its rankings and
@@ -278,12 +278,12 @@ enum CourseGroupStore {
         var byExternalID = Dictionary(
             existing.compactMap { group in group.externalID.map { ($0, group) } },
             uniquingKeysWith: { first, _ in first })
-        // A group made in Chickadee takes the LEARN group of its name, so a
-        // set that switches to LEARN keeps its labs, their sessions and their
-        // joins. An active group wins over a removed one of the same name.
+        // An active group made in Chickadee takes the LEARN group of its
+        // name, so a set that switches to LEARN keeps its labs, their sessions
+        // and their joins. A removed one stays removed: a removed group counts
+        // for nobody, and LEARN gets a new group instead.
         var madeHereByName = Dictionary(
-            existing.filter { $0.externalID == nil }.sorted { $0.removedAt == nil && $1.removedAt != nil }
-                .map { ($0.name.lowercased(), $0) },
+            existing.filter { $0.externalID == nil && $0.removedAt == nil }.map { ($0.name.lowercased(), $0) },
             uniquingKeysWith: { first, _ in first })
         for item in remote where byExternalID[item.externalID] == nil {
             guard let group = madeHereByName.removeValue(forKey: syncedName(item).lowercased()) else { continue }

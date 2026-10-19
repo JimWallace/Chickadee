@@ -4,7 +4,8 @@
 // instructor of a course linked to LEARN reads its groups from the LEARN
 // Sections, syncs them again, and stops the sync, which keeps the groups and
 // makes them editable; a failed first read puts the set back; a lab made in
-// Chickadee keeps its row and its session when the set switches to LEARN; a
+// Chickadee keeps its row and its session when the set switches to LEARN, and
+// a removed one stays removed; a
 // source change ends the join placements, and a failed read keeps them;
 // "Sync now" refuses a manual set; a
 // course not linked to LEARN is refused; a TA may not change the source; and
@@ -231,6 +232,25 @@ private final class LearnStub: Client, Sendable {
             #expect(groups.map(\.id) == [lab.id], "no second Lab 101")
             #expect(groups.first?.externalID == "70")
             #expect(groups.first?.name == "Lab 101")
+        }
+    }
+
+    @Test func aRemovedLabMadeHereStaysRemovedWhenTheSetSwitchesToLearn() async throws {
+        try await withAssignmentRoutesApp { app in
+            let course = try await connect(app)
+            let cookie = try await arLoginAsInstructor(on: app)
+            let set = try await CourseGroupStore.createSet(courseID: try course.requireID(), name: "Labs", on: app.db)
+            let lab = try await CourseGroupStore.addGroup(named: "Lab 101", to: set, on: app.db)
+            try await CourseGroupStore.removeGroup(lab, of: set, on: app.db)
+
+            _ = try await post(
+                "/instructor/groups/source", fields: ["source": "learnSections"], cookie: cookie, on: app)
+            let removed = try #require(try await APICourseGroup.find(lab.id, on: app.db))
+            #expect(removed.removedAt != nil, "a removed lab counts for nobody")
+            #expect(removed.externalID == nil)
+            let active = try await CourseGroupStore.groups(inSet: try set.requireID(), on: app.db)
+            #expect(active.map(\.externalID) == ["70"], "LEARN gets a new group")
+            #expect(active.first?.id != lab.id)
         }
     }
 

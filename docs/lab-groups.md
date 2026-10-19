@@ -814,9 +814,10 @@ group categories would call LEARN on every page load.
   When that first read fails, the route puts the set back as it was, or
   deletes the set it made, so the groups stay editable and the error is
   true.
-- **A switch keeps the labs.** `applySync` matches a group made in Chickadee
-  (no external ID) to the LEARN group of the same name, in any letter case,
-  and gives it that external ID. A lab keeps its row, its sessions, its joins
+- **A switch keeps the labs.** `applySync` matches an active group made in
+  Chickadee (no external ID) to the LEARN group of the same name, in any
+  letter case, and gives it that external ID. A removed one stays removed,
+  because a removed group counts for nobody, and LEARN gets a new group. A lab keeps its row, its sessions, its joins
   and its board when the set switches to LEARN, and no second lab of the
   same name appears.
 - **A switch ends the join placements.** After a source change succeeds,
