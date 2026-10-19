@@ -524,38 +524,19 @@ struct ReorderCourseSectionsTool: ContentTool {
     static let requiredScopes: Set<ContentScope> = [.write]
 
     func execute(_ input: Input, _ context: ToolContext) async throws -> Output {
-        let course = try await resolveCourseForWrite(code: input.courseCode, context: context, atLeast: .instructor)
-        let courseID = try course.requireID()
-        let uuids = input.orderedSectionIDs.compactMap {
-            UUID(uuidString: $0.trimmingCharacters(in: .whitespacesAndNewlines))
+        let course = try await resolveCourseForWrite(
+            code: input.courseCode, context: context, atLeast: SortOrderRenumbering.roleFloor)
+        let sections: [APICourseSection]
+        do {
+            let ids = try input.orderedSectionIDs.map(SortOrderRenumbering.sectionID)
+            sections = try await SortOrderRenumbering.renumberSections(
+                ids, inCourse: try course.requireID(), on: context.db)
+        } catch let error as ReorderError {
+            throw MCPToolError.invalidArguments(detail: "orderedSectionIDs: \(error.reason)")
         }
-        guard uuids.count == input.orderedSectionIDs.count else {
-            throw MCPToolError.invalidArguments(detail: "orderedSectionIDs contains an invalid section id.")
-        }
-        guard Set(uuids).count == uuids.count else {
-            throw MCPToolError.invalidArguments(detail: "orderedSectionIDs contains a duplicate section id.")
-        }
-        let sections = try await APICourseSection.query(on: context.db)
-            .filter(\.$courseID == courseID)
-            .all()
-        let existing = Set(sections.compactMap(\.id))
-        guard existing == Set(uuids) else {
-            throw MCPToolError.invalidArguments(
-                detail: "orderedSectionIDs must list exactly the course's current section ids "
-                    + "(a permutation of all \(existing.count)).")
-        }
-        let byID = Dictionary(
-            uniqueKeysWithValues: sections.compactMap { section -> (UUID, APICourseSection)? in
-                guard let id = section.id else { return nil }
-                return (id, section)
-            })
-        var ordered: [Output.Section] = []
-        for (index, uuid) in uuids.enumerated() {
-            guard let section = byID[uuid] else { continue }
-            section.sortOrder = index + 1
-            try await section.save(on: context.db)
-            ordered.append(
-                Output.Section(sectionID: uuid.uuidString, name: section.name, sortOrder: section.sortOrder))
+        let ordered = sections.map { section in
+            Output.Section(
+                sectionID: section.id?.uuidString ?? "", name: section.name, sortOrder: section.sortOrder)
         }
         return Output(
             courseCode: course.code, courseKey: course.urlKey, courseTerm: course.term?.displayName,

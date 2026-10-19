@@ -25,10 +25,7 @@ import Foundation
 
 struct ReorderSectionItemsTool: ContentTool {
     /// The two kinds of item a course section holds.
-    enum ItemType: String, CaseIterable {
-        case assignment
-        case content
-    }
+    typealias ItemType = SectionItemKind
 
     struct ItemRef: Decodable, Sendable {
         /// An `ItemType` raw value.
@@ -41,7 +38,7 @@ struct ReorderSectionItemsTool: ContentTool {
         let courseCode: String
         /// One section's items in the new display order — a mix of assignments
         /// (from list_assignments) and content items (from list_content_items),
-        /// normally all in the same section. Renumbered 1..n together.
+        /// all in the same section. Renumbered 1..n together.
         let orderedItems: [ItemRef]
     }
 
@@ -64,8 +61,9 @@ struct ReorderSectionItemsTool: ContentTool {
         "Set the interleaved display order of a course section's items — assignments AND ungraded "
         + "content items share ONE per-section order, so a reading can sit between two labs. "
         + "orderedItems lists the section's items ({type:\"assignment\", id:<public ID>} or "
-        + "{type:\"content\", id:<content-item id>}) in the desired order, normally all in one "
-        + "section; they are renumbered 1..n together. This is the primary ordering tool; use "
+        + "{type:\"content\", id:<content-item id>}) in the desired order, all in one "
+        + "section (or all ungrouped); they are renumbered 1..n together. A duplicate id or an unknown "
+        + "type is refused. This is the primary ordering tool; use "
         + "reorder_assignments / reorder_content_items only for a single-type section, and "
         + "set_assignment_course_section / update_content_item to move an item between sections first. "
         + "Organizational metadata only: it does not re-run validation or change the open/closed state."
@@ -123,67 +121,30 @@ struct ReorderSectionItemsTool: ContentTool {
     ])
     static let annotations: MCPToolAnnotations? = MCPToolAnnotations(
         readOnlyHint: false, destructiveHint: false, idempotentHint: true)
-    // Reordering the display list is content organization, TA+ (matching
-    // reorder_content_items and the web POST /instructor/section-items/reorder).
+    // Every reorder kind floors at SortOrderRenumbering.roleFloor (.ta), web
+    // and MCP (#2713).
     static let requiredScopes: Set<ContentScope> = [.write]
 
     func execute(_ input: Input, _ context: ToolContext) async throws -> Output {
         let course = try await resolveCourseForWrite(
-            code: input.courseCode, context: context, atLeast: .ta)
-        let courseID = try course.requireID()
-
-        for item in input.orderedItems {
-            _ = try MCPEnumProse<ItemType>.parse(item.type, field: "each item type")
+            code: input.courseCode, context: context, atLeast: SortOrderRenumbering.roleFloor)
+        let renumbered = try await renumberSectionItemsForMCP(
+            field: "orderedItems", course: course, context: context
+        ) { () throws(ReorderError) in
+            try input.orderedItems.map { ref throws(ReorderError) in
+                try SortOrderItem.parse(type: ref.type, id: ref.id)
+            }
         }
-        let assignmentIDs = input.orderedItems.filter { $0.type == ItemType.assignment.rawValue }.map(\.id)
-        let contentRaw = input.orderedItems.filter { $0.type == ItemType.content.rawValue }.map(\.id)
-        guard assignmentIDs.allSatisfy(isValidAssignmentPublicID(_:)) else {
-            throw MCPToolError.invalidArguments(detail: "orderedItems contains an invalid assignment public ID.")
-        }
-        let contentUUIDs = contentRaw.compactMap {
-            UUID(uuidString: $0.trimmingCharacters(in: .whitespacesAndNewlines))
-        }
-        guard contentUUIDs.count == contentRaw.count else {
-            throw MCPToolError.invalidArguments(detail: "orderedItems contains an invalid content-item id.")
-        }
-        guard Set(assignmentIDs).count == assignmentIDs.count, Set(contentUUIDs).count == contentUUIDs.count
-        else {
-            throw MCPToolError.invalidArguments(detail: "orderedItems contains a duplicate id.")
-        }
-
-        // Scope both fetches to this course so the payload can't renumber another
-        // course's items.
-        let assignments =
-            assignmentIDs.isEmpty
-            ? []
-            : try await APIAssignment.query(on: context.db)
-                .filter(\.$courseID == courseID).filter(\.$publicID ~~ assignmentIDs).all()
-        let contentItems =
-            contentUUIDs.isEmpty
-            ? []
-            : try await APICourseContentItem.query(on: context.db)
-                .filter(\.$courseID == courseID).filter(\.$id ~~ contentUUIDs).all()
-        guard assignments.count == assignmentIDs.count, contentItems.count == contentUUIDs.count else {
-            throw MCPToolError.invalidArguments(
-                detail: "orderedItems must all be assignments or content items in course \(course.urlKey).")
-        }
-        let assignmentByPublicID = Dictionary(uniqueKeysWithValues: assignments.map { ($0.publicID, $0) })
-        let contentByID = Dictionary(
-            uniqueKeysWithValues: contentItems.compactMap { c in c.id.map { ($0, c) } })
-
-        var ordered: [Output.Item] = []
-        for (index, ref) in input.orderedItems.enumerated() {
-            let order = index + 1
-            if ref.type == "assignment", let assignment = assignmentByPublicID[ref.id] {
-                assignment.sortOrder = order
-                try await assignment.save(on: context.db)
-                ordered.append(
-                    Output.Item(type: "assignment", id: ref.id, title: assignment.title, sortOrder: order))
-            } else if let uuid = UUID(uuidString: ref.id), let item = contentByID[uuid] {
-                item.sortOrder = order
-                try await item.save(on: context.db)
-                ordered.append(
-                    Output.Item(type: "content", id: ref.id, title: item.title, sortOrder: order))
+        let ordered = renumbered.map { row in
+            switch row {
+            case .assignment(let assignment):
+                Output.Item(
+                    type: SectionItemKind.assignment.rawValue, id: assignment.publicID,
+                    title: assignment.title, sortOrder: assignment.sortOrder ?? 0)
+            case .content(let item):
+                Output.Item(
+                    type: SectionItemKind.content.rawValue, id: item.id?.uuidString ?? "",
+                    title: item.title, sortOrder: item.sortOrder)
             }
         }
         return Output(
@@ -197,8 +158,8 @@ struct ReorderSectionItemsTool: ContentTool {
 struct ReorderAssignmentsTool: ContentTool {
     struct Input: Decodable, Sendable {
         let courseCode: String
-        /// One section's assignment public IDs in the new order — normally all in
-        /// the same section, renumbered 1..n among themselves.
+        /// One section's assignment public IDs in the new order — all in the
+        /// same section, renumbered 1..n among themselves.
         let orderedAssignmentPublicIDs: [String]
     }
 
@@ -220,8 +181,8 @@ struct ReorderAssignmentsTool: ContentTool {
     static let name = "reorder_assignments"
     static let description =
         "Set the display order of assignments WITHIN a course section, by course code. "
-        + "orderedAssignmentPublicIDs lists the assignments to order (from list_assignments), normally "
-        + "all in the same section; they are renumbered 1..n among themselves. Assignments and content "
+        + "orderedAssignmentPublicIDs lists the assignments to order (from list_assignments), all "
+        + "in the same section (or all ungrouped); they are renumbered 1..n among themselves. Assignments and content "
         + "items share one per-section order, so for a section that ALSO holds content items use "
         + "reorder_section_items instead (it interleaves both). Move an assignment between sections with "
         + "set_assignment_course_section, and order the section groups with reorder_course_sections. "
@@ -234,7 +195,7 @@ struct ReorderAssignmentsTool: ContentTool {
                 "type": .string("array"),
                 "items": MCPSchema.string,
                 "description": .string(
-                    "The section's assignment public IDs in the desired order (normally one section)."),
+                    "The section's assignment public IDs in the desired order (one section)."),
             ]),
         ]),
         "required": .array([.string("courseCode"), .string("orderedAssignmentPublicIDs")]),
@@ -271,51 +232,40 @@ struct ReorderAssignmentsTool: ContentTool {
 
     func execute(_ input: Input, _ context: ToolContext) async throws -> Output {
         let course = try await resolveCourseForWrite(
-            code: input.courseCode, context: context, atLeast: .ta)
-        let courseID = try course.requireID()
-
-        let ids = input.orderedAssignmentPublicIDs.map {
-            $0.trimmingCharacters(in: .whitespacesAndNewlines)
+            code: input.courseCode, context: context, atLeast: SortOrderRenumbering.roleFloor)
+        let renumbered = try await renumberSectionItemsForMCP(
+            field: "orderedAssignmentPublicIDs", course: course, context: context
+        ) { () throws(ReorderError) in
+            try input.orderedAssignmentPublicIDs.map(SortOrderItem.parseAssignment)
         }
-        guard ids.allSatisfy(isValidAssignmentPublicID(_:)) else {
-            throw MCPToolError.invalidArguments(
-                detail: "orderedAssignmentPublicIDs contains an invalid assignment public ID.")
-        }
-        guard Set(ids).count == ids.count else {
-            throw MCPToolError.invalidArguments(
-                detail: "orderedAssignmentPublicIDs contains a duplicate assignment public ID.")
-        }
-        guard !ids.isEmpty else {
-            return Output(
-                courseCode: course.code, courseKey: course.urlKey, courseTerm: course.term?.displayName,
-                assignments: [])
-        }
-
-        // Scope to this course so a reorder can't renumber another course's rows.
-        let assignments = try await APIAssignment.query(on: context.db)
-            .filter(\.$courseID == courseID)
-            .filter(\.$publicID ~~ ids)
-            .all()
-        guard assignments.count == ids.count else {
-            throw MCPToolError.invalidArguments(
-                detail: "orderedAssignmentPublicIDs must all be assignments in course \(course.urlKey).")
-        }
-
-        let byID = Dictionary(uniqueKeysWithValues: assignments.map { ($0.publicID, $0) })
-        var ordered: [Output.Assignment] = []
-        for (index, publicID) in ids.enumerated() {
-            guard let assignment = byID[publicID] else { continue }
-            assignment.sortOrder = index + 1
-            try await assignment.save(on: context.db)
-            ordered.append(
-                Output.Assignment(
-                    publicID: publicID,
-                    title: assignment.title,
-                    sortOrder: index + 1,
-                    sectionID: assignment.sectionID?.uuidString ?? ""))
+        let ordered = renumbered.compactMap { row -> Output.Assignment? in
+            guard case .assignment(let assignment) = row else { return nil }
+            return Output.Assignment(
+                publicID: assignment.publicID,
+                title: assignment.title,
+                sortOrder: assignment.sortOrder ?? 0,
+                sectionID: assignment.sectionID?.uuidString ?? "")
         }
         return Output(
             courseCode: course.code, courseKey: course.urlKey, courseTerm: course.term?.displayName,
             assignments: ordered)
+    }
+}
+
+// MARK: - Shared
+
+/// Parses a section-item reorder and runs it through `SortOrderRenumbering`
+/// for `course`, mapping a `ReorderError` to `MCPToolError` on `field`. The
+/// caller has authorized the course at `SortOrderRenumbering.roleFloor`.
+func renumberSectionItemsForMCP(
+    field: String, course: APICourse, context: ToolContext,
+    _ parse: () throws(ReorderError) -> [SortOrderItem]
+) async throws -> [RenumberedSectionItem] {
+    do {
+        let items = try parse()
+        return try await SortOrderRenumbering.renumberSectionItems(
+            items, inCourse: try course.requireID(), on: context.db)
+    } catch let error as ReorderError {
+        throw MCPToolError.invalidArguments(detail: "\(field): \(error.reason)")
     }
 }

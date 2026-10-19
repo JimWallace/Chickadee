@@ -945,6 +945,35 @@ because line numbers go out of date.
 - **Rule:** an archived course is read-only. It stays readable, through MCP
   too (`MCPArchivedWriteBlockTests`).
 
+### Display order: `sort_order`
+
+- **Objects:** `APICourseSection.sortOrder` (one sequence for each course),
+  and `APIAssignment.sortOrder` with `APICourseContentItem.sortOrder` (one
+  shared sequence for each course section, so a reading can sit between two
+  labs).
+- **Writers:**
+  - Every reorder, through `Services/SortOrderRenumbering.swift` (#2713): the
+    four web routes (`/instructor/sections/reorder`,
+    `/instructor/section-items/reorder`, `/instructor/reorder`,
+    `/instructor/content-items/reorder`) and the four MCP tools
+    (`reorder_course_sections`, `reorder_section_items`,
+    `reorder_assignments`, `reorder_content_items`).
+  - A move into a section and a new item append after the last item
+    (`nextSectionItemSortOrder` in `Services/SectionPlacement.swift`).
+  - Course clone and bundle import copy it.
+- **Readers:** the display comparators in
+  `Routes/Web/AssignmentListDisplayHelpers.swift` (the instructor list, the
+  student dashboard, the grades CSV) and the MCP list tools.
+- **Rules:**
+  - The role floor is `.ta` for every reorder kind, web and MCP
+    (`SortOrderRenumbering.roleFloor`).
+  - A reorder refuses a duplicate id, an unknown type and an id outside the
+    course. A section reorder names every section of the course. A
+    section-item reorder names items of one section.
+  - One reorder is one transaction.
+- **Parallel path:** none now. Do not write `sortOrder` in a new reorder
+  route or tool; call the service.
+
 ### Browser isolation and the CSP
 
 - **Rules:**
@@ -974,6 +1003,7 @@ not repeat them. But a change that makes one of them weaker is a finding.
 | The native and browser graders interpret output differently | `OutputContractTests`, `output-contract.test.mjs` |
 | A new user column with no foreign key | `UserReferenceScanTests` |
 | Rows that course deletion does not remove | `DeleteCourseCoverageTests` |
+| A reorder with its own role floor or rules | `SortOrderRenumberingTests`, `ReorderSurfaceRulesTests` |
 | A notebook worker that is not in the isolation list | `IsolatedWorkerScriptDriftTests` |
 
 ---
