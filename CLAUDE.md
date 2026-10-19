@@ -437,6 +437,12 @@ The subagents are in `.claude/agents/`. Each one reports and does not edit.
 - For drift between the docs and the code, run `docs-audit`. CI runs it each
   month (`.github/workflows/docs-audit.yml`) and files the report as an issue.
 - Before a commit, run `diff-reviewer` on the uncommitted diff.
+- Before a commit on a change under `Sources/` or to a `Public/*.js` file, run
+  `interaction-review`. It checks the change for side effects on other
+  features, with the shared-object map in `docs/feature-interactions.md`. CI
+  runs it on each such PR (`.github/workflows/interaction-review.yml`). Its
+  verdict is advisory for now. When a change adds a shared object, add its
+  row to the map.
 
 The hooks in `.claude/hooks/` do three jobs, so you need not:
 - `format-swift.py` runs `swift-format` on each Swift file that you edit.
@@ -629,7 +635,7 @@ One line per document. Each document holds its own rules and evidence.
 - `docs/course-terms.md` — course year and term, the two course-code resolvers, cloning for a new term
 - `docs/solution-visibility.md` — the post-deadline solution reveal and its slip-day ceiling
 - `docs/datasets.md` — per-student datasets (#1083)
-- `docs/datasets-course-library.md` — in progress: a per-course dataset library, the course cohort seed, the student Data page; opens with a Status table
+- `docs/datasets-course-library.md` — the per-course dataset library: versions and dictionary, attachments, the course cohort seed, the student Data page, the MCP tools, clone and bundle; slices 10 and 11 in progress; opens with a Status table
 - `docs/admin-mcp.md` — the read-only admin diagnostics MCP surface
 - `docs/ai-assisted-feedback.md` — an instructor's own AI agent drafts feedback on written reasoning through MCP, behind two opt-in gates and staff review
 - `docs/compliance/` — the UW approval package: student-data audits, tool and data-flow inventories
@@ -637,6 +643,7 @@ One line per document. Each document holds its own rules and evidence.
 - `docs/class-activities.md` — leaderboards, bots, round robins, hills and brackets (#1508); opens with a Status table
 - `docs/class-composite.md` — shipped: each student renders one slot of a shared image, composed live on the projector; opens with a Status table
 - `docs/unlockable-labs.md` — assignment prerequisites and sticky per-student unlocks
+- `docs/lab-groups.md` — in progress: lab groups and in-lab sessions: a session per (activity, group), a join code for the room, every class activity run once per group; opens with a Status table
 - `docs/achievement-rewards.md` — proposed: achievements at the assignment, course and site levels, one award ledger, and a wardrobe item as a reward
 - `docs/student-wardrobe.md` — cosmetic choices for the avatar, kept apart from earned status
 - `docs/result-celebration.md` — the result-page celebration: the 100% moment, the bird, and the Earned toast
@@ -644,6 +651,7 @@ One line per document. Each document holds its own rules and evidence.
 - `docs/avatar-species.md` — eleven avatar species on one shared skeleton, the colourway decides the species, the trait weights, the prototype findings; opens with a Status table
 - `docs/browser-freeze-investigation.md` — the 2026-08 editor freeze, its root cause, the freeze tracer
 - `docs/ci-flakiness.md` — CI flake families; start here before chasing a red check on an unrelated PR
+- `docs/feature-interactions.md` — the shared objects that several features read or write, and the rule for each; the `interaction-review` agent's map
 - `docs/abstraction-survey.md` — the 2026-10 survey of parallel code paths that need a shared abstraction (#2259)
 - `docs/elementary-spike.md` — the finished Leaf-to-Elementary migration: where the views live, the traps, the guards, the known remainder
 - `docs/manifest-format-v2.md` — proposed: the manifest (`TestProperties`) review, the v2 envelope and its phased rollout

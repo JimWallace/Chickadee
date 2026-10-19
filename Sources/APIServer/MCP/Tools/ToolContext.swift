@@ -120,7 +120,7 @@ struct ToolContext {
         // this gate never widens what a caller can actually touch (#417).
         var eligible = user.isMCPAgent
         if !eligible {
-            eligible = try await isStaffAnywhere(user, db: db)
+            eligible = try await isStaffAnywhere(user, includingArchived: true, db: db)
         }
         guard eligible else {
             throw MCPToolError.notAuthorized(detail: "Students may not use the MCP interface.")

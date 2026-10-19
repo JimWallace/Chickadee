@@ -2,9 +2,9 @@ import Fluent
 import Foundation
 import Vapor
 
-/// One login-rate-limit event: either a POST hitting the per-IP window
-/// (`scope == "ip"`) or a failed login against a username
-/// (`scope == "user_failure"`). Stored in the database so the sliding-window
+/// One rate-limit event: a POST hitting the per-IP window (`scope == "ip"`),
+/// a failed login against a username (`scope == "user_failure"`), or a wrong
+/// lab-session join code (`scope == "join_failure"`, docs/lab-groups.md). Stored in the database so the sliding-window
 /// counts are shared across server processes — with the old in-memory
 /// `LoginAttemptStore`, N instances behind a load balancer meant N× the
 /// configured per-IP rate and lockouts that only counted same-instance
@@ -17,6 +17,9 @@ final class LoginAttempt: Model, @unchecked Sendable {
     enum Scope {
         static let ip = "ip"
         static let userFailure = "user_failure"
+        /// A wrong join code from a signed-in student, keyed by user id
+        /// (`ActivitySessionStore.join`, docs/lab-groups.md).
+        static let joinFailure = "join_failure"
     }
 
     @ID(key: .id)

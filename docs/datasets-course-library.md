@@ -18,10 +18,10 @@ states what it adds and what proves it.
 | 4 | Course cohort: the per-(student, course) seed, and `DatasetResolver` choosing the seed per spec at every delivery path | built |
 | 5 | Instructor surfaces: the Datasets tab (5a), the Files-panel picker and the scope control (5b) | built |
 | 6 | Student surfaces: the course Data page, the assignment-page dataset line, the "my rows" download | built |
-| 7 | MCP: `list_datasets`, `get_dataset`, `create_dataset`, `update_dataset`, `add_dataset_version`, `attach_dataset`, `detach_dataset`; `set_dataset` gains `scope` | proposed |
-| 8 | Lifecycle: course clone, bundle export and import, storage page, purge | proposed |
-| 9 | Migration of HLTH 230: promote the two live datasets; docs and CLAUDE.md | proposed |
-| 10 | Optional: the `formatNoise` transform | proposed |
+| 7 | MCP: `list_datasets`, `get_dataset`, `create_dataset`, `update_dataset`, `add_dataset_version`, `attach_dataset`, `detach_dataset` | built |
+| 8 | Lifecycle: course clone, bundle export and import, storage page, purge | built |
+| 9 | Migration of HLTH 230: promote the two live datasets; docs and CLAUDE.md | docs built; the promotion is the maintainer's, in the UI |
+| 10 | Optional: the `formatNoise` transform | built |
 | 11 | Class-wide data: the `partition` kind dealt by slot, the ranked-activity refusal, and the rule for jobs with no student | proposed |
 
 ---
@@ -35,7 +35,7 @@ is **a support file in one assignment's zip, with a per-student sample**.
 - `DatasetSpec` (`Sources/Core/Models/DatasetSpec.swift`) marks one support
   file in one assignment. It holds the selection (`rowSample` or
   `stratifiedSample`, `sampleSize`, `stratumColumn`) and the derivation
-  (`transforms`, one kind: `missingValues`).
+  (`transforms`, two kinds: `missingValues` and `formatNoise`).
 - `DatasetMaterializer` makes the student's bytes from `(source, spec, seed)`.
   The seed is the per-(student, assignment) seed
   (`APIAssignmentPersonalizationSeed`).
@@ -310,8 +310,8 @@ file in the zip. The operations above keep it, and the other doors defend it:
 - **The course clone, the bundle import and a version restore** drop a source
   that does not resolve, keep the file and its sample, and leave the manifest
   bytes alone when nothing is dropped (`reconciledManifestText`). A clone
-  inside the course keeps every source. Until slice 8 copies the library, a
-  clone into another course drops them all.
+  inside the course keeps every source. A course clone and a version 2 bundle
+  bring the library first (§4.8), so their sources resolve too.
 
 **A spec must do something.** The `/datasets` PUTs and `set_dataset` used to
 require a sample. They now require a sample, a transform or a library source,
@@ -330,7 +330,8 @@ pool behind as a plain support file.
 upload, the draft suite clear and the draft publish reconcile the manifest,
 because each rebuilds the zip or moves the draft into its final course.
 Dropping a source also drops a course scope, so a course-scoped sample is
-dealt again with the assignment seed after a restore or a bundle import.
+dealt again with the assignment seed after a restore, or after the import of
+a bundle that does not carry the library.
 
 **Removing an attached spec needs a detach.** The `/datasets` PUTs refuse a
 body that leaves out a stored attached spec, and `set_dataset remove:true`
@@ -526,57 +527,120 @@ course.
 Tests: `StudentDataRoutesTests`, and the `CourseDataPage` and upload-page
 fixtures in `ElementaryPageFixtures+Datasets.swift`.
 
-### 4.7 MCP (slice 7)
+### 4.7 MCP (slice 7, as built)
 
-New tools, all course-scoped, with the same gates as content items:
+Seven tools, all course-scoped, with the gates of the web Datasets tab and the
+Files panel: a read needs an enrollment, a write the TA role and a course that
+is not archived.
 
 | Tool | Scope | Does |
 |---|---|---|
-| `list_datasets` | `content:read` | the library with versions and usage |
-| `get_dataset` | `content:read` | metadata, dictionary, the first rows of the pool |
-| `create_dataset` | `content:write` | from a `sourceUrl` under the SSRF guard (as content attachments), or by promoting a support file of an assignment |
-| `update_dataset` | `content:write` | name, description, provenance, licence, dictionary, published |
+| `list_datasets` | `content:read` | the library with versions, the newest dictionary and usage |
+| `get_dataset` | `content:read` | the same for one dataset, plus the header and first rows of one version |
+| `create_dataset` | `content:write` | version 1 from a `sourceUrl` under the SSRF guard, or by promoting an assignment's support file |
+| `update_dataset` | `content:write` | name, description, provenance, licence, column prose, published |
 | `add_dataset_version` | `content:write` | a new version from a `sourceUrl` with a note |
-| `attach_dataset` | `content:write` | to an assignment, with filename, version, scope and the sample fields |
-| `detach_dataset` | `content:write` | from an assignment |
+| `attach_dataset` | `content:write` | attach to an assignment, with filename, version, scope and the sample fields; on an attached file, move it to another version or scope |
+| `detach_dataset` | `content:write` | end an attachment, keeping the file and its sample unless `removeFile` |
 
-`set_dataset` gains `scope`. `get_support_files` reports `datasetSource` and
-`datasetScope`. `get_assignment` lists attached datasets. The instructions
-text in `InitializeTypes.swift` gains a Datasets paragraph. Every tool is
-added to `docs/compliance/tool-inventory.md` and to the version-capture
-coverage test.
+- **`set_dataset` does not gain `scope`.** The plan said it would. Slice 3
+  made the library fields (`source` and `scope`) writable only by the library
+  attach path (`DatasetSpecValidation.libraryFieldIssue`, pinned by
+  `DatasetLibraryFieldDoorTests`), so `attach_dataset` sets the scope of a file
+  that is already attached, and `set_dataset` keeps the sample.
+- **Re-grade, no close.** An attach, a version move, a scope change and a
+  detach call `applyContentEditEffects(.gradeAffecting)`, as the web library
+  routes do. None closes the assignment, as neither those routes nor
+  `set_dataset` do. The library tools change no attached file, so they neither
+  re-grade nor close. `MCPContentEditCoverageTests` records both files.
+- **`update_dataset` changes only the columns it names.** The service
+  replaces the prose of every column, so the tool sends the other columns with
+  the prose they have. An agent that edits one column does not clear the rest.
+- `get_support_files` reports `datasetSource` and `datasetScope`;
+  `get_assignment` lists the attached datasets. The `initialize` instructions
+  have a "Course dataset library" paragraph, which names every tool
+  (`MCPInstructionsCatalogSyncTests`).
+- `deploy/sql/mcp-least-privilege-role.sql` grants DML on `course_datasets`
+  and `course_dataset_versions` to the MCP role.
+- The tools that fetch a `sourceUrl` take the fetch as a property, so a test
+  gives the bytes without a network.
 
-### 4.8 Lifecycle (slice 8)
+Tests: `CourseDatasetToolsTests`; the rows in `docs/compliance/tool-inventory.md`
+and `docs/mcp-authoring-roadmap.md` (`MCPRoadmapDocSyncTests`).
 
-- **Course clone** (`CourseCloneService`): copy every dataset with all its
-  versions. Blobs are shared by hash, so only rows are written. The cloned
-  assignments' zips already carry their pinned bytes; their `source` slugs
-  resolve in the new course by D3.
-- **Bundle export and import** (`CourseBundleRoutes`): add `datasets/` to the
-  bundle with a `datasets.json` manifest. Schema version 2 of the bundle.
-  Import of a version-1 bundle still works.
-- **Storage page** (`AdminStoragePage`): a library row per course.
-- **Purge**: the course purge drops the rows; the blob sweep already drops
-  unreferenced blobs, and it must count dataset versions as references.
+### 4.8 Lifecycle (slice 8, as built)
+
+`CourseDatasetService+Lifecycle.swift` holds the library's part of each step.
+
+- **Course clone** (`CourseCloneService`). It copies every dataset with all
+  its versions (`copyLibrary`), and it does so before it copies the
+  assignments. Only rows are written; the versions share their blobs by hash.
+  Order matters: `cloneAssignment` keeps a file's `source` only when the new
+  course's library holds that version, so a library copied after the
+  assignments would strip every source. The cloned assignments resolve their
+  sources in the new course (D10). A dataset keeps its published flag;
+  the new course has no students until enrollment opens. The version rows
+  are new, so their dates are the clone's.
+- **Bundle export and import** (`CourseBundleRoutes`). A bundle that carries
+  the library is `schemaVersion` 2. Its manifest has a `datasets` list
+  (`BundledDataset`), and each version's bytes are at `datasets/<sha256>`, one
+  file per hash. A course with no dataset still exports version 1, so a
+  server that knows only version 1 reads it. An import accepts 1 and 2. It
+  creates the library before the test setups, for the same reason as the
+  clone, and it refuses a dataset file that is missing or whose bytes do not
+  hash to the name, a repeated slug or version number, and an oversized
+  version. A `datasets` key in a version 1 manifest is ignored. The result
+  page counts the datasets. A failed import leaves the blobs it wrote for the
+  collector, as a failed upload does.
+- **Storage page** (`AdminStoragePage`, `get_storage_usage`). A "Dataset
+  Libraries" section has one row per course: datasets, versions and the bytes
+  of its distinct version files, from the version rows, with no disk walk.
+  The bytes are part of the Test Setups card. A clone's row counts the hashes
+  it shares with its source again, because each row is what that course would
+  free.
+- **Purge.** It needs no code. The course delete cascades to the library rows
+  (`CreateCourseDatasets`), and the blob collector counts every version as a
+  reference until its row is gone.
+
+Tests: `CourseDatasetLifecycleTests` (clone, library copy, storage rows,
+delete, blob collection) and `CourseDatasetBundleTests` (version 2 export,
+version 1 export, round trip, refused files).
 
 ### 4.9 Migration of HLTH 230 (slice 9)
 
-Promote Assignment 4's `assignment4_vitaldb_cases.csv` and Lab 9's
-`nhanes_bp.csv` into the library, fill provenance and licence, and publish.
+The maintainer does the promotion on the live course, in the UI (decided
+2026-10-18). After the deploy that carries slices 5 to 8:
+
+1. In Assignment 4, open the Files panel and choose "Move to the course
+   library" on `assignment4_vitaldb_cases.csv`.
+2. In Lab 9, do the same for `nhanes_bp.csv`.
+3. On the Datasets tab, rename each dataset if the file name is not the name
+   students should see, fill the provenance and the licence, describe the
+   columns, and publish.
+
 Lab 6 and Lab 8 keep their plain files; the instructor may promote them. No
 grading changes: a promoted spec keeps `scope == .assignment` and its sample
-size, so every student's rows stay the same.
+size, so every student's rows stay the same. A later assignment that attaches
+one of these datasets with course scope gives each student the same rows
+across those assignments, but not the rows of Assignment 4 or Lab 9, whose
+specs stay on the assignment seed.
 
-Docs: a section in `datasets.md` that points here; `CLAUDE.md` reference line;
-`docs/architecture.md` one paragraph; `docs/mcp-authoring-roadmap.md` rows.
+Docs, as built: `datasets.md` points here; the `CLAUDE.md` reference line;
+one paragraph in `docs/architecture.md`; the `docs/mcp-authoring-roadmap.md`
+rows (slice 7).
 
-### 4.10 Optional: `formatNoise` (slice 10)
+### 4.10 `formatNoise` (slice 10, as built)
 
-Already designed in `datasets.md` §"What is NOT built yet". It is
-answer-preserving and schema-preserving, so it fits the transform rules and
-the row-set theorem. It is independent of the library and can land before or
-after it. It is in this plan so the "clean your cohort" lab in the arc below
-has a second kind of dirt.
+`DatasetTransform.Kind.formatNoise` writes a chosen cell with a space on each
+side, in upper case or in lower case, and never as another value; the rules
+are in `datasets.md` §"formatNoise". It is answer-preserving and
+schema-preserving, so it fits the transform rules and the row-set theorem
+(`DatasetDiagnosticsTests` holds every kind to it). Dates are not reformatted,
+because day-first against month-first is not answer-preserving. It gives the
+"clean your cohort" lab in the arc below a second kind of dirt.
+
+Tests: `DatasetFormatNoiseTests` (the byte pin, the fold back to the pool,
+empty and quoted cells, the order with `missingValues`, the divergence fold).
 
 ### 4.11 Class-wide data: activities and the dealt partition (slice 11)
 
@@ -740,8 +804,8 @@ PR and no version bump.
 
 ## 8. Decisions by the maintainer
 
-The maintainer accepted the recommended answers on 2026-10-17. Two questions
-had no recommendation, and they stay open until their slice comes up.
+The maintainer accepted the recommended answers on 2026-10-17. The two
+questions that had no recommendation were decided on 2026-10-18.
 
 1. **Scope default (D5). Decided.** `assignment` is the decoded default, so
    every existing spec is unchanged. The Files-panel picker and
@@ -753,7 +817,11 @@ had no recommendation, and they stay open until their slice comes up.
    unpublished until provenance and licence are filled.
 4. **Tab names. Decided.** "Datasets" on the instructor bar and "Data" on the
    student side.
-5. **Slice 10 (`formatNoise`). Open.** Decide before slice 9 ships.
+5. **Slice 10 (`formatNoise`). Decided 2026-10-18.** Build it.
 6. **The ranked-activity refusal (§4.11). Decided.** A refusal, on the same
    footing as the kind lock.
-7. **Slice 11. Open.** Decide after slice 6 ships.
+7. **Slice 11. Decided 2026-10-18.** Build both halves: the ranked-activity
+   refusal and the dealt `partition` kind.
+8. **The HLTH 230 promotion (slice 9). Decided 2026-10-18.** The maintainer
+   promotes and publishes the two live datasets in the UI; the slice ships
+   the docs.

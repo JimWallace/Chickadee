@@ -161,6 +161,12 @@ struct EnrolledStudentRow: Content {
     var learnFlagAdvice: String?
     /// For a pending row: "Awaiting first login · added from CSV Sep 3".
     var pendingNote: String = ""
+    /// The student's group in the course's group set (docs/lab-groups.md).
+    /// Nil for staff, a pending row, or a student in no group.
+    var groupName: String?
+    /// The group select for a student row when the set is edited in
+    /// Chickadee; nil otherwise. The view shows it only to an instructor.
+    var groupSelect: GroupSelectCell?
 }
 
 /// The submissions page's Tournament section: the run control and where

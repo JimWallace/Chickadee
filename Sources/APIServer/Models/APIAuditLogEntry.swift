@@ -158,6 +158,10 @@ enum AuditAction: String, Sendable, CaseIterable {
     case enrollmentRemoved = "enrollment.removed"
     case enrollmentRoleChanged = "enrollment.role_changed"
     case enrollmentHandleChanged = "enrollment.handle_changed"
+    /// A course's groups changed (docs/lab-groups.md): a set or group was
+    /// made or removed, a student moved, or a file was imported. The
+    /// `change` metadata key says which.
+    case enrollmentGroupsChanged = "enrollment.groups_changed"
 
     // Assignment lifecycle (#421). Content edits are recorded separately and in
     // far more detail by `assignment_versions`; these are the metadata and
@@ -195,6 +199,7 @@ enum AuditAction: String, Sendable, CaseIterable {
     case activityOpponentFileChanged = "activity_opponent_file.changed"
     case activityWindowChanged = "activity_window.changed"
     case activityCompositeChanged = "activity_composite.changed"
+    case activityGroupSessionChanged = "activity_group_session.changed"
     case tournamentStarted = "tournament.started"
     // Advisory passing threshold
     case passingThresholdChanged = "passing_threshold.changed"
@@ -278,7 +283,8 @@ enum AuditAction: String, Sendable, CaseIterable {
         case .courseCreated, .courseCloned, .courseArchived, .courseUnarchived, .courseDeleted,
             .courseBundleImported, .courseBundleExported:
             return .courses
-        case .enrollmentBulkAdded, .enrollmentRemoved, .enrollmentRoleChanged, .enrollmentHandleChanged:
+        case .enrollmentBulkAdded, .enrollmentRemoved, .enrollmentRoleChanged, .enrollmentHandleChanged,
+            .enrollmentGroupsChanged:
             return .enrollment
         case .assignmentCreated, .assignmentCloned, .assignmentDeleted,
             .assignmentVisibilityChanged, .assignmentDueDateChanged:
@@ -289,7 +295,7 @@ enum AuditAction: String, Sendable, CaseIterable {
         case .extensionGranted, .extensionRevoked, .gradeOverrideSet, .gradeOverrideCleared,
             .secretRevealSpent, .secretRevealRegranted, .secretRevealToggled,
             .solutionVisibilityChanged, .leaderboardVisibilityChanged, .activityOpponentFileChanged,
-            .activityWindowChanged, .activityCompositeChanged, .tournamentStarted,
+            .activityWindowChanged, .activityCompositeChanged, .activityGroupSessionChanged, .tournamentStarted,
             .passingThresholdChanged, .slipDaySpent, .slipDayRefunded, .slipDayAdjustmentChanged,
             .aiFeedbackAssignmentToggled, .aiFeedbackReleased, .aiFeedbackDiscarded:
             return .grading
@@ -334,14 +340,14 @@ enum AuditAction: String, Sendable, CaseIterable {
             .userDataExportDownloaded, .courseCreated, .courseCloned, .courseArchived, .courseUnarchived,
             .courseDeleted, .courseBundleImported, .courseBundleExported,
             .enrollmentBulkAdded, .enrollmentRemoved, .enrollmentRoleChanged, .enrollmentHandleChanged,
-            .assignmentCreated, .assignmentCloned, .assignmentDeleted,
+            .enrollmentGroupsChanged, .assignmentCreated, .assignmentCloned, .assignmentDeleted,
             .assignmentVisibilityChanged, .assignmentDueDateChanged, .submissionsPurged,
             .submissionRetestAll, .submissionRetestForStudent, .submissionsBulkDownloaded,
             .extensionGranted,
             .extensionRevoked, .gradeOverrideSet, .gradeOverrideCleared,
             .secretRevealSpent, .secretRevealRegranted, .secretRevealToggled,
             .solutionVisibilityChanged, .leaderboardVisibilityChanged, .activityOpponentFileChanged,
-            .activityWindowChanged, .activityCompositeChanged,
+            .activityWindowChanged, .activityCompositeChanged, .activityGroupSessionChanged,
             .tournamentStarted, .passingThresholdChanged, .slipDaySpent, .slipDayRefunded,
             .aiFeedbackCourseToggled, .aiFeedbackAssignmentToggled, .aiFeedbackReleased,
             .aiFeedbackDiscarded, .aiFeedbackAttestationChanged, .slipDaySettingsChanged, .slipDayAdjustmentChanged,
@@ -391,6 +397,7 @@ enum AuditAction: String, Sendable, CaseIterable {
         case .enrollmentRemoved: return "Unenrolled"
         case .enrollmentRoleChanged: return "Per-course role changed"
         case .enrollmentHandleChanged: return "Class handle changed"
+        case .enrollmentGroupsChanged: return "Groups changed"
         case .assignmentCreated: return "Assignment created"
         case .assignmentCloned: return "Assignment cloned"
         case .assignmentDeleted: return "Assignment deleted"
@@ -418,6 +425,7 @@ enum AuditAction: String, Sendable, CaseIterable {
         case .activityOpponentFileChanged: return "Activity opponent file changed"
         case .activityWindowChanged: return "Activity session window changed"
         case .activityCompositeChanged: return "Class composite settings changed"
+        case .activityGroupSessionChanged: return "Lab group session started, ended or student removed"
         case .tournamentStarted: return "Tournament started"
         case .slipDaySpent: return "Slip day spent"
         case .slipDayRefunded: return "Slip day refunded"

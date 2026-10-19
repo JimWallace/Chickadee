@@ -384,7 +384,7 @@ enum CourseDatasetService {
         return capped.trimmingCharacters(in: CharacterSet(charactersIn: "-"))
     }
 
-    private static func validatedName(_ raw: String) throws -> String {
+    static func validatedName(_ raw: String) throws -> String {
         guard let name = cleaned(raw), name.count <= maxNameLength else { throw CourseDatasetError.invalidName }
         return name
     }
@@ -413,7 +413,7 @@ enum CourseDatasetService {
     }
 
     /// Trimmed text, or nil when nothing is left.
-    private static func cleaned(_ raw: String?) -> String? {
+    static func cleaned(_ raw: String?) -> String? {
         guard let text = raw?.trimmingCharacters(in: .whitespacesAndNewlines), !text.isEmpty else { return nil }
         return text
     }

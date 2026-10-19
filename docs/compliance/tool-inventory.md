@@ -1,4 +1,4 @@
-, plus the offering's code, key and term# MCP Tool-Surface Inventory
+# MCP Tool-Surface Inventory
 
 Audit scope: the Model Context Protocol (MCP) surfaces under
 `Sources/APIServer/MCP/`. Base snapshot taken at `VERSION` **0.4.435**;
@@ -161,6 +161,25 @@ a student-data model (enforced by `MCPStudentDataWallTests`, whose scan now
 also covers `Transport/` + `Resources/` and confines identity models to the
 authorization layer — 2026-07 audit F-6).
 
+### The course dataset library (2026-10)
+
+Seven content tools for the course dataset library
+(`docs/datasets-course-library.md` §4.7). A library dataset is an
+instructor-uploaded CSV, the same trust tier as a support file. The tools read
+and write `course_datasets` and `course_dataset_versions` on the MCP pool,
+which `deploy/sql/mcp-least-privilege-role.sql` grants; the version bytes are
+blobs on disk. None reads a student's rows, a seed or a student-data model.
+
+| Tool | Handler (`file`) | Resource arg | Authz | Reads / touches | Output |
+|------|------------------|--------------|-------|-----------------|--------|
+| `list_datasets` | `CourseDatasetReadTools.swift` | `courseCode` | course-enrol (`resolveCourse`) | `APICourseDataset`, `APICourseDatasetVersion`, setup manifests (usage) | datasets with versions, dictionary, usage |
+| `get_dataset` | `CourseDatasetReadTools.swift` | `courseCode`, slug | course-enrol (`resolveCourse`) | as `list_datasets`, plus one version's blob | one dataset, plus the header and first rows of the uploaded file |
+| `create_dataset` | `CourseDatasetWriteTools.swift` | `courseCode` (and `assignmentPublicID` to promote) | course-enrol write (TA+) | `APICourseDataset`, `APICourseDatasetVersion`, blob store; a promote also writes the `APITestSetup` manifest | the new dataset |
+| `update_dataset` | `CourseDatasetWriteTools.swift` | `courseCode`, slug | course-enrol write (TA+) | `APICourseDataset`, `APICourseDatasetVersion` (dictionary prose) | the dataset after the edit |
+| `add_dataset_version` | `CourseDatasetWriteTools.swift` | `courseCode`, slug | course-enrol write (TA+) | `APICourseDatasetVersion`, blob store (fetch under the SSRF guard) | the new version number, dropped columns, the dataset |
+| `attach_dataset` | `DatasetAttachmentTools.swift` | `assignmentPublicID`, slug | course-enrol write (TA+) | `APITestSetup` zip and manifest; re-grade and re-validate via `applyContentEditEffects` | the attached spec, action, re-queued count |
+| `detach_dataset` | `DatasetAttachmentTools.swift` | `assignmentPublicID`, filename | course-enrol write (TA+) | `APITestSetup` zip and manifest; re-grade and re-validate | file, removed flag, re-queued count |
+
 ## Addendum (2026-07): the admin diagnostic surface (20 tools; `get_query_stats` added 2026-10)
 
 A second, **read-only** MCP surface at `POST /admin-mcp`
@@ -182,7 +201,7 @@ rows and assert their identifiers never serialize (`AdminMCPToolsTests`).
 | `get_instructor_card_series` | `instructorCardSeries` (one course) | per-bucket counts only; PII-tested |
 | `get_queue_state` | submissions table | counts/ages only |
 | `list_runners` / `get_runner_detail` | worker rows, `job_execution_metrics` | aggregates; per-job rows (username + submission id) deliberately omitted; PII-tested |
-| `get_storage_usage` | storage scan | per-assignment byte/count aggregates |
+| `get_storage_usage` | storage scan | per-assignment and per-course-library byte/count aggregates |
 | `get_request_metrics` | `request_metrics` | routes normalized to `:id`; prefix filter matches normalized routes (audit F-3) |
 | `get_query_stats` | `pg_stat_statements` (Postgres) | returns only SELECT / INSERT / UPDATE / DELETE / MERGE statements, which Postgres normalizes (every constant becomes a placeholder); utility statements, which keep their literals, are filtered out. Residual risk: a SQL comment inside a statement is kept verbatim; the server writes no comments that hold values |
 | `get_health_alerts` | live rule evaluation | counts/thresholds; runner IDs of runners that stopped polling (operational, as `list_runners`); BrightSpace `last_error` writer-sanitized (audit F-2) |

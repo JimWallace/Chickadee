@@ -9,6 +9,76 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.725] - 2026-10-18
+
+### Added
+
+- **Lab groups (slice 2): per-group sessions.** A class activity can now run once per lab group (the edit page's "Run once per lab group" box, or `set_activity`'s `runsPerGroup`). Course staff start and end each group's session from the present page, which shows a five-character join code that changes every 30 seconds. Every student types the code at `/join` to take part, and submits only while the session they joined is open. Staff see who joined on a separate page and can remove a student who is not in the room. Wrong codes are limited to ten in ten minutes per student. See `docs/lab-groups.md`.
+
+
+## [0.5.724] - 2026-10-18
+
+### Added
+
+- **The `formatNoise` dataset transform.** A per-student dataset can now write a deterministic share of the cells in named columns another way: with surrounding spaces, in upper case or in lower case. Trimming and case-folding gives the original value back, so the step adds cleaning work without changing any answer. Empty cells stay empty, quoted cells stay one field, and the divergence diagnostic compares folded text. It is authored through MCP `set_dataset`.
+
+
+## [0.5.723] - 2026-10-18
+
+### Security
+
+- **A TA from a past term no longer reads every user's files.** The user-file namespace and the JupyterLite contents gave the full file tree to anyone with a staff role in any course, archived courses included. They now count only courses that are not archived, as the avatar ring does (#1756). MCP and the OAuth consent still count archived courses, so an archived course stays readable through MCP (#2663).
+
+
+## [0.5.722] - 2026-10-18
+
+### Changed
+
+- **Course dataset library, slice 9: docs.** The architecture overview describes the course dataset library, the per-student dataset design points to it, and the plan records the steps to move HLTH 230's two live datasets into the library and the maintainer's decisions on slices 10 and 11.
+
+
+## [0.5.721] - 2026-10-18
+
+### Fixed
+
+- **The solution-visibility doc now says what a course bundle and a clone do with the reveal policy.** It said that a `.chickadee` bundle does not carry the solution visibility or `secretRevealEnabled`. A bundle carries both (#1737). A clone copies `secretRevealEnabled` and sets the solution reveal back to hidden (#2664).
+
+
+## [0.5.720] - 2026-10-18
+
+### Added
+
+- **Course dataset library, slice 8: lifecycle.** A course clone copies the dataset library, every dataset with all its versions, before the assignments, so each cloned file keeps its library source. A course bundle carries the library as schemaVersion 2, with each version's bytes at `datasets/<sha256>`; a course with no dataset still exports version 1, and an import accepts both and refuses a dataset file whose bytes are not the ones named. The admin storage page and `get_storage_usage` list each course's library. A course delete already removed the library rows and frees their bytes.
+
+
+## [0.5.719] - 2026-10-18
+
+### Added
+
+- **Interaction review on pull requests.** A new `interaction-review` agent checks a change for side effects on other features. It uses a new map of the shared objects that several features read or write (`docs/feature-interactions.md`). CI runs it on each pull request that changes code. Its verdict is advisory while its precision is measured.
+
+
+## [0.5.718] - 2026-10-18
+
+### Added
+
+- **Lab groups (slice 1).** A course can now hold a group set, for example its lab sections. The new instructor Groups tab makes the set, adds and removes groups, and imports a CSV file of usernames and groups (a LEARN Groups export with Username and Group Name columns also reads). The Students tab shows each student's group, with a select for instructors, and its filter matches the group. Group changes are audited, and a student's data export lists their group. See `docs/lab-groups.md`.
+
+
+## [0.5.717] - 2026-10-18
+
+### Added
+
+- **Course dataset library, slice 7: MCP tools.** Seven content tools let an authoring agent work with the course dataset library: `list_datasets` and `get_dataset` read it; `create_dataset` (from a `sourceUrl` or an assignment's support file), `update_dataset` (metadata, column prose, publishing) and `add_dataset_version` edit it; `attach_dataset` and `detach_dataset` attach a dataset to an assignment, move it to another version or scope, and end the attachment. `get_support_files` reports each attached file's source and scope, and `get_assignment` lists the attached datasets. The MCP database role is granted the two library tables.
+
+
+## [0.5.716] - 2026-10-18
+
+### Added
+
+- **Lab groups design note.** `docs/lab-groups.md` proposes lab groups and in-lab sessions: a group set per course, a session per (activity, group) started from the present page, a join code for the room, and every class activity (leaderboard, hill, round robin, tournament, composite, class goal) running once per group. Design only; no behaviour changes.
+
+
 ## [0.5.715] - 2026-10-18
 
 ### Added

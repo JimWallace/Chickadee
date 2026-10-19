@@ -1,7 +1,8 @@
 // APIServer/Views/Pages/AdminStoragePage.swift
 //
 // GET /admin/storage: the Data > Storage tab. The on-disk footprint by
-// component, then by assignment, largest first.
+// component, then by assignment, largest first, then each course's dataset
+// library.
 
 import Elementary
 
@@ -59,6 +60,51 @@ struct AdminStoragePage: HTML {
                             for row in assignmentRows {
                                 StorageAssignmentRow(row: row)
                             }
+                        }
+                    }
+                }
+            }
+            if !storage.libraries.isEmpty {
+                StorageLibrariesSection(libraries: storage.libraries)
+            }
+        }
+    }
+}
+
+/// Each course's dataset library, largest first. Its bytes are part of the
+/// Test Setups card.
+private struct StorageLibrariesSection: HTML {
+    let libraries: [AdminCourseLibraryStorageRow]
+
+    var body: some HTML {
+        section(.class("page-section")) {
+            div(.class("page-titlebar")) {
+                h2 {
+                    "Dataset Libraries "
+                    span(.class("text-muted")) { "Part of Test Setups" }
+                }
+            }
+            // No tile column: a course library has no content kind.
+            table(.class("results-table section-items")) {
+                colgroup {
+                    col()
+                    col(.class("section-items-count"))
+                }
+                thead(.class("visually-hidden")) {
+                    tr {
+                        for heading in ["Course", "Total"] {
+                            th(.custom(name: "scope", value: "col")) { heading }
+                        }
+                    }
+                }
+                tbody {
+                    for library in libraries {
+                        tr {
+                            td(.class("item-main")) {
+                                div(.class("item-title")) { library.courseKey }
+                                div(.class("item-details")) { library.detailsText }
+                            }
+                            td(.class("item-status item-grade")) { strong { library.formatted } }
                         }
                     }
                 }

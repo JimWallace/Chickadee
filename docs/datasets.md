@@ -6,6 +6,9 @@ assignments where students **query data to solve a problem** rather than
 just write standalone functions.
 
 Status: **shipped** (all three waves; this document is the design record).
+The course dataset library, which keeps a course's datasets once and
+attaches them to assignments, is in
+[datasets-course-library.md](datasets-course-library.md).
 
 ---
 
@@ -158,16 +161,16 @@ expression evaluated with the student's seed (reusing
 
 Deterministic and server-side, exactly like today's personalization.
 
-**MCP surface** (natural extension of existing content tools):
-`create_dataset`, `list_datasets`, `get_dataset` (list files / read a head,
-like `get_support_files`), `attach_dataset` / `detach_dataset`,
-`set_dataset_slice`.
+**MCP surface:** built as the course dataset library tools; see
+[datasets-course-library.md](datasets-course-library.md) §4.7.
 
 ### Migration
 
 Support-file CSVs are the v0 of this. Assignment 4 is the first consumer:
 its `assignment4_vitaldb_cases.csv` becomes a Dataset, attached at
-`data/`, and the existing notebook checks are unchanged.
+`data/`, and the existing notebook checks are unchanged. The move of the
+live HLTH 230 files into the course library is in
+[datasets-course-library.md](datasets-course-library.md) §4.9.
 
 ---
 
@@ -651,15 +654,43 @@ honours it for every repaint after a save — omitting the `transforms` key
 entirely when its fields are disabled, so the merge carries the stored steps
 through.
 
-### What is NOT built yet
+### `formatNoise`
 
-`formatNoise` — inconsistent representations of the same value (stray
-whitespace, letter case, `2024-01-02` vs `02/01/2024`) — is the natural next
-transform, and the most pedagogically honest of the set: real health data
-arrives like this, and it is **answer-preserving**, so correct parsing yields
-the same result the pool would. (It was once the only transform safe to author
-without multi-variant validation, for that reason; that gate exists now — see
-below — so the ordering constraint is gone.)
+The second derivation. It writes a deterministic subset of cells in the named
+columns another way: with a space on each side, in upper case or in lower
+case. Real health data arrives like this. A written cell, trimmed and
+lower-cased, is always the pool's cell lower-cased, so the step is
+**answer-preserving where the grader compares trimmed, case-insensitive
+text**, and distribution-preserving under the same fold. A check keyed on the
+pool's exact case, such as a count of rows equal to `Ward A`, is not
+preserved: write such checks, and the expected values of per-student
+expressions, against the folded value. A per-student expression reads the
+cells as the student receives them.
+
+- **A chosen cell changes, within the fold.** Each cell draws its variant from
+  the column's stream. A case change that changes nothing, as on a number or a
+  cell already in that case, adds the spaces instead. So does a case change
+  that would not lower-case back to the cell's own lower case: `Straße`
+  upper-cases to `STRASSE`, and Greek final sigma does not round-trip.
+- **An empty cell and a missing-value marker stay as they are.** `NA`, `N/A`,
+  `NaN`, `null`, `None` and `#N/A`, in any case, are left alone: R and pandas
+  read `NA` and `na` differently, and a hole is `missingValues`' to make. So a
+  noise step after a blanking step leaves the holes where they are. A noise
+  step picks its rows without regard to blanks, so on a column that was
+  blanked first, fewer cells change than the rate says.
+- **A quoted cell stays one field.** The change goes inside the quotes.
+- **The divergence diagnostic compares folded text** for a spec with a noise
+  step, so "Ward A" and "ward a" do not read as two categories.
+- **The rules above hold unchanged:** the rate, the explicit columns, the
+  sub-seeded stream per step and column, the edit in place, and the save-time
+  refusals. The Files panel edits only a single `missingValues` step, so a
+  spec with a noise step renders disabled there and is authored through MCP
+  `set_dataset`.
+
+Dates are not reformatted. `2024-01-02` against `02/01/2024` is not
+answer-preserving: a reader cannot tell day-first from month-first, so the
+cleaned value would depend on a guess. A date variant needs a declared format
+per column, which is a later decision.
 
 ### `numericJitter` is decided against — do not propose it again
 
@@ -874,7 +905,10 @@ alone — transforms alter values inside a student's rows and never change which
 rows they hold — so it is closed-form per kind and a new selection kind must
 answer a formula (the `allCases` completeness test fails until it does, and an
 analytic-vs-Monte-Carlo test checks the formula is *right*, not merely
-present). Divergence has no per-kind logic at all. The row-set theorem that
+present). Divergence has one per-kind rule: it compares the columns a
+`formatNoise` step names as trimmed, lower-cased text, so a written-another-way
+value is not read as a new category. A new kind that changes how a value is
+written, not the value, adds its columns to that fold. The row-set theorem that
 licenses this split is itself a test (`transformsNeverChangeTheRowSet`); a
 future row-dropping transform fails it, at which point the decomposition — not
 the test — needs revisiting.

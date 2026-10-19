@@ -417,18 +417,25 @@ public struct ClassActivity: Codable, Equatable, Sendable {
     /// and the projector settings. Nil on every other kind, and nil on a
     /// composite until `ActivityAuthoring` seeds `CompositeSpec.starter`.
     public let composite: CompositeSpec?
+    /// True when the activity runs once per lab group (docs/lab-groups.md):
+    /// each group's session is its clock, in place of `window`. False — the
+    /// default and what every activity before this carried — leaves the
+    /// window as the clock.
+    public let runsPerGroup: Bool
 
     public init(
         kind: ActivityKind,
         leaderboardVisibility: LeaderboardVisibility = .hidden,
         opponentFile: String? = nil,
         window: LiveSessionWindow? = nil,
-        composite: CompositeSpec? = nil
+        composite: CompositeSpec? = nil,
+        runsPerGroup: Bool = false
     ) {
         self.kind = kind
         self.leaderboardVisibility = leaderboardVisibility
         self.opponentFile = opponentFile
         self.composite = composite
+        self.runsPerGroup = runsPerGroup
         // An unbounded window is no window: storing an empty block would put
         // a field on the manifest that says nothing and make "has a window"
         // two different questions at two different call sites.
@@ -436,7 +443,7 @@ public struct ClassActivity: Codable, Equatable, Sendable {
     }
 
     private enum CodingKeys: String, CodingKey {
-        case kind, leaderboardVisibility, opponentFile, window, composite
+        case kind, leaderboardVisibility, opponentFile, window, composite, runsPerGroup
     }
 
     public init(from decoder: any Decoder) throws {
@@ -448,6 +455,7 @@ public struct ClassActivity: Codable, Equatable, Sendable {
         let decoded = try c.decodeIfPresent(LiveSessionWindow.self, forKey: .window)
         window = (decoded?.isBounded == true) ? decoded : nil
         composite = try c.decodeIfPresent(CompositeSpec.self, forKey: .composite)
+        runsPerGroup = try c.decodeIfPresent(Bool.self, forKey: .runsPerGroup) ?? false
     }
 
     public func encode(to encoder: any Encoder) throws {
@@ -458,6 +466,9 @@ public struct ClassActivity: Codable, Equatable, Sendable {
         try c.encodeIfPresent(opponentFile, forKey: .opponentFile)
         try c.encodeIfPresent(window, forKey: .window)
         try c.encodeIfPresent(composite, forKey: .composite)
+        // Written only when true, so a block that does not run per group
+        // keeps the bytes it had before the field existed.
+        if runsPerGroup { try c.encode(runsPerGroup, forKey: .runsPerGroup) }
     }
 
     /// True when a submission arriving at `now` is inside the live-session
@@ -522,7 +533,7 @@ public struct ClassActivity: Codable, Equatable, Sendable {
     public func withOpponentFile(_ file: String?) -> ClassActivity {
         ClassActivity(
             kind: kind, leaderboardVisibility: leaderboardVisibility, opponentFile: file,
-            window: window, composite: composite)
+            window: window, composite: composite, runsPerGroup: runsPerGroup)
     }
 
     /// The same block with a different leaderboard visibility, everything
@@ -530,7 +541,7 @@ public struct ClassActivity: Codable, Equatable, Sendable {
     public func withLeaderboardVisibility(_ visibility: LeaderboardVisibility) -> ClassActivity {
         ClassActivity(
             kind: kind, leaderboardVisibility: visibility, opponentFile: opponentFile,
-            window: window, composite: composite)
+            window: window, composite: composite, runsPerGroup: runsPerGroup)
     }
 
     /// The same block with a different live-session window, everything else
@@ -540,7 +551,7 @@ public struct ClassActivity: Codable, Equatable, Sendable {
     public func withWindow(_ window: LiveSessionWindow?) -> ClassActivity {
         ClassActivity(
             kind: kind, leaderboardVisibility: leaderboardVisibility, opponentFile: opponentFile,
-            window: window, composite: composite)
+            window: window, composite: composite, runsPerGroup: runsPerGroup)
     }
 
     /// The same block with a different composite block, everything else
@@ -548,6 +559,14 @@ public struct ClassActivity: Codable, Equatable, Sendable {
     public func withComposite(_ composite: CompositeSpec?) -> ClassActivity {
         ClassActivity(
             kind: kind, leaderboardVisibility: leaderboardVisibility, opponentFile: opponentFile,
-            window: window, composite: composite)
+            window: window, composite: composite, runsPerGroup: runsPerGroup)
+    }
+
+    /// The same block run once per lab group, or not, everything else kept —
+    /// the fifth rebuild, for the session form's checkbox.
+    public func withRunsPerGroup(_ runsPerGroup: Bool) -> ClassActivity {
+        ClassActivity(
+            kind: kind, leaderboardVisibility: leaderboardVisibility, opponentFile: opponentFile,
+            window: window, composite: composite, runsPerGroup: runsPerGroup)
     }
 }

@@ -315,15 +315,29 @@ enum AssignmentAuthoringService {
     }
 
     /// The manifest a clone starts from: the source's bytes, unchanged, unless
-    /// the source is a class activity with a live-session window. That window
-    /// holds absolute dates of the source's term, like the due date the clone
-    /// drops, and a closed window refuses every student while it lets staff
-    /// through, so the instructor cannot see the fault (#2189). The clone
-    /// starts with no window, and the instructor sets one for the new term.
+    /// the source is a class activity with a live-session window or one that
+    /// runs per lab group. That window holds absolute dates of the source's
+    /// term, like the due date the clone drops, and a closed window refuses
+    /// every student while it lets staff through, so the instructor cannot see
+    /// the fault (#2189). A per-group activity is the same trap: the clone has
+    /// no groups and so no session, which refuses every student too. The clone
+    /// starts with neither, and the instructor sets them for the new term.
     static func cloneManifest(of setup: APITestSetup) throws -> String {
-        guard var props = setup.decodedManifest(), let activity = props.activity, activity.window != nil
+        guard var props = setup.decodedManifest(), let activity = props.activity,
+            activity.window != nil || activity.runsPerGroup
         else { return setup.manifest }
-        props.activity = activity.withWindow(nil)
+        props.activity = activity.withWindow(nil).withRunsPerGroup(false)
+        return try encodeManifest(props)
+    }
+
+    /// `manifest` with its activity no longer run per lab group, for a copy
+    /// into a course that has none of the source's groups (bundle import).
+    /// Unchanged bytes when the activity does not run per group.
+    static func manifestNotRunPerGroup(_ manifest: String) throws -> String {
+        guard var props = decodeManifest(from: Data(manifest.utf8)), let activity = props.activity,
+            activity.runsPerGroup
+        else { return manifest }
+        props.activity = activity.withRunsPerGroup(false)
         return try encodeManifest(props)
     }
 

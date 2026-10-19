@@ -145,7 +145,7 @@ extension InstructorDashboardRoutes {
         activeCourseUUID: UUID,
         activeCourseKey: String,
         fmt: DateFormatter
-    ) async throws -> (rows: [EnrolledStudentRow], count: Int) {
+    ) async throws -> (rows: [EnrolledStudentRow], count: Int, showsGroups: Bool) {
         let (enrolledUsers, rolesByUserID, enrollmentsByUserID) = try await loadEnrolledUsersForRoster(
             req: req, activeCourseUUID: activeCourseUUID)
         var rows = buildEnrolledStudentRows(
@@ -183,9 +183,10 @@ extension InstructorDashboardRoutes {
                 fmt: fmt
             )
         )
+        let showsGroups = try await Self.applyGroupColumn(to: &rows, courseID: activeCourseUUID, on: req.db)
         let activeStudentCount =
             enrolledUsers.compactMap(\.id).filter { rolesByUserID[$0] == .student }.count
-        return (rows, activeStudentCount + pendingPreEnrollments.count)
+        return (rows, activeStudentCount + pendingPreEnrollments.count, showsGroups)
     }
 
     /// Why LEARN cannot receive this student's grade, or nil. Reads what the

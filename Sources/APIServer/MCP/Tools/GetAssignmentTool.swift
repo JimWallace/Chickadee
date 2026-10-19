@@ -83,6 +83,9 @@ struct GetAssignmentTool: ContentTool {
         /// The class-activity block, or nil for an ordinary assignment. Set via
         /// the activity tool (same naming caveat as `secretRevealEnabled`).
         let activity: ActivityOutput?
+        /// The files that come from the course dataset library, with the
+        /// version each one pins.
+        let datasets: [AttachedDatasetDTO]
     }
 
     /// The activity block as reported: its kind, the leaderboard's visibility,
@@ -106,10 +109,12 @@ struct GetAssignmentTool: ContentTool {
         /// The composite block `set_activity` accepts; nil for any kind but
         /// `classComposite`. Defaulted so existing call sites still compile.
         var composite: CompositeSpec?
+        /// True when the activity runs once per lab group (docs/lab-groups.md).
+        var runsPerGroup: Bool = false
 
         private enum CodingKeys: String, CodingKey {
             case kind, kindDisplayName, leaderboardVisibility, leaderboardPath, aggregation
-            case opponentSource, opponentFile, opensAt, closesAt, composite
+            case opponentSource, opponentFile, opensAt, closesAt, composite, runsPerGroup
         }
 
         /// The three nullable keys are always present, explicitly null when
@@ -128,6 +133,7 @@ struct GetAssignmentTool: ContentTool {
             try c.encode(opensAt, forKey: .opensAt)
             try c.encode(closesAt, forKey: .closesAt)
             try c.encode(composite, forKey: .composite)
+            try c.encode(runsPerGroup, forKey: .runsPerGroup)
         }
     }
 
@@ -155,7 +161,8 @@ struct GetAssignmentTool: ContentTool {
         + "\(MCPActivityProse.quotedTokenAlternatives) — with leaderboardVisibility, the "
         + "leaderboard path, the aggregation, the opponent source and file, and the live-session "
         + "window as opensAt and closesAt, null when unset) — which together decide what may be "
-        + "authored here."
+        + "authored here. datasets lists the files that come from the course dataset library, with the "
+        + "slug, the pinned version, the scope and the sample of each."
     static let inputSchema: JSONValue = MCPSchema.assignmentPublicIDOnlyInput
     static let outputSchema: JSONValue? = .object([
         "type": .string("object"),
@@ -220,12 +227,14 @@ struct GetAssignmentTool: ContentTool {
                         "description": .string(
                             "The composite block, in set_activity's shape; null for any other kind."),
                     ]),
+                    "runsPerGroup": MCPSchema.boolean,
                 ]),
                 "required": .array([
                     .string("kind"), .string("kindDisplayName"), .string("leaderboardVisibility"),
                     .string("leaderboardPath"), .string("aggregation"), .string("opponentSource"),
                 ]),
             ]),
+            "datasets": .object(["type": .string("array"), "items": DatasetToolSchema.attached]),
         ]),
         "required": .array([
             .string("publicID"), .string("title"), .string("slug"), .string("courseCode"),
@@ -295,8 +304,10 @@ struct GetAssignmentTool: ContentTool {
                     opponentFile: activity.opponentFile,
                     opensAt: activity.window?.opensAtISO,
                     closesAt: activity.window?.closesAtISO,
-                    composite: activity.composite)
-            }
+                    composite: activity.composite,
+                    runsPerGroup: activity.runsPerGroup)
+            },
+            datasets: (manifest?.datasets ?? []).compactMap(AttachedDatasetDTO.init)
         )
     }
 }
