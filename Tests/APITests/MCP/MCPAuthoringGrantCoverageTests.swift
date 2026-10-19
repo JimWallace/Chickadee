@@ -55,19 +55,18 @@ import Testing
         APIAssignmentVersion.schema: Allowance(
             files: ["AssignmentVersionTools.swift", "RestoreAssignmentVersionTool.swift"],
             reason: "Version history holds secret tests and solutions. The version tools read it on ToolContext.mainDB."
-        )
+        ),
+        APITournamentRun.schema: Allowance(
+            files: ["RunTournamentTool.swift"],
+            reason:
+                "run_tournament starts the run on ToolContext.mainDB: its entrants are student submissions, which the role cannot see."
+        ),
     ]
 
     /// Tables that these files reach on `context.db` with no grant. Each one
     /// is a bug to fix by routing the call to the owner pool. Remove the entry
     /// when that is done.
-    private static let knownGaps: [String: Allowance] = [
-        APITournamentRun.schema: Allowance(
-            files: ["RunTournamentTool.swift"],
-            reason:
-                "run_tournament calls startTournament on context.db. It also reads student submissions, so the fix is ToolContext.mainDB, not a grant."
-        )
-    ]
+    private static let knownGaps: [String: Allowance] = [:]
 
     private static func allowance(for table: String) -> Allowance? {
         ownerPoolOnly[table] ?? knownGaps[table]

@@ -90,8 +90,11 @@ struct RunTournamentTool: ContentTool {
         let actor = try await context.requireEligibleSubject()
         let run: APITournamentRun
         do {
+            // The owner pool: the entrants are the students' submissions,
+            // which the MCP role cannot see, and the run and its first
+            // matches are rows it may not write. The output is counts only.
             run = try await startTournament(
-                setup: setup, schedule: schedule, startedBy: actor.id, on: context.db)
+                setup: setup, schedule: schedule, startedBy: actor.id, on: context.mainDB)
         } catch let error as TournamentStartError {
             throw MCPToolError.invalidArguments(detail: error.reason)
         }
