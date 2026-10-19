@@ -78,7 +78,13 @@ extension Request {
     /// its own way, such as a redirect, starts here.
     func activeCourseForWrite(_ user: APIUser, atLeast minimum: CourseRole) async throws -> APICourse? {
         guard let courseID = try await resolveActiveCourse(for: user).activeCourseUUID else { return nil }
-        return try await requireCourseWriteAccess(caller: user, courseID: courseID, atLeast: minimum, db: db)
+        // Nil only for an admin whose active course has no row: not found,
+        // and not the same answer as "no active course".
+        guard
+            let course = try await requireCourseWriteAccess(
+                caller: user, courseID: courseID, atLeast: minimum, db: db)
+        else { throw AppError.notFound(resource: "Course") }
+        return course
     }
 
     /// `activeCourseForWrite`, or `WebAssignmentError.noActiveCourse` naming
