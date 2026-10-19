@@ -24,15 +24,10 @@ extension WebRoutes {
 
     @Sendable
     func leaderboardPage(req: Request) async throws -> Response {
-        let user = try req.auth.require(APIUser.self)
-        guard let setupID = req.parameters.get("testSetupID"),
-            let setup = try await APITestSetup.find(setupID, on: req.db),
-            let activity = setup.decodedManifest()?.activity
-        else { throw AppError.notFound(resource: "Leaderboard") }
-
-        let isStaff = try await isCourseStaff(user, inCourse: setup.courseID, db: req.db)
+        let gate = try await ActivityRequest.resolve(req, resource: "Leaderboard", audience: .course)
+        let (user, setup, activity, isStaff) = (gate.user, gate.setup, gate.activity, gate.isStaff)
+        let setupID = try setup.requireID()
         if !isStaff {
-            try await req.cachedRequireCourseEnrollment(caller: user, courseID: setup.courseID)
             guard activity.leaderboardVisibleToStudents else { throw AppError.notFound(resource: "Leaderboard") }
         }
 
@@ -186,7 +181,7 @@ func buildUnionPresentation(
     let isStaff = reader.isStaff
     let tally = try await unionTally(setup: setup, on: db)
     guard tally.targetCount > 0 else { return nil }
-    let identities = try await RankedIdentities.load(
+    let identities = try await AvatarIdentity.load(
         userIDs: tally.kills.map(\.userID) + tally.defences.map(\.userID),
         courseID: setup.courseID, on: db)
 
@@ -323,7 +318,7 @@ func buildTournamentPresentation(
     guard let (run, slots) = try await latestTournament(testSetupID: setup.id ?? "", groupID: groupID, on: db)
     else { return nil }
     let entrants = run.entrants
-    let identities = try await RankedIdentities.load(
+    let identities = try await AvatarIdentity.load(
         userIDs: entrants.map(\.userID), courseID: setup.courseID, on: db)
     var bySeed: [Int: TournamentEntrantPresentation] = [:]
     for entrant in entrants {
@@ -408,24 +403,21 @@ func buildChampionPresentation(
         ? groupID.map { .group(testSetupID: setupID, groupID: $0) } : .course(testSetupID: setupID)
     guard activity.kind.opponentSource == .champion, let hill,
         let champion = try await hill.holder(on: db),
-        let user = try await APIUser.find(champion.userID, on: db),
-        let enrollment = try await CourseRoster.enrollment(of: champion.userID, in: setup.courseID, on: db)
+        let identity = try await AvatarIdentity.load(userIDs: [champion.userID], courseID: setup.courseID, on: db)
+            .presentation(
+                for: champion.userID, includeName: includeNames, fallbackLabel: "Champion", size: .hero, on: db)
     else { return nil }
-    let handle = try await AvatarStore.ensureHandle(for: user, on: db) ?? ""
-    let spec = try await AvatarStore.ensureSpec(for: user, on: db)
-    let accessibility: AvatarAccessibility = handle.isEmpty ? .labelled("Champion") : .decorative
     // The model requires the date; the fallback only keeps the two strings
     // non-optional so the template has no empty shape to render.
     let crownedAt = champion.crownedAt ?? Date()
     return ChampionPresentation(
-        handle: handle,
-        name: includeNames ? staffFacingName(user) : "",
+        handle: identity.handle,
+        name: identity.name,
         crownedAtISO: iso8601String(crownedAt),
         crownedAtText: waterlooDateTimeFormatter().string(from: crownedAt),
         defencesText: champion.defences == 1 ? "1 defence" : "\(champion.defences) defences",
         isViewer: champion.userID == viewerID,
-        avatar: AvatarPresentation(
-            for: spec, size: .hero, accessibility: accessibility, isStaff: enrollment.role >= .ta))
+        avatar: identity.avatar)
 }
 
 /// Everything the metric board needs, built once per request.
@@ -499,7 +491,7 @@ func buildLeaderboard(
     let isStaff = reader.isStaff
     let setupID = setup.id ?? ""
     let allEntries = try await leaderboardEntries(testSetupID: setupID, groupID: groupID, on: db)
-    let identities = try await RankedIdentities.load(
+    let identities = try await AvatarIdentity.load(
         userIDs: allEntries.map(\.userID), courseID: setup.courseID, on: db)
     // Ranked against the roster: a student who has dropped takes no place.
     let entries = allEntries.filter { identities.isOnRoster($0.userID) }
@@ -629,72 +621,6 @@ private func unrankedStudentCount(
     return students.count(where: { !rankedIDs.contains($0) })
 }
 
-/// Who the viewer is to the page: their handle and hero bird, from the same
-/// store every other row reads, and the lines a card shares across kinds.
-struct ViewerIdentity {
-    let handle: String
-    let avatar: AvatarPresentation
-    let privacyLine: String
-    let submitURL: String
-
-    /// nil when the viewer is not enrolled in the setup's course.
-    static func load(viewer: APIUser, setup: APITestSetup, on db: any Database) async throws -> ViewerIdentity? {
-        guard let viewerID = viewer.id,
-            let enrollment = try await CourseRoster.enrollment(of: viewerID, in: setup.courseID, on: db)
-        else { return nil }
-        let handle = try await AvatarStore.ensureHandle(for: viewer, on: db) ?? ""
-        let spec = try await AvatarStore.ensureSpec(for: viewer, on: db)
-        return ViewerIdentity(
-            handle: handle,
-            avatar: AvatarPresentation(
-                for: spec, size: .hero,
-                accessibility: handle.isEmpty ? .labelled("You") : .decorative,
-                isStaff: enrollment.role >= .ta),
-            privacyLine: handle.isEmpty
-                ? "" : "Only you and course staff can link \(handle) to you. It stays the same all term.",
-            submitURL: "/testsetups/\(setup.id ?? "")/submit")
-    }
-}
-
-/// The value a card reports for a ranked viewer.
-struct ViewerBest {
-    /// "Your best", or "Your average".
-    let label: String
-    let text: String
-    /// Nil where the kind has no single moment the value was reached (a round
-    /// robin's average).
-    let reachedAt: Date?
-    let nextPlaceText: String
-}
-
-extension ViewerStanding {
-    /// The card for a viewer with no row on the board.
-    static func notRanked(_ identity: ViewerIdentity) -> ViewerStanding {
-        ViewerStanding(
-            isRanked: false, handle: identity.handle, hasHandle: !identity.handle.isEmpty,
-            avatar: identity.avatar, rankHeadline: "Not on the board yet", ofText: "",
-            bestLabel: "", bestText: "", hasBestAt: false, bestAtISO: "", bestAtText: "",
-            nextPlaceText: "", hasNextPlace: false, privacyLine: identity.privacyLine,
-            submitURL: identity.submitURL)
-    }
-
-    /// The card for a ranked viewer.
-    static func ranked(
-        _ identity: ViewerIdentity, row: (rank: Int, isTied: Bool), total: Int, best: ViewerBest
-    ) -> ViewerStanding {
-        ViewerStanding(
-            isRanked: true, handle: identity.handle, hasHandle: !identity.handle.isEmpty,
-            avatar: identity.avatar,
-            rankHeadline: LeaderboardStandingText.headline(rank: row.rank, isTied: row.isTied),
-            ofText: "of \(total)", bestLabel: best.label, bestText: best.text,
-            hasBestAt: best.reachedAt != nil,
-            bestAtISO: best.reachedAt.map(iso8601String) ?? "",
-            bestAtText: best.reachedAt.map(waterlooDateTimeFormatter().string(from:)) ?? "",
-            nextPlaceText: best.nextPlaceText, hasNextPlace: !best.nextPlaceText.isEmpty,
-            privacyLine: identity.privacyLine, submitURL: identity.submitURL)
-    }
-}
-
 /// The viewer's card: their place and best when they are ranked, else the
 /// invitation to submit.
 private func buildViewerStanding(
@@ -756,7 +682,7 @@ func buildStandingsBoard(
     let isStaff = reader.isStaff
     let ranked = try await rankedStandings(
         testSetupID: setup.id ?? "", courseID: setup.courseID, groupID: groupID, on: db)
-    let identities = try await RankedIdentities.load(
+    let identities = try await AvatarIdentity.load(
         userIDs: ranked.map(\.standing.userID), courseID: setup.courseID, on: db)
 
     var rows: [StandingRow] = []
@@ -799,84 +725,6 @@ func buildStandingsBoard(
         }
     }
     return StandingsBoard(rows: rows, items: items, you: you, rankedCount: rows.count)
-}
-
-/// The users and enrollments behind a set of ranked rows, loaded in two
-/// queries, and the handle-and-bird presentation of each.
-struct RankedIdentities {
-    let userByID: [UUID: APIUser]
-    let enrollmentByUser: [UUID: APICourseEnrollment]
-
-    struct Presentation {
-        let handle: String
-        let name: String
-        let avatar: AvatarPresentation
-    }
-
-    static func load(userIDs: [UUID], courseID: UUID, on db: any Database) async throws -> RankedIdentities {
-        let ids = Array(Set(userIDs))
-        let users = try await APIUser.query(on: db).filter(\.$id ~~ ids).all()
-        var userByID: [UUID: APIUser] = [:]
-        for user in users { if let id = user.id { userByID[id] = user } }
-        let enrollments = try await APICourseEnrollment.query(on: db)
-            .filter(\.$course.$id == courseID)
-            .filter(\.$userID ~~ ids)
-            .all()
-        var enrollmentByUser: [UUID: APICourseEnrollment] = [:]
-        for enrollment in enrollments { enrollmentByUser[enrollment.userID] = enrollment }
-        try await drawMissingHandles(users, on: db)
-        return RankedIdentities(userByID: userByID, enrollmentByUser: enrollmentByUser)
-    }
-
-    /// Draws a handle for each ranked bird that has none, reading the taken
-    /// handles once for the page rather than once per row (#2257).
-    /// `presentation` then finds every handle already in place.
-    private static func drawMissingHandles(_ users: [APIUser], on db: any Database) async throws {
-        var taken: Set<String>?
-        for user in users where !(user.avatarHandle.map(AvatarHandle.hasHandleShape) ?? false) {
-            var current: Set<String>
-            if let taken {
-                current = taken
-            } else {
-                current = try await AvatarStore.takenHandles(on: db)
-            }
-            if let handle = try await AvatarStore.ensureHandle(for: user, taken: current, on: db) {
-                current.insert(handle)
-            }
-            taken = current
-        }
-    }
-
-    /// False for a student who has since dropped: the roster is what a
-    /// classmate is ranked against.
-    func isOnRoster(_ userID: UUID) -> Bool {
-        userByID[userID] != nil && enrollmentByUser[userID] != nil
-    }
-
-    /// nil when `isOnRoster` is false.
-    func presentation(
-        for userID: UUID, includeName: Bool, fallbackLabel: String,
-        size: AvatarSize = .small, on db: any Database
-    ) async throws -> Presentation? {
-        guard let user = userByID[userID], let enrollment = enrollmentByUser[userID] else { return nil }
-        let handle = try await AvatarStore.ensureHandle(for: user, on: db) ?? ""
-        let spec = try await AvatarStore.ensureSpec(for: user, on: db)
-        // Decorative when the handle carries the identity; the bird must
-        // announce whose it is only when there is no handle beside it.
-        let accessibility: AvatarAccessibility = handle.isEmpty ? .labelled(fallbackLabel) : .decorative
-        return Presentation(
-            handle: handle,
-            name: includeName ? staffFacingName(user) : "",
-            avatar: AvatarPresentation(
-                for: spec, size: size, accessibility: accessibility, isStaff: enrollment.role >= .ta))
-    }
-}
-
-/// The name staff see beside a handle: the display name when the roster has
-/// one, else the username.
-private func staffFacingName(_ user: APIUser) -> String {
-    let display = user.displayName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-    return display.isEmpty ? user.username : display
 }
 
 /// A metric as the page prints it: an integer stays an integer ("1234"), a
