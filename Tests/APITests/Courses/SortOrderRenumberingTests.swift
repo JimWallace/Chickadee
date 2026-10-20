@@ -275,7 +275,11 @@ import Vapor
             let failing = FailingSecondUpdateDatabase(base: app.db)
             await #expect(throws: FailingSecondUpdateDatabase.UpdateRefused.self) {
                 _ = try await SortOrderRenumbering.renumberSectionItems(
-                    [.assignment(publicID: fx.labTwo.publicID), .assignment(publicID: fx.labOne.publicID)],
+                    [
+                        .assignment(publicID: fx.labTwo.publicID),
+                        .assignment(publicID: fx.labOne.publicID),
+                        .content(try fx.reading.requireID()),
+                    ],
                     inCourse: fx.courseID, on: failing)
             }
             #expect(try await order(of: fx.labTwo) == 2)

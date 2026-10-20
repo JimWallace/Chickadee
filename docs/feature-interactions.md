@@ -1033,7 +1033,8 @@ because line numbers go out of date.
     (`SortOrderRenumbering.roleFloor`).
   - A reorder refuses a duplicate id, an unknown type and an id outside the
     course. A section reorder names every section of the course. A
-    section-item reorder names items of one section.
+    section-item reorder names every item of one section, assignments and
+    content items together.
   - One reorder is one transaction.
 - **Parallel path:** none now. Do not write `sortOrder` in a new reorder
   route or tool; call the service.
@@ -1067,7 +1068,7 @@ not repeat them. But a change that makes one of them weaker is a finding.
 | The native and browser graders interpret output differently | `OutputContractTests`, `output-contract.test.mjs` |
 | A new user column with no foreign key | `UserReferenceScanTests` |
 | Rows that course deletion does not remove | `DeleteCourseCoverageTests` |
-| A reorder with its own role floor or rules | `SortOrderRenumberingTests`, `ReorderSurfaceRulesTests` |
+| A reorder with its own role floor or rules | `SortOrderRenumberingTests`, `ReorderSurfaceRulesTests`, `SectionItemFullListTests` |
 | A notebook worker that is not in the isolation list | `IsolatedWorkerScriptDriftTests` |
 
 ---
