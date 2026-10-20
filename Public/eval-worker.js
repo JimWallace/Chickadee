@@ -43,6 +43,7 @@ var _EVALUATORS = {
     python: {
         label: 'Python',
         shared: 'ChickadeePythonEvalShared',
+        scripts: ['/python-grading-shared.js', '/python-eval-shared.js'],
         config: function (e) {
             return {
                 kernel: e.PYTHON_KERNEL,
@@ -56,6 +57,7 @@ var _EVALUATORS = {
     r: {
         label: 'R',
         shared: 'ChickadeeREvalShared',
+        scripts: ['/r-grading-shared.js', '/r-eval-shared.js'],
         config: function (e) {
             return {
                 kernel: e.R_KERNEL,
@@ -70,6 +72,7 @@ var _EVALUATORS = {
     lua: {
         label: 'Lua',
         shared: 'ChickadeeLuaEvalShared',
+        scripts: ['/lua-grading-shared.js', '/lua-eval-shared.js'],
         config: function (e) {
             return {
                 kernel: e.LUA_KERNEL,
@@ -83,6 +86,7 @@ var _EVALUATORS = {
     octave: {
         label: 'Octave',
         shared: 'ChickadeeOctaveEvalShared',
+        scripts: ['/octave-grading-shared.js', '/octave-eval-shared.js'],
         // Higher than the others because Octave is the largest vendored env
         // (142 MB) and the slowest to boot.
         maxWaitMs: 90000,
@@ -105,8 +109,8 @@ importScripts('/vendor/xeus-bootstrap.js' + _suffix);
 importScripts('/xeus-kernel-shared.js' + _suffix);
 importScripts('/grading-shared.js' + _suffix);
 importScripts('/eval-protocol-shared.js' + _suffix);
-importScripts('/' + _lang + '-grading-shared.js' + _suffix);
-importScripts('/' + _lang + '-eval-shared.js' + _suffix);
+// Each language names its own scripts, so no URL is built from the query.
+_evaluator.scripts.forEach(function (script) { importScripts(script + _suffix); });
 
 var _eval = self[_evaluator.shared];
 var _config = _evaluator.config(_eval);
