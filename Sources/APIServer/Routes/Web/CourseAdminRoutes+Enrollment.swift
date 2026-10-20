@@ -29,6 +29,9 @@ extension CourseAdminRoutes {
         else {
             throw WebAssignmentError.noActiveCourse(action: "managing enrollments")
         }
+        // Enrollment is an instructor action. A TA passes the area gate, so the
+        // form states the floor of the POST it feeds (#2743).
+        try await requireCourseWriteAccess(caller: caller, courseID: courseID, atLeast: .instructor, db: req.db)
 
         return try await HTMLResponse {
             InstructorEnrollCSVPage(

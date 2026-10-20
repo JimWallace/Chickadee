@@ -41,7 +41,7 @@ extension CourseAdminRoutes {
         }
         let user = try req.auth.require(APIUser.self)
         let courseID = try await req.requireActiveCourseForWrite(
-            user, atLeast: .instructor, action: "managing sections"
+            user, atLeast: DashboardRoleFloor.manageSections, action: "managing sections"
         ).requireID()
         let body = try await req.decodeContent(CreateSectionBody.self)
         let name = body.name.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -109,7 +109,7 @@ extension CourseAdminRoutes {
             throw WebAssignmentError.notFound(resource: "Section")
         }
         try await requireCourseWriteAccess(
-            caller: user, courseID: section.courseID, atLeast: .instructor, db: req.db)
+            caller: user, courseID: section.courseID, atLeast: DashboardRoleFloor.manageSections, db: req.db)
         let body = try await req.decodeContent(RenameSectionBody.self)
         let name = body.name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !name.isEmpty else {
@@ -143,7 +143,7 @@ extension CourseAdminRoutes {
             throw WebAssignmentError.notFound(resource: "Section")
         }
         try await requireCourseWriteAccess(
-            caller: user, courseID: section.courseID, atLeast: .instructor, db: req.db)
+            caller: user, courseID: section.courseID, atLeast: DashboardRoleFloor.manageSections, db: req.db)
         // FK SET NULL: assignments in this section will have section_id → NULL (ungrouped).
         try await section.delete(on: req.db)
         return req.redirect(to: "/instructor")
@@ -166,7 +166,7 @@ extension CourseAdminRoutes {
         // the only role check on the path. Which section an assignment sits in
         // is course structure, so the floor matches `set_assignment_course_section`.
         try await requireCourseWriteAccess(
-            caller: user, courseID: assignment.courseID, atLeast: .instructor, db: req.db)
+            caller: user, courseID: assignment.courseID, atLeast: DashboardRoleFloor.manageSections, db: req.db)
         let body = (try? await req.decodeContent(MoveBody.self))
         let newSectionID: UUID? = try await resolveSectionID(body?.sectionID, courseID: courseID, db: req.db)
         assignment.sectionID = newSectionID
