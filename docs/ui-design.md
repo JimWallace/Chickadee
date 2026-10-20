@@ -620,6 +620,9 @@ duplicate.
   submitted-count track, and a wider state track for the status select.  Rows
   stay `<tr>` in a `tbody[data-section-id]` and keep their `data-assignment-id`
   / `data-content-item-id`, because `section-items-dnd.js` reads them.
+  The page carries `data-assignment-moves="free"` or `"locked"`. When it is
+  locked (a viewer below the section floor, a TA), the script keeps an
+  assignment row in its own section (#2743).
 - **`.editor-split`** — an editor (a form) beside a facts `.card`; one column on a phone. The authoring-voice section of the instructor AI agents page.
 - **`.facts-actions`** — the buttons at the top right of a facts card (a `.detail-grid` in a `.card`): Test connection and a ⋯ on the LEARN page.
 - **`.section-items-combo`** (20rem) — the state track of a `.section-items` list whose control is a combobox plus its Save button.

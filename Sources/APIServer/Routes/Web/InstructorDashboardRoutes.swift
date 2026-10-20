@@ -214,7 +214,7 @@ struct InstructorDashboardRoutes: RouteCollection {
 
     @Sendable
     func openAssignment(req: Request) async throws -> Response {
-        let assignment = try await loadAssignmentForWrite(req, atLeast: .instructor)
+        let assignment = try await loadAssignmentForWrite(req, atLeast: DashboardRoleFloor.assignmentLifecycle)
         do {
             try await AssignmentAuthoringService.setOpenState(
                 assignment, open: true, audit: .web(req), on: req.db)
@@ -317,7 +317,7 @@ struct InstructorDashboardRoutes: RouteCollection {
             var status: String
         }
 
-        let assignment = try await loadAssignmentForWrite(req, atLeast: .instructor)
+        let assignment = try await loadAssignmentForWrite(req, atLeast: DashboardRoleFloor.assignmentLifecycle)
 
         let body = try await req.decodeContent(StatusBody.self)
         guard let visibility = AssignmentVisibility(rawValue: body.status) else {
@@ -341,7 +341,7 @@ struct InstructorDashboardRoutes: RouteCollection {
 
     @Sendable
     func closeAssignment(req: Request) async throws -> Response {
-        let assignment = try await loadAssignmentForWrite(req, atLeast: .instructor)
+        let assignment = try await loadAssignmentForWrite(req, atLeast: DashboardRoleFloor.assignmentLifecycle)
         try await AssignmentAuthoringService.setOpenState(
             assignment, open: false, audit: .web(req), on: req.db)
         return req.redirect(to: "/instructor")
@@ -364,7 +364,8 @@ struct InstructorDashboardRoutes: RouteCollection {
         // possibly-archived source").
         // Cloning creates a *new* assignment (course structure), so it's
         // instructor-only — unlike the content edits this loader defaults to .ta.
-        let (source, sourceSetup) = try await loadAssignmentAndSetupForWrite(req, atLeast: .instructor)
+        let (source, sourceSetup) = try await loadAssignmentAndSetupForWrite(
+            req, atLeast: DashboardRoleFloor.createAssignment)
         let cloned = try await AssignmentAuthoringService.cloneAssignment(
             source: source,
             sourceSetup: sourceSetup,
@@ -426,7 +427,7 @@ struct InstructorDashboardRoutes: RouteCollection {
 
     @Sendable
     func deleteAssignment(req: Request) async throws -> Response {
-        let assignment = try await loadAssignmentForWrite(req, atLeast: .instructor)
+        let assignment = try await loadAssignmentForWrite(req, atLeast: DashboardRoleFloor.assignmentLifecycle)
         let setupID = assignment.testSetupID
 
         // Delete related submissions and their result rows for this setup.
@@ -486,7 +487,8 @@ struct InstructorDashboardRoutes: RouteCollection {
         // Scope the delete to the setup's own course (the :setupID param-taking
         // route is otherwise drivable cross-course / against an archived course;
         // the active-course group gate can't see the setup's course) (#417 Slice D).
-        try await requireCourseWriteAccess(caller: caller, courseID: setup.courseID, atLeast: .instructor, db: req.db)
+        try await requireCourseWriteAccess(
+            caller: caller, courseID: setup.courseID, atLeast: DashboardRoleFloor.assignmentLifecycle, db: req.db)
         // Only allow deleting setups that have no associated assignment.
         let hasAssignment =
             try await APIAssignment.query(on: req.db)

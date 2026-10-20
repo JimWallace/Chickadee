@@ -19,12 +19,15 @@ struct CourseItemRow: HTML {
     /// The course's enrolled students, for the "X / Y submitted" count.
     let enrolledStudentCount: Int
     let csrfToken: String
+    /// The instructor-only controls the viewer gets. Material rows need none.
+    let controls: DashboardControls
 
     var body: some HTML {
         if item.isContent, let content = item.content {
             CourseContentItemRow(content: content, csrfToken: csrfToken)
         } else if let row = item.row {
-            CourseAssignmentItemRow(row: row, enrolledStudentCount: enrolledStudentCount, csrfToken: csrfToken)
+            CourseAssignmentItemRow(
+                row: row, enrolledStudentCount: enrolledStudentCount, csrfToken: csrfToken, controls: controls)
         }
     }
 }
@@ -237,6 +240,7 @@ private struct CourseAssignmentItemRow: HTML {
     let row: AssignmentRow
     let enrolledStudentCount: Int
     let csrfToken: String
+    let controls: DashboardControls
 
     private var statusClass: String {
         switch row.status {
@@ -333,6 +337,8 @@ private struct CourseAssignmentItemRow: HTML {
     @HTMLBuilder private var statusCell: some HTML {
         if let assignmentID = row.assignmentID {
             switch row.validationStatus {
+            case "passed" where !controls.assignmentLifecycle:
+                span(.class("tier \(statusTierClass)")) { Self.statusLabel(row.status) }
             case "passed":
                 form(.method(.post), .action("/instructor/\(assignmentID)/status"), .class("status-form")) {
                     CSRFField(token: csrfToken)
@@ -344,10 +350,10 @@ private struct CourseAssignmentItemRow: HTML {
                             .id("status-\(assignmentID)"), .class("form-input"), .name("status"),
                             .dataFlag("ck-submit-on-change")
                         ) {
-                            option(.value("open")) { "open" }.attributes(.selected, when: row.status == "open")
-                            option(.value("preview")) { "staff only" }
-                                .attributes(.selected, when: row.status == "preview")
-                            option(.value("closed")) { "closed" }.attributes(.selected, when: row.status == "closed")
+                            for status in ["open", "preview", "closed"] {
+                                option(.value(status)) { Self.statusLabel(status) }
+                                    .attributes(.selected, when: row.status == status)
+                            }
                         }
                     }
                 }
@@ -368,40 +374,71 @@ private struct CourseAssignmentItemRow: HTML {
         }
     }
 
+    /// The read-only status, for a viewer who may not change it.
+    private var statusTierClass: String {
+        switch row.status {
+        case "open": "tier-open"
+        case "preview": "tier-preview"
+        default: "tier-closed"
+        }
+    }
+
+    /// The words for a published status, in the select and in the read-only
+    /// label.
+    private static func statusLabel(_ status: String) -> String {
+        switch status {
+        case "open": "open"
+        case "preview": "staff only"
+        default: "closed"
+        }
+    }
+
     private var unpublishedActions: some HTML {
         div(.class("assignment-actions-cell")) {
-            details(.class("publish-details")) {
-                summary(.class("btn action-btn summary-btn")) { "Publish…" }
-                form(.class("publish-form"), .method(.post), .action("/instructor")) {
-                    input(.type(.hidden), .name("testSetupID"), .value(row.setupID))
-                    label(.class("form-label publish-label")) {
-                        "Title"
-                        input(
-                            .class("form-input editor-input"), .type(.text), .name("title"),
-                            .placeholder("e.g. Lab 1 — Warmup"), .required)
+            if controls.createAssignment {
+                publishDetails
+            } else {
+                span(.class("text-muted")) { "An instructor publishes it." }
+            }
+            if controls.assignmentLifecycle {
+                RowMenu(for: "unpublished setup \(row.setupID)") {
+                    form(
+                        .method(.post), .action("/instructor/setup/\(row.setupID)/delete"),
+                        .data("confirm", value: "Delete this unpublished setup? This cannot be undone.")
+                    ) {
+                        CSRFField(token: csrfToken)
+                        button(
+                            .class("row-menu-item row-menu-item--danger"), .type(.submit), .role("menuitem")
+                        ) {
+                            Icon("i-trash")
+                            "Delete setup"
+                        }
                     }
-                    label(.class("form-label publish-label")) {
-                        "Due date (optional)"
-                        input(
-                            .class("form-input js-publish-due-date editor-input"), .type(.datetimeLocal),
-                            .name("dueAt"))
-                    }
-                    // Shown by Public/assignments.js when the date lands on a UW date.
-                    div(.class("publish-uw-warning card-meta"), .custom(name: "style", value: "display:none")) {}
-                    button(.class("btn btn-primary btn-compact"), .type(.submit)) { "Create draft" }
                 }
             }
-            RowMenu(for: "unpublished setup \(row.setupID)") {
-                form(
-                    .method(.post), .action("/instructor/setup/\(row.setupID)/delete"),
-                    .data("confirm", value: "Delete this unpublished setup? This cannot be undone.")
-                ) {
-                    CSRFField(token: csrfToken)
-                    button(.class("row-menu-item row-menu-item--danger"), .type(.submit), .role("menuitem")) {
-                        Icon("i-trash")
-                        "Delete setup"
-                    }
+        }
+    }
+
+    private var publishDetails: some HTML {
+        details(.class("publish-details")) {
+            summary(.class("btn action-btn summary-btn")) { "Publish…" }
+            form(.class("publish-form"), .method(.post), .action("/instructor")) {
+                input(.type(.hidden), .name("testSetupID"), .value(row.setupID))
+                label(.class("form-label publish-label")) {
+                    "Title"
+                    input(
+                        .class("form-input editor-input"), .type(.text), .name("title"),
+                        .placeholder("e.g. Lab 1 — Warmup"), .required)
                 }
+                label(.class("form-label publish-label")) {
+                    "Due date (optional)"
+                    input(
+                        .class("form-input js-publish-due-date editor-input"), .type(.datetimeLocal),
+                        .name("dueAt"))
+                }
+                // Shown by Public/assignments.js when the date lands on a UW date.
+                div(.class("publish-uw-warning card-meta"), .custom(name: "style", value: "display:none")) {}
+                button(.class("btn btn-primary btn-compact"), .type(.submit)) { "Create draft" }
             }
         }
     }
@@ -424,20 +461,24 @@ private struct CourseAssignmentItemRow: HTML {
                         "Leaderboard"
                     }
                 }
-                menuForm(
-                    action: "/instructor/\(assignmentID)/clone",
-                    confirm:
-                        "Duplicate this assignment? A closed, unvalidated copy will be created for you to edit.",
-                    icon: "i-copy", label: "Duplicate", danger: false)
+                if controls.createAssignment {
+                    menuForm(
+                        action: "/instructor/\(assignmentID)/clone",
+                        confirm:
+                            "Duplicate this assignment? A closed, unvalidated copy will be created for you to edit.",
+                        icon: "i-copy", label: "Duplicate", danger: false)
+                }
                 menuForm(
                     action: "/instructor/\(assignmentID)/retest",
                     confirm:
                         "Retest every submission for this assignment? The worker will re-grade each one against the current test suite.",
                     icon: "i-refresh", label: "Retest all submissions", danger: false)
-                menuForm(
-                    action: "/instructor/\(assignmentID)/delete",
-                    confirm: "Delete this assignment? Students will no longer see it.",
-                    icon: "i-trash", label: "Delete assignment", danger: true)
+                if controls.assignmentLifecycle {
+                    menuForm(
+                        action: "/instructor/\(assignmentID)/delete",
+                        confirm: "Delete this assignment? Students will no longer see it.",
+                        icon: "i-trash", label: "Delete assignment", danger: true)
+                }
             }
         }
     }

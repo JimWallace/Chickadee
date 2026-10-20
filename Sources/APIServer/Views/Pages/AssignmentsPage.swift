@@ -23,12 +23,9 @@ struct AssignmentsPage: HTML {
     let showEmptyMessage: Bool
     let enrolledStudentCount: Int
 
-    /// Creating an assignment is an instructor action. The staff dashboard
-    /// also serves a TA, who is not offered a form the server refuses.
-    private var canCreateAssignment: Bool {
-        guard let user = page.currentUser else { return false }
-        return user.isAdmin || user.activeCourse.map { $0.role >= .instructor } == true
-    }
+    /// The staff dashboard also serves a TA, who is not offered a control
+    /// that the server refuses.
+    private var controls: DashboardControls { DashboardControls(viewer: page.currentUser) }
 
     private var heading: String {
         guard let course = page.currentUser?.activeCourse else { return "Assignments" }
@@ -38,7 +35,12 @@ struct AssignmentsPage: HTML {
     var body: some HTML {
         BaseLayout(title: heading, page: page) {
             InstructorTabs(active: .overview)
-            section(.class("page-section")) {
+            // Public/section-items-dnd.js keeps an assignment in its section
+            // when the viewer may not move it to another one.
+            section(
+                .class("page-section"),
+                .data("assignment-moves", value: controls.manageSections ? "free" : "locked")
+            ) {
                 h2(.class("page-heading")) { heading }
                 div(.class("diagnostics-section")) {
                     div(.class("diagnostics-cards")) {
@@ -60,7 +62,7 @@ struct AssignmentsPage: HTML {
                 }
                 if showEmptyMessage {
                     p(.class("empty")) {
-                        if canCreateAssignment {
+                        if controls.createAssignment {
                             "No assignments yet. "
                             a(.href("/instructor/new")) { "Create one to get started." }
                         } else {
@@ -72,11 +74,13 @@ struct AssignmentsPage: HTML {
                         for section in sections {
                             SectionBlock(
                                 section: section, enrolledStudentCount: enrolledStudentCount, csrfToken: page.csrfToken,
-                                canCreateAssignment: canCreateAssignment)
+                                controls: controls)
                         }
                     }
                 }
-                addSectionToolbar
+                if controls.manageSections {
+                    addSectionToolbar
+                }
                 if !showEmptyMessage && showUngroupedBlock {
                     ungroupedBlock
                 }
@@ -134,7 +138,7 @@ struct AssignmentsPage: HTML {
                         h2(.class("ungrouped-heading")) { "Ungrouped" }
                     }
                     AddItemMenu(
-                        newAssignmentHref: canCreateAssignment ? "/instructor/new" : nil,
+                        newAssignmentHref: controls.createAssignment ? "/instructor/new" : nil,
                         panelID: "add-material-ungrouped")
                 }
             }
@@ -144,7 +148,9 @@ struct AssignmentsPage: HTML {
             if !ungroupedItems.isEmpty {
                 SectionItemsTable(tbodyID: "assignments-body", sectionID: "") {
                     for item in ungroupedItems {
-                        CourseItemRow(item: item, enrolledStudentCount: enrolledStudentCount, csrfToken: page.csrfToken)
+                        CourseItemRow(
+                            item: item, enrolledStudentCount: enrolledStudentCount, csrfToken: page.csrfToken,
+                            controls: controls)
                     }
                 }
             }
@@ -158,7 +164,7 @@ private struct SectionBlock: HTML {
     let section: CourseSectionRow
     let enrolledStudentCount: Int
     let csrfToken: String
-    let canCreateAssignment: Bool
+    let controls: DashboardControls
 
     private var isWorker: Bool { section.defaultGradingMode == "worker" }
 
@@ -170,15 +176,20 @@ private struct SectionBlock: HTML {
                     strong { section.name }
                     " "
                     span(.class("section-mode-note")) { "tested in \(isWorker ? "Chickadee" : "Student Browser")" }
-                    button(
-                        .class("btn-link js-section-edit-toggle icon-btn-text"), .type(.button),
-                        .title("Edit section"), .ariaLabel("Edit section")
-                    ) { Icon("i-pencil") }
+                    if controls.manageSections {
+                        button(
+                            .class("btn-link js-section-edit-toggle icon-btn-text"), .type(.button),
+                            .title("Edit section"), .ariaLabel("Edit section")
+                        ) { Icon("i-pencil") }
+                    }
                     AddItemMenu(
-                        newAssignmentHref: canCreateAssignment ? "/instructor/new?sectionID=\(section.sectionID)" : nil,
+                        newAssignmentHref: controls.createAssignment
+                            ? "/instructor/new?sectionID=\(section.sectionID)" : nil,
                         panelID: "add-material-\(section.sectionID)")
                 }
-                editForm
+                if controls.manageSections {
+                    editForm
+                }
             }
             AddMaterialPanel(
                 panelID: "add-material-\(section.sectionID)", sectionID: section.sectionID,
@@ -194,14 +205,17 @@ private struct SectionBlock: HTML {
                     }
                 } else {
                     for item in section.items {
-                        CourseItemRow(item: item, enrolledStudentCount: enrolledStudentCount, csrfToken: csrfToken)
+                        CourseItemRow(
+                            item: item, enrolledStudentCount: enrolledStudentCount, csrfToken: csrfToken,
+                            controls: controls)
                     }
                 }
             }
         }
     }
 
-    /// The rename form, hidden until Public/assignments.js shows it.
+    /// The rename form, hidden until Public/assignments.js shows it. Only for
+    /// a viewer who may manage sections.
     private var editForm: some HTML {
         div(.class("section-edit"), .custom(name: "style", value: "display:none")) {
             form(

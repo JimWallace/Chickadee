@@ -34,7 +34,8 @@ extension DraftAssignmentRoutes {
         // The form creates an assignment, an instructor action: a TA is not
         // shown a form whose save would be refused.
         if let courseID = courseState.activeCourseUUID {
-            try await requireCourseWriteAccess(caller: user, courseID: courseID, atLeast: .instructor, db: req.db)
+            try await requireCourseWriteAccess(
+                caller: user, courseID: courseID, atLeast: DashboardRoleFloor.createAssignment, db: req.db)
         }
         let q = (try? req.query.decode(NewQuery.self))
 
@@ -138,7 +139,7 @@ extension DraftAssignmentRoutes {
         // Creating an assignment is an instructor action. A TA passes the area
         // gate (`ActiveCourseStaffMiddleware`), so the floor is stated here.
         let courseID = try await req.requireActiveCourseForWrite(
-            user, atLeast: .instructor, action: "creating an assignment"
+            user, atLeast: DashboardRoleFloor.createAssignment, action: "creating an assignment"
         ).requireID()
 
         let payload = try await parseNewAssignmentDraftPayload(req: req)
@@ -296,7 +297,7 @@ extension DraftAssignmentRoutes {
     func saveNewAssignment(req: Request) async throws -> Response {
         let saveUser = try req.auth.require(APIUser.self)
         let courseID = try await req.requireActiveCourseForWrite(
-            saveUser, atLeast: .instructor, action: "creating an assignment"
+            saveUser, atLeast: DashboardRoleFloor.createAssignment, action: "creating an assignment"
         ).requireID()
 
         let form = try await parseSaveNewAssignmentForm(req: req)
@@ -741,7 +742,7 @@ extension DraftAssignmentRoutes {
 
         let publishUser = try req.auth.require(APIUser.self)
         let courseID = try await req.requireActiveCourseForWrite(
-            publishUser, atLeast: .instructor, action: "publishing an assignment"
+            publishUser, atLeast: DashboardRoleFloor.createAssignment, action: "publishing an assignment"
         ).requireID()
         let body = try await req.decodeContent(PublishBody.self)
 
