@@ -16,6 +16,13 @@
 //   POST /instructor/brightspace/sync-now              → hard reset: re-queue errored pushes, then sweep immediately
 //   POST /instructor/brightspace/reconcile-now         → re-check roster readiness vs LEARN
 //   POST /instructor/:assignmentID/brightspace/push-all → re-push every grade for one assignment
+//
+// `ActiveCourseStaffMiddleware` admits a TA to this tab. Every action that
+// changes the course (connect, use-my-identity, bind-org-unit, auto-map,
+// sync-now, reconcile-now) is a "BrightSpace binding" action, so it passes
+// `requireBrightSpaceCourse`, the `.instructor` floor, before it reads its
+// form (#2710). `disconnect` acts on the caller's own account and `test` only
+// reads, so a TA keeps both.
 
 import Core
 import Elementary
@@ -87,6 +94,10 @@ extension InstructorLMSRoutes {
     @Sendable
     func brightspaceConnectAccount(req: Request) async throws -> Response {
         let user = try req.auth.require(APIUser.self)
+        // Connecting can make the caller the course's sync identity.
+        guard let course = try await requireBrightSpaceCourse(req: req, user: user) else {
+            return brightspaceRedirect(req, error: "No active course.")
+        }
         struct ConnectForm: Content {
             let userID: String
             let userKey: String
@@ -101,12 +112,11 @@ extension InstructorLMSRoutes {
             return brightspaceRedirect(req, error: "Could not resolve your account.")
         }
 
-        let courseState = try await req.resolveActiveCourse(for: user)
         let connection: BrightSpaceConnectionService.Connection
         do {
             connection = try await BrightSpaceConnectionService.connect(
                 userUUID: userUUID, valenceUserID: valenceUserID, valenceUserKey: valenceUserKey,
-                activeCourseUUID: courseState.activeCourseUUID, on: req.db, application: req.application)
+                activeCourseUUID: course.id, on: req.db, application: req.application)
         } catch BrightSpaceConnectionService.ConnectError.notConfigured {
             return brightspaceRedirect(req, error: "BrightSpace is not configured on this server.")
         } catch BrightSpaceConnectionService.ConnectError.credentialsRejected(let reason) {
@@ -144,9 +154,8 @@ extension InstructorLMSRoutes {
         guard let userUUID = user.id else {
             return brightspaceRedirect(req, error: "Could not resolve your account.")
         }
-        let courseState = try await req.resolveActiveCourse(for: user)
-        guard let courseUUID = courseState.activeCourseUUID,
-            let course = try await APICourse.find(courseUUID, on: req.db)
+        guard let course = try await requireBrightSpaceCourse(req: req, user: user),
+            let courseUUID = course.id
         else {
             return brightspaceRedirect(req, error: "No active course.")
         }
@@ -202,16 +211,14 @@ extension InstructorLMSRoutes {
         guard let userUUID = user.id else {
             return brightspaceRedirect(req, error: "Could not resolve your account.")
         }
-        struct BindForm: Content { let orgUnitID: String? }
-        let rawOrgUnit = (try await req.decodeContent(BindForm.self).orgUnitID ?? "")
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-
-        let courseState = try await req.resolveActiveCourse(for: user)
-        guard let courseUUID = courseState.activeCourseUUID,
-            let course = try await APICourse.find(courseUUID, on: req.db)
+        guard let course = try await requireBrightSpaceCourse(req: req, user: user),
+            let courseUUID = course.id
         else {
             return brightspaceRedirect(req, error: "No active course.")
         }
+        struct BindForm: Content { let orgUnitID: String? }
+        let rawOrgUnit = (try await req.decodeContent(BindForm.self).orgUnitID ?? "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
 
         // Clearing the binding (blank submit) — leave the sync identity alone.
         if rawOrgUnit.isEmpty {
@@ -294,9 +301,8 @@ extension InstructorLMSRoutes {
     @Sendable
     func brightspaceAutoMap(req: Request) async throws -> Response {
         let user = try req.auth.require(APIUser.self)
-        let courseState = try await req.resolveActiveCourse(for: user)
-        guard let courseUUID = courseState.activeCourseUUID,
-            let course = try await APICourse.find(courseUUID, on: req.db),
+        guard let course = try await requireBrightSpaceCourse(req: req, user: user),
+            let courseUUID = course.id,
             let orgUnitID = course.brightspaceOrgUnitID, !orgUnitID.isEmpty,
             let client = try await req.application.brightSpaceClient(forCourse: course)
         else {
@@ -338,10 +344,12 @@ extension InstructorLMSRoutes {
     @Sendable
     func brightspaceSyncNow(req: Request) async throws -> Response {
         let user = try req.auth.require(APIUser.self)
-        let courseState = try await req.resolveActiveCourse(for: user)
-        if let courseUUID = courseState.activeCourseUUID {
-            try await requeueErroredGradePushes(courseUUID: courseUUID, on: req.db)
+        guard let course = try await requireBrightSpaceCourse(req: req, user: user),
+            let courseUUID = course.id
+        else {
+            return brightspaceRedirect(req, error: "No active course.")
         }
+        try await requeueErroredGradePushes(courseUUID: courseUUID, on: req.db)
         // The requeue above is fast local writes; the sweep itself is one
         // sequential D2L PUT per student, so it runs detached instead of
         // holding this request open (a large class risks a proxy timeout).
@@ -349,7 +357,7 @@ extension InstructorLMSRoutes {
         await AuditLogger.record(
             action: .brightspaceSyncNow,
             targetType: .course,
-            targetID: courseState.activeCourseUUID?.uuidString,
+            targetID: courseUUID.uuidString,
             on: req
         )
         return brightspaceRedirect(
@@ -366,10 +374,7 @@ extension InstructorLMSRoutes {
     @Sendable
     func brightspaceReconcileNow(req: Request) async throws -> Response {
         let user = try req.auth.require(APIUser.self)
-        let courseState = try await req.resolveActiveCourse(for: user)
-        guard let courseUUID = courseState.activeCourseUUID,
-            let course = try await APICourse.find(courseUUID, on: req.db)
-        else {
+        guard let course = try await requireBrightSpaceCourse(req: req, user: user) else {
             return brightspaceRedirect(req, error: "No active course.")
         }
         guard let orgUnitID = course.brightspaceOrgUnitID, !orgUnitID.isEmpty else {
@@ -449,6 +454,15 @@ struct BrightspaceTestResult: Content {
 }
 
 extension InstructorLMSRoutes {
+    /// The active course, after the caller passes the `.instructor` floor for
+    /// a BrightSpace binding action (#2710). Throws 403 for a TA or for an
+    /// archived course. Nil when there is no active course.
+    fileprivate func requireBrightSpaceCourse(req: Request, user: APIUser) async throws -> APICourse? {
+        guard let courseID = try await req.resolveActiveCourse(for: user).activeCourseUUID else { return nil }
+        try await requireCourseWriteAccess(caller: user, courseID: courseID, atLeast: .instructor, db: req.db)
+        return try await APICourse.find(courseID, on: req.db)
+    }
+
     /// Sets the flash the BrightSpace page shows on its next load and sends
     /// the browser back to it. Every mutating handler on the page ends here
     /// (#1714); the page reads and clears the two keys.

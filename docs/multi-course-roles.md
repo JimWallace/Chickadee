@@ -241,6 +241,17 @@ representable and creatable.
   handlers came to enforce nothing beyond the `/instructor` area gate while
   three separate comments (including the MCP twins' "matching the web") said
   they were instructor-level. They enforce it now.
+- **Routes without a path parameter have their own guard (#2710).** The
+  matrix walks only routes with a path parameter. A route such as
+  `POST /instructor/brightspace/sync-now` acts on the active course, so it has
+  no cross-course dimension, but it has a role floor.
+  `InstructorParameterlessRouteFloorTests` declares the floor of every such
+  write route under `/instructor` and posts to each one as a TA. Six
+  BrightSpace handlers enforced nothing beyond the area gate until it found
+  them. Two lists in the test name what the probe cannot see:
+  `readsBeforeFloor` (a handler that reads its form before the floor, so an
+  empty post proves only a refusal) and `knownGaps` (a declared floor that the
+  handler does not enforce yet).
 
 ### 3.5 UI touchpoints
 
