@@ -62,14 +62,7 @@ jobs:
         run: scripts/check-kernel-currency.py --self-test
 
       - name: Install micromamba
-        run: |
-          set -euo pipefail
-          mkdir -p "$HOME/.local/bin"
-          curl -sSL --max-time 180 \
-            https://micro.mamba.pm/api/micromamba/linux-64/latest -o /tmp/micromamba.tar.bz2
-          tar -xj -C /tmp -f /tmp/micromamba.tar.bz2 bin/micromamba
-          mv /tmp/bin/micromamba "$HOME/.local/bin/micromamba"
-          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+        run: scripts/install-micromamba.sh
 
       - name: Are the vendored kernels current?
         id: currency

@@ -17,7 +17,7 @@
 #     (defaults to swift-6.4.0-RELEASE_wasm-embedded).
 #   * Node + npx (for esbuild) to bundle the WASI shim locally (no CDN: FIPPA).
 #
-# Output (checked in, like Public/pyodide / Public/vendor — CI and contributors
+# Output (checked in, like Public/jupyterlite / Public/vendor — CI and contributors
 # need no wasm SDK; rebuild only when RunnerCore or the bridge changes):
 #   Public/runner-wasm/runner-core.js   — self-contained ESM loader (init/exports)
 #   Public/runner-wasm/RunnerWasm.wasm  — the embedded wasm module

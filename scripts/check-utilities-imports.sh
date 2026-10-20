@@ -21,6 +21,8 @@ set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$repo_root"
+# shellcheck source=lib/grep-guard.sh
+. "scripts/lib/grep-guard.sh"
 
 dir="Sources/APIServer/Utilities"
 
@@ -28,20 +30,13 @@ dir="Sources/APIServer/Utilities"
 # declaration kind (`import struct Vapor.Abort`), naming a forbidden module.
 forbidden='^[[:space:]]*(@[A-Za-z_]+[[:space:]]+)*import[[:space:]]+((struct|class|enum|protocol|func|var|let|typealias)[[:space:]]+)?(Vapor|Fluent[A-Za-z]*|SQLKit|SQLiteKit|PostgresKit)([^A-Za-z0-9_]|$)'
 
-violations=()
 # Recursive: the renderers sit in subfolders of Utilities/ (#2495).
-while IFS= read -r file; do
-  while IFS= read -r line; do
-    violations+=("$file: $line")
-  done < <(grep -E "$forbidden" "$file" || true)
-done < <(find "$dir" -name '*.swift' | sort)
+violations=$(code_matches "$forbidden" "$dir")
 
-if [ "${#violations[@]}" -gt 0 ]; then
+if [ -n "$violations" ]; then
   echo "ERROR: a file under $dir imports Vapor or a database module."
   echo
-  for violation in "${violations[@]}"; do
-    echo "  $violation"
-  done
+  printf '%s\n' "$violations" | sed 's/^/  /'
   echo
   echo "Utilities/ holds pure code. Move the file to Bootstrap/, Helpers/ or"
   echo "Services/, or remove the import."

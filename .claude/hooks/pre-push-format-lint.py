@@ -19,23 +19,17 @@ import sys
 
 sys.dont_write_bytecode = True
 sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
-from toolchain_path import environment_with_toolchain  # noqa: E402
+from hook_common import environment_with_toolchain, project_dir, read_tool_event  # noqa: E402
 
 GIT_PUSH = re.compile(r"(?:^|[;&|(\s])git\s+(?:-[^\s]+\s+)*push\b")
 NO_CODE_FLAGS = ("--delete", "--dry-run", " -d ", " -n ")
 
 
 def main() -> None:
-    try:
-        event = json.load(sys.stdin)
-    except json.JSONDecodeError:
+    read = read_tool_event()
+    if read is None or read[0].get("tool_name") != "Bash":
         return
-    if not isinstance(event, dict) or event.get("tool_name") != "Bash":
-        return
-
-    tool_input = event.get("tool_input")
-    if not isinstance(tool_input, dict):
-        return
+    event, tool_input = read
     command = tool_input.get("command")
     if not isinstance(command, str):
         return
@@ -46,14 +40,14 @@ def main() -> None:
     if any(flag in f" {push_args} " for flag in NO_CODE_FLAGS):
         return
 
-    project_dir = os.environ.get("CLAUDE_PROJECT_DIR") or event.get("cwd") or os.getcwd()
-    script = os.path.join(project_dir, "scripts", "format-lint.sh")
+    project = project_dir(event)
+    script = os.path.join(project, "scripts", "format-lint.sh")
     if not os.path.isfile(script):
         return
 
     result = subprocess.run(
         [script],
-        cwd=project_dir,
+        cwd=project,
         env=environment_with_toolchain(),
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
