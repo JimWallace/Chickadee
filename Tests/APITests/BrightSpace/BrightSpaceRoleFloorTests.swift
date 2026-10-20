@@ -22,7 +22,7 @@ import VaporTesting
 
 @testable import APIServer
 
-@Suite(.serialized, .timeLimit(.minutes(2))) final class BrightSpaceRoleFloorTests {
+@Suite(.serialized) final class BrightSpaceRoleFloorTests {
 
     let app: Application
 

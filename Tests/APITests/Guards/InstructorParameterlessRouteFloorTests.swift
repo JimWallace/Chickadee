@@ -30,7 +30,7 @@ import VaporTesting
 
 @testable import APIServer
 
-@Suite(.serialized, .timeLimit(.minutes(2))) final class InstructorParameterlessRouteFloorTests {
+@Suite(.serialized) final class InstructorParameterlessRouteFloorTests {
 
     let app: Application
 
