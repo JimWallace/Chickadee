@@ -46,7 +46,10 @@ import VaporTesting
         // MARK: Assignment content and grading — `.ta`
         "POST /instructor/content-items": .ta,
         "POST /instructor/content-items/reorder": .ta,
+        // Every reorder kind floors at `SortOrderRenumbering.roleFloor`.
         "POST /instructor/section-items/reorder": .ta,
+        "POST /instructor/reorder": .ta,
+        "POST /instructor/sections/reorder": .ta,
         "POST /instructor/scan-notebook": .ta,
         "POST /instructor/datasets": .ta,
         "POST /instructor/datasets/delete": .ta,
@@ -75,9 +78,7 @@ import VaporTesting
 
         // MARK: Course structure and settings — `.instructor`
         "POST /instructor/new-term": .instructor,
-        "POST /instructor/reorder": .instructor,
         "POST /instructor/sections": .instructor,
-        "POST /instructor/sections/reorder": .instructor,
         "POST /instructor/slip-days/settings": .instructor,
         "POST /instructor/mcp": .instructor,
         "POST /instructor/github/bind": .instructor,
@@ -114,7 +115,6 @@ import VaporTesting
         "POST /instructor/groups/remove",
         "POST /instructor/groups/import",
         "POST /instructor/groups/membership",
-        "POST /instructor/reorder",
         // `loadDraftSetupForWrite` reads `draftID` first.
         "POST /instructor/new/draft/scripts",
         "POST /instructor/new/draft/suite-sections",

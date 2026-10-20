@@ -459,8 +459,7 @@ extension InstructorLMSRoutes {
     /// archived course. Nil when there is no active course.
     fileprivate func requireBrightSpaceCourse(req: Request, user: APIUser) async throws -> APICourse? {
         guard let courseID = try await req.resolveActiveCourse(for: user).activeCourseUUID else { return nil }
-        try await requireCourseWriteAccess(caller: user, courseID: courseID, atLeast: .instructor, db: req.db)
-        return try await APICourse.find(courseID, on: req.db)
+        return try await requireCourseWriteAccess(caller: user, courseID: courseID, atLeast: .instructor, db: req.db)
     }
 
     /// Sets the flash the BrightSpace page shows on its next load and sends

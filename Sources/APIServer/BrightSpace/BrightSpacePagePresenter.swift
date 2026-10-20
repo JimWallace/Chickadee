@@ -125,7 +125,7 @@ enum BrightSpacePagePresenter {
         // A TA reaches this tab, but the course-level actions are `.instructor`
         // (#2710). Hide what the handlers refuse; disconnect stays.
         let canManage =
-            try await evaluateCourseWrite(user: user, courseID: courseUUID, atLeast: .instructor, db: db) == nil
+            try await evaluateCourseWrite(user: user, courseID: courseUUID, atLeast: .instructor, db: db).denial == nil
         let facts = learnPageFacts(
             LearnFactsInput(
                 usesServiceAccount: application.brightSpaceUsesServiceAccount,
