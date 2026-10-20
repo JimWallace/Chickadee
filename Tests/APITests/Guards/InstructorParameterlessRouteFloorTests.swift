@@ -128,15 +128,10 @@ import VaporTesting
         "POST /instructor/github/archive",
     ]
 
-    /// Routes whose declared floor the handler does not enforce today. A TA of
-    /// the active course can create an assignment through each one. These are
-    /// outside #2710 and are reported on its pull request; the probe skips them
-    /// until a fix moves each one out of this list.
-    private static let knownGaps: Set<String> = [
-        "POST /instructor",
-        "POST /instructor/new/save",
-        "POST /instructor/new/draft",
-    ]
+    /// Routes whose declared floor the handler does not enforce today. The
+    /// probe skips them until a fix moves each one out of this list. Keep it
+    /// empty: an entry is a known hole.
+    private static let knownGaps: Set<String> = []
 
     private static let mutatingMethods: [HTTPMethod] = [.POST, .PUT, .PATCH, .DELETE]
 

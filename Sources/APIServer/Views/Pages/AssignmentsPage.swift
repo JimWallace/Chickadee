@@ -6,6 +6,7 @@
 // Public/assignments.js wires the cards, the section edit and delete
 // controls, the copy-link buttons and the publish form's UW-date warning.
 
+import Core
 import Elementary
 
 struct AssignmentsPage: HTML {
@@ -21,6 +22,13 @@ struct AssignmentsPage: HTML {
     /// True only when the course has nothing to list in any lane.
     let showEmptyMessage: Bool
     let enrolledStudentCount: Int
+
+    /// Creating an assignment is an instructor action. The staff dashboard
+    /// also serves a TA, who is not offered a form the server refuses.
+    private var canCreateAssignment: Bool {
+        guard let user = page.currentUser else { return false }
+        return user.isAdmin || user.activeCourse.map { $0.role >= .instructor } == true
+    }
 
     private var heading: String {
         guard let course = page.currentUser?.activeCourse else { return "Assignments" }
@@ -52,14 +60,19 @@ struct AssignmentsPage: HTML {
                 }
                 if showEmptyMessage {
                     p(.class("empty")) {
-                        "No assignments yet. "
-                        a(.href("/instructor/new")) { "Create one to get started." }
+                        if canCreateAssignment {
+                            "No assignments yet. "
+                            a(.href("/instructor/new")) { "Create one to get started." }
+                        } else {
+                            "No assignments yet. A course instructor creates them."
+                        }
                     }
                 } else {
                     div(.id("sections-container")) {
                         for section in sections {
                             SectionBlock(
-                                section: section, enrolledStudentCount: enrolledStudentCount, csrfToken: page.csrfToken)
+                                section: section, enrolledStudentCount: enrolledStudentCount, csrfToken: page.csrfToken,
+                                canCreateAssignment: canCreateAssignment)
                         }
                     }
                 }
@@ -120,7 +133,9 @@ struct AssignmentsPage: HTML {
                     if hasSections {
                         h2(.class("ungrouped-heading")) { "Ungrouped" }
                     }
-                    AddItemMenu(newAssignmentHref: "/instructor/new", panelID: "add-material-ungrouped")
+                    AddItemMenu(
+                        newAssignmentHref: canCreateAssignment ? "/instructor/new" : nil,
+                        panelID: "add-material-ungrouped")
                 }
             }
             AddMaterialPanel(
@@ -143,6 +158,7 @@ private struct SectionBlock: HTML {
     let section: CourseSectionRow
     let enrolledStudentCount: Int
     let csrfToken: String
+    let canCreateAssignment: Bool
 
     private var isWorker: Bool { section.defaultGradingMode == "worker" }
 
@@ -159,7 +175,7 @@ private struct SectionBlock: HTML {
                         .title("Edit section"), .ariaLabel("Edit section")
                     ) { Icon("i-pencil") }
                     AddItemMenu(
-                        newAssignmentHref: "/instructor/new?sectionID=\(section.sectionID)",
+                        newAssignmentHref: canCreateAssignment ? "/instructor/new?sectionID=\(section.sectionID)" : nil,
                         panelID: "add-material-\(section.sectionID)")
                 }
                 editForm
@@ -217,9 +233,10 @@ private struct SectionBlock: HTML {
 }
 
 /// The "+ Add" menu: a new assignment, or a piece of material, which opens
-/// the add-material panel `panelID`.
+/// the add-material panel `panelID`. No assignment item when
+/// `newAssignmentHref` is nil (a TA).
 private struct AddItemMenu: HTML {
-    let newAssignmentHref: String
+    let newAssignmentHref: String?
     let panelID: String
 
     private static let materials: [(kind: String, icon: String, label: String)] = [
@@ -235,11 +252,13 @@ private struct AddItemMenu: HTML {
                 Icon("i-chevron-down")
             }
             div(.class("add-section-popup card suite-section-popup row-menu-panel"), .role("menu")) {
-                a(.class("row-menu-item"), .href(newAssignmentHref), .role("menuitem")) {
-                    span(.class("item-tile"), .data("kind", value: "graded")) { Icon("i-calendar-check") }
-                    "Assignment"
+                if let newAssignmentHref {
+                    a(.class("row-menu-item"), .href(newAssignmentHref), .role("menuitem")) {
+                        span(.class("item-tile"), .data("kind", value: "graded")) { Icon("i-calendar-check") }
+                        "Assignment"
+                    }
+                    hr()
                 }
-                hr()
                 div(.class("add-test-group-label")) { "Material" }
                 for material in Self.materials {
                     a(
