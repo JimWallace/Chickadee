@@ -79,6 +79,14 @@ keeps the short form and points here.
   `Personalization`. `Guards` holds the tests that scan source or docs for a
   rule. The top level holds only the helpers that every folder shares, and
   `APITestsLayoutTests` fails on a suite placed there.
+- **MCP tool tests use the kit.** `Tests/APITests/MCPToolTestKit.swift`
+  holds `mcpContext` (a tool context for the `tester` account) and
+  `seedMCPCourse` / `seedMCPAssignment` (a course, an enrolled instructor, a
+  setup and an assignment). Use them in a new MCP suite instead of a copied
+  helper. Do not write a per-tool enrollment-denial test:
+  `MCPEnrollmentDenialContractTests` runs every tool in `MCPToolCatalog.live`
+  as an enrolled and as an unenrolled account. A new tool needs one sample
+  input there, or `everyToolHasASample` fails.
 - **Shared JavaScript test support.** Helpers that more than one `.mjs`
   file needs go in `Tests/BrowserRunnerJSTests/support/`. `node --test` does
   not run that directory, and ESLint lints it. `support/runner-wasm.mjs` loads
