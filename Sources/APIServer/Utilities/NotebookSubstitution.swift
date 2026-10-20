@@ -74,19 +74,16 @@ enum NotebookSubstitution {
         substitutions: [String: String],
         strict: Bool = false
     ) throws -> Data {
-        guard
-            var notebook = (try? JSONSerialization.jsonObject(with: notebookData))
-                as? [String: Any]
-        else {
+        guard var notebook = JSONValue.object(from: notebookData) else {
             throw NotebookSubstitutionError.notValidNotebookJSON
         }
-        guard var cells = notebook["cells"] as? [[String: Any]] else {
+        guard var cells = notebook["cells"]?.arrayOfObjects else {
             // Notebook without a cells array — leave alone.
             return notebookData
         }
 
         for (idx, cell) in cells.enumerated() {
-            guard let cellType = cell["cell_type"] as? String, cellType == "code" else {
+            guard cell["cell_type"]?.stringValue == "code" else {
                 continue
             }
             let originalSource = NotebookCellSources.cellSource(cell)
@@ -100,23 +97,23 @@ enum NotebookSubstitution {
             var updated = cell
             // Store source back in the same shape it came in (array of strings
             // preserves nbformat's preference; string round-trips fine too).
-            if cell["source"] is [String] {
-                updated["source"] = splitSourceForArrayShape(rewritten)
+            if let parts = cell["source"]?.arrayValue, parts.allSatisfy({ $0.stringValue != nil }) {
+                updated["source"] = .array(splitSourceForArrayShape(rewritten).map(JSONValue.string))
             } else {
-                updated["source"] = rewritten
+                updated["source"] = .string(rewritten)
             }
 
             // Tag the cell so subsequent re-substitutions know it's fenced.
             // Preserve any existing metadata.
-            var metadata = (updated["metadata"] as? [String: Any]) ?? [:]
-            metadata[fencedCellMetadataKey] = Array(substituted).sorted().joined(separator: ",")
-            updated["metadata"] = metadata
+            var metadata = updated["metadata"]?.objectValue ?? [:]
+            metadata[fencedCellMetadataKey] = .string(Array(substituted).sorted().joined(separator: ","))
+            updated["metadata"] = .object(metadata)
 
             cells[idx] = updated
         }
-        notebook["cells"] = cells
+        notebook["cells"] = .array(cells.map(JSONValue.object))
 
-        guard let encoded = try? JSONSerialization.data(withJSONObject: notebook) else {
+        guard let encoded = JSONValue.data(fromObject: notebook) else {
             throw NotebookSubstitutionError.reencodeFailed
         }
         return encoded
@@ -127,14 +124,10 @@ enum NotebookSubstitution {
     /// `{{...}}` references as 400 errors.  Always returns deduplicated,
     /// sorted output.
     static func placeholderNames(in notebookData: Data) -> [String] {
-        guard
-            let notebook = (try? JSONSerialization.jsonObject(with: notebookData))
-                as? [String: Any]
-        else { return [] }
-        guard let cells = notebook["cells"] as? [[String: Any]] else { return [] }
+        guard let cells = NotebookCellSources.cells(from: notebookData) else { return [] }
         var found = Set<String>()
         for cell in cells {
-            guard let cellType = cell["cell_type"] as? String, cellType == "code" else {
+            guard cell["cell_type"]?.stringValue == "code" else {
                 continue
             }
             found.formUnion(placeholderNames(inSource: NotebookCellSources.cellSource(cell)))

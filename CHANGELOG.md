@@ -9,6 +9,60 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.759] - 2026-10-20
+
+### Changed
+
+- **The browser probe jobs share their CI setup (#2718).** In `browser-probes.yml`, one `probe` matrix job replaces the `exec-probe`, `bridge`, `lifecycle` and `reset` jobs. The `changes` job gives the matrix as a JSON list. The legs keep their check names, for example `exec-probe (webkit)`. The probe budgets are now set for a downloaded server, not for a cold build: 30 min for the smoke, 20 min for each diagnostic probe and 45 min for the grading-hang probe. Before, they were 50, 50 and 75 min. A new `playwright-setup` action installs the npm project and the Playwright engine for `browser-probe-setup` and for `browser-grading-smoke.yml`. A new `gate` action holds the body of `editor-smoke-gate`, `r-grading-smoke-gate` and `swift-tests-gate`, with a list of the jobs that can be skipped. The gate job names do not change. `scripts/install-micromamba.sh` installs micromamba for `kernel-currency.yml` and `revendor-kernels.yml`.
+
+
+## [0.5.758] - 2026-10-19
+
+### Changed
+
+- **Fewer CI runners per pull request (#2719).** The mutation, deployer and handle-review self-tests now run in one `script-self-tests` job, and the Claude Code hook tests run in `guard-self-tests`. The four Swift test lanes share `scripts/ci-swift-test-lane.sh` for the build-skip branch and the skipped-test check. The Muter cache keys use the hash of `scripts/mutation-run.sh`, which holds the pin, so the keys no longer copy it. The JupyterLite job uses a shallow checkout.
+
+### Removed
+
+- **`mutation-baseline-probe.yml`.** Its question has an answer: privileged WorkerTests pass 20 of 20 in the mutation baseline. `repeat-test.yml` runs a test selection N times if the need returns.
+
+
+## [0.5.757] - 2026-10-19
+
+### Changed
+
+- **The release build cache now matches exactly.** The `build-release` job no longer restores an older `.build` by prefix and builds over it. That incremental build could link stale object files after a type changed kind, and the release binaries go to production. Each change to `Sources` now gets a cold release build of about 13 minutes. The `restore-git-mtimes` action and the full-history checkout in that job are removed, because nothing reads the source times now. (#2712)
+
+
+## [0.5.756] - 2026-10-19
+
+### Changed
+
+- **The notebook rewriters write sorted, deterministic JSON.**
+  `normalizeNotebookForJupyterLite`, `mergeNotebook`, `filterNotebook`,
+  `NotebookSubstitution.apply`, `PersonalizedCellRestoration` and the class
+  corpus now parse a notebook as `JSONValue` and write it with sorted keys
+  (`JSONValue.data(fromObject:)`). The same notebook now always gives the
+  same bytes, so a save with no edit keeps its version hash. The first save
+  of each stored notebook after this release writes its keys in a new order
+  one time, which adds one version entry per assignment. The parse and encode
+  together take about the same time as before. `NotebookCellSources` now
+  returns `[String: JSONValue]` cells, and its `[String: Any]` form is
+  removed. The validity gates stay on `JSONSerialization`. Some edge cases
+  differ in the rewritten bytes:
+  - A JSON number that a `Double` or an `Int` cannot hold exactly is rounded:
+    an integer beyond the 64-bit range becomes a double, a decimal with more
+    than about 17 significant digits is rounded, and `-0.0` becomes `0`.
+    Source cells are strings and are not affected; only numbers in output
+    data or metadata are.
+  - UTF-32 input with a byte-order mark is not read, so the rewriter leaves
+    it unchanged (and substitution refuses it).
+  - When a key appears twice, the first value wins.
+- **The submission diff reads more notebooks.** It reads cells with
+  `NotebookCellView`, so a notebook with invalid JSON in an output now shows
+  its diff, where the page said that it could not be parsed.
+
+
 ## [0.5.755] - 2026-10-19
 
 ### Changed

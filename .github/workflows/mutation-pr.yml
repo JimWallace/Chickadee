@@ -105,7 +105,8 @@ jobs:
         uses: actions/cache@v6
         with:
           path: /tmp/muter-src
-          key: muter-${{ runner.os }}-7f1f258-${{ hashFiles('Tools/mutation/0001-restore-parse-tree-cache.patch') }}
+          # The script holds the Muter pin (MUTER_REF), so a pin bump rebuilds.
+          key: muter-${{ runner.os }}-${{ hashFiles('scripts/mutation-run.sh', 'Tools/mutation/0001-restore-parse-tree-cache.patch') }}
 
       - name: Work out which mutable files this PR touches
         id: files

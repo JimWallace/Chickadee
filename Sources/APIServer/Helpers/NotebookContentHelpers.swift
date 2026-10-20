@@ -47,7 +47,7 @@ let pythonKernelNames: Set<String> = AssignmentLanguage.python.notebookKernelNam
 
 /// Returns true when the cell's first non-empty line is a `# TEST:` comment
 /// whose `tier=` value is in `hiddenTiers`.
-private func isHiddenTestCell(_ cell: [String: Any], hiddenTiers: Set<String>) -> Bool {
+private func isHiddenTestCell(_ cell: [String: JSONValue], hiddenTiers: Set<String>) -> Bool {
     let firstLine =
         NotebookCellSources.cellSource(cell)
         .split(separator: "\n", omittingEmptySubsequences: true)
@@ -65,9 +65,15 @@ private func isHiddenTestCell(_ cell: [String: Any], hiddenTiers: Set<String>) -
 
 /// Returns true when the cell's first non-empty line is ANY `# TEST:` comment,
 /// regardless of tier. Used to separate solution cells from test cells during merge.
-func isTestCell(_ cell: [String: Any]) -> Bool {
+func isTestCell(_ cell: [String: JSONValue]) -> Bool {
+    isTestCellSource(NotebookCellSources.cellSource(cell))
+}
+
+/// The same check over a cell's source text, for a walker that reads cells as
+/// `NotebookCellView`.
+func isTestCellSource(_ source: String) -> Bool {
     let firstLine =
-        NotebookCellSources.cellSource(cell)
+        source
         .split(separator: "\n", omittingEmptySubsequences: true)
         .first.map(String.init) ?? ""
     return firstLine.range(of: #"^#\s*TEST:"#, options: .regularExpression) != nil
@@ -76,11 +82,11 @@ func isTestCell(_ cell: [String: Any]) -> Bool {
 /// Returns a copy of `data` (notebook JSON) with cells matching `hiddenTiers` removed.
 /// Returns the original data unchanged if parsing fails.
 func filterNotebook(_ data: Data, hiddenTiers: Set<String>) -> Data {
-    guard var nb = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
-        let cells = nb["cells"] as? [[String: Any]]
+    guard var nb = JSONValue.object(from: data),
+        let cells = nb["cells"]?.arrayOfObjects
     else { return data }
-    nb["cells"] = cells.filter { !isHiddenTestCell($0, hiddenTiers: hiddenTiers) }
-    return (try? JSONSerialization.data(withJSONObject: nb)) ?? data
+    nb["cells"] = .array(cells.filter { !isHiddenTestCell($0, hiddenTiers: hiddenTiers) }.map(JSONValue.object))
+    return JSONValue.data(fromObject: nb) ?? data
 }
 
 /// Merges a student's notebook with the instructor's canonical notebook.
@@ -92,10 +98,10 @@ func filterNotebook(_ data: Data, hiddenTiers: Set<String>) -> Data {
 ///
 /// Returns `studentData` unchanged if either notebook fails to parse.
 func mergeNotebook(student studentData: Data, instructor instructorData: Data) -> Data {
-    guard var studentNB = (try? JSONSerialization.jsonObject(with: studentData)) as? [String: Any],
-        let instructorNB = (try? JSONSerialization.jsonObject(with: instructorData)) as? [String: Any],
-        let studentCells = studentNB["cells"] as? [[String: Any]],
-        let instructorCells = instructorNB["cells"] as? [[String: Any]]
+    guard var studentNB = JSONValue.object(from: studentData),
+        let instructorNB = JSONValue.object(from: instructorData),
+        let studentCells = studentNB["cells"]?.arrayOfObjects,
+        let instructorCells = instructorNB["cells"]?.arrayOfObjects
     else { return studentData }
 
     var solutionCells = studentCells.filter { !isTestCell($0) }
@@ -112,7 +118,7 @@ func mergeNotebook(student studentData: Data, instructor instructorData: Data) -
     solutionCells = NotebookContributionSlots.retainedStudentCells(
         solutionCells, limit: slotCount)
 
-    studentNB["cells"] = solutionCells + testCells
+    studentNB["cells"] = .array((solutionCells + testCells).map(JSONValue.object))
 
     // Grade in the assignment's language, not the editor's. The instructor
     // notebook is authoritative; an in-browser editor can drop or overwrite the
@@ -122,18 +128,18 @@ func mergeNotebook(student studentData: Data, instructor instructorData: Data) -
     // submission file was found to grade." Adopt the instructor's kernel/language
     // so grading follows the assignment. (A Python assignment is unaffected: its
     // instructor kernelspec is already Python.)
-    if let instructorMeta = instructorNB["metadata"] as? [String: Any] {
-        var studentMeta = studentNB["metadata"] as? [String: Any] ?? [:]
+    if let instructorMeta = instructorNB["metadata"]?.objectValue {
+        var studentMeta = studentNB["metadata"]?.objectValue ?? [:]
         if let kernelspec = instructorMeta["kernelspec"] {
             studentMeta["kernelspec"] = kernelspec
         }
         if let languageInfo = instructorMeta["language_info"] {
             studentMeta["language_info"] = languageInfo
         }
-        studentNB["metadata"] = studentMeta
+        studentNB["metadata"] = .object(studentMeta)
     }
 
-    return (try? JSONSerialization.data(withJSONObject: studentNB)) ?? studentData
+    return JSONValue.data(fromObject: studentNB) ?? studentData
 }
 
 /// Normalizes notebook metadata so JupyterLite can attach the right browser kernel.
@@ -154,15 +160,14 @@ func mergeNotebook(student studentData: Data, instructor instructorData: Data) -
 /// of the enumerated sites the compiler cannot flag, and it shipped without a
 /// Lua arm (see docs/archive/lua-architecture-audit.md).
 func normalizeNotebookForJupyterLite(_ data: Data) -> Data {
-    guard var notebook = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
-    else { return data }
+    guard var notebook = JSONValue.object(from: data) else { return data }
 
-    var metadata = notebook["metadata"] as? [String: Any] ?? [:]
-    let existingKernelSpec = metadata["kernelspec"] as? [String: Any]
-    let existingName = (existingKernelSpec?["name"] as? String)?.lowercased()
+    var metadata = notebook["metadata"]?.objectValue ?? [:]
+    let existingKernelSpec = metadata["kernelspec"]?.objectValue
+    let existingName = existingKernelSpec?["name"]?.stringValue?.lowercased()
 
     var kernelSpec = existingKernelSpec ?? [:]
-    var languageInfo = metadata["language_info"] as? [String: Any] ?? [:]
+    var languageInfo = metadata["language_info"]?.objectValue ?? [:]
 
     // DISCOVERED, not enumerated. Each non-default language claims the aliases in
     // its own `notebookKernelNames` and normalizes onto its own descriptor's
@@ -189,15 +194,15 @@ func normalizeNotebookForJupyterLite(_ data: Data) -> Data {
         case .notebookKernel(_, let kernelName, let kernelDisplayName, _, _) =
             language.editorSupport
     {
-        kernelSpec["name"] = kernelName
-        kernelSpec["display_name"] = kernelDisplayName
-        metadata["kernelspec"] = kernelSpec
-        if (languageInfo["name"] as? String).map(\.isEmpty) != false {
+        kernelSpec["name"] = .string(kernelName)
+        kernelSpec["display_name"] = .string(kernelDisplayName)
+        metadata["kernelspec"] = .object(kernelSpec)
+        if languageInfo["name"]?.stringValue.map(\.isEmpty) != false {
             // The raw value IS the language_info name (`r`, `lua`, `python`), so
             // the two cannot drift.
-            languageInfo["name"] = language.rawValue
+            languageInfo["name"] = .string(language.rawValue)
         }
-        metadata["language_info"] = languageInfo
+        metadata["language_info"] = .object(languageInfo)
     } else if let name = existingName, !name.isEmpty, !pythonKernelNames.contains(name) {
         // A kernel no language claims → leave unchanged.
         return data
@@ -211,17 +216,17 @@ func normalizeNotebookForJupyterLite(_ data: Data) -> Data {
             case .notebookKernel(_, let kernelName, let kernelDisplayName, _, _) =
                 python.editorSupport
         else { return data }
-        kernelSpec["name"] = kernelName
-        kernelSpec["display_name"] = kernelDisplayName
-        metadata["kernelspec"] = kernelSpec
-        if (languageInfo["name"] as? String)?.isEmpty != false {
-            languageInfo["name"] = python.rawValue
+        kernelSpec["name"] = .string(kernelName)
+        kernelSpec["display_name"] = .string(kernelDisplayName)
+        metadata["kernelspec"] = .object(kernelSpec)
+        if languageInfo["name"]?.stringValue?.isEmpty != false {
+            languageInfo["name"] = .string(python.rawValue)
         }
-        metadata["language_info"] = languageInfo
+        metadata["language_info"] = .object(languageInfo)
     }
 
-    notebook["metadata"] = metadata
-    return (try? JSONSerialization.data(withJSONObject: notebook)) ?? data
+    notebook["metadata"] = .object(metadata)
+    return JSONValue.data(fromObject: notebook) ?? data
 }
 
 /// Loads the notebook data for a test setup.
