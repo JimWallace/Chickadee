@@ -17,8 +17,6 @@ on:
       - ".github/workflows/docker-build.yml"
       # It gives the toolchain key of the release cache.
       - ".github/actions/swift-test-setup/**"
-      # build-release runs it before the compile.
-      - ".github/actions/restore-git-mtimes/**"
       # It sets the Public file times that become the ETags.
       - "scripts/restore-asset-mtimes.py"
       # It decides what reaches the image build context.
@@ -43,12 +41,9 @@ jobs:
   # ── Compile the release binaries once, with caching ───────────────────────
   # The image build used to `swift build -c release` inside the Dockerfile, so
   # any source change busted the compile layer and triggered a cold ~13 min
-  # rebuild every push.  Compiling here instead — with actions/cache plus
-  # `git restore-mtime`, so a cache restored by prefix builds incrementally
-  # (swift-tests.yml's `build` job dropped restore-mtime because its cache
-  # matches exactly) — lets a source-only change recompile incrementally, and
-  # the image build below
-  # just packages the prebuilt binaries (seconds).  Debug-for-tests and
+  # rebuild every push.  Compiling here instead lets the image build below
+  # just package the prebuilt binaries (seconds), and lets a re-run of the
+  # same tree skip the compile on an exact cache hit.  Debug-for-tests and
   # release-for-ship stay two separate caches; tests are never built in release.
   build-release:
     runs-on: ubuntu-latest
@@ -60,15 +55,8 @@ jobs:
         password: ${{ secrets.GITHUB_TOKEN }}
 
     steps:
-      # Full (blobless) history so `git restore-mtime` can read commit times.
+      # A shallow checkout is enough: no step here reads the git history.
       - uses: actions/checkout@v7
-        with:
-          fetch-depth: 0
-          filter: blob:none
-
-      # Reset source mtimes to commit times so llbuild recompiles only files
-      # touched by new commits.
-      - uses: ./.github/actions/restore-git-mtimes
 
       # Only the toolchain key. This job does not use the shared debug
       # `-build-` cache, so `build-cache` is none.
@@ -81,17 +69,23 @@ jobs:
       # Release cache is keyed on Sources + manifest only (no Tests/** — the
       # release products don't build the test targets), in its own `-release-`
       # namespace, separate from the debug `-build-` cache.
+      #
+      # The cache is EXACT-MATCH ONLY. Do not add `restore-keys`. An
+      # incremental build over a `.build/` from a different tree can link
+      # stale object files after a cross-module type changes kind, and these
+      # binaries go to production. The note on the build cache in
+      # `.github/actions/swift-test-setup/action.yml` lists four past cases.
+      # The cost: each Sources change gets a cold release build, about 13
+      # minutes (#2712).
       - name: Cache release build artifacts
         id: build-cache
         uses: actions/cache@v6
         with:
           path: .build
           key: ${{ runner.os }}-release-${{ steps.setup.outputs.toolchain-key }}-${{ hashFiles('Package.resolved', 'Package.swift', 'Sources/**') }}
-          restore-keys: |
-            ${{ runner.os }}-release-${{ steps.setup.outputs.toolchain-key }}-
 
-      # Skip only on an exact cache hit (artifacts already match this tree); a
-      # restore-keys partial hit recompiles incrementally over the older tree.
+      # Skip on a cache hit (the artifacts already match this tree). A miss
+      # compiles cold into an empty `.build/`.
       - name: Build release products
         if: steps.build-cache.outputs.cache-hit != 'true'
         run: |
@@ -181,8 +175,8 @@ jobs:
       # vendored file a new ETag, and each browser downloaded the kernel
       # binaries again (25-70 MB per language) although no byte changed. With
       # the last-commit time, an ETag changes only when its file changes.
-      # Not the restore-git-mtimes action: on this bare runner it installs a
-      # git-restore-mtime that current git refuses (see the script).
+      # Not git-restore-mtime: on this bare runner apt installs a release
+      # that current git refuses (see the script).
       - name: Set Public file times to their last commit
         run: scripts/restore-asset-mtimes.py Public
 

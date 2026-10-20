@@ -49,4 +49,17 @@ extension JSONValue {
     public static func object(from data: Data) -> [String: JSONValue]? {
         try? JSONDecoder().decode([String: JSONValue].self, from: data)
     }
+
+    /// `object` as compact JSON with its keys sorted, or nil when it cannot be
+    /// encoded (a double that is not finite).
+    ///
+    /// Sorted keys make the bytes deterministic: the same object always gives
+    /// the same bytes, so a notebook that did not change hashes the same.
+    /// `JSONSerialization` wrote keys in dictionary order, which changes from
+    /// one process to the next.
+    public static func data(fromObject object: [String: JSONValue]) -> Data? {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
+        return try? encoder.encode(object)
+    }
 }
