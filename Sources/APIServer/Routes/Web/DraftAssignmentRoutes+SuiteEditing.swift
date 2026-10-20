@@ -173,9 +173,14 @@ extension DraftAssignmentRoutes {
             throw WebAssignmentError.internalFailure(reason: "Authenticated user has no ID")
         }
 
+        // A missing `draftID` is "no such draft" here (404), not the 400 of
+        // `loadDraftSetupForRead`.
+        guard let draftID = try? req.query.get(String.self, at: "draftID"), !draftID.isEmpty else {
+            throw WebAssignmentError.notFound(resource: "Draft assignment")
+        }
         // The solution is the most private file of a draft, so the caller must
         // be staff in the draft's own course (#2742).
-        let draftID = try await loadDraftSetupForRead(req).requireID()
+        _ = try await loadDraftSetupForRead(req)
         let fallbackPath = draftSolutionNotebookPath(
             testSetupsDirectory: req.application.testSetupsDirectory, setupID: draftID)
         guard
