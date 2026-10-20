@@ -308,7 +308,9 @@ because line numbers go out of date.
     course achievements for every enrolled student and stores no assignment
     badge.
   - `AchievementsEditing.apply(rows:course:on:)` writes
-    `courses.achievements`.
+    `courses.achievements`. Its callers are the course Achievements tab
+    (`PUT /instructor/achievements/rows`) and MCP `update_course_achievements`,
+    both TA and above in a course that is not archived.
   - Course deletion (`deleteAwards`, `deleteCourseAwards`) and assignment
     deletion remove ledger rows.
 - **Readers:** the course evaluator (`courseProgress`, which reads the
@@ -330,6 +332,11 @@ because line numbers go out of date.
     assignment badges before it grants the course achievements.
   - A signal's level (`AchievementSignal.allowedLevels`) decides where it may
     be saved. The editor and the validator both derive from it.
+  - A course achievement's id is its identity in the ledger. A writer keeps
+    each existing row's id: a row saved without one gets a new id, and the
+    students who earned the old one earn it again as a second award.
+  - No MCP tool reads the ledger (`MCPStudentDataWallTests`, and no grant in
+    `deploy/sql/mcp-least-privilege-role.sql`).
 
 ---
 

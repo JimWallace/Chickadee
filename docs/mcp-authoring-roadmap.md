@@ -44,6 +44,7 @@ The catalog:
 | `get_support_files` | `content:read` | List the setup zip's non-graded helper/data files, or read one (UTF-8, byte-capped) |
 | `get_global_inputs` | `content:read` | Assignment personalization: global variables + per-student expressions |
 | `get_achievements` | `content:read` | The assignment's composable awards (badges / class goals / records), built-in defaults merged in until first curated |
+| `get_course_achievements` | `content:read` | The course's achievements: individual badges that count work across its assignments (docs/achievement-rewards.md, S5) |
 | `preview_personalization` | `content:read` | Resolve a seed's `name → value` map + a starter-notebook `{{placeholder}}` audit |
 | `validate_assignment` | `content:read` | Watch validation to completion; live SSE progress |
 | `run_validation` | `content:write` | Re-run validation with no edit, optionally on one runner (5-minute fallback to any runner) |
@@ -71,6 +72,7 @@ The catalog:
 | `update_suite` | `content:write` | Script metadata: tier, points, displayName, dependsOn, section |
 | `update_global_inputs` | `content:write` | Replace the assignment's global personalization variables/expressions |
 | `update_achievements` | `content:write` | Replace the assignment's composable awards (display-only; no regrade/close) |
+| `update_course_achievements` | `content:write` | Replace the course's achievements (TA and above; no regrade) |
 | `update_section_variables` | `content:write` | Replace a section's scoped variables/expressions |
 | `create_suite_section` | `content:write` | Create a new, empty test-suite section (named display group) on an assignment; display-only, no regrade/close |
 | `rename_suite_section` | `content:write` | Rename an existing test-suite section (by section id from `get_suite`); display-only, no regrade/close |

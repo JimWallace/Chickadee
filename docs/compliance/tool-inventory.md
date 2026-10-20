@@ -46,6 +46,7 @@ source of truth; a census re-count is required whenever either changes
 | `get_support_files` | `GetSupportFilesTool.swift:53` | `assignmentPublicID` | course-enrol (`:111`) | `APITestSetup` zip helper files | support file bodies |
 | `get_global_inputs` | `GetGlobalInputsTool.swift:27` | `assignmentPublicID` | course-enrol (`:78`) | `APITestSetup` manifest (inputs) | global + section inputs |
 | `get_achievements` | `GetAchievementsTool.swift:25` | `assignmentPublicID` | course-enrol (`:61`) | `APITestSetup` manifest (achievements) | composable awards (built-in defaults until curated) |
+| `get_course_achievements` | `CourseAchievementsTools.swift:31` | `courseCode` | course-enrol (`:48`) | `APICourse.achievements` | course achievements; no ledger, no student |
 | `preview_personalization` | `PreviewPersonalizationTool.swift:53` | `assignmentPublicID` | course-enrol (`:116`) + eligible (`:161`) | manifest; runs `python3` eval subprocess | per-seed resolved values |
 | `validate_assignment` | `ValidateAssignmentTool.swift:36` | `assignmentPublicID` | course-enrol (`:82`) | enqueues validation run; reads `validationStatus` | passed/failed/no-runner |
 | `get_validation_result` | `GetValidationResultTool.swift:69` | `assignmentPublicID` | course-enrol (`:113`) | validation submission + its `APIResult` only | per-test outcomes (no student identity) |
@@ -75,6 +76,7 @@ source of truth; a census re-count is required whenever either changes
 | `update_solution` | `UpdateSolutionTool.swift:39` | `assignmentPublicID` | course-enrol (`:90`) + eligible (`:94`) | **reference solution** submission |
 | `update_global_inputs` | `UpdateGlobalInputsTool.swift:38` | `assignmentPublicID` | course-enrol (`:113`) + eligible (`:118`) | `APITestSetup` manifest (inputs) |
 | `update_achievements` | `UpdateAchievementsTool.swift:35` | `assignmentPublicID` | course-enrol (`:81`) | `APITestSetup` manifest (achievements; display-only, no regrade/close) |
+| `update_course_achievements` | `CourseAchievementsTools.swift:67` | `courseCode` | course-enrol, TA+ (`:101`) | `APICourse.achievements` (no regrade) |
 | `update_section_variables` | `UpdateSectionVariablesTool.swift:35` | `assignmentPublicID` | course-enrol (`:115`) + eligible (`:118`) | `APITestSetup` manifest (section vars) |
 | `create_suite_section` | `SuiteSectionTools.swift:39` | `assignmentPublicID` | course-enrol (`:84`) | `APITestSetup` manifest (sections) |
 | `rename_suite_section` | `SuiteSectionTools.swift:115` | `assignmentPublicID` | course-enrol (`:164`) | `APITestSetup` manifest (sections) |

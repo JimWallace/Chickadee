@@ -1,6 +1,6 @@
 # Achievements and rewards across the site
 
-**Status: decided; S1, S3 and S4 shipped.** The maintainer took the six open
+**Status: decided; S1, S3, S4 and S5 shipped.** The maintainer took the six open
 decisions on 2026-10-17 (see "Decisions taken" at the end). Each took the
 recommended answer. It continues
 [achievements-unification.md](achievements-unification.md) (one editor for
@@ -16,7 +16,7 @@ wardrobe item?), and it gives #2617 (one toast for everything earned) and
 | S2 | A wardrobe item as an achievement reward, on an assignment | — | proposed |
 | S3 | Course achievements: the model, the course signals and the evaluator | — | shipped |
 | S4 | The course Achievements tab in the instructor area | — | shipped |
-| S5 | MCP parity for course achievements and the reward field | — | proposed |
+| S5 | MCP parity for course achievements and the reward field | — | shipped (course tools; the reward field comes with S2) |
 | S6 | The site rules, re-expressed as achievements in code | — | proposed |
 | S7 | Student surfaces: the trophy case and the one toast read the ledger | #2621, #2617 | proposed |
 | S8 | Carry-through: course bundle, new term, account export, deletion | — | proposed |
@@ -449,8 +449,8 @@ The page goes through `ui-review`, as every view does.
 
 ## MCP (S5)
 
-- `get_achievements` and `update_achievements`: `AchievementRow` gains
-  `rewardType` and `rewardItem`. The tool description derives the item list
+- (Ships with S2, which adds the reward field.) `get_achievements` and
+  `update_achievements`: `AchievementRow` gains `rewardType` and `rewardItem`. The tool description derives the item list
   from `WardrobeItem.grantable` through a new `MCPWardrobeItemProse`, with a
   coverage test like `MCPTierCoverageTests`.
 - `get_course_achievements` and `update_course_achievements`: course-scoped,

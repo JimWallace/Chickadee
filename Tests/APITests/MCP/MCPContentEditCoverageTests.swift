@@ -126,6 +126,8 @@ import Testing
         // setup, so create/update/delete/reorder never changes what any
         // assignment's suite grades — nothing to close or regrade.
         "CourseContentItemTools.swift",
+        // Course achievements change no grade and own no test setup.
+        "CourseAchievementsTools.swift",
     ]
 
     @Test func everyWriteToolIsClassifiedForCloseOnEdit() throws {

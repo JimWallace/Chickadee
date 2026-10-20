@@ -100,6 +100,8 @@ struct MCPEnrollmentDenialContractTests {
         "update_suite": Sample(#"{"assignmentPublicID":"$A","edits":[{"script":"test_a.sh","points":2}]}"#),
         "update_global_inputs": Sample(#"{"assignmentPublicID":"$A","variables":[]}"#),
         "update_achievements": Sample(#"{"assignmentPublicID":"$A","achievements":[]}"#),
+        "get_course_achievements": Sample(#"{"courseCode":"CS246"}"#),
+        "update_course_achievements": Sample(#"{"courseCode":"CS246","achievements":[]}"#),
         "update_section_variables": Sample(#"{"assignmentPublicID":"$A","sectionID":"part1","variables":[]}"#),
         "create_suite_section": Sample(#"{"assignmentPublicID":"$A","name":"Part 1"}"#),
         "rename_suite_section": Sample(#"{"assignmentPublicID":"$A","sectionID":"part1","name":"Part 2"}"#),
