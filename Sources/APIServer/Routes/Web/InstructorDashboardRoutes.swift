@@ -228,47 +228,19 @@ struct InstructorDashboardRoutes: RouteCollection {
 
     // MARK: - POST /instructor/reorder
 
+    /// Persists the order of a section's assignments. `assignmentIDs` is the
+    /// order; each is renumbered 1..n by `SortOrderRenumbering`, which holds
+    /// the rules (#2713). AJAX (returns `.ok`).
     @Sendable
     func reorderAssignments(req: Request) async throws -> HTTPStatus {
         struct ReorderBody: Content {
             var assignmentIDs: [String]
         }
-        let caller = try req.auth.require(APIUser.self)
         let body = try await req.decodeContent(ReorderBody.self)
-        let orderedIDs = Array(NSOrderedSet(array: body.assignmentIDs).compactMap { $0 as? String })
-        guard !orderedIDs.isEmpty else { return .ok }
-        guard orderedIDs.allSatisfy(isValidAssignmentPublicID(_:)) else {
-            throw WebAssignmentError.invalidParameter(
-                name: "assignmentIDs",
-                reason: "invalid assignment ID in reorder payload"
-            )
+        let items = try parseReorderItems(name: "assignmentIDs") { () throws(ReorderError) in
+            try body.assignmentIDs.map(SortOrderItem.parseAssignment)
         }
-
-        let assignments = try await APIAssignment.query(on: req.db)
-            .filter(\.$publicID ~~ orderedIDs)
-            .all()
-        let byID = Dictionary(uniqueKeysWithValues: assignments.map { ($0.publicID, $0) })
-        guard byID.count == orderedIDs.count else {
-            throw WebAssignmentError.invalidParameter(
-                name: "assignmentIDs",
-                reason: "assignment set mismatch in reorder payload"
-            )
-        }
-
-        // Reordering writes sortOrder, so it's a per-course write: authorize the
-        // caller for every distinct course the payload touches. Without this an
-        // instructor could reorder another course's (or an archived course's)
-        // assignments by submitting their IDs — the active-course group gate
-        // never sees the target courses here (#417 Slice D).
-        for courseID in Set(assignments.map(\.courseID)) {
-            try await requireCourseWriteAccess(caller: caller, courseID: courseID, atLeast: .instructor, db: req.db)
-        }
-
-        for (index, rawID) in orderedIDs.enumerated() {
-            guard let assignment = byID[rawID] else { continue }
-            assignment.sortOrder = index + 1
-            try await assignment.save(on: req.db)
-        }
+        try await renumberSectionItemsByOwningCourse(items, name: "assignmentIDs", req: req)
         return .ok
     }
 
@@ -276,10 +248,9 @@ struct InstructorDashboardRoutes: RouteCollection {
 
     /// Persists the interleaved order of a section's items — assignments AND
     /// content items share one per-section `sort_order` sequence, so this
-    /// renumbers both tables `1..n` in the given mixed order. `items` is the
-    /// section's full ordered list; each entry names its `type`
-    /// ("assignment" | "content") and `id`. Every touched course is authorized
-    /// (TA+, matching content authoring). AJAX (returns `.ok`).
+    /// renumbers both tables `1..n` in the given mixed order. Each entry names
+    /// its `type` ("assignment" | "content") and `id`. `SortOrderRenumbering`
+    /// holds the rules (#2713). AJAX (returns `.ok`).
     @Sendable
     func reorderSectionItems(req: Request) async throws -> HTTPStatus {
         struct ItemRef: Content {
@@ -292,63 +263,50 @@ struct InstructorDashboardRoutes: RouteCollection {
             var sectionID: String?
             var items: [ItemRef]
         }
-        let caller = try req.auth.require(APIUser.self)
         let body = try await req.decodeContent(ReorderBody.self)
-        guard !body.items.isEmpty else { return .ok }
-
-        let assignmentIDs = body.items.filter { $0.type == "assignment" }.map(\.id)
-        let contentUUIDs = body.items.filter { $0.type == "content" }.compactMap { UUID(uuidString: $0.id) }
-        guard assignmentIDs.allSatisfy(isValidAssignmentPublicID(_:)) else {
-            throw WebAssignmentError.invalidParameter(
-                name: "items", reason: "invalid assignment ID in reorder payload")
+        let items = try parseReorderItems(name: "items") { () throws(ReorderError) in
+            try body.items.map { ref throws(ReorderError) in try SortOrderItem.parse(type: ref.type, id: ref.id) }
         }
-        guard
-            contentUUIDs.count == body.items.count(where: { $0.type == "content" })
-        else {
-            throw WebAssignmentError.invalidParameter(
-                name: "items", reason: "invalid content-item ID in reorder payload")
-        }
-
-        let assignments =
-            assignmentIDs.isEmpty
-            ? []
-            : try await APIAssignment.query(on: req.db).filter(\.$publicID ~~ assignmentIDs).all()
-        let contentItems =
-            contentUUIDs.isEmpty
-            ? []
-            : try await APICourseContentItem.query(on: req.db).filter(\.$id ~~ contentUUIDs).all()
-        guard assignments.count == Set(assignmentIDs).count,
-            contentItems.count == Set(contentUUIDs).count
-        else {
-            throw WebAssignmentError.invalidParameter(
-                name: "items", reason: "item set mismatch in reorder payload")
-        }
-        let assignmentByPublicID = Dictionary(uniqueKeysWithValues: assignments.map { ($0.publicID, $0) })
-        let contentByID = Dictionary(
-            uniqueKeysWithValues: contentItems.compactMap { c in c.id.map { ($0, c) } })
-
-        // Reordering writes sort_order across every course the payload touches:
-        // authorize each so the payload can't renumber another (or archived)
-        // course's items (#417 Slice D). TA+, matching content authoring.
-        var courses = Set(assignments.map(\.courseID))
-        courses.formUnion(contentItems.map(\.courseID))
-        for courseID in courses {
-            try await requireCourseWriteAccess(caller: caller, courseID: courseID, atLeast: .ta, db: req.db)
-        }
-
-        for (index, ref) in body.items.enumerated() {
-            let order = index + 1
-            if ref.type == "assignment", let assignment = assignmentByPublicID[ref.id] {
-                assignment.sortOrder = order
-                try await assignment.save(on: req.db)
-            } else if ref.type == "content", let uuid = UUID(uuidString: ref.id),
-                let item = contentByID[uuid]
-            {
-                item.sortOrder = order
-                try await item.save(on: req.db)
-            }
-        }
+        try await renumberSectionItemsByOwningCourse(items, name: "items", req: req)
         return .ok
+    }
+
+    /// Runs a typed reorder parse and maps its error to a 400 on `name`.
+    private func parseReorderItems(
+        name: String, _ parse: () throws(ReorderError) -> [SortOrderItem]
+    ) throws -> [SortOrderItem] {
+        do {
+            return try parse()
+        } catch {
+            throw WebAssignmentError.invalidParameter(name: name, reason: error.reason)
+        }
+    }
+
+    /// Renumbers section items whose course comes from the rows, not from the
+    /// path. Every course the payload touches is authorized first, so a
+    /// payload with another course's (or an archived course's) ids is a 403
+    /// (#417 Slice D). One reorder then renumbers one course.
+    private func renumberSectionItemsByOwningCourse(
+        _ items: [SortOrderItem], name: String, req: Request
+    ) async throws {
+        guard !items.isEmpty else { return }
+        let caller = try req.auth.require(APIUser.self)
+        let courses = try await SortOrderRenumbering.owningCourses(of: items, on: req.db)
+        for courseID in courses {
+            try await requireCourseWriteAccess(
+                caller: caller, courseID: courseID, atLeast: SortOrderRenumbering.roleFloor, db: req.db)
+        }
+        guard let courseID = courses.first else {
+            throw WebAssignmentError.invalidParameter(name: name, reason: ReorderError.unknownItem.reason)
+        }
+        guard courses.count == 1 else {
+            throw WebAssignmentError.invalidParameter(name: name, reason: ReorderError.mixedSections.reason)
+        }
+        do {
+            _ = try await SortOrderRenumbering.renumberSectionItems(items, inCourse: courseID, on: req.db)
+        } catch let error as ReorderError {
+            throw WebAssignmentError.invalidParameter(name: name, reason: error.reason)
+        }
     }
 
     // MARK: - POST /instructor/:assignmentID/status

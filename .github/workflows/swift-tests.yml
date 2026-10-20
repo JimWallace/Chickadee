@@ -616,18 +616,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Gate on Swift test job results
-        env:
-          NEEDS_JSON: ${{ toJSON(needs) }}
-        run: |
-          echo "${NEEDS_JSON}"
-          failed="$(echo "${NEEDS_JSON}" | python3 -c '
-          import json, sys
-          needs = json.load(sys.stdin)
-          print(" ".join(sorted(name for name, need in needs.items() if need["result"] != "success")))
-          ')"
-          if [ -n "${failed}" ]; then
-            echo "::error::jobs not successful: ${failed}"
-            exit 1
-          fi
-          echo "All Swift test jobs green."
+      - uses: actions/checkout@v7
+        with:
+          sparse-checkout: .github/actions/gate
+      - uses: ./.github/actions/gate
+        with:
+          needs: ${{ toJSON(needs) }}

@@ -1,0 +1,40 @@
+name: Gate
+description: >
+  The body of an always-running required gate job. It fails unless every job
+  in `needs` succeeded. A job named in `allowed-skipped` can also be skipped.
+  Any other result fails the gate: failure, cancelled (a job that hit its own
+  timeout-minutes), or skipped (a job that was not allowed to skip). The
+  caller sets `if: always() && !cancelled()` on the gate job, so that a
+  superseded run skips the gate instead of failing it.
+
+inputs:
+  needs:
+    description: "The caller's toJSON(needs)"
+    required: true
+  allowed-skipped:
+    description: "Space-separated names of the jobs that can be skipped"
+    required: false
+    default: ""
+
+runs:
+  using: composite
+  steps:
+    - name: Gate on the needed jobs
+      shell: bash
+      env:
+        NEEDS_JSON: ${{ inputs.needs }}
+        ALLOWED_SKIPPED: ${{ inputs.allowed-skipped }}
+      run: |
+        set -euo pipefail
+        failed="$(jq -r --arg allowed "$ALLOWED_SKIPPED" '
+          ($allowed | split(" ") | map(select(. != ""))) as $ok
+          | to_entries[]
+          | select(.value.result != "success")
+          | select(.value.result != "skipped" or (.key as $k | $ok | index($k) | not))
+          | "\(.key)=\(.value.result)"' <<< "$NEEDS_JSON")"
+        jq -r 'to_entries[] | "\(.key): \(.value.result)"' <<< "$NEEDS_JSON"
+        if [ -n "$failed" ]; then
+          echo "::error::jobs not successful: $(echo $failed)"
+          exit 1
+        fi
+        echo "Gate passed."

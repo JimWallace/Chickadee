@@ -318,8 +318,8 @@ the same `kernel_error` pipeline, so **success ≈ attempts − failures** — a
 fall toward zero once the root cause is fixed, the headline KPI for that work
 (`get_browser_diagnostics` `bySource`).
 
-**CI reproducer (this change).** `editor-exec-check.mjs` (the `exec-probe` job of
-`browser-probes.yml`, non-gating) opens the *real* notebook page, waits for `kernel_idle`,
+**CI reproducer (this change).** `editor-exec-check.mjs` (the `exec-probe` legs of the
+`probe` matrix job in `browser-probes.yml`, non-gating) opens the *real* notebook page, waits for `kernel_idle`,
 then runs an editor cell and measures the hang rate per engine — the post-idle
 editor-cell execute the required smoke never exercised (it checks boot + browser
 grading, never an editor cell). While the root cause is open a reproduced hang is

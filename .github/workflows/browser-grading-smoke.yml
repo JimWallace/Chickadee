@@ -62,7 +62,7 @@ jobs:
         uses: ./.github/actions/changed-paths
         with:
           label: the browser grading smoke
-          pattern: '^(Public/[a-z0-9]+-(grading|eval)-|Public/eval-protocol-shared\.js|Public/pattern-family-editor\.js|Public/xeus-kernel-shared\.js|Public/browser-runner\.js|Public/grading-shared\.js|Public/vendor/xeus-|Public/jupyterlite/xeus/|Sources/Core/[A-Za-z]+PersonalizationRuntime\.swift|Sources/Core/AssignmentLanguage\.swift|Tools/browser-grading-smoke/|Tools/vendor/|Tools/runner-support/|scripts/setup-vendor\.sh|\.github/workflows/browser-grading-smoke\.yml|\.github/actions/changed-paths/|\.node-version$)'
+          pattern: '^(Public/[a-z0-9]+-(grading|eval)-|Public/eval-protocol-shared\.js|Public/pattern-family-editor\.js|Public/xeus-kernel-shared\.js|Public/browser-runner\.js|Public/grading-shared\.js|Public/vendor/xeus-|Public/jupyterlite/xeus/|Sources/Core/[A-Za-z]+PersonalizationRuntime\.swift|Sources/Core/AssignmentLanguage\.swift|Tools/browser-grading-smoke/|Tools/vendor/|Tools/runner-support/|scripts/setup-vendor\.sh|\.github/workflows/browser-grading-smoke\.yml|\.github/actions/(changed-paths|playwright-setup|gate)/|\.node-version$)'
 
   smoke:
     needs: changes
@@ -111,24 +111,10 @@ jobs:
         with:
           node-version-file: .node-version
 
-      # `npm ci` installs exactly the committed lockfile, as browser-probe-setup
-      # does; `npm install` could resolve a different Playwright.
-      - name: Install the npm dependencies
-        working-directory: Tools/browser-grading-smoke
-        run: npm ci --no-audit --no-fund
-
-      # The engine download is the slow, network-dependent part of
-      # `playwright install`. Cache it on the lockfile, as browser-probe-setup
-      # does, so the eight matrix legs do not each download it.
-      - name: Cache the Playwright Chromium download
-        uses: actions/cache@v6
+      - uses: ./.github/actions/playwright-setup
         with:
-          path: ~/.cache/ms-playwright
-          key: playwright-chromium-${{ runner.os }}-${{ hashFiles('Tools/browser-grading-smoke/package-lock.json') }}
-
-      - name: Install the Playwright Chromium engine
-        working-directory: Tools/browser-grading-smoke
-        run: npx playwright install --with-deps chromium
+          browser: chromium
+          node-project: Tools/browser-grading-smoke
 
       - name: Drive the ${{ matrix.language }} ${{ matrix.mode }} probe on the real kernel
         run: |
@@ -144,9 +130,10 @@ jobs:
     # passed OR was not needed, red when it failed or when nobody could say
     # whether it was needed.
     #
-    # Fail closed on the `changes` job, as editor-smoke-gate does. If it fails,
-    # `smoke` is `skipped`, and a gate that read only the smoke result passed a
-    # PR whose grading surface nobody checked (#1979).
+    # Fail closed on the `changes` job, as editor-smoke-gate does: only `smoke`
+    # can be skipped. If `changes` fails, `smoke` is `skipped`, and a gate that
+    # read only the smoke result passed a PR whose grading surface nobody
+    # checked (#1979).
     #
     # `!cancelled()` is run-scoped: a superseded run skips the gate instead of
     # reporting its cancelled smoke jobs as a failure. A smoke job killed by its
@@ -155,20 +142,12 @@ jobs:
     needs: [changes, smoke]
     if: always() && !cancelled()
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
-      - name: Report
-        env:
-          CHANGES_RESULT: ${{ needs.changes.result }}
-          RUN_SMOKE: ${{ needs.changes.outputs.run_smoke }}
-          SMOKE_RESULT: ${{ needs.smoke.result }}
-        run: |
-          echo "changes job: ${CHANGES_RESULT}; run_smoke: ${RUN_SMOKE}; smoke: ${SMOKE_RESULT}"
-          if [ "$CHANGES_RESULT" != "success" ]; then
-            echo "::error::change-detection job did not succeed (${CHANGES_RESULT}), failing closed."
-            exit 1
-          fi
-          if [ "$SMOKE_RESULT" = "failure" ] || [ "$SMOKE_RESULT" = "cancelled" ]; then
-            echo "::error::browser grading smoke failed; see the smoke job."
-            exit 1
-          fi
-          echo "browser grading smoke gate passed (smoke: ${SMOKE_RESULT})."
+      - uses: actions/checkout@v7
+        with:
+          sparse-checkout: .github/actions/gate
+      - uses: ./.github/actions/gate
+        with:
+          needs: ${{ toJSON(needs) }}
+          allowed-skipped: smoke

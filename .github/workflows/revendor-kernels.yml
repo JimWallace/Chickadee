@@ -59,6 +59,7 @@ on:
       - "scripts/patch-*.py"
       - "scripts/prune-kernel-packages.py"
       - ".github/workflows/revendor-kernels.yml"
+      - "scripts/install-micromamba.sh"
 
 concurrency:
   group: revendor-kernels-${{ github.ref }}
@@ -91,14 +92,7 @@ jobs:
           python-version: "3.13"
 
       - name: Install micromamba
-        run: |
-          set -euo pipefail
-          mkdir -p "$HOME/.local/bin"
-          curl -sSL --max-time 180 \
-            https://micro.mamba.pm/api/micromamba/linux-64/latest -o /tmp/micromamba.tar.bz2
-          tar -xj -C /tmp -f /tmp/micromamba.tar.bz2 bin/micromamba
-          mv /tmp/bin/micromamba "$HOME/.local/bin/micromamba"
-          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+        run: scripts/install-micromamba.sh
 
       - name: Report the toolchain
         run: |

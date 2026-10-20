@@ -41,26 +41,13 @@ set -euo pipefail
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$repo_root"
 
-# Prints file:line:text for each code line under the directory $1 that
-# matches $2, leaving out comment lines and the files named after it (literal
-# paths).
-code_matches() {
-  local dir="$1"
-  local pattern="$2"
-  shift 2
-  local hits
-  hits=$(grep -rnE "$pattern" "$dir" --include='*.swift' 2>/dev/null \
-    | grep -vE '^[^:]+:[0-9]+:[[:space:]]*//' || true)
-  for allowed in "$@"; do
-    hits=$(printf '%s\n' "$hits" | grep -vF "$allowed:" || true)
-  done
-  printf '%s\n' "$hits" | sed '/^$/d' | sort
-}
+# shellcheck source=lib/grep-guard.sh
+. "scripts/lib/grep-guard.sh"
 
 status=0
 
-event_loop=$(code_matches Sources/ \
-  '\bEventLoop(Future|Promise)\b|make(Succeeded|Failed)Future|\beventLoop(Group)?\b|\.threadPool\b')
+event_loop=$(code_matches \
+  '\bEventLoop(Future|Promise)\b|make(Succeeded|Failed)Future|\beventLoop(Group)?\b|\.threadPool\b' Sources/)
 if [ -n "$event_loop" ]; then
   echo "ERROR: event-loop API in Sources/ (Vapor 5 removes it)."
   echo
@@ -72,7 +59,7 @@ if [ -n "$event_loop" ]; then
   status=1
 fi
 
-direct_decode=$(code_matches Sources/ '\bcontent\.(decode|get)\(' \
+direct_decode=$(code_matches '\bcontent\.(decode|get)\(' Sources/ -- \
   'Sources/APIServer/Helpers/Request+DecodeContent.swift' \
   'Sources/APIServer/Helpers/ClientResponse+Body.swift')
 if [ -n "$direct_decode" ]; then
@@ -86,7 +73,7 @@ if [ -n "$direct_decode" ]; then
   status=1
 fi
 
-future_wait=$(code_matches Sources/ '\)\.get\(\)|\.collect\(max:' \
+future_wait=$(code_matches '\)\.get\(\)|\.collect\(max:' Sources/ -- \
   'Sources/APIServer/Helpers/Request+DecodeContent.swift' \
   'Sources/APIServer/Bootstrap/UnchangedSessionSkippingDriver.swift')
 if [ -n "$future_wait" ]; then
@@ -100,8 +87,8 @@ if [ -n "$future_wait" ]; then
   status=1
 fi
 
-direct_testing=$(code_matches Tests/ \
-  '\.testing\(|\bTestingHTTP(Response|Request)\b|(^|[^A-Za-z0-9_.])Request\([[:space:]]*application:' \
+direct_testing=$(code_matches \
+  '\.testing\(|\bTestingHTTP(Response|Request)\b|(^|[^A-Za-z0-9_.])Request\([[:space:]]*application:' Tests/ -- \
   'Tests/APITests/TestRequests.swift')
 if [ -n "$direct_testing" ]; then
   echo "ERROR: a test uses VaporTesting or builds a Request directly (Vapor 5 rewrites both)."
