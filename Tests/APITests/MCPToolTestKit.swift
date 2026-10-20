@@ -40,8 +40,10 @@ func seedMCPCourse(
     return course
 }
 
-/// Seeds `seedMCPCourse`, then a test setup `setupID` and an assignment on
-/// it. A nil `manifest` keeps the `makeTestSetup` default.
+/// Seeds a `TestScenario` (a course, a test setup `setupID` and an assignment
+/// on it) and an instructor account called `mcpTestSubject`. With
+/// `enroll: false` the account holds no enrollment in the course. A nil
+/// `manifest` keeps the `makeTestSetup` default.
 @discardableResult
 func seedMCPAssignment(
     on app: Application,
@@ -53,15 +55,22 @@ func seedMCPAssignment(
     title: String = "Lab",
     withNotebook: Bool = true
 ) async throws -> APIAssignment {
-    let course = try await seedMCPCourse(on: app, code: courseCode, name: courseName, enroll: enroll)
-    let courseID = try course.requireID()
-    if let manifest {
-        try await makeTestSetup(
-            on: app, id: setupID, courseID: courseID, manifest: manifest, withNotebook: withNotebook)
+    let scenario =
+        if let manifest {
+            try await TestScenario.make(
+                on: app, code: courseCode, courseName: courseName, setupID: setupID, manifest: manifest,
+                withNotebook: withNotebook, title: title)
+        } else {
+            try await TestScenario.make(
+                on: app, code: courseCode, courseName: courseName, setupID: setupID,
+                withNotebook: withNotebook, title: title)
+        }
+    if enroll {
+        try await scenario.enroll(mcpTestSubject, role: "instructor", on: app)
     } else {
-        try await makeTestSetup(on: app, id: setupID, courseID: courseID, withNotebook: withNotebook)
+        try await makeTestUser(on: app, username: mcpTestSubject, role: "instructor")
     }
-    return try await makeTestAssignment(on: app, testSetupID: setupID, courseID: courseID, title: title)
+    return scenario.assignment
 }
 
 /// The account `seedMCPCourse` made for `subject`.
