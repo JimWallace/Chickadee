@@ -18,12 +18,8 @@ import Vapor
     private func fixture(
         on app: Application, seedFamily: Bool = false, seedScript: String? = nil
     ) async throws -> APIAssignment {
-        let course = try await makeTestCourse(on: app, code: "CS246", name: "OOP")
-        let courseID = try course.requireID()
-        let tester = try await makeTestUser(on: app, username: "tester", role: "instructor")
-        try await makeTestEnrollment(on: app, userID: tester.requireID(), courseID: courseID)
-        let setup = try await makeTestSetup(
-            on: app, id: "setup_del", courseID: courseID, manifest: emptyManifest)
+        let assignment = try await seedMCPAssignment(on: app, setupID: "setup_del", manifest: emptyManifest)
+        let setup = try #require(try await APITestSetup.find("setup_del", on: app.db))
         try await pfWriteEmptyZip(at: app.testSetupsDirectory + "setup_del.zip")
         var families: [PatternFamily] = []
         var authored: [AuthoredSuiteItem] = []
@@ -43,8 +39,7 @@ import Vapor
             try await applyPatternFamilies(
                 to: setup, nextFamilies: families, authoredItems: authored, on: app.db)
         }
-        return try await makeTestAssignment(
-            on: app, testSetupID: "setup_del", courseID: courseID, title: "Lab")
+        return assignment
     }
 
     private func reloadItems(_ assignment: APIAssignment, on db: any Database) async throws -> [SuiteItemDTO] {

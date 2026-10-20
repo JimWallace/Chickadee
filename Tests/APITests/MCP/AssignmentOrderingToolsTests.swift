@@ -15,10 +15,7 @@ import Vapor
     /// Course + enrolled instructor.
     @discardableResult
     private func fixture(on app: Application) async throws -> APICourse {
-        let course = try await makeTestCourse(on: app, code: "CS246", name: "OOP")
-        let tester = try await makeTestUser(on: app, username: "tester", role: "instructor")
-        try await makeTestEnrollment(on: app, userID: tester.requireID(), courseID: course.requireID())
-        return course
+        try await seedMCPCourse(on: app)
     }
 
     /// A published assignment with its own backing test setup.

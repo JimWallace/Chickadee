@@ -22,20 +22,15 @@ import Vapor
     private func fixture(
         on app: Application, expressions: [PersonalizationExpression] = []
     ) async throws -> APIAssignment {
-        let course = try await makeTestCourse(on: app, code: "CS246", name: "OOP")
-        let courseID = try course.requireID()
-        let tester = try await makeTestUser(on: app, username: "tester", role: "instructor")
-        try await makeTestEnrollment(on: app, userID: tester.requireID(), courseID: courseID)
-        let setup = try await makeTestSetup(
-            on: app, id: "setup_pf", courseID: courseID, manifest: emptyManifest)
+        let assignment = try await seedMCPAssignment(on: app, setupID: "setup_pf", manifest: emptyManifest)
+        let setup = try #require(try await APITestSetup.find("setup_pf", on: app.db))
         try await pfWriteEmptyZip(at: app.testSetupsDirectory + "setup_pf.zip")
         if !expressions.isEmpty {
             try await applyPatternFamilies(
                 to: setup, nextFamilies: [], authoredItems: [],
                 globalExpressions: expressions, on: app.db)
         }
-        return try await makeTestAssignment(
-            on: app, testSetupID: "setup_pf", courseID: courseID, title: "Lab")
+        return assignment
     }
 
     private func reloadFamily(

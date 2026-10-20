@@ -16,10 +16,8 @@ import Vapor
 @Suite struct MCPDeleteVisibilityTests {
     /// "tester" is an instructor in CS246 only; CS136 is another course.
     private func fixture(on app: Application) async throws -> (visible: UUID, hidden: UUID) {
-        let visible = try await makeTestCourse(on: app, code: "CS246", name: "OOP")
+        let visible = try await seedMCPCourse(on: app)
         let hidden = try await makeTestCourse(on: app, code: "CS136", name: "Intro")
-        let tester = try await makeTestUser(on: app, username: "tester", role: "instructor")
-        try await makeTestEnrollment(on: app, userID: tester.requireID(), courseID: visible.requireID())
         return (try visible.requireID(), try hidden.requireID())
     }
 

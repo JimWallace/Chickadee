@@ -13,9 +13,7 @@ import Vapor
 
 @Suite struct MCPEnumResidueTests {
     private func fixture(on app: Application) async throws {
-        let course = try await makeTestCourse(on: app, code: "CS246", name: "OOP")
-        let tester = try await makeTestUser(on: app, username: "tester", role: "instructor")
-        try await makeTestEnrollment(on: app, userID: tester.requireID(), courseID: course.requireID())
+        try await seedMCPCourse(on: app)
     }
 
     private func create(kind: String?, _ app: Application) async throws -> CreateContentItemTool.Output {

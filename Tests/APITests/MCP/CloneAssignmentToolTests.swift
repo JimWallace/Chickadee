@@ -17,13 +17,7 @@ import Vapor
     ) async throws
         -> APIAssignment
     {
-        let course = try await makeTestCourse(on: app, code: courseCode, name: "OOP")
-        let courseID = try course.requireID()
-        let tester = try await makeTestUser(on: app, username: "tester", role: "instructor")
-        try await makeTestEnrollment(on: app, userID: tester.requireID(), courseID: courseID)
-        try await makeTestSetup(on: app, id: "setup_src", courseID: courseID)
-        return try await makeTestAssignment(
-            on: app, testSetupID: "setup_src", courseID: courseID, title: "Lab 1", isOpen: true)
+        try await seedMCPAssignment(on: app, setupID: "setup_src", courseCode: courseCode, title: "Lab 1")
     }
 
     @Test func clonesWithinSameCourse() async throws {
