@@ -9,6 +9,13 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.759] - 2026-10-20
+
+### Changed
+
+- **The browser probe jobs share their CI setup (#2718).** In `browser-probes.yml`, one `probe` matrix job replaces the `exec-probe`, `bridge`, `lifecycle` and `reset` jobs. The `changes` job gives the matrix as a JSON list. The legs keep their check names, for example `exec-probe (webkit)`. The probe budgets are now set for a downloaded server, not for a cold build: 30 min for the smoke, 20 min for each diagnostic probe and 45 min for the grading-hang probe. Before, they were 50, 50 and 75 min. A new `playwright-setup` action installs the npm project and the Playwright engine for `browser-probe-setup` and for `browser-grading-smoke.yml`. A new `gate` action holds the body of `editor-smoke-gate`, `r-grading-smoke-gate` and `swift-tests-gate`, with a list of the jobs that can be skipped. The gate job names do not change. `scripts/install-micromamba.sh` installs micromamba for `kernel-currency.yml` and `revendor-kernels.yml`.
+
+
 ## [0.5.758] - 2026-10-19
 
 ### Changed
