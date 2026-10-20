@@ -65,7 +65,7 @@ extension InstructorLMSRoutes {
         // Only `.student`-role enrollments are roster members; TA/instructor
         // enrollments (staff who joined to see the course) are never flagged
         // (#417 Slice G2 — was the global `role == "student"`).
-        let studentUserIDs = try await studentUserIDsInCourse(courseUUID, on: req.db)
+        let studentUserIDs = try await CourseRoster.studentIDs(in: courseUUID, on: req.db)
         let enrolledUsers =
             studentUserIDs.isEmpty
             ? []

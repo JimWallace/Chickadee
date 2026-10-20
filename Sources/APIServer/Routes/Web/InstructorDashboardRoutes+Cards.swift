@@ -27,7 +27,7 @@ extension InstructorDashboardRoutes {
         let setupIDs = setups.compactMap(\.id)
 
         // Students are `.student`-role enrollments now (#417 Slice G2).
-        let studentIDs = try await studentUserIDsInCourse(activeCourseUUID, on: req.db)
+        let studentIDs = try await CourseRoster.studentIDs(in: activeCourseUUID, on: req.db)
 
         return try await req.application.diagnostics.instructorCardSeries(
             setupIDs: setupIDs, studentIDs: studentIDs, on: req.db)

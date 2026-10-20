@@ -61,11 +61,6 @@ extension Request {
 
     private static let activeCourseSessionKey = "activeCourseID"
 
-    /// Resolves the active course for `user`, consulting the session and DB.
-    /// Auto-enrolls the user in every course with enrollmentMode == .auto.
-    /// Returns `activeCourseUUID == nil` when the user is not enrolled anywhere.
-    /// Cached per request (the underlying work, including its side effects, runs
-    /// once); see `computeActiveCourse` for the resolution itself.
     /// The active course's id, or `WebAssignmentError.noActiveCourse` naming
     /// `action` when the viewer has none selected. The guard every
     /// course-scoped instructor write starts with.
@@ -76,6 +71,39 @@ extension Request {
         return courseID
     }
 
+    /// The active course, when `user` may write to it at `minimum` or above
+    /// (`requireCourseWriteAccess`: admin bypass, the role floor, the archived
+    /// block). Nil when the viewer has no active course. The course is loaded
+    /// once, by the write check. A handler that answers "no active course" in
+    /// its own way, such as a redirect, starts here.
+    func activeCourseForWrite(_ user: APIUser, atLeast minimum: CourseRole) async throws -> APICourse? {
+        guard let courseID = try await resolveActiveCourse(for: user).activeCourseUUID else { return nil }
+        // Nil only for an admin whose active course has no row: not found,
+        // and not the same answer as "no active course".
+        guard
+            let course = try await requireCourseWriteAccess(
+                caller: user, courseID: courseID, atLeast: minimum, db: db)
+        else { throw AppError.notFound(resource: "Course") }
+        return course
+    }
+
+    /// `activeCourseForWrite`, or `WebAssignmentError.noActiveCourse` naming
+    /// `action` when the viewer has no active course. The preamble of every
+    /// instructor write to the active course.
+    func requireActiveCourseForWrite(
+        _ user: APIUser, atLeast minimum: CourseRole, action: String
+    ) async throws -> APICourse {
+        guard let course = try await activeCourseForWrite(user, atLeast: minimum) else {
+            throw WebAssignmentError.noActiveCourse(action: action)
+        }
+        return course
+    }
+
+    /// Resolves the active course for `user`, consulting the session and DB.
+    /// Auto-enrolls the user in every course with enrollmentMode == .auto.
+    /// Returns `activeCourseUUID == nil` when the user is not enrolled anywhere.
+    /// Cached per request (the underlying work, including its side effects, runs
+    /// once); see `computeActiveCourse` for the resolution itself.
     func resolveActiveCourse(for user: APIUser) async throws -> ResolvedCourseState {
         if let cached = storage[ResolvedCourseStateStorageKey.self] { return cached }
         let state = try await computeActiveCourse(for: user)

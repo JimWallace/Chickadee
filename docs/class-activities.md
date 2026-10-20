@@ -453,7 +453,7 @@ then the earlier row; whoever leads holds the `tournamentWinner` record
 **What the page shows.** The leaderboard page switches on
 `ActivityKind.aggregation`: a standings kind shows played, won, drawn, lost
 and average by handle and bird, best first, instead of the metric table
-(`buildStandingRows`, sharing `RankedIdentities` with the metric rows), and
+(`buildStandingRows`, sharing `AvatarIdentity` with the metric rows), and
 `recordLeaderboardEntry` writes no metric row for it. `set_activity` seeds the
 `standings_leader` record INSTEAD of the leaderboard record and swaps them
 back when the kind changes to a metric kind.

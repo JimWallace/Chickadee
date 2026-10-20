@@ -1,0 +1,3 @@
+### Changed
+
+- **One helper for each course access pattern on the server (#2720).** An instructor write to the active course starts with `requireActiveCourseForWrite`, and `evaluateCourseWrite` returns the course that it loads. `CourseRoster` is the one query for the students of a course and for one user's enrollment. `ActivityRequest.resolve` is the gate of the leaderboard, the class composite and the projector arena, and `AvatarIdentity` builds each student's handle and bird. Two student lists now count a row with an unknown role as a student, as every other student list does: the classmate chooser (`latestStudentSubmissionsByUser`) and the grades CSV when no course is active. The unused `manifestHasGeneratedScripts` is gone.

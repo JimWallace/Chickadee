@@ -26,7 +26,7 @@ extension InstructorWorkbenchRoutes {
     /// The students enrolled in `courseID`, by name. Service accounts and
     /// staff are not students.
     static func previewStudents(courseID: UUID, on db: any Database) async throws -> [WorkbenchPreviewStudent] {
-        let ids = try await studentUserIDsInCourse(courseID, on: db)
+        let ids = try await CourseRoster.studentIDs(in: courseID, on: db)
         guard !ids.isEmpty else { return [] }
         let users = try await APIUser.query(on: db)
             .filter(\.$id ~~ Array(ids))

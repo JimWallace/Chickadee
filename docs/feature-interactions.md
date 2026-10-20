@@ -828,8 +828,17 @@ because line numbers go out of date.
   - The MCP `ToolContext` checks.
   - `ActiveCourseStaffMiddleware`.
   - `AvatarStore.courseStaff`.
+  - `courseRole` reads the row through `CourseRoster.enrollment(of:in:on:)`.
+    A new read of one user's row uses it too.
 - **Rules:**
   - Every call site states its minimum role. Nothing has a default.
+  - The students of a course are `CourseRoster.studentIDs` (and
+    `studentIDsByCourse`). The rule is `CourseRoster.isStudent`: a
+    `student` row, a NULL row and a row with an unknown role are students.
+    Do not filter `roleRaw` in a query to find students (#2720).
+  - An instructor write to the active course starts with
+    `requireActiveCourseForWrite` or `activeCourseForWrite`. Both run
+    `evaluateCourseWrite`, which returns the course it loads.
   - A TA authors content and grades. An instructor manages the course.
   - An admin bypasses the role check. But an admin's MCP agent can reach only
     the courses that the MCP account is enrolled in (#1942;
@@ -949,7 +958,8 @@ because line numbers go out of date.
 
 - **Writers:** `AvatarStore.ensureHandle` and `redrawHandle`.
 - **Readers:**
-  - The leaderboard.
+  - The leaderboard, through `AvatarIdentity`: the ranking rows, the
+    hill's champion and the viewer's card.
   - The composite board and its snapshot.
   - The account page and the staff student lists.
   - The data export.
@@ -973,7 +983,12 @@ because line numbers go out of date.
 - **No guard:** no generic check finds a new page that shows student data to
   classmates. `RouteAuthorizationMatrixTests` does not cover routes outside
   `/instructor` and `/courses`. So:
-  - Use `isCourseStaff` and the `AvatarStore` handles.
+  - Use `isCourseStaff` and the `AvatarStore` handles. An activity page
+    starts with `ActivityRequest.resolve` and names students through
+    `AvatarIdentity`. Two activity routes do not start there: the
+    group-session routes authorize the caller first (`requireGroupSession`),
+    and the composite spare is for students only
+    (`requireOpenStudentAssignment`).
   - Add a test that asserts that a classmate's username is not on the page,
     as `LeaderboardPageTests` does.
 - **Trap:** a new aggregation set the metric board flag by accident (#1745).
