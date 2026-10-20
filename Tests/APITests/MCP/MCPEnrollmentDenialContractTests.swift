@@ -161,6 +161,7 @@ struct MCPEnrollmentDenialContractTests {
         case .notAuthorized:
             let enrolled = try await outcome(tool, sample, enrolled: true)
             #expect(!enrolled.isNotAuthorized, "The enrolled run was refused: \(enrolled)")
+            #expect(!enrolled.isOtherError, "The enrolled run failed: \(enrolled)")
             let unenrolled = try await outcome(tool, sample, enrolled: false)
             #expect(unenrolled.isNotAuthorized, "Expected notAuthorized, got \(unenrolled)")
         case .answersAsUnknownID:
@@ -192,6 +193,13 @@ struct MCPEnrollmentDenialContractTests {
 
         var isNotAuthorized: Bool {
             if case .refused(.notAuthorized) = self { return true }
+            return false
+        }
+
+        /// An error that is not an `MCPToolError`: the run broke, so the
+        /// sample proves nothing.
+        var isOtherError: Bool {
+            if case .other = self { return true }
             return false
         }
 
@@ -250,8 +258,7 @@ struct MCPEnrollmentDenialContractTests {
             on: app, setupID: "setup_contract", manifest: Self.manifest, enroll: enrolled)
         let courseID = assignment.courseID
         let other = try await makeTestCourse(on: app, code: "CS999", name: "Other")
-        let subject = try #require(
-            try await APIUser.query(on: app.db).filter(\.$username == mcpTestSubject).first())
+        let subject = try await mcpTestUser(on: app)
         try await makeTestEnrollment(on: app, userID: subject.requireID(), courseID: other.requireID())
 
         try await writeZipFixture(
