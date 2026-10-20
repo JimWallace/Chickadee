@@ -178,7 +178,8 @@ enum BrightSpacePagePresenter {
             orgUnitDisplay: nil, orgUnitFieldValue: "",
             account: account,
             syncIdentity: .empty,
-            showConnectForm: syncEnabled && !account.connected,
+            // Connecting needs a course to manage (#2710).
+            showConnectForm: false,
             showIdentityActions: false, showUseMyIdentity: false,
             flashSuccess: flashes.success, flashError: flashes.error,
             canSyncNow: false, doNotSyncToken: BrightspaceSync.doNotSyncToken,

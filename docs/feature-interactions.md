@@ -845,6 +845,12 @@ because line numbers go out of date.
     `docs/multi-course-roles.md`).
   - The server reads the role again on every request. A role change or an
     unenrollment applies on the next request.
+- **Rule:** the BrightSpace binding is an instructor action (#2710). Three
+  paths read it and must agree: the six course-level handlers on the LEARN
+  tab (`activeCourseForWrite(atLeast: .instructor)`), the per-assignment
+  grade-item and push-all handlers (`loadAssignmentForWrite(atLeast:
+  .instructor)`), and `BrightSpacePagePresenter`, which hides each control
+  from a viewer that `evaluateCourseWrite` refuses at `.instructor`.
 - **Trap:** some handlers had comments that said "instructor", but they had
   only the area gate (#1448). `RouteAuthorizationMatrixTests` now finds a
   route under `/instructor` or `/courses` that has no minimum role.
@@ -1058,6 +1064,7 @@ not repeat them. But a change that makes one of them weaker is a finding.
 | Intersection | Test |
 |---|---|
 | A web route under `/instructor` or `/courses` with no minimum role | `RouteAuthorizationMatrixTests` |
+| A write route under `/instructor` with no path parameter and no minimum role | `InstructorParameterlessRouteFloorTests` |
 | A new MCP tool with no course authorization | `MCPAuthorizationCoverageTests` |
 | An MCP tool that reads student data outside the boundary | `MCPStudentDataWallTests` |
 | An MCP write to an AI-feedback gate | `MCPAIFeedbackGateTests` |
