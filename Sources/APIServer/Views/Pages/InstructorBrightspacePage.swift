@@ -196,6 +196,8 @@ private struct InstructorBrightspaceConnection: HTML {
             }
             if model.showConnectForm {
                 connectForm
+            } else if !model.canManageCourse, !model.courseIsArchived {
+                p(.class("field-note")) { "Only course instructors can change the LEARN connection." }
             }
             if model.showIdentityActions {
                 div(.class("toolbar")) {
@@ -271,7 +273,7 @@ private struct InstructorBrightspaceMapping: HTML {
         section(.class("page-section")) {
             div(.class("page-titlebar")) {
                 h2 { "Grade-item mapping" }
-                if !model.courseIsArchived {
+                if model.canManageCourse {
                     form(.method(.post), .action("/instructor/brightspace/auto-map"), .class("inline-form")) {
                         CSRFField(token: page.csrfToken)
                         button(
@@ -280,6 +282,9 @@ private struct InstructorBrightspaceMapping: HTML {
                         ) { "Auto-map by name" }
                     }
                 }
+            }
+            if !model.canManageCourse, !model.courseIsArchived {
+                p(.class("field-note")) { "Only course instructors can change the grade-item mapping." }
             }
             if model.assignmentRows.isEmpty {
                 p(.class("empty")) { "No assignments in this course yet." }
@@ -305,7 +310,7 @@ private struct InstructorBrightspaceMapping: HTML {
                     tbody {
                         for row in model.assignmentRows {
                             InstructorBrightspaceMappingRow(
-                                page: page, row: row, courseIsArchived: model.courseIsArchived)
+                                page: page, row: row, canManageCourse: model.canManageCourse)
                         }
                     }
                 }
@@ -318,7 +323,7 @@ private struct InstructorBrightspaceMapping: HTML {
 private struct InstructorBrightspaceMappingRow: HTML {
     let page: PageRequestContext
     let row: BrightspaceAssignmentRow
-    let courseIsArchived: Bool
+    let canManageCourse: Bool
 
     var body: some HTML {
         tr {
@@ -345,9 +350,13 @@ private struct InstructorBrightspaceMappingRow: HTML {
                             .class("form-input bs-grade-input"), .type(.text), .id("bs-go-\(row.assignmentID)"),
                             .list("bs-grade-objects"), .value(row.gradeFieldValue),
                             .placeholder("Search assessments…"), .data("raw-id", value: row.gradeFieldValue),
-                            .autocomplete("off"))
+                            .autocomplete("off")
+                        )
+                        .attributes(.disabled, when: !canManageCourse)
                     }
-                    button(.class("btn action-btn"), .type(.submit)) { "Save" }
+                    if canManageCourse {
+                        button(.class("btn action-btn"), .type(.submit)) { "Save" }
+                    }
                 }
             }
             td(.class("item-grade col-hide-phone")) {
@@ -365,7 +374,7 @@ private struct InstructorBrightspaceMappingRow: HTML {
                 }
             }
             td(.class("item-actions-td")) {
-                if !courseIsArchived {
+                if canManageCourse {
                     div(.class("assignment-actions-cell")) {
                         form(
                             .method(.post), .action("/instructor/\(row.assignmentID)/brightspace/push-all"),

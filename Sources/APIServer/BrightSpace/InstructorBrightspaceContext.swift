@@ -62,16 +62,16 @@ struct InstructorBrightspaceContext: Encodable {
     let showUseMyIdentity: Bool
     let flashSuccess: String?
     let flashError: String?
-    /// True when BrightSpace is configured and the active course isn't archived —
-    /// gates the top-bar "Sync now" button.
+    /// True when BrightSpace is configured, the active course isn't archived and
+    /// the viewer is its instructor — gates the top-bar "Sync now" button.
     let canSyncNow: Bool
     /// The reserved value the grade-item dropdown submits for the "Do not sync"
     /// option (`BrightspaceSync.doNotSyncToken`), surfaced so the page JS uses
     /// the one server-side source of truth instead of a duplicated literal.
     let doNotSyncToken: String
     let assignmentRows: [BrightspaceAssignmentRow]
-    /// True when the course is linked to a LEARN org unit and not archived —
-    /// gates the "Reconcile now" button.
+    /// True when the course is linked to a LEARN org unit, not archived, and the
+    /// viewer is its instructor — gates the "Reconcile now" button.
     let canReconcile: Bool
     /// Students we can't currently deliver a grade to (not on the LEARN
     /// classlist, or no key to match) — the authoritative replacement for the
@@ -104,6 +104,10 @@ struct InstructorBrightspaceContext: Encodable {
     var canBindOrgUnit = false
     /// "3 students can't receive grades · checked Sep 3, 2:10 PM".
     var readinessSummary = ""
+    /// Whether the viewer may change the course's LEARN setup: an instructor
+    /// of a course that is not archived (#2710). Gates Auto-map by name and
+    /// each row's grade-item Save and Re-push all grades.
+    var canManageCourse = false
 }
 
 /// Constants shared between the BrightSpace grade-sync server code and the

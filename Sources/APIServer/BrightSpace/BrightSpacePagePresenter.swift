@@ -122,6 +122,10 @@ enum BrightSpacePagePresenter {
             }()
             : nil
         let showIdentityActions = account.connected && !course.isArchived
+        // A TA reaches this tab, but the course-level actions are `.instructor`
+        // (#2710). Hide what the handlers refuse; disconnect stays.
+        let canManage =
+            try await evaluateCourseWrite(user: user, courseID: courseUUID, atLeast: .instructor, db: db).denial == nil
         let facts = learnPageFacts(
             LearnFactsInput(
                 usesServiceAccount: application.brightSpaceUsesServiceAccount,
@@ -137,14 +141,14 @@ enum BrightSpacePagePresenter {
             orgUnitDisplay: orgUnitDisplay, orgUnitFieldValue: orgUnitID ?? "",
             account: account,
             syncIdentity: syncIdentity,
-            showConnectForm: syncEnabled && !account.connected && !course.isArchived,
+            showConnectForm: syncEnabled && !account.connected && canManage,
             showIdentityActions: showIdentityActions,
-            showUseMyIdentity: showIdentityActions && !syncIdentity.isMe,
+            showUseMyIdentity: showIdentityActions && !syncIdentity.isMe && canManage,
             flashSuccess: flashes.success, flashError: flashes.error,
-            canSyncNow: syncEnabled && !course.isArchived && !course.usesLTIGrades,
+            canSyncNow: syncEnabled && canManage && !course.usesLTIGrades,
             doNotSyncToken: BrightspaceSync.doNotSyncToken,
             assignmentRows: assignmentRows,
-            canReconcile: courseLinked && !course.isArchived,
+            canReconcile: courseLinked && canManage,
             unreachableStudents: unreachableStudents,
             showLTIGradesLink: course.ltiPlatformID != nil,
             usesLTIGrades: course.usesLTIGrades,
@@ -154,8 +158,9 @@ enum BrightSpacePagePresenter {
             pushesAsNote: facts.pushesAsNote,
             lastSyncISO: facts.lastSyncISO,
             lastSyncText: facts.lastSyncText,
-            canBindOrgUnit: facts.canBindOrgUnit,
-            readinessSummary: facts.readinessSummary)
+            canBindOrgUnit: facts.canBindOrgUnit && canManage,
+            readinessSummary: facts.readinessSummary,
+            canManageCourse: canManage)
     }
 
     /// The context for the "no active course selected" state: the
@@ -173,7 +178,8 @@ enum BrightSpacePagePresenter {
             orgUnitDisplay: nil, orgUnitFieldValue: "",
             account: account,
             syncIdentity: .empty,
-            showConnectForm: syncEnabled && !account.connected,
+            // Connecting needs a course to manage (#2710).
+            showConnectForm: false,
             showIdentityActions: false, showUseMyIdentity: false,
             flashSuccess: flashes.success, flashError: flashes.error,
             canSyncNow: false, doNotSyncToken: BrightspaceSync.doNotSyncToken,
