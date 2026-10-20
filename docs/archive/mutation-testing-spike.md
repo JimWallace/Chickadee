@@ -2,7 +2,7 @@
 
 > **Archived 2026-10-03.** Its verdict ("Muter is not adoptable") was
 > reversed: CI runs a patched Muter. The live state is
-> [handoff-mutation-testing.md](../handoff-mutation-testing.md) and
+> [handoff-mutation-testing.md](handoff-mutation-testing.md) and
 > [mutation-testing-pilot.md](../mutation-testing-pilot.md).
 
 **Status: CLOSED, negative. Muter is not adoptable.** The macOS probe ran

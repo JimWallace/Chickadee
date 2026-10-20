@@ -12,7 +12,7 @@ The protocol era is resolved per request (#1218), and `initialize` never
 negotiates up to the modern revision. OAuth codes and tokens are stored only as
 hashes and are consumed by an atomic conditional `UPDATE`, so a code cannot be
 replayed. See `docs/architecture.md` §"MCP surfaces" and
-`docs/mcp-2026-07-28-revision.md`. The `initialize` instructions end with the
+`docs/archive/mcp-2026-07-28-revision.md`. The `initialize` instructions end with the
 authoring-voice guide, and a course's instructors can replace it for their
 course (root `CLAUDE.md`, "Voice and Register").
 

@@ -3,15 +3,15 @@ name: Documentation audit
 # Once a month, the `docs-audit` agent compares the documentation with the
 # repository and files one issue: claims that are no longer true (a path, a
 # workflow, a script or an agent that does not exist, a count that changed, a
-# process that no longer runs) and docs/ files that the reference list in
-# CLAUDE.md does not name. The brief is .claude/agents/docs-audit.md, the same
+# process that no longer runs) and docs/ files that the index in
+# docs/README.md does not name. The brief is .claude/agents/docs-audit.md, the same
 # file a Claude Code session runs as a subagent.
 #
 # A REPORT, NEVER A GATE. The fixes are usually one line each, and a person (or
 # a session they start) makes them.
 #
 # SCOPE PER RUN, so that a run reads about 25 documents and not 75:
-#   * every CLAUDE.md file;
+#   * every CLAUDE.md file, and the index docs/README.md;
 #   * each document under docs/ (not docs/archive/) that names a file deleted
 #     or renamed in the last 31 days, which is where most drift comes from;
 #   * one quarter of the other documents, by month, so that each one is
@@ -83,7 +83,7 @@ jobs:
           # deleted README.md cannot match every document that says README.md.
           # The quarter comes from a hash of the path, so adding or removing one
           # document does not move the others to another quarter.
-          git ls-files '*CLAUDE.md' > audit/scope.txt
+          git ls-files '*CLAUDE.md' docs/README.md > audit/scope.txt
           quarter=$(( $(date -u +%-m) % 4 ))
           while read -r doc; do
             if [ -s audit/gone-files.txt ] && grep -q -F -f audit/gone-files.txt "$doc"; then
@@ -129,7 +129,7 @@ jobs:
             ${{ steps.scope.outputs.changed }} files changed in the last 31
             days are in audit/changed-files.txt, and the ones deleted or
             renamed away are in audit/gone-files.txt; use them to find what
-            may have drifted. Check the reference list (brief, check 5) against
+            may have drifted. Check the index (brief, check 5) against
             all of docs/, not only the scope.
             PREVIOUS AUDIT: ${{ steps.scope.outputs.previous }}
 

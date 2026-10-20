@@ -4,8 +4,8 @@ description: >
   Audits the project documentation against the repository: CLAUDE.md, the
   area CLAUDE.md files and docs/. It finds claims that are no longer true
   (a path, a workflow, a script or an agent that does not exist, a count that
-  changed, a process that no longer runs) and docs that the reference list
-  does not name. Use it for a periodic sweep. CI runs it every month
+  changed, a process that no longer runs) and docs that the index in
+  docs/README.md does not name. Use it for a periodic sweep. CI runs it every month
   (.github/workflows/docs-audit.yml).
   Read-only: it reports, it does not edit.
 model: sonnet
@@ -28,7 +28,8 @@ that says "every page" when the job covers one page per archetype.
 2. The scope for this run. In CI the prompt gives it: the documents to audit
    in full, and the files that changed in the last month. In a local session,
    audit every `CLAUDE.md` file and the documents that mention a file changed
-   in the last month (`git log --since=31.days --name-only --format=`).
+   in the last month (`git log --since=31.days --name-only --format=`), and
+   the index `docs/README.md`.
 3. The previous audit, when the prompt gives one. Your report replaces it, so
    a finding that is still true stays in your report. Mark each finding
    **New** or **Still open**, and list the previous findings that are fixed.
@@ -54,8 +55,9 @@ is false.
    runs. Find the workflow, the hook or the config that runs it. A routine
    that lives outside the repository (a Claude Code routine) cannot be
    confirmed from here: report it as "cannot confirm", not as false.
-5. **The reference list.** Every file in `docs/` (not `docs/archive/`) should
-   have a line in "Reference Material" in `CLAUDE.md`. A file with no line is
+5. **The index.** Every file in `docs/` (not `docs/archive/`, and not the
+   index itself) should
+   have a line in `docs/README.md`. A file with no line is
    a finding. A line for a file that does not exist is a finding.
 6. **Status lines.** A document that says "proposed", "planned" or "not yet"
    about something the code now has, or "shipped" about something it does not.

@@ -693,7 +693,7 @@ extension AssignmentLanguage {
     // silently routes it down whichever branch it happens to fall — Python bytes
     // for a Julia assignment, R's error wording for a Julia ImportError. An
     // exhaustive switch here turns each of those into a compile error naming the
-    // decision that has to be made. See docs/language-handling-review.md §4.
+    // decision that has to be made. See docs/archive/language-handling-review.md §4.
 
     /// The kernel facts, when this language has a vendored editor kernel —
     /// see `LanguageDescriptor.editorSupport`. Call sites that presuppose a

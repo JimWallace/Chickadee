@@ -5,7 +5,7 @@
 > `scripts/check-styles.sh`.
 
 **This epic is complete.** The widget-layer audit
-([ui-consistency-audit.md](../ui-consistency-audit.md)) shipped as S0–S10; the
+([ui-consistency-audit.md](ui-consistency-audit.md)) shipped as S0–S10; the
 editor-conversion pass and the inline-script pass (both 2026-08-14) closed
 the two big tracks it left open; the tail pass closed the allowlist. This
 document is now the closure record plus the standing rules for what comes
