@@ -17,6 +17,9 @@ enum ReorderError: Error, Equatable, Sendable {
     case mixedSections
     /// A course-section reorder did not list every section of the course.
     case incompleteList(expected: Int)
+    /// A section-item reorder did not list every item of its section
+    /// (assignments and content items together).
+    case incompleteSection(expected: Int)
 
     /// One sentence that says what is wrong, for a 400 body or an MCP error.
     var reason: String {
@@ -34,6 +37,9 @@ enum ReorderError: Error, Equatable, Sendable {
             "The items are in more than one course section. Reorder one section at a time."
         case .incompleteList(let expected):
             "The list must name every section of the course, all \(expected) of them."
+        case .incompleteSection(let expected):
+            "The list must name every item of the section, assignments and content items together, "
+                + "all \(expected) of them."
         }
     }
 }

@@ -38,7 +38,7 @@ struct ReorderSectionItemsTool: ContentTool {
         let courseCode: String
         /// One section's items in the new display order — a mix of assignments
         /// (from list_assignments) and content items (from list_content_items),
-        /// all in the same section. Renumbered 1..n together.
+        /// every item of one section. Renumbered 1..n together.
         let orderedItems: [ItemRef]
     }
 
@@ -60,9 +60,9 @@ struct ReorderSectionItemsTool: ContentTool {
     static let description =
         "Set the interleaved display order of a course section's items — assignments AND ungraded "
         + "content items share ONE per-section order, so a reading can sit between two labs. "
-        + "orderedItems lists the section's items ({type:\"assignment\", id:<public ID>} or "
-        + "{type:\"content\", id:<content-item id>}) in the desired order, all in one "
-        + "section (or all ungrouped); they are renumbered 1..n together. A duplicate id or an unknown "
+        + "orderedItems lists EVERY item of one section, or every ungrouped item "
+        + "({type:\"assignment\", id:<public ID>} or {type:\"content\", id:<content-item id>}), in the "
+        + "desired order; they are renumbered 1..n together. A partial list, a duplicate id or an unknown "
         + "type is refused. This is the primary ordering tool; use "
         + "reorder_assignments / reorder_content_items only for a single-type section, and "
         + "set_assignment_course_section / update_content_item to move an item between sections first. "
@@ -158,8 +158,8 @@ struct ReorderSectionItemsTool: ContentTool {
 struct ReorderAssignmentsTool: ContentTool {
     struct Input: Decodable, Sendable {
         let courseCode: String
-        /// One section's assignment public IDs in the new order — all in the
-        /// same section, renumbered 1..n among themselves.
+        /// Every assignment public ID of one section, in the new order,
+        /// renumbered 1..n.
         let orderedAssignmentPublicIDs: [String]
     }
 
@@ -181,10 +181,10 @@ struct ReorderAssignmentsTool: ContentTool {
     static let name = "reorder_assignments"
     static let description =
         "Set the display order of assignments WITHIN a course section, by course code. "
-        + "orderedAssignmentPublicIDs lists the assignments to order (from list_assignments), all "
-        + "in the same section (or all ungrouped); they are renumbered 1..n among themselves. Assignments and content "
-        + "items share one per-section order, so for a section that ALSO holds content items use "
-        + "reorder_section_items instead (it interleaves both). Move an assignment between sections with "
+        + "orderedAssignmentPublicIDs lists EVERY assignment of one section, or every ungrouped "
+        + "assignment (from list_assignments); they are renumbered 1..n. A partial list is refused. "
+        + "Assignments and content items share one per-section order, so a section that ALSO holds "
+        + "content items is refused here: use reorder_section_items (it interleaves both). Move an assignment between sections with "
         + "set_assignment_course_section, and order the section groups with reorder_course_sections. "
         + "Organizational metadata only: it does not re-run validation or change the open/closed state."
     static let inputSchema: JSONValue = .object([
@@ -266,6 +266,10 @@ func renumberSectionItemsForMCP(
         return try await SortOrderRenumbering.renumberSectionItems(
             items, inCourse: try course.requireID(), on: context.db)
     } catch let error as ReorderError {
-        throw MCPToolError.invalidArguments(detail: "\(field): \(error.reason)")
+        var detail = "\(field): \(error.reason)"
+        if case .incompleteSection = error {
+            detail += " A section that holds both assignments and content items needs reorder_section_items."
+        }
+        throw MCPToolError.invalidArguments(detail: detail)
     }
 }

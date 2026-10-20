@@ -55,9 +55,9 @@ import Vapor
         }
     }
 
-    @Test func reorderAcceptsSubset() async throws {
-        // Per-section ordering: a subset (one section's assignments) is valid;
-        // only the named assignments are renumbered, untouched ones keep theirs.
+    @Test func reorderRefusesSubset() async throws {
+        // Per-section ordering names the whole section (#2713): a subset would
+        // leave a named and an unnamed assignment at the same position.
         let app = try await makeTestApp()
         try await withApp(app) { app in
             let course = try await fixture(on: app)
@@ -66,18 +66,18 @@ import Vapor
             let b = try await makeAssignment(on: app, setupID: "s_b", title: "B", courseID: courseID)
             let c = try await makeAssignment(on: app, setupID: "s_c", title: "C", courseID: courseID)
 
-            let out = try await ReorderAssignmentsTool().execute(
-                .init(courseCode: "CS246", orderedAssignmentPublicIDs: [b.publicID, a.publicID]),
-                mcpContext(app))
-            #expect(out.assignments.map(\.title) == ["B", "A"])
-            #expect(out.assignments.map(\.sortOrder) == [1, 2])
+            await #expect(throws: MCPToolError.self) {
+                _ = try await ReorderAssignmentsTool().execute(
+                    .init(courseCode: "CS246", orderedAssignmentPublicIDs: [b.publicID, a.publicID]),
+                    mcpContext(app))
+            }
 
             let reloadedB = try #require(try await APIAssignment.find(b.id, on: app.db))
             let reloadedA = try #require(try await APIAssignment.find(a.id, on: app.db))
             let reloadedC = try #require(try await APIAssignment.find(c.id, on: app.db))
-            #expect(reloadedB.sortOrder == 1)
-            #expect(reloadedA.sortOrder == 2)
-            #expect(reloadedC.sortOrder == nil)  // untouched
+            #expect(reloadedB.sortOrder == nil)
+            #expect(reloadedA.sortOrder == nil)
+            #expect(reloadedC.sortOrder == nil)
         }
     }
 
