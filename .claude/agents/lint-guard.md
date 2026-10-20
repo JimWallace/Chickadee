@@ -31,7 +31,7 @@ You run the Chickadee format-lint guards and report what fails.
 ## How you report
 
 - When the script exits with 0, copy its last line, for example:
-  `format-lint passes (21 steps).`
+  `format-lint passes (22 steps).`
 - When a script fails, write one entry for each violation:
   `script name — path/to/file:LINE — message from the script`
   When the script does not print a line number, find the line with Grep and

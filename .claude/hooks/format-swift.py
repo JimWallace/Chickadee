@@ -11,7 +11,6 @@ this project, or when swift-format is not installed. A formatting error does
 not stop the session: the format-lint job reports it later.
 """
 
-import json
 import os
 import shutil
 import subprocess
@@ -19,27 +18,21 @@ import sys
 
 sys.dont_write_bytecode = True
 sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
-from toolchain_path import environment_with_toolchain  # noqa: E402
+from hook_common import environment_with_toolchain, project_dir, read_tool_event  # noqa: E402
 
 
 def main() -> None:
-    try:
-        event = json.load(sys.stdin)
-    except json.JSONDecodeError:
+    read = read_tool_event()
+    if read is None:
         return
-    if not isinstance(event, dict):
-        return
-
-    tool_input = event.get("tool_input")
-    if not isinstance(tool_input, dict):
-        return
+    event, tool_input = read
     path = tool_input.get("file_path")
     if not isinstance(path, str) or not path.endswith(".swift"):
         return
 
-    project_dir = os.path.realpath(os.environ.get("CLAUDE_PROJECT_DIR") or event.get("cwd") or os.getcwd())
-    target = os.path.realpath(os.path.join(project_dir, path))
-    if os.path.commonpath([project_dir, target]) != project_dir or not os.path.isfile(target):
+    project = os.path.realpath(project_dir(event))
+    target = os.path.realpath(os.path.join(project, path))
+    if os.path.commonpath([project, target]) != project or not os.path.isfile(target):
         return
 
     env = environment_with_toolchain()
@@ -49,7 +42,7 @@ def main() -> None:
 
     subprocess.run(
         [swift_format, "format", "--in-place", target],
-        cwd=project_dir,
+        cwd=project,
         env=env,
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
