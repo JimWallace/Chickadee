@@ -129,6 +129,39 @@ import VaporTesting
         }
     }
 
+    /// The staff dashboard offers the new-assignment form only to a viewer
+    /// who may create one. A TA keeps the material items of the "+ Add" menu.
+    @Test func anEmptyDashboardTellsATAWhoCreatesAssignments() async throws {
+        try await withApp(app) { _ in
+            let courseID = try await course("CFEMPTY")
+            let ta = try await actor("cf_empty_ta", role: .ta, courseID: courseID)
+
+            let taPage = try await getHTML("/instructor", cookie: ta.cookie, on: app)
+            #expect(taPage.contains("No assignments yet. A course instructor creates them."))
+            #expect(!taPage.contains("Create one to get started."))
+        }
+    }
+
+    @Test func theDashboardOffersTheFormOnlyToAnInstructor() async throws {
+        try await withApp(app) { _ in
+            let courseID = try await course("CFDASH")
+            try await makeTestSetup(on: app, id: "cf_dash_setup", courseID: courseID)
+            _ = try await makeTestAssignment(on: app, testSetupID: "cf_dash_setup", courseID: courseID)
+            let ta = try await actor("cf_dash_ta", role: .ta, courseID: courseID)
+            let instructor = try await actor("cf_dash_instructor", role: .instructor, courseID: courseID)
+
+            let taPage = try await getHTML("/instructor", cookie: ta.cookie, on: app)
+            let instructorPage = try await getHTML("/instructor", cookie: instructor.cookie, on: app)
+            // The new-assignment form, bare or with `?sectionID=`; not `/new-term`.
+            func offersTheForm(_ html: String) -> Bool {
+                html.contains("href=\"/instructor/new\"") || html.contains("href=\"/instructor/new?")
+            }
+            #expect(!offersTheForm(taPage))
+            #expect(taPage.contains("data-add-kind=\"slides\""))
+            #expect(offersTheForm(instructorPage))
+        }
+    }
+
     @Test func anInstructorCanCreateAnAssignment() async throws {
         try await withApp(app) { _ in
             let courseID = try await course("CFINS")
