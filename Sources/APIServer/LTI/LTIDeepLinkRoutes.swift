@@ -70,7 +70,7 @@ struct LTIDeepLinkRoutes: RouteCollection {
         ).save(on: req.db)
         allowFraming(platform: platform, returnURL: request.returnURL, on: req)
         return try await renderPicker(
-            ticket: ticket, course: course, acceptMultiple: request.acceptMultiple, error: nil, req: req)
+            ticket: ticket, course: course, user: user, acceptMultiple: request.acceptMultiple, error: nil, req: req)
     }
 
     // MARK: - Link the LMS course first
@@ -162,12 +162,14 @@ struct LTIDeepLinkRoutes: RouteCollection {
             .all()
         guard !assignments.isEmpty, assignments.count == chosen.count else {
             return try await Self.renderPicker(
-                ticket: pending.ticket, course: pending.course, acceptMultiple: request.acceptMultiple,
+                ticket: pending.ticket, course: pending.course, user: pending.user,
+                acceptMultiple: request.acceptMultiple,
                 error: "Choose at least one assignment.", req: req)
         }
         guard request.acceptMultiple || assignments.count == 1 else {
             return try await Self.renderPicker(
-                ticket: pending.ticket, course: pending.course, acceptMultiple: request.acceptMultiple,
+                ticket: pending.ticket, course: pending.course, user: pending.user,
+                acceptMultiple: request.acceptMultiple,
                 error: "This LMS accepts one assignment at a time.", req: req)
         }
 
@@ -210,9 +212,13 @@ struct LTIDeepLinkRoutes: RouteCollection {
         reason: "This LMS request has expired or was already answered. Open the LMS content picker again.")
 
     private static func renderPicker(
-        ticket: String, course: APICourse, acceptMultiple: Bool, error: String?, req: Request
+        ticket: String, course: APICourse, user: APIUser, acceptMultiple: Bool, error: String?, req: Request
     ) async throws -> Response {
         let courseID = try course.requireID()
+        // A TA may pick, but creating an assignment is an instructor action.
+        let canCreateAssignment =
+            try await evaluateCourseWrite(user: user, courseID: courseID, atLeast: .instructor, db: req.db).denial
+            == nil
         let assignments = try await APIAssignment.query(on: req.db)
             .filter(\.$courseID == courseID)
             .sort(\.$title)
@@ -221,7 +227,7 @@ struct LTIDeepLinkRoutes: RouteCollection {
         return try await HTMLResponse {
             LTIDeepLinkPage(
                 page: framedPage(req), ticket: ticket, courseCode: course.code, acceptMultiple: acceptMultiple,
-                assignments: options, error: error)
+                assignments: options, error: error, canCreateAssignment: canCreateAssignment)
         }.encodeResponse(for: req)
     }
 
