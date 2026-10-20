@@ -11,6 +11,7 @@
 // declares no slots must go through this path unchanged, or every existing
 // notebook assignment silently loses its solution cells.
 
+import Core
 import Foundation
 import Testing
 
@@ -168,17 +169,22 @@ import Testing
 
     // MARK: - Marker shapes
 
+    /// The parsed form of `cell(_:slot:)`, for the tests that call
+    /// `isSlotCell` directly.
+    private func parsedCell(slot: JSONValue) -> [String: JSONValue] {
+        [
+            "cell_type": .string("code"),
+            "metadata": .object([NotebookContributionSlots.slotMetadataKey: slot]),
+            "source": .array([.string("x\n")]),
+        ]
+    }
+
     @Test func anEmptyStringMarkerDoesNotDeclareASlot() {
-        #expect(!NotebookContributionSlots.isSlotCell(cell("x\n", slot: "")))
-        #expect(NotebookContributionSlots.isSlotCell(cell("x\n", slot: "1")))
+        #expect(!NotebookContributionSlots.isSlotCell(parsedCell(slot: .string(""))))
+        #expect(NotebookContributionSlots.isSlotCell(parsedCell(slot: .string("1"))))
     }
 
     @Test func aNonStringMarkerStillCountsAsASlot() {
-        let numeric: [String: Any] = [
-            "cell_type": "code",
-            "metadata": [NotebookContributionSlots.slotMetadataKey: 2],
-            "source": ["x\n"],
-        ]
-        #expect(NotebookContributionSlots.isSlotCell(numeric))
+        #expect(NotebookContributionSlots.isSlotCell(parsedCell(slot: .int(2))))
     }
 }
