@@ -9,6 +9,13 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.764] - 2026-10-20
+
+### Changed
+
+- **Smaller root `CLAUDE.md` and a complete docs index (#2723).** The reference list moved to `docs/README.md`, which now names every document in `docs/`. Each repeated rule now has one copy, and the other places point to it. Eight finished docs, the CI flake history and the per-language kernel postmortems moved to `docs/archive/`. Four shipped feature docs lost their slice tables and build history, and `lab-groups` is now marked shipped.
+
+
 ## [0.5.763] - 2026-10-20
 
 ### Added
