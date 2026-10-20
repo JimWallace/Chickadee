@@ -45,6 +45,13 @@ because line numbers go out of date.
   `create_assignment` calls `resolveCourseForWrite(atLeast: .instructor)`.
   Both go through `evaluateCourseWrite`, so the archived block is the same.
   A new creation path states the same floor.
+- **Rule (#2742):** a setup or draft ID in a body or query string is checked
+  against its own course, because the `/instructor` area gate sees only the
+  active course. Quick publish refuses a setup that is not in the active
+  course. The form (`?draftID=`) and the draft solution notebook need `.ta` in
+  the draft's course, and the save needs `.instructor` write access there, as
+  `loadDraftSetupForRead` and `loadDraftSetupForWrite` do. The save can move a
+  draft into the active course only for an instructor of both courses.
 
 ### The class deadline: `APIAssignment.dueAt`
 

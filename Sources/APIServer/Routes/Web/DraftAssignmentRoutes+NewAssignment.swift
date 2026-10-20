@@ -45,6 +45,12 @@ extension DraftAssignmentRoutes {
 
         let draftID = (q?.draftID ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         let setup = draftID.isEmpty ? nil : try await APITestSetup.find(draftID, on: req.db)
+        // The page shows the draft's suite, scripts and notebooks, so the
+        // caller must be staff in the draft's own course, as in
+        // `loadDraftSetupForRead` (#2742).
+        if let setup {
+            try await requireCourseRole(caller: user, courseID: setup.courseID, atLeast: .ta, db: req.db)
+        }
         let storedState =
             setup == nil ? NewAssignmentDraftFormState.empty : loadDraftFormState(req: req, draftID: draftID)
 
@@ -745,11 +751,17 @@ extension DraftAssignmentRoutes {
         ).requireID()
         let body = try await req.decodeContent(PublishBody.self)
 
-        guard try await APITestSetup.find(body.testSetupID, on: req.db) != nil else {
+        guard let setup = try await APITestSetup.find(body.testSetupID, on: req.db) else {
             throw WebAssignmentError.invalidParameter(
                 name: "testSetupID",
                 reason: "unknown test setup '\(body.testSetupID)'"
             )
+        }
+        // The assignment is created in the active course, so its setup must be
+        // there too. The area gate sees only the active course, not the setup's
+        // own course (#2742). The dashboard offers only active-course setups.
+        guard setup.courseID == courseID else {
+            throw WebAssignmentError.forbidden(action: "publish a test setup from another course")
         }
 
         // Reject if a draft/open assignment already exists for this setup.

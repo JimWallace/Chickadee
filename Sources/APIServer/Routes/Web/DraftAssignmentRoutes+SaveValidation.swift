@@ -147,6 +147,14 @@ extension DraftAssignmentRoutes {
         let starts = parseDueDate(form.startsAtRaw)
         let draftID = (form.draftIDRaw ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         let draftSetup = draftID.isEmpty ? nil : try await APITestSetup.find(draftID, on: req.db)
+        // The save rewrites the draft and moves it into the active course, so
+        // the caller must be able to write the draft's own course, as in
+        // `loadDraftSetupForWrite` (#2742).
+        if let draftSetup {
+            let caller = try req.auth.require(APIUser.self)
+            try await requireCourseWriteAccess(
+                caller: caller, courseID: draftSetup.courseID, atLeast: .instructor, db: req.db)
+        }
         let draftState =
             draftSetup == nil
             ? NewAssignmentDraftFormState.empty
