@@ -130,7 +130,11 @@ extension DraftAssignmentRoutes {
         guard let userID = user.id else {
             throw WebAssignmentError.forbidden(action: "edit a new-assignment draft")
         }
-        let courseID = try await req.requireActiveCourseID(for: user, action: "creating an assignment")
+        // Creating an assignment is an instructor action. A TA passes the area
+        // gate (`ActiveCourseStaffMiddleware`), so the floor is stated here.
+        let courseID = try await req.requireActiveCourseForWrite(
+            user, atLeast: .instructor, action: "creating an assignment"
+        ).requireID()
 
         let payload = try await parseNewAssignmentDraftPayload(req: req)
 
@@ -286,7 +290,9 @@ extension DraftAssignmentRoutes {
     @Sendable
     func saveNewAssignment(req: Request) async throws -> Response {
         let saveUser = try req.auth.require(APIUser.self)
-        let courseID = try await req.requireActiveCourseID(for: saveUser, action: "creating an assignment")
+        let courseID = try await req.requireActiveCourseForWrite(
+            saveUser, atLeast: .instructor, action: "creating an assignment"
+        ).requireID()
 
         let form = try await parseSaveNewAssignmentForm(req: req)
         let validation = try await validateSaveNewAssignment(
@@ -682,7 +688,7 @@ extension DraftAssignmentRoutes {
             // draft-write hole the narrower draft suite/script/section handlers
             // gate via `loadDraftSetupForWrite` (#417 Slice D). The
             // create-new branch below stays in the caller's active course, which
-            // `resolveActiveCourse` already proves non-archived + instructor-held.
+            // the handler has already checked with `requireActiveCourseForWrite`.
             let caller = try req.auth.require(APIUser.self)
             try await requireCourseWriteAccess(
                 caller: caller, courseID: existing.courseID, atLeast: .instructor, db: req.db)
@@ -729,7 +735,9 @@ extension DraftAssignmentRoutes {
         }
 
         let publishUser = try req.auth.require(APIUser.self)
-        let courseState = try await req.resolveActiveCourse(for: publishUser)
+        let courseID = try await req.requireActiveCourseForWrite(
+            publishUser, atLeast: .instructor, action: "publishing an assignment"
+        ).requireID()
         let body = try await req.decodeContent(PublishBody.self)
 
         guard try await APITestSetup.find(body.testSetupID, on: req.db) != nil else {
@@ -753,10 +761,6 @@ extension DraftAssignmentRoutes {
         // form's save path (previously this inline parser used the server's
         // default zone, shifting the due date by the UTC offset on publish).
         let due = parseDueDate(body.dueAt)
-
-        guard let courseID = courseState.activeCourseUUID else {
-            throw WebAssignmentError.noActiveCourse(action: "publishing an assignment")
-        }
 
         let assignment = try await createAssignmentWithUniquePublicID(
             NewAssignmentFields(
