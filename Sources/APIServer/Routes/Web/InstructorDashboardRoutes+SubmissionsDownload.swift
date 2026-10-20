@@ -20,7 +20,7 @@ extension InstructorDashboardRoutes {
     @Sendable
     func downloadAssignmentSubmissions(req: Request) async throws -> Response {
         let assignment = try await loadAssignmentForStaffRead(req)
-        let studentIDs = Array(try await studentUserIDsInCourse(assignment.courseID, on: req.db))
+        let studentIDs = Array(try await CourseRoster.studentIDs(in: assignment.courseID, on: req.db))
         let summaries = try await submissionSummaryByStudent(
             setupID: assignment.testSetupID, studentIDs: studentIDs, on: req.db)
         guard !summaries.isEmpty else {

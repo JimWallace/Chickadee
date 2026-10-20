@@ -53,18 +53,16 @@ import VaporTesting
     /// A course with one group and an open assignment whose activity runs
     /// per group (or not).
     private func fixture(_ code: String, runsPerGroup: Bool = true) async throws -> Fixture {
-        let course = try await makeTestCourse(on: app, code: code, mode: .closed)
-        let courseID = try course.requireID()
-        let set = try await CourseGroupStore.createSet(courseID: courseID, name: "Lab sections", on: app.db)
+        let scenario = try await TestScenario.make(
+            on: app, code: code, mode: .closed, setupID: "\(code.lowercased())_setup",
+            properties: TestProperties(
+                testSuites: [TestSuiteEntry(tier: .pub, script: "match.sh")], language: nil,
+                activity: ClassActivity(kind: .bestMetric, runsPerGroup: runsPerGroup)))
+        let set = try await CourseGroupStore.createSet(courseID: scenario.courseID, name: "Lab sections", on: app.db)
         let labA = try await CourseGroupStore.addGroup(named: "Lab 101", to: set, on: app.db).requireID()
-        let props = TestProperties(
-            testSuites: [TestSuiteEntry(tier: .pub, script: "match.sh")], language: nil,
-            activity: ClassActivity(kind: .bestMetric, runsPerGroup: runsPerGroup))
-        let manifest = try #require(String(data: JSONEncoder().encode(props), encoding: .utf8))
-        let setupID = "\(code.lowercased())_setup"
-        try await makeTestSetup(on: app, id: setupID, courseID: courseID, manifest: manifest)
-        let assignment = try await makeTestAssignment(on: app, testSetupID: setupID, courseID: courseID)
-        return Fixture(courseID: courseID, setupID: setupID, assignment: assignment, course: course, labA: labA)
+        return Fixture(
+            courseID: scenario.courseID, setupID: scenario.setupID, assignment: scenario.assignment,
+            course: scenario.course, labA: labA)
     }
 
     @discardableResult

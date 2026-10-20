@@ -101,12 +101,7 @@ private func earlier(_ lhs: RecordCandidate, _ rhs: RecordCandidate) -> Bool {
 private func recordCandidates(
     setupID: String, courseID: UUID, needsExecutionTime: Bool, on db: any Database
 ) async throws -> [RecordCandidate] {
-    let students = Set(
-        try await APICourseEnrollment.query(on: db)
-            .filter(\.$course.$id == courseID)
-            .all()
-            .filter { $0.role == .student }
-            .map(\.userID))
+    let students = try await CourseRoster.studentIDs(in: courseID, on: db)
     let submissions = try await APISubmission.query(on: db)
         .filter(\.$testSetupID == setupID)
         .filter(\.$kind == APISubmission.Kind.student)

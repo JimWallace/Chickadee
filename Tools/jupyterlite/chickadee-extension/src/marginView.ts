@@ -9,7 +9,7 @@
 // suite: each action (Edit test, Run again, Pin to a cell, a section action,
 // Add check) is posted to the workbench page, which owns the editors.
 //
-// Performance (docs/browser-freeze-investigation.md): a redraw happens at most
+// Performance (docs/archive/browser-freeze-investigation.md): a redraw happens at most
 // once per animation frame, an edit schedules one after 500ms of quiet, and a
 // redraw whose cells and suite did not change touches no node. Keeping a cell
 // as tall as its cards takes one layout read per redraw, in the frame after.

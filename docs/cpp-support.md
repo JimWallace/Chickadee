@@ -185,7 +185,7 @@ Two changes follow from it, and they are deliberately a pair:
   (`/tmp/chickadee-runner-cache`), so nothing moves on its own.
 - **The capability probe now compiles and runs a trivial program in that
   same root**, and a runner that cannot do both stops advertising `cpp`
-  (`LanguageDescriptor.capabilityRequiresExecutableOutput`). The descriptor
+  (`LanguageDescriptor.executableOutputProbe`). The descriptor
   used to justify the version-only probe with "the generated wrappers invoke
   the same binary, so probe and invocation cannot skew" — true of `g++`
   itself, and irrelevant, because they skew on the step *after* `g++`.

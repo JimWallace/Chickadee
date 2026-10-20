@@ -25,60 +25,24 @@ import VaporTesting
         self.app = try await makeTestApp(prefix: "chickadee-tournament-groups")
     }
 
-    private struct Fixture {
-        let setup: APITestSetup
-        let assignmentID: UUID
-        let labA: UUID
-        let labB: UUID
-        let ada: UUID
-        let ben: UUID
-        let alan: UUID
-        let ari: UUID
-    }
+    private typealias Fixture = PerGroupActivityFixture
 
     private let setupID = "tpg_setup"
 
     /// A per-group tournament with ada and ben in Lab 101 and alan and ari in
     /// Lab 102, each with a complete submission.
     private func fixture() async throws -> Fixture {
-        let course = try await makeTestCourse(on: app, code: "TPG1", mode: .closed)
-        let courseID = try course.requireID()
-        let set = try await CourseGroupStore.createSet(courseID: courseID, name: "Lab sections", on: app.db)
-        let labA = try await CourseGroupStore.addGroup(named: "Lab 101", to: set, on: app.db).requireID()
-        let labB = try await CourseGroupStore.addGroup(named: "Lab 102", to: set, on: app.db).requireID()
-        let props = TestProperties(
-            testSuites: [TestSuiteEntry(tier: .pub, script: "match.sh")], language: nil,
+        try await .make(
+            on: app, code: "TPG1", setupID: setupID,
             activity: ClassActivity(kind: .elimination, runsPerGroup: true),
-            achievements: [ActivityAuthoring.seededTournamentRecord])
-        let manifest = try #require(String(data: JSONEncoder().encode(props), encoding: .utf8))
-        let setup = try await makeTestSetup(on: app, id: setupID, courseID: courseID, manifest: manifest)
-        let assignment = try await makeTestAssignment(on: app, testSetupID: setupID, courseID: courseID)
-        var students: [UUID] = []
-        for (name, group) in [("tpg_ada", labA), ("tpg_ben", labA), ("tpg_alan", labB), ("tpg_ari", labB)] {
-            let id = try await makeTestStudent(on: app, username: name).requireID()
-            try await makeTestEnrollment(on: app, userID: id, courseID: courseID)
-            try await CourseGroupStore.setMembership(userID: id, groupID: group, in: set, on: app.db)
-            try await makeTestSubmission(on: app, id: "\(name)_s1", setupID: setupID, userID: id)
-            students.append(id)
-        }
-        return Fixture(
-            setup: setup, assignmentID: try assignment.requireID(), labA: labA, labB: labB,
-            ada: students[0], ben: students[1], alan: students[2], ari: students[3])
-    }
-
-    /// Opens the group's session, unless it is open, and joins `userID`.
-    private func join(_ f: Fixture, group: UUID, userID: UUID) async throws {
-        let session = try await ActivitySessionStore.open(
-            assignmentID: f.assignmentID, groupID: group, by: nil, now: Date().addingTimeInterval(-60), on: app.db)
-        let joinedAt = Date().addingTimeInterval(-30)
-        try await ActivitySessionStore.join(
-            code: ActivitySessionCode.code(secret: session.codeSecret, at: joinedAt), userID: userID,
-            now: joinedAt, on: app.db)
+            achievements: [ActivityAuthoring.seededTournamentRecord],
+            students: [("tpg_ada", .a), ("tpg_ben", .a), ("tpg_alan", .b), ("tpg_ari", .b)],
+            withSubmissions: true)
     }
 
     private func joinEveryone(_ f: Fixture) async throws {
         for (student, group) in [(f.ada, f.labA), (f.ben, f.labA), (f.alan, f.labB), (f.ari, f.labB)] {
-            try await join(f, group: group, userID: student)
+            try await f.join(student, to: group, on: app.db)
         }
     }
 
@@ -182,7 +146,7 @@ import VaporTesting
             #expect(await refusal(f, group: f.labA) == TournamentStartError.noSession.reason)
 
             // Only ada joined: one entrant is too few.
-            try await join(f, group: f.labA, userID: f.ada)
+            try await f.join(f.ada, to: f.labA, on: app.db)
             #expect(await refusal(f, group: f.labA) == TournamentStartError.tooFewEntrants(1).reason)
         }
     }
@@ -235,13 +199,17 @@ import VaporTesting
     }
 
     private func homeWins() -> TestOutcomeCollection {
-        let outcome = TestOutcome(
-            testName: "match", testClass: nil, tier: .pub, status: .pass, shortResult: "", longResult: nil,
-            score: 1, metric: 1, executionTimeMs: 1, memoryUsageBytes: nil, attemptNumber: 1,
-            isFirstPassSuccess: false)
+        let outcome = TestOutcome.stub(shortResult: "", score: 1, metric: 1)
         return TestOutcomeCollection(
             submissionID: "x", testSetupID: "t", attemptNumber: 1, buildStatus: .passed, compilerOutput: nil,
             outcomes: [outcome], totalTests: 1, passCount: 1, failCount: 0, errorCount: 0, timeoutCount: 0,
             executionTimeMs: 1, runnerVersion: "test", timestamp: Date())
     }
+}
+
+private extension PerGroupActivityFixture {
+    var ada: UUID { students[0] }
+    var ben: UUID { students[1] }
+    var alan: UUID { students[2] }
+    var ari: UUID { students[3] }
 }

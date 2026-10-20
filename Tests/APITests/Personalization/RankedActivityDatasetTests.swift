@@ -89,20 +89,17 @@ import Vapor
     private func fixture(
         on app: Application, code: String, activity: ActivityKind?, datasets: [DatasetSpec]
     ) async throws -> (assignment: APIAssignment, setup: APITestSetup) {
-        let courseID = try await makeTestCourse(on: app, code: code).requireID()
-        let tester = try await makeTestUser(on: app, username: "\(code.lowercased())_tester", role: "instructor")
-        try await makeTestEnrollment(on: app, userID: tester.requireID(), courseID: courseID)
         var props = TestProperties(testSuites: [TestSuiteEntry(tier: .pub, script: "test_a.sh")], language: .python)
         props.activity = activity.map { ClassActivity(kind: $0) }
         props.datasets = datasets
         let manifest = try #require(String(data: JSONEncoder().encode(props), encoding: .utf8))
         let setupID = "rk_\(code.lowercased())"
-        let setup = try await makeTestSetup(on: app, id: setupID, courseID: courseID, manifest: manifest)
+        let scenario = try await TestScenario.make(
+            on: app, code: code, setupID: setupID, manifest: manifest, title: "Ward race")
+        try await scenario.enroll("\(code.lowercased())_tester", role: "instructor", on: app)
         try await writeZipFixture(
             at: app.testSetupsDirectory + setupID + ".zip", entries: [("test_a.sh", "exit 0\n"), ("cases.csv", pool)])
-        let assignment = try await makeTestAssignment(
-            on: app, testSetupID: setupID, courseID: courseID, title: "Ward race")
-        return (assignment, setup)
+        return (scenario.assignment, scenario.setup)
     }
 
     private func reloaded(_ setup: APITestSetup, on app: Application) async throws -> APITestSetup {

@@ -6,7 +6,6 @@
 // is scripted or faked, so nothing here reaches the network.
 
 import ChickadeeTestSupport
-import CryptoExtras
 import Fluent
 import Foundation
 import NIOConcurrencyHelpers
@@ -18,9 +17,6 @@ import VaporTesting
 @Suite(.serialized, .timeLimit(.minutes(5))) final class GitHubAppGrantsPageTests {
     static let api = "https://api.github.com"
     static let installationID: Int64 = 55
-    static let privateKeyPEM: String = {
-        (try? _RSA.Signing.PrivateKey(keySize: .bits2048).pemRepresentation) ?? ""
-    }()
 
     let app: Application
     let directory: URL
@@ -29,10 +25,7 @@ import VaporTesting
 
     init() async throws {
         app = try await makeTestApp(prefix: "chickadee-github-grants")
-        directory = FileManager.default.temporaryDirectory
-            .appendingPathComponent("chickadee-github-grants-\(UUID().uuidString)")
-        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        app.githubAppSecretsFilePath = directory.appendingPathComponent(".github-app-secrets").path
+        directory = try GitHubTestApp.useSecretsDirectory(on: app, prefix: "chickadee-github-grants")
     }
 
     deinit {
@@ -42,14 +35,7 @@ import VaporTesting
     // MARK: - Fixtures
 
     private func registerApp() async throws {
-        try await APIGitHubApp(
-            conversion: GitHubManifestConversion(
-                id: 42, slug: "chickadee-courses", name: "Chickadee", clientID: "Iv1.client",
-                clientSecret: "client-secret", webhookSecret: nil, pem: Self.privateKeyPEM,
-                htmlURL: "https://github.com/apps/chickadee-courses", owner: nil)
-        ).save(on: app.db)
-        try GitHubAppSecrets(privateKeyPEM: Self.privateKeyPEM, clientSecret: "client-secret", webhookSecret: nil)
-            .write(path: app.githubAppSecretsFilePath)
+        try await GitHubTestApp.register(on: app)
     }
 
     /// A GitHub that grants `app` to the App and `installation` to the

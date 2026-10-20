@@ -101,16 +101,12 @@ extension InstructorDashboardRoutes {
     @Sendable
     func saveMCPGuidance(req: Request) async throws -> Response {
         let user = try req.auth.require(APIUser.self)
-        let courseState = try await req.resolveActiveCourse(for: user)
-        guard let courseUUID = courseState.activeCourseUUID,
-            let course = try await APICourse.find(courseUUID, on: req.db)
-        else {
-            return req.redirect(to: "/instructor/mcp?error=course")
-        }
         // A course-level setting → per-course instructor floor (admin bypass,
         // archived-course block), scoped to the active course itself.
-        try await requireCourseWriteAccess(
-            caller: user, courseID: courseUUID, atLeast: .instructor, db: req.db)
+        guard let course = try await req.activeCourseForWrite(user, atLeast: .instructor) else {
+            return req.redirect(to: "/instructor/mcp?error=course")
+        }
+        let courseUUID = try course.requireID()
 
         struct GuidanceForm: Content {
             let instructions: String?

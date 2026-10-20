@@ -10,6 +10,9 @@
 // shape, slightly different defaults.  Each one was ~10 LOC.  When the
 // underlying model gained a field, every copy needed to be updated.
 //
+// `TestScenario` at the end builds the course, setup and assignment that
+// most suites start from, and enrolls users in it.
+//
 // These are free functions (not methods on a test suite type) so they
 // work from both struct-based and class-based suites, and require no
 // inheritance.  Per-suite specializations can still be added at call
@@ -18,6 +21,7 @@
 
 import Fluent
 import Foundation
+import Testing
 import Vapor
 
 @testable import APIServer
@@ -200,4 +204,75 @@ func makeTestResult(
         json: collectionJSON ?? #"{"submissionID":"\#(submissionID)","outcomes":[]}"#,
         on: app.db)
     return result
+}
+
+// MARK: - Scenario
+
+/// A saved course with one test setup and its assignment: the rows that most
+/// suites build before their first request. Use it instead of a local
+/// `fixture()` that calls `makeTestCourse`, `makeTestSetup` and
+/// `makeTestAssignment` in turn.
+struct TestScenario {
+    let course: APICourse
+    let courseID: UUID
+    let setup: APITestSetup
+    let setupID: String
+    let assignment: APIAssignment
+    let assignmentID: UUID
+
+    /// Saves the course, the setup and the assignment, with the defaults of
+    /// `makeTestCourse`, `makeTestSetup` and `makeTestAssignment`.
+    static func make(
+        on app: Application,
+        code: String = "TEST101",
+        courseName: String? = nil,
+        mode: CourseEnrollmentMode = .open,
+        setupID: String,
+        manifest: String = minimalBrowserGradingModeManifest,
+        withNotebook: Bool = true,
+        withZip: Bool = true,
+        title: String = "Test Lab",
+        dueAt: Date? = nil,
+        isOpen: Bool = true
+    ) async throws -> TestScenario {
+        let course = try await makeTestCourse(on: app, code: code, name: courseName, mode: mode)
+        let courseID = try course.requireID()
+        let setup = try await makeTestSetup(
+            on: app, id: setupID, courseID: courseID, manifest: manifest, withNotebook: withNotebook,
+            withZip: withZip)
+        let assignment = try await makeTestAssignment(
+            on: app, testSetupID: setupID, courseID: courseID, title: title, dueAt: dueAt, isOpen: isOpen)
+        return TestScenario(
+            course: course, courseID: courseID, setup: setup, setupID: setupID, assignment: assignment,
+            assignmentID: try assignment.requireID())
+    }
+
+    /// The same, with the manifest encoded from `properties`.
+    static func make(
+        on app: Application,
+        code: String = "TEST101",
+        courseName: String? = nil,
+        mode: CourseEnrollmentMode = .open,
+        setupID: String,
+        properties: TestProperties,
+        withNotebook: Bool = true,
+        withZip: Bool = true,
+        title: String = "Test Lab",
+        dueAt: Date? = nil,
+        isOpen: Bool = true
+    ) async throws -> TestScenario {
+        let manifest = try #require(String(data: JSONEncoder().encode(properties), encoding: .utf8))
+        return try await make(
+            on: app, code: code, courseName: courseName, mode: mode, setupID: setupID, manifest: manifest,
+            withNotebook: withNotebook, withZip: withZip, title: title, dueAt: dueAt, isOpen: isOpen)
+    }
+
+    /// Saves a user with `role` and enrolls them in the course. Returns the
+    /// user ID.
+    @discardableResult
+    func enroll(_ username: String, role: String = "student", on app: Application) async throws -> UUID {
+        let id = try await makeTestUser(on: app, username: username, role: role).requireID()
+        try await makeTestEnrollment(on: app, userID: id, courseID: courseID)
+        return id
+    }
 }

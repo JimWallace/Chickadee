@@ -397,9 +397,14 @@ must not contain `chickadee-acme`.
 
 ### 5. Updating
 
-Use the deploy script from the repo root — it backs up the SQLite database when
-present, pulls the
-new image, restarts services, and confirms the health check passes:
+A production host with the `chickadee-deployer` daemon updates itself: a green
+merge to `main` reaches it with a blue-green deploy, and there is no manual
+step ([docs/zero-downtime-deploy.md](../docs/zero-downtime-deploy.md)).
+
+`scripts/server-deploy.sh` is the fallback for a host without the daemon. It
+backs up the SQLite database when present, pulls the new image, restarts the
+services, and confirms that the health check passes. Run it from the repository
+root:
 
 ```bash
 scripts/server-deploy.sh
@@ -421,7 +426,7 @@ server is healthy again. To customize the wording, edit
 > table). The migration runs automatically on startup. All existing users will be
 > logged out once when this version is first deployed.
 
-**Rollback** to a specific build (replace the SHA with one from the
+**Rollback** with the fallback script to a specific build (replace the SHA with one from the
 [GHCR package page](https://github.com/JimWallace/Chickadee/pkgs/container/chickadee)
 or the Actions run summary):
 

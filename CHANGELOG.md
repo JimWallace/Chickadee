@@ -9,6 +9,137 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.767] - 2026-10-20
+
+### Changed
+
+- **The worker extracts Python notebooks with RunnerCore (#2715).** The generic notebook path now writes `extractPython(...).executableModule`, the same module the browser runner writes through wasm. The extracted file now has `# --- cell N ---` labels, and a notebook with no code cells gives an empty file. A code cell whose first line starts with spaces now has its statements sorted the same way as in the browser. One helper now converts notebook cells for every extractor.
+
+
+## [0.5.766] - 2026-10-20
+
+### Changed
+
+- **Shared fixtures for the API tests (#2717, part 1).** The per-group activity suites use one `PerGroupActivityFixture` and one `joinSession`. Outcomes that a test does not inspect come from `TestOutcome.stub`. The GitHub suites share one App key through `GitHubTestApp`; a key that does not generate now fails at once with its own error. A new `TestScenario` builder in `Fixtures.swift` makes a course, a setup and an assignment, and the Groups and Personalization folders use it. No test changes what it asserts.
+
+
+## [0.5.765] - 2026-10-20
+
+### Changed
+
+- **One helper for each course access pattern on the server (#2720).** An instructor write to the active course starts with `requireActiveCourseForWrite`, and `evaluateCourseWrite` returns the course that it loads. `CourseRoster` is the one query for the students of a course and for one user's enrollment. `ActivityRequest.resolve` is the gate of the leaderboard, the class composite and the projector arena, and `AvatarIdentity` builds each student's handle and bird. Two student lists now count a row with an unknown role as a student, as every other student list does: the classmate chooser (`latestStudentSubmissionsByUser`) and the grades CSV when no course is active. The unused `manifestHasGeneratedScripts` is gone.
+
+
+## [0.5.764] - 2026-10-20
+
+### Changed
+
+- **Smaller root `CLAUDE.md` and a complete docs index (#2723).** The reference list moved to `docs/README.md`, which now names every document in `docs/`. Each repeated rule now has one copy, and the other places point to it. Eight finished docs, the CI flake history and the per-language kernel postmortems moved to `docs/archive/`. Four shipped feature docs lost their slice tables and build history, and `lab-groups` is now marked shipped.
+
+
+## [0.5.763] - 2026-10-20
+
+### Added
+
+- **The web Datasets tab records audit rows (#2724).** Each write that succeeds records one row: create, add version, details, dictionary, publish or unpublish, and delete. The six new actions are in the Courses category of `/admin/audit`. A row names the dataset and its course. It holds no part of the file.
+
+
+## [0.5.762] - 2026-10-20
+
+### Changed
+
+- **Two fail-open defaults are closed (#2714).** `PatternKind.callsFunction` is now the one exhaustive answer to "does this kind call `functionName`?". The pattern validator, the renderer and the notebook anchor read it, and the handler default of `true` is gone. `LanguageDescriptor.executableOutputProbe` now holds the compile-and-exec probe program. `capabilityRequiresExecutableOutput` derives from it, so a compiled language cannot need executable output and have no probe. Behaviour does not change for the seven languages that ship.
+
+
+## [0.5.761] - 2026-10-20
+
+### Security
+
+- **CI agent jobs are read-only.** Every CI workflow that runs a Claude agent now runs it through one composite action, `.github/actions/claude-agent`. The action gives the agent the job's own read-only token. Before, `claude-code-action` exchanged the OIDC token for a Claude GitHub App token with write access when the App was installed, so the model jobs could write although they declared read-only permissions. A separate job with no model posts every result, after `scripts/ci-agent-sanitize.sh` cleans it. Every agent has an explicit deny list. `ui-audit` no longer runs its model in a job with `issues: write`, and `ui-review` no longer posts its own comments. `scripts/check-agent-workflows.sh` in `format-lint` keeps these rules (#2711).
+
+### Changed
+
+- **One review workflow and one triage workflow.** `ui-review` and `interaction-review` call one reusable workflow, `agent-pr-review.yml`, so their check names now have a `ui-review /` or `interaction-review /` prefix. `nightly-failure-notes.yml` is now a part of `ci-triage.yml`. `ci-triage` does not comment on a failed visual-regression PR run, because `visual-diff-explainer` explains that failure (#2711).
+
+
+## [0.5.760] - 2026-10-20
+
+### Changed
+
+- **One shared grep-guard helper; no ratchets at zero (#2722).** The grep
+  guards use `code_matches` from `scripts/lib/grep-guard.sh`. The layering and
+  `alert()` rules are absolute, and the empty layering baseline is gone. The
+  `ui-guard` agent is gone: run `lint-guard` and `test-runner`. The three
+  Python hooks share `hook_common.py`. `deploy/README.md` names
+  `server-deploy.sh` as the fallback, not the update step.
+
+### Changed
+
+- **One reorder service, one set of rules (#2713).** The four web reorder routes
+  and the four MCP reorder tools now call `SortOrderRenumbering`. A TA can
+  reorder every kind: course sections, section items, assignments and content
+  items. Before, the web assignment reorder and the section reorder (web and
+  MCP) needed an instructor. Every reorder refuses a duplicate id, an unknown
+  item type and items of two course sections. The web section reorder must name
+  every section of the course, as MCP `reorder_course_sections` already did.
+  Each reorder runs in one transaction, so a failure part-way leaves the old
+  order.
+
+
+## [0.5.759] - 2026-10-20
+
+### Changed
+
+- **The browser probe jobs share their CI setup (#2718).** In `browser-probes.yml`, one `probe` matrix job replaces the `exec-probe`, `bridge`, `lifecycle` and `reset` jobs. The `changes` job gives the matrix as a JSON list. The legs keep their check names, for example `exec-probe (webkit)`. The probe budgets are now set for a downloaded server, not for a cold build: 30 min for the smoke, 20 min for each diagnostic probe and 45 min for the grading-hang probe. Before, they were 50, 50 and 75 min. A new `playwright-setup` action installs the npm project and the Playwright engine for `browser-probe-setup` and for `browser-grading-smoke.yml`. A new `gate` action holds the body of `editor-smoke-gate`, `r-grading-smoke-gate` and `swift-tests-gate`, with a list of the jobs that can be skipped. The gate job names do not change. `scripts/install-micromamba.sh` installs micromamba for `kernel-currency.yml` and `revendor-kernels.yml`.
+
+
+## [0.5.758] - 2026-10-19
+
+### Changed
+
+- **Fewer CI runners per pull request (#2719).** The mutation, deployer and handle-review self-tests now run in one `script-self-tests` job, and the Claude Code hook tests run in `guard-self-tests`. The four Swift test lanes share `scripts/ci-swift-test-lane.sh` for the build-skip branch and the skipped-test check. The Muter cache keys use the hash of `scripts/mutation-run.sh`, which holds the pin, so the keys no longer copy it. The JupyterLite job uses a shallow checkout.
+
+### Removed
+
+- **`mutation-baseline-probe.yml`.** Its question has an answer: privileged WorkerTests pass 20 of 20 in the mutation baseline. `repeat-test.yml` runs a test selection N times if the need returns.
+
+
+## [0.5.757] - 2026-10-19
+
+### Changed
+
+- **The release build cache now matches exactly.** The `build-release` job no longer restores an older `.build` by prefix and builds over it. That incremental build could link stale object files after a type changed kind, and the release binaries go to production. Each change to `Sources` now gets a cold release build of about 13 minutes. The `restore-git-mtimes` action and the full-history checkout in that job are removed, because nothing reads the source times now. (#2712)
+
+
+## [0.5.756] - 2026-10-19
+
+### Changed
+
+- **The notebook rewriters write sorted, deterministic JSON.**
+  `normalizeNotebookForJupyterLite`, `mergeNotebook`, `filterNotebook`,
+  `NotebookSubstitution.apply`, `PersonalizedCellRestoration` and the class
+  corpus now parse a notebook as `JSONValue` and write it with sorted keys
+  (`JSONValue.data(fromObject:)`). The same notebook now always gives the
+  same bytes, so a save with no edit keeps its version hash. The first save
+  of each stored notebook after this release writes its keys in a new order
+  one time, which adds one version entry per assignment. The parse and encode
+  together take about the same time as before. `NotebookCellSources` now
+  returns `[String: JSONValue]` cells, and its `[String: Any]` form is
+  removed. The validity gates stay on `JSONSerialization`. Some edge cases
+  differ in the rewritten bytes:
+  - A JSON number that a `Double` or an `Int` cannot hold exactly is rounded:
+    an integer beyond the 64-bit range becomes a double, a decimal with more
+    than about 17 significant digits is rounded, and `-0.0` becomes `0`.
+    Source cells are strings and are not affected; only numbers in output
+    data or metadata are.
+  - UTF-32 input with a byte-order mark is not read, so the rewriter leaves
+    it unchanged (and substitution refuses it).
+  - When a key appears twice, the first value wins.
+- **The submission diff reads more notebooks.** It reads cells with
+  `NotebookCellView`, so a notebook with invalid JSON in an output now shows
+  its diff, where the page said that it could not be parsed.
+
+
 ## [0.5.755] - 2026-10-19
 
 ### Changed

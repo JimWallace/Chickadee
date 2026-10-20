@@ -6,7 +6,7 @@ set -euo pipefail
 # Scope and rules live in eslint.config.mjs at the repo root: Public/*.js
 # (classic scripts + the two ES-module renderers) and the
 # Tests/BrowserRunnerJSTests node suite.  Vendored/generated trees
-# (Public/pyodide, Public/jupyterlite, Public/vendor) are never linted.
+# (Public/jupyterlite, Public/vendor, Public/runner-wasm) are never linted.
 #
 # Zero tolerance, matching scripts/swiftlint.sh: --max-warnings 0 means any
 # finding — error or warning, including an unused eslint-disable directive —

@@ -26,10 +26,7 @@ import VaporTesting
 
     init() async throws {
         app = try await makeTestApp(prefix: "chickadee-github-link")
-        directory = FileManager.default.temporaryDirectory
-            .appendingPathComponent("chickadee-github-link-\(UUID().uuidString)")
-        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        app.githubAppSecretsFilePath = directory.appendingPathComponent(".github-app-secrets").path
+        directory = try GitHubTestApp.useSecretsDirectory(on: app, prefix: "chickadee-github-link")
         app.middleware.use(SecurityHeadersMiddleware())
         app.securityConfiguration = AppSecurityConfiguration(
             publicBaseURL: URL(string: "https://courses.example.edu"), enforceHTTPS: false,
@@ -57,14 +54,7 @@ import VaporTesting
     }
 
     private func registerApp(on app: Application) async throws {
-        try await APIGitHubApp(
-            conversion: GitHubManifestConversion(
-                id: 42, slug: "chickadee-courses", name: "Chickadee", clientID: "Iv1.client",
-                clientSecret: "client-secret", webhookSecret: nil, pem: "pem",
-                htmlURL: "https://github.com/apps/chickadee-courses", owner: nil)
-        ).save(on: app.db)
-        try GitHubAppSecrets(privateKeyPEM: "pem", clientSecret: "client-secret", webhookSecret: nil)
-            .write(path: app.githubAppSecretsFilePath)
+        try await GitHubTestApp.register(on: app, pem: "pem")
     }
 
     private func login(_ username: String = "gh_student") async throws -> String {

@@ -20,32 +20,21 @@ public import Foundation
 
 public enum NotebookCellSources {
 
-    /// Parses notebook JSON bytes and returns the `cells` array as an
-    /// untyped sequence of dictionaries.  Returns `nil` if the input
-    /// isn't valid notebook-shaped JSON.
-    public static func cells(from notebookData: Data) -> [[String: Any]]? {
-        guard let obj = try? JSONSerialization.jsonObject(with: notebookData),
-            let nb = obj as? [String: Any],
-            let cells = nb["cells"] as? [[String: Any]]
-        else { return nil }
-        return cells
+    /// Parses notebook JSON bytes and returns the `cells` array. Returns `nil`
+    /// if the input is not valid JSON, is not an object, or its `cells` is not
+    /// an array of objects. Every value is decoded, so invalid JSON anywhere
+    /// gives nil.
+    public static func cells(from notebookData: Data) -> [[String: JSONValue]]? {
+        JSONValue.object(from: notebookData)?["cells"]?.arrayOfObjects
     }
 
     /// Reads a cell's `source` field, tolerating either form nbformat
     /// permits (a single string, or an array of strings to be joined).
-    /// Returns an empty string for missing / wrong-type fields.
+    /// Returns an empty string for missing / wrong-type fields, and for an
+    /// array with an element that is not a string.
     ///
-    /// The `[String: JSONValue]` overload below states the same rule. Keep the
-    /// two the same until this one has no caller.
-    public static func cellSource(_ cell: [String: Any]) -> String {
-        if let s = cell["source"] as? String { return s }
-        if let arr = cell["source"] as? [String] { return arr.joined() }
-        return ""
-    }
-
-    /// The same read over a cell parsed as `JSONValue`, with the same rule as
-    /// the `[String: Any]` overload above: an array form counts only when
-    /// every element is a string, the same as `as? [String]`.
+    /// `NotebookCellView.source` states the same rule for the read-only
+    /// walkers. Keep the two the same.
     public static func cellSource(_ cell: [String: JSONValue]) -> String {
         switch cell["source"] {
         case .string(let source):

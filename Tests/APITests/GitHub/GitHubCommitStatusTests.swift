@@ -9,7 +9,6 @@
 
 import ChickadeeTestSupport
 import Core
-import CryptoExtras
 import Fluent
 import Foundation
 import NIOConcurrencyHelpers
@@ -87,9 +86,6 @@ import VaporTesting
     static let manifest = """
         {"schemaVersion":1,"githubSubmission":true,"githubStatusChecks":true,"submissionMode":"uploadOnly"}
         """
-    static let privateKeyPEM: String = {
-        (try? _RSA.Signing.PrivateKey(keySize: .bits2048).pemRepresentation) ?? ""
-    }()
 
     let app: Application
     let directory: URL
@@ -97,10 +93,7 @@ import VaporTesting
 
     init() async throws {
         app = try await makeTestApp(prefix: "chickadee-github-status")
-        directory = FileManager.default.temporaryDirectory
-            .appendingPathComponent("chickadee-github-status-\(UUID().uuidString)")
-        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        app.githubAppSecretsFilePath = directory.appendingPathComponent(".github-app-secrets").path
+        directory = try GitHubTestApp.useSecretsDirectory(on: app, prefix: "chickadee-github-status")
         app.securityConfiguration = AppSecurityConfiguration(
             publicBaseURL: URL(string: "https://courses.example.edu"), enforceHTTPS: false,
             trustForwardedProto: true, sessionCookieSecure: false,
@@ -141,14 +134,7 @@ import VaporTesting
     ) async throws
         -> APISubmission
     {
-        try await APIGitHubApp(
-            conversion: GitHubManifestConversion(
-                id: 42, slug: "chickadee-courses", name: "Chickadee", clientID: "Iv1.client",
-                clientSecret: "secret", webhookSecret: nil, pem: Self.privateKeyPEM,
-                htmlURL: "https://github.com/apps/chickadee-courses", owner: nil)
-        ).save(on: app.db)
-        try GitHubAppSecrets(privateKeyPEM: Self.privateKeyPEM, clientSecret: "secret", webhookSecret: nil)
-            .write(path: app.githubAppSecretsFilePath)
+        try await GitHubTestApp.register(on: app, clientSecret: "secret")
         try await wrInsertSetup(id: "gh_setup", manifest: manifest, on: app)
         try await wrInsertAssignment(testSetupID: "gh_setup", title: "Lab 1", isOpen: true, on: app)
         _ = try await loginUser(username: "gh_student", password: "testpassword", role: "user", on: app)

@@ -77,7 +77,7 @@ visual-captures/
 # Muter run config, written per-machine for a mutation-testing run. It pins an
 # absolute path to the local swift binary, so it is never portable and must not
 # be committed. scripts/mutation-run.sh writes it per run and deletes it after;
-# see docs/handoff-mutation-testing.md for why the tool is a patched fork.
+# see docs/archive/handoff-mutation-testing.md for why the tool is a patched fork.
 muter.conf.yml
 
 # Muter run artifacts: per-mutant test logs (one file per mutant, MBs per run)

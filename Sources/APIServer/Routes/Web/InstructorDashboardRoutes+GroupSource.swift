@@ -90,12 +90,7 @@ extension InstructorDashboardRoutes {
 
     /// The active course, when the user may change its groups.
     private func requireWritableCourse(user: APIUser, on req: Request) async throws -> APICourse {
-        let courseID = try await req.requireActiveCourseID(for: user, action: "managing groups")
-        try await requireCourseWriteAccess(caller: user, courseID: courseID, atLeast: .instructor, db: req.db)
-        guard let course = try await APICourse.find(courseID, on: req.db) else {
-            throw AppError.notFound(resource: "Course")
-        }
-        return course
+        try await req.requireActiveCourseForWrite(user, atLeast: .instructor, action: "managing groups")
     }
 
     /// Reads the set from LEARN now, as the ten-minute sweep does. Returns

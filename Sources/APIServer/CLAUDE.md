@@ -73,7 +73,8 @@ Per-course roles on the enrollment row: `student` < `ta` < `instructor`
   course
 - **Per-course `instructor`:** everything a TA can do, plus enrollment/roster/
   staff management, assignment lifecycle (create/delete/open/close/deadlines),
-  course sections, archival, BrightSpace binding
+  course sections (but not their reorder: every reorder kind is TA+,
+  `SortOrderRenumbering.roleFloor`), archival, BrightSpace binding
 - **Admin:** admin panel, course creation, worker secret/autostart management,
   runner dashboard (admins bypass per-course role checks, but MCP agents
   acting for them stay enrollment-scoped)

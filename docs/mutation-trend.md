@@ -11,7 +11,7 @@ python3 Tools/mutation/trend.py
 
 Prerequisites and cost are not this document's subject — see
 [mutation-testing-pilot.md](mutation-testing-pilot.md) for what a sweep costs
-and [handoff-mutation-testing.md](handoff-mutation-testing.md) for why the tool
+and [handoff-mutation-testing.md](archive/handoff-mutation-testing.md) for why the tool
 is a patched fork.
 
 ---

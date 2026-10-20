@@ -4,7 +4,7 @@
 // multi-second main-thread freezes the freeze watchdog reports as
 // `page_unresponsive` (Aug 2026, HLTH 230; reproduced and profiled by
 // Tools/editor-smoke-test/freeze-trace-check.mjs; full writeup in
-// docs/browser-freeze-investigation.md). Two upstream listeners run once per
+// docs/archive/browser-freeze-investigation.md). Two upstream listeners run once per
 // IOPub output message and each forces a synchronous style+layout flush of a
 // document whose layout the just-inserted output invalidated:
 //

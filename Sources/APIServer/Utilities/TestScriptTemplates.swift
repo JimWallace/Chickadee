@@ -203,7 +203,7 @@ func shellTestScript(type: ShellTestTemplateType, language: AssignmentLanguage?)
 /// Four shapes, and no language is named to pick one. The three language
 /// shapes are chosen by two descriptor facts: `gradingCompilesBeforeRunning`
 /// says whether a build step comes first at all, and
-/// `capabilityRequiresExecutableOutput` says whether that build produced a
+/// `executableOutputProbe` says whether that build produced a
 /// binary to exec (C++) or artefacts a runtime loads (Java). The scaffold used
 /// to ask only the second, which put Java in the interpreted branch as
 /// `java solution.java` — single-file source mode, which breaks the moment a
@@ -245,7 +245,7 @@ private func runSubmissionShellFragment(
         return #"ACTUAL=$(\#(descriptor.scriptRunCommand) \#(solutionFile) 2>&1)"#
     }
     let compiler = descriptor.interpreterProbe.command
-    if descriptor.capabilityRequiresExecutableOutput {
+    if descriptor.executableOutputProbe != nil {
         // Compile to a binary, then exec it. `-O0`, matching what the generated
         // cases compile with (only `performanceThreshold` asks for `-O2`): a
         // stdout comparison gains nothing from optimisation, and the compile

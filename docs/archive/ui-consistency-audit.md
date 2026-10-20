@@ -7,7 +7,7 @@
 An audit of the web UI one level above the design tokens: interactive
 widgets, page skeletons, and the JavaScript behaviours behind them. The
 token layer (colour / type / radius / spacing) is already guarded by
-`scripts/check-styles.sh` and documented in [ui-design.md](ui-design.md);
+`scripts/check-styles.sh` and documented in [ui-design.md](../ui-design.md);
 this audit found that the drift now lives in the layer those guards cannot
 see — the *same interaction* implemented two to six different ways on
 different pages.

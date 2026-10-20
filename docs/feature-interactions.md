@@ -343,6 +343,38 @@ because line numbers go out of date.
   made family dependencies "sticky", with references to deleted files that no
   edit could remove.
 
+### Does a pattern kind call a function: `PatternKind.callsFunction`
+
+- **Writer:** only the exhaustive switch in
+  `Sources/Core/Models/PatternFamily.swift`. It has no `default:` arm (#2714).
+- **Readers:**
+  - The identifier check on `functionName` and the reserved existence-guard
+    case key (`PatternFamilyValidator`).
+  - The existence guard and the generated filename list
+    (`PatternFamilyRenderer`).
+  - The notebook anchor (`NotebookTestAnchoring.familyTarget`).
+- **Rule:** the validator, the existence guard and the anchor must agree on
+  which kinds call a function. All three read this one value.
+  `PatternKindCallsFunctionTests` pins the answer for each kind.
+- **Parallel path:** `Public/pattern-family-editor.js` names
+  `variable_equality` and `program_io` for its case and stdin columns. It does
+  not read `callsFunction`. A new kind that calls no function must also go
+  there.
+
+### Compiled output that grading execs: `LanguageDescriptor.executableOutputProbe`
+
+- **Writer:** the language literals in `Sources/Core/LanguageDescriptor.swift`.
+  Only C++ sets a probe.
+- **Readers:**
+  - `capabilityRequiresExecutableOutput`, which is derived from it.
+  - The runner exec probe (`Sources/Worker/RunnerProfileDetector.swift`). A
+    runner that cannot compile and run the probe does not advertise the
+    language.
+  - The compiled-solution shape in `Utilities/TestScriptTemplates.swift`.
+- **Rule:** a language that needs executable output always has a probe
+  program, so the runner never advertises an unchecked capability
+  (`ExecutableOutputProbeTests`, #2714).
+
 ### The declared language and `languagesRequiredToGrade`
 
 - **Writers:**
@@ -388,10 +420,22 @@ because line numbers go out of date.
     scans, `SolutionNotebookExtractor` and the notebook guide's starter
     sources. The guide indexes the cells by the indices that the definition
     scan computes, so both must read the same cell list.
+  - The notebook rewriters (`normalizeNotebookForJupyterLite`,
+    `mergeNotebook`, `filterNotebook`, `NotebookSubstitution.apply`,
+    `PersonalizedCellRestoration`, the class corpus) parse with
+    `JSONValue.object(from:)` and write with `JSONValue.data(fromObject:)`,
+    which sorts keys. The saves store their output, and assignment
+    versioning hashes it, so it must stay deterministic: a rewriter must not
+    encode any other way. The read-time uses (`filterNotebook` and
+    `normalizeNotebookForJupyterLite` on page open, `NotebookSubstitution`
+    for working copies) are not hashed.
+  - `sameNotebookContent` compares decoded `JSONValue` objects, so key order
+    does not count, but an `Int` and a `Double` of the same value do: `1` and
+    `1.0` compare unequal, and that means one refresh of a staff copy.
   - The server's validity gates (`notebookCellCount` on the notebook save,
     the starter and solution checks in `PublishedAssignmentRoutes+SaveEdit`
-    and `TestSetupRoutes`) and the notebook rewriters still use
-    `JSONSerialization`.
+    and `TestSetupRoutes`) use `JSONSerialization`, on purpose: they keep
+    nothing from the parse.
 - **Rules:**
   - `NotebookHeader` and `NotebookCellView` are reads, not validity checks.
     They do not check the parts that they skip. A validity gate decodes
@@ -403,16 +447,15 @@ because line numbers go out of date.
     `languageFromKernelNames`, the one sniff.
 - **Parallel paths:**
   - Two parsers. `JSONDecoder` (`NotebookHeader`, `NotebookCellView`,
-    `JSONValue.object(from:)`) and `JSONSerialization` differ on UTF-32 input with a byte-order mark and
-    on duplicate keys (the first value wins in `JSONDecoder`, the last in
-    `JSONSerialization`). So the server can accept a notebook that the worker
-    reads differently. `NotebookHeaderTests`, `NotebookCellViewTests` and
-    `JSONValueAccessorsTests` pin the differences. The server sites move to `JSONValue` in later steps.
-  - Three readers of a cell's source: the two `NotebookCellSources.cellSource`
-    overloads, over `[String: Any]` and over `[String: JSONValue]`, and
-    `NotebookCellView.source`. An array source counts only when every element
-    is a string. A change to one must go to the others until only one is
-    left.
+    `JSONValue.object(from:)`) and `JSONSerialization` differ on UTF-32
+    input with a byte-order mark and on duplicate keys (the first value wins
+    in `JSONDecoder`, the last in `JSONSerialization`). So a server validity
+    gate can accept a notebook that the rest of the code reads differently. `NotebookHeaderTests`, `NotebookCellViewTests` and
+    `JSONValueAccessorsTests` pin the differences.
+  - Two readers of a cell's source: `NotebookCellSources.cellSource` (over
+    `[String: JSONValue]`) and `NotebookCellView.source`. An array source
+    counts only when every element is a string. A change to one must go to
+    the other.
 
 ### Grading and submission mode: `effectiveGradingMode`, `effectiveSubmissionMode`
 
@@ -530,6 +573,12 @@ because line numbers go out of date.
   - Publishing a dataset controls only the Data page and the links to it. A
     download for an assignment follows the gate of that assignment
     (`isAssignmentEffectivelyOpen` or `studentMayViewClosedAssignment`).
+  - A web Datasets tab write records a `dataset.*` audit row with `courseID`,
+    so it shows in the course activity view (`CourseTimelineService`). That
+    view reads the target from the `assignment`, `title` or
+    `subject_user_id` metadata key, so `AuditLogger.recordDatasetWrite` sets
+    `title` to the dataset name. A new course-scoped audit action must set one
+    of those keys, or its row shows a bare UUID.
 
 ### The result: `TestOutcomeCollection` counts and the grade
 
@@ -779,8 +828,17 @@ because line numbers go out of date.
   - The MCP `ToolContext` checks.
   - `ActiveCourseStaffMiddleware`.
   - `AvatarStore.courseStaff`.
+  - `courseRole` reads the row through `CourseRoster.enrollment(of:in:on:)`.
+    A new read of one user's row uses it too.
 - **Rules:**
   - Every call site states its minimum role. Nothing has a default.
+  - The students of a course are `CourseRoster.studentIDs` (and
+    `studentIDsByCourse`). The rule is `CourseRoster.isStudent`: a
+    `student` row, a NULL row and a row with an unknown role are students.
+    Do not filter `roleRaw` in a query to find students (#2720).
+  - An instructor write to the active course starts with
+    `requireActiveCourseForWrite` or `activeCourseForWrite`. Both run
+    `evaluateCourseWrite`, which returns the course it loads.
   - A TA authors content and grades. An instructor manages the course.
   - An admin bypasses the role check. But an admin's MCP agent can reach only
     the courses that the MCP account is enrolled in (#1942;
@@ -900,7 +958,8 @@ because line numbers go out of date.
 
 - **Writers:** `AvatarStore.ensureHandle` and `redrawHandle`.
 - **Readers:**
-  - The leaderboard.
+  - The leaderboard, through `AvatarIdentity`: the ranking rows, the
+    hill's champion and the viewer's card.
   - The composite board and its snapshot.
   - The account page and the staff student lists.
   - The data export.
@@ -924,7 +983,12 @@ because line numbers go out of date.
 - **No guard:** no generic check finds a new page that shows student data to
   classmates. `RouteAuthorizationMatrixTests` does not cover routes outside
   `/instructor` and `/courses`. So:
-  - Use `isCourseStaff` and the `AvatarStore` handles.
+  - Use `isCourseStaff` and the `AvatarStore` handles. An activity page
+    starts with `ActivityRequest.resolve` and names students through
+    `AvatarIdentity`. Two activity routes do not start there: the
+    group-session routes authorize the caller first (`requireGroupSession`),
+    and the composite spare is for students only
+    (`requireOpenStudentAssignment`).
   - Add a test that asserts that a classmate's username is not on the page,
     as `LeaderboardPageTests` does.
 - **Trap:** a new aggregation set the metric board flag by accident (#1745).
@@ -944,6 +1008,35 @@ because line numbers go out of date.
   - The auto-enroll set.
 - **Rule:** an archived course is read-only. It stays readable, through MCP
   too (`MCPArchivedWriteBlockTests`).
+
+### Display order: `sort_order`
+
+- **Objects:** `APICourseSection.sortOrder` (one sequence for each course),
+  and `APIAssignment.sortOrder` with `APICourseContentItem.sortOrder` (one
+  shared sequence for each course section, so a reading can sit between two
+  labs).
+- **Writers:**
+  - Every reorder, through `Services/SortOrderRenumbering.swift` (#2713): the
+    four web routes (`/instructor/sections/reorder`,
+    `/instructor/section-items/reorder`, `/instructor/reorder`,
+    `/instructor/content-items/reorder`) and the four MCP tools
+    (`reorder_course_sections`, `reorder_section_items`,
+    `reorder_assignments`, `reorder_content_items`).
+  - A move into a section and a new item append after the last item
+    (`nextSectionItemSortOrder` in `Services/SectionPlacement.swift`).
+  - Course clone and bundle import copy it.
+- **Readers:** the display comparators in
+  `Routes/Web/AssignmentListDisplayHelpers.swift` (the instructor list, the
+  student dashboard, the grades CSV) and the MCP list tools.
+- **Rules:**
+  - The role floor is `.ta` for every reorder kind, web and MCP
+    (`SortOrderRenumbering.roleFloor`).
+  - A reorder refuses a duplicate id, an unknown type and an id outside the
+    course. A section reorder names every section of the course. A
+    section-item reorder names items of one section.
+  - One reorder is one transaction.
+- **Parallel path:** none now. Do not write `sortOrder` in a new reorder
+  route or tool; call the service.
 
 ### Browser isolation and the CSP
 
@@ -974,6 +1067,7 @@ not repeat them. But a change that makes one of them weaker is a finding.
 | The native and browser graders interpret output differently | `OutputContractTests`, `output-contract.test.mjs` |
 | A new user column with no foreign key | `UserReferenceScanTests` |
 | Rows that course deletion does not remove | `DeleteCourseCoverageTests` |
+| A reorder with its own role floor or rules | `SortOrderRenumberingTests`, `ReorderSurfaceRulesTests` |
 | A notebook worker that is not in the isolation list | `IsolatedWorkerScriptDriftTests` |
 
 ---

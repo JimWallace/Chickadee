@@ -25,61 +25,21 @@ import VaporTesting
         self.app = try await makeTestApp(prefix: "chickadee-leaderboard-groups")
     }
 
-    private struct Fixture {
-        let courseID: UUID
-        let assignmentID: UUID
-        let labA: UUID
-        let labB: UUID
-        let ada: UUID
-        let alan: UUID
-        let grace: UUID
-    }
+    private typealias Fixture = PerGroupActivityFixture
 
     private let setupID = "lbg_setup"
 
     /// A per-group best-metric activity with Lab 101 (ada) and Lab 102 (alan);
     /// grace is in no group.
     private func fixture(on app: Application) async throws -> Fixture {
-        let course = try await makeTestCourse(on: app, code: "LBG1", mode: .closed)
-        let courseID = try course.requireID()
-        let set = try await CourseGroupStore.createSet(courseID: courseID, name: "Lab sections", on: app.db)
-        let labA = try await CourseGroupStore.addGroup(named: "Lab 101", to: set, on: app.db).requireID()
-        let labB = try await CourseGroupStore.addGroup(named: "Lab 102", to: set, on: app.db).requireID()
-        let props = TestProperties(
-            testSuites: [TestSuiteEntry(tier: .pub, script: "match.sh")], language: nil,
-            activity: ClassActivity(kind: .bestMetric, leaderboardVisibility: .visible, runsPerGroup: true))
-        let manifest = try #require(String(data: JSONEncoder().encode(props), encoding: .utf8))
-        try await makeTestSetup(on: app, id: setupID, courseID: courseID, manifest: manifest)
-        let assignment = try await makeTestAssignment(on: app, testSetupID: setupID, courseID: courseID)
-        var students: [UUID] = []
-        for name in ["lbg_ada", "lbg_alan", "lbg_grace"] {
-            let id = try await makeTestStudent(on: app, username: name).requireID()
-            try await makeTestEnrollment(on: app, userID: id, courseID: courseID)
-            students.append(id)
-        }
-        try await CourseGroupStore.setMembership(userID: students[0], groupID: labA, in: set, on: app.db)
-        try await CourseGroupStore.setMembership(userID: students[1], groupID: labB, in: set, on: app.db)
-        return Fixture(
-            courseID: courseID, assignmentID: try assignment.requireID(), labA: labA, labB: labB,
-            ada: students[0], alan: students[1], grace: students[2])
+        try await .make(
+            on: app, code: "LBG1", setupID: setupID,
+            activity: ClassActivity(kind: .bestMetric, leaderboardVisibility: .visible, runsPerGroup: true),
+            students: [("lbg_ada", .a), ("lbg_alan", .b), ("lbg_grace", nil)])
     }
 
     private func outcome(metric: Double) -> TestOutcome {
-        TestOutcome(
-            testName: "match", testClass: nil, tier: .pub, status: .pass, shortResult: "passed", longResult: nil,
-            metric: metric, executionTimeMs: 1, memoryUsageBytes: nil, attemptNumber: 1, isFirstPassSuccess: false)
-    }
-
-    /// Opens the group's session a minute ago and joins `userID` to it.
-    @discardableResult
-    private func joinSession(_ f: Fixture, group: UUID, userID: UUID) async throws -> APIActivitySession {
-        let session = try await ActivitySessionStore.open(
-            assignmentID: f.assignmentID, groupID: group, by: nil, now: Date().addingTimeInterval(-60), on: app.db)
-        let joinedAt = Date().addingTimeInterval(-30)
-        try await ActivitySessionStore.join(
-            code: ActivitySessionCode.code(secret: session.codeSecret, at: joinedAt), userID: userID,
-            now: joinedAt, on: app.db)
-        return session
+        .stub(metric: metric)
     }
 
     /// Moves `userID` to `group`, as a TA does on the Groups tab: a member
@@ -111,9 +71,9 @@ import VaporTesting
     @Test func aRankedRowCarriesTheGroupOfTheSessionTheStudentJoined() async throws {
         try await withApp(app) { _ in
             let f = try await fixture(on: app)
-            try await joinSession(f, group: f.labA, userID: f.ada)
+            try await f.join(f.ada, to: f.labA, on: app.db)
             // grace is in no group and joins Lab 102's session by code.
-            try await joinSession(f, group: f.labB, userID: f.grace)
+            try await f.join(f.grace, to: f.labB, on: app.db)
             try await submit(f.ada, id: "lbg_s1", metric: 5)
             try await submit(f.grace, id: "lbg_s2", metric: 7)
             #expect(try await entry(f.ada, in: f.labA)?.metric == 5)
@@ -131,7 +91,7 @@ import VaporTesting
             #expect(try await entry(f.alan, in: f.labB) == nil, "membership alone does not rank")
 
             // ada joined, and the session closed before ada submitted.
-            let session = try await joinSession(f, group: f.labA, userID: f.ada)
+            let session = try await f.join(f.ada, to: f.labA, on: app.db)
             try await ActivitySessionStore.close(session, now: Date().addingTimeInterval(-1), on: app.db)
             try await submit(f.ada, id: "lbg_s4", metric: 9)
             #expect(try await entry(f.ada, in: f.labA) == nil, "the board froze when the session closed")
@@ -145,10 +105,10 @@ import VaporTesting
             try await APILeaderboardEntry(
                 testSetupID: setupID, userID: f.ada, submissionID: "lbg_old", metric: 50, reachedAt: Date()
             ).save(on: app.db)
-            try await joinSession(f, group: f.labA, userID: f.ada)
+            try await f.join(f.ada, to: f.labA, on: app.db)
             try await submit(f.ada, id: "lbg_s7", metric: 5)
             try await move(f.ada, to: f.labB)
-            try await joinSession(f, group: f.labB, userID: f.ada)
+            try await f.join(f.ada, to: f.labB, on: app.db)
             try await submit(f.ada, id: "lbg_s8", metric: 3)
             #expect(try await entry(f.ada, in: f.labA)?.metric == 5, "the older, higher row does not block it")
             #expect(try await entry(f.ada, in: f.labB)?.metric == 3, "a second lab is a second board")
@@ -158,7 +118,7 @@ import VaporTesting
     @Test func aJoinAfterTheSubmissionDoesNotMoveIt() async throws {
         try await withApp(app) { _ in
             let f = try await fixture(on: app)
-            try await joinSession(f, group: f.labA, userID: f.ada)
+            try await f.join(f.ada, to: f.labA, on: app.db)
             _ = try await makeTestSubmission(on: app, id: "lbg_s9", setupID: setupID, userID: f.ada)
             try await move(f.ada, to: f.labB)
             // ada joins Lab 102 after submitting, before the result is graded.
@@ -180,7 +140,7 @@ import VaporTesting
     @Test func reEnteringTheSameCodeDuringGradingKeepsThePlace() async throws {
         try await withApp(app) { _ in
             let f = try await fixture(on: app)
-            let labA = try await joinSession(f, group: f.labA, userID: f.ada)
+            let labA = try await f.join(f.ada, to: f.labA, on: app.db)
             _ = try await makeTestSubmission(on: app, id: "lbg_s10", setupID: setupID, userID: f.ada)
             // ada types Lab 101's code again before the result is graded.
             let later = Date().addingTimeInterval(5)
@@ -199,8 +159,8 @@ import VaporTesting
     @Test func eachGroupReadsItsOwnBoard() async throws {
         try await withApp(app) { app in
             let f = try await fixture(on: app)
-            try await joinSession(f, group: f.labA, userID: f.ada)
-            try await joinSession(f, group: f.labB, userID: f.alan)
+            try await f.join(f.ada, to: f.labA, on: app.db)
+            try await f.join(f.alan, to: f.labB, on: app.db)
             try await submit(f.ada, id: "lbg_s5", metric: 5)
             try await submit(f.alan, id: "lbg_s6", metric: 7)
 
@@ -249,4 +209,10 @@ import VaporTesting
             #expect(error?.reason == ActivityAuthoring.runsPerGroupKindMessage)
         }
     }
+}
+
+private extension PerGroupActivityFixture {
+    var ada: UUID { students[0] }
+    var alan: UUID { students[1] }
+    var grace: UUID { students[2] }
 }

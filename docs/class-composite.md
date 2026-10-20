@@ -2,7 +2,7 @@
 
 Design note for a class activity in which each student renders one part of a
 shared image, and the class watches the full image form on the projector while
-the submissions arrive. Slices 1 to 6 are built. See **Status**.
+the submissions arrive. Every part of it is built. See **Status**.
 
 The idea came from a sequence of computer-graphics and medical-imaging labs:
 a framebuffer, the painter's algorithm, the z-buffer, ray casting, and CT
@@ -13,20 +13,23 @@ of all parts together.
 
 ## Status
 
-| slice | what | state |
-|---|---|---|
-| 0 | This design note | shipped |
-| 1 | Output contract: the `composite` footer field in `RunnerCore` | shipped |
-| 2 | The `classComposite` kind, the `composite` block, the layout lock, authoring with the roster ratio, and `set_activity` | shipped |
-| 3 | Slot dealing, and the slot as a per-student input | shipped |
-| 4 | Ingest: the `composite_contributions` table and the coverage row | shipped |
-| 5 | The composite view on the leaderboard page, with all four compositors | shipped |
-| 6a | Reference renders and `emptySlots: reference` | shipped |
-| 6b | Spare slots | shipped |
-| groups | One image per lab group (`docs/lab-groups.md`, slices 4a to 4c) | shipped |
+Every part of the class composite is shipped. This includes the output
+contract, slot dealing, ingest, the composite view with all four compositors,
+reference renders and spare slots. A composite can also run as one image per
+lab group (`docs/lab-groups.md`).
 
-Slice 5 is the first slice that a class can use. Slices 1 to 4 only supply data
-to it. Run one session with TAs after slice 5, before slice 6.
+Code comments cite the build slices by number. This table maps each slice to
+the section that describes it now.
+
+| Slice | What it built | Section |
+|---|---|---|
+| 1 | The `composite` footer field | Data flow, "1. The contribution" |
+| 2 | The `classComposite` kind, the `composite` block, the layout lock, `set_activity` | The manifest; Compatibility rules |
+| 3 | Slot dealing, the slot as a per-student input | Data flow, "2. The slot" |
+| 4 | `composite_contributions` and the coverage row | Data flow, "3. Ingest" |
+| 5 | The composite view and the four compositors | Data flow, "4. The composite view" |
+| 6, 6a | Reference renders, `emptySlots: reference` | Source data, "How the reference render is made" |
+| 6b | Spare slots | Source data, "Spare slots" |
 
 ## The name
 
@@ -89,7 +92,7 @@ submission.
    window, achievements and freeze, and all of these hang off an assignment.
 2. **The contribution travels in the JSON footer.** It is next to `score` and
    `metric`, so it uses the path that both grading substrates already use. An
-   output file was rejected: it needs a new channel on every substrate.
+   output file is not used: it would need a new channel on every substrate.
 3. **The contribution is raw pixels, not PNG.** `RunnerCore` is
    Embedded-Swift-compatible and must not decode images. The server checks
    only the length and the size cap. The browser draws raw pixels into an
@@ -119,11 +122,11 @@ submission.
    free, though: the normal page selects its body with one flag for each
    aggregation, and present mode (`WebRoutes+LeaderboardPresent.swift`, its own
    `leaderboard-present` template) dispatches with an exhaustive `switch` on
-   the aggregation. Slice 5 adds a `composite` case in both places.
+   the aggregation. Both places have a `composite` case.
 
 ## Data flow
 
-### 1. The contribution (slice 1)
+### 1. The contribution
 
 The test script writes the contribution in its footer:
 
@@ -150,11 +153,10 @@ keys, which are also the keys of the `Codable` form that the server decodes.
 
 `Tests/Fixtures/output-contract.json` has rows for a valid contribution, a
 failed test with a contribution, and four invalid shapes. CI asserts them
-against the native build and the vendored wasm, which slice 1 re-vendored. The
-server still validates every payload at ingest (slice 4), because a
-browser-posted outcome is not trusted.
+against the native build and the vendored wasm. The server still validates
+every payload at ingest, because a browser-posted outcome is not trusted.
 
-**The stored result keeps the contribution (slice 4).** Truncation in
+**The stored result keeps the contribution.** Truncation in
 `TestOutcomeCollection` cuts only `longResult` and copies `composite` unchanged.
 A contribution is at most about 87 KB of base64, well inside the 6 MB result
 budget, so the result keeps it. The composite view reads the
@@ -164,7 +166,7 @@ The contribution is attached to the test outcome, so a script can grade the
 correctness of the contribution in the same run. The exit code and `score` are
 the grade. The composite is a display. It never changes a grade.
 
-### 2. The slot (slice 3)
+### 2. The slot
 
 **Dealing.** When a student first opens the notebook page or the upload page
 while the assignment is open and inside its window, the server deals a slot and
@@ -230,10 +232,10 @@ equals the slot count holds the rows of their own tile
 **The MCP lock reads the owner pool.** The least-privilege MCP database role
 cannot read `composite_slots` (it maps students to slots), and it reads
 `submissions` filtered to validation runs. So `set_activity` answers both lock
-questions on `ToolContext.mainDB`. This also corrects the existing kind lock,
-which on the MCP pool saw no student submissions.
+questions on `ToolContext.mainDB`. So the kind lock also sees student
+submissions.
 
-### 3. Ingest (slice 4)
+### 3. Ingest
 
 `CompositeContributions.record` (`Sources/APIServer/Services/`) runs in
 `ResultIngestEffects.apply`, which both ingest paths (the worker report and the
@@ -269,7 +271,7 @@ on delete. `deleteCourse` also deletes the slots and the contributions of the
 course explicitly, as it does the coverage rows. The least-privilege MCP role
 cannot read `composite_contributions`.
 
-### 4. The composite view (slice 5)
+### 4. The composite view
 
 The leaderboard page shows the composite stage when the aggregation is
 `composite` (`CompositeStage`). The image data comes from a JSON endpoint, so
@@ -350,7 +352,9 @@ toggle for it.
 `Public/class-composite-core.js`, with no inline script (#1516). The JS draws
 pixels into the `<canvas>` and toggles classes for the slot states. It makes no
 other styling decision. The `composite-*` classes are in the component
-vocabulary in `docs/ui-design.md`.
+vocabulary in `docs/ui-design.md`. The visual-regression pages
+`composite-leaderboard` and `composite-tile` show the composite view and the
+student's own-contribution panel.
 
 ## Source data and slot count
 
@@ -364,9 +368,9 @@ students and the grader work on is one of these, and both already exist:
   datasets already carry this. The student's notebook reads the file, and the
   test script reads the same file.
 - **The reference solution.** The complete target image is the output of the
-  reference solution for every slot. A staff action, "Prepare reference"
-  (slice 6), runs it once before the session and stores one reference render
-  for each slot.
+  reference solution for every slot. A staff action, "Prepare reference",
+  runs it once before the session and stores one reference render for each
+  slot.
 
 **Empty slots: blank or reference.** One display setting, `emptySlots`, decides
 what the projector shows in a slot that has no passing contribution:
@@ -387,13 +391,13 @@ projection angle, and an empty angle is not a hole: it makes the
 reconstruction blurrier, which is the lesson. Filling it with the reference
 angle would hide that lesson.
 
-**How the reference render is made (slice 6a).** The "Prepare reference"
+**How the reference render is made.** The "Prepare reference"
 button is in the composite settings on the edit page. It needs a reference
 solution, and only an instructor can press it. For each slot, it makes one
 `compositeReference` submission of the solution, owned by no student, and one
 row in `composite_references` that names the slot. The worker gives the job
 that slot's inputs, as it does for a student. The job waits behind every job
-that a person waits on, with the class corpus run. When the result arrives,
+that a person waits on, with the claim-order rule of the class corpus run. When the result arrives,
 the row stores the pixels and whether the run passed. A payload with the
 wrong shape clears the row. A second press deletes the earlier rows, and the
 earlier jobs that no runner holds, and starts again. A job that a runner holds
@@ -414,7 +418,8 @@ render is a visible answer. A render whose length is not the shape of the
 spec is not shown, so a render made before a shape change disappears until
 the instructor prepares it again.
 
-**Spare slots (slice 6b).** A student whose own tile passed can fill a hole.
+**Spare slots.** A spare slot is a second slot that a student who finished
+can ask for. A student whose own tile passed can fill a hole.
 The result page shows a "Fill a hole" button while the session is open, none
 of the student's spares is grading, and a hole is left. A hole is a slot with
 no passing contribution and no spare that passed or is grading. A slot that no
@@ -426,11 +431,11 @@ a hole for the others.
 
 On a composite that runs once per lab group, a student fills holes in the
 image of their own lab, and only while they play in that lab's open session
-(`docs/lab-groups.md`, slice 4b). The spare's row is in
+(`docs/lab-groups.md`). The spare's row is in
 `group_composite_spares`, and a passing one covers its slot in the lab's
-coverage (slice 5b).
+coverage.
 
-The button grades the student's passing submission again with the inputs of
+The button grades the student's latest passing submission again with the inputs of
 the first hole. The job is a `compositeSpare` submission, owned by no student,
 so no listing, grade or attempt count sees it. Its row in `composite_spares`
 names the student, and a user delete removes the job and its copy of the code.
@@ -468,7 +473,7 @@ checks that size.
 
 `compositor`, `layout`, `contribution` and `dealOrder` lock together
 (`CompositeSpec.hasSameStructure`). The compositor is in the set because a
-change between a grid and a count moves every slot. This is a new check in
+change between a grid and a count moves every slot. This is a separate check in
 `ActivityAuthoring`, with its own refusal message
 (`compositeLayoutLockedMessage`). The kind lock does not cover it: that check
 compares only the kind, and its message says that the kind is locked. The edit
@@ -539,81 +544,36 @@ range, or when the total payload for all slots is more than 4 MB.
 
 | Seam | Rule |
 |---|---|
-| Suite rebuilds | `makeWorkerManifestJSON(preserving:)` already keeps the `activity` block. `AssignmentHelpersManifestTests` gains a composite round trip. |
-| Layout lock | `compositor`, `layout`, `contribution` and `dealOrder` lock at the first deal or the first student submission, whichever comes first (`compositeStructureLocked`). This is a new check with its own message, separate from the kind lock. `frameRate`, `showFailed` and `emptySlots` are display settings and stay editable. |
+| Suite rebuilds | `makeWorkerManifestJSON(preserving:)` already keeps the `activity` block. `AssignmentHelpersManifestTests` has a composite round trip. |
+| Layout lock | `compositor`, `layout`, `contribution` and `dealOrder` lock at the first deal or the first student submission, whichever comes first (`compositeStructureLocked`). This is a separate check with its own message, separate from the kind lock. `frameRate`, `showFailed` and `emptySlots` are display settings and stay editable. |
 | Surgical edits | A `withComposite` rebuild, like `withWindow`, so no edit drops another field. |
-| Old runners | An old `RunnerCore` drops the unknown footer field, so the contribution is lost with no error. A new capability token, `activity-composite`, keeps a composite job away from a runner that does not advertise it. The browser wasm ships with the server, so it is always current. |
+| Old runners | An old `RunnerCore` drops the unknown footer field, so the contribution is lost with no error. The capability token, `activity-composite`, keeps a composite job away from a runner that does not advertise it. The browser wasm ships with the server, so it is always current. |
 | Browser grading | Permitted. A composite stages no opponent. |
 | Output contract | `output-contract.json` only gains rows. |
 | Setup cache | The key hashes the manifest. Assignments without a composite keep their key. |
 | Versioning and bundles | The block travels in the manifest, as the other activity fields do. |
-| MCP | `set_activity` accepts the kind and the block. Every kind list derives from `ActivityKind.allCases`, so `MCPActivityCoverageTests` covers the new kind. |
+| MCP | `set_activity` accepts the kind and the block. Every kind list derives from `ActivityKind.allCases`, so `MCPActivityCoverageTests` covers this kind. |
 | Class goal | `itemsCovered`, which the sweep already evaluates. No new goal shape. |
 
-## Slices
+## Load and size
 
-Each slice is one PR. Each slice leaves `main` green, adds tests for what it
-adds, and keeps every existing assignment on the code path it uses now.
-
-1. **Output contract.** The `composite` footer field, the optional
-   `TestOutcome` field, and the new contract rows. Nothing reads the field yet.
-2. **Kind and authoring.** `ActivityKind.classComposite`, the `composite`
-   aggregation, the `composite` block, the save-time checks, the layout lock,
-   the edit-page control with the roster ratio, and `set_activity`.
-3. **Slots.** `composite_slots`, dealing in the three orders, the slot in
-   `gradingInputs`, the `activity-composite` capability token, and the
-   extension of the layout lock to the first deal (slice 2 can lock only at
-   the first submission, because no slot is dealt before slice 3).
-4. **Ingest.** `composite_contributions`, the payload checks, the coverage row,
-   and `deleteCourse`.
-5. **The composite view.** The JSON endpoint, `class-composite.js` with all
-   four compositors, the four slot states, playback, present mode, the
-   student's own-contribution panel on the result page, the node tests,
-   `ui-review`, and the `composite-leaderboard` and `composite-tile`
-   visual-regression pages.
-6. **Reference renders and spare slots.** "Prepare reference" is a staff
-   action that renders the reference solution for every slot and stores the
-   results. It is a server-initiated job that waits behind every student
-   submission, with the claim-order rule of the corpus run. The slice also
-   enables `emptySlots: reference`. Shipped as 6a.
-   6b. A spare slot is a second slot that a student who finished can ask for,
-   to fill a hole. The student presses "Fill a hole" on the result page. The
-   server grades the latest passing submission of the student again with
-   the inputs of an empty slot, behind every student job, and the tile is
-   credited to the student. Shipped as 6b.
-
-## Risks
-
-- **Polling load.** Only the projector polls the full composite, and it is one
-  client. A student page polls only for its own contribution, at a slower
-  rate. The ETag and the `since` cursor make an unchanged poll cheap.
+- **Polling.** Only the projector polls the full composite, and it is one
+  client. The ETag and the `since` cursor make an unchanged poll cheap.
 - **Payload size.** 48 slots with 30 RGB frames of 8 × 8 pixels is about
   280 KB of pixels in total, or about 370 KB as base64. The cap for each
   contribution and the 4 MB limit at save keep this small.
 - **Test time.** A test renders only the student's slot, not the full image,
   so it stays well below the 10-second limit.
 - **Attendance.** Dealing at arrival handles absent students. Reference
-  renders (slice 6a) fill the holes of a small class, dimmed. Spare slots
-  (slice 6b) let students fill them with their own work.
-
-## Decisions
-
-All open decisions are settled.
-
-1. **The composite is for the projector.** Each student sees only their own
-   contribution (see **Student view**).
-2. **Failed contributions show with a mark by default** (`showFailed: true`).
-   The dead pixel is part of the lesson.
-3. **Spare slots ship in slice 6**, with the reference renders.
-4. **`emptySlots` defaults to `blank`.** A reference render is a visible answer
-   on a shared projector.
+  renders fill the holes of a small class, dimmed. Spare slots let students
+  fill them with their own work.
 
 ## Activities this enables
 
-| Activity | Compositor | Available after |
-|---|---|---|
-| The class is the GPU: each student shades one tile of an animated scene | `tile` | slice 5 |
-| Cine loop: each student gates one cardiac phase | `sequence` | slice 5 |
-| Class film: each student renders one segment of a fly-through | `sequence` | slice 5 |
-| The class is the CT scanner: each student backprojects one angle | `sum` | slice 5 |
-| Teleradiology race: each student streams one scan over a slow link | `gallery` | slice 5 |
+| Activity | Compositor |
+|---|---|
+| The class is the GPU: each student shades one tile of an animated scene | `tile` |
+| Cine loop: each student gates one cardiac phase | `sequence` |
+| Class film: each student renders one segment of a fly-through | `sequence` |
+| The class is the CT scanner: each student backprojects one angle | `sum` |
+| Teleradiology race: each student streams one scan over a slow link | `gallery` |

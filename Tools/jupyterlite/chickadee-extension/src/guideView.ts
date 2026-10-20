@@ -4,7 +4,7 @@
 // widgets (`jp-CellHeader`, `jp-CellFooter`), which JupyterLab creates empty,
 // so the notebook's cells, metadata and outputs are never touched.
 //
-// Performance (docs/browser-freeze-investigation.md): no layout is read, a
+// Performance (docs/archive/browser-freeze-investigation.md): no layout is read, a
 // redraw happens at most once per animation frame, an edit schedules one only
 // after 500ms of quiet, and a redraw whose cells did not change touches no
 // node. A run changes only outputs, so it redraws nothing.

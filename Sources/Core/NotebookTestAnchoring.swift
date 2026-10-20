@@ -167,18 +167,16 @@ public enum NotebookTestAnchoring {
     /// variable-equality family the variable that the script's case reads. A
     /// program-I/O family calls no function and anchors by section.
     static func familyTarget(_ family: PatternFamily, script: String) -> String? {
-        switch family.kind {
-        case .variableEquality:
+        if family.kind == .variableEquality {
             // A generated filename ends `test_<familyID>_<caseKey>.<ext>`.
             let stem = script.lastIndex(of: ".").map { String(script[..<$0]) } ?? script
             let matching = family.cases.first { stem.hasSuffix("test_\(family.id)_\($0.key)") }
             guard case .string(let variable)? = matching?.args.first else { return nil }
             return nonEmpty(variable)
-        case .programIO:
-            return nil
-        default:
-            return nonEmpty(family.functionName)
         }
+        // `callsFunction` is exhaustive, so a new kind states whether it has
+        // a function to anchor on; there is no default to inherit.
+        return family.kind.callsFunction ? nonEmpty(family.functionName) : nil
     }
 
     /// Every identifier-shaped token in `source`, and each dotted part of it,

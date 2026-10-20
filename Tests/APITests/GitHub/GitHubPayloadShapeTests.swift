@@ -35,10 +35,7 @@ import VaporTesting
 
     init() async throws {
         app = try await makeTestApp(prefix: "chickadee-github-push-payload")
-        directory = FileManager.default.temporaryDirectory
-            .appendingPathComponent("chickadee-github-push-payload-\(UUID().uuidString)")
-        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        app.githubAppSecretsFilePath = directory.appendingPathComponent(".github-app-secrets").path
+        directory = try GitHubTestApp.useSecretsDirectory(on: app, prefix: "chickadee-github-push-payload")
     }
 
     deinit {

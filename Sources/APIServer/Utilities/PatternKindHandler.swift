@@ -21,13 +21,10 @@ import Foundation
 
 /// Behaviour for one `PatternKind`: how a case renders to Python and how a
 /// family/case is validated before it is applied to a test setup.
+///
+/// Whether a kind calls `functionName` is not a handler fact: it is
+/// `PatternKind.callsFunction`, an exhaustive switch in `Core`.
 protocol PatternKindHandler: Sendable {
-    /// Whether this kind requires `PatternFamily.functionName` to be a valid
-    /// call target in the assignment's language (`isValidFunctionTarget`).
-    /// `false` for kinds that inspect module-level state rather than calling a
-    /// function (`.variableEquality`).
-    var requiresFunctionName: Bool { get }
-
     /// Renders one enabled case to Python source.  Delegates to the matching
     /// `render*` function in `PatternFamilyRenderer.swift`.
     func render(
@@ -48,7 +45,6 @@ protocol PatternKindHandler: Sendable {
 }
 
 extension PatternKindHandler {
-    var requiresFunctionName: Bool { true }
     func validateFamily(_ family: PatternFamily) throws {}
 }
 
@@ -100,10 +96,6 @@ func programIOComparisonUnsupportedReason(
 /// Runs the submission as a program with each case's stdin and compares its
 /// stdout. See `PatternKind.programIO`.
 struct ProgramIOKind: PatternKindHandler {
-    /// No function is called, so no existence guard and no identifier check
-    /// on `functionName` — the same posture as `.variableEquality`.
-    var requiresFunctionName: Bool { false }
-
     func render(
         family: PatternFamily, case c: PatternCase,
         sectionVariables: [FamilyVariable], specHash: String,
@@ -241,8 +233,6 @@ struct ApproximateEqualityKind: PatternKindHandler {
 // MARK: - variableEquality
 
 struct VariableEqualityKind: PatternKindHandler {
-    var requiresFunctionName: Bool { false }
-
     func render(
         family: PatternFamily, case c: PatternCase,
         sectionVariables: [FamilyVariable], specHash: String,

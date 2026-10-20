@@ -2,9 +2,9 @@
 
 **Status: stock Muter is unusable; a three-line fork works and has been run
 against real source.** Tracking issue: **#1447**. Root cause and measurements:
-[mutation-testing-spike.md](archive/mutation-testing-spike.md). What a real run costs
-and finds: **[mutation-testing-pilot.md](mutation-testing-pilot.md)**. How to
-read a series of runs: [mutation-trend.md](mutation-trend.md).
+[mutation-testing-spike.md](mutation-testing-spike.md). What a real run costs
+and finds: **[mutation-testing-pilot.md](../mutation-testing-pilot.md)**. How to
+read a series of runs: [mutation-trend.md](../mutation-trend.md).
 
 **If you read one thing:** the blocker is upstream issue
 [muter#307](https://github.com/muter-mutation-testing/muter/issues/307), not a
@@ -29,7 +29,8 @@ on the `mutation-reports` branch for `trend.py`. Scope grew the way the config
 planned — one target at a time, after a green run: RunnerCore (runs 3–5), + Core
 (runs 6–8), + Worker after the 2026-08-25 sweep came back **366 killed / 6
 survived (98%)** and all six survivors were answered the same day. Worker's
-admission was measured by `mutation-baseline-probe.yml`: unprivileged, 20/20
+admission was measured by a baseline-probe workflow (removed in #2719;
+`repeat-test.yml` now runs a selection N times): unprivileged, 20/20
 baseline iterations failed deterministically on the sandbox's `unshare` being
 refused (a container capability — hence `--privileged` on the mutation jobs,
 matching worker-tests); privileged, 20/20 passed at 11–12s flat. The logic tier
@@ -165,7 +166,7 @@ move. #307 is a few lines and makes Muter insert mutants again — measured abov
 mutants across 763 LOC of `RunnerCore`, zero build errors, every mutant
 accounted for in the report. That is evidence rather than a clearance — those
 files contain none of the do/catch shapes #308 names — but the risk is smaller
-than it read on paper. See [mutation-testing-pilot.md](mutation-testing-pilot.md).
+than it read on paper. See [mutation-testing-pilot.md](../mutation-testing-pilot.md).
 Adopting a patched fork would mean owning both, on a tool whose failure mode is
 a confident wrong number.
 
@@ -215,7 +216,7 @@ Ask before building a recurring job — it is a standing commitment of CI time a
 attention, not a one-off. The "run it against real source before trusting a
 number" caveat that stood here has been **discharged**: that run happened, and
 its costs, findings and counter-argument are in
-[mutation-testing-pilot.md](mutation-testing-pilot.md). The measured
+[mutation-testing-pilot.md](../mutation-testing-pilot.md). The measured
 one-mutant-per-6-LOC ratio is what makes `--files-to-mutate` non-negotiable —
 a whole-tree campaign is ~10,000 mutants.
 

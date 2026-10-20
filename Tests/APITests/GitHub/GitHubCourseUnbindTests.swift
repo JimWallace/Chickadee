@@ -25,12 +25,7 @@ final class GitHubCourseUnbindTests {
 
     /// The course routes answer 404 until a GitHub App is registered.
     private func registerApp() async throws {
-        try await APIGitHubApp(
-            conversion: GitHubManifestConversion(
-                id: 42, slug: "chickadee-courses", name: "Chickadee", clientID: "Iv1.client",
-                clientSecret: "client-secret", webhookSecret: nil, pem: "unused",
-                htmlURL: "https://github.com/apps/chickadee-courses", owner: nil)
-        ).save(on: app.db)
+        try await GitHubTestApp.register(on: app, pem: "unused", writesSecrets: false)
     }
 
     private func bind(courseID: UUID, orgLogin: String) async throws {

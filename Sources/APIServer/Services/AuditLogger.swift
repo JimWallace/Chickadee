@@ -104,6 +104,33 @@ enum AuditLogger {
     }
 }
 
+// MARK: - Course dataset library
+
+extension AuditLogger {
+    /// Records a write to the course dataset library from the web Datasets
+    /// tab (#2724), course-scoped. The metadata names the dataset by slug and
+    /// by name, the name as `title` so the course activity view shows it. It
+    /// never holds the file or its rows.
+    static func recordDatasetWrite(
+        _ action: AuditAction,
+        dataset: APICourseDataset,
+        metadata: [String: String] = [:],
+        on context: some AuditContext
+    ) async {
+        var merged = metadata
+        merged["dataset"] = dataset.slug
+        merged["title"] = dataset.name
+        merged["course_id"] = dataset.courseID.uuidString
+        await record(
+            action: action,
+            targetType: .dataset,
+            targetID: dataset.id?.uuidString,
+            metadata: merged,
+            courseID: dataset.courseID,
+            on: context)
+    }
+}
+
 // MARK: - Assignment lifecycle
 
 extension AuditLogger {

@@ -83,7 +83,7 @@ Targets, as declared in `Package.swift`:
   WebAssembly through a JS bridge. The artifact is vendored and checked in at
   `Public/runner-wasm/` (`RunnerWasm.<contenthash>.wasm` + `runner-core.js`),
   immutably cached (`RunnerWasmCacheMiddleware`), and size-guarded in CI. See
-  [`runner-wasm-migration.md`](runner-wasm-migration.md) and
+  [`runner-wasm-migration.md`](archive/runner-wasm-migration.md) and
   [`runner-wasm-serving.md`](runner-wasm-serving.md).
 
 `chickadee-server` and `chickadee-runner` communicate over HTTP. The runner
@@ -137,8 +137,8 @@ The feature directories that hold only services, `BrightSpace/` and `GitHub/`,
 are shared code too. `scripts/check-layering.sh` enforces it in `format-lint`.
 It fails when a file under any of those five directories names a function or
 type declared only under `Routes/`. `LTI/` is not scanned, because it holds its
-own routes. The uses that predate the rule are listed in
-`scripts/layering-baseline.txt`, and that list can only shrink (#1726).
+own routes. The rule is absolute: the shrink-only list of older uses reached
+zero in #2143 and is gone (#1726).
 
 Each of those directories has one job, so a file goes where its imports say:
 
@@ -363,22 +363,9 @@ recognised extension wins, else the `#!` shebang, else content sniffing — so
 `.sh` scripts run with `/bin/sh` and Python test files (including
 extensionless ones with a shebang) run with the Python interpreter.
 
-| Exit code | Meaning |
-|-----------|---------|
-| 0 | pass |
-| 1 | fail |
-| 2 | error |
-| killed after timeout | timeout |
-
-**stdout:** Everything is ignored except the last non-empty line, which is
-parsed as optional JSON `{ "score": 0.75, "shortResult": "3/4 passed" }`.
-If not valid JSON, the line is used as plain-text `shortResult`. If stdout is
-empty, `shortResult` is synthesized from the exit code. `score` (clamped to
-`0...1`) carries partial credit — the test contributes `points × score` — and
-is orthogonal to the exit code; a script that emits no `score` grades full
-credit on a pass and none otherwise.
-
-**stderr:** Captured verbatim as `longResult` (nil if empty).
+The exit codes, the stdout footer (`score`, `shortResult`, `metric`) and the
+stderr capture are in the root `CLAUDE.md`, "Test Script Contract". That is
+the one copy of the contract.
 
 Test dependencies can be declared in `TestProperties.testSuites[].dependsOn`.
 If a prerequisite did not pass, dependents are automatically recorded as
@@ -771,7 +758,7 @@ carries `io.modelcontextprotocol/protocolVersion` gets the 2026-07-28
 revision's semantics (mandatory `server/discover`, `resultType` + server
 `_meta`, mirrored protocol headers); anything else keeps the legacy
 `initialize` handshake behaviour. See
-[`mcp-2026-07-28-revision.md`](mcp-2026-07-28-revision.md) and the tool index
+[`mcp-2026-07-28-revision.md`](archive/mcp-2026-07-28-revision.md) and the tool index
 in [`mcp-authoring-roadmap.md`](mcp-authoring-roadmap.md).
 
 ### Admin diagnostics (`POST /admin-mcp`)

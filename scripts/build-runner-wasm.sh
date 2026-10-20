@@ -10,14 +10,14 @@
 # runtime — so the browser runner can call the SAME extraction code instead of
 # a hand-written JS copy.
 #
-# Prerequisites (one-time, see docs/runner-wasm-migration.md):
+# Prerequisites (one-time, see docs/archive/runner-wasm-migration.md):
 #   * Swift toolchain matching the wasm SDK (6.4.0 — pinned by the swiftly
 #     version in .github/workflows/runner-wasm-vendor.yml)
 #   * The Embedded Swift WebAssembly SDK installed and named via SWIFT_WASM_SDK
 #     (defaults to swift-6.4.0-RELEASE_wasm-embedded).
 #   * Node + npx (for esbuild) to bundle the WASI shim locally (no CDN: FIPPA).
 #
-# Output (checked in, like Public/pyodide / Public/vendor — CI and contributors
+# Output (checked in, like Public/jupyterlite / Public/vendor — CI and contributors
 # need no wasm SDK; rebuild only when RunnerCore or the bridge changes):
 #   Public/runner-wasm/runner-core.js   — self-contained ESM loader (init/exports)
 #   Public/runner-wasm/RunnerWasm.wasm  — the embedded wasm module

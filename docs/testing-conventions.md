@@ -19,7 +19,7 @@ keeps the short form and points here.
   `.timeLimit(.minutes(n))` (put it on any suite
   that spawns subprocesses or awaits daemons/network, so a stall fails
   with a named test instead of holding the CI job to its 20-minute kill —
-  see the #1139 postmortem in `docs/ci-flakiness.md`). Avoid
+  see the #1139 postmortem in `docs/archive/ci-flakiness-history.md`). Avoid
   `CustomExecutionTrait`, hand-rolled trait types, and anything still
   labelled experimental in the Swift Testing source — the API is still
   evolving.

@@ -127,12 +127,12 @@ func submissionDiffSides(_ source: SubmissionDiffSource) async -> SubmissionDiff
     }
 
     if let submittedNotebook {
-        guard let newCells = NotebookCellSources.cells(from: submittedNotebook) else {
+        guard let newCells = NotebookCellView.cells(from: submittedNotebook) else {
             return SubmissionDiffSides(
                 oldLines: [], newLines: [], comparedLabel: submittedName,
                 unavailableReason: "The submitted notebook could not be parsed.")
         }
-        let oldCells = await (try? notebookData(from: source.starter)).flatMap(NotebookCellSources.cells(from:)) ?? []
+        let oldCells = await (try? notebookData(from: source.starter)).flatMap(NotebookCellView.cells(from:)) ?? []
         return SubmissionDiffSides(
             oldLines: notebookDiffLines(oldCells),
             newLines: notebookDiffLines(newCells),
@@ -168,11 +168,11 @@ func submissionDiffSides(_ source: SubmissionDiffSource) async -> SubmissionDiff
 /// A notebook flattened to lines for diffing: every non-test cell behind one
 /// marker line. Markdown cells are kept — a student's written answer is as
 /// much their work as their code.
-func notebookDiffLines(_ cells: [[String: Any]]) -> [String] {
+func notebookDiffLines(_ cells: [NotebookCellView]) -> [String] {
     var lines: [String] = []
-    for cell in cells where !isTestCell(cell) {
+    for cell in cells where !isTestCellSource(cell.source) {
         lines.append(notebookDiffCellMarker)
-        lines.append(contentsOf: diffLines(NotebookCellSources.cellSource(cell)))
+        lines.append(contentsOf: diffLines(cell.source))
     }
     return lines
 }
