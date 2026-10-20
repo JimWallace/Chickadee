@@ -87,6 +87,13 @@ extension Request {
         return course
     }
 
+    /// The active course's row for `user`, or nil when they have none. An
+    /// archived course is never the active course.
+    func activeCourseRow(for user: APIUser) async throws -> APICourse? {
+        guard let courseID = try await resolveActiveCourse(for: user).activeCourseUUID else { return nil }
+        return try await APICourse.find(courseID, on: db)
+    }
+
     /// `activeCourseForWrite`, or `WebAssignmentError.noActiveCourse` naming
     /// `action` when the viewer has no active course. The preamble of every
     /// instructor write to the active course.

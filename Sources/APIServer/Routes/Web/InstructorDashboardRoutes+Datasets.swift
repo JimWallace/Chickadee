@@ -281,8 +281,7 @@ extension InstructorDashboardRoutes {
     /// an archived course is never the active course, so a reader may also
     /// write; each write still checks the floor itself.
     private func activeDatasetCourse(req: Request, user: APIUser) async throws -> APICourse? {
-        guard let courseID = try await req.resolveActiveCourse(for: user).activeCourseUUID else { return nil }
-        return try await APICourse.find(courseID, on: req.db)
+        try await req.activeCourseRow(for: user)
     }
 
     /// The active course, after the TA floor and the archive check.

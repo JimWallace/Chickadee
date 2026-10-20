@@ -19,6 +19,7 @@
     };
     var CMP_LABEL = { atLeast: '≥', atMost: '≤', equals: '=' };
     var NAME_REQUIRED = 'Name is required.';
+    var DELETED_SECTION = 'Deleted section';
 
     function n(v) { return v == null ? '' : v; }
 
@@ -92,6 +93,61 @@
         return first != null ? first : current;
     }
 
+    /// signal value -> the course condition field it also needs, read off
+    /// each option's `data-course-field` (AchievementSignalPresentation).
+    function signalCourseFieldsFromOptions(options) {
+        var out = {};
+        Array.prototype.forEach.call(options, function (o) {
+            out[o.value] = o.getAttribute('data-course-field') || '';
+        });
+        return out;
+    }
+
+    /// The course target select's value for a stored condition: "" for every
+    /// assignment, "kind:ref" for a section or a concept, and "assignments:"
+    /// for a chosen list, whose ids live in the checklist instead.
+    function courseTargetValue(cond) {
+        if (!cond || !cond.targetKind) return '';
+        if (cond.targetKind === 'assignments') return 'assignments:';
+        return cond.targetKind + ':' + n(cond.targetRef);
+    }
+
+    /// The public IDs a stored "Chosen assignments" condition lists.
+    function pickedAssignments(cond) {
+        if (!cond || cond.targetKind !== 'assignments') return [];
+        return n(cond.targetRef).split(',').map(function (s) { return s.trim(); })
+            .filter(function (s) { return s.length > 0; });
+    }
+
+    /// `cond` with the course fields a course condition row holds: the set
+    /// it counts over, and the one extra field its signal needs.
+    function withCourseFields(cond, fields, courseField) {
+        var target = fields.target || '';
+        if (target) {
+            var i = target.indexOf(':');
+            cond.targetKind = target.slice(0, i);
+            cond.targetRef = cond.targetKind === 'assignments'
+                ? (fields.picked || []).join(',') : target.slice(i + 1);
+        }
+        if (courseField === 'gradeFloor') { cond.gradeFloor = Number(fields.floor || 0); }
+        var ref = (fields.achievementRef || '').trim();
+        if (courseField === 'achievementRef' && ref) { cond.achievementRef = ref; }
+        return cond;
+    }
+
+    /// What a course condition counts over, for the Earned-when cell.
+    /// `labels` maps a target select value to its option text.
+    function courseTargetLabel(cond, labels) {
+        if (cond.targetKind === 'assignments') {
+            var count = pickedAssignments(cond).length;
+            return count + (count === 1 ? ' chosen assignment' : ' chosen assignments');
+        }
+        var value = courseTargetValue(cond);
+        if (labels[value]) return labels[value];
+        // A stored id is never shown: a section that is gone reads as such.
+        return cond.targetKind === 'courseSection' ? DELETED_SECTION : n(cond.targetRef);
+    }
+
     /// One condition as a human phrase for the table's Earned-when cell.
     /// `ctx.esc` escapes HTML, `ctx.sectionNames` maps section id -> name.
     function condPhrase(c, ctx) {
@@ -104,6 +160,12 @@
         // A section ref is stored as an opaque id; show the name the author
         // gave it, never the id.
         if (ref) { phrase += ' in “' + ctx.esc(ctx.sectionNames[ref] || ref) + '”'; }
+        if (c.gradeFloor != null) { phrase += ' at ' + n(c.gradeFloor) + '%'; }
+        if (c.achievementRef) {
+            var achName = ctx.achievementName ? ctx.achievementName(c.achievementRef) : c.achievementRef;
+            phrase += ' (“' + ctx.esc(achName) + '”)';
+        }
+        if (c.targetKind && ctx.targetLabel) { phrase += ' in “' + ctx.esc(ctx.targetLabel(c)) + '”'; }
         return phrase;
     }
 
@@ -197,6 +259,7 @@
         SCOPE_LABEL: SCOPE_LABEL,
         CMP_LABEL: CMP_LABEL,
         NAME_REQUIRED: NAME_REQUIRED,
+        DELETED_SECTION: DELETED_SECTION,
         signalMetaFromOption: signalMetaFromOption,
         signalMetaFromOptions: signalMetaFromOptions,
         isSignalAllowed: isSignalAllowed,
@@ -204,6 +267,11 @@
         signalLevelsFromOptions: signalLevelsFromOptions,
         isSignalAtLevel: isSignalAtLevel,
         signalForLevel: signalForLevel,
+        signalCourseFieldsFromOptions: signalCourseFieldsFromOptions,
+        courseTargetValue: courseTargetValue,
+        pickedAssignments: pickedAssignments,
+        withCourseFields: withCourseFields,
+        courseTargetLabel: courseTargetLabel,
         condPhrase: condPhrase,
         conditionsText: conditionsText,
         summary: summary,

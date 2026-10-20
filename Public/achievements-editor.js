@@ -46,11 +46,47 @@
     // signal, and the course editor no assignment one.
     var SIGNAL_LEVELS = {};
     var LEVEL = '';
+    // signal value -> the course condition field it also needs
+    // ("gradeFloor", "achievementRef" or ""), off data-course-field.
+    var COURSE_FIELDS = {};
 
     /// What the core needs to phrase a row: the signal facts, the live
     /// section names, the HTML escaper and the dimension labels.
     function presenterCtx() {
-        return { signalMeta: SIGNAL_META, sectionNames: sectionNames(), esc: esc, dimLabel: dimLabel };
+        return {
+            signalMeta: SIGNAL_META, sectionNames: sectionNames(), esc: esc, dimLabel: dimLabel,
+            targetLabel: targetLabel, achievementName: achievementName
+        };
+    }
+
+    // "courseSection:<id>" -> "Unit 2", read off the course target select in
+    // the condition template, so the server stays the one source of names.
+    var TARGET_LABEL = null;
+    function targetLabel(cond) {
+        if (!TARGET_LABEL) {
+            TARGET_LABEL = {};
+            var tpl = document.getElementById('achievement-condition-template');
+            var root = tpl && tpl.content ? tpl.content : document;
+            Array.prototype.forEach.call(root.querySelectorAll('.js-am-cond-target option'), function (o) {
+                TARGET_LABEL[o.value] = o.textContent.trim();
+            });
+        }
+        return Core.courseTargetLabel(cond, TARGET_LABEL);
+    }
+
+    // achievement id -> its name, off the achievement select in the condition
+    // template, for the Earned-when cell.
+    var ACHIEVEMENT_NAME = null;
+    function achievementName(id) {
+        if (!ACHIEVEMENT_NAME) {
+            ACHIEVEMENT_NAME = {};
+            var tpl = document.getElementById('achievement-condition-template');
+            var root = tpl && tpl.content ? tpl.content : document;
+            Array.prototype.forEach.call(root.querySelectorAll('.js-am-cond-achref option'), function (o) {
+                if (o.value) ACHIEVEMENT_NAME[o.value] = o.textContent.trim();
+            });
+        }
+        return ACHIEVEMENT_NAME[id] || id;
     }
 
     // id -> name for the suite sections currently on the page.  Read live from
@@ -68,6 +104,21 @@
     }
     function refInput(rowEl, meta) {
         return refInputs(rowEl)[meta && meta.refControl] || null;
+    }
+
+    // The course condition inputs of one condition row, or null on the
+    // assignment editor, which renders none.
+    function courseControls(rowEl) {
+        var target = rowEl.querySelector('.js-am-cond-target');
+        if (!target) return null;
+        var picks = rowEl.querySelector('.js-am-cond-assignments');
+        return {
+            target: target,
+            floor: rowEl.querySelector('.js-am-cond-floor'),
+            achRef: rowEl.querySelector('.js-am-cond-achref'),
+            picks: picks,
+            boxes: Array.prototype.slice.call(picks.querySelectorAll('input[type="checkbox"]'))
+        };
     }
 
     function sectionNames() {
@@ -92,24 +143,28 @@
         if (!block) return;
         var tbody = block.querySelector('tbody.achievements-body');
         var assignmentID = block.getAttribute('data-assignment-id') || '';
+        // The course tab names its own URL; the assignment editor's follows
+        // from the assignment.
+        var url = block.getAttribute('data-url')
+            || (assignmentID ? '/instructor/' + encodeURIComponent(assignmentID) + '/achievements' : '');
         var template = document.getElementById('achievement-editor-template');
         var condTemplate = document.getElementById('achievement-condition-template');
-        if (!tbody || !assignmentID || !template || !condTemplate) return;
+        if (!tbody || !url || !template || !condTemplate) return;
         if (!ChickadeeUI.wireOnce(block, 'achievements')) return;
-        var url = '/instructor/' + encodeURIComponent(assignmentID) + '/achievements';
         var status = document.getElementById('achievements-status');
 
         SIGNAL_META = Core.signalMetaFromOptions(
             condTemplate.content.querySelectorAll('.am-cond-signal option'));
         LEVEL = block.getAttribute('data-level') || '';
-        // The levels are read when the first condition row is built, not
-        // here: init stays the same small step it always was.
-        var signalLevelsRead = false;
-        function readSignalLevels() {
-            if (signalLevelsRead) return;
-            signalLevelsRead = true;
-            SIGNAL_LEVELS = Core.signalLevelsFromOptions(
-                condTemplate.content.querySelectorAll('.am-cond-signal option'));
+        // The level and course facts are read when the first condition row
+        // is built, not here: init stays the same small step it always was.
+        var signalFactsRead = false;
+        function readSignalFacts() {
+            if (signalFactsRead) return;
+            signalFactsRead = true;
+            var options = condTemplate.content.querySelectorAll('.am-cond-signal option');
+            SIGNAL_LEVELS = Core.signalLevelsFromOptions(options);
+            COURSE_FIELDS = Core.signalCourseFieldsFromOptions(options);
         }
 
         var state = [];
@@ -180,7 +235,7 @@
 
         // Build one condition row inside `container` from an optional `cond`.
         function addConditionRow(container, cond) {
-            readSignalLevels();
+            readSignalFacts();
             container.appendChild(condTemplate.content.cloneNode(true));
             var rowEl = container.lastElementChild;
             var sig = rowEl.querySelector('.am-cond-signal');
@@ -190,6 +245,40 @@
             var inputs = refInputs(rowEl);
             var textRef = inputs.text;
             var sectionRef = inputs.sections;
+            // The course tab's own controls; absent on the assignment editor.
+            var course = courseControls(rowEl);
+            if (course) {
+                var storedTarget = Core.courseTargetValue(cond);
+                // A target whose section is gone keeps a disabled home of its
+                // own, so it cannot save as "Every assignment"; the save is
+                // refused by name instead.
+                if (storedTarget && !Array.prototype.some.call(course.target.options, function (o) {
+                    return o.value === storedTarget;
+                })) {
+                    var gone = document.createElement('option');
+                    gone.value = storedTarget;
+                    gone.textContent = Core.DELETED_SECTION;
+                    gone.disabled = true;
+                    course.target.appendChild(gone);
+                }
+                course.target.value = storedTarget;
+                var picked = Core.pickedAssignments(cond);
+                course.boxes.forEach(function (box) { box.checked = picked.indexOf(box.value) >= 0; });
+                course.floor.value = cond ? n(cond.gradeFloor) : '';
+                var storedRef = cond ? n(cond.achievementRef) : '';
+                // A stored id that no assignment has any more keeps a home of
+                // its own, so it does not save as "any achievement".
+                if (storedRef && !Array.prototype.some.call(course.achRef.options, function (o) {
+                    return o.value === storedRef;
+                })) {
+                    var missing = document.createElement('option');
+                    missing.value = storedRef;
+                    missing.textContent = storedRef;
+                    course.achRef.appendChild(missing);
+                }
+                course.achRef.value = storedRef;
+                course.target.addEventListener('change', function () { sync(); });
+            }
             // The core decides the option list: "Whole suite" first, then the
             // live sections, then a disabled home for a ref whose section was
             // deleted, so a stale ref cannot serialise as the whole suite.
@@ -248,6 +337,16 @@
                 textRef.placeholder = meta.refPlaceholder || '';
                 if (active) { active.setAttribute('aria-label', meta.refLabel || 'Reference'); }
                 unit.textContent = meta.unit || '';
+                if (course) {
+                    // A course count takes "at least" only, so the
+                    // comparator is not offered.
+                    cmp.value = 'atLeast';
+                    cmp.style.display = 'none';
+                    var field = COURSE_FIELDS[sig.value] || '';
+                    course.floor.style.display = field === 'gradeFloor' ? '' : 'none';
+                    course.achRef.style.display = field === 'achievementRef' ? '' : 'none';
+                    course.picks.style.display = course.target.value === 'assignments:' ? '' : 'none';
+                }
             }
             sig.addEventListener('change', sync);
             rowEl.querySelector('.am-cond-remove').addEventListener('click', function () {
@@ -317,12 +416,21 @@
                     conditionsBox.querySelectorAll('.am-condition')).map(function (rowEl) {
                         var signal = rowEl.querySelector('.am-cond-signal').value;
                         var source = refInput(rowEl, SIGNAL_META[signal] || {});
-                        return Core.conditionFromRow({
+                        var out = Core.conditionFromRow({
                             signal: signal,
                             comparator: rowEl.querySelector('.js-am-cond-comparator').value,
                             value: rowEl.querySelector('.am-cond-value').value,
                             refText: source ? source.value : ''
                         }, SIGNAL_META);
+                        var course = courseControls(rowEl);
+                        if (!course) return out;
+                        return Core.withCourseFields(out, {
+                            target: course.target.value,
+                            picked: course.boxes.filter(function (b) { return b.checked; })
+                                .map(function (b) { return b.value; }),
+                            floor: course.floor.value,
+                            achievementRef: course.achRef.value
+                        }, COURSE_FIELDS[signal] || '');
                     });
                 var built = Core.buildAchievement({
                     name: el('am-name').value,

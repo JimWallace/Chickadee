@@ -58,6 +58,8 @@ struct InstructorDashboardRoutes: RouteCollection {
         registerDatasetRoutes(on: r)
         // Groups tab: the course's lab groups (docs/lab-groups.md).
         registerGroupRoutes(on: r)
+        // Achievements tab: the course achievements (docs/achievement-rewards.md, S4).
+        registerAchievementRoutes(on: r)
         r.get("grades.csv", use: exportGradesCSV)
         r.get(":assignmentID", "submissions", use: assignmentSubmissionsPage)
         r.get(":assignmentID", "submissions.zip", use: downloadAssignmentSubmissions)
