@@ -9,6 +9,13 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.767] - 2026-10-20
+
+### Changed
+
+- **The worker extracts Python notebooks with RunnerCore (#2715).** The generic notebook path now writes `extractPython(...).executableModule`, the same module the browser runner writes through wasm. The extracted file now has `# --- cell N ---` labels, and a notebook with no code cells gives an empty file. A code cell whose first line starts with spaces now has its statements sorted the same way as in the browser. One helper now converts notebook cells for every extractor.
+
+
 ## [0.5.766] - 2026-10-20
 
 ### Changed
