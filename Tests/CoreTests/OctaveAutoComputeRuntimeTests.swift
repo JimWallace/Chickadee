@@ -53,7 +53,7 @@ import Testing
     @Test func octaveDeclaresItsInPageWorker() {
         #expect(
             AssignmentLanguage.octave.descriptor.autoCompute
-                == .inPageKernel(workerScript: "/octave-eval-worker.js"))
+                == .inPageKernel(workerScript: "/eval-worker.js?lang=octave"))
     }
 
     /// Every language with a vendored editor kernel now computes in the page.

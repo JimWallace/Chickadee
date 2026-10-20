@@ -26,11 +26,7 @@
         return el ? Core.parseSchema(el.textContent) : Core.normalizeSchema(null);
     }
 
-    function el(tag, attrs) {
-        var node = document.createElement(tag);
-        if (attrs) for (var k in attrs) if (Object.prototype.hasOwnProperty.call(attrs, k)) node.setAttribute(k, attrs[k]);
-        return node;
-    }
+    var el = global.ChickadeeUI.el;
 
     /// Materialises the core's description of a field's control.
     function buildControl(field) {

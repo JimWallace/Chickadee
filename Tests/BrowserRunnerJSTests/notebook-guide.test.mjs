@@ -16,6 +16,17 @@ const require = createRequire(import.meta.url);
 const Guide = require('../../Public/notebook-guide.js');
 const here = path.dirname(fileURLToPath(import.meta.url));
 const source = fs.readFileSync(path.join(here, '../../Public/notebook-guide.js'), 'utf8');
+// The page loads chickadee-ui.js first, and this script builds its rows with
+// ChickadeeUI.el (#2721), so each context runs the real one too.
+const uiSource = fs.readFileSync(path.join(here, '../../Public/chickadee-ui.js'), 'utf8');
+
+/// Runs chickadee-ui.js and then `source` in one context, as the page does.
+function runWithUI(context) {
+  vm.createContext(context);
+  vm.runInContext(uiSource, context);
+  context.ChickadeeUI = context.window.ChickadeeUI;
+  vm.runInContext(source, context);
+}
 const ORIGIN = 'https://chickadee.test';
 
 test('each status has a glyph, and an unknown one is the open circle', () => {
@@ -70,7 +81,10 @@ function element(tag) {
     get textContent() { return this._text + this.children.map((c) => c.textContent).join(''); },
     set textContent(value) { this._text = value; this.children = []; },
     appendChild(child) { this.children.push(child); return child; },
-    setAttribute(name, value) { this.attributes[name] = String(value); },
+    setAttribute(name, value) {
+      this.attributes[name] = String(value);
+      if (name === 'class') this.className = String(value);
+    },
     getAttribute(name) { return this.attributes[name] ?? null; },
     removeAttribute(name) { delete this.attributes[name]; },
     addEventListener(type, fn) { (this.listeners[type] ??= []).push(fn); },
@@ -114,7 +128,7 @@ async function loadPage(guide = GUIDE) {
   const fetch = async (url) => { fetched.push(url); return { ok: true, json: async () => guide }; };
   const context = { window, document, fetch };
   context.self = context;
-  vm.runInNewContext(source, context);
+  runWithUI(context);
   await new Promise((resolve) => setTimeout(resolve, 0));
   const message = (data, origin = ORIGIN) => listeners.message.forEach((fn) => fn({ origin, data }));
   const rows = () => {

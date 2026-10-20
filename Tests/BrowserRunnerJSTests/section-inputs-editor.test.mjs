@@ -19,6 +19,13 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import vm from 'node:vm';
+import { createRequire } from 'node:module';
+
+// The real wire-once guard and inputs core (#2721): the panel wiring now lives
+// in the core, and only the editor and the saver below are stubbed.
+const require = createRequire(import.meta.url);
+const { wireOnce } = require('../../Public/chickadee-ui.js');
+const realInputsCore = require('../../Public/inputs-editor-core.js');
 
 const source = await fs.readFile(path.resolve('Public/section-inputs-editor.js'), 'utf8');
 
@@ -73,9 +80,11 @@ function load({ forms, payload = { variables: [{ name: 'n', value: '1' }] }, res
       });
     },
   };
-  // The shared core, stubbed: its own behaviour is covered by
-  // inputs-editor-core.test.mjs, so this file only needs its seams.
+  // The shared core, with the editor and the saver stubbed: their own
+  // behaviour is covered by inputs-editor-core.test.mjs, so this file only
+  // needs their seams. The panel wiring is the real one.
   sandbox.ChickadeeInputsCore = {
+    ...realInputsCore,
     createEditor: () => ({
       buildPayload: () => payload,
       refreshAllRows: () => {},
@@ -94,6 +103,7 @@ function load({ forms, payload = { variables: [{ name: 'n', value: '1' }] }, res
   sandbox.ChickadeeUI = {
     getCsrfToken: () => 'csrf-token-value',
     notifyWorkbench: (what) => notified.push(what),
+    wireOnce,
   };
   sandbox.window = { ChickadeeUI: sandbox.ChickadeeUI };
   sandbox.self = sandbox;

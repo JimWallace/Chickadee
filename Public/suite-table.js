@@ -133,7 +133,6 @@
 
     function initSuiteTable(config) {
         config = config || {};
-        var csrfToken = config.csrfToken || '';
         var urls      = config.urls || {};
         var formSelector = config.formSelector || 'form.form';
 
@@ -560,7 +559,6 @@
         /// the same family/check renderers work in either host.
         function inlineCtx(sectionID) {
             return {
-                csrfToken: csrfToken,
                 getSectionID: function () { return sectionID || null; },
                 setStatus: function () {},
                 extractErrorMessage: extractErrorMessage
@@ -834,7 +832,7 @@
             if (pushInFlight) { pushPending = true; return; }
             pushInFlight = true;
             global.ChickadeeUI.fetchJSON(urls.putSuite(), {
-                method: 'PUT', csrfToken: csrfToken, body: buildPayload()
+                method: 'PUT', body: buildPayload()
             })
             .then(function (payload) {
                 var liveEdit = captureLiveEdit();
@@ -1181,7 +1179,7 @@
         function persistSectionOrder() {
             var ids = sectionIDsInOrder();
             global.ChickadeeUI.fetchJSON(urls.reorderSections(), {
-                method: 'POST', csrfToken: csrfToken, body: { sectionIDs: ids }
+                method: 'POST', body: { sectionIDs: ids }
             })
             .catch(function (err) {
                 console.error('Section reorder failed:', err);
@@ -1296,7 +1294,7 @@
             if (!await ChickadeeUI.confirmAction('Delete test script "' + item.script + '"? This also removes it as a dependency from other items.')) return;
 
             global.ChickadeeUI.fetchJSON(urls.deleteScript(item.script), {
-                method: 'DELETE', csrfToken: csrfToken
+                method: 'DELETE'
             })
             .then(function () {
                 items = items.filter(function (it) { return it.id !== id; });
@@ -1361,7 +1359,7 @@
                 // the same trap v0.4.133 hit with the multipart CSRF intercept.
                 f.setAttribute('data-ck-inplace', '');
                 var t = document.createElement('input');
-                t.type = 'hidden'; t.name = '_csrf'; t.value = csrfToken;
+                t.type = 'hidden'; t.name = '_csrf'; t.value = global.ChickadeeUI.getCsrfToken();
                 f.appendChild(t);
                 document.body.appendChild(f);
                 if (typeof f.requestSubmit === 'function') f.requestSubmit();
@@ -1382,7 +1380,7 @@
                             // No tier and no `isTest`: whether this is a test
                             // is the server's call (#1960).
                             return global.ChickadeeUI.fetchJSON(urls.uploadScript(), {
-                                method: 'POST', csrfToken: csrfToken,
+                                method: 'POST',
                                 body: {
                                     filename: file.name,
                                     content: content,
@@ -1590,7 +1588,7 @@
         /// the message.
         function pushSuiteNow() {
             return global.ChickadeeUI.fetchJSON(urls.putSuite(), {
-                method: 'PUT', csrfToken: csrfToken, body: buildPayload()
+                method: 'PUT', body: buildPayload()
             })
             .then(function (payload) {
                 items = normaliseItems(payload.items || []);
@@ -1724,7 +1722,7 @@
                     return;
                 }
                 global.ChickadeeUI.fetchJSON(putTimeLimitURL, {
-                    method: 'PUT', csrfToken: csrfToken, body: { seconds: seconds }
+                    method: 'PUT', body: { seconds: seconds }
                 }).then(function (payload) {
                     lastSaved = String((payload && payload.seconds) || seconds);
                     input.value = lastSaved;

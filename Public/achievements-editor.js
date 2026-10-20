@@ -76,24 +76,21 @@
         return out;
     }
 
-    var csrf = ChickadeeUI.getCsrfToken;
     var esc = ChickadeeUI.escapeHtml;
     function n(v) { return v == null ? '' : v; }
 
-    // The panels init() has wired, so that init() can run again (#1957).
-    // The workbench calls it after it swaps the edit half: the new half has a
-    // new panel to wire and load, and a panel wired before is not wired twice.
-    var wiredBlocks = new WeakSet();
-
+    // init() can run again (#1957): the workbench calls it after it swaps the
+    // edit half. The new half has a new panel to wire and load, and a panel
+    // wired before is not wired twice (`ChickadeeUI.wireOnce`).
     function init() {
         var block = document.getElementById('achievements-block');
-        if (!block || wiredBlocks.has(block)) return;
+        if (!block) return;
         var tbody = block.querySelector('tbody.achievements-body');
         var assignmentID = block.getAttribute('data-assignment-id') || '';
         var template = document.getElementById('achievement-editor-template');
         var condTemplate = document.getElementById('achievement-condition-template');
         if (!tbody || !assignmentID || !template || !condTemplate) return;
-        wiredBlocks.add(block);
+        if (!ChickadeeUI.wireOnce(block, 'achievements')) return;
         var url = '/instructor/' + encodeURIComponent(assignmentID) + '/achievements';
         var status = document.getElementById('achievements-status');
 
@@ -136,19 +133,13 @@
                 return Promise.reject(new Error(
                     'The achievements list never loaded — refresh the page before editing.'));
             }
-            return fetch(url, {
+            return ChickadeeUI.fetchJSON(url, {
                 method: 'PUT',
-                headers: { 'Content-Type': 'application/json', 'x-csrf-token': csrf() },
-                body: JSON.stringify({ achievements: state })
-            }).then(function (r) {
-                if (!r.ok) {
-                    return r.text().then(function (t) {
-                        throw new Error(Core.persistErrorMessage(t, r.status));
-                    });
-                }
-                return r.json()
-                    .then(function (body) { state = (body && body.achievements) || []; })
-                    .catch(function () { /* keep optimistic state if body unparseable */ });
+                body: { achievements: state },
+                errorMessage: Core.persistErrorMessage
+            }).then(function (body) {
+                // A body that does not parse keeps the optimistic state.
+                if (body) state = body.achievements || [];
             });
         }
 
@@ -370,11 +361,9 @@
             }
         });
 
-        fetch(url, { headers: { 'x-csrf-token': csrf() } })
-            .then(function (r) {
-                if (!r.ok) { throw new Error('HTTP ' + r.status); }
-                return r.json();
-            })
+        ChickadeeUI.fetchJSON(url, {
+            errorMessage: function (text, status) { return 'HTTP ' + status; }
+        })
             .then(function (body) {
                 state = (body && body.achievements) || [];
                 loaded = true;

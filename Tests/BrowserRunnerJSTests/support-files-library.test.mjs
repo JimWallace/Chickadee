@@ -58,7 +58,6 @@ function load({ withLibrary = true, confirm = true, fail = null, selectValue = '
   vm.runInContext(source, sandbox);
 
   const config = {
-    csrfToken: 'csrf',
     uploadURL: () => '/u',
     deleteURL: () => '/d',
     onChange: () => { changes += 1; },

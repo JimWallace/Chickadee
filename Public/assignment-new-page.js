@@ -19,7 +19,6 @@
         catch (e) { config = {}; }
     }
     var draftID = config.draftID || null;
-    var csrfToken = ChickadeeUI.getCsrfToken();
 
     // ── Pattern family editor (Public/pattern-family-editor.js) ─────────────
     // Wired to draft-scoped URLs; after a save the page reloads so the
@@ -34,7 +33,6 @@
         }
         window.chickadeePatternFamilyEditor = window.initPatternFamilyEditor({
             draftID: draftID,
-            csrfToken: csrfToken,
             initialFamilies: initialFamilies,
             urls: {
                 solutionNotebook: function () {
@@ -51,7 +49,6 @@
     if (draftID && typeof window.initSuiteTable === 'function') {
         var suiteTable = window.initSuiteTable({
             assignmentID: 'draft:' + draftID,  // diagnostics-only; URL builders below ignore
-            csrfToken: csrfToken,
             formSelector: 'form#new-assignment-form',
             urls: {
                 putSuite: function () {
@@ -109,7 +106,6 @@
     // flow stays unwired (the buttons only do something once a draft exists).
     if (draftID) {
         window.initSupportFiles({
-            csrfToken: csrfToken,
             uploadURL: function () {
                 return '/instructor/new/draft/scripts?draftID=' + encodeURIComponent(draftID);
             },
@@ -128,7 +124,6 @@
     // Runs whether or not a draft exists yet — with no draft it reports that
     // one is needed.
     window.initGeneratedStarterTests({
-        csrfToken: csrfToken,
         draftID: draftID,
         solutionNotebookURL: (draftID && config.hasSolutionNotebook)
             ? '/instructor/new/draft/solution-notebook?draftID=' + encodeURIComponent(draftID)
@@ -165,9 +160,8 @@
     // PUT /suite (suite-table's saveScriptViaSuite).  Editing an existing
     // notebook-check row is delegated by the shell itself.
     window.ChickadeeScriptRendererConfig = {
-        csrfToken: csrfToken,
         scriptContentURL: null,
         uploadFilesInputID: null
     };
-    window.initTestEditorModal({ csrfToken: csrfToken });
+    window.initTestEditorModal();
 })();

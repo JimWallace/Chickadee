@@ -1045,7 +1045,9 @@ because line numbers go out of date.
   - Every worker that the notebook page starts is in
     `NotebookAssetIsolationMiddleware.isolatedWorkerScripts`. The list comes
     from `AssignmentLanguage.allCases` (`IsolatedWorkerScriptDriftTests`;
-    #1274). A new language adds a worker.
+    #1274). A new language adds a grading worker. Its auto-compute is an
+    entry in `Public/eval-worker.js`, which the editor pages start and which
+    is not isolated (`EvalWorkerLanguageTableTests`; #2721).
   - The CSP permits no inline script (#1516;
     `ContentSecurityPolicyInlineScriptTests`).
 

@@ -24,7 +24,6 @@
 //       assignmentID: 'TWTFKZ',                 // edit mode
 //       // OR
 //       draftID: 'setup_ab12...',               // create-draft mode (future)
-//       csrfToken: '<token>',
 //       initialFamilies: [...],                 // parsed pattern-families-seed JSON
 //       urls: {
 //           solutionNotebook: function () {...}, // GET returns .ipynb JSON bytes
@@ -75,7 +74,7 @@
 
     function initPatternFamilyEditor(config) {
         config = config || {};
-        var csrfToken       = config.csrfToken || '';
+        var csrfToken       = ChickadeeUI.getCsrfToken();
         var urls            = config.urls || {};
 
         if (typeof urls.solutionNotebook !== 'function'

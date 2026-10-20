@@ -958,15 +958,18 @@ editor spawn a 404 and auto-compute stop with no message at all.
    trap gets pinned (see the table below).
 2. **`<lang>-eval-shared.js`** — the snippets. `loadCell`, `runExpression`,
    `callFunction`. Arguments are rendered here, by the renderer above.
-3. **`<lang>-eval-worker.js`** — a config handed to `serveEvalWorker` in
-   `xeus-kernel-shared.js`; copy `lua-eval-worker.js`. The message protocol is
+3. **An entry in `eval-worker.js`** — the config it hands to `serveEvalWorker`
+   in `xeus-kernel-shared.js`, keyed by the language's raw value; copy the Lua
+   entry (#2721). The message protocol is
    the driver's, so the editor's client code does not change. Every message may
    carry `runtimeSource`, seeded from
    `AssignmentLanguage.autoComputeRuntimeSource` so the serializer that reports
    a value is the one the personalization driver uses rather than a copy; the
    config's `bootCell` defines it once.
 4. **A smoke row** `{ language: <x>, mode: eval }`, and only then the
-   descriptor's `.inPageKernel(workerScript:)`.
+   descriptor's `.inPageKernel(workerScript: "/eval-worker.js?lang=<x>")`.
+   `EvalWorkerLanguageTableTests` fails until the descriptor and the entry
+   agree.
 
 Cheaper than the smoke and worth writing first: an **execution test** under a
 plain interpreter (`Tests/BrowserRunnerJSTests/<lang>-eval-execution.test.mjs`).

@@ -77,6 +77,6 @@ import Testing
     @Test func luaDeclaresItsInPageWorker() {
         #expect(
             AssignmentLanguage.lua.descriptor.autoCompute
-                == .inPageKernel(workerScript: "/lua-eval-worker.js"))
+                == .inPageKernel(workerScript: "/eval-worker.js?lang=lua"))
     }
 }

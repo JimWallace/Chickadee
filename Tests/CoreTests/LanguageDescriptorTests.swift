@@ -275,8 +275,10 @@ import Testing
     func autoComputeSubstrateMatchesWhetherAKernelExists(_ language: AssignmentLanguage) {
         switch (language.descriptor.autoCompute, language.editorSupport) {
         case (.inPageKernel(let worker), .notebookKernel):
-            #expect(worker.hasPrefix("/"), "the worker path must be absolute: \(worker)")
-            #expect(worker.hasSuffix(".js"), "the worker must be a script: \(worker)")
+            // One worker serves every in-page language, by `lang` (#2721).
+            #expect(
+                worker == "/eval-worker.js?lang=\(language.rawValue)",
+                "the worker must be the shared eval worker for this language: \(worker)")
         case (.inPageKernel(let worker), .uploadOnly):
             Issue.record(
                 Comment(

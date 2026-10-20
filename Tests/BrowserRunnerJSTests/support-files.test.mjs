@@ -88,6 +88,8 @@ function load({ responses = [], confirmAnswer = true, readFails = false } = {}) 
     setStatus: (_el, msg, kind) => statuses.push({ msg, kind }),
     confirmAction: () => Promise.resolve(confirmAnswer),
     showActionError: (msg) => statuses.push({ msg, kind: 'error' }),
+    // The token comes from the page, not from the config (#2721).
+    getCsrfToken: () => 'csrf-token-value',
   };
   sandbox.window = { ChickadeeUI: sandbox.ChickadeeUI };
   sandbox.self = sandbox;
@@ -96,7 +98,6 @@ function load({ responses = [], confirmAnswer = true, readFails = false } = {}) 
 
   const changed = [];
   sandbox.window.initSupportFiles({
-    csrfToken: 'csrf-token-value',
     uploadURL: () => '/instructor/abc/support-files',
     deleteURL: (name) => '/instructor/abc/support-files/' + name,
     onChange: () => changed.push('changed'),

@@ -16,7 +16,8 @@
 // — BEFORE the scripts included at the end of <body> (app.js et al).
 //
 // What belongs here is the low-level shared utility: escaping, the CSRF token,
-// a status line, a fetch wrapper, an error extractor, a confirmation dialog.
+// a status line, a fetch wrapper, an error extractor, a confirmation dialog, a
+// small DOM builder and the wire-once guard.
 // This module once held eighteen functions behind that one name, which is how
 // a chart renderer and an accordion came to be loaded by every page in the
 // product. Those are their own concerns and have their own files and names:
@@ -239,6 +240,9 @@
     // the extracted server message — the `if (!r.ok) return r.text()...`
     // boilerplate that repeated across the editors (#1126).  Resolves with
     // the parsed JSON body (null for 204 / non-JSON responses).
+    //
+    // `opts.errorMessage(text, status)` replaces the default message, for a
+    // call site whose users already read a message of another shape.
     function fetchJSON(url, opts) {
         opts = opts || {};
         var headers = {};
@@ -253,12 +257,44 @@
         }).then(function (r) {
             if (!r.ok && r.status !== 204) {
                 return r.text().then(function (t) {
-                    throw new Error(extractErrorMessage(t) || ('HTTP ' + r.status));
+                    throw new Error(opts.errorMessage
+                        ? opts.errorMessage(t, r.status)
+                        : (extractErrorMessage(t) || ('HTTP ' + r.status)));
                 });
             }
             if (r.status === 204) return null;
             return r.json().catch(function () { return null; });
         });
+    }
+
+    // ── DOM builders ──
+    //
+    // Makes an element, sets each attribute in `attrs`, and sets the text when
+    // `text` is given. It replaces the identical local `el` helpers that each
+    // renderer declared.
+    function el(tag, attrs, text) {
+        var node = document.createElement(tag);
+        if (attrs) {
+            Object.keys(attrs).forEach(function (k) { node.setAttribute(k, attrs[k]); });
+        }
+        if (text != null) node.textContent = text;
+        return node;
+    }
+
+    // The "wire once" guard (#1957). A workbench swap re-runs a page's init on
+    // a DOM that partly survives, so each init must skip an element it already
+    // wired. Returns true the first time it sees `node` for `purpose`, and
+    // false after. One set per purpose, so two modules that wire the same
+    // element for different jobs do not block each other. The sets are weak:
+    // an element that a swap discards is not kept alive.
+    var wiredSets = {};
+    function wireOnce(node, purpose) {
+        if (!node) return false;
+        var key = String(purpose);
+        var wired = wiredSets[key] || (wiredSets[key] = new WeakSet());
+        if (wired.has(node)) return false;
+        wired.add(node);
+        return true;
     }
 
     // Tell the assignment-workbench shell that something on this page changed
@@ -351,6 +387,8 @@
         setStatus: setStatus,
         extractErrorMessage: extractErrorMessage,
         fetchJSON: fetchJSON,
+        el: el,
+        wireOnce: wireOnce,
         notifyWorkbench: notifyWorkbench,
         checkUWDates: checkUWDates
     };

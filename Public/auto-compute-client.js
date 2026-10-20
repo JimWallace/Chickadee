@@ -103,7 +103,10 @@
             // could only ever be in-page for Python.
             var workerScript = ChickadeeLanguage.autoComputeWorker();
             if (!workerScript) return null;
-            var workerURL = workerScript + (version ? '?v=' + encodeURIComponent(version) : '');
+            // `&` when the script already carries a query (`eval-worker.js?lang=`).
+            var workerURL = workerScript + (version
+                ? (workerScript.indexOf('?') === -1 ? '?' : '&') + 'v=' + encodeURIComponent(version)
+                : '');
             var worker = new Worker(workerURL);
             _worker = worker;
             worker.addEventListener('message', function (e) {

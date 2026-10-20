@@ -5,8 +5,10 @@
 // (section-inputs-editor.js) were ~64% identical and drifting — value
 // classification, literal parsing, row validation/rendering, payload
 // collection, and the debounced auto-save machinery now live here once.
-// The two editor files keep only what genuinely differs: their CSS class
-// names, their persistence endpoint, and how they report save results.
+// So does the panel wiring that both share (`wirePanel`, #2721). The two
+// editor files keep only what genuinely differs: their CSS class names, how
+// they find their panels, their persistence endpoint, and how they report
+// save results.
 //
 // A row's Value cell is one of two kinds, picked by prefix:
 //   - "literal"     : `42`, `"hello"`, `[1, 2, 3]`, `{"k": 1}`, and the
@@ -250,13 +252,48 @@
         return { schedule: schedule, flush: flush, flushPending: flushPending };
     }
 
+    /// Shows a panel's amber-cue note (ValueCueNote) only while its table has a
+    /// row, since the cue it explains is drawn on a row (#1996).
+    function syncCueNote(root, tbody) {
+        var note = root.querySelector('.js-value-cue-note');
+        if (note) note.hidden = !tbody.querySelector('tr');
+    }
+
+    /// Wires what both panels do the same way (#2721): the first row refresh,
+    /// a save scheduled on each row edit, the remove button, and the cue note.
+    /// `classes` are the ones given to `createEditor`. What differs stays in
+    /// the editor files: how each finds its panel, its endpoint, how it
+    /// reports a save, and its "+ Add" button.
+    function wirePanel(root, tbody, classes, editor, saver) {
+        editor.refreshAllRows(tbody);
+        syncCueNote(root, tbody);
+
+        root.addEventListener('input', function (e) {
+            var tr = e.target.closest && e.target.closest('tr.' + classes.row);
+            if (tr) {
+                editor.refreshAllRows(tbody);
+                saver.schedule();
+            }
+        });
+        root.addEventListener('click', function (e) {
+            var btn = e.target.closest && e.target.closest('.' + classes.remove);
+            if (btn && root.contains(btn)) {
+                var tr = btn.closest('tr.' + classes.row);
+                if (tr) { tr.remove(); editor.refreshAllRows(tbody); saver.schedule(); }
+                syncCueNote(root, tbody);
+            }
+        });
+    }
+
     var api = {
         RESERVED_NAMES: RESERVED_NAMES,
         isValidPyIdent: isValidPyIdent,
         classifyValue: classifyValue,
         tryParseLiteral: tryParseLiteral,
         createEditor: createEditor,
-        makeDebouncedSaver: makeDebouncedSaver
+        makeDebouncedSaver: makeDebouncedSaver,
+        syncCueNote: syncCueNote,
+        wirePanel: wirePanel
     };
 
     var root = typeof window !== 'undefined' ? window : globalThis;

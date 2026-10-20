@@ -35,7 +35,7 @@ const codeOf = (source) => source
 const R_SEED = {
   name: 'r', displayName: 'R',
   trueLiteral: 'TRUE', falseLiteral: 'FALSE', nullLiteral: 'NULL',
-  autoComputeWorker: '/r-eval-worker.js',
+  autoComputeWorker: '/eval-worker.js?lang=r',
   autoComputeRuntimeSource: '# the R runtime',
 };
 
@@ -158,7 +158,7 @@ test('a language with an in-page worker computes in that worker', async () => {
   assert.deepEqual(plain(res), { ok: true, value: 42, returnedNone: false });
   // The worker is the one the seed names, pinned to the page's release.
   assert.equal(workers.length, 1);
-  assert.equal(workers[0].url, '/r-eval-worker.js?v=0.5.1');
+  assert.equal(workers[0].url, '/eval-worker.js?lang=r&v=0.5.1');
   // The solution loads first: code cells only, with magic and shell lines
   // removed, and the seed's runtime beside them.
   assert.deepEqual(workers[0].messages.map(({ id: _id, ...rest }) => rest), [

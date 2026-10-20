@@ -24,12 +24,10 @@
 (function (global) {
     'use strict';
 
-    // The renders that init() has wired.  One render of the edit body carries
-    // one `#suite-state-seed`, and a swap brings a new one, so the seed element
-    // is the key.  (Not the `[data-assignment-id]` carrier: on the workbench
-    // that is `#wb-shell`, which a swap keeps.)  A WeakSet lets a discarded
-    // render go.
-    var wiredRenders = new WeakSet();
+    // init() wires each render once (`ChickadeeUI.wireOnce`).  One render of
+    // the edit body carries one `#suite-state-seed`, and a swap brings a new
+    // one, so the seed element is the key.  (Not the `[data-assignment-id]`
+    // carrier: on the workbench that is `#wb-shell`, which a swap keeps.)
 
     // The Test Editor modal.  Its shell is built once per document; init()
     // refreshes this reference.
@@ -37,19 +35,17 @@
 
     function init() {
         var renderKey = document.getElementById('suite-state-seed');
-        if (!renderKey || wiredRenders.has(renderKey)) return;
-        wiredRenders.add(renderKey);
+        if (!ChickadeeUI.wireOnce(renderKey, 'edit-page-render')) return;
 
         var carrier = document.querySelector('[data-assignment-id]');
         var assignmentID = carrier ? (carrier.getAttribute('data-assignment-id') || '') : '';
-        var csrfToken = ChickadeeUI.getCsrfToken();
 
         wireHeader();
-        wireSuiteTable(assignmentID, csrfToken);
+        wireSuiteTable(assignmentID);
         dropParkedFamilyEditorBodies();
-        wirePatternFamilyEditor(assignmentID, csrfToken);
-        wireTestEditor(assignmentID, csrfToken);
-        wireSupportFiles(assignmentID, csrfToken);
+        wirePatternFamilyEditor(assignmentID);
+        wireTestEditor(assignmentID);
+        wireSupportFiles(assignmentID);
         wireSelfStartingEditors();
         wireBrightspacePicker();
     }
@@ -105,10 +101,9 @@
     }
 
     // ── Unified suite table (Public/suite-table.js) ─────────────────────────
-    function wireSuiteTable(assignmentID, csrfToken) {
+    function wireSuiteTable(assignmentID) {
         var suiteTable = window.initSuiteTable({
             assignmentID: assignmentID,
-            csrfToken: csrfToken,
             formSelector: 'form.form',
             urls: {
                 putSuite: function () {
@@ -151,7 +146,7 @@
     }
 
     // ── Pattern family editor (Public/pattern-family-editor.js) ─────────────
-    function wirePatternFamilyEditor(assignmentID, csrfToken) {
+    function wirePatternFamilyEditor(assignmentID) {
         var seed = document.getElementById('pattern-families-seed');
         var initialFamilies = [];
         if (seed) {
@@ -160,7 +155,6 @@
         }
         window.chickadeePatternFamilyEditor = window.initPatternFamilyEditor({
             assignmentID: assignmentID,
-            csrfToken: csrfToken,
             initialFamilies: initialFamilies,
             urls: {
                 solutionNotebook: function () {
@@ -175,11 +169,10 @@
     }
 
     // ── Test Editor modal (shell + script renderer config) ──────────────────
-    function wireTestEditor(assignmentID, csrfToken) {
+    function wireTestEditor(assignmentID) {
         // Edit page: published-assignment script endpoints (test-renderer-script.js
         // reads this lazily at open time).
         window.ChickadeeScriptRendererConfig = {
-            csrfToken: csrfToken,
             scriptContentURL: function (name) {
                 return '/instructor/' + encodeURIComponent(assignmentID) + '/scripts/' + encodeURIComponent(name);
             },
@@ -188,13 +181,12 @@
 
         // The shell is built on the first call.  A later call keeps it and
         // upgrades the "+ Add Test" buttons of the current render.
-        modal = window.initTestEditorModal({ csrfToken: csrfToken });
+        modal = window.initTestEditorModal();
     }
 
     // ── Support files (Public/support-files.js) ─────────────────────────────
-    function wireSupportFiles(assignmentID, csrfToken) {
+    function wireSupportFiles(assignmentID) {
         window.initSupportFiles({
-            csrfToken: csrfToken,
             uploadURL: function () {
                 return '/instructor/' + encodeURIComponent(assignmentID) + '/scripts';
             },

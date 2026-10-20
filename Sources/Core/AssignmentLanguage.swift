@@ -513,7 +513,7 @@ extension AssignmentLanguage {
     /// rules). But the escapers already EXIST for all three languages as
     /// constants, so framing bought nothing and cost a second payload encoding
     /// beside Python's, with a second parser to match. The eval protocol stays
-    /// exactly the one `python-eval-worker.js` speaks.
+    /// exactly the one `eval-worker.js` speaks for Python.
     public var autoComputeRuntimeSource: String? {
         switch self {
         case .python:

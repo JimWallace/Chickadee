@@ -55,7 +55,7 @@ const languageModuleSource = await fs.readFile(
   'utf8',
 );
 
-// The Python eval module, loaded in the order python-eval-worker.js loads it.
+// The Python eval module, loaded in the order eval-worker.js loads it for Python.
 const pythonEvalContext = { console };
 pythonEvalContext.globalThis = pythonEvalContext;
 vm.createContext(pythonEvalContext);
@@ -466,11 +466,11 @@ test("auto-compute picks its substrate from the language seed", () => {
   assert.ok(/ChickadeeLanguage\.autoComputeWorker\(\)/.test(clientSource),
     'the worker must come from the language seed, not from a name check here');
 
-  // No hardcoded worker path. A literal `/x-eval-worker.js` in this file is the
-  // shape that made auto-compute Python-only: the editor reached for one
-  // kernel by name and no seed could redirect it.
+  // No hardcoded worker path. A literal worker URL in this file is the shape
+  // that made auto-compute Python-only: the editor reached for one kernel by
+  // name and no seed could redirect it. The URL may carry `?lang=` (#2721).
   for (const [name, source] of autoComputeSources) {
-    const hardcodedWorker = /['"]\/[a-z-]*eval-worker\.js['"]/.exec(source);
+    const hardcodedWorker = /['"]\/[a-z-]*eval-worker\.js(\?[^'"]*)?['"]/.exec(source);
     assert.equal(hardcodedWorker, null,
       `${name} must not name a worker itself (found ${hardcodedWorker && hardcodedWorker[0]})`);
   }

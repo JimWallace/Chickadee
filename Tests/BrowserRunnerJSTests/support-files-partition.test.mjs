@@ -107,7 +107,6 @@ function load({ specs = [], diagnostics = null } = {}) {
   vm.runInContext(source, sandbox);
 
   const config = {
-    csrfToken: 'csrf',
     uploadURL: () => '/u',
     deleteURL: () => '/d',
     datasetsURL: () => '/instructor/abc/datasets',

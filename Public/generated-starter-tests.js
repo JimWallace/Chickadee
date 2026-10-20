@@ -22,7 +22,6 @@
 // conditionals (is there a draft? is there a solution notebook?) stay in the
 // server-rendered view where they belong:
 //
-//   csrfToken          string
 //   draftID            string | null   — null before the first notebook upload
 //   solutionNotebookURL string | null  — the draft's saved solution, when it has one
 //
@@ -39,7 +38,7 @@
     /// Wires the panel. Safe to call on a page that does not render it.
     function initGeneratedStarterTests(config) {
         var cfg = config || {};
-        var csrfToken = cfg.csrfToken;
+        var csrfToken = global.ChickadeeUI.getCsrfToken();
 
         var scanBtn        = document.getElementById('scan-solution-btn');
         var scanStatus     = document.getElementById('scan-status');
@@ -139,17 +138,11 @@
                 setStatus('Saving ' + checked.length + ' test(s)…');
                 var ops = checked.map(function (chk) {
                     var fnName = chk.value;
-                    return fetch(Core.draftScriptsURL(cfg.draftID), {
+                    return global.ChickadeeUI.fetchJSON(Core.draftScriptsURL(cfg.draftID), {
                         method: 'POST',
-                        headers: { 'Content-Type': 'application/json', 'x-csrf-token': csrfToken },
-                        body: JSON.stringify(Core.scriptPayload(
-                            fnName, Core.generatedTemplate(scannedFunctions, tplType, fnName)))
-                    }).then(function (r) {
-                        return r.ok
-                            ? r.json()
-                            : r.text().then(function (t) {
-                                return Promise.reject(t || ('HTTP ' + r.status));
-                            });
+                        body: Core.scriptPayload(
+                            fnName, Core.generatedTemplate(scannedFunctions, tplType, fnName)),
+                        errorMessage: function (text, status) { return text || ('HTTP ' + status); }
                     }).then(function (data) {
                         if (global.chickadeeAddExistingSuiteScript) {
                             global.chickadeeAddExistingSuiteScript(data);
@@ -160,7 +153,7 @@
                     setStatus(Core.savedMessage(checked.length));
                     if (scanResults) scanResults.style.display = 'none';
                 }).catch(function (err) {
-                    setStatus('Could not add generated tests: ' + err);
+                    setStatus('Could not add generated tests: ' + err.message);
                 });
             });
         }

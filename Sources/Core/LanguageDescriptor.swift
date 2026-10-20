@@ -268,7 +268,9 @@ public enum VariableScanSyntax: Equatable, Sendable {
 /// kernel that will grade a browser-graded submission.
 public enum AutoComputeSubstrate: Equatable, Sendable {
 
-    /// A vendored xeus kernel, run in the named Web Worker.
+    /// A vendored xeus kernel, run in the named Web Worker. Every such
+    /// language uses `/eval-worker.js?lang=<rawValue>` (#2721), and the worker
+    /// holds one entry for each `lang`.
     case inPageKernel(workerScript: String)
 
     /// No kernel is vendored for this language, so the server's interpreter
@@ -635,7 +637,7 @@ extension AssignmentLanguage {
         lineCommentPrefix: "#",
         functionScan: .pythonDefStatements,
         variableScan: .assignmentPattern(#"^([A-Za-z_][A-Za-z0-9_]*)\s*(?::[^=]*)?=(?!=)"#),
-        autoCompute: .inPageKernel(workerScript: "/python-eval-worker.js"),
+        autoCompute: .inPageKernel(workerScript: "/eval-worker.js?lang=python"),
         inputsFileName: "_ck_inputs.py",
         notebookKernelNames: AssignmentLanguage.pythonKernelNames,
         editorSupport: .notebookKernel(
@@ -670,7 +672,7 @@ extension AssignmentLanguage {
             #"^([A-Za-z._][A-Za-z0-9._]*)\s*(?:<-|=)\s*function\s*\(([^)]*)\)"#
         ]),
         variableScan: .assignmentPattern(#"^([A-Za-z.][A-Za-z0-9._]*)\s*(?:<<?-|=(?!=))"#),
-        autoCompute: .inPageKernel(workerScript: "/r-eval-worker.js"),
+        autoCompute: .inPageKernel(workerScript: "/eval-worker.js?lang=r"),
         inputsFileName: "_ck_inputs.R",
         notebookKernelNames: AssignmentLanguage.rKernelNames,
         editorSupport: .notebookKernel(
@@ -704,7 +706,7 @@ extension AssignmentLanguage {
             #"^(?:local\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=\s*function\s*\(([^)]*)\)"#,
         ]),
         variableScan: .assignmentPattern(#"^(?:local\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=(?!=)"#),
-        autoCompute: .inPageKernel(workerScript: "/lua-eval-worker.js"),
+        autoCompute: .inPageKernel(workerScript: "/eval-worker.js?lang=lua"),
         inputsFileName: "_ck_inputs.lua",
         notebookKernelNames: AssignmentLanguage.luaKernelNames,
         editorSupport: .notebookKernel(
@@ -744,7 +746,7 @@ extension AssignmentLanguage {
             #"^function\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(([^)]*)\)"#,
         ]),
         variableScan: .assignmentPattern(#"^([A-Za-z_][A-Za-z0-9_]*)\s*=(?!=)"#),
-        autoCompute: .inPageKernel(workerScript: "/octave-eval-worker.js"),
+        autoCompute: .inPageKernel(workerScript: "/eval-worker.js?lang=octave"),
         inputsFileName: "_ck_inputs.m",
         notebookKernelNames: AssignmentLanguage.octaveKernelNames,
         editorSupport: .notebookKernel(
