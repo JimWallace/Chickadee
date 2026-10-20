@@ -18,9 +18,6 @@ import _CryptoExtras
 @Suite(.serialized) final class GitHubTokenEvictionTests {
 
     static let accountID: Int64 = 9_001
-    static let privateKeyPEM: String = {
-        (try? _RSA.Signing.PrivateKey(keySize: .bits2048).pemRepresentation) ?? ""
-    }()
 
     let app: Application
     let directory: URL
@@ -31,10 +28,7 @@ import _CryptoExtras
 
     init() async throws {
         app = try await makeTestApp(prefix: "chickadee-github-evict")
-        directory = FileManager.default.temporaryDirectory
-            .appendingPathComponent("chickadee-github-evict-\(UUID().uuidString)")
-        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        app.githubAppSecretsFilePath = directory.appendingPathComponent(".github-app-secrets").path
+        directory = try GitHubTestApp.useSecretsDirectory(on: app, prefix: "chickadee-github-evict")
     }
 
     deinit {
@@ -70,14 +64,7 @@ import _CryptoExtras
     /// The App, its secrets and a linked student, with `stale` already cached
     /// for the student's account.
     private func linkedStudent(cachedToken stale: String) async throws -> UUID {
-        try await APIGitHubApp(
-            conversion: GitHubManifestConversion(
-                id: 42, slug: "chickadee-courses", name: "Chickadee", clientID: "Iv1.client",
-                clientSecret: "secret", webhookSecret: nil, pem: Self.privateKeyPEM,
-                htmlURL: "https://github.com/apps/chickadee-courses", owner: nil)
-        ).save(on: app.db)
-        try GitHubAppSecrets(privateKeyPEM: Self.privateKeyPEM, clientSecret: "secret", webhookSecret: nil)
-            .write(path: app.githubAppSecretsFilePath)
+        try await GitHubTestApp.register(on: app, clientSecret: "secret")
         let student = try await makeTestStudent(on: app, username: "gh_evict_student")
         let studentID = try student.requireID()
         try await APIGitHubAccountLink(userID: studentID, githubUserID: Self.accountID, githubLogin: "octo-student")

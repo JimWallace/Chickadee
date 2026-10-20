@@ -229,7 +229,7 @@ struct ToolContext {
         if user.isAdmin {
             try await requireEnrollment(of: user, in: courseID)
         }
-        switch try await evaluateCourseWrite(user: user, courseID: courseID, atLeast: minimum, db: db) {
+        switch try await evaluateCourseWrite(user: user, courseID: courseID, atLeast: minimum, db: db).denial {
         case nil:
             return
         case .notEnrolled:

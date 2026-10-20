@@ -28,7 +28,7 @@ extension InstructorLMSRoutes {
             return .unavailable("Chickadee could not read the class list from the LMS.")
         }
 
-        let studentIDs = Array(try await studentUserIDsInCourse(courseID, on: req.db))
+        let studentIDs = Array(try await CourseRoster.studentIDs(in: courseID, on: req.db))
         var students: [APIUser] = []
         var identities: [APILTIIdentity] = []
         for chunk in chunkedForInFilter(studentIDs) {

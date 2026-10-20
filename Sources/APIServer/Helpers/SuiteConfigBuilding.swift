@@ -304,7 +304,7 @@ private func hasRecognizedScriptShebang(_ text: String) -> Bool {
     // it is in the suite — this is only about letting it in.
     //
     // (Rscript is still absent here, matching `classifyScriptInterpreter`'s own
-    // gap noted in docs/language-handling-review.md §4. Harmless while
+    // gap noted in docs/archive/language-handling-review.md §4. Harmless while
     // instructors upload `.R` files, and out of scope for this change.)
     if normalized.range(of: #"^#!.*\blua[0-9.]*\b"#, options: .regularExpression) != nil {
         return true

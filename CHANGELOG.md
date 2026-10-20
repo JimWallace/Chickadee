@@ -9,6 +9,48 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.767] - 2026-10-20
+
+### Changed
+
+- **The worker extracts Python notebooks with RunnerCore (#2715).** The generic notebook path now writes `extractPython(...).executableModule`, the same module the browser runner writes through wasm. The extracted file now has `# --- cell N ---` labels, and a notebook with no code cells gives an empty file. A code cell whose first line starts with spaces now has its statements sorted the same way as in the browser. One helper now converts notebook cells for every extractor.
+
+
+## [0.5.766] - 2026-10-20
+
+### Changed
+
+- **Shared fixtures for the API tests (#2717, part 1).** The per-group activity suites use one `PerGroupActivityFixture` and one `joinSession`. Outcomes that a test does not inspect come from `TestOutcome.stub`. The GitHub suites share one App key through `GitHubTestApp`; a key that does not generate now fails at once with its own error. A new `TestScenario` builder in `Fixtures.swift` makes a course, a setup and an assignment, and the Groups and Personalization folders use it. No test changes what it asserts.
+
+
+## [0.5.765] - 2026-10-20
+
+### Changed
+
+- **One helper for each course access pattern on the server (#2720).** An instructor write to the active course starts with `requireActiveCourseForWrite`, and `evaluateCourseWrite` returns the course that it loads. `CourseRoster` is the one query for the students of a course and for one user's enrollment. `ActivityRequest.resolve` is the gate of the leaderboard, the class composite and the projector arena, and `AvatarIdentity` builds each student's handle and bird. Two student lists now count a row with an unknown role as a student, as every other student list does: the classmate chooser (`latestStudentSubmissionsByUser`) and the grades CSV when no course is active. The unused `manifestHasGeneratedScripts` is gone.
+
+
+## [0.5.764] - 2026-10-20
+
+### Changed
+
+- **Smaller root `CLAUDE.md` and a complete docs index (#2723).** The reference list moved to `docs/README.md`, which now names every document in `docs/`. Each repeated rule now has one copy, and the other places point to it. Eight finished docs, the CI flake history and the per-language kernel postmortems moved to `docs/archive/`. Four shipped feature docs lost their slice tables and build history, and `lab-groups` is now marked shipped.
+
+
+## [0.5.763] - 2026-10-20
+
+### Added
+
+- **The web Datasets tab records audit rows (#2724).** Each write that succeeds records one row: create, add version, details, dictionary, publish or unpublish, and delete. The six new actions are in the Courses category of `/admin/audit`. A row names the dataset and its course. It holds no part of the file.
+
+
+## [0.5.762] - 2026-10-20
+
+### Changed
+
+- **Two fail-open defaults are closed (#2714).** `PatternKind.callsFunction` is now the one exhaustive answer to "does this kind call `functionName`?". The pattern validator, the renderer and the notebook anchor read it, and the handler default of `true` is gone. `LanguageDescriptor.executableOutputProbe` now holds the compile-and-exec probe program. `capabilityRequiresExecutableOutput` derives from it, so a compiled language cannot need executable output and have no probe. Behaviour does not change for the seven languages that ship.
+
+
 ## [0.5.761] - 2026-10-20
 
 ### Security

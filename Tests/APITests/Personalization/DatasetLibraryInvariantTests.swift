@@ -125,18 +125,16 @@ import VaporTesting
 
     @Test func aRestoreDropsTheSourceOfADeletedDataset() async throws {
         try await withApp(app) { app in
-            let courseID = try await makeTestCourse(on: app, code: "DSINVR", name: "Restore").requireID()
-            let user = try await makeTestUser(on: app, username: "dsinv_restore", role: "instructor")
-            try await makeTestEnrollment(on: app, userID: user.requireID(), courseID: courseID)
             let setupID = "dsinv_restore_setup"
-            try await makeTestSetup(
-                on: app, id: setupID, courseID: courseID,
+            let scenario = try await TestScenario.make(
+                on: app, code: "DSINVR", courseName: "Restore", setupID: setupID,
                 manifest:
                     #"{"schemaVersion":1,"testSuites":[{"tier":"public","script":"test_a.sh"}],"timeLimitSeconds":10}"#,
-                withNotebook: false, withZip: false)
+                withNotebook: false, withZip: false, title: "Restore lab")
+            let courseID = scenario.courseID
+            try await scenario.enroll("dsinv_restore", role: "instructor", on: app)
             try await writeZipFixture(at: directory + setupID + ".zip", entries: [("test_a.sh", "exit 0\n")])
-            let assignment = try await makeTestAssignment(
-                on: app, testSetupID: setupID, courseID: courseID, title: "Restore lab")
+            let assignment = scenario.assignment
 
             let library = try await dataset(courseID: courseID)
             var setup = try #require(try await APITestSetup.find(setupID, on: app.db))
@@ -176,18 +174,16 @@ import VaporTesting
 
     @Test func setDatasetKeepsAStoredSampleItIsNotGiven() async throws {
         try await withApp(app) { app in
-            let courseID = try await makeTestCourse(on: app, code: "DSINVS", name: "Sample").requireID()
-            let user = try await makeTestUser(on: app, username: "dsinv_sample", role: "instructor")
-            try await makeTestEnrollment(on: app, userID: user.requireID(), courseID: courseID)
             let setupID = "dsinv_sample_setup"
-            try await makeTestSetup(
-                on: app, id: setupID, courseID: courseID,
+            let scenario = try await TestScenario.make(
+                on: app, code: "DSINVS", courseName: "Sample", setupID: setupID,
                 manifest:
                     #"{"schemaVersion":1,"testSuites":[{"tier":"public","script":"test_a.sh"}],"timeLimitSeconds":10}"#,
-                withNotebook: false, withZip: false)
+                withNotebook: false, withZip: false, title: "Sample lab")
+            let courseID = scenario.courseID
+            try await scenario.enroll("dsinv_sample", role: "instructor", on: app)
             try await writeZipFixture(at: directory + setupID + ".zip", entries: [("test_a.sh", "exit 0\n")])
-            let assignment = try await makeTestAssignment(
-                on: app, testSetupID: setupID, courseID: courseID, title: "Sample lab")
+            let assignment = scenario.assignment
             let library = try await dataset(courseID: courseID)
             try await CourseDatasetService.attach(
                 library, to: try #require(try await APITestSetup.find(setupID, on: app.db)),

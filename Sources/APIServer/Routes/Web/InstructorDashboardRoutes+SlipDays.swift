@@ -99,16 +99,12 @@ extension InstructorDashboardRoutes {
     @Sendable
     func saveSlipDaySettings(req: Request) async throws -> Response {
         let user = try req.auth.require(APIUser.self)
-        let courseState = try await req.resolveActiveCourse(for: user)
-        guard let courseUUID = courseState.activeCourseUUID,
-            let course = try await APICourse.find(courseUUID, on: req.db)
-        else {
-            return req.redirect(to: "/instructor/slip-days?error=course")
-        }
         // Course-wide policy → per-course instructor floor (admin bypass,
         // archived-course block), like the MCP guide.
-        try await requireCourseWriteAccess(
-            caller: user, courseID: courseUUID, atLeast: .instructor, db: req.db)
+        guard let course = try await req.activeCourseForWrite(user, atLeast: .instructor) else {
+            return req.redirect(to: "/instructor/slip-days?error=course")
+        }
+        let courseUUID = try course.requireID()
 
         struct SettingsForm: Content {
             /// "on" when the checkbox is ticked; absent otherwise.
@@ -157,16 +153,12 @@ extension InstructorDashboardRoutes {
     @Sendable
     func adjustSlipDayBudget(req: Request) async throws -> Response {
         let user = try req.auth.require(APIUser.self)
-        let courseState = try await req.resolveActiveCourse(for: user)
-        guard let courseUUID = courseState.activeCourseUUID,
-            let course = try await APICourse.find(courseUUID, on: req.db)
-        else {
-            return req.redirect(to: "/instructor/slip-days?error=course")
-        }
         // A per-student budget adjustment is an individual accommodation,
         // sibling to the extension grant → `.ta` floor.
-        try await requireCourseWriteAccess(
-            caller: user, courseID: courseUUID, atLeast: .ta, db: req.db)
+        guard let course = try await req.activeCourseForWrite(user, atLeast: .ta) else {
+            return req.redirect(to: "/instructor/slip-days?error=course")
+        }
+        let courseUUID = try course.requireID()
 
         struct AdjustForm: Content {
             let userID: String
@@ -174,11 +166,8 @@ extension InstructorDashboardRoutes {
         }
         let form = try await req.decodeContent(AdjustForm.self)
         guard let studentUUID = UUID(uuidString: form.userID), [-1, 1].contains(form.delta),
-            let enrollment = try await APICourseEnrollment.query(on: req.db)
-                .filter(\.$userID == studentUUID)
-                .filter(\.$course.$id == courseUUID)
-                .first(),
-            enrollment.role == .student,
+            let enrollment = try await CourseRoster.enrollment(of: studentUUID, in: courseUUID, on: req.db),
+            CourseRoster.isStudent(enrollment),
             let student = try await APIUser.find(studentUUID, on: req.db)
         else {
             return req.redirect(to: "/instructor/slip-days?error=student")
@@ -212,16 +201,12 @@ extension InstructorDashboardRoutes {
     @Sendable
     func refundSlipDaySpendAction(req: Request) async throws -> Response {
         let user = try req.auth.require(APIUser.self)
-        let courseState = try await req.resolveActiveCourse(for: user)
-        guard let courseUUID = courseState.activeCourseUUID,
-            let course = try await APICourse.find(courseUUID, on: req.db)
-        else {
-            return req.redirect(to: "/instructor/slip-days?error=course")
-        }
         // A refund is an individual accommodation, sibling to the extension
         // revoke → `.ta` floor.
-        try await requireCourseWriteAccess(
-            caller: user, courseID: courseUUID, atLeast: .ta, db: req.db)
+        guard let course = try await req.activeCourseForWrite(user, atLeast: .ta) else {
+            return req.redirect(to: "/instructor/slip-days?error=course")
+        }
+        let courseUUID = try course.requireID()
 
         struct RefundForm: Content {
             let spendID: String
@@ -268,10 +253,7 @@ extension InstructorDashboardRoutes {
     static func loadSlipDayStudentRows(
         courseUUID: UUID, policy: SlipDayPolicy, canManageLedger: Bool, db: any Database
     ) async throws -> [SlipDayStudentRow] {
-        let enrollments = try await APICourseEnrollment.query(on: db)
-            .filter(\.$course.$id == courseUUID)
-            .all()
-        let studentEnrollments = enrollments.filter { $0.role == .student }
+        let studentEnrollments = try await CourseRoster.studentEnrollments(in: courseUUID, on: db)
         guard !studentEnrollments.isEmpty else { return [] }
 
         // Same roster conventions as the Students tab: join in Swift and

@@ -56,16 +56,14 @@ extension InstructorDashboardRoutes {
     @Sendable
     func saveAIFeedbackAttestation(req: Request) async throws -> Response {
         let user = try req.auth.require(APIUser.self)
-        let courseState = try await req.resolveActiveCourse(for: user)
-        guard let courseID = courseState.activeCourseUUID,
-            let course = try await APICourse.find(courseID, on: req.db),
+        guard let course = try await req.activeCourseForWrite(user, atLeast: .ta),
             course.aiFeedbackEnabled == true
         else {
             return req.redirect(to: "/instructor/mcp?error=course")
         }
+        let courseID = try course.requireID()
         // The attestation is about the viewer's own account, so it lives on
         // their own enrollment row: an admin who is not enrolled has none.
-        try await requireCourseWriteAccess(caller: user, courseID: courseID, atLeast: .ta, db: req.db)
         guard let enrollment = try await viewerEnrollment(user, courseID: courseID, on: req.db) else {
             return req.redirect(to: "/instructor/mcp?error=enrollment")
         }

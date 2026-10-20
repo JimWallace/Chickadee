@@ -28,10 +28,7 @@ import VaporTesting
 
     init() async throws {
         app = try await makeTestApp(prefix: "chickadee-admin-github")
-        directory = FileManager.default.temporaryDirectory
-            .appendingPathComponent("chickadee-admin-github-\(UUID().uuidString)")
-        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        app.githubAppSecretsFilePath = directory.appendingPathComponent(".github-app-secrets").path
+        directory = try GitHubTestApp.useSecretsDirectory(on: app, prefix: "chickadee-admin-github")
         // The test app does not install the production middleware stack; the
         // manifest form's form-action allowance is asserted on a real header.
         app.middleware.use(SecurityHeadersMiddleware())

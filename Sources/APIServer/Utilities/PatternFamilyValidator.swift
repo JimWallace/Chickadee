@@ -20,7 +20,7 @@ private func validatePatternCaseHeader(
     // A function-calling family auto-generates an existence guard whose
     // filename uses `patternExistenceGuardCaseKey`; forbid a real case from
     // claiming that key so the two can never produce the same filename.
-    if patternKindHandler(for: family.kind).requiresFunctionName,
+    if family.kind.callsFunction,
         c.key == patternExistenceGuardCaseKey
     {
         throw AuthoringValidationError.patternCaseKeyReserved(familyID: family.id, caseKey: c.key)
@@ -184,7 +184,7 @@ private func validatePatternFamilyHeader(
     // identifier check for those — an empty or placeholder value is
     // acceptable.  Every function-calling kind still requires a valid
     // identifier.
-    if patternKindHandler(for: family.kind).requiresFunctionName {
+    if family.kind.callsFunction {
         guard isValidFunctionTarget(family.functionName, language: language) else {
             throw AuthoringValidationError.patternFunctionNameInvalid(
                 familyID: family.id, functionName: family.functionName, language: language,

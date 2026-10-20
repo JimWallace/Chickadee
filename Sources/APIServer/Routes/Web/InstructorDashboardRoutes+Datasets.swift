@@ -16,7 +16,8 @@
 // Each route names its dataset by slug in the active course, so a slug of
 // another course is not found. The `/instructor` gate admits course staff to
 // read. Every write needs a TA or above in a course that is not archived,
-// because a dataset is content, as a content item is.
+// because a dataset is content, as a content item is. Every write that
+// succeeds records one audit row (#2724).
 
 import Core
 import Elementary
@@ -162,6 +163,8 @@ extension InstructorDashboardRoutes {
                 dataset: .init(name: name, slug: slug),
                 upload: .init(filename: file.filename, bytes: Data(buffer: file.data), note: form.note),
                 blobs: datasetBlobs(req), on: req.db)
+            await AuditLogger.recordDatasetWrite(
+                .datasetCreated, dataset: created.dataset, metadata: ["version": "\(created.version.version)"], on: req)
             return Self.redirectToDataset(req: req, slug: created.dataset.slug, notice: "Created.")
         } catch let error as CourseDatasetError {
             return Self.redirectToList(req: req, error: error.description)
@@ -182,6 +185,8 @@ extension InstructorDashboardRoutes {
                 to: dataset,
                 upload: .init(filename: file.filename, bytes: Data(buffer: file.data), note: form.note),
                 blobs: datasetBlobs(req), on: req.db)
+            await AuditLogger.recordDatasetWrite(
+                .datasetVersionAdded, dataset: dataset, metadata: ["version": "\(added.version.version)"], on: req)
             var notice = "Added version \(added.version.version)."
             if !added.droppedColumns.isEmpty {
                 notice += " The new file has no \(added.droppedColumns.joined(separator: ", ")) column."
@@ -204,6 +209,7 @@ extension InstructorDashboardRoutes {
             licence: form.licence ?? "")
         do {
             try await CourseDatasetService.updateMetadata(dataset, edit: edit, on: req.db)
+            await AuditLogger.recordDatasetWrite(.datasetMetadataChanged, dataset: dataset, on: req)
             return Self.redirectToDataset(req: req, slug: dataset.slug, notice: "Saved.")
         } catch let error as CourseDatasetError {
             return Self.redirectToDataset(req: req, slug: dataset.slug, error: error.description)
@@ -226,8 +232,10 @@ extension InstructorDashboardRoutes {
             CourseDatasetService.ColumnNote(name: names[index], description: descriptions[index], unit: units[index])
         }
         do {
-            _ = try await CourseDatasetService.updateDictionary(
-                dataset, version: form.version ?? dataset.currentVersion, notes: notes, on: req.db)
+            let version = form.version ?? dataset.currentVersion
+            _ = try await CourseDatasetService.updateDictionary(dataset, version: version, notes: notes, on: req.db)
+            await AuditLogger.recordDatasetWrite(
+                .datasetDictionaryChanged, dataset: dataset, metadata: ["version": "\(version)"], on: req)
             return Self.redirectToDataset(req: req, slug: dataset.slug, notice: "Saved.")
         } catch let error as CourseDatasetError {
             return Self.redirectToDataset(req: req, slug: dataset.slug, error: error.description)
@@ -243,6 +251,8 @@ extension InstructorDashboardRoutes {
         let published = form.published == "1"
         do {
             try await CourseDatasetService.setPublished(dataset, published, on: req.db)
+            await AuditLogger.recordDatasetWrite(
+                .datasetVisibilityChanged, dataset: dataset, metadata: ["published": "\(published)"], on: req)
             return Self.redirectToDataset(
                 req: req, slug: dataset.slug, notice: published ? "Published." : "Unpublished.")
         } catch let error as CourseDatasetError {
@@ -258,6 +268,7 @@ extension InstructorDashboardRoutes {
         let dataset = try await requireDataset(form.slug, courseID: courseID, on: req.db)
         do {
             try await CourseDatasetService.delete(dataset, on: req.db)
+            await AuditLogger.recordDatasetWrite(.datasetDeleted, dataset: dataset, on: req)
             return Self.redirectToList(req: req, notice: "Deleted \(dataset.name).")
         } catch let error as CourseDatasetError {
             return Self.redirectToDataset(req: req, slug: dataset.slug, error: error.description)
@@ -276,9 +287,7 @@ extension InstructorDashboardRoutes {
 
     /// The active course, after the TA floor and the archive check.
     private func requireDatasetWrite(req: Request, user: APIUser) async throws -> UUID {
-        let courseID = try await req.requireActiveCourseID(for: user, action: "managing datasets")
-        try await requireCourseWriteAccess(caller: user, courseID: courseID, atLeast: .ta, db: req.db)
-        return courseID
+        try await req.requireActiveCourseForWrite(user, atLeast: .ta, action: "managing datasets").requireID()
     }
 
     /// The dataset with `slug` in `courseID`, the active course. A slug of

@@ -343,6 +343,38 @@ because line numbers go out of date.
   made family dependencies "sticky", with references to deleted files that no
   edit could remove.
 
+### Does a pattern kind call a function: `PatternKind.callsFunction`
+
+- **Writer:** only the exhaustive switch in
+  `Sources/Core/Models/PatternFamily.swift`. It has no `default:` arm (#2714).
+- **Readers:**
+  - The identifier check on `functionName` and the reserved existence-guard
+    case key (`PatternFamilyValidator`).
+  - The existence guard and the generated filename list
+    (`PatternFamilyRenderer`).
+  - The notebook anchor (`NotebookTestAnchoring.familyTarget`).
+- **Rule:** the validator, the existence guard and the anchor must agree on
+  which kinds call a function. All three read this one value.
+  `PatternKindCallsFunctionTests` pins the answer for each kind.
+- **Parallel path:** `Public/pattern-family-editor.js` names
+  `variable_equality` and `program_io` for its case and stdin columns. It does
+  not read `callsFunction`. A new kind that calls no function must also go
+  there.
+
+### Compiled output that grading execs: `LanguageDescriptor.executableOutputProbe`
+
+- **Writer:** the language literals in `Sources/Core/LanguageDescriptor.swift`.
+  Only C++ sets a probe.
+- **Readers:**
+  - `capabilityRequiresExecutableOutput`, which is derived from it.
+  - The runner exec probe (`Sources/Worker/RunnerProfileDetector.swift`). A
+    runner that cannot compile and run the probe does not advertise the
+    language.
+  - The compiled-solution shape in `Utilities/TestScriptTemplates.swift`.
+- **Rule:** a language that needs executable output always has a probe
+  program, so the runner never advertises an unchecked capability
+  (`ExecutableOutputProbeTests`, #2714).
+
 ### The declared language and `languagesRequiredToGrade`
 
 - **Writers:**
@@ -541,6 +573,12 @@ because line numbers go out of date.
   - Publishing a dataset controls only the Data page and the links to it. A
     download for an assignment follows the gate of that assignment
     (`isAssignmentEffectivelyOpen` or `studentMayViewClosedAssignment`).
+  - A web Datasets tab write records a `dataset.*` audit row with `courseID`,
+    so it shows in the course activity view (`CourseTimelineService`). That
+    view reads the target from the `assignment`, `title` or
+    `subject_user_id` metadata key, so `AuditLogger.recordDatasetWrite` sets
+    `title` to the dataset name. A new course-scoped audit action must set one
+    of those keys, or its row shows a bare UUID.
 
 ### The result: `TestOutcomeCollection` counts and the grade
 
@@ -790,8 +828,17 @@ because line numbers go out of date.
   - The MCP `ToolContext` checks.
   - `ActiveCourseStaffMiddleware`.
   - `AvatarStore.courseStaff`.
+  - `courseRole` reads the row through `CourseRoster.enrollment(of:in:on:)`.
+    A new read of one user's row uses it too.
 - **Rules:**
   - Every call site states its minimum role. Nothing has a default.
+  - The students of a course are `CourseRoster.studentIDs` (and
+    `studentIDsByCourse`). The rule is `CourseRoster.isStudent`: a
+    `student` row, a NULL row and a row with an unknown role are students.
+    Do not filter `roleRaw` in a query to find students (#2720).
+  - An instructor write to the active course starts with
+    `requireActiveCourseForWrite` or `activeCourseForWrite`. Both run
+    `evaluateCourseWrite`, which returns the course it loads.
   - A TA authors content and grades. An instructor manages the course.
   - An admin bypasses the role check. But an admin's MCP agent can reach only
     the courses that the MCP account is enrolled in (#1942;
@@ -911,7 +958,8 @@ because line numbers go out of date.
 
 - **Writers:** `AvatarStore.ensureHandle` and `redrawHandle`.
 - **Readers:**
-  - The leaderboard.
+  - The leaderboard, through `AvatarIdentity`: the ranking rows, the
+    hill's champion and the viewer's card.
   - The composite board and its snapshot.
   - The account page and the staff student lists.
   - The data export.
@@ -935,7 +983,12 @@ because line numbers go out of date.
 - **No guard:** no generic check finds a new page that shows student data to
   classmates. `RouteAuthorizationMatrixTests` does not cover routes outside
   `/instructor` and `/courses`. So:
-  - Use `isCourseStaff` and the `AvatarStore` handles.
+  - Use `isCourseStaff` and the `AvatarStore` handles. An activity page
+    starts with `ActivityRequest.resolve` and names students through
+    `AvatarIdentity`. Two activity routes do not start there: the
+    group-session routes authorize the caller first (`requireGroupSession`),
+    and the composite spare is for students only
+    (`requireOpenStudentAssignment`).
   - Add a test that asserts that a classmate's username is not on the page,
     as `LeaderboardPageTests` does.
 - **Trap:** a new aggregation set the metric board flag by accident (#1745).

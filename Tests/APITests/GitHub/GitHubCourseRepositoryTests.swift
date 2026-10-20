@@ -10,7 +10,6 @@
 
 import ChickadeeTestSupport
 import Core
-import CryptoExtras
 import Fluent
 import Foundation
 import NIOConcurrencyHelpers
@@ -32,9 +31,6 @@ import VaporTesting
     static let manifest = """
         {"schemaVersion":1,"githubSubmission":true,"submissionMode":"uploadOnly","testSuites":[{"tier":"public","script":"test.sh"}],"timeLimitSeconds":10}
         """
-    static let privateKeyPEM: String = {
-        (try? _RSA.Signing.PrivateKey(keySize: .bits2048).pemRepresentation) ?? ""
-    }()
 
     let app: Application
     let directory: URL
@@ -44,10 +40,7 @@ import VaporTesting
 
     init() async throws {
         app = try await makeTestApp(prefix: "chickadee-github-course")
-        directory = FileManager.default.temporaryDirectory
-            .appendingPathComponent("chickadee-github-course-\(UUID().uuidString)")
-        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        app.githubAppSecretsFilePath = directory.appendingPathComponent(".github-app-secrets").path
+        directory = try GitHubTestApp.useSecretsDirectory(on: app, prefix: "chickadee-github-course")
         app.middleware.use(SecurityHeadersMiddleware())
         app.securityConfiguration = AppSecurityConfiguration(
             publicBaseURL: URL(string: "https://courses.example.edu"), enforceHTTPS: false,
@@ -134,14 +127,7 @@ import VaporTesting
     // MARK: - Fixtures
 
     private func registerApp() async throws {
-        try await APIGitHubApp(
-            conversion: GitHubManifestConversion(
-                id: 42, slug: "chickadee-courses", name: "Chickadee", clientID: "Iv1.client",
-                clientSecret: "client-secret", webhookSecret: nil, pem: Self.privateKeyPEM,
-                htmlURL: "https://github.com/apps/chickadee-courses", owner: nil)
-        ).save(on: app.db)
-        try GitHubAppSecrets(privateKeyPEM: Self.privateKeyPEM, clientSecret: "client-secret", webhookSecret: nil)
-            .write(path: app.githubAppSecretsFilePath)
+        try await GitHubTestApp.register(on: app)
     }
 
     private func course() async throws -> UUID {

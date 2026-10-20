@@ -145,7 +145,7 @@ extension InstructorDashboardRoutes {
     ) async throws -> [APIUser] {
         // Roster = `.student`-role enrollments (#417 Slice G2); TA/instructor
         // enrollments don't count toward the submitted-student denominators.
-        let studentUserIDs = try await studentUserIDsInCourse(assignment.courseID, on: req.db)
+        let studentUserIDs = try await CourseRoster.studentIDs(in: assignment.courseID, on: req.db)
         guard !studentUserIDs.isEmpty else { return [] }
         return try await APIUser.query(on: req.db)
             .filter(\.$id ~~ Array(studentUserIDs))

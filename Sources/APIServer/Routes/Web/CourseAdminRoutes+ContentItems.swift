@@ -40,8 +40,9 @@ extension CourseAdminRoutes {
     @Sendable
     func createContentItem(req: Request) async throws -> Response {
         let user = try req.auth.require(APIUser.self)
-        let courseID = try await req.requireActiveCourseID(for: user, action: "managing content items")
-        try await requireCourseWriteAccess(caller: user, courseID: courseID, atLeast: .ta, db: req.db)
+        let courseID = try await req.requireActiveCourseForWrite(
+            user, atLeast: .ta, action: "managing content items"
+        ).requireID()
 
         let body = try await req.decodeContent(ContentItemFormBody.self)
         let title = body.title.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -156,10 +157,10 @@ extension CourseAdminRoutes {
             var itemIDs: [String]
         }
         let user = try req.auth.require(APIUser.self)
-        let courseState = try await req.resolveActiveCourse(for: user)
-        guard let courseID = courseState.activeCourseUUID else { return .ok }
-        try await requireCourseWriteAccess(
-            caller: user, courseID: courseID, atLeast: SortOrderRenumbering.roleFloor, db: req.db)
+        guard let course = try await req.activeCourseForWrite(user, atLeast: SortOrderRenumbering.roleFloor) else {
+            return .ok
+        }
+        let courseID = try course.requireID()
 
         let body = try await req.decodeContent(ReorderBody.self)
         do {

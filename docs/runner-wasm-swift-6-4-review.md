@@ -3,7 +3,7 @@
 Status: **slices 1–3 shipped** (#1548, #1550, and the language-mode PR
 after it). Slice 4 was spiked, measured and deliberately NOT shipped; the
 numbers are in the table so the decision can be revisited with them. Companion to
-[runner-wasm-migration.md](runner-wasm-migration.md) (the design) and
+[runner-wasm-migration.md](archive/runner-wasm-migration.md) (the design) and
 [runner-wasm-serving.md](runner-wasm-serving.md) (caching and the size guard).
 
 The question was whether anything in Swift 6.4 helps the wasm build — smaller,

@@ -93,7 +93,7 @@ func patternFamilyAllGeneratedFilenames(
     // `applyPatternFamilies` deletes a stale guard when the family's default
     // tier changes, the kind switches to one that doesn't call a function, or
     // the family is removed, and so the filename-collision checks see it.
-    if patternKindHandler(for: family.kind).requiresFunctionName {
+    if family.kind.callsFunction {
         names.append(
             generatedScriptFilename(
                 familyID: family.id,
@@ -130,7 +130,7 @@ func existenceGuard(
     globalVariables: [FamilyVariable] = [],
     language: AssignmentLanguage
 ) -> GeneratedScript? {
-    guard patternKindHandler(for: family.kind).requiresFunctionName,
+    guard family.kind.callsFunction,
         family.cases.contains(where: \.enabled)
     else { return nil }
     let hash = patternFamilySpecHash(
@@ -138,7 +138,7 @@ func existenceGuard(
     let tier = family.defaults.tier
     let label = "\(family.functionName) is defined"
     // Exhaustive so a future language cannot silently receive Python bytes
-    // (docs/language-handling-review.md §4).
+    // (docs/archive/language-handling-review.md §4).
     //
     // Only the SOURCE differs per language — every arm built an identical
     // `GeneratedScript` around it, so the shared construction is hoisted below.

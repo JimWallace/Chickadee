@@ -97,7 +97,7 @@ if [ "$check_rc" -ne 0 ]; then
   # for the probe's full 300 s budget, so by the time the check gives up the
   # last 40 lines are several hundred INFO polls and the 500 that caused the
   # failure has scrolled away — which is exactly what happened on the third
-  # sighting of the result-POST intermittent (docs/ci-flakiness.md, Family 2's
+  # sighting of the result-POST intermittent (docs/archive/ci-flakiness-history.md, Family 2's
   # "not the exec-hang" note). The tail is kept: it is the right view when the
   # server died or never got that far.
   echo "run-smoke: check failed (rc=$check_rc) — server errors:" >&2

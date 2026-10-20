@@ -29,7 +29,7 @@
 # drift silently because a machine writes it, and the CI format-lint job fails
 # when a rewrite would change anything. The one regex parse of Swift source
 # lives here, in the generator, rather than in a test per shared constant —
-# see docs/language-handling-review.md section 2 for the guard-mechanism
+# see docs/archive/language-handling-review.md section 2 for the guard-mechanism
 # hierarchy this implements.
 #
 # It also writes one whole file: Public/runner-support-sources.js, which holds

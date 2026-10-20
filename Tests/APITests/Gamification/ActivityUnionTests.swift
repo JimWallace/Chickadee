@@ -20,11 +20,7 @@ import VaporTesting
 @Suite struct ActivityUnionTests {
 
     private func outcome(_ name: String, metric: Double?, status: TestStatus = .pass) -> TestOutcome {
-        TestOutcome(
-            testName: name, testClass: nil, tier: .pub, status: status,
-            shortResult: status.defaultShortResult, longResult: nil, score: status == .pass ? 1 : 0,
-            metric: metric, executionTimeMs: 1, memoryUsageBytes: nil,
-            attemptNumber: 1, isFirstPassSuccess: false)
+        .stub(name, status: status, score: status == .pass ? 1 : 0, metric: metric)
     }
 
     private func unionManifest() throws -> String {

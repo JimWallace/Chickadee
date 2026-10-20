@@ -353,14 +353,6 @@ func applyLanguageDeclaration(_ language: AssignmentLanguage?, to props: inout T
     }
 }
 
-/// True when the manifest carries any generated test — a pattern-family case or
-/// a notebook check. Read off the entries rather than the family/check lists
-/// so a family that has produced no enabled case doesn't block a change that
-/// would rewrite nothing.
-func manifestHasGeneratedScripts(_ manifest: String?) -> Bool {
-    manifest.flatMap(decodeManifest(fromJSON:))?.testSuites.contains(where: \.isGenerated) ?? false
-}
-
 /// Names the languages rather than listing an enum case, so the message stays
 /// correct when a sixth language is added.
 func unknownLanguageMessage(_ given: String) -> String {
