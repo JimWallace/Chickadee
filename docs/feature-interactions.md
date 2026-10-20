@@ -573,6 +573,12 @@ because line numbers go out of date.
   - Publishing a dataset controls only the Data page and the links to it. A
     download for an assignment follows the gate of that assignment
     (`isAssignmentEffectivelyOpen` or `studentMayViewClosedAssignment`).
+  - A web Datasets tab write records a `dataset.*` audit row with `courseID`,
+    so it shows in the course activity view (`CourseTimelineService`). That
+    view reads the target from the `assignment`, `title` or
+    `subject_user_id` metadata key, so `AuditLogger.recordDatasetWrite` sets
+    `title` to the dataset name. A new course-scoped audit action must set one
+    of those keys, or its row shows a bare UUID.
 
 ### The result: `TestOutcomeCollection` counts and the grade
 
