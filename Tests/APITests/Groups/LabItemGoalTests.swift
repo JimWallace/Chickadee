@@ -41,11 +41,6 @@ import VaporTesting
     /// A course with Lab 101 and Lab 102 and a per-group assignment of
     /// `activity` with a goal that the lab covers both items.
     private func fixture(activity: ClassActivity) async throws -> Fixture {
-        let course = try await makeTestCourse(on: app, code: "LIT1", mode: .closed)
-        let courseID = try course.requireID()
-        let set = try await CourseGroupStore.createSet(courseID: courseID, name: "Lab sections", on: app.db)
-        let labA = try await CourseGroupStore.addGroup(named: "Lab 101", to: set, on: app.db).requireID()
-        let labB = try await CourseGroupStore.addGroup(named: "Lab 102", to: set, on: app.db).requireID()
         let props = TestProperties(
             testSuites: [
                 TestSuiteEntry(tier: .pub, script: "bug_one.py"), TestSuiteEntry(tier: .pub, script: "bug_two.py"),
@@ -59,13 +54,15 @@ import VaporTesting
                     reward: AchievementReward(type: .points, label: "Bugs found", points: 2),
                     classFraction: 1)
             ])
-        let manifest = try #require(String(data: JSONEncoder().encode(props), encoding: .utf8))
-        let setup = try await makeTestSetup(on: app, id: setupID, courseID: courseID, manifest: manifest)
-        let assignment = try await makeTestAssignment(on: app, testSetupID: setupID, courseID: courseID)
+        let scenario = try await TestScenario.make(
+            on: app, code: "LIT1", mode: .closed, setupID: setupID, properties: props)
+        let set = try await CourseGroupStore.createSet(courseID: scenario.courseID, name: "Lab sections", on: app.db)
+        let labA = try await CourseGroupStore.addGroup(named: "Lab 101", to: set, on: app.db).requireID()
+        let labB = try await CourseGroupStore.addGroup(named: "Lab 102", to: set, on: app.db).requireID()
         let items = props.testSuites.map { runnerOutcomeTestName(displayName: $0.name, script: $0.script) }
         return Fixture(
-            setup: setup, assignment: assignment, assignmentID: try assignment.requireID(), props: props,
-            labA: labA, labB: labB, items: items)
+            setup: scenario.setup, assignment: scenario.assignment, assignmentID: scenario.assignmentID,
+            props: props, labA: labA, labB: labB, items: items)
     }
 
     /// An enrolled student who joins `group`'s session, or none.

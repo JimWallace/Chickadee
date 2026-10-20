@@ -57,16 +57,15 @@ import VaporTesting
 
     @Test func aJoinFromAnotherNetworkIsMarkedForStaff() async throws {
         try await withApp(app) { app in
-            let course = try await makeTestCourse(on: app, code: "NET1", mode: .closed)
-            let courseID = try course.requireID()
+            let scenario = try await TestScenario.make(
+                on: app, code: "NET1", mode: .closed, setupID: "net1_setup",
+                properties: TestProperties(
+                    testSuites: [TestSuiteEntry(tier: .pub, script: "match.sh")], language: nil,
+                    activity: ClassActivity(kind: .bestMetric, runsPerGroup: true)))
+            let courseID = scenario.courseID
+            let assignment = scenario.assignment
             let set = try await CourseGroupStore.createSet(courseID: courseID, name: "Lab sections", on: app.db)
             let labA = try await CourseGroupStore.addGroup(named: "Lab 101", to: set, on: app.db).requireID()
-            let props = TestProperties(
-                testSuites: [TestSuiteEntry(tier: .pub, script: "match.sh")], language: nil,
-                activity: ClassActivity(kind: .bestMetric, runsPerGroup: true))
-            let manifest = try #require(String(data: JSONEncoder().encode(props), encoding: .utf8))
-            try await makeTestSetup(on: app, id: "net1_setup", courseID: courseID, manifest: manifest)
-            let assignment = try await makeTestAssignment(on: app, testSetupID: "net1_setup", courseID: courseID)
 
             let ta = try await actor("net_ta", role: .ta, courseID: courseID)
             try await post(

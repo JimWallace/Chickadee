@@ -45,11 +45,6 @@ import VaporTesting
     /// reaches 100%. ada (100%) and ben (50%) join Lab 101's session, alan
     /// (100%) joins Lab 102's, and grace, a member of Lab 102, joins nothing.
     private func fixture(dueAt: Date? = nil, extraGoals: [Achievement] = []) async throws -> Fixture {
-        let course = try await makeTestCourse(on: app, code: "LGL1", mode: .closed)
-        let courseID = try course.requireID()
-        let set = try await CourseGroupStore.createSet(courseID: courseID, name: "Lab sections", on: app.db)
-        let labA = try await CourseGroupStore.addGroup(named: "Lab 101", to: set, on: app.db).requireID()
-        let labB = try await CourseGroupStore.addGroup(named: "Lab 102", to: set, on: app.db).requireID()
         let props = TestProperties(
             testSuites: [TestSuiteEntry(tier: .pub, script: "t.py")], language: .python,
             activity: ClassActivity(kind: .bestMetric, runsPerGroup: true),
@@ -60,17 +55,16 @@ import VaporTesting
                     reward: AchievementReward(type: .points, label: "Lab goal", points: 2),
                     classFraction: 1)
             ] + extraGoals)
-        let manifest = try #require(String(data: JSONEncoder().encode(props), encoding: .utf8))
-        let setup = try await makeTestSetup(on: app, id: setupID, courseID: courseID, manifest: manifest)
-        let assignment = try await makeTestAssignment(
-            on: app, testSetupID: setupID, courseID: courseID, dueAt: dueAt)
-        let assignmentID = try assignment.requireID()
+        let scenario = try await TestScenario.make(
+            on: app, code: "LGL1", mode: .closed, setupID: setupID, properties: props, dueAt: dueAt)
+        let assignmentID = scenario.assignmentID
+        let set = try await CourseGroupStore.createSet(courseID: scenario.courseID, name: "Lab sections", on: app.db)
+        let labA = try await CourseGroupStore.addGroup(named: "Lab 101", to: set, on: app.db).requireID()
+        let labB = try await CourseGroupStore.addGroup(named: "Lab 102", to: set, on: app.db).requireID()
 
         var students: [UUID] = []
         for name in ["lgoal_ada", "lgoal_ben", "lgoal_alan", "lgoal_grace"] {
-            let id = try await makeTestStudent(on: app, username: name).requireID()
-            try await makeTestEnrollment(on: app, userID: id, courseID: courseID)
-            students.append(id)
+            students.append(try await scenario.enroll(name, on: app))
         }
         try await CourseGroupStore.setMembership(userID: students[3], groupID: labB, in: set, on: app.db)
         for (student, lab) in [(students[0], labA), (students[1], labA), (students[2], labB)] {
@@ -80,7 +74,8 @@ import VaporTesting
             try await grade(student, earned: earned)
         }
         return Fixture(
-            setup: setup, assignment: assignment, assignmentID: assignmentID, props: props, labA: labA,
+            setup: scenario.setup, assignment: scenario.assignment, assignmentID: assignmentID, props: props,
+            labA: labA,
             labB: labB, ada: students[0], ben: students[1], alan: students[2], grace: students[3])
     }
 

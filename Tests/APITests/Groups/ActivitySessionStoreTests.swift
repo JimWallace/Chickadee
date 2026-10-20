@@ -29,19 +29,15 @@ import VaporTesting
 
     /// A course with two groups; ada in Lab 101, alan in Lab 102, grace in none.
     private func fixture(on app: Application) async throws -> Fixture {
-        let course = try await makeTestCourse(on: app, code: "CS135", name: "Designing Programs")
-        let courseID = try course.requireID()
-        let props = TestProperties(
-            testSuites: [TestSuiteEntry(tier: .pub, script: "match.sh")], language: nil,
-            activity: ClassActivity(kind: .bestMetric, runsPerGroup: true))
-        let manifest = try #require(String(data: JSONEncoder().encode(props), encoding: .utf8))
-        try await makeTestSetup(on: app, id: "sess_setup", courseID: courseID, manifest: manifest)
-        let assignment = try await makeTestAssignment(on: app, testSetupID: "sess_setup", courseID: courseID)
+        let scenario = try await TestScenario.make(
+            on: app, code: "CS135", courseName: "Designing Programs", setupID: "sess_setup",
+            properties: TestProperties(
+                testSuites: [TestSuiteEntry(tier: .pub, script: "match.sh")], language: nil,
+                activity: ClassActivity(kind: .bestMetric, runsPerGroup: true)))
+        let courseID = scenario.courseID
         var students: [UUID] = []
         for name in ["ada", "alan", "grace"] {
-            let id = try await makeTestStudent(on: app, username: name).requireID()
-            try await makeTestEnrollment(on: app, userID: id, courseID: courseID)
-            students.append(id)
+            students.append(try await scenario.enroll(name, on: app))
         }
         let set = try await CourseGroupStore.createSet(courseID: courseID, name: "Lab sections", on: app.db)
         let labA = try await CourseGroupStore.addGroup(named: "Lab 101", to: set, on: app.db).requireID()
@@ -49,7 +45,7 @@ import VaporTesting
         try await CourseGroupStore.setMembership(userID: students[0], groupID: labA, in: set, on: app.db)
         try await CourseGroupStore.setMembership(userID: students[1], groupID: labB, in: set, on: app.db)
         return Fixture(
-            courseID: courseID, assignmentID: try assignment.requireID(), set: set, labA: labA, labB: labB,
+            courseID: courseID, assignmentID: scenario.assignmentID, set: set, labA: labA, labB: labB,
             ada: students[0], alan: students[1], grace: students[2])
     }
 
