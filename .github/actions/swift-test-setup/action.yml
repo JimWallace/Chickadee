@@ -112,8 +112,8 @@ runs:
     # SILENTLY on a stale image, and the job stayed green with no test run in
     # that language. Rscript was missing from the probe and from the install
     # list for a long time, and nothing went red. The suites now skip through
-    # a ConditionTrait, and the "No test was skipped" step of each lane fails
-    # the job on a skip.
+    # a ConditionTrait, and scripts/ci-swift-test-lane.sh fails each lane on
+    # a skip.
     #
     # The strictest form of the old copies: three apt-get attempts, then a
     # failure. The step then probes again and fails if a command is still

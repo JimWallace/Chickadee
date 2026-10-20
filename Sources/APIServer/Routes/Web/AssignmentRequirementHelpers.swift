@@ -73,11 +73,11 @@ func detectRequirementSuggestions(
     }
 
     func scanNotebook(_ data: Data) {
-        guard let root = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] else { return }
-        if let metadata = root["metadata"] as? [String: Any] {
-            if let kernelspec = metadata["kernelspec"] as? [String: Any] {
-                let name = (kernelspec["name"] as? String ?? "").lowercased()
-                let language = (kernelspec["language"] as? String ?? "").lowercased()
+        guard let root = JSONValue.object(from: data) else { return }
+        if let metadata = root["metadata"]?.objectValue {
+            if let kernelspec = metadata["kernelspec"]?.objectValue {
+                let name = (kernelspec["name"]?.stringValue ?? "").lowercased()
+                let language = (kernelspec["language"]?.stringValue ?? "").lowercased()
                 if name == "python" || language == "python" { addLanguage("python") }
                 // Every non-default language's kernel aliases, from the one
                 // table — `rKernelNames` alone missed `xlua`, so a Lua notebook
@@ -89,14 +89,12 @@ func detectRequirementSuggestions(
                     addLanguage(candidate.capabilityName)
                 }
             }
-            if let languageInfo = metadata["language_info"] as? [String: Any],
-                let language = languageInfo["name"] as? String
-            {
+            if let language = metadata["language_info"]?["name"]?.stringValue {
                 addLanguage(language)
             }
         }
-        guard let cells = root["cells"] as? [[String: Any]] else { return }
-        for cell in cells where (cell["cell_type"] as? String) == "code" {
+        guard let cells = root["cells"]?.arrayOfObjects else { return }
+        for cell in cells where cell["cell_type"]?.stringValue == "code" {
             scanPythonSource(NotebookCellSources.cellSource(cell))
         }
     }
