@@ -16,15 +16,8 @@ import Vapor
     private func fixture(
         on app: Application, manifest: String, enroll: Bool = true
     ) async throws -> APIAssignment {
-        let course = try await makeTestCourse(on: app, code: "CS246", name: "OOP")
-        let courseID = try course.requireID()
-        let tester = try await makeTestUser(on: app, username: "tester", role: "instructor")
-        if enroll {
-            try await makeTestEnrollment(on: app, userID: tester.requireID(), courseID: courseID)
-        }
-        try await makeTestSetup(on: app, id: "setup_gm", courseID: courseID, manifest: manifest)
-        return try await makeTestAssignment(
-            on: app, testSetupID: "setup_gm", courseID: courseID, title: "Lab")
+        try await seedMCPAssignment(
+            on: app, setupID: "setup_gm", manifest: manifest, enroll: enroll)
     }
 
     @Test func setsGradingModeWithoutClosing() async throws {

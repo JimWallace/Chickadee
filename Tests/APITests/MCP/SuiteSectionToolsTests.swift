@@ -22,16 +22,12 @@ import Vapor
     /// Course + enrolled instructor + setup (with a real zip holding the two
     /// scripts so applySuiteEdit can rebuild it) + assignment.
     private func fixture(on app: Application) async throws -> APIAssignment {
-        let course = try await makeTestCourse(on: app, code: "CS246", name: "OOP")
-        let courseID = try course.requireID()
-        let tester = try await makeTestUser(on: app, username: "tester", role: "instructor")
-        try await makeTestEnrollment(on: app, userID: tester.requireID(), courseID: courseID)
-        try await makeTestSetup(on: app, id: "setup_ss", courseID: courseID, manifest: manifest)
+        let assignment = try await seedMCPAssignment(
+            on: app, setupID: "setup_ss", manifest: manifest)
         try await writeZipFixture(
             at: app.testSetupsDirectory + "setup_ss.zip",
             entries: [(".placeholder", "x"), ("test_a.sh", "exit 0\n"), ("test_b.sh", "exit 0\n")])
-        return try await makeTestAssignment(
-            on: app, testSetupID: "setup_ss", courseID: courseID, title: "Lab")
+        return assignment
     }
 
     private func sections(

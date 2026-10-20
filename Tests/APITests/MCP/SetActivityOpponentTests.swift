@@ -27,19 +27,16 @@ import Vapor
     private func fixture(
         on app: Application, manifest: String? = nil, support: [String] = ["bot.py"]
     ) async throws -> APIAssignment {
-        let course = try await makeTestCourse(on: app, code: "CS135", name: "Designing Programs")
-        let courseID = try course.requireID()
-        let tester = try await makeTestUser(on: app, username: "tester", role: "instructor")
-        try await makeTestEnrollment(on: app, userID: tester.requireID(), courseID: courseID)
-        try await makeTestSetup(on: app, id: "setup_opp", courseID: courseID, manifest: manifest ?? workerManifest)
+        let assignment = try await seedMCPAssignment(
+            on: app, setupID: "setup_opp", manifest: manifest ?? workerManifest, courseCode: "CS135",
+            courseName: "Designing Programs", title: "RPS")
         let zipPath = app.testSetupsDirectory + "setup_opp.zip"
         try await pfWriteEmptyZip(at: zipPath)
         try await updateScriptInZip(zipPath: zipPath, filename: "match.sh", content: "#!/bin/sh\nexit 0\n")
         for name in support {
             try await updateScriptInZip(zipPath: zipPath, filename: name, content: "print('rock')\n")
         }
-        return try await makeTestAssignment(
-            on: app, testSetupID: "setup_opp", courseID: courseID, title: "RPS")
+        return assignment
     }
 
     private func stored(on app: Application) async throws -> ClassActivity? {

@@ -15,13 +15,8 @@ import Vapor
         #"{"schemaVersion":1,"testSuites":[],"timeLimitSeconds":10,"globalVariables":[{"name":"limit","value":5}],"globalExpressions":[{"name":"offset","expression":"seed % 3"}]}"#
 
     private func fixture(on app: Application) async throws -> APIAssignment {
-        let course = try await makeTestCourse(on: app, code: "CS246", name: "OOP")
-        let courseID = try course.requireID()
-        let tester = try await makeTestUser(on: app, username: "tester", role: "instructor")
-        try await makeTestEnrollment(on: app, userID: tester.requireID(), courseID: courseID)
-        try await makeTestSetup(on: app, id: "setup_gi", courseID: courseID, manifest: manifest)
-        return try await makeTestAssignment(
-            on: app, testSetupID: "setup_gi", courseID: courseID, title: "Lab")
+        try await seedMCPAssignment(
+            on: app, setupID: "setup_gi", manifest: manifest)
     }
 
     @Test func returnsVariablesAndExpressions() async throws {

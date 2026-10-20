@@ -18,14 +18,10 @@ import Vapor
         #"{"schemaVersion":1,"gradingMode":"worker","language":"python","testSuites":[],"timeLimitSeconds":10}"#
 
     private func fixture(on app: Application) async throws -> (APIAssignment, UUID) {
-        let course = try await makeTestCourse(on: app, code: "CS135", name: "Designing Programs")
-        let courseID = try course.requireID()
-        let tester = try await makeTestUser(on: app, username: "tester", role: "instructor")
-        try await makeTestEnrollment(on: app, userID: tester.requireID(), courseID: courseID)
-        try await makeTestSetup(on: app, id: "setup_cmp", courseID: courseID, manifest: workerManifest)
-        let assignment = try await makeTestAssignment(
-            on: app, testSetupID: "setup_cmp", courseID: courseID, title: "Class GPU")
-        return (assignment, courseID)
+        let assignment = try await seedMCPAssignment(
+            on: app, setupID: "setup_cmp", manifest: workerManifest, courseCode: "CS135",
+            courseName: "Designing Programs", title: "Class GPU")
+        return (assignment, assignment.courseID)
     }
 
     private func storedActivity(on app: Application) async throws -> ClassActivity? {

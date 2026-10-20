@@ -20,11 +20,9 @@ import Vapor
         """
 
     private func fixture(on app: Application) async throws -> APIAssignment {
-        let course = try await makeTestCourse(on: app, code: "HLTH230", name: "Health Informatics")
-        let courseID = try course.requireID()
-        let tester = try await makeTestUser(on: app, username: "tester", role: "instructor")
-        try await makeTestEnrollment(on: app, userID: tester.requireID(), courseID: courseID)
-        try await makeTestSetup(on: app, id: "setup_ds", courseID: courseID, manifest: manifest)
+        let assignment = try await seedMCPAssignment(
+            on: app, setupID: "setup_ds", manifest: manifest, courseCode: "HLTH230", courseName: "Health Informatics",
+            title: "A4")
         try await writeZipFixture(
             at: app.testSetupsDirectory + "setup_ds.zip",
             entries: [
@@ -33,8 +31,7 @@ import Vapor
                 ("solution.ipynb", "{}"),
                 ("cases.csv", "caseid,age\n1,20\n2,30\n3,40\n"),
             ])
-        return try await makeTestAssignment(
-            on: app, testSetupID: "setup_ds", courseID: courseID, title: "A4")
+        return assignment
     }
 
     private func run(

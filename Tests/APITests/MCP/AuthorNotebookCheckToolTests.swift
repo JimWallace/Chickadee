@@ -14,15 +14,10 @@ import Vapor
         TestManifests.pythonDeclaredEmpty
 
     private func fixture(on app: Application) async throws -> APIAssignment {
-        let course = try await makeTestCourse(on: app, code: "CS246", name: "OOP")
-        let courseID = try course.requireID()
-        let tester = try await makeTestUser(on: app, username: "tester", role: "instructor")
-        try await makeTestEnrollment(on: app, userID: tester.requireID(), courseID: courseID)
-        _ = try await makeTestSetup(
-            on: app, id: "setup_nc", courseID: courseID, manifest: emptyManifest)
+        let assignment = try await seedMCPAssignment(
+            on: app, setupID: "setup_nc", manifest: emptyManifest)
         try await pfWriteEmptyZip(at: app.testSetupsDirectory + "setup_nc.zip")
-        return try await makeTestAssignment(
-            on: app, testSetupID: "setup_nc", courseID: courseID, title: "Lab")
+        return assignment
     }
 
     private func reloadCheck(

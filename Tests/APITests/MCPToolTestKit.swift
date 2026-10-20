@@ -1,6 +1,7 @@
 // Shared setup for the MCP tool tests (#2716): the tool context, and the
 // course, the instructor and the assignment that most tool suites seed.
 
+import ChickadeeTestSupport
 import Fluent
 import Foundation
 import Vapor
@@ -61,4 +62,12 @@ func seedMCPAssignment(
         try await makeTestSetup(on: app, id: setupID, courseID: courseID, withNotebook: withNotebook)
     }
     return try await makeTestAssignment(on: app, testSetupID: setupID, courseID: courseID, title: title)
+}
+
+/// The account `seedMCPCourse` made for `subject`.
+func mcpTestUser(on app: Application, subject: String = mcpTestSubject) async throws -> APIUser {
+    guard let user = try await APIUser.query(on: app.db).filter(\.$username == subject).first() else {
+        throw IssueRecorded("No seeded MCP test account \"\(subject)\".")
+    }
+    return user
 }

@@ -18,15 +18,11 @@ import Vapor
     /// Course + enrolled instructor + setup (empty manifest, rebuildable zip) +
     /// assignment.
     private func fixture(on app: Application) async throws -> APIAssignment {
-        let course = try await makeTestCourse(on: app, code: "CS246", name: "OOP")
-        let courseID = try course.requireID()
-        let tester = try await makeTestUser(on: app, username: "tester", role: "instructor")
-        try await makeTestEnrollment(on: app, userID: tester.requireID(), courseID: courseID)
-        try await makeTestSetup(on: app, id: "setup_gi", courseID: courseID, manifest: emptyManifest)
+        let assignment = try await seedMCPAssignment(
+            on: app, setupID: "setup_gi", manifest: emptyManifest)
         // applyPatternFamilies rebuilds the zip, so it must be a valid archive.
         try await pfWriteEmptyZip(at: app.testSetupsDirectory + "setup_gi.zip")
-        return try await makeTestAssignment(
-            on: app, testSetupID: "setup_gi", courseID: courseID, title: "Lab")
+        return assignment
     }
 
     private func input(

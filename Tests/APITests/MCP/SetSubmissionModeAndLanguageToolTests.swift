@@ -25,15 +25,9 @@ import Vapor
     private func fixture(
         on app: Application, manifest: String, enroll: Bool = true
     ) async throws -> APIAssignment {
-        let course = try await makeTestCourse(on: app, code: "CS247", name: "Software Design")
-        let courseID = try course.requireID()
-        let tester = try await makeTestUser(on: app, username: "tester", role: "instructor")
-        if enroll {
-            try await makeTestEnrollment(on: app, userID: tester.requireID(), courseID: courseID)
-        }
-        try await makeTestSetup(on: app, id: "setup_sm", courseID: courseID, manifest: manifest)
-        return try await makeTestAssignment(
-            on: app, testSetupID: "setup_sm", courseID: courseID, title: "Lab")
+        try await seedMCPAssignment(
+            on: app, setupID: "setup_sm", manifest: manifest, enroll: enroll, courseCode: "CS247",
+            courseName: "Software Design")
     }
 
     private func manifest(

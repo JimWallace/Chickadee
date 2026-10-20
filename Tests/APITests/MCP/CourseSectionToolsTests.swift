@@ -18,13 +18,9 @@ import Vapor
 
     /// Course + enrolled instructor + setup + assignment (ungrouped).
     private func fixture(on app: Application) async throws -> (course: APICourse, assignment: APIAssignment) {
-        let course = try await makeTestCourse(on: app, code: "CS246", name: "OOP")
-        let courseID = try course.requireID()
-        let tester = try await makeTestUser(on: app, username: "tester", role: "instructor")
-        try await makeTestEnrollment(on: app, userID: tester.requireID(), courseID: courseID)
-        try await makeTestSetup(on: app, id: "setup_cs", courseID: courseID, manifest: manifest)
-        let assignment = try await makeTestAssignment(
-            on: app, testSetupID: "setup_cs", courseID: courseID, title: "Lab 5")
+        let assignment = try await seedMCPAssignment(
+            on: app, setupID: "setup_cs", manifest: manifest, title: "Lab 5")
+        let course = try #require(try await APICourse.find(assignment.courseID, on: app.db))
         return (course, assignment)
     }
 
