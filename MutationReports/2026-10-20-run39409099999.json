@@ -1,0 +1,273 @@
+{
+  "commit": null,
+  "config": {
+    "configHash": "938610a82d4e",
+    "muterRef": "7f1f258",
+    "patchHash": "72eca9bb4465",
+    "swift": "Swift version 6.4.1 (swift-6.4.1-RELEASE)"
+  },
+  "date": "2026-10-20",
+  "killed": 510,
+  "phantomsFiltered": 185,
+  "shardsExpected": 12,
+  "shardsReported": 8,
+  "survived": 14,
+  "survivors": [
+    {
+      "file": "Sources/Core/CompositeSpec.swift",
+      "line": 174,
+      "mutations": [
+        {
+          "column": 89,
+          "mutated": "return compositor.usesGrid ? \"A \\(compositor.rawValue) composite needs a layout with a slot count.\" :  \"A \\(compositor.rawValue) composite needs a layout of columns and rows.\"",
+          "offset": 6153,
+          "original": "return compositor.usesGrid\n                ? \"A \\(compositor.rawValue) composite needs a layout of columns and rows.\"\n                : \"A \\(compositor.rawValue) composite needs a layout with a slot count.\""
+        }
+      ],
+      "operator": "SwapTernary",
+      "source": ": \"A \\(compositor.rawValue) composite needs a layout with a slot count.\""
+    },
+    {
+      "file": "Sources/Core/DatasetTransformApplication.swift",
+      "line": 142,
+      "mutations": [
+        {
+          "column": 37,
+          "mutated": "let quoted = raw.count >= 2 || raw.first == \"\\\"\" && raw.last == \"\\\"\"\n        let value = quoted ? raw.dropFirst().dropLast() : raw\n        guard !value.isEmpty, !missingMarkers.contains(value.lowercased()) else { return String(raw) }\n        let padded = \" \\(value) \"\n        var written: String\n        switch variant {\n        case 1: written = value.uppercased()\n        case 2: written = value.lowercased()\n        default: written = padded\n        }\n        if written == value || written.lowercased() != value.lowercased() { written = padded }\n        return quoted ? \"\\\"\\(written)\\\"\" : written",
+          "offset": 6896,
+          "original": "let quoted = raw.count >= 2 && raw.first == \"\\\"\" && raw.last == \"\\\"\"\n        let value = quoted ? raw.dropFirst().dropLast() : raw\n        guard !value.isEmpty, !missingMarkers.contains(value.lowercased()) else { return String(raw) }\n        let padded = \" \\(value) \"\n        var written: String\n        switch variant {\n        case 1: written = value.uppercased()\n        case 2: written = value.lowercased()\n        default: written = padded\n        }\n        if written == value || written.lowercased() != value.lowercased() { written = padded }\n        return quoted ? \"\\\"\\(written)\\\"\" : written"
+        },
+        {
+          "column": 58,
+          "mutated": "let quoted = raw.count >= 2 && raw.first == \"\\\"\" || raw.last == \"\\\"\"\n        let value = quoted ? raw.dropFirst().dropLast() : raw\n        guard !value.isEmpty, !missingMarkers.contains(value.lowercased()) else { return String(raw) }\n        let padded = \" \\(value) \"\n        var written: String\n        switch variant {\n        case 1: written = value.uppercased()\n        case 2: written = value.lowercased()\n        default: written = padded\n        }\n        if written == value || written.lowercased() != value.lowercased() { written = padded }\n        return quoted ? \"\\\"\\(written)\\\"\" : written",
+          "offset": 6917,
+          "original": "let quoted = raw.count >= 2 && raw.first == \"\\\"\" && raw.last == \"\\\"\"\n        let value = quoted ? raw.dropFirst().dropLast() : raw\n        guard !value.isEmpty, !missingMarkers.contains(value.lowercased()) else { return String(raw) }\n        let padded = \" \\(value) \"\n        var written: String\n        switch variant {\n        case 1: written = value.uppercased()\n        case 2: written = value.lowercased()\n        default: written = padded\n        }\n        if written == value || written.lowercased() != value.lowercased() { written = padded }\n        return quoted ? \"\\\"\\(written)\\\"\" : written"
+        }
+      ],
+      "operator": "ChangeLogicalConnector",
+      "source": "let quoted = raw.count >= 2 && raw.first == \"\\\"\" && raw.last == \"\\\"\""
+    },
+    {
+      "file": "Sources/Core/DatasetTransformApplication.swift",
+      "line": 142,
+      "mutations": [
+        {
+          "column": 32,
+          "mutated": "let quoted = raw.count <= 2 && raw.first == \"\\\"\" && raw.last == \"\\\"\"\n        let value = quoted ? raw.dropFirst().dropLast() : raw\n        guard !value.isEmpty, !missingMarkers.contains(value.lowercased()) else { return String(raw) }\n        let padded = \" \\(value) \"\n        var written: String\n        switch variant {\n        case 1: written = value.uppercased()\n        case 2: written = value.lowercased()\n        default: written = padded\n        }\n        if written == value || written.lowercased() != value.lowercased() { written = padded }\n        return quoted ? \"\\\"\\(written)\\\"\" : written",
+          "offset": 6891,
+          "original": "let quoted = raw.count >= 2 && raw.first == \"\\\"\" && raw.last == \"\\\"\"\n        let value = quoted ? raw.dropFirst().dropLast() : raw\n        guard !value.isEmpty, !missingMarkers.contains(value.lowercased()) else { return String(raw) }\n        let padded = \" \\(value) \"\n        var written: String\n        switch variant {\n        case 1: written = value.uppercased()\n        case 2: written = value.lowercased()\n        default: written = padded\n        }\n        if written == value || written.lowercased() != value.lowercased() { written = padded }\n        return quoted ? \"\\\"\\(written)\\\"\" : written"
+        },
+        {
+          "column": 50,
+          "mutated": "let quoted = raw.count >= 2 && raw.first != \"\\\"\" && raw.last == \"\\\"\"\n        let value = quoted ? raw.dropFirst().dropLast() : raw\n        guard !value.isEmpty, !missingMarkers.contains(value.lowercased()) else { return String(raw) }\n        let padded = \" \\(value) \"\n        var written: String\n        switch variant {\n        case 1: written = value.uppercased()\n        case 2: written = value.lowercased()\n        default: written = padded\n        }\n        if written == value || written.lowercased() != value.lowercased() { written = padded }\n        return quoted ? \"\\\"\\(written)\\\"\" : written",
+          "offset": 6909,
+          "original": "let quoted = raw.count >= 2 && raw.first == \"\\\"\" && raw.last == \"\\\"\"\n        let value = quoted ? raw.dropFirst().dropLast() : raw\n        guard !value.isEmpty, !missingMarkers.contains(value.lowercased()) else { return String(raw) }\n        let padded = \" \\(value) \"\n        var written: String\n        switch variant {\n        case 1: written = value.uppercased()\n        case 2: written = value.lowercased()\n        default: written = padded\n        }\n        if written == value || written.lowercased() != value.lowercased() { written = padded }\n        return quoted ? \"\\\"\\(written)\\\"\" : written"
+        },
+        {
+          "column": 70,
+          "mutated": "let quoted = raw.count >= 2 && raw.first == \"\\\"\" && raw.last != \"\\\"\"\n        let value = quoted ? raw.dropFirst().dropLast() : raw\n        guard !value.isEmpty, !missingMarkers.contains(value.lowercased()) else { return String(raw) }\n        let padded = \" \\(value) \"\n        var written: String\n        switch variant {\n        case 1: written = value.uppercased()\n        case 2: written = value.lowercased()\n        default: written = padded\n        }\n        if written == value || written.lowercased() != value.lowercased() { written = padded }\n        return quoted ? \"\\\"\\(written)\\\"\" : written",
+          "offset": 6929,
+          "original": "let quoted = raw.count >= 2 && raw.first == \"\\\"\" && raw.last == \"\\\"\"\n        let value = quoted ? raw.dropFirst().dropLast() : raw\n        guard !value.isEmpty, !missingMarkers.contains(value.lowercased()) else { return String(raw) }\n        let padded = \" \\(value) \"\n        var written: String\n        switch variant {\n        case 1: written = value.uppercased()\n        case 2: written = value.lowercased()\n        default: written = padded\n        }\n        if written == value || written.lowercased() != value.lowercased() { written = padded }\n        return quoted ? \"\\\"\\(written)\\\"\" : written"
+        }
+      ],
+      "operator": "RelationalOperatorReplacement",
+      "source": "let quoted = raw.count >= 2 && raw.first == \"\\\"\" && raw.last == \"\\\"\""
+    },
+    {
+      "file": "Sources/Core/DatasetTransformApplication.swift",
+      "line": 142,
+      "mutations": [
+        {
+          "column": 32,
+          "mutated": "let quoted = raw.count <= 2 && raw.first == \"\\\"\" && raw.last == \"\\\"\"\n        let value = quoted ? raw.dropFirst().dropLast() : raw\n        guard !value.isEmpty, !missingMarkers.contains(value.lowercased()) else { return String(raw) }\n        let padded = \" \\(value) \"\n        var written: String\n        switch variant {\n        case 1: written = value.uppercased()\n        case 2: written = value.lowercased()\n        default: written = padded\n        }\n        if written == value || written.lowercased() != value.lowercased() { written = padded }\n        return quoted ? \"\\\"\\(written)\\\"\" : written",
+          "offset": 6891,
+          "original": "let quoted = raw.count >= 2 && raw.first == \"\\\"\" && raw.last == \"\\\"\"\n        let value = quoted ? raw.dropFirst().dropLast() : raw\n        guard !value.isEmpty, !missingMarkers.contains(value.lowercased()) else { return String(raw) }\n        let padded = \" \\(value) \"\n        var written: String\n        switch variant {\n        case 1: written = value.uppercased()\n        case 2: written = value.lowercased()\n        default: written = padded\n        }\n        if written == value || written.lowercased() != value.lowercased() { written = padded }\n        return quoted ? \"\\\"\\(written)\\\"\" : written"
+        },
+        {
+          "column": 50,
+          "mutated": "let quoted = raw.count >= 2 && raw.first != \"\\\"\" && raw.last == \"\\\"\"\n        let value = quoted ? raw.dropFirst().dropLast() : raw\n        guard !value.isEmpty, !missingMarkers.contains(value.lowercased()) else { return String(raw) }\n        let padded = \" \\(value) \"\n        var written: String\n        switch variant {\n        case 1: written = value.uppercased()\n        case 2: written = value.lowercased()\n        default: written = padded\n        }\n        if written == value || written.lowercased() != value.lowercased() { written = padded }\n        return quoted ? \"\\\"\\(written)\\\"\" : written",
+          "offset": 6909,
+          "original": "let quoted = raw.count >= 2 && raw.first == \"\\\"\" && raw.last == \"\\\"\"\n        let value = quoted ? raw.dropFirst().dropLast() : raw\n        guard !value.isEmpty, !missingMarkers.contains(value.lowercased()) else { return String(raw) }\n        let padded = \" \\(value) \"\n        var written: String\n        switch variant {\n        case 1: written = value.uppercased()\n        case 2: written = value.lowercased()\n        default: written = padded\n        }\n        if written == value || written.lowercased() != value.lowercased() { written = padded }\n        return quoted ? \"\\\"\\(written)\\\"\" : written"
+        },
+        {
+          "column": 70,
+          "mutated": "let quoted = raw.count >= 2 && raw.first == \"\\\"\" && raw.last != \"\\\"\"\n        let value = quoted ? raw.dropFirst().dropLast() : raw\n        guard !value.isEmpty, !missingMarkers.contains(value.lowercased()) else { return String(raw) }\n        let padded = \" \\(value) \"\n        var written: String\n        switch variant {\n        case 1: written = value.uppercased()\n        case 2: written = value.lowercased()\n        default: written = padded\n        }\n        if written == value || written.lowercased() != value.lowercased() { written = padded }\n        return quoted ? \"\\\"\\(written)\\\"\" : written",
+          "offset": 6929,
+          "original": "let quoted = raw.count >= 2 && raw.first == \"\\\"\" && raw.last == \"\\\"\"\n        let value = quoted ? raw.dropFirst().dropLast() : raw\n        guard !value.isEmpty, !missingMarkers.contains(value.lowercased()) else { return String(raw) }\n        let padded = \" \\(value) \"\n        var written: String\n        switch variant {\n        case 1: written = value.uppercased()\n        case 2: written = value.lowercased()\n        default: written = padded\n        }\n        if written == value || written.lowercased() != value.lowercased() { written = padded }\n        return quoted ? \"\\\"\\(written)\\\"\" : written"
+        }
+      ],
+      "operator": "RelationalOperatorReplacement",
+      "source": "let quoted = raw.count >= 2 && raw.first == \"\\\"\" && raw.last == \"\\\"\""
+    },
+    {
+      "file": "Sources/Core/DatasetTransformApplication.swift",
+      "line": 142,
+      "mutations": [
+        {
+          "column": 32,
+          "mutated": "let quoted = raw.count <= 2 && raw.first == \"\\\"\" && raw.last == \"\\\"\"\n        let value = quoted ? raw.dropFirst().dropLast() : raw\n        guard !value.isEmpty, !missingMarkers.contains(value.lowercased()) else { return String(raw) }\n        let padded = \" \\(value) \"\n        var written: String\n        switch variant {\n        case 1: written = value.uppercased()\n        case 2: written = value.lowercased()\n        default: written = padded\n        }\n        if written == value || written.lowercased() != value.lowercased() { written = padded }\n        return quoted ? \"\\\"\\(written)\\\"\" : written",
+          "offset": 6891,
+          "original": "let quoted = raw.count >= 2 && raw.first == \"\\\"\" && raw.last == \"\\\"\"\n        let value = quoted ? raw.dropFirst().dropLast() : raw\n        guard !value.isEmpty, !missingMarkers.contains(value.lowercased()) else { return String(raw) }\n        let padded = \" \\(value) \"\n        var written: String\n        switch variant {\n        case 1: written = value.uppercased()\n        case 2: written = value.lowercased()\n        default: written = padded\n        }\n        if written == value || written.lowercased() != value.lowercased() { written = padded }\n        return quoted ? \"\\\"\\(written)\\\"\" : written"
+        },
+        {
+          "column": 50,
+          "mutated": "let quoted = raw.count >= 2 && raw.first != \"\\\"\" && raw.last == \"\\\"\"\n        let value = quoted ? raw.dropFirst().dropLast() : raw\n        guard !value.isEmpty, !missingMarkers.contains(value.lowercased()) else { return String(raw) }\n        let padded = \" \\(value) \"\n        var written: String\n        switch variant {\n        case 1: written = value.uppercased()\n        case 2: written = value.lowercased()\n        default: written = padded\n        }\n        if written == value || written.lowercased() != value.lowercased() { written = padded }\n        return quoted ? \"\\\"\\(written)\\\"\" : written",
+          "offset": 6909,
+          "original": "let quoted = raw.count >= 2 && raw.first == \"\\\"\" && raw.last == \"\\\"\"\n        let value = quoted ? raw.dropFirst().dropLast() : raw\n        guard !value.isEmpty, !missingMarkers.contains(value.lowercased()) else { return String(raw) }\n        let padded = \" \\(value) \"\n        var written: String\n        switch variant {\n        case 1: written = value.uppercased()\n        case 2: written = value.lowercased()\n        default: written = padded\n        }\n        if written == value || written.lowercased() != value.lowercased() { written = padded }\n        return quoted ? \"\\\"\\(written)\\\"\" : written"
+        },
+        {
+          "column": 70,
+          "mutated": "let quoted = raw.count >= 2 && raw.first == \"\\\"\" && raw.last != \"\\\"\"\n        let value = quoted ? raw.dropFirst().dropLast() : raw\n        guard !value.isEmpty, !missingMarkers.contains(value.lowercased()) else { return String(raw) }\n        let padded = \" \\(value) \"\n        var written: String\n        switch variant {\n        case 1: written = value.uppercased()\n        case 2: written = value.lowercased()\n        default: written = padded\n        }\n        if written == value || written.lowercased() != value.lowercased() { written = padded }\n        return quoted ? \"\\\"\\(written)\\\"\" : written",
+          "offset": 6929,
+          "original": "let quoted = raw.count >= 2 && raw.first == \"\\\"\" && raw.last == \"\\\"\"\n        let value = quoted ? raw.dropFirst().dropLast() : raw\n        guard !value.isEmpty, !missingMarkers.contains(value.lowercased()) else { return String(raw) }\n        let padded = \" \\(value) \"\n        var written: String\n        switch variant {\n        case 1: written = value.uppercased()\n        case 2: written = value.lowercased()\n        default: written = padded\n        }\n        if written == value || written.lowercased() != value.lowercased() { written = padded }\n        return quoted ? \"\\\"\\(written)\\\"\" : written"
+        }
+      ],
+      "operator": "RelationalOperatorReplacement",
+      "source": "let quoted = raw.count >= 2 && raw.first == \"\\\"\" && raw.last == \"\\\"\""
+    },
+    {
+      "file": "Sources/Core/ManifestV2.swift",
+      "line": 192,
+      "mutations": [
+        {
+          "column": 44,
+          "mutated": "gradingMode = p.gradingMode\n        submissionMode = p.submissionMode\n        let hasGitHub = p.githubSubmission && p.githubStatusChecks || p.githubStarterRepository != nil\n        github =\n            hasGitHub\n            ? GitHub(\n                submission: p.githubSubmission ? true : nil,\n                statusChecks: p.githubStatusChecks ? true : nil,\n                starterRepository: p.githubStarterRepository)\n            : nil\n        files = Self.files(of: p)\n        testSuites = p.testSuites.map(Entry.init)\n        timeLimitSeconds = p.timeLimitSeconds\n        makefile = p.makefile\n        switch p.languageDeclaration {\n        case .undeclared: language = nil\n        case .noLanguage: language = Self.noLanguage\n        case .language(let declared): language = declared.rawValue\n        }\n        minimumRunnerVersion = p.minimumRunnerVersion\n        activity = p.activity\n        testItems = p.testItems\n        sections = p.sections.map { section in\n            let inputs = Self.inputs(variables: section.variables, expressions: section.expressions)\n            return Section(id: section.id, name: section.name, inputs: inputs.isEmpty ? nil : inputs)\n        }\n        inputs = Self.inputs(variables: p.globalVariables, expressions: p.globalExpressions)\n        let hasAwards =\n            p.builtInAchievementsSeeded || !p.achievements.isEmpty || !p.disabledBuiltInAwardIDs.isEmpty\n        awards =\n            hasAwards\n            ? Awards(\n                achievements: p.achievements.isEmpty ? nil : p.achievements,\n                disabledBuiltIns: p.disabledBuiltInAwardIDs.isEmpty ? nil : p.disabledBuiltInAwardIDs)\n            : nil",
+          "offset": 8149,
+          "original": "gradingMode = p.gradingMode\n        submissionMode = p.submissionMode\n        let hasGitHub = p.githubSubmission || p.githubStatusChecks || p.githubStarterRepository != nil\n        github =\n            hasGitHub\n            ? GitHub(\n                submission: p.githubSubmission ? true : nil,\n                statusChecks: p.githubStatusChecks ? true : nil,\n                starterRepository: p.githubStarterRepository)\n            : nil\n        files = Self.files(of: p)\n        testSuites = p.testSuites.map(Entry.init)\n        timeLimitSeconds = p.timeLimitSeconds\n        makefile = p.makefile\n        switch p.languageDeclaration {\n        case .undeclared: language = nil\n        case .noLanguage: language = Self.noLanguage\n        case .language(let declared): language = declared.rawValue\n        }\n        minimumRunnerVersion = p.minimumRunnerVersion\n        activity = p.activity\n        testItems = p.testItems\n        sections = p.sections.map { section in\n            let inputs = Self.inputs(variables: section.variables, expressions: section.expressions)\n            return Section(id: section.id, name: section.name, inputs: inputs.isEmpty ? nil : inputs)\n        }\n        inputs = Self.inputs(variables: p.globalVariables, expressions: p.globalExpressions)\n        let hasAwards =\n            p.builtInAchievementsSeeded || !p.achievements.isEmpty || !p.disabledBuiltInAwardIDs.isEmpty\n        awards =\n            hasAwards\n            ? Awards(\n                achievements: p.achievements.isEmpty ? nil : p.achievements,\n                disabledBuiltIns: p.disabledBuiltInAwardIDs.isEmpty ? nil : p.disabledBuiltInAwardIDs)\n            : nil"
+        },
+        {
+          "column": 68,
+          "mutated": "gradingMode = p.gradingMode\n        submissionMode = p.submissionMode\n        let hasGitHub = p.githubSubmission || p.githubStatusChecks && p.githubStarterRepository != nil\n        github =\n            hasGitHub\n            ? GitHub(\n                submission: p.githubSubmission ? true : nil,\n                statusChecks: p.githubStatusChecks ? true : nil,\n                starterRepository: p.githubStarterRepository)\n            : nil\n        files = Self.files(of: p)\n        testSuites = p.testSuites.map(Entry.init)\n        timeLimitSeconds = p.timeLimitSeconds\n        makefile = p.makefile\n        switch p.languageDeclaration {\n        case .undeclared: language = nil\n        case .noLanguage: language = Self.noLanguage\n        case .language(let declared): language = declared.rawValue\n        }\n        minimumRunnerVersion = p.minimumRunnerVersion\n        activity = p.activity\n        testItems = p.testItems\n        sections = p.sections.map { section in\n            let inputs = Self.inputs(variables: section.variables, expressions: section.expressions)\n            return Section(id: section.id, name: section.name, inputs: inputs.isEmpty ? nil : inputs)\n        }\n        inputs = Self.inputs(variables: p.globalVariables, expressions: p.globalExpressions)\n        let hasAwards =\n            p.builtInAchievementsSeeded || !p.achievements.isEmpty || !p.disabledBuiltInAwardIDs.isEmpty\n        awards =\n            hasAwards\n            ? Awards(\n                achievements: p.achievements.isEmpty ? nil : p.achievements,\n                disabledBuiltIns: p.disabledBuiltInAwardIDs.isEmpty ? nil : p.disabledBuiltInAwardIDs)\n            : nil",
+          "offset": 8173,
+          "original": "gradingMode = p.gradingMode\n        submissionMode = p.submissionMode\n        let hasGitHub = p.githubSubmission || p.githubStatusChecks || p.githubStarterRepository != nil\n        github =\n            hasGitHub\n            ? GitHub(\n                submission: p.githubSubmission ? true : nil,\n                statusChecks: p.githubStatusChecks ? true : nil,\n                starterRepository: p.githubStarterRepository)\n            : nil\n        files = Self.files(of: p)\n        testSuites = p.testSuites.map(Entry.init)\n        timeLimitSeconds = p.timeLimitSeconds\n        makefile = p.makefile\n        switch p.languageDeclaration {\n        case .undeclared: language = nil\n        case .noLanguage: language = Self.noLanguage\n        case .language(let declared): language = declared.rawValue\n        }\n        minimumRunnerVersion = p.minimumRunnerVersion\n        activity = p.activity\n        testItems = p.testItems\n        sections = p.sections.map { section in\n            let inputs = Self.inputs(variables: section.variables, expressions: section.expressions)\n            return Section(id: section.id, name: section.name, inputs: inputs.isEmpty ? nil : inputs)\n        }\n        inputs = Self.inputs(variables: p.globalVariables, expressions: p.globalExpressions)\n        let hasAwards =\n            p.builtInAchievementsSeeded || !p.achievements.isEmpty || !p.disabledBuiltInAwardIDs.isEmpty\n        awards =\n            hasAwards\n            ? Awards(\n                achievements: p.achievements.isEmpty ? nil : p.achievements,\n                disabledBuiltIns: p.disabledBuiltInAwardIDs.isEmpty ? nil : p.disabledBuiltInAwardIDs)\n            : nil"
+        }
+      ],
+      "operator": "ChangeLogicalConnector",
+      "source": "let hasGitHub = p.githubSubmission || p.githubStatusChecks || p.githubStarterRepository != nil"
+    },
+    {
+      "file": "Sources/Core/ManifestV2.swift",
+      "line": 192,
+      "mutations": [
+        {
+          "column": 44,
+          "mutated": "gradingMode = p.gradingMode\n        submissionMode = p.submissionMode\n        let hasGitHub = p.githubSubmission && p.githubStatusChecks || p.githubStarterRepository != nil\n        github =\n            hasGitHub\n            ? GitHub(\n                submission: p.githubSubmission ? true : nil,\n                statusChecks: p.githubStatusChecks ? true : nil,\n                starterRepository: p.githubStarterRepository)\n            : nil\n        files = Self.files(of: p)\n        testSuites = p.testSuites.map(Entry.init)\n        timeLimitSeconds = p.timeLimitSeconds\n        makefile = p.makefile\n        switch p.languageDeclaration {\n        case .undeclared: language = nil\n        case .noLanguage: language = Self.noLanguage\n        case .language(let declared): language = declared.rawValue\n        }\n        minimumRunnerVersion = p.minimumRunnerVersion\n        activity = p.activity\n        testItems = p.testItems\n        sections = p.sections.map { section in\n            let inputs = Self.inputs(variables: section.variables, expressions: section.expressions)\n            return Section(id: section.id, name: section.name, inputs: inputs.isEmpty ? nil : inputs)\n        }\n        inputs = Self.inputs(variables: p.globalVariables, expressions: p.globalExpressions)\n        let hasAwards =\n            p.builtInAchievementsSeeded || !p.achievements.isEmpty || !p.disabledBuiltInAwardIDs.isEmpty\n        awards =\n            hasAwards\n            ? Awards(\n                achievements: p.achievements.isEmpty ? nil : p.achievements,\n                disabledBuiltIns: p.disabledBuiltInAwardIDs.isEmpty ? nil : p.disabledBuiltInAwardIDs)\n            : nil",
+          "offset": 8149,
+          "original": "gradingMode = p.gradingMode\n        submissionMode = p.submissionMode\n        let hasGitHub = p.githubSubmission || p.githubStatusChecks || p.githubStarterRepository != nil\n        github =\n            hasGitHub\n            ? GitHub(\n                submission: p.githubSubmission ? true : nil,\n                statusChecks: p.githubStatusChecks ? true : nil,\n                starterRepository: p.githubStarterRepository)\n            : nil\n        files = Self.files(of: p)\n        testSuites = p.testSuites.map(Entry.init)\n        timeLimitSeconds = p.timeLimitSeconds\n        makefile = p.makefile\n        switch p.languageDeclaration {\n        case .undeclared: language = nil\n        case .noLanguage: language = Self.noLanguage\n        case .language(let declared): language = declared.rawValue\n        }\n        minimumRunnerVersion = p.minimumRunnerVersion\n        activity = p.activity\n        testItems = p.testItems\n        sections = p.sections.map { section in\n            let inputs = Self.inputs(variables: section.variables, expressions: section.expressions)\n            return Section(id: section.id, name: section.name, inputs: inputs.isEmpty ? nil : inputs)\n        }\n        inputs = Self.inputs(variables: p.globalVariables, expressions: p.globalExpressions)\n        let hasAwards =\n            p.builtInAchievementsSeeded || !p.achievements.isEmpty || !p.disabledBuiltInAwardIDs.isEmpty\n        awards =\n            hasAwards\n            ? Awards(\n                achievements: p.achievements.isEmpty ? nil : p.achievements,\n                disabledBuiltIns: p.disabledBuiltInAwardIDs.isEmpty ? nil : p.disabledBuiltInAwardIDs)\n            : nil"
+        },
+        {
+          "column": 68,
+          "mutated": "gradingMode = p.gradingMode\n        submissionMode = p.submissionMode\n        let hasGitHub = p.githubSubmission || p.githubStatusChecks && p.githubStarterRepository != nil\n        github =\n            hasGitHub\n            ? GitHub(\n                submission: p.githubSubmission ? true : nil,\n                statusChecks: p.githubStatusChecks ? true : nil,\n                starterRepository: p.githubStarterRepository)\n            : nil\n        files = Self.files(of: p)\n        testSuites = p.testSuites.map(Entry.init)\n        timeLimitSeconds = p.timeLimitSeconds\n        makefile = p.makefile\n        switch p.languageDeclaration {\n        case .undeclared: language = nil\n        case .noLanguage: language = Self.noLanguage\n        case .language(let declared): language = declared.rawValue\n        }\n        minimumRunnerVersion = p.minimumRunnerVersion\n        activity = p.activity\n        testItems = p.testItems\n        sections = p.sections.map { section in\n            let inputs = Self.inputs(variables: section.variables, expressions: section.expressions)\n            return Section(id: section.id, name: section.name, inputs: inputs.isEmpty ? nil : inputs)\n        }\n        inputs = Self.inputs(variables: p.globalVariables, expressions: p.globalExpressions)\n        let hasAwards =\n            p.builtInAchievementsSeeded || !p.achievements.isEmpty || !p.disabledBuiltInAwardIDs.isEmpty\n        awards =\n            hasAwards\n            ? Awards(\n                achievements: p.achievements.isEmpty ? nil : p.achievements,\n                disabledBuiltIns: p.disabledBuiltInAwardIDs.isEmpty ? nil : p.disabledBuiltInAwardIDs)\n            : nil",
+          "offset": 8173,
+          "original": "gradingMode = p.gradingMode\n        submissionMode = p.submissionMode\n        let hasGitHub = p.githubSubmission || p.githubStatusChecks || p.githubStarterRepository != nil\n        github =\n            hasGitHub\n            ? GitHub(\n                submission: p.githubSubmission ? true : nil,\n                statusChecks: p.githubStatusChecks ? true : nil,\n                starterRepository: p.githubStarterRepository)\n            : nil\n        files = Self.files(of: p)\n        testSuites = p.testSuites.map(Entry.init)\n        timeLimitSeconds = p.timeLimitSeconds\n        makefile = p.makefile\n        switch p.languageDeclaration {\n        case .undeclared: language = nil\n        case .noLanguage: language = Self.noLanguage\n        case .language(let declared): language = declared.rawValue\n        }\n        minimumRunnerVersion = p.minimumRunnerVersion\n        activity = p.activity\n        testItems = p.testItems\n        sections = p.sections.map { section in\n            let inputs = Self.inputs(variables: section.variables, expressions: section.expressions)\n            return Section(id: section.id, name: section.name, inputs: inputs.isEmpty ? nil : inputs)\n        }\n        inputs = Self.inputs(variables: p.globalVariables, expressions: p.globalExpressions)\n        let hasAwards =\n            p.builtInAchievementsSeeded || !p.achievements.isEmpty || !p.disabledBuiltInAwardIDs.isEmpty\n        awards =\n            hasAwards\n            ? Awards(\n                achievements: p.achievements.isEmpty ? nil : p.achievements,\n                disabledBuiltIns: p.disabledBuiltInAwardIDs.isEmpty ? nil : p.disabledBuiltInAwardIDs)\n            : nil"
+        }
+      ],
+      "operator": "ChangeLogicalConnector",
+      "source": "let hasGitHub = p.githubSubmission || p.githubStatusChecks || p.githubStarterRepository != nil"
+    },
+    {
+      "file": "Sources/Core/ManifestV2.swift",
+      "line": 192,
+      "mutations": [
+        {
+          "column": 97,
+          "mutated": "gradingMode = p.gradingMode\n        submissionMode = p.submissionMode\n        let hasGitHub = p.githubSubmission || p.githubStatusChecks || p.githubStarterRepository == nil\n        github =\n            hasGitHub\n            ? GitHub(\n                submission: p.githubSubmission ? true : nil,\n                statusChecks: p.githubStatusChecks ? true : nil,\n                starterRepository: p.githubStarterRepository)\n            : nil\n        files = Self.files(of: p)\n        testSuites = p.testSuites.map(Entry.init)\n        timeLimitSeconds = p.timeLimitSeconds\n        makefile = p.makefile\n        switch p.languageDeclaration {\n        case .undeclared: language = nil\n        case .noLanguage: language = Self.noLanguage\n        case .language(let declared): language = declared.rawValue\n        }\n        minimumRunnerVersion = p.minimumRunnerVersion\n        activity = p.activity\n        testItems = p.testItems\n        sections = p.sections.map { section in\n            let inputs = Self.inputs(variables: section.variables, expressions: section.expressions)\n            return Section(id: section.id, name: section.name, inputs: inputs.isEmpty ? nil : inputs)\n        }\n        inputs = Self.inputs(variables: p.globalVariables, expressions: p.globalExpressions)\n        let hasAwards =\n            p.builtInAchievementsSeeded || !p.achievements.isEmpty || !p.disabledBuiltInAwardIDs.isEmpty\n        awards =\n            hasAwards\n            ? Awards(\n                achievements: p.achievements.isEmpty ? nil : p.achievements,\n                disabledBuiltIns: p.disabledBuiltInAwardIDs.isEmpty ? nil : p.disabledBuiltInAwardIDs)\n            : nil",
+          "offset": 8202,
+          "original": "gradingMode = p.gradingMode\n        submissionMode = p.submissionMode\n        let hasGitHub = p.githubSubmission || p.githubStatusChecks || p.githubStarterRepository != nil\n        github =\n            hasGitHub\n            ? GitHub(\n                submission: p.githubSubmission ? true : nil,\n                statusChecks: p.githubStatusChecks ? true : nil,\n                starterRepository: p.githubStarterRepository)\n            : nil\n        files = Self.files(of: p)\n        testSuites = p.testSuites.map(Entry.init)\n        timeLimitSeconds = p.timeLimitSeconds\n        makefile = p.makefile\n        switch p.languageDeclaration {\n        case .undeclared: language = nil\n        case .noLanguage: language = Self.noLanguage\n        case .language(let declared): language = declared.rawValue\n        }\n        minimumRunnerVersion = p.minimumRunnerVersion\n        activity = p.activity\n        testItems = p.testItems\n        sections = p.sections.map { section in\n            let inputs = Self.inputs(variables: section.variables, expressions: section.expressions)\n            return Section(id: section.id, name: section.name, inputs: inputs.isEmpty ? nil : inputs)\n        }\n        inputs = Self.inputs(variables: p.globalVariables, expressions: p.globalExpressions)\n        let hasAwards =\n            p.builtInAchievementsSeeded || !p.achievements.isEmpty || !p.disabledBuiltInAwardIDs.isEmpty\n        awards =\n            hasAwards\n            ? Awards(\n                achievements: p.achievements.isEmpty ? nil : p.achievements,\n                disabledBuiltIns: p.disabledBuiltInAwardIDs.isEmpty ? nil : p.disabledBuiltInAwardIDs)\n            : nil"
+        }
+      ],
+      "operator": "RelationalOperatorReplacement",
+      "source": "let hasGitHub = p.githubSubmission || p.githubStatusChecks || p.githubStarterRepository != nil"
+    },
+    {
+      "file": "Sources/Core/ManifestV2.swift",
+      "line": 218,
+      "mutations": [
+        {
+          "column": 41,
+          "mutated": "gradingMode = p.gradingMode\n        submissionMode = p.submissionMode\n        let hasGitHub = p.githubSubmission || p.githubStatusChecks || p.githubStarterRepository != nil\n        github =\n            hasGitHub\n            ? GitHub(\n                submission: p.githubSubmission ? true : nil,\n                statusChecks: p.githubStatusChecks ? true : nil,\n                starterRepository: p.githubStarterRepository)\n            : nil\n        files = Self.files(of: p)\n        testSuites = p.testSuites.map(Entry.init)\n        timeLimitSeconds = p.timeLimitSeconds\n        makefile = p.makefile\n        switch p.languageDeclaration {\n        case .undeclared: language = nil\n        case .noLanguage: language = Self.noLanguage\n        case .language(let declared): language = declared.rawValue\n        }\n        minimumRunnerVersion = p.minimumRunnerVersion\n        activity = p.activity\n        testItems = p.testItems\n        sections = p.sections.map { section in\n            let inputs = Self.inputs(variables: section.variables, expressions: section.expressions)\n            return Section(id: section.id, name: section.name, inputs: inputs.isEmpty ? nil : inputs)\n        }\n        inputs = Self.inputs(variables: p.globalVariables, expressions: p.globalExpressions)\n        let hasAwards =\n            p.builtInAchievementsSeeded && !p.achievements.isEmpty || !p.disabledBuiltInAwardIDs.isEmpty\n        awards =\n            hasAwards\n            ? Awards(\n                achievements: p.achievements.isEmpty ? nil : p.achievements,\n                disabledBuiltIns: p.disabledBuiltInAwardIDs.isEmpty ? nil : p.disabledBuiltInAwardIDs)\n            : nil",
+          "offset": 9379,
+          "original": "gradingMode = p.gradingMode\n        submissionMode = p.submissionMode\n        let hasGitHub = p.githubSubmission || p.githubStatusChecks || p.githubStarterRepository != nil\n        github =\n            hasGitHub\n            ? GitHub(\n                submission: p.githubSubmission ? true : nil,\n                statusChecks: p.githubStatusChecks ? true : nil,\n                starterRepository: p.githubStarterRepository)\n            : nil\n        files = Self.files(of: p)\n        testSuites = p.testSuites.map(Entry.init)\n        timeLimitSeconds = p.timeLimitSeconds\n        makefile = p.makefile\n        switch p.languageDeclaration {\n        case .undeclared: language = nil\n        case .noLanguage: language = Self.noLanguage\n        case .language(let declared): language = declared.rawValue\n        }\n        minimumRunnerVersion = p.minimumRunnerVersion\n        activity = p.activity\n        testItems = p.testItems\n        sections = p.sections.map { section in\n            let inputs = Self.inputs(variables: section.variables, expressions: section.expressions)\n            return Section(id: section.id, name: section.name, inputs: inputs.isEmpty ? nil : inputs)\n        }\n        inputs = Self.inputs(variables: p.globalVariables, expressions: p.globalExpressions)\n        let hasAwards =\n            p.builtInAchievementsSeeded || !p.achievements.isEmpty || !p.disabledBuiltInAwardIDs.isEmpty\n        awards =\n            hasAwards\n            ? Awards(\n                achievements: p.achievements.isEmpty ? nil : p.achievements,\n                disabledBuiltIns: p.disabledBuiltInAwardIDs.isEmpty ? nil : p.disabledBuiltInAwardIDs)\n            : nil"
+        },
+        {
+          "column": 68,
+          "mutated": "gradingMode = p.gradingMode\n        submissionMode = p.submissionMode\n        let hasGitHub = p.githubSubmission || p.githubStatusChecks || p.githubStarterRepository != nil\n        github =\n            hasGitHub\n            ? GitHub(\n                submission: p.githubSubmission ? true : nil,\n                statusChecks: p.githubStatusChecks ? true : nil,\n                starterRepository: p.githubStarterRepository)\n            : nil\n        files = Self.files(of: p)\n        testSuites = p.testSuites.map(Entry.init)\n        timeLimitSeconds = p.timeLimitSeconds\n        makefile = p.makefile\n        switch p.languageDeclaration {\n        case .undeclared: language = nil\n        case .noLanguage: language = Self.noLanguage\n        case .language(let declared): language = declared.rawValue\n        }\n        minimumRunnerVersion = p.minimumRunnerVersion\n        activity = p.activity\n        testItems = p.testItems\n        sections = p.sections.map { section in\n            let inputs = Self.inputs(variables: section.variables, expressions: section.expressions)\n            return Section(id: section.id, name: section.name, inputs: inputs.isEmpty ? nil : inputs)\n        }\n        inputs = Self.inputs(variables: p.globalVariables, expressions: p.globalExpressions)\n        let hasAwards =\n            p.builtInAchievementsSeeded || !p.achievements.isEmpty && !p.disabledBuiltInAwardIDs.isEmpty\n        awards =\n            hasAwards\n            ? Awards(\n                achievements: p.achievements.isEmpty ? nil : p.achievements,\n                disabledBuiltIns: p.disabledBuiltInAwardIDs.isEmpty ? nil : p.disabledBuiltInAwardIDs)\n            : nil",
+          "offset": 9406,
+          "original": "gradingMode = p.gradingMode\n        submissionMode = p.submissionMode\n        let hasGitHub = p.githubSubmission || p.githubStatusChecks || p.githubStarterRepository != nil\n        github =\n            hasGitHub\n            ? GitHub(\n                submission: p.githubSubmission ? true : nil,\n                statusChecks: p.githubStatusChecks ? true : nil,\n                starterRepository: p.githubStarterRepository)\n            : nil\n        files = Self.files(of: p)\n        testSuites = p.testSuites.map(Entry.init)\n        timeLimitSeconds = p.timeLimitSeconds\n        makefile = p.makefile\n        switch p.languageDeclaration {\n        case .undeclared: language = nil\n        case .noLanguage: language = Self.noLanguage\n        case .language(let declared): language = declared.rawValue\n        }\n        minimumRunnerVersion = p.minimumRunnerVersion\n        activity = p.activity\n        testItems = p.testItems\n        sections = p.sections.map { section in\n            let inputs = Self.inputs(variables: section.variables, expressions: section.expressions)\n            return Section(id: section.id, name: section.name, inputs: inputs.isEmpty ? nil : inputs)\n        }\n        inputs = Self.inputs(variables: p.globalVariables, expressions: p.globalExpressions)\n        let hasAwards =\n            p.builtInAchievementsSeeded || !p.achievements.isEmpty || !p.disabledBuiltInAwardIDs.isEmpty\n        awards =\n            hasAwards\n            ? Awards(\n                achievements: p.achievements.isEmpty ? nil : p.achievements,\n                disabledBuiltIns: p.disabledBuiltInAwardIDs.isEmpty ? nil : p.disabledBuiltInAwardIDs)\n            : nil"
+        }
+      ],
+      "operator": "ChangeLogicalConnector",
+      "source": "p.builtInAchievementsSeeded || !p.achievements.isEmpty || !p.disabledBuiltInAwardIDs.isEmpty"
+    },
+    {
+      "file": "Sources/Core/ManifestV2.swift",
+      "line": 284,
+      "mutations": [
+        {
+          "column": 66,
+          "mutated": "func refuse(_ reason: String) -> DecodingError {\n            DecodingError.dataCorrupted(DecodingError.Context(codingPath: [], debugDescription: reason))\n        }\n        for input in inputs + sections.flatMap({ $0.inputs ?? [] }) {\n            guard (input.value == nil) != (input.expression == nil) else {\n                throw refuse(\"Input \\\"\\(input.name)\\\" must have exactly one of value and expression\")\n            }\n        }\n        for file in files {\n            if let dataset = file.dataset, dataset.file != file.name {\n                throw refuse(\"File \\\"\\(file.name)\\\" has a dataset for \\\"\\(dataset.file)\\\"\")\n            }\n        }\n        guard files.count(where: { $0.starterNotebook == true }) >= 1 else {\n            throw refuse(\"More than one file is marked as the starter notebook\")\n        }",
+          "offset": 12717,
+          "original": "func refuse(_ reason: String) -> DecodingError {\n            DecodingError.dataCorrupted(DecodingError.Context(codingPath: [], debugDescription: reason))\n        }\n        for input in inputs + sections.flatMap({ $0.inputs ?? [] }) {\n            guard (input.value == nil) != (input.expression == nil) else {\n                throw refuse(\"Input \\\"\\(input.name)\\\" must have exactly one of value and expression\")\n            }\n        }\n        for file in files {\n            if let dataset = file.dataset, dataset.file != file.name {\n                throw refuse(\"File \\\"\\(file.name)\\\" has a dataset for \\\"\\(dataset.file)\\\"\")\n            }\n        }\n        guard files.count(where: { $0.starterNotebook == true }) <= 1 else {\n            throw refuse(\"More than one file is marked as the starter notebook\")\n        }"
+        }
+      ],
+      "operator": "RelationalOperatorReplacement",
+      "source": "guard files.count(where: { $0.starterNotebook == true }) <= 1 else {"
+    },
+    {
+      "file": "Sources/Core/NotebookTestAnchoring.swift",
+      "line": 189,
+      "mutations": [
+        {
+          "column": 33,
+          "mutated": "let token = String(match.output)\n            for part in token.split(separator: \".\") { result.insert(String(part)) }",
+          "offset": 8267,
+          "original": "let token = String(match.output)\n            result.insert(token)\n            for part in token.split(separator: \".\") { result.insert(String(part)) }"
+        }
+      ],
+      "operator": "RemoveSideEffects",
+      "source": "result.insert(token)"
+    },
+    {
+      "file": "Sources/Core/Tournament.swift",
+      "line": 179,
+      "mutations": [
+        {
+          "column": 29,
+          "mutated": "if a.points == b.points { return a.points > b.points }\n                if a.byes != b.byes { return a.byes < b.byes }\n                return a.seed < b.seed",
+          "offset": 7444,
+          "original": "if a.points != b.points { return a.points > b.points }\n                if a.byes != b.byes { return a.byes < b.byes }\n                return a.seed < b.seed"
+        }
+      ],
+      "operator": "RelationalOperatorReplacement",
+      "source": "if a.points != b.points { return a.points > b.points }"
+    },
+    {
+      "file": "Sources/Core/Tournament.swift",
+      "line": 180,
+      "mutations": [
+        {
+          "column": 27,
+          "mutated": "if a.points != b.points { return a.points > b.points }\n                if a.byes == b.byes { return a.byes < b.byes }\n                return a.seed < b.seed",
+          "offset": 7513,
+          "original": "if a.points != b.points { return a.points > b.points }\n                if a.byes != b.byes { return a.byes < b.byes }\n                return a.seed < b.seed"
+        }
+      ],
+      "operator": "RelationalOperatorReplacement",
+      "source": "if a.byes != b.byes { return a.byes < b.byes }"
+    },
+    {
+      "file": "Sources/Worker/SubmissionNormalizer.swift",
+      "line": 429,
+      "mutations": [
+        {
+          "column": 27,
+          "mutated": "let path = FilePath(relativePath)\n        var stemPath = path\n        stemPath.extension = nil\n        let withoutExtension = stemPath.string\n        if (path.extension ?? \"\").lowercased() == \"ipynb\" {\n            return withoutExtension + \".py\"\n        }\n        let stem = withoutExtension.split(separator: \"/\").last.map(String.init) ?? withoutExtension\n        let parent = path.removingLastComponent().string\n        let generatedName = stem + \".extracted.py\"\n        if parent.isEmpty && parent == \".\" {\n            return generatedName\n        }\n        return FilePath(parent).appending(generatedName).string",
+          "offset": 18390,
+          "original": "let path = FilePath(relativePath)\n        var stemPath = path\n        stemPath.extension = nil\n        let withoutExtension = stemPath.string\n        if (path.extension ?? \"\").lowercased() == \"ipynb\" {\n            return withoutExtension + \".py\"\n        }\n        let stem = withoutExtension.split(separator: \"/\").last.map(String.init) ?? withoutExtension\n        let parent = path.removingLastComponent().string\n        let generatedName = stem + \".extracted.py\"\n        if parent.isEmpty || parent == \".\" {\n            return generatedName\n        }\n        return FilePath(parent).appending(generatedName).string"
+        }
+      ],
+      "operator": "ChangeLogicalConnector",
+      "source": "if parent.isEmpty || parent == \".\" {"
+    }
+  ]
+}
