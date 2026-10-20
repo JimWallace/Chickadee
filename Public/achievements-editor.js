@@ -101,9 +101,16 @@
 
         SIGNAL_META = Core.signalMetaFromOptions(
             condTemplate.content.querySelectorAll('.am-cond-signal option'));
-        SIGNAL_LEVELS = Core.signalLevelsFromOptions(
-            condTemplate.content.querySelectorAll('.am-cond-signal option'));
         LEVEL = block.getAttribute('data-level') || '';
+        // The levels are read when the first condition row is built, not
+        // here: init stays the same small step it always was.
+        var signalLevelsRead = false;
+        function readSignalLevels() {
+            if (signalLevelsRead) return;
+            signalLevelsRead = true;
+            SIGNAL_LEVELS = Core.signalLevelsFromOptions(
+                condTemplate.content.querySelectorAll('.am-cond-signal option'));
+        }
 
         var state = [];
         // Until the initial GET succeeds, saving is disabled: persisting the
@@ -173,6 +180,7 @@
 
         // Build one condition row inside `container` from an optional `cond`.
         function addConditionRow(container, cond) {
+            readSignalLevels();
             container.appendChild(condTemplate.content.cloneNode(true));
             var rowEl = container.lastElementChild;
             var sig = rowEl.querySelector('.am-cond-signal');
