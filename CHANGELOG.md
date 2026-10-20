@@ -9,6 +9,13 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.770] - 2026-10-20
+
+### Security
+
+- **A TA can no longer change the BrightSpace binding or the sync identity (#2710).** Six actions on the instructor LEARN tab now require the course instructor role: connect, use my identity, bind org unit, auto-map, sync now and reconcile now. An archived course refuses them too. A TA keeps disconnect (their own account) and the connection test. A new test, `InstructorParameterlessRouteFloorTests`, declares a role floor for every `/instructor` write route without a path parameter and checks it as a TA.
+
+
 ## [0.5.769] - 2026-10-20
 
 ### Changed
