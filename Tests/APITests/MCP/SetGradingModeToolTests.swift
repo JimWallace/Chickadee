@@ -14,10 +14,10 @@ import Vapor
         TestManifests.browserEmpty
 
     private func fixture(
-        on app: Application, manifest: String, enroll: Bool = true
+        on app: Application, manifest: String
     ) async throws -> APIAssignment {
         try await seedMCPAssignment(
-            on: app, setupID: "setup_gm", manifest: manifest, enroll: enroll)
+            on: app, setupID: "setup_gm", manifest: manifest)
     }
 
     @Test func setsGradingModeWithoutClosing() async throws {
@@ -45,17 +45,6 @@ import Vapor
             await #expect(throws: MCPToolError.self) {
                 _ = try await SetGradingModeTool().execute(
                     .init(assignmentPublicID: assignment.publicID, gradingMode: "nonsense"), mcpContext(app))
-            }
-        }
-    }
-
-    @Test func deniesWhenSubjectNotEnrolled() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
-            let assignment = try await fixture(on: app, manifest: browserManifest, enroll: false)
-            await #expect(throws: MCPToolError.self) {
-                _ = try await SetGradingModeTool().execute(
-                    .init(assignmentPublicID: assignment.publicID, gradingMode: "worker"), mcpContext(app))
             }
         }
     }

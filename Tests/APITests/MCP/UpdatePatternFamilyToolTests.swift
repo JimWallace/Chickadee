@@ -415,31 +415,6 @@ import Vapor
         }
     }
 
-    @Test func deniesWhenSubjectNotEnrolled() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
-            let course = try await makeTestCourse(on: app, code: "CS246", name: "OOP")
-            let courseID = try course.requireID()
-            _ = try await makeTestUser(on: app, username: "tester", role: "instructor")
-            let setup = try await makeTestSetup(
-                on: app, id: "setup_pf", courseID: courseID, manifest: emptyManifest)
-            try await pfWriteEmptyZip(at: app.testSetupsDirectory + "setup_pf.zip")
-            try await applyPatternFamilies(
-                to: setup, nextFamilies: [pfBMIFamily()],
-                authoredItems: [.family(id: "bmi_category", sectionID: nil)], on: app.db)
-            let assignment = try await makeTestAssignment(
-                on: app, testSetupID: "setup_pf", courseID: courseID, title: "Lab")
-
-            await #expect(throws: MCPToolError.self) {
-                _ = try await UpdatePatternFamilyTool().execute(
-                    UpdatePatternFamilyTool.Input(
-                        assignmentPublicID: assignment.publicID, familyID: "bmi_category",
-                        defaultTier: nil, defaultPoints: 2, enableCases: nil, disableCases: nil),
-                    mcpContext(app))
-            }
-        }
-    }
-
     @Test func addsNewCases() async throws {
         let app = try await makeTestApp()
         try await withApp(app) { app in

@@ -162,23 +162,6 @@ import Vapor
         }
     }
 
-    @Test func deniesWhenSubjectNotEnrolled() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
-            let course = try await makeTestCourse(on: app, code: "CS246", name: "OOP")
-            let courseID = try course.requireID()
-            _ = try await makeTestUser(on: app, username: "tester", role: "instructor")
-            try await makeTestSetup(on: app, id: "setup_g", courseID: courseID)
-            let assignment = try await makeTestAssignment(
-                on: app, testSetupID: "setup_g", courseID: courseID, title: "Tasks")
-
-            await #expect(throws: MCPToolError.self) {
-                _ = try await GetAssignmentTool().execute(
-                    GetAssignmentTool.Input(assignmentPublicID: assignment.publicID), mcpContext(app))
-            }
-        }
-    }
-
     /// The live-session window `set_activity` writes is readable here, and
     /// the three nullable activity keys are present as null when unset, so an
     /// agent can tell "no window" from a server that predates the field

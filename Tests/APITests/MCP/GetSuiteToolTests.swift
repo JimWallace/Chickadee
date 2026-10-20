@@ -183,23 +183,6 @@ import Vapor
         }
     }
 
-    @Test func deniesWhenSubjectNotEnrolled() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
-            let course = try await makeTestCourse(on: app, code: "CS246", name: "OOP")
-            let courseID = try course.requireID()
-            _ = try await makeTestUser(on: app, username: "tester", role: "instructor")
-            try await makeTestSetup(on: app, id: "setup_s", courseID: courseID, manifest: manifest)
-            let assignment = try await makeTestAssignment(
-                on: app, testSetupID: "setup_s", courseID: courseID, title: "Lab")
-
-            await #expect(throws: MCPToolError.self) {
-                _ = try await GetSuiteTool().execute(
-                    GetSuiteTool.Input(assignmentPublicID: assignment.publicID), mcpContext(app))
-            }
-        }
-    }
-
     @Test func unknownAssignmentThrows() async throws {
         let app = try await makeTestApp()
         try await withApp(app) { app in

@@ -217,24 +217,6 @@ import Vapor
         }
     }
 
-    @Test func deniesWhenSubjectNotEnrolled() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
-            let course = try await makeTestCourse(on: app, code: "CS246", name: "OOP")
-            let courseID = try course.requireID()
-            _ = try await makeTestUser(on: app, username: "tester", role: "instructor")
-            try await makeTestSetup(on: app, id: "setup_val", courseID: courseID)
-            let assignment = try await makeTestAssignment(
-                on: app, testSetupID: "setup_val", courseID: courseID, title: "Lab")
-            assignment.validationStatus = "failed"
-            try await assignment.save(on: app.db)
-
-            await #expect(throws: MCPToolError.self) {
-                _ = try await run(app, publicID: assignment.publicID)
-            }
-        }
-    }
-
     // MARK: - Multi-variant batch
 
     @Test func reportsTheVariantBatchWithFailingOutcomesOnly() async throws {

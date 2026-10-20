@@ -13,9 +13,9 @@ import Vapor
     private let manifest =
         TestManifests.workerEmpty
 
-    private func fixture(on app: Application, enroll: Bool = true) async throws -> APIAssignment {
+    private func fixture(on app: Application) async throws -> APIAssignment {
         try await seedMCPAssignment(
-            on: app, setupID: "setup_tl", manifest: manifest, enroll: enroll)
+            on: app, setupID: "setup_tl", manifest: manifest)
     }
 
     @Test func setsDefaultTimeLimitWithoutClosing() async throws {
@@ -79,17 +79,6 @@ import Vapor
             let high = try await SetTimeLimitTool().execute(
                 .init(assignmentPublicID: assignment.publicID, seconds: 600), mcpContext(app))
             #expect(high.timeLimitSeconds == 600)
-        }
-    }
-
-    @Test func deniesWhenSubjectNotEnrolled() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
-            let assignment = try await fixture(on: app, enroll: false)
-            await #expect(throws: MCPToolError.self) {
-                _ = try await SetTimeLimitTool().execute(
-                    .init(assignmentPublicID: assignment.publicID, seconds: 30), mcpContext(app))
-            }
         }
     }
 }

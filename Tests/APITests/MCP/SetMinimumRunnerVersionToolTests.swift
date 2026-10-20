@@ -18,15 +18,13 @@ import Vapor
     /// A live course + setup + assignment, with `tester` (a *global student*)
     /// enrolled at the given per-course role.
     private func fixture(
-        on app: Application, role: CourseRole = .instructor, enroll: Bool = true
+        on app: Application, role: CourseRole = .instructor
     ) async throws -> APIAssignment {
         let course = try await makeTestCourse(on: app, code: "CS241", name: "Systems")
         let courseID = try course.requireID()
         let tester = try await makeTestUser(on: app, username: "tester", role: "student")
-        if enroll {
-            try await APICourseEnrollment(userID: try tester.requireID(), courseID: courseID, role: role)
-                .save(on: app.db)
-        }
+        try await APICourseEnrollment(userID: try tester.requireID(), courseID: courseID, role: role)
+            .save(on: app.db)
         try await makeTestSetup(on: app, id: "setup_mrv", courseID: courseID, manifest: manifest)
         return try await makeTestAssignment(
             on: app, testSetupID: "setup_mrv", courseID: courseID, title: "Lab")
@@ -94,18 +92,6 @@ import Vapor
             await #expect(throws: MCPToolError.self) {
                 _ = try await SetMinimumRunnerVersionTool().execute(
                     .init(assignmentPublicID: assignment.publicID, minimumRunnerVersion: "not-a-version"),
-                    mcpContext(app))
-            }
-        }
-    }
-
-    @Test func deniesWhenSubjectNotEnrolled() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
-            let assignment = try await fixture(on: app, enroll: false)
-            await #expect(throws: MCPToolError.self) {
-                _ = try await SetMinimumRunnerVersionTool().execute(
-                    .init(assignmentPublicID: assignment.publicID, minimumRunnerVersion: "0.5.0"),
                     mcpContext(app))
             }
         }

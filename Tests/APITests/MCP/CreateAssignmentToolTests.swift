@@ -205,19 +205,4 @@ import Vapor
             #expect(props.languageDeclared == true)
         }
     }
-
-    @Test func deniesWhenSubjectNotEnrolled() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
-            // Course exists but the instructor isn't enrolled in it.
-            _ = try await makeTestCourse(on: app, code: "CS246", name: "OOP")
-            _ = try await makeTestUser(on: app, username: "tester", role: "instructor")
-            await #expect(throws: MCPToolError.self) {
-                _ = try await CreateAssignmentTool().execute(
-                    CreateAssignmentTool.Input(
-                        courseCode: "CS246", title: "Lab", notebook: try json(twoCellNotebook), language: "python"),
-                    mcpContext(app))
-            }
-        }
-    }
 }

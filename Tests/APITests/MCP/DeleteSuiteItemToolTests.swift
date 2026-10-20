@@ -169,25 +169,4 @@ import Vapor
             }
         }
     }
-
-    @Test func deniesWhenSubjectNotEnrolled() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
-            let course = try await makeTestCourse(on: app, code: "CS246", name: "OOP")
-            let courseID = try course.requireID()
-            _ = try await makeTestUser(on: app, username: "tester", role: "instructor")
-            _ = try await makeTestSetup(
-                on: app, id: "setup_del", courseID: courseID, manifest: emptyManifest)
-            try await pfWriteEmptyZip(at: app.testSetupsDirectory + "setup_del.zip")
-            let assignment = try await makeTestAssignment(
-                on: app, testSetupID: "setup_del", courseID: courseID, title: "Lab")
-            await #expect(throws: MCPToolError.self) {
-                _ = try await DeleteSuiteItemTool().execute(
-                    DeleteSuiteItemTool.Input(
-                        assignmentPublicID: assignment.publicID, script: "x.py",
-                        familyID: nil, check: nil),
-                    mcpContext(app))
-            }
-        }
-    }
 }

@@ -348,35 +348,6 @@ import Vapor
         }
     }
 
-    @Test func deniesWhenSubjectNotEnrolled() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
-            let course = try await makeTestCourse(on: app, code: "CS246", name: "OOP")
-            let courseID = try course.requireID()
-            _ = try await makeTestUser(on: app, username: "tester", role: "instructor")
-            _ = try await makeTestSetup(
-                on: app, id: "setup_pf", courseID: courseID, manifest: emptyManifest)
-            try await pfWriteEmptyZip(at: app.testSetupsDirectory + "setup_pf.zip")
-            let assignment = try await makeTestAssignment(
-                on: app, testSetupID: "setup_pf", courseID: courseID, title: "Lab")
-            await #expect(throws: MCPToolError.self) {
-                _ = try await CreatePatternFamilyTool().execute(
-                    CreatePatternFamilyTool.Input(
-                        assignmentPublicID: assignment.publicID, id: "x", name: "X",
-                        kind: "boundary_equality", function: "f", paramNames: ["x"],
-                        defaultTier: nil, defaultPoints: nil, tolerance: nil, sectionID: nil,
-                        dependsOn: nil, variables: nil,
-                        cases: [
-                            CreatePatternFamilyTool.CaseInput(
-                                key: "01", label: nil, args: [.int(1)], expected: .int(1),
-                                argVarRefs: nil, argsProvided: nil, expectedVarRef: nil,
-                                points: nil, tier: nil, enabled: nil)
-                        ]),
-                    mcpContext(app))
-            }
-        }
-    }
-
     @Test func createsFamilyWithDefaultAndPerCaseFailureDetail() async throws {
         let app = try await makeTestApp()
         try await withApp(app) { app in

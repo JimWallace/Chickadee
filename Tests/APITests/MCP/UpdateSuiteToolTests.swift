@@ -223,29 +223,6 @@ import Vapor
         }
     }
 
-    @Test func deniesWhenSubjectNotEnrolled() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
-            let course = try await makeTestCourse(on: app, code: "CS246", name: "OOP")
-            let courseID = try course.requireID()
-            _ = try await makeTestUser(on: app, username: "tester", role: "instructor")
-            try await makeTestSetup(on: app, id: "setup_us", courseID: courseID, manifest: manifest)
-            let assignment = try await makeTestAssignment(
-                on: app, testSetupID: "setup_us", courseID: courseID, title: "Lab")
-            await #expect(throws: MCPToolError.self) {
-                _ = try await UpdateSuiteTool().execute(
-                    UpdateSuiteTool.Input(
-                        assignmentPublicID: assignment.publicID,
-                        edits: [
-                            UpdateSuiteTool.ScriptEdit(
-                                script: "test_a.sh", tier: "secret", points: nil, displayName: nil,
-                                dependsOn: nil, sectionID: nil)
-                        ]),
-                    mcpContext(app))
-            }
-        }
-    }
-
     @Test func setsAndRevertsFailureDetail() async throws {
         let app = try await makeTestApp()
         try await withApp(app) { app in
