@@ -1,0 +1,38 @@
+name: Playwright setup
+description: >
+  Installs one npm project with `npm ci` and the Playwright engine it drives.
+  The engine download is cached on the project lockfile. The caller provides
+  Node first: browser-probe-setup uses the node of the swift-ci image, and
+  browser-grading-smoke.yml uses actions/setup-node.
+
+inputs:
+  browser:
+    description: "Playwright engine to install (chromium | webkit)"
+    required: true
+  node-project:
+    description: "Directory holding the npm project (package-lock.json) to install"
+    required: true
+
+runs:
+  using: composite
+  steps:
+    # `npm ci` installs exactly the committed lockfile. `npm install` could
+    # resolve a different Playwright.
+    - name: Install the npm dependencies
+      shell: bash
+      working-directory: ${{ inputs.node-project }}
+      run: npm ci --no-audit --no-fund
+
+    # The engine download (~150 MB) is the slow, network-dependent part of
+    # `playwright install`. `--with-deps` still apt-installs the engine's
+    # system libraries each run, because they cannot be cached in a container.
+    - name: Cache the Playwright ${{ inputs.browser }} download
+      uses: actions/cache@v6
+      with:
+        path: ~/.cache/ms-playwright
+        key: playwright-${{ inputs.browser }}-${{ runner.os }}-${{ inputs.node-project }}-${{ hashFiles(format('{0}/package-lock.json', inputs.node-project)) }}
+
+    - name: Install the Playwright ${{ inputs.browser }} engine
+      shell: bash
+      working-directory: ${{ inputs.node-project }}
+      run: npx playwright install --with-deps ${{ inputs.browser }}

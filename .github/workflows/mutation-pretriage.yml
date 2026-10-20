@@ -25,9 +25,11 @@ name: Mutation survivor pre-triage
 #
 # Untrusted text is unlikely here (the inputs are main's source and a record
 # the sweep wrote), but the layers are the same as in the other agent
-# workflows: the agent's job is read-only with read-only tools, the checkout
-# keeps no credentials, and a second job with no model posts the comment after
-# it refuses credential-shaped text and caps the length.
+# workflows: the agent's job is read-only with read-only tools and gets only
+# that job's token (.github/actions/claude-agent), the checkout keeps no
+# credentials, and a second job with no model posts the comment after it
+# refuses credential-shaped text and caps the length
+# (scripts/ci-agent-sanitize.sh).
 
 on:
   workflow_run:
@@ -51,12 +53,11 @@ jobs:
     permissions:
       contents: read
       issues: read
-      id-token: write
     outputs:
       issue: ${{ steps.collect.outputs.issue }}
       marker: ${{ steps.collect.outputs.marker }}
-      outcome: ${{ steps.pretriage.outcome }}
-      result: ${{ steps.pretriage.outputs.structured_output }}
+      outcome: ${{ steps.pretriage.outputs.outcome }}
+      result: ${{ steps.pretriage.outputs.structured-output }}
 
     steps:
       - uses: actions/checkout@v7
@@ -64,22 +65,8 @@ jobs:
           fetch-depth: 1
           persist-credentials: false
 
-      - name: Check for credentials
-        id: credentials
-        env:
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-        run: |
-          if [ -n "$ANTHROPIC_API_KEY" ] || [ -n "$CLAUDE_CODE_OAUTH_TOKEN" ]; then
-            echo "present=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "present=false" >> "$GITHUB_OUTPUT"
-            echo "::warning::No ANTHROPIC_API_KEY or CLAUDE_CODE_OAUTH_TOKEN secret is set, so the pre-triage did not run."
-          fi
-
       - name: Find the sweep issue and its run record
         id: collect
-        if: steps.credentials.outputs.present == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
           SWEEP_RUN: ${{ github.event.workflow_run.id }}
@@ -144,11 +131,12 @@ jobs:
       - name: Read each survivor
         id: pretriage
         if: steps.collect.outputs.go == 'true'
-        continue-on-error: true
-        uses: anthropics/claude-code-action@v1
+        uses: ./.github/actions/claude-agent
         with:
-          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
-          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          name: mutation-pretriage
+          anthropic-api-key: ${{ secrets.ANTHROPIC_API_KEY }}
+          claude-code-oauth-token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          github-token: ${{ github.token }}
           prompt: |
             The weekly mutation sweep of the Chickadee repository left
             ${{ steps.collect.outputs.survivors }} survivors. Give a first
@@ -193,12 +181,11 @@ jobs:
             - Last, one paragraph: "These readings are unverified. Follow
               docs/mutation-triage.md: run the verifier before and after."
             Plain, short sentences. No exclamation marks or emoji.
-          claude_args: |
-            --model sonnet
-            --max-turns 150
-            --allowedTools "Read,Grep,Glob"
-            --disallowedTools "Bash,Edit,Write,WebFetch,WebSearch,Read(//proc/**),Read(//sys/**),Read(//etc/**),Read(//tmp/**),Read(//github/**),Read(//root/**),Read(//home/runner/work/_temp/**),Read(~/.*/**),Read(./.git/**)"
-            --json-schema '{"type":"object","properties":{"gap":{"type":"integer"},"equivalent":{"type":"integer"},"apiOnly":{"type":"integer"},"unclear":{"type":"integer"},"comment":{"type":"string"}},"required":["gap","equivalent","apiOnly","unclear","comment"]}'
+          model: sonnet
+          max-turns: "150"
+          allowed-tools: "Read,Grep,Glob"
+          disallowed-tools: "Bash,WebFetch"
+          json-schema: '{"type":"object","properties":{"gap":{"type":"integer"},"equivalent":{"type":"integer"},"apiOnly":{"type":"integer"},"unclear":{"type":"integer"},"comment":{"type":"string"}},"required":["gap","equivalent","apiOnly","unclear","comment"]}'
 
   post:
     name: mutation-pretriage (post)
@@ -206,11 +193,18 @@ jobs:
     if: needs.pretriage.outputs.outcome == 'success'
     runs-on: ubuntu-latest
     timeout-minutes: 5
-    # No model runs in this job, and no repository code is checked out.
+    # No model runs in this job. The checkout is `main`, for the sanitize
+    # script.
     permissions:
+      contents: read
       issues: write
 
     steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
       - name: Comment on the sweep issue
         env:
           GH_TOKEN: ${{ github.token }}
@@ -224,19 +218,11 @@ jobs:
             echo "::warning::The pre-triage came back empty."
             exit 0
           fi
-          if grep -qE 'sk-ant-|gh[pousr]_[A-Za-z0-9]{20,}|github_pat_|eyJ[A-Za-z0-9_-]{20,}\.|BEGIN [A-Z ]*PRIVATE KEY' raw.md; then
-            echo "::error::The pre-triage looks like it holds a credential. It was not posted."
+          # A comment holds at most 65,536 characters.
+          if ! scripts/ci-agent-sanitize.sh --max-chars 60000 --append "$MARKER" raw.md comment.md; then
+            echo "::error::The pre-triage was refused. It was not posted."
             exit 1
           fi
-          # A comment holds at most 65,536 characters.
-          head -c 60000 raw.md | sed 's/@/@\xE2\x80\x8B/g' > comment.md
-          {
-            echo
-            echo "$MARKER"
-            echo
-            echo "---"
-            echo "_Generated by [Claude Code](https://claude.ai/code)_"
-          } >> comment.md
           if ! gh api "repos/$GITHUB_REPOSITORY/issues/$ISSUE/comments" -F "body=@comment.md" > /dev/null; then
             echo "::error::Could not comment on issue #$ISSUE."
             exit 1

@@ -22,13 +22,16 @@ name: Dependabot notes
 # UNTRUSTED TEXT. A PR body carries upstream release notes, which anybody who
 # publishes a package can write. So:
 #   * The `notes` jobs, where the model runs, have read-only permissions and
-#     read-only tools. The checkout is `main`, with no credentials kept, and
+#     read-only tools, and the agent gets only its job's token
+#     (.github/actions/claude-agent). The checkout is `main`, with no credentials kept, and
 #     .git/ and the places where a credential can sit are denied by name. The
 #     agent may read the whole checkout, because "where is this package used"
 #     is half of its job.
 #   * The `post` job runs no model. It refuses credential-shaped text, caps
-#     the length and breaks @mentions before a comment is public, and it edits
-#     only its own comments.
+#     the length and breaks @mentions (scripts/ci-agent-sanitize.sh) before a
+#     comment is public, and it edits only its own comments.
+#
+# Without the API secret, each `notes` leg says so in a warning and passes.
 
 on:
   schedule:
@@ -53,24 +56,10 @@ jobs:
       prs: ${{ steps.find.outputs.prs }}
 
     steps:
-      - name: Check for credentials
-        id: credentials
-        env:
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-        run: |
-          if [ -n "$ANTHROPIC_API_KEY" ] || [ -n "$CLAUDE_CODE_OAUTH_TOKEN" ]; then
-            echo "present=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "present=false" >> "$GITHUB_OUTPUT"
-            echo "::warning::No ANTHROPIC_API_KEY or CLAUDE_CODE_OAUTH_TOKEN secret is set, so the Dependabot notes did not run."
-          fi
-
       # Every open Dependabot PR whose notes do not name its current head
       # commit: a new PR, or one that Dependabot rebased since the last run.
       - name: Find PRs that need notes
         id: find
-        if: steps.credentials.outputs.present == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -106,7 +95,6 @@ jobs:
     permissions:
       contents: read
       pull-requests: read
-      id-token: write
 
     steps:
       # `main`, as a schedule always checks out: the model reads the
@@ -138,11 +126,12 @@ jobs:
 
       - name: Write the notes
         id: notes
-        continue-on-error: true
-        uses: anthropics/claude-code-action@v1
+        uses: ./.github/actions/claude-agent
         with:
-          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
-          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          name: dependabot-notes
+          anthropic-api-key: ${{ secrets.ANTHROPIC_API_KEY }}
+          claude-code-oauth-token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          github-token: ${{ github.token }}
           prompt: |
             Dependabot opened a dependency update on the Chickadee repository.
             Write a short note for the person who reviews it.
@@ -172,19 +161,18 @@ jobs:
               asks for, and any that a breaking change needs. Say "CI is
               enough" only when neither asks for more.
             Plain, short sentences. No exclamation marks or emoji.
-          claude_args: |
-            --model haiku
-            --max-turns 25
-            --allowedTools "Read,Grep,Glob"
-            --disallowedTools "Bash,Edit,Write,WebFetch,WebSearch,Read(//proc/**),Read(//sys/**),Read(//etc/**),Read(//tmp/**),Read(//github/**),Read(//root/**),Read(//home/runner/work/_temp/**),Read(~/.*/**),Read(./.git/**)"
-            --json-schema '{"type":"object","properties":{"risk":{"type":"string","enum":["low","medium","high"]},"comment":{"type":"string"}},"required":["risk","comment"]}'
+          model: haiku
+          max-turns: "25"
+          allowed-tools: "Read,Grep,Glob"
+          disallowed-tools: "Bash,WebFetch"
+          json-schema: '{"type":"object","properties":{"risk":{"type":"string","enum":["low","medium","high"]},"comment":{"type":"string"}},"required":["risk","comment"]}'
 
       # Hand the result to `post`, which holds the write scope. A matrix job
       # cannot set one output per instance, so this goes through an artifact.
       - name: Save the result
-        if: steps.notes.outcome == 'success'
+        if: steps.notes.outputs.outcome == 'success'
         env:
-          RESULT: ${{ steps.notes.outputs.structured_output }}
+          RESULT: ${{ steps.notes.outputs.structured-output }}
           PR: ${{ matrix.pr }}
           SHA: ${{ steps.collect.outputs.sha }}
         run: |
@@ -193,7 +181,7 @@ jobs:
             '{pr: $pr, sha: $sha, result: $result}' > "result/notes-$PR.json"
 
       - name: Upload the result
-        if: steps.notes.outcome == 'success'
+        if: steps.notes.outputs.outcome == 'success'
         uses: actions/upload-artifact@v7
         with:
           name: dependabot-notes-${{ matrix.pr }}
@@ -201,9 +189,9 @@ jobs:
           retention-days: 7
 
       - name: Say so if the notes failed
-        if: steps.notes.outcome != 'success'
+        if: steps.notes.outputs.ran == 'true' && steps.notes.outputs.outcome != 'success'
         env:
-          OUTCOME: ${{ steps.notes.outcome }}
+          OUTCOME: ${{ steps.notes.outputs.outcome }}
           PR: ${{ matrix.pr }}
         run: echo "::warning::The notes for #$PR did not complete (outcome $OUTCOME)."
 
@@ -213,11 +201,18 @@ jobs:
     if: ${{ !cancelled() && needs.notes.result != 'skipped' }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    # No model runs in this job, and no repository code is checked out.
+    # No model runs in this job. The checkout is `main`, for the sanitize
+    # script; nothing from a PR is checked out.
     permissions:
+      contents: read
       pull-requests: write
 
     steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
       # Every leg can fail, and then there is nothing to download.
       - uses: actions/download-artifact@v8
         continue-on-error: true
@@ -241,20 +236,12 @@ jobs:
               echo "::warning::The notes for #$pr came back empty."
               continue
             fi
-            if grep -qE 'sk-ant-|gh[pousr]_[A-Za-z0-9]{20,}|github_pat_|eyJ[A-Za-z0-9_-]{20,}\.|BEGIN [A-Z ]*PRIVATE KEY' raw.md; then
-              echo "::error::The notes for #$pr look like they hold a credential. They were not posted."
+            if ! scripts/ci-agent-sanitize.sh --max-lines 30 --max-width 300 --max-chars 4000 \
+                --append "<!-- dependabot-notes -->" --append "<!-- dependabot-notes:$sha -->" raw.md comment.md; then
+              echo "::error::The notes for #$pr were refused. They were not posted."
               status=1
               continue
             fi
-            head -n 30 raw.md | cut -c1-300 | head -c 4000 | sed 's/@/@\xE2\x80\x8B/g' > comment.md
-            {
-              echo
-              echo "<!-- dependabot-notes -->"
-              echo "<!-- dependabot-notes:$sha -->"
-              echo
-              echo "---"
-              echo "_Generated by [Claude Code](https://claude.ai/code)_"
-            } >> comment.md
 
             # One comment per PR: update it after a rebase instead of adding more.
             ids="$(gh api "repos/$GITHUB_REPOSITORY/issues/$pr/comments" --paginate \

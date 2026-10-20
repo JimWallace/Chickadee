@@ -137,8 +137,8 @@ The feature directories that hold only services, `BrightSpace/` and `GitHub/`,
 are shared code too. `scripts/check-layering.sh` enforces it in `format-lint`.
 It fails when a file under any of those five directories names a function or
 type declared only under `Routes/`. `LTI/` is not scanned, because it holds its
-own routes. The uses that predate the rule are listed in
-`scripts/layering-baseline.txt`, and that list can only shrink (#1726).
+own routes. The rule is absolute: the shrink-only list of older uses reached
+zero in #2143 and is gone (#1726).
 
 Each of those directories has one job, so a file goes where its imports say:
 

@@ -34,12 +34,13 @@ set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$repo_root"
+# shellcheck source=lib/grep-guard.sh
+. "scripts/lib/grep-guard.sh"
 
 # Any parameter typed `AssignmentLanguage` (optional or not) with a default of a
 # language case or of nil. Matches across the whole declaration line, which is where
 # swift-format puts a defaulted parameter.
-offenders=$(grep -rnE "AssignmentLanguage\??[[:space:]]*=[[:space:]]*(\.|nil\b)" \
-  Sources/ 2>/dev/null | sort || true)
+offenders=$(code_matches 'AssignmentLanguage\??[[:space:]]*=[[:space:]]*(\.|nil\b)' Sources/)
 
 if [ -n "$offenders" ]; then
   echo "ERROR: a language parameter carries a default."

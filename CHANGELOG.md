@@ -9,6 +9,48 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.761] - 2026-10-20
+
+### Security
+
+- **CI agent jobs are read-only.** Every CI workflow that runs a Claude agent now runs it through one composite action, `.github/actions/claude-agent`. The action gives the agent the job's own read-only token. Before, `claude-code-action` exchanged the OIDC token for a Claude GitHub App token with write access when the App was installed, so the model jobs could write although they declared read-only permissions. A separate job with no model posts every result, after `scripts/ci-agent-sanitize.sh` cleans it. Every agent has an explicit deny list. `ui-audit` no longer runs its model in a job with `issues: write`, and `ui-review` no longer posts its own comments. `scripts/check-agent-workflows.sh` in `format-lint` keeps these rules (#2711).
+
+### Changed
+
+- **One review workflow and one triage workflow.** `ui-review` and `interaction-review` call one reusable workflow, `agent-pr-review.yml`, so their check names now have a `ui-review /` or `interaction-review /` prefix. `nightly-failure-notes.yml` is now a part of `ci-triage.yml`. `ci-triage` does not comment on a failed visual-regression PR run, because `visual-diff-explainer` explains that failure (#2711).
+
+
+## [0.5.760] - 2026-10-20
+
+### Changed
+
+- **One shared grep-guard helper; no ratchets at zero (#2722).** The grep
+  guards use `code_matches` from `scripts/lib/grep-guard.sh`. The layering and
+  `alert()` rules are absolute, and the empty layering baseline is gone. The
+  `ui-guard` agent is gone: run `lint-guard` and `test-runner`. The three
+  Python hooks share `hook_common.py`. `deploy/README.md` names
+  `server-deploy.sh` as the fallback, not the update step.
+
+### Changed
+
+- **One reorder service, one set of rules (#2713).** The four web reorder routes
+  and the four MCP reorder tools now call `SortOrderRenumbering`. A TA can
+  reorder every kind: course sections, section items, assignments and content
+  items. Before, the web assignment reorder and the section reorder (web and
+  MCP) needed an instructor. Every reorder refuses a duplicate id, an unknown
+  item type and items of two course sections. The web section reorder must name
+  every section of the course, as MCP `reorder_course_sections` already did.
+  Each reorder runs in one transaction, so a failure part-way leaves the old
+  order.
+
+
+## [0.5.759] - 2026-10-20
+
+### Changed
+
+- **The browser probe jobs share their CI setup (#2718).** In `browser-probes.yml`, one `probe` matrix job replaces the `exec-probe`, `bridge`, `lifecycle` and `reset` jobs. The `changes` job gives the matrix as a JSON list. The legs keep their check names, for example `exec-probe (webkit)`. The probe budgets are now set for a downloaded server, not for a cold build: 30 min for the smoke, 20 min for each diagnostic probe and 45 min for the grading-hang probe. Before, they were 50, 50 and 75 min. A new `playwright-setup` action installs the npm project and the Playwright engine for `browser-probe-setup` and for `browser-grading-smoke.yml`. A new `gate` action holds the body of `editor-smoke-gate`, `r-grading-smoke-gate` and `swift-tests-gate`, with a list of the jobs that can be skipped. The gate job names do not change. `scripts/install-micromamba.sh` installs micromamba for `kernel-currency.yml` and `revendor-kernels.yml`.
+
+
 ## [0.5.758] - 2026-10-19
 
 ### Changed

@@ -1,0 +1,251 @@
+name: Agent PR review
+
+# The one review job that ui-review.yml and interaction-review.yml both call
+# (#2711). Before, the two were near twins that had drifted: the UI review let
+# the model post its own comment with no cleanup, and neither had a deny list.
+#
+# The brief is `.claude/agents/<agent>.md`, the same file a Claude Code
+# session runs as a subagent. This workflow holds no second copy of it: the
+# prompt tells the reviewer to read that file and apply it to this PR.
+#
+# TWO JOBS, as in every agent workflow:
+#   * `review` runs the model. It is read-only, and the agent gets only that
+#     job's token (.github/actions/claude-agent), so it can read the PR but
+#     not write to it. It returns the report, the verdict and its inline
+#     findings as structured output, and posts nothing.
+#   * `post` runs no model. It cleans each text with
+#     scripts/ci-agent-sanitize.sh, posts the inline findings as one review,
+#     and posts the report as one comment per agent, found by its marker and
+#     updated on each push. The marker is per agent, because both reviews post
+#     as github-actions[bot]; `gh pr comment --edit-last` in one would
+#     overwrite the other's report.
+#
+# WHAT IT GATES. Only when the caller sets `gate: true`, and only when the
+# review completes and requests changes. An infrastructure failure (no API
+# key, a model outage, a timeout) is a warning and a green job, on the same
+# rule mutation-pr.yml follows: a broken tool must not fail somebody's pull
+# request. A run that did not happen is visible in the job log and the step
+# summary.
+#
+# WHAT IT NEEDS. One repository secret, ANTHROPIC_API_KEY (or
+# CLAUDE_CODE_OAUTH_TOKEN for a Claude subscription), passed by the caller.
+# Without either the job says so and passes.
+
+on:
+  workflow_call:
+    inputs:
+      agent:
+        description: "The agent name: its brief is .claude/agents/<agent>.md, and it heads the report."
+        type: string
+        required: true
+      brief-note:
+        description: "One more sentence for the prompt, about the scope of this brief."
+        type: string
+        required: true
+      max-turns:
+        type: string
+        required: true
+      timeout-minutes:
+        type: number
+        required: true
+      allowed-tools:
+        type: string
+        required: true
+      gate:
+        description: "true: a `changes requested` verdict fails the post job. false: it is a warning."
+        type: boolean
+        required: true
+    secrets:
+      ANTHROPIC_API_KEY:
+        required: false
+      CLAUDE_CODE_OAUTH_TOKEN:
+        required: false
+
+permissions: {}
+
+jobs:
+  review:
+    name: ${{ inputs.agent }}
+    runs-on: ubuntu-latest
+    timeout-minutes: ${{ inputs.timeout-minutes }}
+    # Read only. The write scope is in the `post` job.
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      ran: ${{ steps.review.outputs.ran }}
+      outcome: ${{ steps.review.outputs.outcome }}
+      result: ${{ steps.review.outputs.structured-output }}
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # The reviewer reads the PR diff through `gh pr diff`, which needs no
+          # history; the checkout is for reading the files around each change.
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Review the change
+        id: review
+        uses: ./.github/actions/claude-agent
+        with:
+          name: ${{ inputs.agent }}
+          anthropic-api-key: ${{ secrets.ANTHROPIC_API_KEY }}
+          claude-code-oauth-token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          github-token: ${{ github.token }}
+          prompt: |
+            REPO: ${{ github.repository }}
+            PR NUMBER: ${{ github.event.pull_request.number }}
+
+            You are the Chickadee ${{ inputs.agent }} agent. Your brief is the
+            file .claude/agents/${{ inputs.agent }}.md in the checked-out tree.
+            Read it first and follow it exactly. ${{ inputs.brief-note }}
+
+            The PR branch is checked out in the working directory. Read the
+            change with `gh pr diff ${{ github.event.pull_request.number }}`.
+
+            You cannot post to GitHub, and you must not try. Return everything
+            in the structured output; a later job posts it:
+            - `report`: the three-part report (Verdict, Findings, What you did
+              not check), as GitHub Markdown. Start it with the heading
+              `## ${{ inputs.agent }}`.
+            - `comments`: one entry per finding that anchors to a line that
+              the PR adds or changes: the file path from the repository root,
+              the line number in the new version of the file, and the body.
+              Leave out a finding that does not anchor to a changed line; the
+              report holds it.
+            - `verdict` and a one-sentence `summary`.
+          # A family alias, not a dated model ID: `sonnet` is always the newest
+          # Sonnet, so this pins the price tier and never goes out of date.
+          # The brief's `model:` line says the same for local sessions.
+          model: sonnet
+          max-turns: ${{ inputs.max-turns }}
+          allowed-tools: ${{ inputs.allowed-tools }}
+          disallowed-tools: "WebFetch,Bash(curl:*),Bash(wget:*),Bash(git diff --no-index:*),Bash(gh api:*),Bash(gh pr comment:*),Bash(gh pr review:*),mcp__github_inline_comment__create_inline_comment"
+          json-schema: '{"type":"object","properties":{"verdict":{"type":"string","enum":["pass","findings","changes requested"]},"summary":{"type":"string"},"report":{"type":"string"},"comments":{"type":"array","items":{"type":"object","properties":{"path":{"type":"string"},"line":{"type":"integer"},"body":{"type":"string"}},"required":["path","line","body"]}}},"required":["verdict","summary","report","comments"]}'
+
+  post:
+    name: ${{ inputs.agent }} (post)
+    needs: review
+    if: needs.review.outputs.ran == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    # No model runs in this job. The checkout is for the sanitize script.
+    permissions:
+      contents: read
+      pull-requests: write
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Post the review and record the verdict
+        env:
+          GH_TOKEN: ${{ github.token }}
+          AGENT: ${{ inputs.agent }}
+          GATE: ${{ inputs.gate }}
+          OUTCOME: ${{ needs.review.outputs.outcome }}
+          RESULT: ${{ needs.review.outputs.result }}
+          PR: ${{ github.event.pull_request.number }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -uo pipefail
+          if [ "$OUTCOME" != "success" ]; then
+            echo "::warning::$AGENT did not complete (step outcome: $OUTCOME). This is not a verdict. Re-run the job."
+            {
+              echo "## $AGENT"
+              echo
+              echo "Did not complete (step outcome: $OUTCOME). Re-run the job."
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          # Only the three verdicts the schema allows. The summary is one
+          # line with no `::`, so it cannot start a workflow command in the
+          # echo lines below, and it goes through the same cleanup as a post.
+          verdict="$(jq -r '.verdict // "none"' <<< "${RESULT:-null}")"
+          case "$verdict" in pass | findings | "changes requested") ;; *) verdict="none" ;; esac
+          jq -r '.summary // empty' <<< "${RESULT:-null}" | tr '\r\n' '  ' | sed 's/::/: :/g' > summary.raw
+          summary=""
+          if scripts/ci-agent-sanitize.sh --max-chars 500 summary.raw summary.md 2> /dev/null; then
+            summary="$(head -n 1 summary.md)"
+          fi
+          jq -r '.report // empty' <<< "${RESULT:-null}" > raw.md
+
+          # The inline findings, as one review. Each body is cleaned on its
+          # own. GitHub refuses the whole review when one line is not in the
+          # diff; the findings then go into the report instead.
+          mkdir -p inline
+          jq -c '(.comments // [])[:20][]' <<< "${RESULT:-null}" > inline/all.jsonl
+          : > inline/kept.jsonl
+          n=0
+          while IFS= read -r finding; do
+            n=$((n + 1))
+            jq -r '.body // empty' <<< "$finding" > "inline/$n.raw"
+            if scripts/ci-agent-sanitize.sh --max-lines 40 --max-width 400 --max-chars 4000 \
+                "inline/$n.raw" "inline/$n.md" 2> /dev/null; then
+              jq -c --rawfile body "inline/$n.md" \
+                '{path: (.path | tostring), line: (.line | floor), side: "RIGHT", body: $body}' \
+                <<< "$finding" >> inline/kept.jsonl \
+                || echo "::warning::Inline finding $n has no usable line number, so it was not posted."
+            else
+              echo "::warning::Inline finding $n was refused or empty, so it was not posted."
+            fi
+          done < inline/all.jsonl
+          unanchored=""
+          if [ -s inline/kept.jsonl ]; then
+            jq -n --arg sha "$HEAD_SHA" --slurpfile comments inline/kept.jsonl \
+              '{commit_id: $sha, event: "COMMENT", comments: $comments}' > inline/review.json
+            if ! gh api "repos/$GITHUB_REPOSITORY/pulls/$PR/reviews" --input inline/review.json > /dev/null; then
+              echo "::warning::GitHub refused the inline findings (a line may be outside the diff). They are in the report."
+              unanchored="$(jq -r '"- `\(.path):\(.line)`: \(.body | split("\n---\n")[0] | gsub("\n"; " "))"' inline/kept.jsonl)"
+            fi
+          fi
+          if [ -n "$unanchored" ]; then
+            printf '\n### Findings that could not be posted inline\n\n%s\n' "$unanchored" >> raw.md
+          fi
+
+          # The report: one comment per agent, found by its marker and updated
+          # on each push.
+          marker="<!-- $AGENT -->"
+          if [ ! -s raw.md ]; then
+            echo "::warning::$AGENT returned no report."
+          elif ! scripts/ci-agent-sanitize.sh --max-chars 16000 --append "$marker" raw.md comment.md; then
+            echo "::warning::The $AGENT report was refused. It was not posted."
+          elif ! ids="$(gh api "repos/$GITHUB_REPOSITORY/issues/$PR/comments" --paginate \
+              --jq ".[] | select(.user.login == \"github-actions[bot]\" and (.body | contains(\"$marker\"))) | .id")"; then
+            echo "::warning::Could not list the comments on #$PR, so the report was not posted. The step summary has the verdict."
+          else
+            existing="$(head -n 1 <<< "$ids")"
+            if [ -n "$existing" ]; then
+              gh api --method PATCH "repos/$GITHUB_REPOSITORY/issues/comments/$existing" \
+                -F "body=@comment.md" > /dev/null || echo "::warning::Could not update the report."
+            else
+              gh api "repos/$GITHUB_REPOSITORY/issues/$PR/comments" \
+                -F "body=@comment.md" > /dev/null || echo "::warning::Could not post the report."
+            fi
+          fi
+
+          {
+            echo "## $AGENT"
+            echo
+            echo "**Verdict:** $verdict"
+            echo
+            echo "$summary"
+          } >> "$GITHUB_STEP_SUMMARY"
+          case "$verdict" in
+            "changes requested")
+              if [ "$GATE" = "true" ]; then
+                echo "::error::$AGENT requested changes. $summary"
+                exit 1
+              fi
+              echo "::warning::$AGENT requested changes (advisory). $summary"
+              ;;
+            pass | findings)
+              echo "::notice::$AGENT: $verdict. $summary"
+              ;;
+            *)
+              echo "::warning::$AGENT returned no verdict. Read the PR comment; treat the run as not done."
+              ;;
+          esac

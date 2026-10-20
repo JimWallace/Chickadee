@@ -29,6 +29,10 @@ import re
 import shlex
 import sys
 
+sys.dont_write_bytecode = True
+sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
+from hook_common import project_dir, read_tool_event  # noqa: E402
+
 # A command whose named paths it may change. The value is the set of the
 # command's arguments that can be a write target: "all", or "last" for a
 # command whose earlier arguments are only read (cp reads its sources).
@@ -129,25 +133,19 @@ def bash_test_targets(command: str, base: str, tests_dir: str) -> list[str]:
 
 
 def main() -> None:
-    try:
-        event = json.load(sys.stdin)
-    except json.JSONDecodeError:
+    read = read_tool_event()
+    if read is None:
         return
-    if not isinstance(event, dict):
-        return
+    event, tool_input = read
 
-    tool_input = event.get("tool_input")
-    if not isinstance(tool_input, dict):
-        return
-
-    project_dir = os.environ.get("CLAUDE_PROJECT_DIR") or event.get("cwd") or os.getcwd()
-    tests_dir = os.path.realpath(os.path.join(project_dir, "Tests"))
+    project = project_dir(event)
+    tests_dir = os.path.realpath(os.path.join(project, "Tests"))
 
     if event.get("tool_name") == "Bash":
         command = tool_input.get("command")
         if not isinstance(command, str) or not command:
             return
-        base = event.get("cwd") or project_dir
+        base = event.get("cwd") or project
         targets = bash_test_targets(command, base, tests_dir)
         if targets:
             ask(
@@ -160,13 +158,13 @@ def main() -> None:
     if not isinstance(path, str) or not path:
         return
 
-    target = os.path.realpath(os.path.join(project_dir, path))
+    target = os.path.realpath(os.path.join(project, path))
     if os.path.commonpath([tests_dir, target]) != tests_dir:
         return
     if not os.path.isfile(target):
         return
 
-    relative = os.path.relpath(target, project_dir)
+    relative = os.path.relpath(target, project)
     ask(
         f"{relative} is an existing file under Tests/. "
         "The maintainer approves every change to an existing test."

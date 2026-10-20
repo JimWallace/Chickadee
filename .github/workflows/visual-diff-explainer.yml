@@ -16,11 +16,15 @@ name: Visual diff explainer
 # no code from the PR is checked out or run. The images and the diff are data:
 # the images come from the failed run's artifact and from the PR's head commit
 # through the API.
-#   * The `explain` job, where the model runs, is read-only. The agent has one
-#     tool, Read, limited to visual/ (the images, the notes and the diff); the
-#     places where a credential can sit are denied by name as well.
+#   * The `explain` job, where the model runs, is read-only, and the agent
+#     gets only that job's token (.github/actions/claude-agent). The agent has
+#     one tool, Read, limited to visual/ (the images, the notes and the diff);
+#     the places where a credential can sit are denied by name as well.
 #   * The `post` job runs no model. It refuses credential-shaped text, caps the
-#     length and breaks @mentions, and keeps one comment per PR up to date.
+#     length and breaks @mentions (scripts/ci-agent-sanitize.sh), and keeps
+#     one comment per PR up to date.
+#
+# ci-triage.yml skips this failure on a PR run, so the PR gets one comment.
 #
 # A fork's PR gets no explanation: claude-code-action runs only for an actor
 # with write access.
@@ -49,11 +53,10 @@ jobs:
       actions: read
       contents: read
       pull-requests: read
-      id-token: write
     outputs:
       pr: ${{ steps.pr.outputs.pr }}
-      outcome: ${{ steps.explain.outcome }}
-      result: ${{ steps.explain.outputs.structured_output }}
+      outcome: ${{ steps.explain.outputs.outcome }}
+      result: ${{ steps.explain.outputs.structured-output }}
 
     steps:
       - uses: actions/checkout@v7
@@ -61,22 +64,8 @@ jobs:
           fetch-depth: 1
           persist-credentials: false
 
-      - name: Check for credentials
-        id: credentials
-        env:
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-        run: |
-          if [ -n "$ANTHROPIC_API_KEY" ] || [ -n "$CLAUDE_CODE_OAUTH_TOKEN" ]; then
-            echo "present=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "present=false" >> "$GITHUB_OUTPUT"
-            echo "::warning::No ANTHROPIC_API_KEY or CLAUDE_CODE_OAUTH_TOKEN secret is set, so the visual diff explainer did not run."
-          fi
-
       - name: Find the PR
         id: pr
-        if: steps.credentials.outputs.present == 'true'
         env:
           FIRST_PR: ${{ github.event.workflow_run.pull_requests[0].number }}
         run: |
@@ -165,11 +154,12 @@ jobs:
       - name: Explain the changes
         id: explain
         if: steps.collect.outputs.go == 'true'
-        continue-on-error: true
-        uses: anthropics/claude-code-action@v1
+        uses: ./.github/actions/claude-agent
         with:
-          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
-          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          name: visual-diff-explainer
+          anthropic-api-key: ${{ secrets.ANTHROPIC_API_KEY }}
+          claude-code-oauth-token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          github-token: ${{ github.token }}
           prompt: |
             The visual-regression check failed on a Chickadee pull request:
             ${{ steps.collect.outputs.pages }} page captures differ from their
@@ -215,12 +205,11 @@ jobs:
             - Last line: "Regenerate the baselines only when every row is
               intended."
             Plain, short sentences. No exclamation marks or emoji.
-          claude_args: |
-            --model sonnet
-            --max-turns 60
-            --allowedTools "Read(./visual/**)"
-            --disallowedTools "Bash,Edit,Write,WebFetch,WebSearch,Read(//proc/**),Read(//sys/**),Read(//etc/**),Read(//tmp/**),Read(//github/**),Read(//root/**),Read(//home/runner/work/_temp/**),Read(~/.*/**),Read(./.git/**)"
-            --json-schema '{"type":"object","properties":{"intended":{"type":"integer"},"regression":{"type":"integer"},"unclear":{"type":"integer"},"comment":{"type":"string"}},"required":["intended","regression","unclear","comment"]}'
+          model: sonnet
+          max-turns: "60"
+          allowed-tools: "Read(./visual/**)"
+          disallowed-tools: "Bash,WebFetch"
+          json-schema: '{"type":"object","properties":{"intended":{"type":"integer"},"regression":{"type":"integer"},"unclear":{"type":"integer"},"comment":{"type":"string"}},"required":["intended","regression","unclear","comment"]}'
 
   post:
     name: visual-diff-explainer (post)
@@ -228,11 +217,18 @@ jobs:
     if: needs.explain.outputs.outcome == 'success'
     runs-on: ubuntu-latest
     timeout-minutes: 5
-    # No model runs in this job, and no repository code is checked out.
+    # No model runs in this job. The checkout is `main`, for the sanitize
+    # script; nothing from the PR is checked out.
     permissions:
+      contents: read
       pull-requests: write
 
     steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
       - name: Post or update the explanation
         env:
           GH_TOKEN: ${{ github.token }}
@@ -246,21 +242,12 @@ jobs:
             echo "::warning::The visual diff explanation came back empty."
             exit 0
           fi
-          if grep -qE 'sk-ant-|gh[pousr]_[A-Za-z0-9]{20,}|github_pat_|eyJ[A-Za-z0-9_-]{20,}\.|BEGIN [A-Z ]*PRIVATE KEY' raw.md; then
-            echo "::error::The explanation looks like it holds a credential. It was not posted."
+          marker="<!-- visual-diff-explainer -->"
+          if ! scripts/ci-agent-sanitize.sh --max-lines 60 --max-width 400 --max-chars 8000 \
+              --append "Run: $RUN_URL" --append "" --append "$marker" raw.md comment.md; then
+            echo "::error::The explanation was refused. It was not posted."
             exit 1
           fi
-          marker="<!-- visual-diff-explainer -->"
-          head -n 60 raw.md | cut -c1-400 | head -c 8000 | sed 's/@/@\xE2\x80\x8B/g' > comment.md
-          {
-            echo
-            echo "Run: $RUN_URL"
-            echo
-            echo "$marker"
-            echo
-            echo "---"
-            echo "_Generated by [Claude Code](https://claude.ai/code)_"
-          } >> comment.md
 
           # One comment per PR, updated on each failed run.
           if ! ids="$(gh api "repos/$GITHUB_REPOSITORY/issues/$PR/comments" --paginate \

@@ -6,8 +6,8 @@
 // rename pass.
 //
 // Course-section structure is **instructor-level** (#417): it is course
-// LIFECYCLE, not assignment content, so every handler here calls
-// `requireCourseWriteAccess(atLeast: .instructor)` on top of the `/instructor`
+// LIFECYCLE, not assignment content, so every handler here except the reorder
+// calls `requireCourseWriteAccess(atLeast: .instructor)` on top of the `/instructor`
 // group's `ActiveCourseStaffMiddleware` (which only proves TA+ in the caller's
 // *active* course).  The floor is stated in three other places — the
 // convention comment on `evaluateCourseWrite`, the header of
@@ -20,6 +20,10 @@
 // assignments between them — and, lacking `requireCourseWriteAccess`, could do
 // it in an archived course.  `RouteAuthorizationMatrixTests` is what surfaced
 // it, and is what holds the floor now.
+//
+// The reorder is the one exception (#2713): reordering is display
+// organization, so every reorder kind, web and MCP, floors at `.ta`
+// (`SortOrderRenumbering.roleFloor`).
 
 import Core
 import Fluent
@@ -61,6 +65,9 @@ extension CourseAdminRoutes {
 
     // MARK: - POST /instructor/sections/reorder
 
+    /// Persists the order of the active course's sections. `sectionIDs` must
+    /// name every section; `SortOrderRenumbering` holds the rules and the
+    /// `.ta` floor (#2713). AJAX (returns `.ok`).
     @Sendable
     func reorderSections(req: Request) async throws -> HTTPStatus {
         struct ReorderBody: Content {
@@ -70,30 +77,13 @@ extension CourseAdminRoutes {
         let courseState = try await req.resolveActiveCourse(for: user)
         guard let courseID = courseState.activeCourseUUID else { return .ok }
         try await requireCourseWriteAccess(
-            caller: user, courseID: courseID, atLeast: .instructor, db: req.db)
+            caller: user, courseID: courseID, atLeast: SortOrderRenumbering.roleFloor, db: req.db)
         let body = try await req.decodeContent(ReorderBody.self)
-        let uuids = body.sectionIDs.compactMap { UUID(uuidString: $0) }
-        guard uuids.count == body.sectionIDs.count, !uuids.isEmpty else {
-            throw WebAssignmentError.invalidParameter(
-                name: "sectionIDs", reason: "Invalid section ID in reorder payload.")
-        }
-        let sections = try await APICourseSection.query(on: req.db)
-            .filter(\.$courseID == courseID)
-            .filter(\.$id ~~ uuids)
-            .all()
-        guard sections.count == uuids.count else {
-            throw WebAssignmentError.invalidParameter(
-                name: "sectionIDs", reason: "Section set mismatch in reorder payload.")
-        }
-        let byID = Dictionary(
-            uniqueKeysWithValues: sections.compactMap { s -> (UUID, APICourseSection)? in
-                guard let id = s.id else { return nil }
-                return (id, s)
-            })
-        for (index, uuid) in uuids.enumerated() {
-            guard let section = byID[uuid] else { continue }
-            section.sortOrder = index + 1
-            try await section.save(on: req.db)
+        do {
+            let ids = try body.sectionIDs.map(SortOrderRenumbering.sectionID)
+            _ = try await SortOrderRenumbering.renumberSections(ids, inCourse: courseID, on: req.db)
+        } catch let error as ReorderError {
+            throw WebAssignmentError.invalidParameter(name: "sectionIDs", reason: error.reason)
         }
         return .ok
     }
