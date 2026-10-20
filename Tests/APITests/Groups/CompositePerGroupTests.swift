@@ -46,39 +46,31 @@ import VaporTesting
     /// A per-group composite with ada and ben in Lab 101, alan in Lab 102 and
     /// grace in no group.
     private func fixture() async throws -> Fixture {
-        let course = try await makeTestCourse(on: app, code: "CPG1", mode: .closed)
-        let courseID = try course.requireID()
-        let set = try await CourseGroupStore.createSet(courseID: courseID, name: "Lab sections", on: app.db)
+        let scenario = try await TestScenario.make(
+            on: app, code: "CPG1", mode: .closed, setupID: setupID,
+            properties: TestProperties(
+                testSuites: [TestSuiteEntry(tier: .pub, script: "tile.py")], language: .python,
+                activity: ClassActivity(kind: .classComposite, composite: spec, runsPerGroup: true)))
+        let set = try await CourseGroupStore.createSet(courseID: scenario.courseID, name: "Lab sections", on: app.db)
         let labA = try await CourseGroupStore.addGroup(named: "Lab 101", to: set, on: app.db).requireID()
         let labB = try await CourseGroupStore.addGroup(named: "Lab 102", to: set, on: app.db).requireID()
-        let props = TestProperties(
-            testSuites: [TestSuiteEntry(tier: .pub, script: "tile.py")], language: .python,
-            activity: ClassActivity(kind: .classComposite, composite: spec, runsPerGroup: true))
-        let manifest = try #require(String(data: JSONEncoder().encode(props), encoding: .utf8))
-        let setup = try await makeTestSetup(on: app, id: setupID, courseID: courseID, manifest: manifest)
-        let assignment = try await makeTestAssignment(on: app, testSetupID: setupID, courseID: courseID)
         var students: [UUID] = []
         for (name, group) in [("cpg_ada", labA), ("cpg_ben", labA), ("cpg_alan", labB), ("cpg_grace", nil)] {
-            let id = try await makeTestStudent(on: app, username: name).requireID()
-            try await makeTestEnrollment(on: app, userID: id, courseID: courseID)
+            let id = try await scenario.enroll(name, on: app)
             if let group {
                 try await CourseGroupStore.setMembership(userID: id, groupID: group, in: set, on: app.db)
             }
             students.append(id)
         }
         return Fixture(
-            setup: setup, assignment: assignment, assignmentID: try assignment.requireID(), labA: labA, labB: labB,
+            setup: scenario.setup, assignment: scenario.assignment, assignmentID: scenario.assignmentID, labA: labA,
+            labB: labB,
             ada: students[0], ben: students[1], alan: students[2], grace: students[3])
     }
 
     /// Opens the group's session, unless it is open, and joins `userID`.
     private func join(_ f: Fixture, group: UUID, userID: UUID) async throws {
-        let session = try await ActivitySessionStore.open(
-            assignmentID: f.assignmentID, groupID: group, by: nil, now: Date().addingTimeInterval(-60), on: app.db)
-        let joinedAt = Date().addingTimeInterval(-30)
-        try await ActivitySessionStore.join(
-            code: ActivitySessionCode.code(secret: session.codeSecret, at: joinedAt), userID: userID,
-            now: joinedAt, on: app.db)
+        try await joinSession(assignmentID: f.assignmentID, groupID: group, userID: userID, on: app.db)
     }
 
     private func open(_ f: Fixture, _ userID: UUID) async {
@@ -142,11 +134,11 @@ import VaporTesting
             try await join(f, group: f.labA, userID: f.ada)
             await open(f, f.ada)
             let submission = try await makeTestSubmission(on: app, id: "cpg_s1", setupID: setupID, userID: f.ada)
-            let outcome = TestOutcome(
-                testName: "tile.py", testClass: nil, tier: .pub, status: .pass, shortResult: "", longResult: nil,
+            let outcome = TestOutcome.stub(
+                "tile.py", shortResult: "",
                 composite: CompositeContribution(
                     width: 2, height: 1, frames: 1, format: .gray8, data: Data([1, 2]).base64EncodedString()),
-                executionTimeMs: 1, memoryUsageBytes: nil, attemptNumber: 1, isFirstPassSuccess: true)
+                isFirstPassSuccess: true)
             let collection = TestOutcomeCollection(
                 submissionID: "cpg_s1", testSetupID: setupID, attemptNumber: 1, buildStatus: .passed,
                 compilerOutput: nil, outcomes: [outcome], totalTests: 1, passCount: 1, failCount: 0, errorCount: 0,

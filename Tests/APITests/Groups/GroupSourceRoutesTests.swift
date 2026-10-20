@@ -267,14 +267,10 @@ private final class LearnStub: Client, Sendable {
         let manifest = try #require(String(data: JSONEncoder().encode(props), encoding: .utf8))
         try await makeTestSetup(on: app, id: "gsrc_setup", courseID: courseID, manifest: manifest)
         let assignment = try await makeTestAssignment(on: app, testSetupID: "gsrc_setup", courseID: courseID)
-        let session = try await ActivitySessionStore.open(
-            assignmentID: try assignment.requireID(), groupID: try lab.requireID(), by: nil,
-            now: Date().addingTimeInterval(-60), on: app.db)
         let ada = try #require(try await APIUser.query(on: app.db).filter(\.$username == "gsrc_ada").first())
-        let joinedAt = Date().addingTimeInterval(-30)
-        try await ActivitySessionStore.join(
-            code: ActivitySessionCode.code(secret: session.codeSecret, at: joinedAt),
-            userID: try ada.requireID(), now: joinedAt, on: app.db)
+        try await joinSession(
+            assignmentID: try assignment.requireID(), groupID: try lab.requireID(), userID: try ada.requireID(),
+            on: app.db)
         #expect(try await placed(app) == [true], "the join placed ada in the manual set")
         return set
     }

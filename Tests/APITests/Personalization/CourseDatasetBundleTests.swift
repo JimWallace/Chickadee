@@ -31,17 +31,18 @@ import VaporTesting
     /// A course with a published dataset of two versions, and an assignment
     /// that attaches version 1 with a course-scoped sample.
     private func makeCourse(code: String, withDataset: Bool = true) async throws -> APICourse {
-        let course = try await makeTestCourse(on: app, code: code)
-        let courseID = try course.requireID()
         let setupID = "bd_\(UUID().uuidString.prefix(8))"
         try await writeZipFixture(at: app.testSetupsDirectory + setupID + ".zip", entries: [("test_a.sh", "exit 0\n")])
         let manifest = """
             {"schemaVersion":1,"requiredFiles":[],"testSuites":[{"tier":"public","script":"test_a.sh"}],\
             "timeLimitSeconds":10,"makefile":null,"submissionMode":"uploadOnly"}
             """
-        let setup = try await makeTestSetup(
-            on: app, id: setupID, courseID: courseID, manifest: manifest, withNotebook: false, withZip: false)
-        _ = try await makeTestAssignment(on: app, testSetupID: setupID, courseID: courseID, title: "Lab 2")
+        let scenario = try await TestScenario.make(
+            on: app, code: code, setupID: setupID, manifest: manifest, withNotebook: false, withZip: false,
+            title: "Lab 2")
+        let course = scenario.course
+        let courseID = scenario.courseID
+        let setup = scenario.setup
         guard withDataset else { return course }
 
         let blobs = AssignmentVersionBlobStore(testSetupsDirectory: app.testSetupsDirectory)

@@ -8,7 +8,6 @@
 
 import ChickadeeTestSupport
 import Core
-import CryptoExtras
 import Fluent
 import Foundation
 import NIOConcurrencyHelpers
@@ -22,9 +21,6 @@ import VaporTesting
     static let manifest = """
         {"schemaVersion":1,"githubSubmission":true,"githubStatusChecks":true,"submissionMode":"uploadOnly"}
         """
-    static let privateKeyPEM: String = {
-        (try? _RSA.Signing.PrivateKey(keySize: .bits2048).pemRepresentation) ?? ""
-    }()
     static let orgID: Int64 = 7_000
     static let orgInstallationID: Int64 = 55
     static let studentGitHubID: Int64 = 9_001
@@ -38,10 +34,7 @@ import VaporTesting
 
     init() async throws {
         app = try await makeTestApp(prefix: "chickadee-github-status-course")
-        directory = FileManager.default.temporaryDirectory
-            .appendingPathComponent("chickadee-github-status-course-\(UUID().uuidString)")
-        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        app.githubAppSecretsFilePath = directory.appendingPathComponent(".github-app-secrets").path
+        directory = try GitHubTestApp.useSecretsDirectory(on: app, prefix: "chickadee-github-status-course")
         app.securityConfiguration = AppSecurityConfiguration(
             publicBaseURL: URL(string: "https://courses.example.edu"), enforceHTTPS: false,
             trustForwardedProto: true, sessionCookieSecure: false,
@@ -85,14 +78,7 @@ import VaporTesting
     /// An opted-in assignment with a template, the course organization bound,
     /// and a graded GitHub submission from the student's course repository.
     private func submission() async throws -> APISubmission {
-        try await APIGitHubApp(
-            conversion: GitHubManifestConversion(
-                id: 42, slug: "chickadee-courses", name: "Chickadee", clientID: "Iv1.client",
-                clientSecret: "secret", webhookSecret: nil, pem: Self.privateKeyPEM,
-                htmlURL: "https://github.com/apps/chickadee-courses", owner: nil)
-        ).save(on: app.db)
-        try GitHubAppSecrets(privateKeyPEM: Self.privateKeyPEM, clientSecret: "secret", webhookSecret: nil)
-            .write(path: app.githubAppSecretsFilePath)
+        try await GitHubTestApp.register(on: app, clientSecret: "secret")
         try await wrInsertSetup(id: "gh_setup", manifest: Self.manifest, on: app)
         try await wrInsertAssignment(testSetupID: "gh_setup", title: "Lab 1", isOpen: true, on: app)
         try await APIGitHubCourseOrganization(

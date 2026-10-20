@@ -41,11 +41,6 @@ import VaporTesting
     /// A course with Lab 101 and Lab 102 and a per-group assignment of
     /// `activity` with a goal that the lab covers both items.
     private func fixture(activity: ClassActivity) async throws -> Fixture {
-        let course = try await makeTestCourse(on: app, code: "LIT1", mode: .closed)
-        let courseID = try course.requireID()
-        let set = try await CourseGroupStore.createSet(courseID: courseID, name: "Lab sections", on: app.db)
-        let labA = try await CourseGroupStore.addGroup(named: "Lab 101", to: set, on: app.db).requireID()
-        let labB = try await CourseGroupStore.addGroup(named: "Lab 102", to: set, on: app.db).requireID()
         let props = TestProperties(
             testSuites: [
                 TestSuiteEntry(tier: .pub, script: "bug_one.py"), TestSuiteEntry(tier: .pub, script: "bug_two.py"),
@@ -59,13 +54,15 @@ import VaporTesting
                     reward: AchievementReward(type: .points, label: "Bugs found", points: 2),
                     classFraction: 1)
             ])
-        let manifest = try #require(String(data: JSONEncoder().encode(props), encoding: .utf8))
-        let setup = try await makeTestSetup(on: app, id: setupID, courseID: courseID, manifest: manifest)
-        let assignment = try await makeTestAssignment(on: app, testSetupID: setupID, courseID: courseID)
+        let scenario = try await TestScenario.make(
+            on: app, code: "LIT1", mode: .closed, setupID: setupID, properties: props)
+        let set = try await CourseGroupStore.createSet(courseID: scenario.courseID, name: "Lab sections", on: app.db)
+        let labA = try await CourseGroupStore.addGroup(named: "Lab 101", to: set, on: app.db).requireID()
+        let labB = try await CourseGroupStore.addGroup(named: "Lab 102", to: set, on: app.db).requireID()
         let items = props.testSuites.map { runnerOutcomeTestName(displayName: $0.name, script: $0.script) }
         return Fixture(
-            setup: setup, assignment: assignment, assignmentID: try assignment.requireID(), props: props,
-            labA: labA, labB: labB, items: items)
+            setup: scenario.setup, assignment: scenario.assignment, assignmentID: scenario.assignmentID,
+            props: props, labA: labA, labB: labB, items: items)
     }
 
     /// An enrolled student who joins `group`'s session, or none.
@@ -73,13 +70,7 @@ import VaporTesting
         let id = try await makeTestStudent(on: app, username: name).requireID()
         try await makeTestEnrollment(on: app, userID: id, courseID: f.setup.courseID)
         if let group {
-            let session = try await ActivitySessionStore.open(
-                assignmentID: f.assignmentID, groupID: group, by: nil, now: Date().addingTimeInterval(-60),
-                on: app.db)
-            let joinedAt = Date().addingTimeInterval(-30)
-            try await ActivitySessionStore.join(
-                code: ActivitySessionCode.code(secret: session.codeSecret, at: joinedAt), userID: id,
-                now: joinedAt, on: app.db)
+            try await joinSession(assignmentID: f.assignmentID, groupID: group, userID: id, on: app.db)
         }
         return id
     }
@@ -89,9 +80,7 @@ import VaporTesting
         let id = "litem_\(UUID().uuidString.prefix(12))"
         _ = try await makeTestSubmission(on: app, id: id, setupID: setupID, userID: userID)
         let outcomes = items.map { item in
-            TestOutcome(
-                testName: item, testClass: nil, tier: .pub, status: .pass, shortResult: "", longResult: nil,
-                executionTimeMs: 1, memoryUsageBytes: nil, attemptNumber: 1, isFirstPassSuccess: true)
+            TestOutcome.stub(item, shortResult: "", isFirstPassSuccess: true)
         }
         try await recordClassItemCoverage(
             testSetupID: setupID, userID: userID, submissionID: id, outcomes: outcomes, declaredSlotCount: 2,
@@ -162,10 +151,10 @@ import VaporTesting
             await CompositeSlots.dealOnOpen(setup: f.setup, assignment: f.assignment, userID: ben, on: app.db)
 
             let pixels = Data([1, 2]).base64EncodedString()
-            let outcome = TestOutcome(
-                testName: "tile.py", testClass: nil, tier: .pub, status: .pass, shortResult: "", longResult: nil,
+            let outcome = TestOutcome.stub(
+                "tile.py", shortResult: "",
                 composite: CompositeContribution(width: 2, height: 1, frames: 1, format: .gray8, data: pixels),
-                executionTimeMs: 1, memoryUsageBytes: nil, attemptNumber: 1, isFirstPassSuccess: true)
+                isFirstPassSuccess: true)
             func collection(_ submissionID: String) -> TestOutcomeCollection {
                 TestOutcomeCollection(
                     submissionID: submissionID, testSetupID: setupID, attemptNumber: 1, buildStatus: .passed,

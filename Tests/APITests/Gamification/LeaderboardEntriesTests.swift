@@ -23,11 +23,7 @@ import VaporTesting
 @Suite struct LeaderboardEntriesTests {
 
     private func outcome(_ name: String, metric: Double?, status: TestStatus = .pass) -> TestOutcome {
-        TestOutcome(
-            testName: name, testClass: nil, tier: .pub, status: status,
-            shortResult: status.defaultShortResult, longResult: nil, metric: metric,
-            executionTimeMs: 1, memoryUsageBytes: nil,
-            attemptNumber: 1, isFirstPassSuccess: false)
+        .stub(name, status: status, metric: metric)
     }
 
     private func activityManifest(_ kind: ActivityKind, records: [Achievement] = []) throws -> String {
