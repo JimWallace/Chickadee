@@ -11,14 +11,6 @@ import Vapor
 @testable import APIServer
 
 @Suite struct UpdateSectionVariablesToolTests {
-    private func context(_ app: Application) -> ToolContext {
-        ToolContext(
-            request: makeTestRequest(on: app),
-            subject: "tester",
-            grantedScopes: [.write]
-        )
-    }
-
     /// One section ("sec1"), one global variable ("g") to exercise the
     /// cross-scope clash check.
     private let manifest = #"""
@@ -62,7 +54,7 @@ import Vapor
                     assignment,
                     variables: [FamilyVariable(name: "cap", value: .int(7))],
                     expressions: [PersonalizationExpression(name: "pick", expression: "seed % 4")]),
-                context(app))
+                mcpContext(app))
             #expect(output.variables.map(\.name) == ["cap"])
             #expect(output.expressions.map(\.name) == ["pick"])
 
@@ -78,9 +70,9 @@ import Vapor
             let assignment = try await fixture(on: app)
             _ = try await UpdateSectionVariablesTool().execute(
                 input(assignment, variables: [FamilyVariable(name: "cap", value: .int(7))]),
-                context(app))
+                mcpContext(app))
             _ = try await UpdateSectionVariablesTool().execute(
-                input(assignment, variables: []), context(app))
+                input(assignment, variables: []), mcpContext(app))
             let reloaded = try #require(try await reload(assignment, on: app.db))
             #expect(reloaded.variables.isEmpty)
             #expect(reloaded.expressions.isEmpty)
@@ -94,7 +86,7 @@ import Vapor
             await #expect(throws: MCPToolError.self) {
                 _ = try await UpdateSectionVariablesTool().execute(
                     input(assignment, variables: [FamilyVariable(name: "g", value: .int(2))]),
-                    context(app))
+                    mcpContext(app))
             }
         }
     }
@@ -106,7 +98,7 @@ import Vapor
             await #expect(throws: MCPToolError.self) {
                 _ = try await UpdateSectionVariablesTool().execute(
                     input(assignment, variables: [FamilyVariable(name: "seed", value: .int(1))]),
-                    context(app))
+                    mcpContext(app))
             }
         }
     }
@@ -120,7 +112,7 @@ import Vapor
                     input(
                         assignment, sectionID: "nope",
                         variables: [FamilyVariable(name: "cap", value: .int(1))]),
-                    context(app))
+                    mcpContext(app))
             }
         }
     }
@@ -137,7 +129,7 @@ import Vapor
             await #expect(throws: MCPToolError.self) {
                 _ = try await UpdateSectionVariablesTool().execute(
                     input(assignment, variables: [FamilyVariable(name: "cap", value: .int(1))]),
-                    context(app))
+                    mcpContext(app))
             }
         }
     }

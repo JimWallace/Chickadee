@@ -17,14 +17,6 @@ import Vapor
 @testable import APIServer
 
 @Suite struct SetSubmissionModeAndLanguageToolTests {
-    private func context(_ app: Application) -> ToolContext {
-        ToolContext(
-            request: makeTestRequest(on: app),
-            subject: "tester",
-            grantedScopes: [.write]
-        )
-    }
-
     private let workerManifest =
         TestManifests.workerEmpty
     private let browserManifest =
@@ -62,7 +54,7 @@ import Vapor
 
             let out = try await SetSubmissionModeTool().execute(
                 .init(assignmentPublicID: assignment.publicID, submissionMode: "uploadOnly"),
-                context(app))
+                mcpContext(app))
             #expect(out.submissionMode == "uploadOnly")
             // Upload-only pins grading to the native worker; the tool reports
             // the effective path rather than leaving the caller to infer it.
@@ -78,7 +70,7 @@ import Vapor
             await #expect(throws: MCPToolError.self) {
                 _ = try await SetSubmissionModeTool().execute(
                     .init(assignmentPublicID: assignment.publicID, submissionMode: "uploadOnly"),
-                    context(app))
+                    mcpContext(app))
             }
             // Refusing must leave the assignment untouched, not half-saved.
             #expect(try await manifest(of: assignment, on: app)?.submissionMode == .notebook)
@@ -92,7 +84,7 @@ import Vapor
             await #expect(throws: MCPToolError.self) {
                 _ = try await SetSubmissionModeTool().execute(
                     .init(assignmentPublicID: assignment.publicID, submissionMode: "upload"),
-                    context(app))
+                    mcpContext(app))
             }
         }
     }
@@ -105,7 +97,7 @@ import Vapor
             await #expect(throws: MCPToolError.self) {
                 _ = try await SetSubmissionModeTool().execute(
                     .init(assignmentPublicID: assignment.publicID, submissionMode: "uploadOnly"),
-                    context(app))
+                    mcpContext(app))
             }
         }
     }
@@ -118,10 +110,10 @@ import Vapor
             let assignment = try await fixture(on: app, manifest: workerManifest)
             _ = try await SetSubmissionModeTool().execute(
                 .init(assignmentPublicID: assignment.publicID, submissionMode: "uploadOnly"),
-                context(app))
+                mcpContext(app))
 
             let out = try await SetAssignmentLanguageTool().execute(
-                .init(assignmentPublicID: assignment.publicID, language: "cpp"), context(app))
+                .init(assignmentPublicID: assignment.publicID, language: "cpp"), mcpContext(app))
             #expect(out.language == "cpp")
             #expect(out.submissionMode == "uploadOnly")
 
@@ -140,7 +132,7 @@ import Vapor
         try await withApp(app) { app in
             let assignment = try await fixture(on: app, manifest: browserManifest)
             let out = try await SetAssignmentLanguageTool().execute(
-                .init(assignmentPublicID: assignment.publicID, language: "cpp"), context(app))
+                .init(assignmentPublicID: assignment.publicID, language: "cpp"), mcpContext(app))
             #expect(out.language == "cpp")
             #expect(out.submissionMode == "uploadOnly")
             #expect(out.gradingMode == "worker")
@@ -160,7 +152,7 @@ import Vapor
                 #"{"schemaVersion":1,"gradingMode":"worker","testSuites":[],"timeLimitSeconds":10,"language":"r"}"#
             let assignment = try await fixture(on: app, manifest: declared)
             let out = try await SetAssignmentLanguageTool().execute(
-                .init(assignmentPublicID: assignment.publicID, language: "none"), context(app))
+                .init(assignmentPublicID: assignment.publicID, language: "none"), mcpContext(app))
             #expect(out.language == "none")
 
             let props = try #require(try await manifest(of: assignment, on: app))
@@ -198,14 +190,14 @@ import Vapor
             let assignment = try await fixture(on: app, manifest: workerManifest)
             _ = try await SetSubmissionModeTool().execute(
                 .init(assignmentPublicID: assignment.publicID, submissionMode: "uploadOnly"),
-                context(app))
+                mcpContext(app))
             _ = try await SetAssignmentLanguageTool().execute(
-                .init(assignmentPublicID: assignment.publicID, language: "cpp"), context(app))
+                .init(assignmentPublicID: assignment.publicID, language: "cpp"), mcpContext(app))
 
             await #expect(throws: MCPToolError.self) {
                 _ = try await SetSubmissionModeTool().execute(
                     .init(assignmentPublicID: assignment.publicID, submissionMode: "notebook"),
-                    context(app))
+                    mcpContext(app))
             }
             #expect(try await manifest(of: assignment, on: app)?.submissionMode == .uploadOnly)
         }
@@ -225,7 +217,7 @@ import Vapor
             // only the family-application path knows how to do.
             await #expect(throws: MCPToolError.self) {
                 _ = try await SetAssignmentLanguageTool().execute(
-                    .init(assignmentPublicID: assignment.publicID, language: "r"), context(app))
+                    .init(assignmentPublicID: assignment.publicID, language: "r"), mcpContext(app))
             }
             #expect(try await manifest(of: assignment, on: app)?.language == nil)
         }
@@ -245,7 +237,7 @@ import Vapor
             let assignment = try await fixture(on: app, manifest: generated)
 
             let out = try await SetAssignmentLanguageTool().execute(
-                .init(assignmentPublicID: assignment.publicID, language: "r"), context(app))
+                .init(assignmentPublicID: assignment.publicID, language: "r"), mcpContext(app))
             #expect(out.language == "r")
         }
     }
@@ -256,7 +248,7 @@ import Vapor
             let assignment = try await fixture(on: app, manifest: workerManifest)
             await #expect(throws: MCPToolError.self) {
                 _ = try await SetAssignmentLanguageTool().execute(
-                    .init(assignmentPublicID: assignment.publicID, language: "cobol"), context(app))
+                    .init(assignmentPublicID: assignment.publicID, language: "cobol"), mcpContext(app))
             }
         }
     }
@@ -268,7 +260,7 @@ import Vapor
                 on: app, manifest: workerManifest, enroll: false)
             await #expect(throws: MCPToolError.self) {
                 _ = try await SetAssignmentLanguageTool().execute(
-                    .init(assignmentPublicID: assignment.publicID, language: "lua"), context(app))
+                    .init(assignmentPublicID: assignment.publicID, language: "lua"), mcpContext(app))
             }
         }
     }

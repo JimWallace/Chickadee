@@ -10,14 +10,6 @@ import Vapor
 @testable import APIServer
 
 @Suite struct UpdateSuiteToolTests {
-    private func context(_ app: Application) -> ToolContext {
-        ToolContext(
-            request: makeTestRequest(on: app),
-            subject: "tester",
-            grantedScopes: [.write]
-        )
-    }
-
     private let manifest = """
         {"schemaVersion":1,"testSuites":[\
         {"tier":"public","script":"test_a.sh","points":1},\
@@ -54,7 +46,7 @@ import Vapor
                             script: "test_a.sh", tier: "secret", points: 5, displayName: "First",
                             dependsOn: nil, sectionID: nil)
                     ]),
-                context(app))
+                mcpContext(app))
             #expect(output.updatedScripts == ["test_a.sh"])
 
             // Reload the persisted manifest and confirm the edit stuck.
@@ -83,7 +75,7 @@ import Vapor
                             script: "test_b.sh", tier: nil, points: nil, displayName: nil,
                             dependsOn: ["test_a.sh"], sectionID: nil)
                     ]),
-                context(app))
+                mcpContext(app))
             let reloaded = try #require(try await APITestSetup.find(assignment.testSetupID, on: app.db))
             let items = await buildSuitePayload(fromManifest: reloaded.manifest).items
             let b = try #require(items.first { $0.script?.script == "test_b.sh" })
@@ -99,7 +91,7 @@ import Vapor
                 UpdateSuiteTool.Input(
                     assignmentPublicID: assignment.publicID,
                     edits: [UpdateSuiteTool.ScriptEdit(script: "test_a.sh", timeLimitSeconds: 30)]),
-                context(app))
+                mcpContext(app))
             let reloaded = try #require(try await APITestSetup.find(assignment.testSetupID, on: app.db))
             let items = await buildSuitePayload(fromManifest: reloaded.manifest).items
             let a = try #require(items.first { $0.script?.script == "test_a.sh" })
@@ -119,12 +111,12 @@ import Vapor
                 UpdateSuiteTool.Input(
                     assignmentPublicID: assignment.publicID,
                     edits: [UpdateSuiteTool.ScriptEdit(script: "test_a.sh", timeLimitSeconds: 30)]),
-                context(app))
+                mcpContext(app))
             _ = try await UpdateSuiteTool().execute(
                 UpdateSuiteTool.Input(
                     assignmentPublicID: assignment.publicID,
                     edits: [UpdateSuiteTool.ScriptEdit(script: "test_a.sh", timeLimitSeconds: 0)]),
-                context(app))
+                mcpContext(app))
             let reloaded = try #require(try await APITestSetup.find(assignment.testSetupID, on: app.db))
             let items = await buildSuitePayload(fromManifest: reloaded.manifest).items
             let a = try #require(items.first { $0.script?.script == "test_a.sh" })
@@ -141,7 +133,7 @@ import Vapor
                     UpdateSuiteTool.Input(
                         assignmentPublicID: assignment.publicID,
                         edits: [UpdateSuiteTool.ScriptEdit(script: "test_a.sh", timeLimitSeconds: 1000)]),
-                    context(app))
+                    mcpContext(app))
             }
         }
     }
@@ -159,7 +151,7 @@ import Vapor
                             script: "test_a.sh", tier: "secret", points: nil, displayName: nil,
                             dependsOn: nil, sectionID: nil)
                     ]),
-                context(app))
+                mcpContext(app))
             #expect(output.assignmentClosed)
             let reloaded = try #require(try await APIAssignment.find(assignment.id, on: app.db))
             #expect(!reloaded.isOpen)
@@ -180,7 +172,7 @@ import Vapor
                             script: "test_a.sh", tier: "secret", points: nil, displayName: nil,
                             dependsOn: nil, sectionID: nil)
                     ]),
-                context(app))
+                mcpContext(app))
             #expect(!output.assignmentClosed)
             let reloaded = try #require(try await APIAssignment.find(assignment.id, on: app.db))
             #expect(!reloaded.isOpen)
@@ -200,7 +192,7 @@ import Vapor
                                 script: "nope.sh", tier: "secret", points: nil, displayName: nil,
                                 dependsOn: nil, sectionID: nil)
                         ]),
-                    context(app))
+                    mcpContext(app))
             }
         }
     }
@@ -218,7 +210,7 @@ import Vapor
                                 script: "test_a.sh", tier: "bogus", points: nil, displayName: nil,
                                 dependsOn: nil, sectionID: nil)
                         ]),
-                    context(app))
+                    mcpContext(app))
             }
         }
     }
@@ -230,7 +222,7 @@ import Vapor
             await #expect(throws: MCPToolError.self) {
                 _ = try await UpdateSuiteTool().execute(
                     UpdateSuiteTool.Input(assignmentPublicID: assignment.publicID, edits: []),
-                    context(app))
+                    mcpContext(app))
             }
         }
     }
@@ -253,7 +245,7 @@ import Vapor
                                 script: "test_a.sh", tier: "secret", points: nil, displayName: nil,
                                 dependsOn: nil, sectionID: nil)
                         ]),
-                    context(app))
+                    mcpContext(app))
             }
         }
     }
@@ -266,7 +258,7 @@ import Vapor
                 UpdateSuiteTool.Input(
                     assignmentPublicID: assignment.publicID,
                     edits: [UpdateSuiteTool.ScriptEdit(script: "test_a.sh", failureDetail: "verdictOnly")]),
-                context(app))
+                mcpContext(app))
             var reloaded = try #require(try await APITestSetup.find(assignment.testSetupID, on: app.db))
             var items = await buildSuitePayload(fromManifest: reloaded.manifest).items
             #expect(items.first { $0.script?.script == "test_a.sh" }?.script?.failureDetail == "verdictOnly")
@@ -276,7 +268,7 @@ import Vapor
                 UpdateSuiteTool.Input(
                     assignmentPublicID: assignment.publicID,
                     edits: [UpdateSuiteTool.ScriptEdit(script: "test_a.sh", failureDetail: "")]),
-                context(app))
+                mcpContext(app))
             reloaded = try #require(try await APITestSetup.find(assignment.testSetupID, on: app.db))
             items = await buildSuitePayload(fromManifest: reloaded.manifest).items
             #expect(items.first { $0.script?.script == "test_a.sh" }?.script?.failureDetail == nil)

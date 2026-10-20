@@ -14,14 +14,6 @@ import Vapor
 @testable import APIServer
 
 @Suite struct SetActivityStandingsTests {
-    private func context(_ app: Application) -> ToolContext {
-        ToolContext(
-            request: makeTestRequest(on: app),
-            subject: "tester",
-            grantedScopes: [.read, .write]
-        )
-    }
-
     private func fixture(on app: Application, gradingMode: String) async throws -> APIAssignment {
         let course = try await makeTestCourse(on: app, code: "CS135", name: "Designing Programs")
         let courseID = try course.requireID()
@@ -45,7 +37,7 @@ import Vapor
             let assignment = try await fixture(on: app, gradingMode: "worker")
             let out = try await SetActivityTool().execute(
                 .init(assignmentPublicID: assignment.publicID, kind: "roundRobin", leaderboardVisibility: nil),
-                context(app))
+                mcpContext(app))
             #expect(out.opponentSource == "classmates")
             let props = try await manifest(on: app)
             #expect(props.achievements.contains { $0.id == ActivityAuthoring.seededWinnerRecordID })
@@ -58,7 +50,7 @@ import Vapor
             // Switching to a metric kind swaps the seeded records.
             _ = try await SetActivityTool().execute(
                 .init(assignmentPublicID: assignment.publicID, kind: "bestMetric", leaderboardVisibility: nil),
-                context(app))
+                mcpContext(app))
             let switched = try await manifest(on: app)
             #expect(!switched.achievements.contains { $0.id == ActivityAuthoring.seededWinnerRecordID })
             #expect(switched.achievements.contains { $0.id == ActivityAuthoring.seededRecordID })
@@ -74,7 +66,7 @@ import Vapor
             let assignment = try await fixture(on: app, gradingMode: "worker")
             let out = try await SetActivityTool().execute(
                 .init(assignmentPublicID: assignment.publicID, kind: "elimination", leaderboardVisibility: nil),
-                context(app))
+                mcpContext(app))
             #expect(out.opponentSource == "paired")
             let props = try await manifest(on: app)
             #expect(props.achievements.contains { $0.id == ActivityAuthoring.seededTournamentRecordID })
@@ -84,7 +76,7 @@ import Vapor
 
             _ = try await SetActivityTool().execute(
                 .init(assignmentPublicID: assignment.publicID, kind: "roundRobin", leaderboardVisibility: nil),
-                context(app))
+                mcpContext(app))
             let switched = try await manifest(on: app)
             #expect(!switched.achievements.contains { $0.id == ActivityAuthoring.seededTournamentRecordID })
             #expect(switched.achievements.contains { $0.id == ActivityAuthoring.seededWinnerRecordID })
@@ -102,7 +94,7 @@ import Vapor
             let assignment = try await fixture(on: app, gradingMode: "worker")
             _ = try await SetActivityTool().execute(
                 .init(assignmentPublicID: assignment.publicID, kind: "roundRobin", leaderboardVisibility: nil),
-                context(app))
+                mcpContext(app))
             #expect(
                 try await manifest(on: app).achievements
                     .contains { $0.id == ActivityAuthoring.seededWinnerRecordID })
@@ -110,7 +102,7 @@ import Vapor
             let out = try await SetActivityTool().execute(
                 .init(
                     assignmentPublicID: assignment.publicID, kind: "testsVersusImplementations",
-                    leaderboardVisibility: nil), context(app))
+                    leaderboardVisibility: nil), mcpContext(app))
             #expect(out.opponentSource == "classmates")
             let props = try await manifest(on: app)
             #expect(!props.achievements.contains { $0.id == ActivityAuthoring.seededWinnerRecordID })
@@ -131,7 +123,7 @@ import Vapor
             let assignment = try await fixture(on: app, gradingMode: "worker")
             let out = try await SetActivityTool().execute(
                 .init(assignmentPublicID: assignment.publicID, kind: kind, leaderboardVisibility: nil),
-                context(app))
+                mcpContext(app))
             #expect(out.recordAchievementSeeded == seeded)
         }
     }
@@ -145,7 +137,7 @@ import Vapor
                 _ = try await SetActivityTool().execute(
                     .init(
                         assignmentPublicID: assignment.publicID, kind: "testsVersusImplementations",
-                        leaderboardVisibility: nil), context(app))
+                        leaderboardVisibility: nil), mcpContext(app))
             }
             #expect(try await manifest(on: app).activity == nil)
         }
@@ -159,7 +151,7 @@ import Vapor
             await #expect(throws: MCPToolError.self) {
                 _ = try await SetActivityTool().execute(
                     .init(assignmentPublicID: assignment.publicID, kind: "roundRobin", leaderboardVisibility: nil),
-                    context(app))
+                    mcpContext(app))
             }
             #expect(try await manifest(on: app).activity == nil)
         }

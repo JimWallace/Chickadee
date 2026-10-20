@@ -10,14 +10,6 @@ import Vapor
 @testable import APIServer
 
 @Suite struct ValidateAssignmentToolTests {
-    private func context(_ app: Application) -> ToolContext {
-        ToolContext(
-            request: makeTestRequest(on: app),
-            subject: "tester",
-            grantedScopes: [.read]
-        )
-    }
-
     /// Course + enrolled instructor "tester" + setup + assignment. Returns the
     /// assignment so the test can set its validation state.
     private func fixture(on app: Application) async throws -> APIAssignment {
@@ -128,7 +120,7 @@ import Vapor
             let output = try await ValidateAssignmentTool().execute(
                 ValidateAssignmentTool.Input(
                     assignmentPublicID: assignment.publicID, timeoutSeconds: 5),
-                context(app))
+                mcpContext(app))
             #expect(output.validationStatus == "failed")
             #expect(output.timedOut == false)
         }
@@ -144,7 +136,7 @@ import Vapor
             let output = try await ValidateAssignmentTool().execute(
                 ValidateAssignmentTool.Input(
                     assignmentPublicID: assignment.publicID, timeoutSeconds: 1),
-                context(app))
+                mcpContext(app))
             #expect(output.timedOut)
         }
     }
@@ -156,7 +148,7 @@ import Vapor
             await #expect(throws: MCPToolError.self) {
                 _ = try await ValidateAssignmentTool().execute(
                     ValidateAssignmentTool.Input(assignmentPublicID: "zzzzzz", timeoutSeconds: 1),
-                    context(app))
+                    mcpContext(app))
             }
         }
     }
@@ -177,7 +169,7 @@ import Vapor
                 _ = try await ValidateAssignmentTool().execute(
                     ValidateAssignmentTool.Input(
                         assignmentPublicID: assignment.publicID, timeoutSeconds: 1),
-                    context(app))
+                    mcpContext(app))
             }
         }
     }

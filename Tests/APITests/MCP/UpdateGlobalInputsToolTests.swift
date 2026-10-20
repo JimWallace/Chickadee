@@ -12,14 +12,6 @@ import Vapor
 @testable import APIServer
 
 @Suite struct UpdateGlobalInputsToolTests {
-    private func context(_ app: Application) -> ToolContext {
-        ToolContext(
-            request: makeTestRequest(on: app),
-            subject: "tester",
-            grantedScopes: [.write]
-        )
-    }
-
     private let emptyManifest =
         TestManifests.pythonDeclaredEmpty
 
@@ -62,7 +54,7 @@ import Vapor
                     assignment,
                     variables: [FamilyVariable(name: "limit", value: .int(5))],
                     expressions: [PersonalizationExpression(name: "offset", expression: "seed % 3")]),
-                context(app))
+                mcpContext(app))
             #expect(output.variables.map(\.name) == ["limit"])
             #expect(output.expressions.map(\.name) == ["offset"])
 
@@ -78,9 +70,9 @@ import Vapor
             let assignment = try await fixture(on: app)
             _ = try await UpdateGlobalInputsTool().execute(
                 input(assignment, variables: [FamilyVariable(name: "limit", value: .int(5))]),
-                context(app))
+                mcpContext(app))
             _ = try await UpdateGlobalInputsTool().execute(
-                input(assignment, variables: []), context(app))
+                input(assignment, variables: []), mcpContext(app))
             let reloaded = try await reloadInputs(assignment, on: app.db)
             #expect(reloaded.variables.isEmpty)
             #expect(reloaded.expressions.isEmpty)
@@ -94,7 +86,7 @@ import Vapor
             await #expect(throws: MCPToolError.self) {
                 _ = try await UpdateGlobalInputsTool().execute(
                     input(assignment, variables: [FamilyVariable(name: "1bad", value: .int(1))]),
-                    context(app))
+                    mcpContext(app))
             }
         }
     }
@@ -106,7 +98,7 @@ import Vapor
             await #expect(throws: MCPToolError.self) {
                 _ = try await UpdateGlobalInputsTool().execute(
                     input(assignment, variables: [FamilyVariable(name: "seed", value: .int(1))]),
-                    context(app))
+                    mcpContext(app))
             }
         }
     }
@@ -121,7 +113,7 @@ import Vapor
                         assignment,
                         variables: [FamilyVariable(name: "n", value: .int(1))],
                         expressions: [PersonalizationExpression(name: "n", expression: "seed")]),
-                    context(app))
+                    mcpContext(app))
             }
         }
     }
@@ -139,7 +131,7 @@ import Vapor
             await #expect(throws: MCPToolError.self) {
                 _ = try await UpdateGlobalInputsTool().execute(
                     input(assignment, variables: [FamilyVariable(name: "n", value: .int(1))]),
-                    context(app))
+                    mcpContext(app))
             }
         }
     }

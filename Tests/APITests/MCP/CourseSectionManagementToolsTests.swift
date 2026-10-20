@@ -11,14 +11,6 @@ import Vapor
 @testable import APIServer
 
 @Suite struct CourseSectionManagementToolsTests {
-    private func context(_ app: Application) -> ToolContext {
-        ToolContext(
-            request: makeTestRequest(on: app),
-            subject: "tester",
-            grantedScopes: [.write]
-        )
-    }
-
     /// Course + enrolled instructor.
     @discardableResult
     private func fixture(on app: Application) async throws -> APICourse {
@@ -48,7 +40,7 @@ import Vapor
                 .init(
                     courseSectionID: section.requireID().uuidString, name: "Assignments",
                     defaultGradingMode: "worker"),
-                context(app))
+                mcpContext(app))
             #expect(out.name == "Assignments")
             #expect(out.defaultGradingMode == "worker")
 
@@ -67,7 +59,7 @@ import Vapor
             await #expect(throws: MCPToolError.self) {
                 _ = try await RenameCourseSectionTool().execute(
                     .init(courseSectionID: section.requireID().uuidString, name: nil, defaultGradingMode: nil),
-                    context(app))
+                    mcpContext(app))
             }
         }
     }
@@ -87,7 +79,7 @@ import Vapor
             try await assignment.save(on: app.db)
 
             let out = try await DeleteCourseSectionTool().execute(
-                .init(courseSectionID: sectionID.uuidString), context(app))
+                .init(courseSectionID: sectionID.uuidString), mcpContext(app))
             #expect(out.removed)
             #expect(out.ungroupedAssignmentCount == 1)
 
@@ -102,7 +94,7 @@ import Vapor
         try await withApp(app) { app in
             _ = try await fixture(on: app)
             let out = try await DeleteCourseSectionTool().execute(
-                .init(courseSectionID: UUID().uuidString), context(app))
+                .init(courseSectionID: UUID().uuidString), mcpContext(app))
             #expect(!out.removed)
             #expect(out.ungroupedAssignmentCount == 0)
         }
@@ -124,11 +116,11 @@ import Vapor
                         try c.requireID().uuidString, try a.requireID().uuidString,
                         try b.requireID().uuidString,
                     ]),
-                context(app))
+                mcpContext(app))
             #expect(out.sections.map(\.name) == ["C", "A", "B"])
 
             // Persisted order is reflected by list_course_sections.
-            let listed = try await ListCourseSectionsTool().execute(.init(courseCode: "CS246"), context(app))
+            let listed = try await ListCourseSectionsTool().execute(.init(courseCode: "CS246"), mcpContext(app))
             #expect(listed.sections.map(\.name) == ["C", "A", "B"])
         }
     }
@@ -143,7 +135,7 @@ import Vapor
             await #expect(throws: MCPToolError.self) {
                 _ = try await ReorderCourseSectionsTool().execute(
                     .init(courseCode: "CS246", orderedSectionIDs: [try a.requireID().uuidString]),
-                    context(app))
+                    mcpContext(app))
             }
         }
     }
@@ -158,7 +150,7 @@ import Vapor
             await #expect(throws: MCPToolError.self) {
                 _ = try await RenameCourseSectionTool().execute(
                     .init(courseSectionID: foreign.requireID().uuidString, name: "Y", defaultGradingMode: nil),
-                    context(app))
+                    mcpContext(app))
             }
         }
     }

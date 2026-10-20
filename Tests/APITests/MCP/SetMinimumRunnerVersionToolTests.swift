@@ -12,14 +12,6 @@ import Vapor
 @testable import APIServer
 
 @Suite struct SetMinimumRunnerVersionToolTests {
-    private func context(_ app: Application) -> ToolContext {
-        ToolContext(
-            request: makeTestRequest(on: app),
-            subject: "tester",
-            grantedScopes: [.read, .write]
-        )
-    }
-
     private let manifest =
         TestManifests.workerEmpty
 
@@ -48,7 +40,7 @@ import Vapor
 
             let out = try await SetMinimumRunnerVersionTool().execute(
                 .init(assignmentPublicID: assignment.publicID, minimumRunnerVersion: "0.5.0"),
-                context(app))
+                mcpContext(app))
             #expect(out.minimumRunnerVersion == "0.5.0")
 
             let setup = try #require(try await APITestSetup.find(assignment.testSetupID, on: app.db))
@@ -65,11 +57,11 @@ import Vapor
             let assignment = try await fixture(on: app)
             _ = try await SetMinimumRunnerVersionTool().execute(
                 .init(assignmentPublicID: assignment.publicID, minimumRunnerVersion: "0.5.0"),
-                context(app))
+                mcpContext(app))
 
             let cleared = try await SetMinimumRunnerVersionTool().execute(
                 .init(assignmentPublicID: assignment.publicID, minimumRunnerVersion: nil),
-                context(app))
+                mcpContext(app))
             #expect(cleared.minimumRunnerVersion == nil)
 
             let setup = try #require(try await APITestSetup.find(assignment.testSetupID, on: app.db))
@@ -87,10 +79,10 @@ import Vapor
             let assignment = try await fixture(on: app)
             _ = try await SetMinimumRunnerVersionTool().execute(
                 .init(assignmentPublicID: assignment.publicID, minimumRunnerVersion: "0.5.0"),
-                context(app))
+                mcpContext(app))
             let cleared = try await SetMinimumRunnerVersionTool().execute(
                 .init(assignmentPublicID: assignment.publicID, minimumRunnerVersion: "  "),
-                context(app))
+                mcpContext(app))
             #expect(cleared.minimumRunnerVersion == nil)
         }
     }
@@ -102,7 +94,7 @@ import Vapor
             await #expect(throws: MCPToolError.self) {
                 _ = try await SetMinimumRunnerVersionTool().execute(
                     .init(assignmentPublicID: assignment.publicID, minimumRunnerVersion: "not-a-version"),
-                    context(app))
+                    mcpContext(app))
             }
         }
     }
@@ -114,7 +106,7 @@ import Vapor
             await #expect(throws: MCPToolError.self) {
                 _ = try await SetMinimumRunnerVersionTool().execute(
                     .init(assignmentPublicID: assignment.publicID, minimumRunnerVersion: "0.5.0"),
-                    context(app))
+                    mcpContext(app))
             }
         }
     }
@@ -126,7 +118,7 @@ import Vapor
             await #expect(throws: MCPToolError.self) {
                 _ = try await SetMinimumRunnerVersionTool().execute(
                     .init(assignmentPublicID: assignment.publicID, minimumRunnerVersion: "0.5.0"),
-                    context(app))
+                    mcpContext(app))
             }
         }
     }
@@ -137,14 +129,14 @@ import Vapor
             let assignment = try await fixture(on: app)
             _ = try await SetMinimumRunnerVersionTool().execute(
                 .init(assignmentPublicID: assignment.publicID, minimumRunnerVersion: "0.5.0"),
-                context(app))
+                mcpContext(app))
 
             let suite = try await GetSuiteTool().execute(
-                .init(assignmentPublicID: assignment.publicID), context(app))
+                .init(assignmentPublicID: assignment.publicID), mcpContext(app))
             #expect(suite.minimumRunnerVersion == "0.5.0")
 
             let info = try await GetAssignmentTool().execute(
-                .init(assignmentPublicID: assignment.publicID), context(app))
+                .init(assignmentPublicID: assignment.publicID), mcpContext(app))
             #expect(info.minimumRunnerVersion == "0.5.0")
         }
     }

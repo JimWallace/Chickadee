@@ -15,17 +15,10 @@ import Vapor
             issuer: "https://chickadee.example", resource: "https://chickadee.example/mcp")
     }
 
-    private func context(_ app: Application) -> ToolContext {
-        ToolContext(
-            request: makeTestRequest(on: app),
-            subject: "tester",
-            grantedScopes: [.read])
-    }
-
     @Test func reportsCurrentVersion() async throws {
         let app = try await makeTestApp()
         try await withApp(app) { app in
-            let out = try await GetServerInfoTool().execute(GetServerInfoTool.Input(), context(app))
+            let out = try await GetServerInfoTool().execute(GetServerInfoTool.Input(), mcpContext(app))
             #expect(out.version == ChickadeeVersion.current)
         }
     }
@@ -33,7 +26,7 @@ import Vapor
     @Test func reportsReadWriteModeAndScopes() async throws {
         let app = try await makeTestApp(appConfig: .testDefaults(mcp: mcpConfig(.readWrite)))
         try await withApp(app) { app in
-            let out = try await GetServerInfoTool().execute(GetServerInfoTool.Input(), context(app))
+            let out = try await GetServerInfoTool().execute(GetServerInfoTool.Input(), mcpContext(app))
             #expect(out.mcpMode == "read_write")
             #expect(out.writeEnabled)
             #expect(out.advertisedScopes == ["content:read", "content:write", "feedback:read", "feedback:write"])
@@ -43,7 +36,7 @@ import Vapor
     @Test func reportsReadOnlyModeWithoutWrite() async throws {
         let app = try await makeTestApp(appConfig: .testDefaults(mcp: mcpConfig(.readOnly)))
         try await withApp(app) { app in
-            let out = try await GetServerInfoTool().execute(GetServerInfoTool.Input(), context(app))
+            let out = try await GetServerInfoTool().execute(GetServerInfoTool.Input(), mcpContext(app))
             #expect(out.mcpMode == "read_only")
             #expect(!out.writeEnabled)
             #expect(out.advertisedScopes == ["content:read", "feedback:read"])

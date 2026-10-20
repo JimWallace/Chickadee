@@ -10,14 +10,6 @@ import Vapor
 @testable import APIServer
 
 @Suite struct GetNotebookToolTests {
-    private func context(_ app: Application) -> ToolContext {
-        ToolContext(
-            request: makeTestRequest(on: app),
-            subject: "tester",
-            grantedScopes: [.read]
-        )
-    }
-
     private let twoCellNotebook = #"""
         {"nbformat":4,"nbformat_minor":5,"metadata":{},"cells":[
         {"cell_type":"markdown","metadata":{},"source":["# Lab"]},
@@ -52,7 +44,7 @@ import Vapor
                 encoding: .utf8)
 
             let output = try await GetNotebookTool().execute(
-                GetNotebookTool.Input(assignmentPublicID: assignment.publicID), context(app))
+                GetNotebookTool.Input(assignmentPublicID: assignment.publicID), mcpContext(app))
 
             #expect(output.assignmentPublicID == assignment.publicID)
             #expect(output.cellCount == 2)
@@ -71,7 +63,7 @@ import Vapor
         try await withApp(app) { app in
             let assignment = try await fixture(on: app)
             let output = try await GetNotebookTool().execute(
-                GetNotebookTool.Input(assignmentPublicID: assignment.publicID), context(app))
+                GetNotebookTool.Input(assignmentPublicID: assignment.publicID), mcpContext(app))
             #expect(output.cellCount == 0)
         }
     }
@@ -82,7 +74,7 @@ import Vapor
             _ = try await fixture(on: app)
             await #expect(throws: MCPToolError.self) {
                 _ = try await GetNotebookTool().execute(
-                    GetNotebookTool.Input(assignmentPublicID: "zzzzzz"), context(app))
+                    GetNotebookTool.Input(assignmentPublicID: "zzzzzz"), mcpContext(app))
             }
         }
     }
@@ -94,7 +86,7 @@ import Vapor
             let assignment = try await fixture(on: app, withNotebook: false)
             await #expect(throws: MCPToolError.self) {
                 _ = try await GetNotebookTool().execute(
-                    GetNotebookTool.Input(assignmentPublicID: assignment.publicID), context(app))
+                    GetNotebookTool.Input(assignmentPublicID: assignment.publicID), mcpContext(app))
             }
         }
     }
@@ -110,7 +102,7 @@ import Vapor
                 on: app, testSetupID: "setup_nb", courseID: courseID, title: "Lab")
             await #expect(throws: MCPToolError.self) {
                 _ = try await GetNotebookTool().execute(
-                    GetNotebookTool.Input(assignmentPublicID: assignment.publicID), context(app))
+                    GetNotebookTool.Input(assignmentPublicID: assignment.publicID), mcpContext(app))
             }
         }
     }

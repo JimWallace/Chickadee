@@ -12,14 +12,6 @@ import Vapor
 @testable import APIServer
 
 @Suite struct GetSupportFilesToolTests {
-    private func context(_ app: Application) -> ToolContext {
-        ToolContext(
-            request: makeTestRequest(on: app),
-            subject: "tester",
-            grantedScopes: [.read]
-        )
-    }
-
     private let manifest = """
         {"schemaVersion":1,"testSuites":[\
         {"tier":"public","script":"test_a.sh","points":1}\
@@ -53,7 +45,7 @@ import Vapor
         try await GetSupportFilesTool().execute(
             GetSupportFilesTool.Input(
                 assignmentPublicID: publicID, filename: filename, maxBytes: maxBytes),
-            context(app))
+            mcpContext(app))
     }
 
     // MARK: - List mode

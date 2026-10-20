@@ -12,14 +12,6 @@ import Vapor
 @testable import APIServer
 
 @Suite struct CourseSectionToolsTests {
-    private func context(_ app: Application) -> ToolContext {
-        ToolContext(
-            request: makeTestRequest(on: app),
-            subject: "tester",
-            grantedScopes: [.write]
-        )
-    }
-
     private let manifest = """
         {"schemaVersion":1,"gradingMode":"browser","testSuites":[],"timeLimitSeconds":10}
         """
@@ -51,7 +43,7 @@ import Vapor
         try await withApp(app) { app in
             _ = try await fixture(on: app)
             let out = try await CreateCourseSectionTool().execute(
-                .init(courseCode: "CS246", name: "Labs", defaultGradingMode: "browser"), context(app))
+                .init(courseCode: "CS246", name: "Labs", defaultGradingMode: "browser"), mcpContext(app))
             #expect(out.name == "Labs")
             #expect(out.defaultGradingMode == "browser")
             #expect(!out.sectionID.isEmpty)
@@ -68,7 +60,7 @@ import Vapor
             _ = try await fixture(on: app)
             await #expect(throws: MCPToolError.self) {
                 _ = try await CreateCourseSectionTool().execute(
-                    .init(courseCode: "CS246", name: "Labs", defaultGradingMode: "nonsense"), context(app))
+                    .init(courseCode: "CS246", name: "Labs", defaultGradingMode: "nonsense"), mcpContext(app))
             }
         }
     }
@@ -81,7 +73,7 @@ import Vapor
             try await makeSection(on: app, name: "Exams", mode: "worker", order: 2, courseID: courseID)
             try await makeSection(on: app, name: "Labs", mode: "browser", order: 1, courseID: courseID)
 
-            let out = try await ListCourseSectionsTool().execute(.init(courseCode: "CS246"), context(app))
+            let out = try await ListCourseSectionsTool().execute(.init(courseCode: "CS246"), mcpContext(app))
             #expect(out.sections.map(\.name) == ["Labs", "Exams"])
             #expect(out.sections.first?.defaultGradingMode == "browser")
         }
@@ -111,7 +103,7 @@ import Vapor
                 .init(
                     assignmentPublicID: holdoutAssignment.publicID,
                     courseSectionID: sectionID.uuidString),
-                context(app))
+                mcpContext(app))
             #expect(out.gradingMode == "worker")
 
             // The move itself succeeded; the mode did not adopt.
@@ -134,7 +126,7 @@ import Vapor
 
             let out = try await SetAssignmentCourseSectionTool().execute(
                 .init(assignmentPublicID: fx.assignment.publicID, courseSectionID: sectionID.uuidString),
-                context(app))
+                mcpContext(app))
             #expect(out.sectionID == sectionID.uuidString)
             #expect(out.sectionName == "Labs")
             #expect(out.gradingMode == "worker")
@@ -158,10 +150,10 @@ import Vapor
             _ = try await SetAssignmentCourseSectionTool().execute(
                 .init(
                     assignmentPublicID: fx.assignment.publicID,
-                    courseSectionID: try section.requireID().uuidString), context(app))
+                    courseSectionID: try section.requireID().uuidString), mcpContext(app))
 
             let out = try await SetAssignmentCourseSectionTool().execute(
-                .init(assignmentPublicID: fx.assignment.publicID, courseSectionID: ""), context(app))
+                .init(assignmentPublicID: fx.assignment.publicID, courseSectionID: ""), mcpContext(app))
             #expect(out.sectionID.isEmpty)
             let reloaded = try #require(try await APIAssignment.find(fx.assignment.id, on: app.db))
             #expect(reloaded.sectionID == nil)
@@ -176,7 +168,7 @@ import Vapor
                 _ = try await SetAssignmentCourseSectionTool().execute(
                     .init(
                         assignmentPublicID: fx.assignment.publicID,
-                        courseSectionID: UUID().uuidString), context(app))
+                        courseSectionID: UUID().uuidString), mcpContext(app))
             }
         }
     }
@@ -200,7 +192,7 @@ import Vapor
                 _ = try await SetAssignmentCourseSectionTool().execute(
                     .init(
                         assignmentPublicID: fx.assignment.publicID,
-                        courseSectionID: try section.requireID().uuidString), context(app))
+                        courseSectionID: try section.requireID().uuidString), mcpContext(app))
             }
             // The blocked write didn't persist: the assignment is still ungrouped.
             let reloaded = try #require(try await APIAssignment.find(fx.assignment.id, on: app.db))
@@ -220,7 +212,7 @@ import Vapor
                 _ = try await SetAssignmentCourseSectionTool().execute(
                     .init(
                         assignmentPublicID: fx.assignment.publicID,
-                        courseSectionID: try foreign.requireID().uuidString), context(app))
+                        courseSectionID: try foreign.requireID().uuidString), mcpContext(app))
             }
         }
     }

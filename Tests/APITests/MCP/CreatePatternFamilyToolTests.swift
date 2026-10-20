@@ -10,14 +10,6 @@ import Vapor
 @testable import APIServer
 
 @Suite struct CreatePatternFamilyToolTests {
-    private func context(_ app: Application) -> ToolContext {
-        ToolContext(
-            request: makeTestRequest(on: app),
-            subject: "tester",
-            grantedScopes: [.write]
-        )
-    }
-
     // Declared, because `create_assignment` requires a language and there is no
     // door that produces an assignment without an answer. A family save on an
     // assignment whose author chose "None" is refused, and that case has its own
@@ -70,7 +62,7 @@ import Vapor
                             argVarRefs: nil, argsProvided: nil, expectedVarRef: nil, points: nil,
                             tier: nil, enabled: nil)
                     ]),
-                context(app))
+                mcpContext(app))
             #expect(output.familyID == "classify")
             #expect(output.kind == "boundary_equality")
             #expect(output.caseKeys == ["01"])
@@ -99,7 +91,7 @@ import Vapor
                         CreatePatternFamilyTool.CaseInput(
                             key: "01", args: [.int(1)], expected: .string("one"))
                     ]),
-                context(app))
+                mcpContext(app))
             #expect(output.assignmentClosed)
 
             let reloaded = try #require(try await APIAssignment.find(assignment.id, on: app.db))
@@ -126,7 +118,7 @@ import Vapor
                         CreatePatternFamilyTool.CaseInput(
                             key: "01", args: [.int(1)], expected: .string("one"))
                     ]),
-                context(app))
+                mcpContext(app))
 
             let reloaded = try #require(try await APISubmission.find("sub_pf", on: app.db))
             #expect(reloaded.status == "pending")
@@ -151,7 +143,7 @@ import Vapor
                             argVarRefs: nil, argsProvided: nil, expectedVarRef: "exp_val",
                             points: nil, tier: nil, enabled: nil)
                     ]),
-                context(app))
+                mcpContext(app))
             let family = try await reloadFamily(assignment, id: "perstud", on: app.db)
             #expect(family.cases.first?.expectedVarRef == "exp_val")
         }
@@ -173,7 +165,7 @@ import Vapor
                         CreatePatternFamilyTool.CaseInput(
                             key: "02", label: "plain", args: [.int(2)], expected: .string("two")),
                     ]),
-                context(app))
+                mcpContext(app))
 
             let family = try await reloadFamily(assignment, id: "hinted", on: app.db)
             #expect(family.defaults.hint == "mind the boundary")
@@ -203,7 +195,7 @@ import Vapor
                         CreatePatternFamilyTool.CaseInput(
                             key: "02", args: [.int(2)], expected: .string("two")),
                     ]),
-                context(app))
+                mcpContext(app))
 
             let family = try await reloadFamily(assignment, id: "timed", on: app.db)
             #expect(family.defaults.timeLimitSeconds == 30)
@@ -239,7 +231,7 @@ import Vapor
                             CreatePatternFamilyTool.CaseInput(
                                 key: "01", args: [.int(1)], expected: .string("one"))
                         ]),
-                    context(app))
+                    mcpContext(app))
             }
         }
     }
@@ -257,7 +249,7 @@ import Vapor
                         CreatePatternFamilyTool.CaseInput(
                             key: "01", args: [.int(1)], expected: .string("one"), hint: "")
                     ]),
-                context(app))
+                mcpContext(app))
             let family = try await reloadFamily(assignment, id: "blank", on: app.db)
             // An empty hint normalizes to nil rather than a blank "💡 Hint".
             #expect(family.defaults.hint == nil)
@@ -282,7 +274,7 @@ import Vapor
                                 argVarRefs: nil, argsProvided: nil, expectedVarRef: nil,
                                 points: nil, tier: nil, enabled: nil)
                         ]),
-                    context(app))
+                    mcpContext(app))
             }
             _ = try await make()
             await #expect(throws: MCPToolError.self) { _ = try await make() }
@@ -310,7 +302,7 @@ import Vapor
                                 argVarRefs: nil, argsProvided: nil, expectedVarRef: nil,
                                 points: nil, tier: nil, enabled: nil),
                         ]),
-                    context(app))
+                    mcpContext(app))
             }
         }
     }
@@ -334,7 +326,7 @@ import Vapor
                                 argVarRefs: nil, argsProvided: nil, expectedVarRef: nil,
                                 points: nil, tier: nil, enabled: nil)
                         ]),
-                    context(app))
+                    mcpContext(app))
             }
         }
     }
@@ -356,7 +348,7 @@ import Vapor
                                 argVarRefs: nil, argsProvided: nil, expectedVarRef: nil,
                                 points: nil, tier: nil, enabled: nil)
                         ]),
-                    context(app))
+                    mcpContext(app))
             }
         }
     }
@@ -385,7 +377,7 @@ import Vapor
                                 argVarRefs: nil, argsProvided: nil, expectedVarRef: nil,
                                 points: nil, tier: nil, enabled: nil)
                         ]),
-                    context(app))
+                    mcpContext(app))
             }
         }
     }
@@ -407,7 +399,7 @@ import Vapor
                             key: "02", args: [.int(2)], expected: .string("two"),
                             failureDetail: "full"),
                     ]),
-                context(app))
+                mcpContext(app))
             let family = try await reloadFamily(assignment, id: "masked", on: app.db)
             #expect(family.defaults.failureDetail == .actualOnly)
             #expect(family.cases.first { $0.key == "01" }?.failureDetail == .verdictOnly)
@@ -435,7 +427,7 @@ import Vapor
                             argVarRefs: nil, argsProvided: nil, expectedVarRef: nil, points: nil,
                             tier: nil, enabled: nil)
                     ]),
-                context(app))
+                mcpContext(app))
             #expect(output.kind == "program_io")
 
             let family = try await reloadFamily(assignment, id: "io", on: app.db)
@@ -460,7 +452,7 @@ import Vapor
                                 argVarRefs: nil, argsProvided: nil, expectedVarRef: nil, points: nil,
                                 tier: nil, enabled: nil)
                         ]),
-                    context(app))
+                    mcpContext(app))
             }
         }
     }

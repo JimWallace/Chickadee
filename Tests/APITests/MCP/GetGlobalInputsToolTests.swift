@@ -10,14 +10,6 @@ import Vapor
 @testable import APIServer
 
 @Suite struct GetGlobalInputsToolTests {
-    private func context(_ app: Application) -> ToolContext {
-        ToolContext(
-            request: makeTestRequest(on: app),
-            subject: "tester",
-            grantedScopes: [.read]
-        )
-    }
-
     /// Manifest carrying one literal global variable and one expression.
     private let manifest =
         #"{"schemaVersion":1,"testSuites":[],"timeLimitSeconds":10,"globalVariables":[{"name":"limit","value":5}],"globalExpressions":[{"name":"offset","expression":"seed % 3"}]}"#
@@ -37,7 +29,7 @@ import Vapor
         try await withApp(app) { app in
             let assignment = try await fixture(on: app)
             let output = try await GetGlobalInputsTool().execute(
-                GetGlobalInputsTool.Input(assignmentPublicID: assignment.publicID), context(app))
+                GetGlobalInputsTool.Input(assignmentPublicID: assignment.publicID), mcpContext(app))
             #expect(output.assignmentPublicID == assignment.publicID)
             #expect(output.variables.map(\.name) == ["limit"])
             #expect(output.variables.first?.value == .int(5))
@@ -52,7 +44,7 @@ import Vapor
             _ = try await fixture(on: app)
             await #expect(throws: MCPToolError.self) {
                 _ = try await GetGlobalInputsTool().execute(
-                    GetGlobalInputsTool.Input(assignmentPublicID: "ZZZ999"), context(app))
+                    GetGlobalInputsTool.Input(assignmentPublicID: "ZZZ999"), mcpContext(app))
             }
         }
     }
@@ -69,7 +61,7 @@ import Vapor
                 on: app, testSetupID: "setup_gi", courseID: courseID, title: "Lab")
             await #expect(throws: MCPToolError.self) {
                 _ = try await GetGlobalInputsTool().execute(
-                    GetGlobalInputsTool.Input(assignmentPublicID: assignment.publicID), context(app))
+                    GetGlobalInputsTool.Input(assignmentPublicID: assignment.publicID), mcpContext(app))
             }
         }
     }

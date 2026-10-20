@@ -14,14 +14,6 @@ import Vapor
 @testable import APIServer
 
 @Suite struct GetValidationResultVariantFallbackTests {
-    private func context(_ app: Application) -> ToolContext {
-        ToolContext(
-            request: makeTestRequest(on: app),
-            subject: "tester",
-            grantedScopes: [.read]
-        )
-    }
-
     /// Course + enrolled instructor "tester" + setup + assignment.
     private func fixture(on app: Application) async throws -> (APIAssignment, UUID) {
         let course = try await makeTestCourse(on: app, code: "CS246", name: "OOP")
@@ -55,7 +47,7 @@ import Vapor
         -> GetValidationResultTool.Output
     {
         try await GetValidationResultTool().execute(
-            GetValidationResultTool.Input(assignmentPublicID: publicID), context(app))
+            GetValidationResultTool.Input(assignmentPublicID: publicID), mcpContext(app))
     }
 
     @Test func reportsOutcomesWhenTheVariantBatchCannotBeRead() async throws {

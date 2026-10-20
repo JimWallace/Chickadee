@@ -19,14 +19,6 @@ import Vapor
 @testable import APIServer
 
 @Suite struct MCPArchivedWriteBlockTests {
-    private func context(_ app: Application) -> ToolContext {
-        ToolContext(
-            request: makeTestRequest(on: app),
-            subject: "tester",
-            grantedScopes: [.read, .write]
-        )
-    }
-
     private let manifest = """
         {"schemaVersion":1,"gradingMode":"worker","requiredFiles":[],"testSuites":[],"timeLimitSeconds":10,"makefile":null}
         """
@@ -53,7 +45,7 @@ import Vapor
             let fx = try await fixture(on: app, archived: true)
             await #expect(throws: MCPToolError.self) {
                 _ = try await SetTimeLimitTool().execute(
-                    .init(assignmentPublicID: fx.assignment.publicID, seconds: 42), context(app))
+                    .init(assignmentPublicID: fx.assignment.publicID, seconds: 42), mcpContext(app))
             }
         }
     }
@@ -65,7 +57,7 @@ import Vapor
             // block above is attributable to the archived state, not the fixture.
             let fx = try await fixture(on: app, archived: false, code: "LIVEMCP")
             let out = try await SetTimeLimitTool().execute(
-                .init(assignmentPublicID: fx.assignment.publicID, seconds: 42), context(app))
+                .init(assignmentPublicID: fx.assignment.publicID, seconds: 42), mcpContext(app))
             #expect(out.timeLimitSeconds == 42)
         }
     }
@@ -80,7 +72,7 @@ import Vapor
             // by the archived state — grade audits / lookups stay available. The
             // call returning (rather than throwing MCPToolError) is the assertion.
             let out = try await GetSuiteTool().execute(
-                .init(assignmentPublicID: fx.assignment.publicID), context(app))
+                .init(assignmentPublicID: fx.assignment.publicID), mcpContext(app))
             #expect(out.items.isEmpty)
         }
     }
@@ -93,7 +85,7 @@ import Vapor
             _ = try await fixture(on: app, archived: true, code: "ARCHSEC")
             await #expect(throws: MCPToolError.self) {
                 _ = try await CreateCourseSectionTool().execute(
-                    .init(courseCode: "ARCHSEC", name: "Labs", defaultGradingMode: "browser"), context(app))
+                    .init(courseCode: "ARCHSEC", name: "Labs", defaultGradingMode: "browser"), mcpContext(app))
             }
         }
     }
@@ -106,7 +98,7 @@ import Vapor
             _ = try await fixture(on: app, archived: true, code: "ARCHLS")
             // list_course_sections routes through the READ resolveCourse; an
             // archived course must still list (here: empty), not 403.
-            let out = try await ListCourseSectionsTool().execute(.init(courseCode: "ARCHLS"), context(app))
+            let out = try await ListCourseSectionsTool().execute(.init(courseCode: "ARCHLS"), mcpContext(app))
             #expect(out.sections.isEmpty)
         }
     }

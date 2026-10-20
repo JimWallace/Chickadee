@@ -12,18 +12,12 @@ import Vapor
 @testable import APIServer
 
 @Suite struct MCPCourseSectionIDTests {
-    private func context(_ app: Application) -> ToolContext {
-        ToolContext(
-            request: makeTestRequest(on: app),
-            subject: "tester", grantedScopes: [.read])
-    }
-
     @Test(arguments: [nil, "", "  ", "none", "NONE"])
     func anAbsentSectionIsNil(raw: String?) async throws {
         let app = try await makeTestApp()
         try await withApp(app) { app in
             let id = try await resolveCourseSectionID(
-                raw, inCourse: UUID(), owner: "assignment", context: context(app))
+                raw, inCourse: UUID(), owner: "assignment", context: mcpContext(app))
             #expect(id == nil)
         }
     }
@@ -37,7 +31,7 @@ import Vapor
             try await section.save(on: app.db)
             let id = try await resolveCourseSectionID(
                 " \(try section.requireID().uuidString) ", inCourse: try course.requireID(),
-                owner: "assignment", context: context(app))
+                owner: "assignment", context: mcpContext(app))
             #expect(id == section.id)
         }
     }
@@ -56,7 +50,7 @@ import Vapor
                     detail: "No course section with id \"\(raw)\" in this content item's course.")
             ) {
                 _ = try await resolveCourseSectionID(
-                    raw, inCourse: try mine.requireID(), owner: "content item", context: context(app))
+                    raw, inCourse: try mine.requireID(), owner: "content item", context: mcpContext(app))
             }
         }
     }
@@ -65,7 +59,8 @@ import Vapor
         let app = try await makeTestApp()
         try await withApp(app) { app in
             await #expect(throws: MCPToolError.invalidArguments(detail: "courseSectionID \"x\" is not a valid id.")) {
-                _ = try await resolveCourseSectionID("x", inCourse: UUID(), owner: "assignment", context: context(app))
+                _ = try await resolveCourseSectionID(
+                    "x", inCourse: UUID(), owner: "assignment", context: mcpContext(app))
             }
         }
     }

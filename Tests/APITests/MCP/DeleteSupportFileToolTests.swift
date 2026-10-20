@@ -14,14 +14,6 @@ import Vapor
 @testable import APIServer
 
 @Suite struct DeleteSupportFileToolTests {
-    private func context(_ app: Application) -> ToolContext {
-        ToolContext(
-            request: makeTestRequest(on: app),
-            subject: "tester",
-            grantedScopes: [.write]
-        )
-    }
-
     private let emptyManifest = TestManifests.emptySuite
 
     /// Course + enrolled instructor + setup + assignment, with `support` written
@@ -69,7 +61,7 @@ import Vapor
         try await DeleteSupportFileTool().execute(
             DeleteSupportFileTool.Input(
                 assignmentPublicID: assignment.publicID, filename: filename),
-            context(app))
+            mcpContext(app))
     }
 
     @Test func removesASupportFileFromTheZip() async throws {

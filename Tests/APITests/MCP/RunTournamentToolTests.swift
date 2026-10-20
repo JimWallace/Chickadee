@@ -14,14 +14,6 @@ import Vapor
 @testable import APIServer
 
 @Suite struct RunTournamentToolTests {
-    private func context(_ app: Application) -> ToolContext {
-        ToolContext(
-            request: makeTestRequest(on: app),
-            subject: "tester",
-            grantedScopes: [.read, .write]
-        )
-    }
-
     private func manifest(kind: ActivityKind) throws -> String {
         let props = TestProperties(
             testSuites: [TestSuiteEntry(tier: .pub, script: "match.sh")],
@@ -57,7 +49,7 @@ import Vapor
         try await withApp(app) { app in
             let assignment = try await fixture(on: app, kind: .elimination, students: 3)
             let out = try await RunTournamentTool().execute(
-                .init(assignmentPublicID: assignment.publicID, schedule: nil), context(app))
+                .init(assignmentPublicID: assignment.publicID, schedule: nil), mcpContext(app))
             #expect(out.schedule == "bracket")
             #expect(out.entrantCount == 3)
             #expect(out.roundCount == 2)
@@ -70,7 +62,7 @@ import Vapor
                     .filter(\.$kind == APISubmission.Kind.tournamentMatch).count() == 1)
 
             let swiss = try await RunTournamentTool().execute(
-                .init(assignmentPublicID: assignment.publicID, schedule: "swiss"), context(app))
+                .init(assignmentPublicID: assignment.publicID, schedule: "swiss"), mcpContext(app))
             #expect(swiss.schedule == "swiss")
             #expect(
                 try await APITournamentRun.find(UUID(uuidString: out.tournamentID), on: app.db)?.status == "superseded")
@@ -83,11 +75,11 @@ import Vapor
             let assignment = try await fixture(on: app, kind: .elimination, students: 1)
             await #expect(throws: MCPToolError.self) {
                 _ = try await RunTournamentTool().execute(
-                    .init(assignmentPublicID: assignment.publicID, schedule: "ladder"), context(app))
+                    .init(assignmentPublicID: assignment.publicID, schedule: "ladder"), mcpContext(app))
             }
             await #expect(throws: MCPToolError.self) {
                 _ = try await RunTournamentTool().execute(
-                    .init(assignmentPublicID: assignment.publicID, schedule: "bracket"), context(app))
+                    .init(assignmentPublicID: assignment.publicID, schedule: "bracket"), mcpContext(app))
             }
             #expect(try await APITournamentRun.query(on: app.db).count() == 0)
         }
@@ -102,7 +94,7 @@ import Vapor
             try app.useMCPRoleDatabase()
             let assignment = try await fixture(on: app, kind: .elimination, students: 3)
             let out = try await RunTournamentTool().execute(
-                .init(assignmentPublicID: assignment.publicID, schedule: nil), context(app))
+                .init(assignmentPublicID: assignment.publicID, schedule: nil), mcpContext(app))
             #expect(out.entrantCount == 3)
             #expect(out.status == "running")
             #expect(
@@ -125,7 +117,7 @@ import Vapor
             let assignment = try await fixture(on: app, kind: .roundRobin, students: 3)
             await #expect(throws: MCPToolError.self) {
                 _ = try await RunTournamentTool().execute(
-                    .init(assignmentPublicID: assignment.publicID, schedule: nil), context(app))
+                    .init(assignmentPublicID: assignment.publicID, schedule: nil), mcpContext(app))
             }
             #expect(try await APITournamentRun.query(on: app.db).count() == 0)
         }

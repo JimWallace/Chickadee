@@ -21,14 +21,6 @@ import Vapor
         #expect(description.contains("author_notebook_check"))
     }
 
-    private func context(_ app: Application) -> ToolContext {
-        ToolContext(
-            request: makeTestRequest(on: app),
-            subject: "tester",
-            grantedScopes: [.write]
-        )
-    }
-
     private let manifest = """
         {"schemaVersion":1,"testSuites":[\
         {"tier":"public","script":"test_a.sh","points":1}\
@@ -75,7 +67,7 @@ import Vapor
                     content: "#!/usr/bin/env python3\nprint('ok')\n",
                     tier: "secret", points: 3, displayName: "Marker",
                     dependsOn: ["test_a.sh"]),
-                context(app))
+                mcpContext(app))
             #expect(output.created)
             #expect(output.isTest)
             #expect(output.tier == "secret")
@@ -103,7 +95,7 @@ import Vapor
                     assignment, filename: "secrettest_slow.py",
                     content: "#!/usr/bin/env python3\nprint('ok')\n",
                     tier: "secret", timeLimitSeconds: 45),
-                context(app))
+                mcpContext(app))
             let reloaded = try #require(try await APITestSetup.find(assignment.testSetupID, on: app.db))
             let items = await buildSuitePayload(fromManifest: reloaded.manifest, zipPath: reloaded.zipPath).items
             let row = try #require(items.first { $0.script?.script == "secrettest_slow.py" })
@@ -121,7 +113,7 @@ import Vapor
                         assignment, filename: "secrettest_huge.py",
                         content: "#!/usr/bin/env python3\nprint('ok')\n",
                         tier: "secret", timeLimitSeconds: 9999),
-                    context(app))
+                    mcpContext(app))
             }
         }
     }
@@ -133,11 +125,11 @@ import Vapor
             // Create as secret.
             _ = try await AuthorScriptTool().execute(
                 input(assignment, filename: "t.py", content: "#!/usr/bin/env python3\nx=1\n", tier: "secret"),
-                context(app))
+                mcpContext(app))
             // Replace body without specifying tier — must stay secret.
             let output = try await AuthorScriptTool().execute(
                 input(assignment, filename: "t.py", content: "#!/usr/bin/env python3\nx=2\n"),
-                context(app))
+                mcpContext(app))
             #expect(!output.created)
             #expect(output.tier == "secret")
 
@@ -156,7 +148,7 @@ import Vapor
             let assignment = try await fixture(on: app)
             let output = try await AuthorScriptTool().execute(
                 input(assignment, filename: "helpers.py", content: "def gen():\n    return 1\n", tier: "support"),
-                context(app))
+                mcpContext(app))
             #expect(output.created)
             #expect(!output.isTest)
             #expect(output.tier == "support")
@@ -175,7 +167,7 @@ import Vapor
             let assignment = try await fixture(on: app)
             await #expect(throws: MCPToolError.self) {
                 _ = try await AuthorScriptTool().execute(
-                    input(assignment, filename: "../escape.py", content: "x=1\n"), context(app))
+                    input(assignment, filename: "../escape.py", content: "x=1\n"), mcpContext(app))
             }
         }
     }
@@ -186,7 +178,7 @@ import Vapor
             let assignment = try await fixture(on: app)
             await #expect(throws: MCPToolError.self) {
                 _ = try await AuthorScriptTool().execute(
-                    input(assignment, filename: "t.py", content: ""), context(app))
+                    input(assignment, filename: "t.py", content: ""), mcpContext(app))
             }
         }
     }
@@ -197,7 +189,7 @@ import Vapor
             let assignment = try await fixture(on: app)
             await #expect(throws: MCPToolError.self) {
                 _ = try await AuthorScriptTool().execute(
-                    input(assignment, filename: "t.py", content: "x=1\n", tier: "bogus"), context(app))
+                    input(assignment, filename: "t.py", content: "x=1\n", tier: "bogus"), mcpContext(app))
             }
         }
     }
@@ -217,7 +209,7 @@ import Vapor
                 on: app, testSetupID: "setup_as", courseID: courseID, title: "Lab")
             await #expect(throws: MCPToolError.self) {
                 _ = try await AuthorScriptTool().execute(
-                    input(assignment, filename: "t.py", content: "x=1\n", tier: "secret"), context(app))
+                    input(assignment, filename: "t.py", content: "x=1\n", tier: "secret"), mcpContext(app))
             }
         }
     }
@@ -233,7 +225,7 @@ import Vapor
                     assignment, filename: "publictest_masked.py",
                     content: "#!/usr/bin/env python3\nprint('ok')\n",
                     tier: "public", failureDetail: "actualOnly"),
-                context(app))
+                mcpContext(app))
             var reloaded = try #require(try await APITestSetup.find(assignment.testSetupID, on: app.db))
             var items = await buildSuitePayload(fromManifest: reloaded.manifest, zipPath: reloaded.zipPath).items
             #expect(items.first { $0.script?.script == "publictest_masked.py" }?.script?.failureDetail == "actualOnly")
@@ -243,7 +235,7 @@ import Vapor
                 input(
                     assignment, filename: "publictest_masked.py",
                     content: "#!/usr/bin/env python3\nprint('still ok')\n"),
-                context(app))
+                mcpContext(app))
             reloaded = try #require(try await APITestSetup.find(assignment.testSetupID, on: app.db))
             items = await buildSuitePayload(fromManifest: reloaded.manifest, zipPath: reloaded.zipPath).items
             #expect(items.first { $0.script?.script == "publictest_masked.py" }?.script?.failureDetail == "actualOnly")
@@ -253,7 +245,7 @@ import Vapor
                 input(
                     assignment, filename: "publictest_masked.py",
                     content: "#!/usr/bin/env python3\nprint('ok')\n", failureDetail: "full"),
-                context(app))
+                mcpContext(app))
             reloaded = try #require(try await APITestSetup.find(assignment.testSetupID, on: app.db))
             items = await buildSuitePayload(fromManifest: reloaded.manifest, zipPath: reloaded.zipPath).items
             #expect(items.first { $0.script?.script == "publictest_masked.py" }?.script?.failureDetail == nil)
@@ -269,7 +261,7 @@ import Vapor
                     input(
                         assignment, filename: "publictest_x.py",
                         content: "#!/usr/bin/env python3\nprint('ok')\n", failureDetail: "some"),
-                    context(app))
+                    mcpContext(app))
             }
         }
     }

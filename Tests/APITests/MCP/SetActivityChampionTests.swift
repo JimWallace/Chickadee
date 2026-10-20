@@ -14,14 +14,6 @@ import Vapor
 @testable import APIServer
 
 @Suite struct SetActivityChampionTests {
-    private func context(_ app: Application) -> ToolContext {
-        ToolContext(
-            request: makeTestRequest(on: app),
-            subject: "tester",
-            grantedScopes: [.read, .write]
-        )
-    }
-
     private func fixture(on app: Application, gradingMode: String) async throws -> APIAssignment {
         let course = try await makeTestCourse(on: app, code: "CS135", name: "Designing Programs")
         let courseID = try course.requireID()
@@ -45,7 +37,7 @@ import Vapor
             let assignment = try await fixture(on: app, gradingMode: "worker")
             let out = try await SetActivityTool().execute(
                 .init(assignmentPublicID: assignment.publicID, kind: "kingOfTheHill", leaderboardVisibility: nil),
-                context(app))
+                mcpContext(app))
             #expect(out.opponentSource == "champion")
             #expect(out.recordAchievementSeeded)
             let props = try await manifest(on: app)
@@ -57,7 +49,7 @@ import Vapor
             // record away and keeps the leaderboard record.
             _ = try await SetActivityTool().execute(
                 .init(assignmentPublicID: assignment.publicID, kind: "bestMetric", leaderboardVisibility: nil),
-                context(app))
+                mcpContext(app))
             let switched = try await manifest(on: app)
             #expect(!switched.achievements.contains { $0.id == ActivityAuthoring.seededChampionRecordID })
             #expect(switched.achievements.contains { $0.id == ActivityAuthoring.seededRecordID })
@@ -73,7 +65,7 @@ import Vapor
             await #expect(throws: MCPToolError.self) {
                 _ = try await SetActivityTool().execute(
                     .init(assignmentPublicID: assignment.publicID, kind: "kingOfTheHill", leaderboardVisibility: nil),
-                    context(app))
+                    mcpContext(app))
             }
             #expect(try await manifest(on: app).activity == nil)
         }

@@ -12,14 +12,6 @@ import Vapor
 @testable import APIServer
 
 @Suite struct SuiteSectionToolsTests {
-    private func context(_ app: Application) -> ToolContext {
-        ToolContext(
-            request: makeTestRequest(on: app),
-            subject: "tester",
-            grantedScopes: [.write]
-        )
-    }
-
     private let manifest = """
         {"schemaVersion":1,"language":"python","languageDeclared":true,"testSuites":[\
         {"tier":"public","script":"test_a.sh","points":1},\
@@ -63,7 +55,7 @@ import Vapor
         try await withApp(app) { app in
             let assignment = try await fixture(on: app)
             let out = try await CreateSuiteSectionTool().execute(
-                .init(assignmentPublicID: assignment.publicID, name: "Question 1"), context(app))
+                .init(assignmentPublicID: assignment.publicID, name: "Question 1"), mcpContext(app))
             #expect(!out.sectionID.isEmpty)
             #expect(out.name == "Question 1")
 
@@ -81,7 +73,7 @@ import Vapor
             let assignment = try await fixture(on: app)
             await #expect(throws: MCPToolError.self) {
                 _ = try await CreateSuiteSectionTool().execute(
-                    .init(assignmentPublicID: assignment.publicID, name: "   "), context(app))
+                    .init(assignmentPublicID: assignment.publicID, name: "   "), mcpContext(app))
             }
         }
     }
@@ -91,10 +83,10 @@ import Vapor
         try await withApp(app) { app in
             let assignment = try await fixture(on: app)
             let created = try await CreateSuiteSectionTool().execute(
-                .init(assignmentPublicID: assignment.publicID, name: "Old"), context(app))
+                .init(assignmentPublicID: assignment.publicID, name: "Old"), mcpContext(app))
             _ = try await RenameSuiteSectionTool().execute(
                 .init(assignmentPublicID: assignment.publicID, sectionID: created.sectionID, name: "New"),
-                context(app))
+                mcpContext(app))
             let secs = try await sections(of: assignment, on: app)
             #expect(secs.first { $0.id == created.sectionID }?.name == "New")
         }
@@ -107,7 +99,7 @@ import Vapor
             await #expect(throws: MCPToolError.self) {
                 _ = try await RenameSuiteSectionTool().execute(
                     .init(assignmentPublicID: assignment.publicID, sectionID: "no-such-id", name: "X"),
-                    context(app))
+                    mcpContext(app))
             }
         }
     }
@@ -117,14 +109,14 @@ import Vapor
         try await withApp(app) { app in
             let assignment = try await fixture(on: app)
             let created = try await CreateSuiteSectionTool().execute(
-                .init(assignmentPublicID: assignment.publicID, name: "Q1"), context(app))
+                .init(assignmentPublicID: assignment.publicID, name: "Q1"), mcpContext(app))
             _ = try await MoveSuiteItemTool().execute(
                 .init(
                     assignmentPublicID: assignment.publicID, script: "test_a.sh", familyID: nil,
-                    check: nil, sectionID: created.sectionID), context(app))
+                    check: nil, sectionID: created.sectionID), mcpContext(app))
 
             let out = try await DeleteSuiteSectionTool().execute(
-                .init(assignmentPublicID: assignment.publicID, sectionID: created.sectionID), context(app))
+                .init(assignmentPublicID: assignment.publicID, sectionID: created.sectionID), mcpContext(app))
             #expect(out.removed)
             #expect(out.ungroupedItemCount == 1)
 
@@ -141,7 +133,7 @@ import Vapor
         try await withApp(app) { app in
             let assignment = try await fixture(on: app)
             let out = try await DeleteSuiteSectionTool().execute(
-                .init(assignmentPublicID: assignment.publicID, sectionID: "no-such-id"), context(app))
+                .init(assignmentPublicID: assignment.publicID, sectionID: "no-such-id"), mcpContext(app))
             #expect(!out.removed)
             #expect(out.ungroupedItemCount == 0)
         }
@@ -154,11 +146,11 @@ import Vapor
         try await withApp(app) { app in
             let assignment = try await fixture(on: app)
             let created = try await CreateSuiteSectionTool().execute(
-                .init(assignmentPublicID: assignment.publicID, name: "Q1"), context(app))
+                .init(assignmentPublicID: assignment.publicID, name: "Q1"), mcpContext(app))
             let out = try await MoveSuiteItemTool().execute(
                 .init(
                     assignmentPublicID: assignment.publicID, script: "test_b.sh", familyID: nil,
-                    check: nil, sectionID: created.sectionID), context(app))
+                    check: nil, sectionID: created.sectionID), mcpContext(app))
             #expect(out.kind == "script")
             #expect(out.item == "test_b.sh")
             #expect(out.sectionID == created.sectionID)
@@ -176,7 +168,7 @@ import Vapor
                 _ = try await MoveSuiteItemTool().execute(
                     .init(
                         assignmentPublicID: assignment.publicID, script: "test_a.sh", familyID: nil,
-                        check: nil, sectionID: "no-such-id"), context(app))
+                        check: nil, sectionID: "no-such-id"), mcpContext(app))
             }
         }
     }
@@ -186,20 +178,20 @@ import Vapor
         try await withApp(app) { app in
             let assignment = try await fixture(on: app)
             let created = try await CreateSuiteSectionTool().execute(
-                .init(assignmentPublicID: assignment.publicID, name: "Q1"), context(app))
+                .init(assignmentPublicID: assignment.publicID, name: "Q1"), mcpContext(app))
             // Zero identifiers.
             await #expect(throws: MCPToolError.self) {
                 _ = try await MoveSuiteItemTool().execute(
                     .init(
                         assignmentPublicID: assignment.publicID, script: nil, familyID: nil,
-                        check: nil, sectionID: created.sectionID), context(app))
+                        check: nil, sectionID: created.sectionID), mcpContext(app))
             }
             // Two identifiers.
             await #expect(throws: MCPToolError.self) {
                 _ = try await MoveSuiteItemTool().execute(
                     .init(
                         assignmentPublicID: assignment.publicID, script: "test_a.sh", familyID: "x",
-                        check: nil, sectionID: created.sectionID), context(app))
+                        check: nil, sectionID: created.sectionID), mcpContext(app))
             }
         }
     }
@@ -209,16 +201,16 @@ import Vapor
         try await withApp(app) { app in
             let assignment = try await fixture(on: app)
             let created = try await CreateSuiteSectionTool().execute(
-                .init(assignmentPublicID: assignment.publicID, name: "Q1"), context(app))
+                .init(assignmentPublicID: assignment.publicID, name: "Q1"), mcpContext(app))
             _ = try await MoveSuiteItemTool().execute(
                 .init(
                     assignmentPublicID: assignment.publicID, script: "test_a.sh", familyID: nil,
-                    check: nil, sectionID: created.sectionID), context(app))
+                    check: nil, sectionID: created.sectionID), mcpContext(app))
             // Now ungroup it.
             let out = try await MoveSuiteItemTool().execute(
                 .init(
                     assignmentPublicID: assignment.publicID, script: "test_a.sh", familyID: nil,
-                    check: nil, sectionID: ""), context(app))
+                    check: nil, sectionID: ""), mcpContext(app))
             #expect(out.sectionID.isEmpty)
             let a = try #require(try await items(of: assignment, on: app).first { $0.script?.script == "test_a.sh" })
             #expect(a.sectionID == nil)
@@ -240,14 +232,14 @@ import Vapor
                 """
             let famInput = try JSONDecoder().decode(
                 CreatePatternFamilyTool.Input.self, from: Data(famJSON.utf8))
-            _ = try await CreatePatternFamilyTool().execute(famInput, context(app))
+            _ = try await CreatePatternFamilyTool().execute(famInput, mcpContext(app))
             let created = try await CreateSuiteSectionTool().execute(
-                .init(assignmentPublicID: assignment.publicID, name: "Q2"), context(app))
+                .init(assignmentPublicID: assignment.publicID, name: "Q2"), mcpContext(app))
 
             let out = try await MoveSuiteItemTool().execute(
                 .init(
                     assignmentPublicID: assignment.publicID, script: nil, familyID: "fam1",
-                    check: nil, sectionID: created.sectionID), context(app))
+                    check: nil, sectionID: created.sectionID), mcpContext(app))
             #expect(out.kind == "family")
             #expect(out.item == "fam1")
             #expect(out.sectionID == created.sectionID)
@@ -268,12 +260,12 @@ import Vapor
                 on: app, id: "sub_mv", setupID: assignment.testSetupID,
                 userID: try student.requireID(), status: "complete")
             let created = try await CreateSuiteSectionTool().execute(
-                .init(assignmentPublicID: assignment.publicID, name: "Q1"), context(app))
+                .init(assignmentPublicID: assignment.publicID, name: "Q1"), mcpContext(app))
 
             _ = try await MoveSuiteItemTool().execute(
                 .init(
                     assignmentPublicID: assignment.publicID, script: "test_a.sh", familyID: nil,
-                    check: nil, sectionID: created.sectionID), context(app))
+                    check: nil, sectionID: created.sectionID), mcpContext(app))
 
             let reloaded = try #require(try await APISubmission.find("sub_mv", on: app.db))
             #expect(reloaded.status == "complete")  // not flipped to pending

@@ -14,10 +14,6 @@ import Vapor
 @testable import APIServer
 
 @Suite struct MCPOwnerPoolRoutingTests {
-    private func context(_ app: Application) -> ToolContext {
-        ToolContext(request: makeTestRequest(on: app), subject: "tester", grantedScopes: [.read, .write])
-    }
-
     /// Course + enrolled instructor "tester". Returns the course id.
     private func course(on app: Application, code: String = "CS246") async throws -> UUID {
         let courseID = try await makeTestCourse(on: app, code: code, name: code).requireID()
@@ -43,7 +39,7 @@ import Vapor
                 on: app, id: "sub_student", setupID: "setup_role", userID: tester, kind: APISubmission.Kind.student)
             _ = try await makeTestSubmission(
                 on: app, id: "sub_valid", setupID: "setup_role", userID: tester, kind: APISubmission.Kind.validation)
-            let db = context(app).db
+            let db = mcpContext(app).db
 
             #expect(try await APICourse.query(on: db).count() == 1)
             await #expect(throws: MCPRoleDatabase.PermissionDenied.self) {
@@ -74,7 +70,7 @@ import Vapor
                     courseCode: "CS246", title: "New Lab",
                     notebook: try JSONDecoder().decode(JSONValue.self, from: Data(notebook.utf8)),
                     language: "java"),
-                context(app))
+                mcpContext(app))
 
             let created = try #require(try await assignmentByPublicID(output.publicID, on: app.db))
             let versions = try await APIAssignmentVersion.query(on: app.db)
@@ -109,7 +105,7 @@ import Vapor
             let output = try await CloneAssignmentTool().execute(
                 CloneAssignmentTool.Input(
                     sourceAssignmentPublicID: source.publicID, newTitle: "Lab 1 (Copy)", targetCourseCode: nil),
-                context(app))
+                mcpContext(app))
 
             let clone = try #require(try await assignmentByPublicID(output.publicID, on: app.db))
             let copiedID = try #require(clone.validationSubmissionID)
@@ -148,7 +144,7 @@ import Vapor
             let output = try await CloneAssignmentTool().execute(
                 CloneAssignmentTool.Input(
                     sourceAssignmentPublicID: source.publicID, newTitle: "Cohort lab copy", targetCourseCode: nil),
-                context(app))
+                mcpContext(app))
 
             let clone = try #require(try await assignmentByPublicID(output.publicID, on: app.db))
             let cloneSetup = try #require(try await APITestSetup.find(clone.testSetupID, on: app.db))
@@ -174,7 +170,7 @@ import Vapor
                 on: app, submissionID: "sub_starter", collectionJSON: try starterCollectionJSON())
 
             let suite = try await GetSuiteTool().execute(
-                GetSuiteTool.Input(assignmentPublicID: assignment.publicID), context(app))
+                GetSuiteTool.Input(assignmentPublicID: assignment.publicID), mcpContext(app))
 
             let starter = try #require(suite.starterRun)
             #expect(starter.outcomes.map(\.testName) == ["test_a"])
@@ -200,7 +196,7 @@ import Vapor
             }
 
             let suite = try await GetSuiteTool().execute(
-                GetSuiteTool.Input(assignmentPublicID: assignment.publicID), context(app))
+                GetSuiteTool.Input(assignmentPublicID: assignment.publicID), mcpContext(app))
 
             #expect(suite.starterRun == nil)
         }

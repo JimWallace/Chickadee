@@ -10,14 +10,6 @@ import Vapor
 @testable import APIServer
 
 @Suite struct UpdatePatternFamilyToolTests {
-    private func context(_ app: Application) -> ToolContext {
-        ToolContext(
-            request: makeTestRequest(on: app),
-            subject: "tester",
-            grantedScopes: [.write]
-        )
-    }
-
     private let emptyManifest =
         TestManifests.pythonDeclaredEmpty
 
@@ -62,7 +54,7 @@ import Vapor
                 UpdatePatternFamilyTool.Input(
                     assignmentPublicID: assignment.publicID, familyID: "bmi_category",
                     defaultTier: nil, defaultPoints: nil, enableCases: nil, disableCases: ["02"]),
-                context(app))
+                mcpContext(app))
             #expect(output.enabledCaseKeys == ["01", "03"])
 
             let family = try await reloadFamily(assignment, on: app.db)
@@ -79,7 +71,7 @@ import Vapor
                 UpdatePatternFamilyTool.Input(
                     assignmentPublicID: assignment.publicID, familyID: "bmi_category",
                     defaultTier: "secret", defaultPoints: 4, enableCases: nil, disableCases: nil),
-                context(app))
+                mcpContext(app))
             #expect(output.defaultTier == "secret")
             #expect(output.defaultPoints == 4)
 
@@ -106,7 +98,7 @@ import Vapor
                         UpdatePatternFamilyTool.CaseEdit(
                             key: "01", args: [.double(16.5)], expected: .string("severely underweight"))
                     ]),
-                context(app))
+                mcpContext(app))
             #expect(output.editedCaseKeys == ["01"])
 
             let family = try await reloadFamily(assignment, on: app.db)
@@ -128,7 +120,7 @@ import Vapor
                     assignmentPublicID: assignment.publicID, familyID: "bmi_category",
                     defaultHint: "watch the category boundaries",
                     cases: [UpdatePatternFamilyTool.CaseEdit(key: "01", hint: "18.5 rounds up to normal")]),
-                context(app))
+                mcpContext(app))
             var family = try await reloadFamily(assignment, on: app.db)
             #expect(family.defaults.hint == "watch the category boundaries")
             #expect(family.cases.first { $0.key == "01" }?.hint == "18.5 rounds up to normal")
@@ -145,7 +137,7 @@ import Vapor
                     assignmentPublicID: assignment.publicID, familyID: "bmi_category",
                     defaultHint: "",
                     cases: [UpdatePatternFamilyTool.CaseEdit(key: "01", hint: "")]),
-                context(app))
+                mcpContext(app))
             family = try await reloadFamily(assignment, on: app.db)
             #expect(family.defaults.hint == nil)
             #expect(family.cases.first { $0.key == "01" }?.hint == nil)
@@ -162,7 +154,7 @@ import Vapor
                 UpdatePatternFamilyTool.Input(
                     assignmentPublicID: assignment.publicID, familyID: "bmi_category",
                     defaultHint: "re-read the spec's edge cases"),
-                context(app))
+                mcpContext(app))
             let family = try await reloadFamily(assignment, on: app.db)
             #expect(family.defaults.hint == "re-read the spec's edge cases")
         }
@@ -178,7 +170,7 @@ import Vapor
                     assignmentPublicID: assignment.publicID, familyID: "bmi_category",
                     defaultTimeLimitSeconds: 30,
                     cases: [UpdatePatternFamilyTool.CaseEdit(key: "01", timeLimitSeconds: 120)]),
-                context(app))
+                mcpContext(app))
             var family = try await reloadFamily(assignment, on: app.db)
             #expect(family.defaults.timeLimitSeconds == 30)
             #expect(family.cases.first { $0.key == "01" }?.timeLimitSeconds == 120)
@@ -203,7 +195,7 @@ import Vapor
                     assignmentPublicID: assignment.publicID, familyID: "bmi_category",
                     defaultTimeLimitSeconds: 0,
                     cases: [UpdatePatternFamilyTool.CaseEdit(key: "01", timeLimitSeconds: 0)]),
-                context(app))
+                mcpContext(app))
             family = try await reloadFamily(assignment, on: app.db)
             #expect(family.defaults.timeLimitSeconds == nil)
             #expect(family.cases.first { $0.key == "01" }?.timeLimitSeconds == nil)
@@ -220,7 +212,7 @@ import Vapor
                     UpdatePatternFamilyTool.Input(
                         assignmentPublicID: assignment.publicID, familyID: "bmi_category",
                         defaultTimeLimitSeconds: 601),
-                    context(app))
+                    mcpContext(app))
             }
             // A per-case value below the floor is rejected too.
             await #expect(throws: MCPToolError.self) {
@@ -228,7 +220,7 @@ import Vapor
                     UpdatePatternFamilyTool.Input(
                         assignmentPublicID: assignment.publicID, familyID: "bmi_category",
                         cases: [UpdatePatternFamilyTool.CaseEdit(key: "01", timeLimitSeconds: -5)]),
-                    context(app))
+                    mcpContext(app))
             }
         }
     }
@@ -257,7 +249,7 @@ import Vapor
                 UpdatePatternFamilyTool.Input(
                     assignmentPublicID: assignment.publicID, familyID: "bmi_category",
                     cases: [UpdatePatternFamilyTool.CaseEdit(key: "01", expectedVarRef: "exp_val")]),
-                context(app))
+                mcpContext(app))
             var family = try await reloadFamily(assignment, on: app.db)
             #expect(family.cases.first { $0.key == "01" }?.expectedVarRef == "exp_val")
 
@@ -266,7 +258,7 @@ import Vapor
                 UpdatePatternFamilyTool.Input(
                     assignmentPublicID: assignment.publicID, familyID: "bmi_category",
                     cases: [UpdatePatternFamilyTool.CaseEdit(key: "01", expected: .string("normal"))]),
-                context(app))
+                mcpContext(app))
             family = try await reloadFamily(assignment, on: app.db)
             #expect(family.cases.first { $0.key == "01" }?.expectedVarRef == nil)
             #expect(family.cases.first { $0.key == "01" }?.expected == .string("normal"))
@@ -283,7 +275,7 @@ import Vapor
                     UpdatePatternFamilyTool.Input(
                         assignmentPublicID: assignment.publicID, familyID: "bmi_category",
                         cases: [UpdatePatternFamilyTool.CaseEdit(key: "01", expectedVarRef: "nope")]),
-                    context(app))
+                    mcpContext(app))
             }
         }
     }
@@ -302,7 +294,7 @@ import Vapor
                             UpdatePatternFamilyTool.CaseEdit(
                                 key: "01", args: [.double(1.0), .double(2.0)])
                         ]),
-                    context(app))
+                    mcpContext(app))
             }
         }
     }
@@ -316,7 +308,7 @@ import Vapor
                     UpdatePatternFamilyTool.Input(
                         assignmentPublicID: assignment.publicID, familyID: "bmi_category",
                         cases: [UpdatePatternFamilyTool.CaseEdit(key: "99", expected: .string("x"))]),
-                    context(app))
+                    mcpContext(app))
             }
         }
     }
@@ -333,7 +325,7 @@ import Vapor
                             UpdatePatternFamilyTool.CaseEdit(
                                 key: "01", args: [.double(16.0)], argVarRefs: [nil, nil])
                         ]),
-                    context(app))
+                    mcpContext(app))
             }
         }
     }
@@ -350,7 +342,7 @@ import Vapor
                             UpdatePatternFamilyTool.CaseEdit(key: "01", expected: .string("a")),
                             UpdatePatternFamilyTool.CaseEdit(key: "01", expected: .string("b")),
                         ]),
-                    context(app))
+                    mcpContext(app))
             }
         }
     }
@@ -364,7 +356,7 @@ import Vapor
                     UpdatePatternFamilyTool.Input(
                         assignmentPublicID: assignment.publicID, familyID: "nope",
                         defaultTier: nil, defaultPoints: 2, enableCases: nil, disableCases: nil),
-                    context(app))
+                    mcpContext(app))
             }
         }
     }
@@ -379,7 +371,7 @@ import Vapor
                         assignmentPublicID: assignment.publicID, familyID: "bmi_category",
                         defaultTier: nil, defaultPoints: nil, enableCases: nil,
                         disableCases: ["99"]),
-                    context(app))
+                    mcpContext(app))
             }
         }
     }
@@ -394,7 +386,7 @@ import Vapor
                         assignmentPublicID: assignment.publicID, familyID: "bmi_category",
                         defaultTier: "bogus", defaultPoints: nil, enableCases: nil,
                         disableCases: nil),
-                    context(app))
+                    mcpContext(app))
             }
         }
     }
@@ -408,7 +400,7 @@ import Vapor
                     UpdatePatternFamilyTool.Input(
                         assignmentPublicID: assignment.publicID, familyID: "bmi_category",
                         defaultTier: nil, defaultPoints: nil, enableCases: nil, disableCases: nil),
-                    context(app))
+                    mcpContext(app))
             }
         }
     }
@@ -423,7 +415,7 @@ import Vapor
                         assignmentPublicID: assignment.publicID, familyID: "bmi_category",
                         defaultTier: nil, defaultPoints: nil, enableCases: ["01"],
                         disableCases: ["01"]),
-                    context(app))
+                    mcpContext(app))
             }
         }
     }
@@ -448,7 +440,7 @@ import Vapor
                     UpdatePatternFamilyTool.Input(
                         assignmentPublicID: assignment.publicID, familyID: "bmi_category",
                         defaultTier: nil, defaultPoints: 2, enableCases: nil, disableCases: nil),
-                    context(app))
+                    mcpContext(app))
             }
         }
     }
@@ -468,7 +460,7 @@ import Vapor
                             key: "05", label: "BMI 17.5 is underweight",
                             args: [.double(17.5)], expected: .string("underweight")),
                     ]),
-                context(app))
+                mcpContext(app))
             #expect(output.addedCaseKeys == ["04", "05"])
             #expect(output.enabledCaseKeys == ["01", "02", "03", "04", "05"])
 
@@ -497,7 +489,7 @@ import Vapor
                             CreatePatternFamilyTool.CaseInput(
                                 key: "01", args: [.double(19.0)], expected: .string("normal"))
                         ]),
-                    context(app))
+                    mcpContext(app))
             }
         }
     }
@@ -517,7 +509,7 @@ import Vapor
                                 key: "99", args: [.double(1.0), .double(2.0)],
                                 expected: .string("x"))
                         ]),
-                    context(app))
+                    mcpContext(app))
             }
         }
     }
@@ -547,7 +539,7 @@ import Vapor
                 UpdatePatternFamilyTool.Input(
                     assignmentPublicID: assignment.publicID, familyID: "bmi_category",
                     dependsOn: ["family:bmi_kg_m2"]),
-                context(app))
+                mcpContext(app))
             var family = try await reloadFamily(assignment, on: app.db)
             #expect(family.dependsOn == ["family:bmi_kg_m2"])
 
@@ -556,7 +548,7 @@ import Vapor
                 UpdatePatternFamilyTool.Input(
                     assignmentPublicID: assignment.publicID, familyID: "bmi_category",
                     dependsOn: []),
-                context(app))
+                mcpContext(app))
             family = try await reloadFamily(assignment, on: app.db)
             #expect(family.dependsOn.isEmpty)
         }
@@ -571,7 +563,7 @@ import Vapor
                     assignmentPublicID: assignment.publicID, familyID: "bmi_category",
                     defaultFailureDetail: "actualOnly",
                     cases: [UpdatePatternFamilyTool.CaseEdit(key: "01", failureDetail: "verdictOnly")]),
-                context(app))
+                mcpContext(app))
             var family = try await reloadFamily(assignment, on: app.db)
             #expect(family.defaults.failureDetail == .actualOnly)
             #expect(family.cases.first { $0.key == "01" }?.failureDetail == .verdictOnly)
@@ -594,7 +586,7 @@ import Vapor
                     assignmentPublicID: assignment.publicID, familyID: "bmi_category",
                     defaultFailureDetail: "",
                     cases: [UpdatePatternFamilyTool.CaseEdit(key: "01", failureDetail: "")]),
-                context(app))
+                mcpContext(app))
             family = try await reloadFamily(assignment, on: app.db)
             #expect(family.defaults.failureDetail == nil)
             #expect(family.cases.first { $0.key == "01" }?.failureDetail == nil)
@@ -610,7 +602,7 @@ import Vapor
                     UpdatePatternFamilyTool.Input(
                         assignmentPublicID: assignment.publicID, familyID: "bmi_category",
                         defaultFailureDetail: "everything"),
-                    context(app))
+                    mcpContext(app))
             }
         }
     }
@@ -634,13 +626,13 @@ import Vapor
             _ = try await UpdatePatternFamilyTool().execute(
                 UpdatePatternFamilyTool.Input(
                     assignmentPublicID: assignment.publicID, familyID: "io", ioComparison: "regex"),
-                context(app))
+                mcpContext(app))
             #expect(try await reload().ioComparison == .regex)
 
             _ = try await UpdatePatternFamilyTool().execute(
                 UpdatePatternFamilyTool.Input(
                     assignmentPublicID: assignment.publicID, familyID: "io", defaultPoints: 3),
-                context(app))
+                mcpContext(app))
             let after = try await reload()
             #expect(after.ioComparison == .regex)
             #expect(after.defaults.points == 3)

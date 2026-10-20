@@ -10,14 +10,6 @@ import Vapor
 @testable import APIServer
 
 @Suite struct SetGradingModeToolTests {
-    private func context(_ app: Application) -> ToolContext {
-        ToolContext(
-            request: makeTestRequest(on: app),
-            subject: "tester",
-            grantedScopes: [.write]
-        )
-    }
-
     private let browserManifest =
         TestManifests.browserEmpty
 
@@ -42,7 +34,7 @@ import Vapor
             #expect(assignment.visibility == .open)
 
             let out = try await SetGradingModeTool().execute(
-                .init(assignmentPublicID: assignment.publicID, gradingMode: "worker"), context(app))
+                .init(assignmentPublicID: assignment.publicID, gradingMode: "worker"), mcpContext(app))
             #expect(out.gradingMode == "worker")
 
             let setup = try #require(try await APITestSetup.find(assignment.testSetupID, on: app.db))
@@ -59,7 +51,7 @@ import Vapor
             let assignment = try await fixture(on: app, manifest: browserManifest)
             await #expect(throws: MCPToolError.self) {
                 _ = try await SetGradingModeTool().execute(
-                    .init(assignmentPublicID: assignment.publicID, gradingMode: "nonsense"), context(app))
+                    .init(assignmentPublicID: assignment.publicID, gradingMode: "nonsense"), mcpContext(app))
             }
         }
     }
@@ -70,7 +62,7 @@ import Vapor
             let assignment = try await fixture(on: app, manifest: browserManifest, enroll: false)
             await #expect(throws: MCPToolError.self) {
                 _ = try await SetGradingModeTool().execute(
-                    .init(assignmentPublicID: assignment.publicID, gradingMode: "worker"), context(app))
+                    .init(assignmentPublicID: assignment.publicID, gradingMode: "worker"), mcpContext(app))
             }
         }
     }
@@ -89,7 +81,7 @@ import Vapor
             let assignment = try await fixture(on: app, manifest: workerGraderOnlyManifest)
             await #expect(throws: MCPToolError.self) {
                 _ = try await SetGradingModeTool().execute(
-                    .init(assignmentPublicID: assignment.publicID, gradingMode: "browser"), context(app))
+                    .init(assignmentPublicID: assignment.publicID, gradingMode: "browser"), mcpContext(app))
             }
             let setup = try #require(try await APITestSetup.find(assignment.testSetupID, on: app.db))
             #expect(setup.decodedManifest()?.gradingMode.rawValue == "worker")
@@ -105,7 +97,7 @@ import Vapor
                 #"{"schemaVersion":1,"gradingMode":"worker","graderOnlyFiles":[],"testSuites":[],"timeLimitSeconds":10}"#
             let assignment = try await fixture(on: app, manifest: workerManifest)
             let out = try await SetGradingModeTool().execute(
-                .init(assignmentPublicID: assignment.publicID, gradingMode: "browser"), context(app))
+                .init(assignmentPublicID: assignment.publicID, gradingMode: "browser"), mcpContext(app))
             #expect(out.gradingMode == "browser")
             let setup = try #require(try await APITestSetup.find(assignment.testSetupID, on: app.db))
             #expect(setup.decodedManifest()?.gradingMode.rawValue == "browser")
@@ -124,13 +116,13 @@ import Vapor
             let assignment = try await fixture(on: app, manifest: opponentManifest)
             await #expect(throws: MCPToolError.self) {
                 _ = try await SetGradingModeTool().execute(
-                    .init(assignmentPublicID: assignment.publicID, gradingMode: "browser"), context(app))
+                    .init(assignmentPublicID: assignment.publicID, gradingMode: "browser"), mcpContext(app))
             }
             let setup = try #require(try await APITestSetup.find("setup_gm", on: app.db))
             #expect(currentManifestGradingMode(setup.manifest) == "worker")
             do {
                 _ = try await SetGradingModeTool().execute(
-                    .init(assignmentPublicID: assignment.publicID, gradingMode: "browser"), context(app))
+                    .init(assignmentPublicID: assignment.publicID, gradingMode: "browser"), mcpContext(app))
             } catch let error as MCPToolError {
                 #expect(String(describing: error).contains(activityOpponentGradingConflictMessage))
             }
@@ -146,7 +138,7 @@ import Vapor
                 #"{"schemaVersion":1,"gradingMode":"worker","testSuites":[],"timeLimitSeconds":10,"activity":{"kind":"beatTheInstructor","opponentFile":"bot.py"}}"#
             let assignment = try await fixture(on: app, manifest: botManifest)
             _ = try await SetGradingModeTool().execute(
-                .init(assignmentPublicID: assignment.publicID, gradingMode: "browser"), context(app))
+                .init(assignmentPublicID: assignment.publicID, gradingMode: "browser"), mcpContext(app))
             let setup = try #require(try await APITestSetup.find("setup_gm", on: app.db))
             #expect(currentManifestGradingMode(setup.manifest) == "browser")
         }
@@ -159,7 +151,7 @@ import Vapor
                 #"{"schemaVersion":1,"gradingMode":"worker","testSuites":[],"timeLimitSeconds":10,"activity":{"kind":"bestMetric"}}"#
             let assignment = try await fixture(on: app, manifest: metricManifest)
             let out = try await SetGradingModeTool().execute(
-                .init(assignmentPublicID: assignment.publicID, gradingMode: "browser"), context(app))
+                .init(assignmentPublicID: assignment.publicID, gradingMode: "browser"), mcpContext(app))
             #expect(out.gradingMode == "browser")
         }
     }

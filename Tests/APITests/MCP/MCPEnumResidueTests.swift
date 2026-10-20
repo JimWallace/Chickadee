@@ -12,12 +12,6 @@ import Vapor
 @testable import APIServer
 
 @Suite struct MCPEnumResidueTests {
-    private func context(_ app: Application) -> ToolContext {
-        ToolContext(
-            request: makeTestRequest(on: app),
-            subject: "tester", grantedScopes: [.read, .write])
-    }
-
     private func fixture(on app: Application) async throws {
         let course = try await makeTestCourse(on: app, code: "CS246", name: "OOP")
         let tester = try await makeTestUser(on: app, username: "tester", role: "instructor")
@@ -29,7 +23,7 @@ import Vapor
             .init(
                 courseCode: "CS246", title: "Item", kind: kind, links: nil, description: nil,
                 updatedLabel: nil, courseSectionID: nil, isPublished: nil),
-            context(app))
+            mcpContext(app))
     }
 
     @Test func createRefusesAnUnknownKindAndNamesTheLegalOnes() async throws {
@@ -71,7 +65,7 @@ import Vapor
             await #expect(throws: MCPToolError.self) {
                 _ = try await ReorderSectionItemsTool().execute(
                     .init(courseCode: "CS246", orderedItems: [.init(type: "video", id: "x")]),
-                    context(app))
+                    mcpContext(app))
             }
         }
     }

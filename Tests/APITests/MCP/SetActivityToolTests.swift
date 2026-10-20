@@ -15,14 +15,6 @@ import Vapor
 @testable import APIServer
 
 @Suite struct SetActivityToolTests {
-    private func context(_ app: Application) -> ToolContext {
-        ToolContext(
-            request: makeTestRequest(on: app),
-            subject: "tester",
-            grantedScopes: [.read, .write]
-        )
-    }
-
     private let workerManifest =
         TestManifests.workerEmpty
 
@@ -48,7 +40,7 @@ import Vapor
             let (assignment, _) = try await fixture(on: app)
             let out = try await SetActivityTool().execute(
                 .init(assignmentPublicID: assignment.publicID, kind: "bestMetric", leaderboardVisibility: nil),
-                context(app))
+                mcpContext(app))
             #expect(out.kind == "bestMetric")
             #expect(out.leaderboardVisibility == "hidden")
             #expect(out.leaderboardPath == "/testsetups/setup_act/leaderboard")
@@ -67,7 +59,7 @@ import Vapor
 
             // get_assignment reports the block.
             let detail = try await GetAssignmentTool().execute(
-                GetAssignmentTool.Input(assignmentPublicID: assignment.publicID), context(app))
+                GetAssignmentTool.Input(assignmentPublicID: assignment.publicID), mcpContext(app))
             #expect(detail.activity?.kind == "bestMetric")
             #expect(detail.activity?.leaderboardVisibility == "hidden")
             #expect(detail.activity?.leaderboardPath == out.leaderboardPath)
@@ -80,12 +72,12 @@ import Vapor
             let (assignment, _) = try await fixture(on: app)
             _ = try await SetActivityTool().execute(
                 .init(assignmentPublicID: assignment.publicID, kind: "beatTheInstructor", leaderboardVisibility: nil),
-                context(app))
+                mcpContext(app))
             let out = try await SetActivityTool().execute(
                 .init(
                     assignmentPublicID: assignment.publicID, kind: "beatTheInstructor", leaderboardVisibility: "visible"
                 ),
-                context(app))
+                mcpContext(app))
             #expect(out.leaderboardVisibility == "visible")
             let props = try await manifest(on: app)
             #expect(props.activity?.leaderboardVisibleToStudents == true)
@@ -99,7 +91,7 @@ import Vapor
             let (assignment, courseID) = try await fixture(on: app)
             _ = try await SetActivityTool().execute(
                 .init(assignmentPublicID: assignment.publicID, kind: "bestMetric", leaderboardVisibility: nil),
-                context(app))
+                mcpContext(app))
             let student = try await makeTestStudent(on: app, username: "act_student")
             try await makeTestEnrollment(on: app, userID: student.requireID(), courseID: courseID)
             try await makeTestSubmission(
@@ -108,7 +100,7 @@ import Vapor
             // Visibility still moves.
             let shown = try await SetActivityTool().execute(
                 .init(assignmentPublicID: assignment.publicID, kind: "bestMetric", leaderboardVisibility: "visible"),
-                context(app))
+                mcpContext(app))
             #expect(shown.leaderboardVisibility == "visible")
 
             // A different kind, and clearing, are both refused and leave the
@@ -117,7 +109,7 @@ import Vapor
                 await #expect(throws: MCPToolError.self) {
                     _ = try await SetActivityTool().execute(
                         .init(assignmentPublicID: assignment.publicID, kind: locked, leaderboardVisibility: nil),
-                        context(app))
+                        mcpContext(app))
                 }
             }
             let props = try await manifest(on: app)
@@ -131,10 +123,10 @@ import Vapor
             let (assignment, _) = try await fixture(on: app)
             _ = try await SetActivityTool().execute(
                 .init(assignmentPublicID: assignment.publicID, kind: "bestMetric", leaderboardVisibility: nil),
-                context(app))
+                mcpContext(app))
             let out = try await SetActivityTool().execute(
                 .init(assignmentPublicID: assignment.publicID, kind: "none", leaderboardVisibility: nil),
-                context(app))
+                mcpContext(app))
             #expect(out.kind == "none")
             #expect(out.leaderboardVisibility == nil)
             #expect(out.leaderboardPath == nil)
@@ -155,12 +147,12 @@ import Vapor
             await #expect(throws: MCPToolError.self) {
                 _ = try await SetActivityTool().execute(
                     .init(assignmentPublicID: assignment.publicID, kind: "tournament", leaderboardVisibility: nil),
-                    context(app))
+                    mcpContext(app))
             }
             await #expect(throws: MCPToolError.self) {
                 _ = try await SetActivityTool().execute(
                     .init(assignmentPublicID: assignment.publicID, kind: "bestMetric", leaderboardVisibility: "public"),
-                    context(app))
+                    mcpContext(app))
             }
             #expect(try await manifest(on: app).activity == nil)
         }
@@ -175,18 +167,18 @@ import Vapor
             let tool = SetActivityTool()
             _ = try await tool.execute(
                 .init(assignmentPublicID: assignment.publicID, kind: "bestMetric", leaderboardVisibility: "visible"),
-                context(app))
+                mcpContext(app))
             let moved = try await tool.execute(
                 .init(
                     assignmentPublicID: assignment.publicID, kind: "bestMetric", leaderboardVisibility: nil,
                     closesAt: "2026-12-01T16:00:00Z"),
-                context(app))
+                mcpContext(app))
             #expect(moved.leaderboardVisibility == "visible")
             #expect(moved.closesAt == "2026-12-01T16:00:00Z")
 
             let switched = try await tool.execute(
                 .init(assignmentPublicID: assignment.publicID, kind: "beatTheInstructor", leaderboardVisibility: nil),
-                context(app))
+                mcpContext(app))
             #expect(switched.leaderboardVisibility == "hidden")
         }
     }
@@ -203,7 +195,7 @@ import Vapor
     @Test func serverInfoListsEveryKind() async throws {
         let app = try await makeTestApp()
         try await withApp(app) { app in
-            let out = try await GetServerInfoTool().execute(GetServerInfoTool.Input(), context(app))
+            let out = try await GetServerInfoTool().execute(GetServerInfoTool.Input(), mcpContext(app))
             #expect(out.activityKinds.map(\.name) == ActivityKind.allCases.map(\.rawValue))
             for kind in out.activityKinds {
                 #expect(!kind.summary.isEmpty)
@@ -225,7 +217,7 @@ import Vapor
             for kind in ["beatTheInstructor", SetActivityTool.noActivityChoice] {
                 let out = try await SetActivityTool().execute(
                     .init(assignmentPublicID: assignment.publicID, kind: kind, leaderboardVisibility: nil),
-                    context(app))
+                    mcpContext(app))
                 let encoded = try JSONValue(encoding: out)
                 guard case .object(let fields) = encoded else {
                     Issue.record("\(kind): output did not encode to an object")

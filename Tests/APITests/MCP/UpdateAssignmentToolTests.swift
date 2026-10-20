@@ -9,14 +9,6 @@ import Vapor
 @testable import APIServer
 
 @Suite struct UpdateAssignmentToolTests {
-    private func context(_ app: Application) -> ToolContext {
-        ToolContext(
-            request: makeTestRequest(on: app),
-            subject: "tester",
-            grantedScopes: [.write]
-        )
-    }
-
     private func enrolledAssignment(
         on app: Application, dueAt: Date? = nil, validationStatus: String? = nil, isOpen: Bool = false
     ) async throws -> APIAssignment {
@@ -41,7 +33,7 @@ import Vapor
             let assignment = try await enrolledAssignment(on: app, isOpen: false)
             let output = try await UpdateAssignmentTool().execute(
                 UpdateAssignmentTool.Input(assignmentPublicID: assignment.publicID, isOpen: true),
-                context(app))
+                mcpContext(app))
             #expect(output.isOpen)
             let reloaded = try await assignmentByPublicID(assignment.publicID, on: app.db)
             #expect(reloaded?.isOpen == true)
@@ -55,7 +47,7 @@ import Vapor
                 on: app, dueAt: Date().addingTimeInterval(-3600), isOpen: false)
             _ = try await UpdateAssignmentTool().execute(
                 UpdateAssignmentTool.Input(assignmentPublicID: assignment.publicID, isOpen: true),
-                context(app))
+                mcpContext(app))
             let reloaded = try await assignmentByPublicID(assignment.publicID, on: app.db)
             #expect(reloaded?.deadlineOverrideActive == true)
         }
@@ -67,7 +59,7 @@ import Vapor
             let assignment = try await enrolledAssignment(on: app, isOpen: true)
             let output = try await UpdateAssignmentTool().execute(
                 UpdateAssignmentTool.Input(assignmentPublicID: assignment.publicID, isOpen: false),
-                context(app))
+                mcpContext(app))
             #expect(output.isOpen == false)
             let reloaded = try await assignmentByPublicID(assignment.publicID, on: app.db)
             #expect(reloaded?.isOpen == false)
@@ -83,7 +75,7 @@ import Vapor
             let output = try await UpdateAssignmentTool().execute(
                 UpdateAssignmentTool.Input(
                     assignmentPublicID: assignment.publicID, visibility: "preview"),
-                context(app))
+                mcpContext(app))
             #expect(output.visibility == "preview")
             #expect(output.isOpen == false)
             let reloaded = try await assignmentByPublicID(assignment.publicID, on: app.db)
@@ -100,7 +92,7 @@ import Vapor
             let output = try await UpdateAssignmentTool().execute(
                 UpdateAssignmentTool.Input(
                     assignmentPublicID: assignment.publicID, visibility: "preview"),
-                context(app))
+                mcpContext(app))
             #expect(output.visibility == "preview")
             let reloaded = try await assignmentByPublicID(assignment.publicID, on: app.db)
             #expect(reloaded?.visibility == .preview)
@@ -114,7 +106,7 @@ import Vapor
             await #expect(throws: MCPToolError.self) {
                 _ = try await UpdateAssignmentTool().execute(
                     UpdateAssignmentTool.Input(assignmentPublicID: assignment.publicID, isOpen: true),
-                    context(app))
+                    mcpContext(app))
             }
             let reloaded = try await assignmentByPublicID(assignment.publicID, on: app.db)
             #expect(reloaded?.isOpen == false)
@@ -127,7 +119,7 @@ import Vapor
             let assignment = try await enrolledAssignment(on: app)
             let output = try await UpdateAssignmentTool().execute(
                 UpdateAssignmentTool.Input(assignmentPublicID: assignment.publicID, title: "  Renamed  "),
-                context(app))
+                mcpContext(app))
             #expect(output.title == "Renamed")
             let reloaded = try await assignmentByPublicID(assignment.publicID, on: app.db)
             #expect(reloaded?.title == "Renamed")
@@ -141,7 +133,7 @@ import Vapor
             _ = try await UpdateAssignmentTool().execute(
                 UpdateAssignmentTool.Input(
                     assignmentPublicID: assignment.publicID, dueAt: "2030-04-22T23:59:00Z"),
-                context(app))
+                mcpContext(app))
             let reloaded = try await assignmentByPublicID(assignment.publicID, on: app.db)
             #expect(reloaded?.dueAt != nil)
             #expect(reloaded?.deadlineOverrideActive == false)
@@ -154,7 +146,7 @@ import Vapor
             let assignment = try await enrolledAssignment(on: app, dueAt: Date().addingTimeInterval(3600))
             _ = try await UpdateAssignmentTool().execute(
                 UpdateAssignmentTool.Input(assignmentPublicID: assignment.publicID, dueAt: ""),
-                context(app))
+                mcpContext(app))
             let reloaded = try await assignmentByPublicID(assignment.publicID, on: app.db)
             #expect(reloaded?.dueAt == nil)
         }
@@ -167,14 +159,14 @@ import Vapor
             let setOutput = try await UpdateAssignmentTool().execute(
                 UpdateAssignmentTool.Input(
                     assignmentPublicID: assignment.publicID, startsAt: "2030-04-15T09:00:00Z"),
-                context(app))
+                mcpContext(app))
             #expect(setOutput.startsAt != nil)
             let afterSet = try await assignmentByPublicID(assignment.publicID, on: app.db)
             #expect(afterSet?.startsAt != nil)
 
             _ = try await UpdateAssignmentTool().execute(
                 UpdateAssignmentTool.Input(assignmentPublicID: assignment.publicID, startsAt: ""),
-                context(app))
+                mcpContext(app))
             let afterClear = try await assignmentByPublicID(assignment.publicID, on: app.db)
             #expect(afterClear?.startsAt == nil)
         }
@@ -190,7 +182,7 @@ import Vapor
                 UpdateAssignmentTool.Input(
                     assignmentPublicID: assignment.publicID, startsAt: "2030-04-15T09:00:00Z",
                     isOpen: true),
-                context(app))
+                mcpContext(app))
             let reloaded = try await assignmentByPublicID(assignment.publicID, on: app.db)
             #expect(reloaded?.isOpen == true)
             #expect(reloaded?.startsAt == nil)
@@ -204,7 +196,7 @@ import Vapor
             await #expect(throws: MCPToolError.self) {
                 _ = try await UpdateAssignmentTool().execute(
                     UpdateAssignmentTool.Input(assignmentPublicID: assignment.publicID, startsAt: "soon"),
-                    context(app))
+                    mcpContext(app))
             }
         }
     }
@@ -217,7 +209,7 @@ import Vapor
                 UpdateAssignmentTool.Input(
                     assignmentPublicID: assignment.publicID, title: "Combined",
                     dueAt: "2030-01-01T00:00:00Z", isOpen: true),
-                context(app))
+                mcpContext(app))
             #expect(output.title == "Combined")
             #expect(output.isOpen)
             #expect(output.dueAt != nil)
@@ -231,7 +223,7 @@ import Vapor
             await #expect(throws: MCPToolError.self) {
                 _ = try await UpdateAssignmentTool().execute(
                     UpdateAssignmentTool.Input(assignmentPublicID: assignment.publicID, title: "   "),
-                    context(app))
+                    mcpContext(app))
             }
         }
     }
@@ -243,7 +235,7 @@ import Vapor
             await #expect(throws: MCPToolError.self) {
                 _ = try await UpdateAssignmentTool().execute(
                     UpdateAssignmentTool.Input(assignmentPublicID: assignment.publicID, dueAt: "next tuesday"),
-                    context(app))
+                    mcpContext(app))
             }
         }
     }
@@ -254,7 +246,7 @@ import Vapor
             let assignment = try await enrolledAssignment(on: app)
             await #expect(throws: MCPToolError.self) {
                 _ = try await UpdateAssignmentTool().execute(
-                    UpdateAssignmentTool.Input(assignmentPublicID: assignment.publicID), context(app))
+                    UpdateAssignmentTool.Input(assignmentPublicID: assignment.publicID), mcpContext(app))
             }
         }
     }
@@ -267,7 +259,7 @@ import Vapor
             let enabled = try await UpdateAssignmentTool().execute(
                 UpdateAssignmentTool.Input(
                     assignmentPublicID: assignment.publicID, secretRevealEnabled: true),
-                context(app))
+                mcpContext(app))
             #expect(enabled.secretRevealEnabled)
             var reloaded = try await assignmentByPublicID(assignment.publicID, on: app.db)
             #expect(reloaded?.secretRevealEnabled == true)
@@ -275,7 +267,7 @@ import Vapor
             let disabled = try await UpdateAssignmentTool().execute(
                 UpdateAssignmentTool.Input(
                     assignmentPublicID: assignment.publicID, secretRevealEnabled: false),
-                context(app))
+                mcpContext(app))
             #expect(disabled.secretRevealEnabled == false)
             reloaded = try await assignmentByPublicID(assignment.publicID, on: app.db)
             #expect(reloaded?.secretRevealEnabled == false)
@@ -295,7 +287,7 @@ import Vapor
             await #expect(throws: MCPToolError.self) {
                 _ = try await UpdateAssignmentTool().execute(
                     UpdateAssignmentTool.Input(assignmentPublicID: assignment.publicID, isOpen: true),
-                    context(app))
+                    mcpContext(app))
             }
             let reloaded = try await assignmentByPublicID(assignment.publicID, on: app.db)
             #expect(reloaded?.isOpen == false)
@@ -316,7 +308,7 @@ import Vapor
                     UpdateAssignmentTool.Input(
                         assignmentPublicID: assignment.publicID,
                         solutionVisibility: "afterDue"),
-                    context(app))
+                    mcpContext(app))
             }
             let reloaded = try await assignmentByPublicID(assignment.publicID, on: app.db)
             #expect(reloaded?.solutionVisibility == .hidden)
@@ -330,7 +322,7 @@ import Vapor
             let enabled = try await UpdateAssignmentTool().execute(
                 UpdateAssignmentTool.Input(
                     assignmentPublicID: assignment.publicID, solutionVisibility: "afterDue"),
-                context(app))
+                mcpContext(app))
             #expect(enabled.solutionVisibility == "afterDue")
             var reloaded = try await assignmentByPublicID(assignment.publicID, on: app.db)
             #expect(reloaded?.solutionVisibility == .afterDue)
@@ -339,7 +331,7 @@ import Vapor
             let disabled = try await UpdateAssignmentTool().execute(
                 UpdateAssignmentTool.Input(
                     assignmentPublicID: assignment.publicID, solutionVisibility: "hidden"),
-                context(app))
+                mcpContext(app))
             #expect(disabled.solutionVisibility == "hidden")
             reloaded = try await assignmentByPublicID(assignment.publicID, on: app.db)
             #expect(reloaded?.solutionVisibility == .hidden)
@@ -355,7 +347,7 @@ import Vapor
                     UpdateAssignmentTool.Input(
                         assignmentPublicID: assignment.publicID,
                         solutionVisibility: "sometimes"),
-                    context(app))
+                    mcpContext(app))
             }
         }
     }
@@ -369,7 +361,7 @@ import Vapor
             let set = try await UpdateAssignmentTool().execute(
                 UpdateAssignmentTool.Input(
                     assignmentPublicID: assignment.publicID, passingThresholdPercent: 70),
-                context(app))
+                mcpContext(app))
             #expect(set.passingThresholdPercent == 70)
             var reloaded = try await assignmentByPublicID(assignment.publicID, on: app.db)
             #expect(reloaded?.passingThresholdPercent == 70)
@@ -378,7 +370,7 @@ import Vapor
             let cleared = try await UpdateAssignmentTool().execute(
                 UpdateAssignmentTool.Input(
                     assignmentPublicID: assignment.publicID, passingThresholdPercent: 0),
-                context(app))
+                mcpContext(app))
             #expect(cleared.passingThresholdPercent == nil)
             reloaded = try await assignmentByPublicID(assignment.publicID, on: app.db)
             #expect(reloaded?.passingThresholdPercent == nil)
@@ -394,7 +386,7 @@ import Vapor
                     _ = try await UpdateAssignmentTool().execute(
                         UpdateAssignmentTool.Input(
                             assignmentPublicID: assignment.publicID, passingThresholdPercent: bad),
-                        context(app))
+                        mcpContext(app))
                 }
             }
             let reloaded = try await assignmentByPublicID(assignment.publicID, on: app.db)

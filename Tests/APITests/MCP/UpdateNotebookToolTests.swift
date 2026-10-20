@@ -10,14 +10,6 @@ import Vapor
 @testable import APIServer
 
 @Suite struct UpdateNotebookToolTests {
-    private func context(_ app: Application) -> ToolContext {
-        ToolContext(
-            request: makeTestRequest(on: app),
-            subject: "tester",
-            grantedScopes: [.write]
-        )
-    }
-
     /// Decodes a JSON string into a `JSONValue` for use as tool input.
     private func json(_ raw: String) throws -> JSONValue {
         try JSONDecoder().decode(JSONValue.self, from: Data(raw.utf8))
@@ -52,7 +44,7 @@ import Vapor
             let output = try await UpdateNotebookTool().execute(
                 UpdateNotebookTool.Input(
                     assignmentPublicID: assignment.publicID, notebook: try json(twoCellNotebook)),
-                context(app))
+                mcpContext(app))
             #expect(output.cellCount == 2)
 
             // Read the persisted notebook back through the canonical loader.
@@ -78,7 +70,7 @@ import Vapor
             _ = try await UpdateNotebookTool().execute(
                 UpdateNotebookTool.Input(
                     assignmentPublicID: assignment.publicID, notebook: try json(twoCellNotebook)),
-                context(app))
+                mcpContext(app))
 
             let after = try #require(try await APITestSetup.find("setup_nb", on: app.db))
             let path = try #require(after.notebookPath)
@@ -124,7 +116,7 @@ import Vapor
             let output = try await UpdateNotebookTool().execute(
                 UpdateNotebookTool.Input(
                     assignmentPublicID: assignment.publicID, notebook: try json(twoCellNotebook)),
-                context(app))
+                mcpContext(app))
 
             #expect(output.validationStatus == "pending")
 
@@ -151,7 +143,7 @@ import Vapor
                 _ = try await UpdateNotebookTool().execute(
                     UpdateNotebookTool.Input(
                         assignmentPublicID: assignment.publicID, notebook: .array([])),
-                    context(app))
+                    mcpContext(app))
             }
         }
     }
@@ -165,7 +157,7 @@ import Vapor
                     UpdateNotebookTool.Input(
                         assignmentPublicID: assignment.publicID,
                         notebook: try json(#"{"nbformat":4,"metadata":{}}"#)),
-                    context(app))
+                    mcpContext(app))
             }
         }
     }
@@ -178,7 +170,7 @@ import Vapor
                 _ = try await UpdateNotebookTool().execute(
                     UpdateNotebookTool.Input(
                         assignmentPublicID: "zzzzzz", notebook: try json(twoCellNotebook)),
-                    context(app))
+                    mcpContext(app))
             }
         }
     }
@@ -196,7 +188,7 @@ import Vapor
                 _ = try await UpdateNotebookTool().execute(
                     UpdateNotebookTool.Input(
                         assignmentPublicID: assignment.publicID, notebook: try json(twoCellNotebook)),
-                    context(app))
+                    mcpContext(app))
             }
         }
     }

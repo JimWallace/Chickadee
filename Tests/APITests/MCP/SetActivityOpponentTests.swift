@@ -17,14 +17,6 @@ import Vapor
 @testable import APIServer
 
 @Suite struct SetActivityOpponentTests {
-    private func context(_ app: Application) -> ToolContext {
-        ToolContext(
-            request: makeTestRequest(on: app),
-            subject: "tester",
-            grantedScopes: [.read, .write]
-        )
-    }
-
     private let workerManifest =
         #"{"schemaVersion":1,"gradingMode":"worker","testSuites":[{"tier":"public","script":"match.sh"}],"timeLimitSeconds":10}"#
     private let browserManifest =
@@ -62,13 +54,13 @@ import Vapor
                 .init(
                     assignmentPublicID: assignment.publicID, kind: "beatTheInstructor",
                     leaderboardVisibility: nil, opponentFile: "bot.py"),
-                context(app))
+                mcpContext(app))
             #expect(out.opponentSource == "supportFile")
             #expect(out.opponentFile == "bot.py")
             #expect(try await stored(on: app) == ClassActivity(kind: .beatTheInstructor, opponentFile: "bot.py"))
 
             let detail = try await GetAssignmentTool().execute(
-                GetAssignmentTool.Input(assignmentPublicID: assignment.publicID), context(app))
+                GetAssignmentTool.Input(assignmentPublicID: assignment.publicID), mcpContext(app))
             #expect(detail.activity?.opponentSource == "supportFile")
             #expect(detail.activity?.opponentFile == "bot.py")
         }
@@ -86,7 +78,7 @@ import Vapor
                         .init(
                             assignmentPublicID: assignment.publicID, kind: "beatTheInstructor",
                             leaderboardVisibility: nil, opponentFile: bad),
-                        context(app))
+                        mcpContext(app))
                 }
             }
             #expect(try await stored(on: app) == nil)
@@ -103,7 +95,7 @@ import Vapor
                     .init(
                         assignmentPublicID: assignment.publicID, kind: "bestMetric",
                         leaderboardVisibility: nil, opponentFile: "bot.py"),
-                    context(app))
+                    mcpContext(app))
             }
             #expect(try await stored(on: app) == nil)
         }
@@ -120,7 +112,7 @@ import Vapor
                 _ = try await SetActivityTool().execute(
                     .init(
                         assignmentPublicID: assignment.publicID, kind: "kingOfTheHill", leaderboardVisibility: nil),
-                    context(app))
+                    mcpContext(app))
             }
             #expect(try await stored(on: app) == nil)
         }
@@ -137,7 +129,7 @@ import Vapor
                 .init(
                     assignmentPublicID: assignment.publicID, kind: "beatTheInstructor",
                     leaderboardVisibility: nil, opponentFile: "bot.py"),
-                context(app))
+                mcpContext(app))
             #expect(chosen.opponentSource == "supportFile")
             #expect(chosen.opponentFile == "bot.py")
             #expect(try await stored(on: app) == ClassActivity(kind: .beatTheInstructor, opponentFile: "bot.py"))
@@ -154,19 +146,19 @@ import Vapor
             let tool = SetActivityTool()
             let first = try await tool.execute(
                 .init(assignmentPublicID: assignment.publicID, kind: "beatTheInstructor", leaderboardVisibility: nil),
-                context(app))
+                mcpContext(app))
             #expect(first.opponentFile == nil)
 
             _ = try await tool.execute(
                 .init(
                     assignmentPublicID: assignment.publicID, kind: "beatTheInstructor",
                     leaderboardVisibility: nil, opponentFile: "bot.py"),
-                context(app))
+                mcpContext(app))
             let shown = try await tool.execute(
                 .init(
                     assignmentPublicID: assignment.publicID, kind: "beatTheInstructor", leaderboardVisibility: "visible"
                 ),
-                context(app))
+                mcpContext(app))
             #expect(shown.opponentFile == "bot.py")
             #expect(shown.leaderboardVisibility == "visible")
 
@@ -174,7 +166,7 @@ import Vapor
                 .init(
                     assignmentPublicID: assignment.publicID, kind: "beatTheInstructor",
                     leaderboardVisibility: nil, opponentFile: ""),
-                context(app))
+                mcpContext(app))
             #expect(cleared.opponentFile == nil)
             #expect(try await stored(on: app)?.leaderboardVisibility == .visible)
 
@@ -182,10 +174,10 @@ import Vapor
                 .init(
                     assignmentPublicID: assignment.publicID, kind: "beatTheInstructor",
                     leaderboardVisibility: nil, opponentFile: "bot.py"),
-                context(app))
+                mcpContext(app))
             let switched = try await tool.execute(
                 .init(assignmentPublicID: assignment.publicID, kind: "bestMetric", leaderboardVisibility: nil),
-                context(app))
+                mcpContext(app))
             #expect(switched.opponentFile == nil)
             #expect(switched.opponentSource == "none")
         }

@@ -13,14 +13,6 @@ import Vapor
 @testable import APIServer
 
 @Suite struct SetDatasetToolTests {
-    private func context(_ app: Application) -> ToolContext {
-        ToolContext(
-            request: makeTestRequest(on: app),
-            subject: "tester",
-            grantedScopes: [.read, .write]
-        )
-    }
-
     private let manifest = """
         {"schemaVersion":1,"testSuites":[\
         {"tier":"public","script":"test_a.sh","points":1}\
@@ -55,7 +47,7 @@ import Vapor
                 assignmentPublicID: publicID, filename: filename,
                 sampleSize: sampleSize, stratumColumn: stratumColumn, remove: remove,
                 transforms: transforms),
-            context(app))
+            mcpContext(app))
     }
 
     // MARK: - Marking
@@ -102,7 +94,7 @@ import Vapor
             let listing = try await GetSupportFilesTool().execute(
                 GetSupportFilesTool.Input(
                     assignmentPublicID: assignment.publicID, filename: nil, maxBytes: nil),
-                context(app))
+                mcpContext(app))
             let entry = try #require(listing.files?.first { $0.filename == "cases.csv" })
             #expect(entry.isDataset)
             #expect(entry.datasetSampleSize == 2)
@@ -221,7 +213,7 @@ import Vapor
             let listing = try await GetSupportFilesTool().execute(
                 GetSupportFilesTool.Input(
                     assignmentPublicID: assignment.publicID, filename: nil, maxBytes: nil),
-                context(app))
+                mcpContext(app))
             let entry = try #require(listing.files?.first { $0.filename == "cases.csv" })
             #expect(entry.datasetKind == "stratifiedSample")
             #expect(entry.datasetStratumColumn == "age")
@@ -237,7 +229,7 @@ import Vapor
             let listing = try await GetSupportFilesTool().execute(
                 GetSupportFilesTool.Input(
                     assignmentPublicID: assignment.publicID, filename: nil, maxBytes: nil),
-                context(app))
+                mcpContext(app))
             let entry = try #require(listing.files?.first { $0.filename == "cases.csv" })
             #expect(entry.datasetKind == "rowSample")
             #expect(entry.datasetStratumColumn == nil)
