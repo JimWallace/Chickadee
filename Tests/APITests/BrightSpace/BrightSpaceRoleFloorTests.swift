@@ -150,9 +150,13 @@ import VaporTesting
                 #expect(!taPage.contains(action), "a TA sees \(action)")
                 #expect(instructorPage.contains(action), "an instructor does not see \(action)")
             }
-            let note = "Only course instructors can change the LEARN connection."
-            #expect(taPage.contains(note))
-            #expect(!instructorPage.contains(note))
+            for note in [
+                "Only course instructors can change the LEARN connection.",
+                "Only course instructors can change the grade-item mapping.",
+            ] {
+                #expect(taPage.contains(note), "a TA does not see \"\(note)\"")
+                #expect(!instructorPage.contains(note), "an instructor sees \"\(note)\"")
+            }
         }
     }
 

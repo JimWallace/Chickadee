@@ -283,6 +283,9 @@ private struct InstructorBrightspaceMapping: HTML {
                     }
                 }
             }
+            if !model.canManageCourse, !model.courseIsArchived {
+                p(.class("field-note")) { "Only course instructors can change the grade-item mapping." }
+            }
             if model.assignmentRows.isEmpty {
                 p(.class("empty")) { "No assignments in this course yet." }
             } else {
