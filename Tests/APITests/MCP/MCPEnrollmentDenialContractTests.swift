@@ -6,6 +6,9 @@
 // authorization, so the refusal in the second run comes from the missing
 // enrollment and not from the input.
 //
+// A third run acts as a student who is enrolled in the course. Students may
+// not use the MCP interface at all, so every tool refuses that account.
+//
 // A new tool fails `everyToolHasASample` until it gets a sample here.
 
 import Core
@@ -45,6 +48,7 @@ struct MCPEnrollmentDenialContractTests {
 
     /// The seeded ids the samples refer to.
     struct World {
+        let courseID: UUID
         let assignmentPublicID: String
         let sectionID: UUID
         let contentItemID: UUID
@@ -182,6 +186,19 @@ struct MCPEnrollmentDenialContractTests {
         }
     }
 
+    @Test(arguments: toolNames)
+    func studentIsRefused(_ name: String) async throws {
+        let sample = try #require(Self.samples[name], "No sample for \(name)")
+        let tool = try #require(MCPToolCatalog.live.tool(named: name))
+        let student = try await outcome(tool, sample, enrolled: false, asStudent: true)
+        switch sample.denial {
+        case .notAuthorized, .answersAsUnknownID:
+            #expect(student.isNotAuthorized, "Expected notAuthorized, got \(student)")
+        case .omitsCourse, .notCourseScoped:
+            #expect(!student.mentions(Self.courseCode), "The student run showed the course")
+        }
+    }
+
     // MARK: - Running one tool
 
     /// The result of one call, with the seeded ids put back in place of the
@@ -218,12 +235,19 @@ struct MCPEnrollmentDenialContractTests {
     }
 
     private func outcome(
-        _ tool: AnyContentTool, _ sample: Sample, enrolled: Bool, unknownIDs: Bool = false
+        _ tool: AnyContentTool, _ sample: Sample, enrolled: Bool, unknownIDs: Bool = false,
+        asStudent: Bool = false
     ) async throws -> Outcome {
         let app = try await makeTestApp()
         var result = Outcome.other("not run")
         try await withApp(app) { app in
             let world = try await seedWorld(on: app, enrolled: enrolled)
+            var subject = mcpTestSubject
+            if asStudent {
+                subject = "pupil"
+                let pupil = try await makeTestUser(on: app, username: subject, role: "student")
+                try await makeTestEnrollment(on: app, userID: pupil.requireID(), courseID: world.courseID)
+            }
             let section = unknownIDs ? Self.unknownID : world.sectionID.uuidString
             let item = unknownIDs ? Self.unknownID : world.contentItemID.uuidString
             let raw = sample.arguments
@@ -233,7 +257,7 @@ struct MCPEnrollmentDenialContractTests {
                 .replacingOccurrences(of: "$C", with: item)
             let arguments = try JSONDecoder().decode(JSONValue.self, from: Data(raw.utf8))
             do {
-                let output = try await tool.invoke(arguments, mcpContext(app))
+                let output = try await tool.invoke(arguments, mcpContext(app, subject: subject))
                 let data = try JSONEncoder.sortedKeys.encode(output)
                 let json = try #require(String(bytes: data, encoding: .utf8))
                 result = .output(
@@ -273,6 +297,7 @@ struct MCPEnrollmentDenialContractTests {
             upload: .init(filename: "cases.csv", bytes: Data("id,ward\n1,A\n2,B\n".utf8)),
             blobs: AssignmentVersionBlobStore(testSetupsDirectory: app.testSetupsDirectory), on: app.db)
         return World(
+            courseID: courseID,
             assignmentPublicID: assignment.publicID,
             sectionID: try section.requireID(),
             contentItemID: try item.requireID())
