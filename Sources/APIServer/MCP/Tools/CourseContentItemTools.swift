@@ -677,8 +677,9 @@ struct ReorderContentItemsTool: ContentTool {
     static let name = "reorder_content_items"
     static let description =
         "Set the display order of content items within one section's content lane, by course code. "
-        + "orderedContentItemIDs must all belong to the same course and the same section — "
-        + "they are renumbered 1..n in the given order. Reorders ungraded material only; assignments "
+        + "orderedContentItemIDs must list every content item of one section (or every ungrouped "
+        + "one) — they are renumbered 1..n in the given order. A section that also holds assignments "
+        + "is refused here: use reorder_section_items. Reorders ungraded material only; assignments "
         + "use reorder_assignments and test-suite items use move_suite_item."
     static let inputSchema: JSONValue = .object([
         "type": .string("object"),

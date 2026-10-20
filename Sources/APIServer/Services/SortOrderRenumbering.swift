@@ -24,8 +24,10 @@
 //   - A course-section reorder names every section of the course. Sections
 //     share one per-course sequence, so a partial list would leave two
 //     sections at the same position.
-//   - A section-item reorder names items of one course section (or only
-//     ungrouped items), and renumbers them 1..n.
+//   - A section-item reorder names every item of one course section (or
+//     every ungrouped item), assignments and content items together, and
+//     renumbers them 1..n. The two tables share one per-section sequence, so
+//     a partial list would leave two items at the same position.
 //   - All the writes of one reorder run in one transaction, so a failure
 //     part-way leaves the old order.
 
@@ -66,7 +68,9 @@ enum SortOrderRenumbering {
                 throw ReorderError.unknownItem
             }
             let sections = Set(assignments.map(\.sectionID)).union(contentItems.map(\.sectionID))
-            guard sections.count == 1 else { throw ReorderError.mixedSections }
+            guard sections.count == 1, let sectionID = sections.first else { throw ReorderError.mixedSections }
+            let sectionSize = try await itemCount(inSection: sectionID, ofCourse: courseID, on: tx)
+            guard items.count == sectionSize else { throw ReorderError.incompleteSection(expected: sectionSize) }
 
             let assignmentByPublicID = Dictionary(uniqueKeysWithValues: assignments.map { ($0.publicID, $0) })
             let contentByID = Dictionary(
@@ -114,6 +118,23 @@ enum SortOrderRenumbering {
             }
             return renumbered
         }
+    }
+
+    /// The number of assignments and content items in one section of the
+    /// course; a nil `sectionID` counts the ungrouped items.
+    private static func itemCount(
+        inSection sectionID: UUID?, ofCourse courseID: UUID, on db: any Database
+    ) async throws -> Int {
+        let assignments = APIAssignment.query(on: db).filter(\.$courseID == courseID)
+        let contentItems = APICourseContentItem.query(on: db).filter(\.$courseID == courseID)
+        if let sectionID {
+            assignments.filter(\.$sectionID == sectionID)
+            contentItems.filter(\.$sectionID == sectionID)
+        } else {
+            assignments.filter(\.$sectionID == nil)
+            contentItems.filter(\.$sectionID == nil)
+        }
+        return try await assignments.count() + contentItems.count()
     }
 
     /// The assignment and content-item rows that `items` name, scoped to
