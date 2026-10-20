@@ -55,6 +55,7 @@ scripts/check-security-headers.sh|Reads the headers of a running server, which t
 scripts/ci-compose-env.sh|Not a check without --check. It writes the .env that the ZAP job starts compose with.
 scripts/mutation-run.sh|Not a check. It runs the weekly mutation report.
 scripts/setup-jupyterlite.sh|Not a check. It installs the JupyterLite build tools.
+scripts/install-micromamba.sh|Not a check. It installs micromamba for the kernel workflows.
 scripts/build-jupyterlite.sh|Not a check. It builds the vendored bundle.
 scripts/build-runner-wasm.sh|Not a check. It builds the vendored runner wasm.
 scripts/runnercore-source-hash.sh|Not a check. It prints the source hash that the runner wasm vendor records.
