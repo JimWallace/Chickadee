@@ -81,7 +81,9 @@ struct AssignmentsPage: HTML {
                 if controls.manageSections {
                     addSectionToolbar
                 }
-                if !showEmptyMessage && showUngroupedBlock {
+                // An empty course still gives a TA the "+ Add" menu: material is
+                // the route out when the form is not theirs to open.
+                if showUngroupedBlock && (!showEmptyMessage || !controls.createAssignment) {
                     ungroupedBlock
                 }
             }
