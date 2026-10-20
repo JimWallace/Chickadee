@@ -9,6 +9,30 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.760] - 2026-10-20
+
+### Changed
+
+- **One shared grep-guard helper; no ratchets at zero (#2722).** The grep
+  guards use `code_matches` from `scripts/lib/grep-guard.sh`. The layering and
+  `alert()` rules are absolute, and the empty layering baseline is gone. The
+  `ui-guard` agent is gone: run `lint-guard` and `test-runner`. The three
+  Python hooks share `hook_common.py`. `deploy/README.md` names
+  `server-deploy.sh` as the fallback, not the update step.
+
+### Changed
+
+- **One reorder service, one set of rules (#2713).** The four web reorder routes
+  and the four MCP reorder tools now call `SortOrderRenumbering`. A TA can
+  reorder every kind: course sections, section items, assignments and content
+  items. Before, the web assignment reorder and the section reorder (web and
+  MCP) needed an instructor. Every reorder refuses a duplicate id, an unknown
+  item type and items of two course sections. The web section reorder must name
+  every section of the course, as MCP `reorder_course_sections` already did.
+  Each reorder runs in one transaction, so a failure part-way leaves the old
+  order.
+
+
 ## [0.5.759] - 2026-10-20
 
 ### Changed
