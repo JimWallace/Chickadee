@@ -875,31 +875,22 @@ private struct EditAchievementsBlock: HTML {
                     ) {}
                 }
             }
-            table(.class("results-table"), .id("achievements-table")) {
-                thead {
-                    tr {
-                        th { "Name" }
-                        th { "Scope" }
-                        th { "Earned when" }
-                        th {}
-                    }
-                }
-                tbody(.class("achievements-body")) {}
-            }
-            template(.id("achievement-editor-template")) {
-                AchievementEditorFields(recordDimensionOptions: edit.recordDimensionOptions)
-            }
-            // One condition row, cloned into #am-conditions per condition.
-            template(.id("achievement-condition-template")) {
-                AchievementConditionRow(signalOptions: edit.achievementSignalOptions)
-            }
+            AchievementsTable(
+                signalOptions: edit.achievementSignalOptions, recordDimensionOptions: edit.recordDimensionOptions)
         }
     }
 }
 
-/// The inline achievement editor. Fields show and hide by scope.
-private struct AchievementEditorFields: HTML {
+/// The inline achievement editor. Fields show and hide by scope. The course
+/// Achievements tab shares it through `AchievementsTable`. It stays in this
+/// file because `RecordDimensionCoverageTests` reads the "Ranked by" loop
+/// here.
+struct AchievementEditorFields: HTML {
     let recordDimensionOptions: [RecordDimensionOption]
+    /// The course editor offers only the individual scope
+    /// (docs/achievement-rewards.md, S3). The other fields stay in the
+    /// template, hidden by scope, because the editor reads them by id.
+    var courseLevel = false
 
     var body: some HTML {
         label(.class("form-label field-gap")) {
@@ -920,8 +911,10 @@ private struct AchievementEditorFields: HTML {
             "Awarded to "
             select(.class("form-input"), .id("am-scope")) {
                 option(.value("individual")) { "This student" }
-                option(.value("classWide")) { "The class together" }
-                option(.value("record")) { "Class record (one holder)" }
+                if !courseLevel {
+                    option(.value("classWide")) { "The class together" }
+                    option(.value("record")) { "Class record (one holder)" }
+                }
             }
             " "
         }
@@ -959,50 +952,6 @@ private struct AchievementEditorFields: HTML {
                 }
             }
             " "
-        }
-    }
-}
-
-private struct AchievementConditionRow: HTML {
-    let signalOptions: [AchievementSignalOption]
-
-    var body: some HTML {
-        div(.class("am-condition")) {
-            select(.class("form-input am-cond-signal"), .ariaLabel("Measure")) {
-                for signal in signalOptions {
-                    option(
-                        .value(signal.value), .data("unit", value: signal.unit), .data("scope", value: signal.scopes),
-                        .data("levels", value: signal.levels),
-                        .data("ref-control", value: signal.refControl), .data("ref-field", value: signal.refField),
-                        .data("ref-label", value: signal.refLabel),
-                        .data("ref-placeholder", value: signal.refPlaceholder),
-                        .data("ref-replaces-value", value: signal.refReplacesValue ? "true" : "false")
-                    ) { signal.label }
-                }
-            }
-            " "
-            select(.class("form-input js-am-cond-comparator"), .ariaLabel("Comparison")) {
-                option(.value("atLeast")) { "at least" }
-                option(.value("atMost")) { "at most" }
-                option(.value("equals")) { "exactly" }
-            }
-            " "
-            input(.type(.number), .class("form-input am-cond-value"), .ariaLabel("Value"))
-            " "
-            span(.class("am-cond-unit")) {}
-            " "
-            input(.type(.text), .class("form-input am-cond-ref"), .custom(name: "style", value: "display:none"))
-            " "
-            // Filled by the editor from the live suite sections on the page,
-            // so a section added or renamed without a reload shows under its
-            // current name.
-            select(.class("form-input am-cond-ref"), .custom(name: "style", value: "display:none")) {}
-            " "
-            button(
-                .type(.button), .class("btn action-btn action-danger am-cond-remove"), .ariaLabel("Remove condition")
-            ) {
-                "×"
-            }
         }
     }
 }

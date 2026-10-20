@@ -301,18 +301,28 @@ because line numbers go out of date.
 - **Writers:**
   - `AchievementAwardStore.record` (assignment badges) and
     `grantCourseAchievements` (course achievements), from the student's own
-    pages only: the result page and the dashboard store assignment badges,
-    and the result page and the account page grant course achievements.
+    pages: the result page and the dashboard store assignment badges, and
+    the result page and the account page grant course achievements. The one
+    staff writer is Recompute on the course Achievements tab
+    (`POST /instructor/achievements/recompute`, TA and above), which grants
+    course achievements for every enrolled student and stores no assignment
+    badge.
   - `AchievementsEditing.apply(rows:course:on:)` writes
     `courses.achievements`.
   - Course deletion (`deleteAwards`, `deleteCourseAwards`) and assignment
     deletion remove ledger rows.
 - **Readers:** the course evaluator (`courseProgress`, which reads the
-  assignment-level rows for `achievementsEarned`) and the account export.
+  assignment-level rows for `achievementsEarned`), the account export, and
+  "Earned so far" on the course Achievements tab, which shows course staff
+  the names of the students who hold each course award (web only, never
+  MCP).
 - **Rules:**
   - A ledger row is written off the grading path and is never taken back by
     a regrade (`docs/achievement-rewards.md`, decision 2). A staff view
-    writes nothing.
+    writes nothing, except Recompute.
+  - Recompute stores no assignment badge, so an `achievementsEarned`
+    condition counts only the badges the student's own pages stored. A
+    badge waits for the student's next result page or dashboard load.
   - A course signal counts only assignments that
     `assignmentVisibleToStudentByState` admits. A new visibility state must
     keep that true for the course counts as for the dashboard.

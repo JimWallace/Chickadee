@@ -51,6 +51,8 @@ import VaporTesting
         "POST /instructor/reorder": .ta,
         "POST /instructor/sections/reorder": .ta,
         "POST /instructor/scan-notebook": .ta,
+        "POST /instructor/achievements/recompute": .ta,
+        "PUT /instructor/achievements/rows": .ta,
         "POST /instructor/datasets": .ta,
         "POST /instructor/datasets/delete": .ta,
         "POST /instructor/datasets/dictionary": .ta,

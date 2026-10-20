@@ -1,6 +1,6 @@
 # Achievements and rewards across the site
 
-**Status: decided; S1 and S3 shipped.** The maintainer took the six open
+**Status: decided; S1, S3 and S4 shipped.** The maintainer took the six open
 decisions on 2026-10-17 (see "Decisions taken" at the end). Each took the
 recommended answer. It continues
 [achievements-unification.md](achievements-unification.md) (one editor for
@@ -15,7 +15,7 @@ wardrobe item?), and it gives #2617 (one toast for everything earned) and
 | S1 | The award ledger: one stored row for each achievement a student earns | — | shipped |
 | S2 | A wardrobe item as an achievement reward, on an assignment | — | proposed |
 | S3 | Course achievements: the model, the course signals and the evaluator | — | shipped |
-| S4 | The course Achievements tab in the instructor area | — | proposed |
+| S4 | The course Achievements tab in the instructor area | — | shipped |
 | S5 | MCP parity for course achievements and the reward field | — | proposed |
 | S6 | The site rules, re-expressed as achievements in code | — | proposed |
 | S7 | Student surfaces: the trophy case and the one toast read the ledger | #2621, #2617 | proposed |
@@ -412,8 +412,10 @@ A new `InstructorTab.achievements`, "Achievements", after Students in
    targets. The target control for a course signal is a select of three
    groups: the course's sections, the concepts, and "Chosen assignments",
    which opens a checklist of the course's assignments by title. The page
-   PUTs `GET/PUT /instructor/achievements`, which call the same
-   `AchievementsEditing.apply` with the course as the source.
+   reads and writes `GET/PUT /instructor/achievements/rows` (the page itself
+   is `GET /instructor/achievements`), which call the same
+   `AchievementsEditing.apply` with the course as the source. A course
+   condition takes "at least" only, so the editor hides the comparator.
 2. **Earned so far.** Per row, how many enrolled students have the award, and
    a disclosure that lists them by name with the date. This is course staff
    reading their own course, on the web. It is not an MCP surface.
@@ -422,7 +424,9 @@ A new `InstructorTab.achievements`, "Achievements", after Students in
 
 A **Recompute** button runs `grantEarned` for every enrolled student
 (decision 7). It is idempotent and it is the only write on the page besides
-the table.
+the table. It grants course achievements only. It stores no assignment
+badge, because only the student's own pages compute those, so an
+`achievementsEarned` condition counts what those pages stored.
 
 The page goes through `ui-review`, as every view does.
 

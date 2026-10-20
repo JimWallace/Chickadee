@@ -95,6 +95,10 @@ struct AchievementSignalOption: Encodable {
     /// (`AchievementSignal.allowedLevels`). The editor hides an option that
     /// its own level cannot evaluate, as it hides one by scope.
     let levels: String
+    /// The course condition field this signal also needs: "gradeFloor"
+    /// (`assignmentsAtGrade`), "achievementRef" (`achievementsEarned`) or "".
+    /// The course editor shows that input by it.
+    let courseField: String
     /// Which input this signal's reference needs, if any: "" | "text" | "sections".
     let refControl: String
     /// The `ConditionRow` field the reference serializes to.
@@ -170,6 +174,17 @@ enum AchievementSignalPresentation {
         }
     }
 
+    private static func courseField(for signal: AchievementSignal) -> String {
+        switch signal {
+        case .assignmentsAtGrade: return "gradeFloor"
+        case .achievementsEarned: return "achievementRef"
+        case .grade, .attempts, .executionTimeMs, .gradeJumpPercent, .testPass, .itemsCovered, .standing,
+            .matchesWon, .classCoverage, .assignmentsGraded, .assignmentsFullMarks, .assignmentsEarly,
+            .assignmentsComeback, .conceptsAtFullMarks:
+            return ""
+        }
+    }
+
     private static func make(
         _ signal: AchievementSignal, _ label: String, _ detail: String,
         unit: String, ref: AchievementSignalRefKind, refReplacesValue: Bool = false
@@ -178,6 +193,7 @@ enum AchievementSignalPresentation {
             value: signal.rawValue, label: label, detail: detail, unit: unit,
             scopes: signal.allowedScopes.map(\.rawValue).joined(separator: " "),
             levels: signal.allowedLevels.map(\.rawValue).joined(separator: " "),
+            courseField: courseField(for: signal),
             refControl: ref.control, refField: ref.refField, refLabel: ref.label,
             refPlaceholder: ref.placeholder, refReplacesValue: refReplacesValue)
     }
