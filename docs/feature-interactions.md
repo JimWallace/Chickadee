@@ -871,6 +871,15 @@ because line numbers go out of date.
   grade-item and push-all handlers (`loadAssignmentForWrite(atLeast:
   .instructor)`), and `BrightSpacePagePresenter`, which hides each control
   from a viewer that `evaluateCourseWrite` refuses at `.instructor`.
+- **Rule:** the assignments dashboard shows a control only to a viewer whom
+  its route accepts (#2743). `DashboardRoleFloor` holds the floors for
+  assignment creation, the assignment lifecycle and section management. The
+  route handlers and `DashboardControls` (which `AssignmentsPage` and
+  `CourseItemRow` read) use the same constants. One parallel path is in
+  JavaScript: `section-items-dnd.js` posts the assignment move to another
+  section, so the page sets `data-assignment-moves="locked"` for a viewer
+  below `manageSections`. A new dashboard control that calls an
+  instructor route reads a `DashboardRoleFloor` constant.
 - **Trap:** some handlers had comments that said "instructor", but they had
   only the area gate (#1448). `RouteAuthorizationMatrixTests` now finds a
   route under `/instructor` or `/courses` that has no minimum role.

@@ -13,6 +13,10 @@
 // another tbody moves the item (per-type section endpoint), reorders the
 // destination to the dropped position, and reloads.
 //
+// A viewer who may not move an assignment to another section (a TA) gets
+// `data-assignment-moves="locked"` on the page: an assignment row then stays
+// in its own section, and only the within-section reorder runs.
+//
 // Runs after chickadee-ui.js (loaded by the layout) — uses ChickadeeUI.getCsrfToken().
 // Decoupled from the section-reorder DnD (still inline) by that handler's
 // stopPropagation on the section header.
@@ -79,6 +83,13 @@
     var dragged = null;
     var startTbody = null;
     var startOrder = '';
+    var assignmentMovesLocked = !!document.querySelector('[data-assignment-moves="locked"]');
+
+    // False when the dragged row may not leave its starting section.
+    function mayEnter(tbody) {
+        if (tbody === startTbody) return true;
+        return !(assignmentMovesLocked && descriptor(dragged).type === 'assignment');
+    }
 
     function makeDraggable(root) {
         root.querySelectorAll(ROW_SELECTOR).forEach(function (row) {
@@ -118,6 +129,7 @@
         // 1. Over another item row — insert before or after it.
         var overRow = target.closest(ROW_SELECTOR);
         if (overRow && overRow !== dragged) {
+            if (!mayEnter(overRow.parentElement)) return;
             var rect = overRow.getBoundingClientRect();
             var after = event.clientY > rect.top + rect.height / 2;
             overRow.parentElement.insertBefore(dragged, after ? overRow.nextSibling : overRow);
@@ -127,6 +139,7 @@
         // 2. Over an empty-section placeholder row — move into that section.
         var emptyRow = target.closest('tr.section-empty-row');
         if (emptyRow) {
+            if (!mayEnter(emptyRow.parentElement)) return;
             emptyRow.style.display = 'none';
             emptyRow.parentElement.insertBefore(dragged, emptyRow);
             return;
@@ -135,6 +148,7 @@
         // 3. Over a tbody but not a specific row — append if from another section.
         var dropTbody = target.closest('tbody[data-section-id]');
         if (dropTbody && dragged.parentElement !== dropTbody) {
+            if (!mayEnter(dropTbody)) return;
             dropTbody.appendChild(dragged);
             return;
         }
@@ -143,7 +157,7 @@
         var overBlock = target.closest('.section-block[data-section-id]');
         if (overBlock) {
             var blockTbody = overBlock.querySelector('tbody[data-section-id]');
-            if (blockTbody && dragged.parentElement !== blockTbody) {
+            if (blockTbody && dragged.parentElement !== blockTbody && mayEnter(blockTbody)) {
                 blockTbody.appendChild(dragged);
             }
         }
