@@ -13,23 +13,10 @@ import Vapor
 @testable import APIServer
 
 @Suite struct GetValidationResultToolTests {
-    private func context(_ app: Application) -> ToolContext {
-        ToolContext(
-            request: makeTestRequest(on: app),
-            subject: "tester",
-            grantedScopes: [.read]
-        )
-    }
-
     /// Course + enrolled instructor "tester" + setup + assignment.
     private func fixture(on app: Application) async throws -> APIAssignment {
-        let course = try await makeTestCourse(on: app, code: "CS246", name: "OOP")
-        let courseID = try course.requireID()
-        let tester = try await makeTestUser(on: app, username: "tester", role: "instructor")
-        try await makeTestEnrollment(on: app, userID: tester.requireID(), courseID: courseID)
-        try await makeTestSetup(on: app, id: "setup_val", courseID: courseID)
-        return try await makeTestAssignment(
-            on: app, testSetupID: "setup_val", courseID: courseID, title: "Lab")
+        try await seedMCPAssignment(
+            on: app, setupID: "setup_val")
     }
 
     private func testerID(on app: Application) async throws -> UUID {
@@ -73,7 +60,7 @@ import Vapor
         -> GetValidationResultTool.Output
     {
         try await GetValidationResultTool().execute(
-            GetValidationResultTool.Input(assignmentPublicID: publicID), context(app))
+            GetValidationResultTool.Input(assignmentPublicID: publicID), mcpContext(app))
     }
 
     // MARK: - Happy path
@@ -226,24 +213,6 @@ import Vapor
             _ = try await fixture(on: app)
             await #expect(throws: MCPToolError.self) {
                 _ = try await run(app, publicID: "zzzzzz")
-            }
-        }
-    }
-
-    @Test func deniesWhenSubjectNotEnrolled() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
-            let course = try await makeTestCourse(on: app, code: "CS246", name: "OOP")
-            let courseID = try course.requireID()
-            _ = try await makeTestUser(on: app, username: "tester", role: "instructor")
-            try await makeTestSetup(on: app, id: "setup_val", courseID: courseID)
-            let assignment = try await makeTestAssignment(
-                on: app, testSetupID: "setup_val", courseID: courseID, title: "Lab")
-            assignment.validationStatus = "failed"
-            try await assignment.save(on: app.db)
-
-            await #expect(throws: MCPToolError.self) {
-                _ = try await run(app, publicID: assignment.publicID)
             }
         }
     }

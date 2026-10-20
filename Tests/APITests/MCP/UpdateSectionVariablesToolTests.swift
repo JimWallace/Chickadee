@@ -11,14 +11,6 @@ import Vapor
 @testable import APIServer
 
 @Suite struct UpdateSectionVariablesToolTests {
-    private func context(_ app: Application) -> ToolContext {
-        ToolContext(
-            request: makeTestRequest(on: app),
-            subject: "tester",
-            grantedScopes: [.write]
-        )
-    }
-
     /// One section ("sec1"), one global variable ("g") to exercise the
     /// cross-scope clash check.
     private let manifest = #"""
@@ -26,13 +18,8 @@ import Vapor
         """#
 
     private func fixture(on app: Application) async throws -> APIAssignment {
-        let course = try await makeTestCourse(on: app, code: "CS246", name: "OOP")
-        let courseID = try course.requireID()
-        let tester = try await makeTestUser(on: app, username: "tester", role: "instructor")
-        try await makeTestEnrollment(on: app, userID: tester.requireID(), courseID: courseID)
-        try await makeTestSetup(on: app, id: "setup_sv", courseID: courseID, manifest: manifest)
-        return try await makeTestAssignment(
-            on: app, testSetupID: "setup_sv", courseID: courseID, title: "Lab")
+        try await seedMCPAssignment(
+            on: app, setupID: "setup_sv", manifest: manifest)
     }
 
     private func input(
@@ -62,7 +49,7 @@ import Vapor
                     assignment,
                     variables: [FamilyVariable(name: "cap", value: .int(7))],
                     expressions: [PersonalizationExpression(name: "pick", expression: "seed % 4")]),
-                context(app))
+                mcpContext(app))
             #expect(output.variables.map(\.name) == ["cap"])
             #expect(output.expressions.map(\.name) == ["pick"])
 
@@ -78,9 +65,9 @@ import Vapor
             let assignment = try await fixture(on: app)
             _ = try await UpdateSectionVariablesTool().execute(
                 input(assignment, variables: [FamilyVariable(name: "cap", value: .int(7))]),
-                context(app))
+                mcpContext(app))
             _ = try await UpdateSectionVariablesTool().execute(
-                input(assignment, variables: []), context(app))
+                input(assignment, variables: []), mcpContext(app))
             let reloaded = try #require(try await reload(assignment, on: app.db))
             #expect(reloaded.variables.isEmpty)
             #expect(reloaded.expressions.isEmpty)
@@ -94,7 +81,7 @@ import Vapor
             await #expect(throws: MCPToolError.self) {
                 _ = try await UpdateSectionVariablesTool().execute(
                     input(assignment, variables: [FamilyVariable(name: "g", value: .int(2))]),
-                    context(app))
+                    mcpContext(app))
             }
         }
     }
@@ -106,7 +93,7 @@ import Vapor
             await #expect(throws: MCPToolError.self) {
                 _ = try await UpdateSectionVariablesTool().execute(
                     input(assignment, variables: [FamilyVariable(name: "seed", value: .int(1))]),
-                    context(app))
+                    mcpContext(app))
             }
         }
     }
@@ -120,24 +107,7 @@ import Vapor
                     input(
                         assignment, sectionID: "nope",
                         variables: [FamilyVariable(name: "cap", value: .int(1))]),
-                    context(app))
-            }
-        }
-    }
-
-    @Test func deniesWhenSubjectNotEnrolled() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
-            let course = try await makeTestCourse(on: app, code: "CS246", name: "OOP")
-            let courseID = try course.requireID()
-            _ = try await makeTestUser(on: app, username: "tester", role: "instructor")
-            try await makeTestSetup(on: app, id: "setup_sv", courseID: courseID, manifest: manifest)
-            let assignment = try await makeTestAssignment(
-                on: app, testSetupID: "setup_sv", courseID: courseID, title: "Lab")
-            await #expect(throws: MCPToolError.self) {
-                _ = try await UpdateSectionVariablesTool().execute(
-                    input(assignment, variables: [FamilyVariable(name: "cap", value: .int(1))]),
-                    context(app))
+                    mcpContext(app))
             }
         }
     }

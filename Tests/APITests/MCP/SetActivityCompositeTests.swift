@@ -14,26 +14,14 @@ import Vapor
 @testable import APIServer
 
 @Suite struct SetActivityCompositeTests {
-    private func context(_ app: Application) -> ToolContext {
-        ToolContext(
-            request: makeTestRequest(on: app),
-            subject: "tester",
-            grantedScopes: [.read, .write]
-        )
-    }
-
     private let workerManifest =
         #"{"schemaVersion":1,"gradingMode":"worker","language":"python","testSuites":[],"timeLimitSeconds":10}"#
 
     private func fixture(on app: Application) async throws -> (APIAssignment, UUID) {
-        let course = try await makeTestCourse(on: app, code: "CS135", name: "Designing Programs")
-        let courseID = try course.requireID()
-        let tester = try await makeTestUser(on: app, username: "tester", role: "instructor")
-        try await makeTestEnrollment(on: app, userID: tester.requireID(), courseID: courseID)
-        try await makeTestSetup(on: app, id: "setup_cmp", courseID: courseID, manifest: workerManifest)
-        let assignment = try await makeTestAssignment(
-            on: app, testSetupID: "setup_cmp", courseID: courseID, title: "Class GPU")
-        return (assignment, courseID)
+        let assignment = try await seedMCPAssignment(
+            on: app, setupID: "setup_cmp", manifest: workerManifest, courseCode: "CS135",
+            courseName: "Designing Programs", title: "Class GPU")
+        return (assignment, assignment.courseID)
     }
 
     private func storedActivity(on app: Application) async throws -> ClassActivity? {
@@ -59,7 +47,7 @@ import Vapor
         let app = try await makeTestApp()
         try await withApp(app) { app in
             let (assignment, _) = try await fixture(on: app)
-            let out = try await SetActivityTool().execute(input(assignment), context(app))
+            let out = try await SetActivityTool().execute(input(assignment), mcpContext(app))
             #expect(out.kind == "classComposite")
             #expect(out.composite == .starter)
             #expect(out.opponentSource == "none")
@@ -67,7 +55,7 @@ import Vapor
             #expect(try await storedActivity(on: app)?.composite == .starter)
 
             let detail = try await GetAssignmentTool().execute(
-                GetAssignmentTool.Input(assignmentPublicID: assignment.publicID), context(app))
+                GetAssignmentTool.Input(assignmentPublicID: assignment.publicID), mcpContext(app))
             #expect(detail.activity?.aggregation == "composite")
             #expect(detail.activity?.composite == .starter)
         }
@@ -77,11 +65,11 @@ import Vapor
         let app = try await makeTestApp()
         try await withApp(app) { app in
             let (assignment, _) = try await fixture(on: app)
-            _ = try await SetActivityTool().execute(input(assignment, composite: sequence), context(app))
+            _ = try await SetActivityTool().execute(input(assignment, composite: sequence), mcpContext(app))
             #expect(try await storedActivity(on: app)?.composite == sequence)
 
             // A call that names only the kind keeps the stored block.
-            let out = try await SetActivityTool().execute(input(assignment), context(app))
+            let out = try await SetActivityTool().execute(input(assignment), mcpContext(app))
             #expect(out.composite == sequence)
         }
     }
@@ -92,7 +80,7 @@ import Vapor
             let (assignment, _) = try await fixture(on: app)
             await #expect(throws: MCPToolError.self) {
                 _ = try await SetActivityTool().execute(
-                    input(assignment, kind: "bestMetric", composite: sequence), context(app))
+                    input(assignment, kind: "bestMetric", composite: sequence), mcpContext(app))
             }
             #expect(try await storedActivity(on: app) == nil, "nothing was stored")
         }
@@ -105,7 +93,7 @@ import Vapor
             let wrongShape = CompositeSpec(
                 compositor: .tile, layout: .count(12), contribution: sequence.contribution)
             await #expect(throws: MCPToolError.self) {
-                _ = try await SetActivityTool().execute(input(assignment, composite: wrongShape), context(app))
+                _ = try await SetActivityTool().execute(input(assignment, composite: wrongShape), mcpContext(app))
             }
             #expect(try await storedActivity(on: app) == nil)
         }
@@ -118,11 +106,11 @@ import Vapor
         try await withApp(app) { app in
             let (assignment, _) = try await fixture(on: app)
             await #expect(throws: MCPToolError.self) {
-                _ = try await SetActivityTool().execute(input(assignment, visibility: "visible"), context(app))
+                _ = try await SetActivityTool().execute(input(assignment, visibility: "visible"), mcpContext(app))
             }
-            _ = try await SetActivityTool().execute(input(assignment), context(app))
+            _ = try await SetActivityTool().execute(input(assignment), mcpContext(app))
             await #expect(throws: MCPToolError.self) {
-                _ = try await SetActivityTool().execute(input(assignment, visibility: "visible"), context(app))
+                _ = try await SetActivityTool().execute(input(assignment, visibility: "visible"), mcpContext(app))
             }
             #expect(try await storedActivity(on: app)?.leaderboardVisibility == .hidden)
         }
@@ -132,14 +120,14 @@ import Vapor
         let app = try await makeTestApp()
         try await withApp(app) { app in
             let (assignment, courseID) = try await fixture(on: app)
-            _ = try await SetActivityTool().execute(input(assignment, composite: sequence), context(app))
+            _ = try await SetActivityTool().execute(input(assignment, composite: sequence), mcpContext(app))
             let student = try await makeTestStudent(on: app, username: "cmp_student")
             try await makeTestEnrollment(on: app, userID: student.requireID(), courseID: courseID)
             try await makeTestSubmission(
                 on: app, id: "sub_cmp", setupID: "setup_cmp", userID: student.requireID())
 
             let display = sequence.withDisplay(frameRate: 24, showFailed: false, emptySlots: .reference)
-            let out = try await SetActivityTool().execute(input(assignment, composite: display), context(app))
+            let out = try await SetActivityTool().execute(input(assignment, composite: display), mcpContext(app))
             #expect(out.composite == display)
 
             let moreSlots = CompositeSpec(
@@ -147,7 +135,7 @@ import Vapor
             await #expect(
                 throws: MCPToolError.invalidArguments(detail: ActivityAuthoring.compositeLayoutLockedMessage)
             ) {
-                _ = try await SetActivityTool().execute(input(assignment, composite: moreSlots), context(app))
+                _ = try await SetActivityTool().execute(input(assignment, composite: moreSlots), mcpContext(app))
             }
             #expect(try await storedActivity(on: app)?.composite == display)
         }

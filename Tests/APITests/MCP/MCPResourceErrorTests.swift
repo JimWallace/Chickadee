@@ -15,12 +15,6 @@ import Vapor
         MCPDispatcher(serverInfo: MCPServerInfo(name: "t", version: "t"))
     }
 
-    private func context(_ app: Application, subject: String) -> ToolContext {
-        ToolContext(
-            request: makeTestRequest(on: app),
-            subject: subject, grantedScopes: [.read])
-    }
-
     private func request(_ method: String, _ params: JSONValue? = nil) -> JSONRPCRequest {
         JSONRPCRequest(jsonrpc: "2.0", id: .number(1), method: method, params: params)
     }
@@ -33,7 +27,8 @@ import Vapor
             try await makeTestEnrollment(on: app, userID: student.requireID(), courseID: course.requireID())
 
             let response = try #require(
-                await dispatcher().dispatch(request("resources/list"), context: context(app, subject: "stu")))
+                await dispatcher().dispatch(
+                    request("resources/list"), context: mcpContext(app, subject: "stu", scopes: [.read])))
             let error = try #require(response.error)
             #expect(error.code == -32_602)
             #expect(error.message != "Failed to list resources.")
@@ -50,7 +45,7 @@ import Vapor
             let response = try #require(
                 await dispatcher().dispatch(
                     request("resources/read", .object(["uri": .string("chickadee://nothing/here")])),
-                    context: context(app, subject: "prof")))
+                    context: mcpContext(app, subject: "prof", scopes: [.read])))
             #expect(response.error?.code == -32_602)
         }
     }

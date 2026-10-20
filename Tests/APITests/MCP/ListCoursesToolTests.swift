@@ -7,14 +7,6 @@ import Vapor
 @testable import APIServer
 
 @Suite struct ListCoursesToolTests {
-    private func context(_ app: Application, subject: String) -> ToolContext {
-        ToolContext(
-            request: makeTestRequest(on: app),
-            subject: subject,
-            grantedScopes: [.read]
-        )
-    }
-
     @Test func instructorSeesOnlyEnrolledCourses() async throws {
         let app = try await makeTestApp()
         try await withApp(app) { app in
@@ -24,7 +16,7 @@ import Vapor
             try await makeTestEnrollment(on: app, userID: tester.requireID(), courseID: try cs136.requireID())
 
             let output = try await ListCoursesTool().execute(
-                ListCoursesTool.Input(), context(app, subject: "tester"))
+                ListCoursesTool.Input(), mcpContext(app, subject: "tester"))
             #expect(output.courses.map(\.code) == ["CS136"])
         }
     }
@@ -38,7 +30,7 @@ import Vapor
             // Even enrolled, a student-role subject may not use MCP.
             await #expect(throws: MCPToolError.self) {
                 _ = try await ListCoursesTool().execute(
-                    ListCoursesTool.Input(), context(app, subject: "stud"))
+                    ListCoursesTool.Input(), mcpContext(app, subject: "stud"))
             }
         }
     }
@@ -54,7 +46,7 @@ import Vapor
             try await makeTestEnrollment(on: app, userID: boss.requireID(), courseID: try cs136.requireID())
 
             let output = try await ListCoursesTool().execute(
-                ListCoursesTool.Input(), context(app, subject: "boss"))
+                ListCoursesTool.Input(), mcpContext(app, subject: "boss"))
             #expect(output.courses.map(\.code) == ["CS136"])
         }
     }
@@ -73,7 +65,7 @@ import Vapor
             try await makeTestEnrollment(on: app, userID: tester.requireID(), courseID: try old.requireID())
 
             let output = try await ListCoursesTool().execute(
-                ListCoursesTool.Input(), context(app, subject: "tester"))
+                ListCoursesTool.Input(), mcpContext(app, subject: "tester"))
             #expect(output.courses.map(\.code) == ["CS136"])
         }
     }
@@ -84,7 +76,7 @@ import Vapor
             _ = try await makeTestCourse(on: app, code: "CS136", name: "Systems")
             await #expect(throws: MCPToolError.self) {
                 _ = try await ListCoursesTool().execute(
-                    ListCoursesTool.Input(), context(app, subject: "ghost"))
+                    ListCoursesTool.Input(), mcpContext(app, subject: "ghost"))
             }
         }
     }

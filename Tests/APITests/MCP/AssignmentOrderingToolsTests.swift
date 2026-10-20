@@ -12,21 +12,10 @@ import Vapor
 @testable import APIServer
 
 @Suite struct AssignmentOrderingToolsTests {
-    private func context(_ app: Application) -> ToolContext {
-        ToolContext(
-            request: makeTestRequest(on: app),
-            subject: "tester",
-            grantedScopes: [.write]
-        )
-    }
-
     /// Course + enrolled instructor.
     @discardableResult
     private func fixture(on app: Application) async throws -> APICourse {
-        let course = try await makeTestCourse(on: app, code: "CS246", name: "OOP")
-        let tester = try await makeTestUser(on: app, username: "tester", role: "instructor")
-        try await makeTestEnrollment(on: app, userID: tester.requireID(), courseID: course.requireID())
-        return course
+        try await seedMCPCourse(on: app)
     }
 
     /// A published assignment with its own backing test setup.
@@ -52,7 +41,7 @@ import Vapor
                 .init(
                     courseCode: "CS246",
                     orderedAssignmentPublicIDs: [c.publicID, a.publicID, b.publicID]),
-                context(app))
+                mcpContext(app))
             #expect(out.assignments.map(\.title) == ["C", "A", "B"])
             #expect(out.assignments.map(\.sortOrder) == [1, 2, 3])
 
@@ -80,7 +69,7 @@ import Vapor
             await #expect(throws: MCPToolError.self) {
                 _ = try await ReorderAssignmentsTool().execute(
                     .init(courseCode: "CS246", orderedAssignmentPublicIDs: [b.publicID, a.publicID]),
-                    context(app))
+                    mcpContext(app))
             }
 
             let reloadedB = try #require(try await APIAssignment.find(b.id, on: app.db))
@@ -103,7 +92,7 @@ import Vapor
             await #expect(throws: MCPToolError.self) {
                 _ = try await ReorderAssignmentsTool().execute(
                     .init(courseCode: "CS246", orderedAssignmentPublicIDs: [a.publicID, a.publicID]),
-                    context(app))
+                    mcpContext(app))
             }
         }
     }
@@ -115,7 +104,7 @@ import Vapor
             await #expect(throws: MCPToolError.self) {
                 _ = try await ReorderAssignmentsTool().execute(
                     .init(courseCode: "CS246", orderedAssignmentPublicIDs: ["not-a-valid-id"]),
-                    context(app))
+                    mcpContext(app))
             }
         }
     }
@@ -131,7 +120,7 @@ import Vapor
             await #expect(throws: MCPToolError.self) {
                 _ = try await ReorderAssignmentsTool().execute(
                     .init(courseCode: "CS999", orderedAssignmentPublicIDs: [foreign.publicID]),
-                    context(app))
+                    mcpContext(app))
             }
         }
     }

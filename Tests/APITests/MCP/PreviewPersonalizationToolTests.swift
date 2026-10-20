@@ -11,14 +11,6 @@ import Vapor
 @testable import APIServer
 
 @Suite struct PreviewPersonalizationToolTests {
-    private func context(_ app: Application) -> ToolContext {
-        ToolContext(
-            request: makeTestRequest(on: app),
-            subject: "tester",
-            grantedScopes: [.read]
-        )
-    }
-
     private func enrolledFixture(
         on app: Application, id: String, manifest: String, withNotebook: Bool = true
     ) async throws -> APIAssignment {
@@ -44,7 +36,7 @@ import Vapor
             let output = try await PreviewPersonalizationTool().execute(
                 PreviewPersonalizationTool.Input(
                     assignmentPublicID: assignment.publicID, seedHex: "ff"),
-                context(app))
+                mcpContext(app))
             #expect(output.seedHex == "ff")
             let byName = Dictionary(uniqueKeysWithValues: output.values.map { ($0.name, $0.value) })
             #expect(byName["cap"] == "5")
@@ -63,7 +55,7 @@ import Vapor
             let assignment = try await enrolledFixture(on: app, id: "setup_pv", manifest: manifest)
             let output = try await PreviewPersonalizationTool().execute(
                 PreviewPersonalizationTool.Input(assignmentPublicID: assignment.publicID, seedHex: nil),
-                context(app))
+                mcpContext(app))
             #expect(output.seedHex == nil)
             #expect(output.values.map(\.name) == ["cap"])
             #expect(output.evaluatedExpressionNames.isEmpty)
@@ -80,7 +72,7 @@ import Vapor
                 _ = try await PreviewPersonalizationTool().execute(
                     PreviewPersonalizationTool.Input(
                         assignmentPublicID: assignment.publicID, seedHex: "nothex"),
-                    context(app))
+                    mcpContext(app))
             }
         }
     }
@@ -112,7 +104,7 @@ import Vapor
 
             let output = try await PreviewPersonalizationTool().execute(
                 PreviewPersonalizationTool.Input(assignmentPublicID: assignment.publicID, seedHex: nil),
-                context(app))
+                mcpContext(app))
             #expect(output.placeholders.used == ["cap", "missing"])
             #expect(output.placeholders.unresolved == ["missing"])
         }
@@ -138,7 +130,7 @@ import Vapor
 
             let output = try await PreviewPersonalizationTool().execute(
                 PreviewPersonalizationTool.Input(assignmentPublicID: assignment.publicID, seedHex: nil),
-                context(app))
+                mcpContext(app))
             #expect(output.placeholders.used == ["cap"])
             #expect(output.placeholders.unresolved.isEmpty)
         }
@@ -173,29 +165,10 @@ import Vapor
 
             let output = try await PreviewPersonalizationTool().execute(
                 PreviewPersonalizationTool.Input(assignmentPublicID: assignment.publicID, seedHex: "ff"),
-                context(app))
+                mcpContext(app))
             #expect(output.placeholders.used.contains("patients"))
             #expect(output.placeholders.used.contains("adults_expected"))
             #expect(output.placeholders.unresolved.isEmpty)
-        }
-    }
-
-    @Test func deniesWhenSubjectNotEnrolled() async throws {
-        let manifest =
-            TestManifests.pythonDeclaredEmpty
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
-            let course = try await makeTestCourse(on: app, code: "CS246", name: "OOP")
-            let courseID = try course.requireID()
-            _ = try await makeTestUser(on: app, username: "tester", role: "instructor")
-            try await makeTestSetup(on: app, id: "setup_pv", courseID: courseID, manifest: manifest)
-            let assignment = try await makeTestAssignment(
-                on: app, testSetupID: "setup_pv", courseID: courseID, title: "Lab")
-            await #expect(throws: MCPToolError.self) {
-                _ = try await PreviewPersonalizationTool().execute(
-                    PreviewPersonalizationTool.Input(assignmentPublicID: assignment.publicID, seedHex: nil),
-                    context(app))
-            }
         }
     }
 }

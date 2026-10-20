@@ -10,14 +10,6 @@ import Vapor
 @testable import APIServer
 
 @Suite struct DeleteSuiteItemToolTests {
-    private func context(_ app: Application) -> ToolContext {
-        ToolContext(
-            request: makeTestRequest(on: app),
-            subject: "tester",
-            grantedScopes: [.write]
-        )
-    }
-
     private let emptyManifest =
         TestManifests.pythonDeclaredEmpty
 
@@ -26,12 +18,8 @@ import Vapor
     private func fixture(
         on app: Application, seedFamily: Bool = false, seedScript: String? = nil
     ) async throws -> APIAssignment {
-        let course = try await makeTestCourse(on: app, code: "CS246", name: "OOP")
-        let courseID = try course.requireID()
-        let tester = try await makeTestUser(on: app, username: "tester", role: "instructor")
-        try await makeTestEnrollment(on: app, userID: tester.requireID(), courseID: courseID)
-        let setup = try await makeTestSetup(
-            on: app, id: "setup_del", courseID: courseID, manifest: emptyManifest)
+        let assignment = try await seedMCPAssignment(on: app, setupID: "setup_del", manifest: emptyManifest)
+        let setup = try #require(try await APITestSetup.find("setup_del", on: app.db))
         try await pfWriteEmptyZip(at: app.testSetupsDirectory + "setup_del.zip")
         var families: [PatternFamily] = []
         var authored: [AuthoredSuiteItem] = []
@@ -51,8 +39,7 @@ import Vapor
             try await applyPatternFamilies(
                 to: setup, nextFamilies: families, authoredItems: authored, on: app.db)
         }
-        return try await makeTestAssignment(
-            on: app, testSetupID: "setup_del", courseID: courseID, title: "Lab")
+        return assignment
     }
 
     private func reloadItems(_ assignment: APIAssignment, on db: any Database) async throws -> [SuiteItemDTO] {
@@ -70,7 +57,7 @@ import Vapor
                 DeleteSuiteItemTool.Input(
                     assignmentPublicID: assignment.publicID, script: "extra_test.py",
                     familyID: nil, check: nil),
-                context(app))
+                mcpContext(app))
             #expect(output.kind == "script")
             #expect(output.removed == "extra_test.py")
 
@@ -87,7 +74,7 @@ import Vapor
                 DeleteSuiteItemTool.Input(
                     assignmentPublicID: assignment.publicID, script: nil,
                     familyID: "bmi_category", check: nil),
-                context(app))
+                mcpContext(app))
             #expect(output.kind == "family")
             #expect(output.removed == "bmi_category")
 
@@ -108,7 +95,7 @@ import Vapor
                 DeleteSuiteItemTool.Input(
                     assignmentPublicID: assignment.publicID, script: "extra_test.py",
                     familyID: nil, check: nil),
-                context(app))
+                mcpContext(app))
             #expect(output.assignmentClosed)
 
             let reloaded = try #require(try await APIAssignment.find(assignment.id, on: app.db))
@@ -131,7 +118,7 @@ import Vapor
                 DeleteSuiteItemTool.Input(
                     assignmentPublicID: assignment.publicID, script: "extra_test.py",
                     familyID: nil, check: nil),
-                context(app))
+                mcpContext(app))
 
             let reloaded = try #require(try await APISubmission.find("sub_del", on: app.db))
             #expect(reloaded.status == "pending")
@@ -150,7 +137,7 @@ import Vapor
                     DeleteSuiteItemTool.Input(
                         assignmentPublicID: assignment.publicID, script: "nope.py",
                         familyID: nil, check: nil),
-                    context(app))
+                    mcpContext(app))
             }
         }
     }
@@ -164,7 +151,7 @@ import Vapor
                     DeleteSuiteItemTool.Input(
                         assignmentPublicID: assignment.publicID, script: nil,
                         familyID: nil, check: nil),
-                    context(app))
+                    mcpContext(app))
             }
         }
     }
@@ -178,28 +165,7 @@ import Vapor
                     DeleteSuiteItemTool.Input(
                         assignmentPublicID: assignment.publicID, script: "extra_test.py",
                         familyID: "bmi_category", check: nil),
-                    context(app))
-            }
-        }
-    }
-
-    @Test func deniesWhenSubjectNotEnrolled() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
-            let course = try await makeTestCourse(on: app, code: "CS246", name: "OOP")
-            let courseID = try course.requireID()
-            _ = try await makeTestUser(on: app, username: "tester", role: "instructor")
-            _ = try await makeTestSetup(
-                on: app, id: "setup_del", courseID: courseID, manifest: emptyManifest)
-            try await pfWriteEmptyZip(at: app.testSetupsDirectory + "setup_del.zip")
-            let assignment = try await makeTestAssignment(
-                on: app, testSetupID: "setup_del", courseID: courseID, title: "Lab")
-            await #expect(throws: MCPToolError.self) {
-                _ = try await DeleteSuiteItemTool().execute(
-                    DeleteSuiteItemTool.Input(
-                        assignmentPublicID: assignment.publicID, script: "x.py",
-                        familyID: nil, check: nil),
-                    context(app))
+                    mcpContext(app))
             }
         }
     }

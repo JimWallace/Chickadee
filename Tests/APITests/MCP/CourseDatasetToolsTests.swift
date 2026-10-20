@@ -16,7 +16,6 @@ import Vapor
 /// The attach and detach paths run `zip` and `unzip`, so the suite has a time
 /// limit.
 @Suite(.serialized, .timeLimit(.minutes(5))) final class CourseDatasetToolsTests {
-
     let app: Application
 
     init() async throws {
@@ -61,10 +60,6 @@ import Vapor
         try #require(try await APICourse.query(on: app.db).filter(\.$code == code).first()).requireID()
     }
 
-    private func context(_ username: String = "cdt_staff") -> ToolContext {
-        ToolContext(request: makeTestRequest(on: app), subject: username, grantedScopes: [.read, .write])
-    }
-
     private func fetching(_ csv: String) -> DatasetSourceFetch {
         { _, _ in Data(csv.utf8) }
     }
@@ -81,7 +76,7 @@ import Vapor
             .init(
                 assignmentPublicID: fx.assignment.publicID, slug: "ward-cases", filename: filename,
                 version: version, sampleSize: sampleSize, stratumColumn: nil, scope: scope),
-            context(username))
+            mcpContext(app, subject: username))
     }
 
     private func addVersion(_ csv: String) async throws -> AddDatasetVersionTool.Output {
@@ -89,7 +84,7 @@ import Vapor
             .init(
                 courseCode: "CDT1", slug: "ward-cases", sourceUrl: "https://example.org/v2.csv", filename: nil,
                 note: "Fewer rows"),
-            context())
+            mcpContext(app, subject: "cdt_staff"))
     }
 
     // MARK: - Reading
@@ -98,7 +93,8 @@ import Vapor
         try await withApp(app) { _ in
             let fx = try await fixture()
             _ = try await attach(fx, sampleSize: 3)
-            let out = try await ListDatasetsTool().execute(.init(courseCode: "CDT1"), context())
+            let out = try await ListDatasetsTool().execute(
+                .init(courseCode: "CDT1"), mcpContext(app, subject: "cdt_staff"))
             let dataset = try #require(out.datasets.first)
             #expect(out.datasets.count == 1)
             #expect(dataset.slug == "ward-cases")
@@ -114,14 +110,16 @@ import Vapor
         try await withApp(app) { _ in
             _ = try await fixture()
             let out = try await GetDatasetTool().execute(
-                .init(courseCode: "CDT1", slug: "ward-cases", version: nil, maxRows: 2), context())
+                .init(courseCode: "CDT1", slug: "ward-cases", version: nil, maxRows: 2),
+                mcpContext(app, subject: "cdt_staff"))
             #expect(out.version == 1)
             #expect(out.rows == "id,ward,systolic\n1,A,120\n2,B,131\n")
             #expect(out.rowCount == 6)
             #expect(out.truncated)
             await #expect(throws: MCPToolError.self) {
                 _ = try await GetDatasetTool().execute(
-                    .init(courseCode: "CDT1", slug: "no-such", version: nil, maxRows: nil), self.context())
+                    .init(courseCode: "CDT1", slug: "no-such", version: nil, maxRows: nil),
+                    mcpContext(self.app, subject: "cdt_staff"))
             }
         }
     }
@@ -136,7 +134,7 @@ import Vapor
                     courseCode: "CDT1", name: "Blood pressure", slug: nil, description: nil, provenance: nil,
                     licence: nil, sourceUrl: "https://example.org/data/bp.csv", note: nil, assignmentPublicID: nil,
                     filename: nil),
-                context())
+                mcpContext(app, subject: "cdt_staff"))
             #expect(out.dataset.slug == "blood-pressure")
             #expect(!out.dataset.isPublished)
             #expect(out.dataset.versions.map(\.filename) == ["bp.csv"])
@@ -153,7 +151,7 @@ import Vapor
                             courseCode: "CDT1", name: "Two", slug: nil, description: nil, provenance: nil,
                             licence: nil, sourceUrl: url, note: nil, assignmentPublicID: publicID,
                             filename: "notes.csv"),
-                        self.context())
+                        mcpContext(self.app, subject: "cdt_staff"))
                 }
             }
         }
@@ -169,7 +167,7 @@ import Vapor
                         courseCode: "CDT1", name: "Local", slug: nil, description: nil, provenance: nil,
                         licence: nil, sourceUrl: "https://127.0.0.1/secret.csv", note: nil,
                         assignmentPublicID: nil, filename: nil),
-                    self.context())
+                    mcpContext(self.app, subject: "cdt_staff"))
             }
         }
     }
@@ -182,7 +180,7 @@ import Vapor
                     courseCode: "CDT1", name: "Notes", slug: nil, description: nil, provenance: nil,
                     licence: nil, sourceUrl: nil, note: nil, assignmentPublicID: fx.assignment.publicID,
                     filename: "notes.csv"),
-                context())
+                mcpContext(app, subject: "cdt_staff"))
             #expect(out.dataset.usage.map(\.file) == ["notes.csv"])
             let spec = try #require(try await setup(of: fx).decodedManifest()?.datasetSpecsByFile["notes.csv"])
             #expect(spec.source == DatasetSource(slug: "notes", version: 1))
@@ -200,7 +198,7 @@ import Vapor
                     .init(
                         courseCode: "CDT1", slug: "ward-cases", name: nil, description: nil, provenance: provenance,
                         licence: licence, isPublished: true, columns: nil),
-                    self.context())
+                    mcpContext(self.app, subject: "cdt_staff"))
             }
             await #expect(throws: MCPToolError.self) { _ = try await update(provenance: nil, licence: nil) }
             let out = try await update(provenance: "Hospital extract", licence: "Course use only")
@@ -217,7 +215,7 @@ import Vapor
                     .init(
                         courseCode: "CDT1", slug: "ward-cases", name: nil, description: nil, provenance: nil,
                         licence: nil, isPublished: nil, columns: columns),
-                    self.context())
+                    mcpContext(self.app, subject: "cdt_staff"))
             }
             _ = try await describe([.init(name: "ward", description: "Hospital ward", unit: nil)])
             let out = try await describe([.init(name: "systolic", description: nil, unit: "mmHg")])
@@ -255,7 +253,7 @@ import Vapor
                     .init(
                         courseCode: "CDT1", slug: "ward-cases", name: "Renamed", description: nil,
                         provenance: nil, licence: nil, isPublished: true, columns: nil),
-                    self.context())
+                    mcpContext(self.app, subject: "cdt_staff"))
             }
             let courseID = try await self.courseID("CDT1")
             let stored = try #require(
@@ -274,7 +272,7 @@ import Vapor
                     .init(
                         courseCode: "CDT1", slug: "ward-cases", name: nil, description: nil,
                         provenance: "Hospital extract", licence: licence, isPublished: publish, columns: nil),
-                    self.context())
+                    mcpContext(self.app, subject: "cdt_staff"))
             }
             _ = try await update(licence: "Course use only", publish: true)
             let out = try await update(licence: "", publish: false)
@@ -295,7 +293,7 @@ import Vapor
                         courseCode: "CDT3", name: "Notes", slug: nil, description: nil, provenance: nil,
                         licence: nil, sourceUrl: nil, note: nil, assignmentPublicID: fx.assignment.publicID,
                         filename: "notes.csv"),
-                    self.context())
+                    mcpContext(self.app, subject: "cdt_staff"))
             }
         }
     }
@@ -316,12 +314,13 @@ import Vapor
             #expect(reloaded.visibility == .open)
 
             let files = try await GetSupportFilesTool().execute(
-                .init(assignmentPublicID: fx.assignment.publicID, filename: nil, maxBytes: nil), context())
+                .init(assignmentPublicID: fx.assignment.publicID, filename: nil, maxBytes: nil),
+                mcpContext(app, subject: "cdt_staff"))
             let entry = try #require(files.files?.first { $0.filename == "cases.csv" })
             #expect(entry.datasetSource == DatasetSource(slug: "ward-cases", version: 1))
             #expect(entry.datasetScope == "course")
             let details = try await GetAssignmentTool().execute(
-                .init(assignmentPublicID: fx.assignment.publicID), context())
+                .init(assignmentPublicID: fx.assignment.publicID), mcpContext(app, subject: "cdt_staff"))
             #expect(details.datasets.map(\.slug) == ["ward-cases"])
         }
     }
@@ -379,7 +378,7 @@ import Vapor
             func detach(removeFile: Bool?) async throws -> DetachDatasetTool.Output {
                 try await DetachDatasetTool().execute(
                     .init(assignmentPublicID: fx.assignment.publicID, filename: "cases.csv", removeFile: removeFile),
-                    self.context())
+                    mcpContext(self.app, subject: "cdt_staff"))
             }
             _ = try await detach(removeFile: nil)
             let kept = try #require(try await setup(of: fx).decodedManifest()?.datasetSpecsByFile["cases.csv"])
@@ -392,7 +391,7 @@ import Vapor
             _ = try await attach(fx, filename: "again.csv")
             _ = try await DetachDatasetTool().execute(
                 .init(assignmentPublicID: fx.assignment.publicID, filename: "again.csv", removeFile: true),
-                context())
+                mcpContext(app, subject: "cdt_staff"))
             let setup = try await setup(of: fx)
             #expect(await extractZipEntry(zipPath: setup.zipPath, entryName: "again.csv") == nil)
         }
@@ -411,7 +410,7 @@ import Vapor
                     .init(
                         courseCode: "CDT1", slug: "ward-cases", name: "Renamed", description: nil, provenance: nil,
                         licence: nil, isPublished: nil, columns: nil),
-                    self.context("cdt_student"))
+                    mcpContext(self.app, subject: "cdt_student"))
             }
         }
     }
@@ -423,7 +422,8 @@ import Vapor
             let fx = try await fixture()
             _ = try await fixture(code: "CDT2", username: "cdt_other")
             await #expect(throws: MCPToolError.self) {
-                _ = try await ListDatasetsTool().execute(.init(courseCode: "CDT1"), self.context("cdt_other"))
+                _ = try await ListDatasetsTool().execute(
+                    .init(courseCode: "CDT1"), mcpContext(self.app, subject: "cdt_other"))
             }
             await #expect(throws: MCPToolError.self) { _ = try await self.attach(fx, as: "cdt_other") }
         }

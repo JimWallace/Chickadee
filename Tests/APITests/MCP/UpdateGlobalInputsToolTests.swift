@@ -12,29 +12,17 @@ import Vapor
 @testable import APIServer
 
 @Suite struct UpdateGlobalInputsToolTests {
-    private func context(_ app: Application) -> ToolContext {
-        ToolContext(
-            request: makeTestRequest(on: app),
-            subject: "tester",
-            grantedScopes: [.write]
-        )
-    }
-
     private let emptyManifest =
         TestManifests.pythonDeclaredEmpty
 
     /// Course + enrolled instructor + setup (empty manifest, rebuildable zip) +
     /// assignment.
     private func fixture(on app: Application) async throws -> APIAssignment {
-        let course = try await makeTestCourse(on: app, code: "CS246", name: "OOP")
-        let courseID = try course.requireID()
-        let tester = try await makeTestUser(on: app, username: "tester", role: "instructor")
-        try await makeTestEnrollment(on: app, userID: tester.requireID(), courseID: courseID)
-        try await makeTestSetup(on: app, id: "setup_gi", courseID: courseID, manifest: emptyManifest)
+        let assignment = try await seedMCPAssignment(
+            on: app, setupID: "setup_gi", manifest: emptyManifest)
         // applyPatternFamilies rebuilds the zip, so it must be a valid archive.
         try await pfWriteEmptyZip(at: app.testSetupsDirectory + "setup_gi.zip")
-        return try await makeTestAssignment(
-            on: app, testSetupID: "setup_gi", courseID: courseID, title: "Lab")
+        return assignment
     }
 
     private func input(
@@ -62,7 +50,7 @@ import Vapor
                     assignment,
                     variables: [FamilyVariable(name: "limit", value: .int(5))],
                     expressions: [PersonalizationExpression(name: "offset", expression: "seed % 3")]),
-                context(app))
+                mcpContext(app))
             #expect(output.variables.map(\.name) == ["limit"])
             #expect(output.expressions.map(\.name) == ["offset"])
 
@@ -78,9 +66,9 @@ import Vapor
             let assignment = try await fixture(on: app)
             _ = try await UpdateGlobalInputsTool().execute(
                 input(assignment, variables: [FamilyVariable(name: "limit", value: .int(5))]),
-                context(app))
+                mcpContext(app))
             _ = try await UpdateGlobalInputsTool().execute(
-                input(assignment, variables: []), context(app))
+                input(assignment, variables: []), mcpContext(app))
             let reloaded = try await reloadInputs(assignment, on: app.db)
             #expect(reloaded.variables.isEmpty)
             #expect(reloaded.expressions.isEmpty)
@@ -94,7 +82,7 @@ import Vapor
             await #expect(throws: MCPToolError.self) {
                 _ = try await UpdateGlobalInputsTool().execute(
                     input(assignment, variables: [FamilyVariable(name: "1bad", value: .int(1))]),
-                    context(app))
+                    mcpContext(app))
             }
         }
     }
@@ -106,7 +94,7 @@ import Vapor
             await #expect(throws: MCPToolError.self) {
                 _ = try await UpdateGlobalInputsTool().execute(
                     input(assignment, variables: [FamilyVariable(name: "seed", value: .int(1))]),
-                    context(app))
+                    mcpContext(app))
             }
         }
     }
@@ -121,25 +109,7 @@ import Vapor
                         assignment,
                         variables: [FamilyVariable(name: "n", value: .int(1))],
                         expressions: [PersonalizationExpression(name: "n", expression: "seed")]),
-                    context(app))
-            }
-        }
-    }
-
-    @Test func deniesWhenSubjectNotEnrolled() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
-            let course = try await makeTestCourse(on: app, code: "CS246", name: "OOP")
-            let courseID = try course.requireID()
-            _ = try await makeTestUser(on: app, username: "tester", role: "instructor")
-            try await makeTestSetup(on: app, id: "setup_gi", courseID: courseID, manifest: emptyManifest)
-            try await pfWriteEmptyZip(at: app.testSetupsDirectory + "setup_gi.zip")
-            let assignment = try await makeTestAssignment(
-                on: app, testSetupID: "setup_gi", courseID: courseID, title: "Lab")
-            await #expect(throws: MCPToolError.self) {
-                _ = try await UpdateGlobalInputsTool().execute(
-                    input(assignment, variables: [FamilyVariable(name: "n", value: .int(1))]),
-                    context(app))
+                    mcpContext(app))
             }
         }
     }

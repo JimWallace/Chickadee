@@ -13,14 +13,6 @@ import Vapor
 @testable import APIServer
 
 @Suite struct SetDatasetToolTests {
-    private func context(_ app: Application) -> ToolContext {
-        ToolContext(
-            request: makeTestRequest(on: app),
-            subject: "tester",
-            grantedScopes: [.read, .write]
-        )
-    }
-
     private let manifest = """
         {"schemaVersion":1,"testSuites":[\
         {"tier":"public","script":"test_a.sh","points":1}\
@@ -28,11 +20,9 @@ import Vapor
         """
 
     private func fixture(on app: Application) async throws -> APIAssignment {
-        let course = try await makeTestCourse(on: app, code: "HLTH230", name: "Health Informatics")
-        let courseID = try course.requireID()
-        let tester = try await makeTestUser(on: app, username: "tester", role: "instructor")
-        try await makeTestEnrollment(on: app, userID: tester.requireID(), courseID: courseID)
-        try await makeTestSetup(on: app, id: "setup_ds", courseID: courseID, manifest: manifest)
+        let assignment = try await seedMCPAssignment(
+            on: app, setupID: "setup_ds", manifest: manifest, courseCode: "HLTH230", courseName: "Health Informatics",
+            title: "A4")
         try await writeZipFixture(
             at: app.testSetupsDirectory + "setup_ds.zip",
             entries: [
@@ -41,8 +31,7 @@ import Vapor
                 ("solution.ipynb", "{}"),
                 ("cases.csv", "caseid,age\n1,20\n2,30\n3,40\n"),
             ])
-        return try await makeTestAssignment(
-            on: app, testSetupID: "setup_ds", courseID: courseID, title: "A4")
+        return assignment
     }
 
     private func run(
@@ -55,7 +44,7 @@ import Vapor
                 assignmentPublicID: publicID, filename: filename,
                 sampleSize: sampleSize, stratumColumn: stratumColumn, remove: remove,
                 transforms: transforms),
-            context(app))
+            mcpContext(app))
     }
 
     // MARK: - Marking
@@ -102,7 +91,7 @@ import Vapor
             let listing = try await GetSupportFilesTool().execute(
                 GetSupportFilesTool.Input(
                     assignmentPublicID: assignment.publicID, filename: nil, maxBytes: nil),
-                context(app))
+                mcpContext(app))
             let entry = try #require(listing.files?.first { $0.filename == "cases.csv" })
             #expect(entry.isDataset)
             #expect(entry.datasetSampleSize == 2)
@@ -221,7 +210,7 @@ import Vapor
             let listing = try await GetSupportFilesTool().execute(
                 GetSupportFilesTool.Input(
                     assignmentPublicID: assignment.publicID, filename: nil, maxBytes: nil),
-                context(app))
+                mcpContext(app))
             let entry = try #require(listing.files?.first { $0.filename == "cases.csv" })
             #expect(entry.datasetKind == "stratifiedSample")
             #expect(entry.datasetStratumColumn == "age")
@@ -237,7 +226,7 @@ import Vapor
             let listing = try await GetSupportFilesTool().execute(
                 GetSupportFilesTool.Input(
                     assignmentPublicID: assignment.publicID, filename: nil, maxBytes: nil),
-                context(app))
+                mcpContext(app))
             let entry = try #require(listing.files?.first { $0.filename == "cases.csv" })
             #expect(entry.datasetKind == "rowSample")
             #expect(entry.datasetStratumColumn == nil)

@@ -10,14 +10,6 @@ import Vapor
 @testable import APIServer
 
 @Suite struct GetNotebookToolTests {
-    private func context(_ app: Application) -> ToolContext {
-        ToolContext(
-            request: makeTestRequest(on: app),
-            subject: "tester",
-            grantedScopes: [.read]
-        )
-    }
-
     private let twoCellNotebook = #"""
         {"nbformat":4,"nbformat_minor":5,"metadata":{},"cells":[
         {"cell_type":"markdown","metadata":{},"source":["# Lab"]},
@@ -32,14 +24,8 @@ import Vapor
     ) async throws
         -> APIAssignment
     {
-        let course = try await makeTestCourse(on: app, code: "CS246", name: "OOP")
-        let courseID = try course.requireID()
-        let tester = try await makeTestUser(on: app, username: "tester", role: "instructor")
-        try await makeTestEnrollment(on: app, userID: tester.requireID(), courseID: courseID)
-        try await makeTestSetup(
-            on: app, id: "setup_nb", courseID: courseID, withNotebook: withNotebook)
-        return try await makeTestAssignment(
-            on: app, testSetupID: "setup_nb", courseID: courseID, title: "Lab")
+        try await seedMCPAssignment(
+            on: app, setupID: "setup_nb", withNotebook: withNotebook)
     }
 
     @Test func returnsNotebookWithCells() async throws {
@@ -52,7 +38,7 @@ import Vapor
                 encoding: .utf8)
 
             let output = try await GetNotebookTool().execute(
-                GetNotebookTool.Input(assignmentPublicID: assignment.publicID), context(app))
+                GetNotebookTool.Input(assignmentPublicID: assignment.publicID), mcpContext(app))
 
             #expect(output.assignmentPublicID == assignment.publicID)
             #expect(output.cellCount == 2)
@@ -71,7 +57,7 @@ import Vapor
         try await withApp(app) { app in
             let assignment = try await fixture(on: app)
             let output = try await GetNotebookTool().execute(
-                GetNotebookTool.Input(assignmentPublicID: assignment.publicID), context(app))
+                GetNotebookTool.Input(assignmentPublicID: assignment.publicID), mcpContext(app))
             #expect(output.cellCount == 0)
         }
     }
@@ -82,7 +68,7 @@ import Vapor
             _ = try await fixture(on: app)
             await #expect(throws: MCPToolError.self) {
                 _ = try await GetNotebookTool().execute(
-                    GetNotebookTool.Input(assignmentPublicID: "zzzzzz"), context(app))
+                    GetNotebookTool.Input(assignmentPublicID: "zzzzzz"), mcpContext(app))
             }
         }
     }
@@ -94,23 +80,7 @@ import Vapor
             let assignment = try await fixture(on: app, withNotebook: false)
             await #expect(throws: MCPToolError.self) {
                 _ = try await GetNotebookTool().execute(
-                    GetNotebookTool.Input(assignmentPublicID: assignment.publicID), context(app))
-            }
-        }
-    }
-
-    @Test func deniesWhenSubjectNotEnrolled() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
-            let course = try await makeTestCourse(on: app, code: "CS246", name: "OOP")
-            let courseID = try course.requireID()
-            _ = try await makeTestUser(on: app, username: "tester", role: "instructor")
-            try await makeTestSetup(on: app, id: "setup_nb", courseID: courseID)
-            let assignment = try await makeTestAssignment(
-                on: app, testSetupID: "setup_nb", courseID: courseID, title: "Lab")
-            await #expect(throws: MCPToolError.self) {
-                _ = try await GetNotebookTool().execute(
-                    GetNotebookTool.Input(assignmentPublicID: assignment.publicID), context(app))
+                    GetNotebookTool.Input(assignmentPublicID: assignment.publicID), mcpContext(app))
             }
         }
     }

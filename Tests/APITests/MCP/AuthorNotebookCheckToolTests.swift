@@ -10,27 +10,14 @@ import Vapor
 @testable import APIServer
 
 @Suite struct AuthorNotebookCheckToolTests {
-    private func context(_ app: Application) -> ToolContext {
-        ToolContext(
-            request: makeTestRequest(on: app),
-            subject: "tester",
-            grantedScopes: [.write]
-        )
-    }
-
     private let emptyManifest =
         TestManifests.pythonDeclaredEmpty
 
     private func fixture(on app: Application) async throws -> APIAssignment {
-        let course = try await makeTestCourse(on: app, code: "CS246", name: "OOP")
-        let courseID = try course.requireID()
-        let tester = try await makeTestUser(on: app, username: "tester", role: "instructor")
-        try await makeTestEnrollment(on: app, userID: tester.requireID(), courseID: courseID)
-        _ = try await makeTestSetup(
-            on: app, id: "setup_nc", courseID: courseID, manifest: emptyManifest)
+        let assignment = try await seedMCPAssignment(
+            on: app, setupID: "setup_nc", manifest: emptyManifest)
         try await pfWriteEmptyZip(at: app.testSetupsDirectory + "setup_nc.zip")
-        return try await makeTestAssignment(
-            on: app, testSetupID: "setup_nc", courseID: courseID, title: "Lab")
+        return assignment
     }
 
     private func reloadCheck(
@@ -51,7 +38,7 @@ import Vapor
                 .init(
                     assignmentPublicID: assignment.publicID, id: "df_shape", kind: "data_frame_shape",
                     variable: "df", expectedRows: 250, expectedCols: 13),
-                context(app))
+                mcpContext(app))
             #expect(out.created)
             #expect(out.kind == "data_frame_shape")
             #expect(out.assignmentClosed)
@@ -74,13 +61,13 @@ import Vapor
                 .init(
                     assignmentPublicID: assignment.publicID, id: "df_shape", kind: "data_frame_shape",
                     variable: "df", expectedRows: 1, expectedCols: 1),
-                context(app))
+                mcpContext(app))
 
             let out = try await AuthorNotebookCheckTool().execute(
                 .init(
                     assignmentPublicID: assignment.publicID, id: "df_shape", kind: "data_frame_shape",
                     variable: "df", expectedRows: 9, expectedCols: 2),
-                context(app))
+                mcpContext(app))
             #expect(!out.created)
 
             let check = try await reloadCheck(assignment, id: "df_shape", on: app.db)
@@ -99,7 +86,7 @@ import Vapor
             let assignment = try await fixture(on: app)
             let out = try await AuthorNotebookCheckTool().execute(
                 .init(assignmentPublicID: assignment.publicID, id: "figs", kind: "figure_count", minFigures: 2),
-                context(app))
+                mcpContext(app))
             #expect(out.created)
             let check = try await reloadCheck(assignment, id: "figs", on: app.db)
             #expect(check.minFigures == 2)
@@ -114,7 +101,7 @@ import Vapor
                 .init(
                     assignmentPublicID: assignment.publicID, id: "figs", kind: "figure_count",
                     timeLimitSeconds: 45, minFigures: 2),
-                context(app))
+                mcpContext(app))
             let check = try await reloadCheck(assignment, id: "figs", on: app.db)
             #expect(check.timeLimitSeconds == 45)
 
@@ -138,7 +125,7 @@ import Vapor
                     .init(
                         assignmentPublicID: assignment.publicID, id: "figs", kind: "figure_count",
                         timeLimitSeconds: 601, minFigures: 1),
-                    context(app))
+                    mcpContext(app))
             }
         }
     }
@@ -150,7 +137,7 @@ import Vapor
             await #expect(throws: MCPToolError.self) {
                 _ = try await AuthorNotebookCheckTool().execute(
                     .init(assignmentPublicID: assignment.publicID, id: "x", kind: "not_a_kind"),
-                    context(app))
+                    mcpContext(app))
             }
         }
     }
@@ -163,7 +150,7 @@ import Vapor
             await #expect(throws: MCPToolError.self) {
                 _ = try await AuthorNotebookCheckTool().execute(
                     .init(assignmentPublicID: assignment.publicID, id: "bad", kind: "data_frame_shape"),
-                    context(app))
+                    mcpContext(app))
             }
         }
     }
@@ -176,7 +163,7 @@ import Vapor
                 .init(
                     assignmentPublicID: assignment.publicID, id: "figs", kind: "figure_count",
                     failureDetail: "verdictOnly", minFigures: 2),
-                context(app))
+                mcpContext(app))
             let check = try await reloadCheck(assignment, id: "figs", on: app.db)
             #expect(check.failureDetail == .verdictOnly)
 

@@ -12,14 +12,6 @@ import Vapor
 @testable import APIServer
 
 @Suite struct SetAssignmentConceptToolTests {
-    private func context(_ app: Application) -> ToolContext {
-        ToolContext(
-            request: makeTestRequest(on: app),
-            subject: "tester",
-            grantedScopes: [.read, .write]
-        )
-    }
-
     private let manifest =
         TestManifests.workerEmpty
 
@@ -51,7 +43,7 @@ import Vapor
             #expect(assignment.visibility == .open)
 
             let set = try await SetAssignmentConceptTool().execute(
-                .init(assignmentPublicID: assignment.publicID, concept: "loops"), context(app))
+                .init(assignmentPublicID: assignment.publicID, concept: "loops"), mcpContext(app))
             #expect(set.concept == "loops")
             #expect(set.ring == "Ouroboros")
             #expect(try await storedConcept(of: assignment, on: app) == .loops)
@@ -59,7 +51,7 @@ import Vapor
             #expect(try #require(try await APIAssignment.find(assignment.id, on: app.db)).visibility == .open)
 
             let cleared = try await SetAssignmentConceptTool().execute(
-                .init(assignmentPublicID: assignment.publicID, concept: "none"), context(app))
+                .init(assignmentPublicID: assignment.publicID, concept: "none"), mcpContext(app))
             #expect(cleared.concept == nil)
             #expect(cleared.ring == nil)
             #expect(try await storedConcept(of: assignment, on: app) == nil)
@@ -71,10 +63,10 @@ import Vapor
         try await withApp(app) { app in
             let assignment = try await fixture(on: app)
             _ = try await SetAssignmentConceptTool().execute(
-                .init(assignmentPublicID: assignment.publicID, concept: "binary"), context(app))
+                .init(assignmentPublicID: assignment.publicID, concept: "binary"), mcpContext(app))
             await #expect(throws: MCPToolError.self) {
                 _ = try await SetAssignmentConceptTool().execute(
-                    .init(assignmentPublicID: assignment.publicID, concept: "recursion"), context(app))
+                    .init(assignmentPublicID: assignment.publicID, concept: "recursion"), mcpContext(app))
             }
             #expect(try await storedConcept(of: assignment, on: app) == .binary)
         }
@@ -86,7 +78,7 @@ import Vapor
             let assignment = try await fixture(on: app, role: .ta)
             await #expect(throws: MCPToolError.self) {
                 _ = try await SetAssignmentConceptTool().execute(
-                    .init(assignmentPublicID: assignment.publicID, concept: "loops"), context(app))
+                    .init(assignmentPublicID: assignment.publicID, concept: "loops"), mcpContext(app))
             }
             #expect(try await storedConcept(of: assignment, on: app) == nil)
         }
@@ -98,7 +90,7 @@ import Vapor
             let assignment = try await fixture(on: app, enroll: false)
             await #expect(throws: MCPToolError.self) {
                 _ = try await SetAssignmentConceptTool().execute(
-                    .init(assignmentPublicID: assignment.publicID, concept: "loops"), context(app))
+                    .init(assignmentPublicID: assignment.publicID, concept: "loops"), mcpContext(app))
             }
         }
     }
@@ -108,13 +100,13 @@ import Vapor
         try await withApp(app) { app in
             let assignment = try await fixture(on: app)
             let before = try await GetAssignmentTool().execute(
-                .init(assignmentPublicID: assignment.publicID), context(app))
+                .init(assignmentPublicID: assignment.publicID), mcpContext(app))
             #expect(before.concept == nil)
 
             _ = try await SetAssignmentConceptTool().execute(
-                .init(assignmentPublicID: assignment.publicID, concept: "healthData"), context(app))
+                .init(assignmentPublicID: assignment.publicID, concept: "healthData"), mcpContext(app))
             let after = try await GetAssignmentTool().execute(
-                .init(assignmentPublicID: assignment.publicID), context(app))
+                .init(assignmentPublicID: assignment.publicID), mcpContext(app))
             #expect(after.concept == "healthData")
         }
     }

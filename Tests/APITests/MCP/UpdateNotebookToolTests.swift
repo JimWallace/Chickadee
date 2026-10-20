@@ -10,14 +10,6 @@ import Vapor
 @testable import APIServer
 
 @Suite struct UpdateNotebookToolTests {
-    private func context(_ app: Application) -> ToolContext {
-        ToolContext(
-            request: makeTestRequest(on: app),
-            subject: "tester",
-            grantedScopes: [.write]
-        )
-    }
-
     /// Decodes a JSON string into a `JSONValue` for use as tool input.
     private func json(_ raw: String) throws -> JSONValue {
         try JSONDecoder().decode(JSONValue.self, from: Data(raw.utf8))
@@ -35,14 +27,8 @@ import Vapor
     ) async throws
         -> APIAssignment
     {
-        let course = try await makeTestCourse(on: app, code: "CS246", name: "OOP")
-        let courseID = try course.requireID()
-        let tester = try await makeTestUser(on: app, username: "tester", role: "instructor")
-        try await makeTestEnrollment(on: app, userID: tester.requireID(), courseID: courseID)
-        try await makeTestSetup(
-            on: app, id: "setup_nb", courseID: courseID, withNotebook: withNotebook)
-        return try await makeTestAssignment(
-            on: app, testSetupID: "setup_nb", courseID: courseID, title: "Lab")
+        try await seedMCPAssignment(
+            on: app, setupID: "setup_nb", withNotebook: withNotebook)
     }
 
     @Test func writesNotebookAndPersists() async throws {
@@ -52,7 +38,7 @@ import Vapor
             let output = try await UpdateNotebookTool().execute(
                 UpdateNotebookTool.Input(
                     assignmentPublicID: assignment.publicID, notebook: try json(twoCellNotebook)),
-                context(app))
+                mcpContext(app))
             #expect(output.cellCount == 2)
 
             // Read the persisted notebook back through the canonical loader.
@@ -78,7 +64,7 @@ import Vapor
             _ = try await UpdateNotebookTool().execute(
                 UpdateNotebookTool.Input(
                     assignmentPublicID: assignment.publicID, notebook: try json(twoCellNotebook)),
-                context(app))
+                mcpContext(app))
 
             let after = try #require(try await APITestSetup.find("setup_nb", on: app.db))
             let path = try #require(after.notebookPath)
@@ -124,7 +110,7 @@ import Vapor
             let output = try await UpdateNotebookTool().execute(
                 UpdateNotebookTool.Input(
                     assignmentPublicID: assignment.publicID, notebook: try json(twoCellNotebook)),
-                context(app))
+                mcpContext(app))
 
             #expect(output.validationStatus == "pending")
 
@@ -151,7 +137,7 @@ import Vapor
                 _ = try await UpdateNotebookTool().execute(
                     UpdateNotebookTool.Input(
                         assignmentPublicID: assignment.publicID, notebook: .array([])),
-                    context(app))
+                    mcpContext(app))
             }
         }
     }
@@ -165,7 +151,7 @@ import Vapor
                     UpdateNotebookTool.Input(
                         assignmentPublicID: assignment.publicID,
                         notebook: try json(#"{"nbformat":4,"metadata":{}}"#)),
-                    context(app))
+                    mcpContext(app))
             }
         }
     }
@@ -178,25 +164,7 @@ import Vapor
                 _ = try await UpdateNotebookTool().execute(
                     UpdateNotebookTool.Input(
                         assignmentPublicID: "zzzzzz", notebook: try json(twoCellNotebook)),
-                    context(app))
-            }
-        }
-    }
-
-    @Test func deniesWhenSubjectNotEnrolled() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
-            let course = try await makeTestCourse(on: app, code: "CS246", name: "OOP")
-            let courseID = try course.requireID()
-            _ = try await makeTestUser(on: app, username: "tester", role: "instructor")
-            try await makeTestSetup(on: app, id: "setup_nb", courseID: courseID)
-            let assignment = try await makeTestAssignment(
-                on: app, testSetupID: "setup_nb", courseID: courseID, title: "Lab")
-            await #expect(throws: MCPToolError.self) {
-                _ = try await UpdateNotebookTool().execute(
-                    UpdateNotebookTool.Input(
-                        assignmentPublicID: assignment.publicID, notebook: try json(twoCellNotebook)),
-                    context(app))
+                    mcpContext(app))
             }
         }
     }

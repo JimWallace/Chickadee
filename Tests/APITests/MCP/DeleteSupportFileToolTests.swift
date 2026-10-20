@@ -14,14 +14,6 @@ import Vapor
 @testable import APIServer
 
 @Suite struct DeleteSupportFileToolTests {
-    private func context(_ app: Application) -> ToolContext {
-        ToolContext(
-            request: makeTestRequest(on: app),
-            subject: "tester",
-            grantedScopes: [.write]
-        )
-    }
-
     private let emptyManifest = TestManifests.emptySuite
 
     /// Course + enrolled instructor + setup + assignment, with `support` written
@@ -31,12 +23,8 @@ import Vapor
         on app: Application, support: [String: String] = [:], seedScript: String? = nil,
         manifest: String? = nil
     ) async throws -> APIAssignment {
-        let course = try await makeTestCourse(on: app, code: "CS246", name: "OOP")
-        let courseID = try course.requireID()
-        let tester = try await makeTestUser(on: app, username: "tester", role: "instructor")
-        try await makeTestEnrollment(on: app, userID: tester.requireID(), courseID: courseID)
-        let setup = try await makeTestSetup(
-            on: app, id: "setup_sup", courseID: courseID, manifest: manifest ?? emptyManifest)
+        let assignment = try await seedMCPAssignment(on: app, setupID: "setup_sup", manifest: manifest ?? emptyManifest)
+        let setup = try #require(try await APITestSetup.find("setup_sup", on: app.db))
         let zipPath = app.testSetupsDirectory + "setup_sup.zip"
         try await pfWriteEmptyZip(at: zipPath)
         for (name, body) in support.sorted(by: { $0.key < $1.key }) {
@@ -53,8 +41,7 @@ import Vapor
                             content: "#!/usr/bin/env python3\nprint('ok')", hint: nil))
                 ], on: app.db)
         }
-        return try await makeTestAssignment(
-            on: app, testSetupID: "setup_sup", courseID: courseID, title: "Lab")
+        return assignment
     }
 
     private func entries(_ app: Application) async -> [String] {
@@ -69,7 +56,7 @@ import Vapor
         try await DeleteSupportFileTool().execute(
             DeleteSupportFileTool.Input(
                 assignmentPublicID: assignment.publicID, filename: filename),
-            context(app))
+            mcpContext(app))
     }
 
     @Test func removesASupportFileFromTheZip() async throws {

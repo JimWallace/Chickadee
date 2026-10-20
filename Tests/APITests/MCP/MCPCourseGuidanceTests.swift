@@ -15,7 +15,6 @@ import Vapor
 @testable import APIServer
 
 @Suite struct MCPCourseGuidanceTests {
-
     // MARK: - House authoring-voice block (pure)
 
     @Test func instructionsCarryTheAuthoringVoiceGuide() {
@@ -187,13 +186,6 @@ import Vapor
 
     // MARK: - initialize integration
 
-    private func toolContext(_ app: Application, subject: String) -> ToolContext {
-        ToolContext(
-            request: makeTestRequest(on: app),
-            subject: subject,
-            grantedScopes: [.read, .write])
-    }
-
     private func initializeInstructions(
         _ app: Application, subject: String
     ) async throws -> String {
@@ -201,7 +193,7 @@ import Vapor
             serverInfo: MCPServerInfo(name: "Chickadee MCP", version: "test"))
         let request = JSONRPCRequest(jsonrpc: "2.0", id: .number(1), method: "initialize", params: nil)
         let response = try #require(
-            await dispatcher.dispatch(request, context: toolContext(app, subject: subject)))
+            await dispatcher.dispatch(request, context: mcpContext(app, subject: subject)))
         guard case .object(let result)? = response.result,
             case .string(let instructions)? = result["instructions"]
         else {

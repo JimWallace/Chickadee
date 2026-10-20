@@ -10,13 +10,6 @@ import Vapor
 @testable import APIServer
 
 @Suite struct GetSolutionToolTests {
-    private func context(_ app: Application, scopes: Set<ContentScope> = [.read]) -> ToolContext {
-        ToolContext(
-            request: makeTestRequest(on: app),
-            subject: "tester",
-            grantedScopes: scopes)
-    }
-
     private let solutionNotebook = #"""
         {"nbformat":4,"nbformat_minor":5,"metadata":{},"cells":[
         {"cell_type":"markdown","metadata":{},"source":["# Solution"]},
@@ -28,13 +21,9 @@ import Vapor
     /// `withSolution` is true, attaches a `kind == .validation` submission
     /// carrying `solutionNotebook` and links it as the assignment's solution.
     private func fixture(on app: Application, withSolution: Bool = true) async throws -> APIAssignment {
-        let course = try await makeTestCourse(on: app, code: "CS246", name: "OOP")
-        let courseID = try course.requireID()
-        let tester = try await makeTestUser(on: app, username: "tester", role: "instructor")
-        try await makeTestEnrollment(on: app, userID: tester.requireID(), courseID: courseID)
-        try await makeTestSetup(on: app, id: "setup_sol", courseID: courseID)
-        let assignment = try await makeTestAssignment(
-            on: app, testSetupID: "setup_sol", courseID: courseID, title: "Lab")
+        let assignment = try await seedMCPAssignment(
+            on: app, setupID: "setup_sol")
+        let tester = try await mcpTestUser(on: app)
 
         if withSolution {
             let path = app.submissionsDirectory + "sub_sol.ipynb"
@@ -59,7 +48,7 @@ import Vapor
         try await withApp(app) { app in
             let assignment = try await fixture(on: app)
             let output = try await GetSolutionTool().execute(
-                GetSolutionTool.Input(assignmentPublicID: assignment.publicID), context(app))
+                GetSolutionTool.Input(assignmentPublicID: assignment.publicID), mcpContext(app))
 
             #expect(output.cellCount == 2)
             #expect(output.filename == "solution.ipynb")
@@ -82,7 +71,7 @@ import Vapor
             try await assignment.save(on: app.db)
 
             let output = try await GetSolutionTool().execute(
-                GetSolutionTool.Input(assignmentPublicID: assignment.publicID), context(app))
+                GetSolutionTool.Input(assignmentPublicID: assignment.publicID), mcpContext(app))
             #expect(output.cellCount == 2)
         }
     }
@@ -93,7 +82,7 @@ import Vapor
             let assignment = try await fixture(on: app, withSolution: false)
             await #expect(throws: MCPToolError.self) {
                 _ = try await GetSolutionTool().execute(
-                    GetSolutionTool.Input(assignmentPublicID: assignment.publicID), context(app))
+                    GetSolutionTool.Input(assignmentPublicID: assignment.publicID), mcpContext(app))
             }
         }
     }
@@ -104,24 +93,7 @@ import Vapor
             _ = try await fixture(on: app)
             await #expect(throws: MCPToolError.self) {
                 _ = try await GetSolutionTool().execute(
-                    GetSolutionTool.Input(assignmentPublicID: "zzzzzz"), context(app))
-            }
-        }
-    }
-
-    @Test func deniesWhenSubjectNotEnrolled() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
-            let course = try await makeTestCourse(on: app, code: "CS246", name: "OOP")
-            let courseID = try course.requireID()
-            // "tester" exists but is NOT enrolled in the course.
-            _ = try await makeTestUser(on: app, username: "tester", role: "instructor")
-            try await makeTestSetup(on: app, id: "setup_sol", courseID: courseID)
-            let assignment = try await makeTestAssignment(
-                on: app, testSetupID: "setup_sol", courseID: courseID, title: "Lab")
-            await #expect(throws: MCPToolError.self) {
-                _ = try await GetSolutionTool().execute(
-                    GetSolutionTool.Input(assignmentPublicID: assignment.publicID), context(app))
+                    GetSolutionTool.Input(assignmentPublicID: "zzzzzz"), mcpContext(app))
             }
         }
     }

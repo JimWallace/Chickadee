@@ -12,14 +12,6 @@ import Vapor
 @testable import APIServer
 
 @Suite struct GetSupportFilesToolTests {
-    private func context(_ app: Application) -> ToolContext {
-        ToolContext(
-            request: makeTestRequest(on: app),
-            subject: "tester",
-            grantedScopes: [.read]
-        )
-    }
-
     private let manifest = """
         {"schemaVersion":1,"testSuites":[\
         {"tier":"public","script":"test_a.sh","points":1}\
@@ -29,11 +21,8 @@ import Vapor
     /// Course + enrolled instructor + setup whose zip holds one graded script,
     /// both canonical notebooks, and two support files (one nested).
     private func fixture(on app: Application) async throws -> APIAssignment {
-        let course = try await makeTestCourse(on: app, code: "CS246", name: "OOP")
-        let courseID = try course.requireID()
-        let tester = try await makeTestUser(on: app, username: "tester", role: "instructor")
-        try await makeTestEnrollment(on: app, userID: tester.requireID(), courseID: courseID)
-        try await makeTestSetup(on: app, id: "setup_sf", courseID: courseID, manifest: manifest)
+        let assignment = try await seedMCPAssignment(
+            on: app, setupID: "setup_sf", manifest: manifest)
         try await writeZipFixture(
             at: app.testSetupsDirectory + "setup_sf.zip",
             entries: [
@@ -43,8 +32,7 @@ import Vapor
                 ("cases.csv", "caseid,age\n1,20\n2,30\n"),
                 ("data/extra.txt", "nested support file\n"),
             ])
-        return try await makeTestAssignment(
-            on: app, testSetupID: "setup_sf", courseID: courseID, title: "Lab")
+        return assignment
     }
 
     private func run(
@@ -53,7 +41,7 @@ import Vapor
         try await GetSupportFilesTool().execute(
             GetSupportFilesTool.Input(
                 assignmentPublicID: publicID, filename: filename, maxBytes: maxBytes),
-            context(app))
+            mcpContext(app))
     }
 
     // MARK: - List mode
@@ -151,22 +139,6 @@ import Vapor
             await #expect(throws: MCPToolError.self) {
                 _ = try await run(
                     app, publicID: assignment.publicID, filename: "../../etc/passwd")
-            }
-        }
-    }
-
-    @Test func deniesWhenSubjectNotEnrolled() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
-            let course = try await makeTestCourse(on: app, code: "CS246", name: "OOP")
-            let courseID = try course.requireID()
-            _ = try await makeTestUser(on: app, username: "tester", role: "instructor")
-            try await makeTestSetup(on: app, id: "setup_sf", courseID: courseID, manifest: manifest)
-            let assignment = try await makeTestAssignment(
-                on: app, testSetupID: "setup_sf", courseID: courseID, title: "Lab")
-
-            await #expect(throws: MCPToolError.self) {
-                _ = try await run(app, publicID: assignment.publicID)
             }
         }
     }

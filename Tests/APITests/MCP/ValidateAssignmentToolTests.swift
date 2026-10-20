@@ -10,24 +10,11 @@ import Vapor
 @testable import APIServer
 
 @Suite struct ValidateAssignmentToolTests {
-    private func context(_ app: Application) -> ToolContext {
-        ToolContext(
-            request: makeTestRequest(on: app),
-            subject: "tester",
-            grantedScopes: [.read]
-        )
-    }
-
     /// Course + enrolled instructor "tester" + setup + assignment. Returns the
     /// assignment so the test can set its validation state.
     private func fixture(on app: Application) async throws -> APIAssignment {
-        let course = try await makeTestCourse(on: app, code: "CS246", name: "OOP")
-        let courseID = try course.requireID()
-        let tester = try await makeTestUser(on: app, username: "tester", role: "instructor")
-        try await makeTestEnrollment(on: app, userID: tester.requireID(), courseID: courseID)
-        try await makeTestSetup(on: app, id: "setup_val", courseID: courseID)
-        return try await makeTestAssignment(
-            on: app, testSetupID: "setup_val", courseID: courseID, title: "Lab")
+        try await seedMCPAssignment(
+            on: app, setupID: "setup_val")
     }
 
     /// Collects emitted progress messages across the watch's child task.
@@ -128,7 +115,7 @@ import Vapor
             let output = try await ValidateAssignmentTool().execute(
                 ValidateAssignmentTool.Input(
                     assignmentPublicID: assignment.publicID, timeoutSeconds: 5),
-                context(app))
+                mcpContext(app))
             #expect(output.validationStatus == "failed")
             #expect(output.timedOut == false)
         }
@@ -144,7 +131,7 @@ import Vapor
             let output = try await ValidateAssignmentTool().execute(
                 ValidateAssignmentTool.Input(
                     assignmentPublicID: assignment.publicID, timeoutSeconds: 1),
-                context(app))
+                mcpContext(app))
             #expect(output.timedOut)
         }
     }
@@ -156,7 +143,7 @@ import Vapor
             await #expect(throws: MCPToolError.self) {
                 _ = try await ValidateAssignmentTool().execute(
                     ValidateAssignmentTool.Input(assignmentPublicID: "zzzzzz", timeoutSeconds: 1),
-                    context(app))
+                    mcpContext(app))
             }
         }
     }
@@ -177,7 +164,7 @@ import Vapor
                 _ = try await ValidateAssignmentTool().execute(
                     ValidateAssignmentTool.Input(
                         assignmentPublicID: assignment.publicID, timeoutSeconds: 1),
-                    context(app))
+                    mcpContext(app))
             }
         }
     }

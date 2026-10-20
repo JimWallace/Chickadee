@@ -9,14 +9,6 @@ import Vapor
 @testable import APIServer
 
 @Suite struct ListAssignmentsToolTests {
-    private func context(_ app: Application) -> ToolContext {
-        ToolContext(
-            request: makeTestRequest(on: app),
-            subject: "tester",
-            grantedScopes: [.read, .write]
-        )
-    }
-
     @Test func listsAssignmentsForCourseSortedByTitle() async throws {
         let app = try await makeTestApp()
         try await withApp(app) { app in
@@ -30,7 +22,7 @@ import Vapor
             try await makeTestAssignment(on: app, testSetupID: "setup_app", courseID: courseID, title: "Apportionment")
 
             let output = try await ListAssignmentsTool().execute(
-                ListAssignmentsTool.Input(courseCode: "CS136"), context(app))
+                ListAssignmentsTool.Input(courseCode: "CS136"), mcpContext(app))
             #expect(output.courseCode == "CS136")
             #expect(output.assignments.map(\.title) == ["Apportionment", "Bit Counting"])
         }
@@ -48,7 +40,7 @@ import Vapor
 
             await #expect(throws: MCPToolError.self) {
                 _ = try await ListAssignmentsTool().execute(
-                    ListAssignmentsTool.Input(courseCode: "CS136"), context(app))
+                    ListAssignmentsTool.Input(courseCode: "CS136"), mcpContext(app))
             }
         }
     }
@@ -66,12 +58,12 @@ import Vapor
 
             await #expect(throws: MCPToolError.self) {
                 _ = try await ListAssignmentsTool().execute(
-                    ListAssignmentsTool.Input(courseCode: "CS136"), context(app))
+                    ListAssignmentsTool.Input(courseCode: "CS136"), mcpContext(app))
             }
 
             try await makeTestEnrollment(on: app, userID: admin.requireID(), courseID: courseID)
             let output = try await ListAssignmentsTool().execute(
-                ListAssignmentsTool.Input(courseCode: "CS136"), context(app))
+                ListAssignmentsTool.Input(courseCode: "CS136"), mcpContext(app))
             #expect(output.assignments.map(\.title) == ["X"])
         }
     }
@@ -89,7 +81,7 @@ import Vapor
 
             await #expect(throws: MCPToolError.self) {
                 _ = try await ListAssignmentsTool().execute(
-                    ListAssignmentsTool.Input(courseCode: "CS136"), context(app))
+                    ListAssignmentsTool.Input(courseCode: "CS136"), mcpContext(app))
             }
         }
     }
@@ -99,7 +91,7 @@ import Vapor
         try await withApp(app) { app in
             await #expect(throws: MCPToolError.self) {
                 _ = try await ListAssignmentsTool().execute(
-                    ListAssignmentsTool.Input(courseCode: "NOPE"), context(app))
+                    ListAssignmentsTool.Input(courseCode: "NOPE"), mcpContext(app))
             }
         }
     }
@@ -143,7 +135,7 @@ import Vapor
                     "name": .string("list_assignments"),
                     "arguments": .object(["courseCode": .string("CS246")]),
                 ]))
-            let response = try #require(await dispatcher.dispatch(request, context: context(app)))
+            let response = try #require(await dispatcher.dispatch(request, context: mcpContext(app)))
             let result = try #require(response.result?.objectFields)
             #expect(result["isError"] == .bool(false))
             #expect(result["content"] != nil)
@@ -158,7 +150,7 @@ import Vapor
             let request = JSONRPCRequest(
                 jsonrpc: "2.0", id: .number(3), method: "tools/call",
                 params: .object(["name": .string("does_not_exist")]))
-            let response = try #require(await dispatcher.dispatch(request, context: context(app)))
+            let response = try #require(await dispatcher.dispatch(request, context: mcpContext(app)))
             #expect(response.error?.code == -32_602)
         }
     }

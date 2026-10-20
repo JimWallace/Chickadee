@@ -15,7 +15,6 @@ import Vapor
 @testable import APIServer
 
 @Suite(.serialized, .timeLimit(.minutes(5))) final class MCPCourseTermOutputTests {
-
     let app: Application
 
     init() async throws {
@@ -24,12 +23,6 @@ import Vapor
 
     private let fall26 = AcademicTerm(year: 2026, season: .fall)
     private let winter27 = AcademicTerm(year: 2027, season: .winter)
-
-    private func context(_ app: Application) -> ToolContext {
-        ToolContext(
-            request: makeTestRequest(on: app),
-            subject: "prof", grantedScopes: [.read, .write])
-    }
 
     private struct Offerings {
         let older: APICourse
@@ -64,7 +57,7 @@ import Vapor
         try await withApp(app) { app in
             _ = try await twoOfferings(on: app)
             let output = try await ListAssignmentsTool().execute(
-                ListAssignmentsTool.Input(courseCode: "CS246"), context(app))
+                ListAssignmentsTool.Input(courseCode: "CS246"), mcpContext(app, subject: "prof"))
             #expect(output.courseCode == "CS246")
             #expect(output.courseKey == "CS246-W27")
             #expect(output.courseTerm == "Winter 2027")
@@ -76,7 +69,7 @@ import Vapor
         try await withApp(app) { app in
             _ = try await twoOfferings(on: app)
             let output = try await ListAssignmentsTool().execute(
-                ListAssignmentsTool.Input(courseCode: "CS246-F26"), context(app))
+                ListAssignmentsTool.Input(courseCode: "CS246-F26"), mcpContext(app, subject: "prof"))
             #expect(output.courseCode == "CS246")
             #expect(output.courseKey == "CS246-F26")
             #expect(output.courseTerm == "Fall 2026")
@@ -91,7 +84,7 @@ import Vapor
             try await makeTestEnrollment(on: app, userID: prof.requireID(), courseID: course.requireID())
 
             let output = try await ListAssignmentsTool().execute(
-                ListAssignmentsTool.Input(courseCode: "CS100"), context(app))
+                ListAssignmentsTool.Input(courseCode: "CS100"), mcpContext(app, subject: "prof"))
             #expect(output.courseKey == "CS100")
             #expect(output.courseTerm == nil)
 
@@ -107,7 +100,7 @@ import Vapor
             let offerings = try await twoOfferings(on: app)
             let output = try await GetAssignmentTool().execute(
                 GetAssignmentTool.Input(assignmentPublicID: offerings.olderAssignment.publicID),
-                context(app))
+                mcpContext(app, subject: "prof"))
             #expect(output.courseCode == "CS246")
             #expect(output.courseKey == "CS246-F26")
             #expect(output.courseTerm == "Fall 2026")
@@ -118,12 +111,12 @@ import Vapor
         try await withApp(app) { app in
             _ = try await twoOfferings(on: app)
             let sections = try await ListCourseSectionsTool().execute(
-                ListCourseSectionsTool.Input(courseCode: "CS246-F26"), context(app))
+                ListCourseSectionsTool.Input(courseCode: "CS246-F26"), mcpContext(app, subject: "prof"))
             #expect(sections.courseKey == "CS246-F26")
             #expect(sections.courseTerm == "Fall 2026")
 
             let items = try await ListContentItemsTool().execute(
-                ListContentItemsTool.Input(courseCode: "CS246"), context(app))
+                ListContentItemsTool.Input(courseCode: "CS246"), mcpContext(app, subject: "prof"))
             #expect(items.courseKey == "CS246-W27")
             #expect(items.courseTerm == "Winter 2027")
         }
@@ -138,7 +131,7 @@ import Vapor
             let section = try await CreateCourseSectionTool().execute(
                 CreateCourseSectionTool.Input(
                     courseCode: "CS246-F26", name: "Labs", defaultGradingMode: nil),
-                context(app))
+                mcpContext(app, subject: "prof"))
             #expect(section.courseCode == "CS246")
             #expect(section.courseKey == "CS246-F26")
             #expect(section.courseTerm == "Fall 2026")
@@ -146,14 +139,14 @@ import Vapor
             let reorderedSections = try await ReorderCourseSectionsTool().execute(
                 ReorderCourseSectionsTool.Input(
                     courseCode: "CS246-F26", orderedSectionIDs: [section.sectionID]),
-                context(app))
+                mcpContext(app, subject: "prof"))
             #expect(reorderedSections.courseKey == "CS246-F26")
 
             let reordered = try await ReorderAssignmentsTool().execute(
                 ReorderAssignmentsTool.Input(
                     courseCode: "CS246-F26",
                     orderedAssignmentPublicIDs: [offerings.olderAssignment.publicID]),
-                context(app))
+                mcpContext(app, subject: "prof"))
             #expect(reordered.courseKey == "CS246-F26")
             #expect(reordered.courseTerm == "Fall 2026")
 
@@ -161,12 +154,12 @@ import Vapor
                 ReorderSectionItemsTool.Input(
                     courseCode: "CS246-F26",
                     orderedItems: [.init(type: "assignment", id: offerings.olderAssignment.publicID)]),
-                context(app))
+                mcpContext(app, subject: "prof"))
             #expect(interleaved.courseKey == "CS246-F26")
 
             let content = try await ReorderContentItemsTool().execute(
                 ReorderContentItemsTool.Input(courseCode: "CS246-W27", orderedContentItemIDs: []),
-                context(app))
+                mcpContext(app, subject: "prof"))
             #expect(content.courseKey == "CS246-W27")
             #expect(content.courseTerm == "Winter 2027")
         }
@@ -180,7 +173,7 @@ import Vapor
             let output = try await CreateAssignmentTool().execute(
                 CreateAssignmentTool.Input(
                     courseCode: "CS246-W27", title: "Lab 2", notebook: notebook, language: "python"),
-                context(app))
+                mcpContext(app, subject: "prof"))
             #expect(output.courseCode == "CS246")
             #expect(output.courseKey == "CS246-W27")
             #expect(output.courseTerm == "Winter 2027")
@@ -195,7 +188,7 @@ import Vapor
                 CloneAssignmentTool.Input(
                     sourceAssignmentPublicID: offerings.olderAssignment.publicID,
                     newTitle: "Lab 1", targetCourseCode: "CS246-W27"),
-                context(app))
+                mcpContext(app, subject: "prof"))
             #expect(intoNewTerm.courseCode == "CS246")
             #expect(intoNewTerm.courseKey == "CS246-W27")
             #expect(intoNewTerm.courseTerm == "Winter 2027")
@@ -205,7 +198,7 @@ import Vapor
                 CloneAssignmentTool.Input(
                     sourceAssignmentPublicID: offerings.olderAssignment.publicID,
                     newTitle: "Lab 1 (Copy)", targetCourseCode: nil),
-                context(app))
+                mcpContext(app, subject: "prof"))
             #expect(inPlace.courseKey == "CS246-F26")
             #expect(inPlace.courseTerm == "Fall 2026")
         }
@@ -216,7 +209,7 @@ import Vapor
     @Test func manifestResourceNamesCarryTheCourseKey() async throws {
         try await withApp(app) { app in
             let offerings = try await twoOfferings(on: app)
-            let result = try await MCPResourceProvider().list(context: context(app))
+            let result = try await MCPResourceProvider().list(context: mcpContext(app, subject: "prof"))
             guard case .array(let resources)? = fields(result)?["resources"] else {
                 throw IssueRecorded("resources/list returned no resources array")
             }

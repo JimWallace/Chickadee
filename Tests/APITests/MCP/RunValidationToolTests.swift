@@ -11,23 +11,12 @@ import Vapor
 @testable import APIServer
 
 @Suite struct RunValidationToolTests {
-    private func context(_ app: Application, scopes: Set<ContentScope> = [.write]) -> ToolContext {
-        ToolContext(
-            request: makeTestRequest(on: app),
-            subject: "tester",
-            grantedScopes: scopes)
-    }
-
     /// Course + enrolled instructor "tester" + setup + an open assignment whose
     /// solution has passed validation once.
     private func fixture(on app: Application) async throws -> APIAssignment {
-        let course = try await makeTestCourse(on: app, code: "CS246", name: "OOP")
-        let courseID = try course.requireID()
-        let tester = try await makeTestUser(on: app, username: "tester", role: "instructor")
-        try await makeTestEnrollment(on: app, userID: tester.requireID(), courseID: courseID)
-        try await makeTestSetup(on: app, id: "setup_run", courseID: courseID)
-        let assignment = try await makeTestAssignment(
-            on: app, testSetupID: "setup_run", courseID: courseID, title: "Lab")
+        let assignment = try await seedMCPAssignment(
+            on: app, setupID: "setup_run")
+        let tester = try await mcpTestUser(on: app)
         try await makeTestSubmission(
             on: app, id: "sub_first_run", setupID: "setup_run", userID: tester.requireID(),
             kind: APISubmission.Kind.validation, status: "complete")
@@ -43,7 +32,7 @@ import Vapor
         try await RunValidationTool().execute(
             RunValidationTool.Input(
                 assignmentPublicID: assignment.publicID, runnerID: runnerID, timeoutSeconds: 1),
-            context(app))
+            mcpContext(app))
     }
 
     @Test func queuesAFreshRunForTheNamedRunner() async throws {

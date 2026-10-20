@@ -10,14 +10,6 @@ import Vapor
 @testable import APIServer
 
 @Suite struct CreateAssignmentToolTests {
-    private func context(_ app: Application) -> ToolContext {
-        ToolContext(
-            request: makeTestRequest(on: app),
-            subject: "tester",
-            grantedScopes: [.write]
-        )
-    }
-
     private func json(_ raw: String) throws -> JSONValue {
         try JSONDecoder().decode(JSONValue.self, from: Data(raw.utf8))
     }
@@ -44,7 +36,7 @@ import Vapor
             let output = try await CreateAssignmentTool().execute(
                 CreateAssignmentTool.Input(
                     courseCode: "CS246", title: "  New Lab  ", notebook: try json(twoCellNotebook), language: "python"),
-                context(app))
+                mcpContext(app))
 
             #expect(output.title == "New Lab")
             #expect(output.courseCode == "CS246")
@@ -78,7 +70,7 @@ import Vapor
                 _ = try await CreateAssignmentTool().execute(
                     CreateAssignmentTool.Input(
                         courseCode: "CS246", title: "   ", notebook: try json(twoCellNotebook), language: "python"),
-                    context(app))
+                    mcpContext(app))
             }
         }
     }
@@ -91,7 +83,7 @@ import Vapor
                 _ = try await CreateAssignmentTool().execute(
                     CreateAssignmentTool.Input(
                         courseCode: "NOPE99", title: "Lab", notebook: try json(twoCellNotebook), language: "python"),
-                    context(app))
+                    mcpContext(app))
             }
         }
     }
@@ -105,7 +97,7 @@ import Vapor
                     CreateAssignmentTool.Input(
                         courseCode: "CS246", title: "Lab",
                         notebook: try json(#"{"nbformat":4,"metadata":{}}"#), language: "python"),
-                    context(app))
+                    mcpContext(app))
             }
         }
     }
@@ -183,7 +175,7 @@ import Vapor
                     CreateAssignmentTool.Input(
                         courseCode: "CS246", title: "Lab", notebook: try json(twoCellNotebook),
                         language: "cobol"),
-                    context(app))
+                    mcpContext(app))
             }
             // Parsed before the course lookup and the setup write, so a bad
             // language leaves nothing half-created behind.
@@ -204,28 +196,13 @@ import Vapor
                 CreateAssignmentTool.Input(
                     courseCode: "CS246", title: "Shell Lab", notebook: try json(twoCellNotebook),
                     language: noLanguageChoice),
-                context(app))
+                mcpContext(app))
 
             let assignment = try #require(try await assignmentByPublicID(output.publicID, on: app.db))
             let setup = try #require(try await APITestSetup.find(assignment.testSetupID, on: app.db))
             let props = try #require(setup.decodedManifest())
             #expect(props.language == nil)
             #expect(props.languageDeclared == true)
-        }
-    }
-
-    @Test func deniesWhenSubjectNotEnrolled() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
-            // Course exists but the instructor isn't enrolled in it.
-            _ = try await makeTestCourse(on: app, code: "CS246", name: "OOP")
-            _ = try await makeTestUser(on: app, username: "tester", role: "instructor")
-            await #expect(throws: MCPToolError.self) {
-                _ = try await CreateAssignmentTool().execute(
-                    CreateAssignmentTool.Input(
-                        courseCode: "CS246", title: "Lab", notebook: try json(twoCellNotebook), language: "python"),
-                    context(app))
-            }
         }
     }
 }

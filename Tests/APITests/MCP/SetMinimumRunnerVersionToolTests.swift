@@ -12,29 +12,19 @@ import Vapor
 @testable import APIServer
 
 @Suite struct SetMinimumRunnerVersionToolTests {
-    private func context(_ app: Application) -> ToolContext {
-        ToolContext(
-            request: makeTestRequest(on: app),
-            subject: "tester",
-            grantedScopes: [.read, .write]
-        )
-    }
-
     private let manifest =
         TestManifests.workerEmpty
 
     /// A live course + setup + assignment, with `tester` (a *global student*)
     /// enrolled at the given per-course role.
     private func fixture(
-        on app: Application, role: CourseRole = .instructor, enroll: Bool = true
+        on app: Application, role: CourseRole = .instructor
     ) async throws -> APIAssignment {
         let course = try await makeTestCourse(on: app, code: "CS241", name: "Systems")
         let courseID = try course.requireID()
         let tester = try await makeTestUser(on: app, username: "tester", role: "student")
-        if enroll {
-            try await APICourseEnrollment(userID: try tester.requireID(), courseID: courseID, role: role)
-                .save(on: app.db)
-        }
+        try await APICourseEnrollment(userID: try tester.requireID(), courseID: courseID, role: role)
+            .save(on: app.db)
         try await makeTestSetup(on: app, id: "setup_mrv", courseID: courseID, manifest: manifest)
         return try await makeTestAssignment(
             on: app, testSetupID: "setup_mrv", courseID: courseID, title: "Lab")
@@ -48,7 +38,7 @@ import Vapor
 
             let out = try await SetMinimumRunnerVersionTool().execute(
                 .init(assignmentPublicID: assignment.publicID, minimumRunnerVersion: "0.5.0"),
-                context(app))
+                mcpContext(app))
             #expect(out.minimumRunnerVersion == "0.5.0")
 
             let setup = try #require(try await APITestSetup.find(assignment.testSetupID, on: app.db))
@@ -65,11 +55,11 @@ import Vapor
             let assignment = try await fixture(on: app)
             _ = try await SetMinimumRunnerVersionTool().execute(
                 .init(assignmentPublicID: assignment.publicID, minimumRunnerVersion: "0.5.0"),
-                context(app))
+                mcpContext(app))
 
             let cleared = try await SetMinimumRunnerVersionTool().execute(
                 .init(assignmentPublicID: assignment.publicID, minimumRunnerVersion: nil),
-                context(app))
+                mcpContext(app))
             #expect(cleared.minimumRunnerVersion == nil)
 
             let setup = try #require(try await APITestSetup.find(assignment.testSetupID, on: app.db))
@@ -87,10 +77,10 @@ import Vapor
             let assignment = try await fixture(on: app)
             _ = try await SetMinimumRunnerVersionTool().execute(
                 .init(assignmentPublicID: assignment.publicID, minimumRunnerVersion: "0.5.0"),
-                context(app))
+                mcpContext(app))
             let cleared = try await SetMinimumRunnerVersionTool().execute(
                 .init(assignmentPublicID: assignment.publicID, minimumRunnerVersion: "  "),
-                context(app))
+                mcpContext(app))
             #expect(cleared.minimumRunnerVersion == nil)
         }
     }
@@ -102,19 +92,7 @@ import Vapor
             await #expect(throws: MCPToolError.self) {
                 _ = try await SetMinimumRunnerVersionTool().execute(
                     .init(assignmentPublicID: assignment.publicID, minimumRunnerVersion: "not-a-version"),
-                    context(app))
-            }
-        }
-    }
-
-    @Test func deniesWhenSubjectNotEnrolled() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
-            let assignment = try await fixture(on: app, enroll: false)
-            await #expect(throws: MCPToolError.self) {
-                _ = try await SetMinimumRunnerVersionTool().execute(
-                    .init(assignmentPublicID: assignment.publicID, minimumRunnerVersion: "0.5.0"),
-                    context(app))
+                    mcpContext(app))
             }
         }
     }
@@ -126,7 +104,7 @@ import Vapor
             await #expect(throws: MCPToolError.self) {
                 _ = try await SetMinimumRunnerVersionTool().execute(
                     .init(assignmentPublicID: assignment.publicID, minimumRunnerVersion: "0.5.0"),
-                    context(app))
+                    mcpContext(app))
             }
         }
     }
@@ -137,14 +115,14 @@ import Vapor
             let assignment = try await fixture(on: app)
             _ = try await SetMinimumRunnerVersionTool().execute(
                 .init(assignmentPublicID: assignment.publicID, minimumRunnerVersion: "0.5.0"),
-                context(app))
+                mcpContext(app))
 
             let suite = try await GetSuiteTool().execute(
-                .init(assignmentPublicID: assignment.publicID), context(app))
+                .init(assignmentPublicID: assignment.publicID), mcpContext(app))
             #expect(suite.minimumRunnerVersion == "0.5.0")
 
             let info = try await GetAssignmentTool().execute(
-                .init(assignmentPublicID: assignment.publicID), context(app))
+                .init(assignmentPublicID: assignment.publicID), mcpContext(app))
             #expect(info.minimumRunnerVersion == "0.5.0")
         }
     }

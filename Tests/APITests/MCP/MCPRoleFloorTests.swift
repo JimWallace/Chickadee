@@ -16,14 +16,6 @@ import Vapor
 @testable import APIServer
 
 @Suite struct MCPRoleFloorTests {
-    private func context(_ app: Application) -> ToolContext {
-        ToolContext(
-            request: makeTestRequest(on: app),
-            subject: "tester",
-            grantedScopes: [.read, .write]
-        )
-    }
-
     private let manifest = """
         {"schemaVersion":1,"gradingMode":"worker","requiredFiles":[],"testSuites":[],"timeLimitSeconds":10,"makefile":null}
         """
@@ -52,21 +44,21 @@ import Vapor
 
             // Content edit (set_time_limit → `.ta` floor) succeeds for a TA.
             let out = try await SetTimeLimitTool().execute(
-                .init(assignmentPublicID: assignment.publicID, seconds: 42), context(app))
+                .init(assignmentPublicID: assignment.publicID, seconds: 42), mcpContext(app))
             #expect(out.timeLimitSeconds == 42)
 
             // Lifecycle on the assignment resolver (set_grading_mode → `.instructor`)
             // is refused for a TA.
             await #expect(throws: MCPToolError.self) {
                 _ = try await SetGradingModeTool().execute(
-                    .init(assignmentPublicID: assignment.publicID, gradingMode: "browser"), context(app))
+                    .init(assignmentPublicID: assignment.publicID, gradingMode: "browser"), mcpContext(app))
             }
 
             // Lifecycle on the course resolver (create course section → `.instructor`)
             // is refused for a TA.
             await #expect(throws: MCPToolError.self) {
                 _ = try await CreateCourseSectionTool().execute(
-                    .init(courseCode: "TAFLOOR", name: "Labs", defaultGradingMode: "browser"), context(app))
+                    .init(courseCode: "TAFLOOR", name: "Labs", defaultGradingMode: "browser"), mcpContext(app))
             }
         }
     }
@@ -80,16 +72,16 @@ import Vapor
 
             // Content still works.
             let out = try await SetTimeLimitTool().execute(
-                .init(assignmentPublicID: assignment.publicID, seconds: 55), context(app))
+                .init(assignmentPublicID: assignment.publicID, seconds: 55), mcpContext(app))
             #expect(out.timeLimitSeconds == 55)
 
             // Lifecycle now allowed — grading-mode flip and a new course section.
             let mode = try await SetGradingModeTool().execute(
-                .init(assignmentPublicID: assignment.publicID, gradingMode: "browser"), context(app))
+                .init(assignmentPublicID: assignment.publicID, gradingMode: "browser"), mcpContext(app))
             #expect(mode.gradingMode == "browser")
 
             let section = try await CreateCourseSectionTool().execute(
-                .init(courseCode: "INSTFLOOR", name: "Labs", defaultGradingMode: "browser"), context(app))
+                .init(courseCode: "INSTFLOOR", name: "Labs", defaultGradingMode: "browser"), mcpContext(app))
             #expect(section.name == "Labs")
         }
     }

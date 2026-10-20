@@ -14,18 +14,10 @@ import Vapor
 @testable import APIServer
 
 @Suite struct MCPDeleteVisibilityTests {
-    private func context(_ app: Application, subject: String) -> ToolContext {
-        ToolContext(
-            request: makeTestRequest(on: app),
-            subject: subject, grantedScopes: [.read, .write])
-    }
-
     /// "tester" is an instructor in CS246 only; CS136 is another course.
     private func fixture(on app: Application) async throws -> (visible: UUID, hidden: UUID) {
-        let visible = try await makeTestCourse(on: app, code: "CS246", name: "OOP")
+        let visible = try await seedMCPCourse(on: app)
         let hidden = try await makeTestCourse(on: app, code: "CS136", name: "Intro")
-        let tester = try await makeTestUser(on: app, username: "tester", role: "instructor")
-        try await makeTestEnrollment(on: app, userID: tester.requireID(), courseID: visible.requireID())
         return (try visible.requireID(), try hidden.requireID())
     }
 
@@ -38,7 +30,7 @@ import Vapor
             let itemID = try item.requireID()
 
             let out = try await DeleteContentItemTool().execute(
-                .init(contentItemID: itemID.uuidString), context(app, subject: "tester"))
+                .init(contentItemID: itemID.uuidString), mcpContext(app, subject: "tester"))
             #expect(!out.removed)
             #expect(try await APICourseContentItem.find(itemID, on: app.db) != nil)
         }
@@ -54,7 +46,7 @@ import Vapor
             let sectionID = try section.requireID()
 
             let out = try await DeleteCourseSectionTool().execute(
-                .init(courseSectionID: sectionID.uuidString), context(app, subject: "tester"))
+                .init(courseSectionID: sectionID.uuidString), mcpContext(app, subject: "tester"))
             #expect(!out.removed)
             #expect(try await APICourseSection.find(sectionID, on: app.db) != nil)
         }
@@ -72,7 +64,7 @@ import Vapor
 
             await #expect(throws: MCPToolError.self) {
                 _ = try await DeleteCourseSectionTool().execute(
-                    .init(courseSectionID: try section.requireID().uuidString), context(app, subject: "stu"))
+                    .init(courseSectionID: try section.requireID().uuidString), mcpContext(app, subject: "stu"))
             }
         }
     }

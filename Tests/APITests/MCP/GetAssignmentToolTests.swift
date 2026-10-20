@@ -8,14 +8,6 @@ import Vapor
 @testable import APIServer
 
 @Suite struct GetAssignmentToolTests {
-    private func context(_ app: Application) -> ToolContext {
-        ToolContext(
-            request: makeTestRequest(on: app),
-            subject: "tester",
-            grantedScopes: [.read, .write]
-        )
-    }
-
     @Test func returnsDetailForEnrolledSubject() async throws {
         let app = try await makeTestApp()
         try await withApp(app) { app in
@@ -28,7 +20,7 @@ import Vapor
                 on: app, testSetupID: "setup_g", courseID: courseID, title: "Tasks", isOpen: false)
 
             let output = try await GetAssignmentTool().execute(
-                GetAssignmentTool.Input(assignmentPublicID: assignment.publicID), context(app))
+                GetAssignmentTool.Input(assignmentPublicID: assignment.publicID), mcpContext(app))
             #expect(output.publicID == assignment.publicID)
             #expect(output.title == "Tasks")
             #expect(output.courseCode == "CS246")
@@ -53,7 +45,7 @@ import Vapor
             try await assignment.save(on: app.db)
 
             let output = try await GetAssignmentTool().execute(
-                GetAssignmentTool.Input(assignmentPublicID: assignment.publicID), context(app))
+                GetAssignmentTool.Input(assignmentPublicID: assignment.publicID), mcpContext(app))
             #expect(output.secretRevealEnabled)
         }
     }
@@ -70,13 +62,13 @@ import Vapor
                 on: app, testSetupID: "setup_pt", courseID: courseID, title: "Tasks")
 
             let off = try await GetAssignmentTool().execute(
-                GetAssignmentTool.Input(assignmentPublicID: assignment.publicID), context(app))
+                GetAssignmentTool.Input(assignmentPublicID: assignment.publicID), mcpContext(app))
             #expect(off.passingThresholdPercent == nil, "off by default")
 
             assignment.passingThresholdPercent = 55
             try await assignment.save(on: app.db)
             let on = try await GetAssignmentTool().execute(
-                GetAssignmentTool.Input(assignmentPublicID: assignment.publicID), context(app))
+                GetAssignmentTool.Input(assignmentPublicID: assignment.publicID), mcpContext(app))
             #expect(on.passingThresholdPercent == 55)
         }
     }
@@ -97,7 +89,7 @@ import Vapor
                 on: app, testSetupID: "setup_w", courseID: courseID, title: "Tasks")
 
             let output = try await GetAssignmentTool().execute(
-                GetAssignmentTool.Input(assignmentPublicID: assignment.publicID), context(app))
+                GetAssignmentTool.Input(assignmentPublicID: assignment.publicID), mcpContext(app))
             #expect(output.gradingMode == "worker")
         }
     }
@@ -120,7 +112,7 @@ import Vapor
                 on: app, testSetupID: "setup_sm", courseID: courseID, title: "Tasks")
 
             let output = try await GetAssignmentTool().execute(
-                GetAssignmentTool.Input(assignmentPublicID: assignment.publicID), context(app))
+                GetAssignmentTool.Input(assignmentPublicID: assignment.publicID), mcpContext(app))
             #expect(output.submissionMode == "uploadOnly")
             #expect(output.language == "cpp")
         }
@@ -140,7 +132,7 @@ import Vapor
                 on: app, testSetupID: "setup_nb", courseID: courseID, title: "Tasks")
 
             let output = try await GetAssignmentTool().execute(
-                GetAssignmentTool.Input(assignmentPublicID: assignment.publicID), context(app))
+                GetAssignmentTool.Input(assignmentPublicID: assignment.publicID), mcpContext(app))
             #expect(output.submissionMode == "notebook")
             #expect(output.language == nil)
         }
@@ -165,25 +157,8 @@ import Vapor
                 on: app, testSetupID: "setup_eff", courseID: courseID, title: "Tasks")
 
             let output = try await GetAssignmentTool().execute(
-                GetAssignmentTool.Input(assignmentPublicID: assignment.publicID), context(app))
+                GetAssignmentTool.Input(assignmentPublicID: assignment.publicID), mcpContext(app))
             #expect(output.gradingMode == "worker")
-        }
-    }
-
-    @Test func deniesWhenSubjectNotEnrolled() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
-            let course = try await makeTestCourse(on: app, code: "CS246", name: "OOP")
-            let courseID = try course.requireID()
-            _ = try await makeTestUser(on: app, username: "tester", role: "instructor")
-            try await makeTestSetup(on: app, id: "setup_g", courseID: courseID)
-            let assignment = try await makeTestAssignment(
-                on: app, testSetupID: "setup_g", courseID: courseID, title: "Tasks")
-
-            await #expect(throws: MCPToolError.self) {
-                _ = try await GetAssignmentTool().execute(
-                    GetAssignmentTool.Input(assignmentPublicID: assignment.publicID), context(app))
-            }
         }
     }
 
@@ -208,7 +183,7 @@ import Vapor
                 on: app, testSetupID: "setup_win", courseID: courseID, title: "Race")
 
             let output = try await GetAssignmentTool().execute(
-                GetAssignmentTool.Input(assignmentPublicID: assignment.publicID), context(app))
+                GetAssignmentTool.Input(assignmentPublicID: assignment.publicID), mcpContext(app))
             let activity = try #require(output.activity)
             #expect(activity.opensAt == "2026-10-02T14:00:00Z")
             #expect(activity.closesAt == nil)
@@ -233,7 +208,7 @@ import Vapor
         try await withApp(app) { app in
             await #expect(throws: MCPToolError.self) {
                 _ = try await GetAssignmentTool().execute(
-                    GetAssignmentTool.Input(assignmentPublicID: "zzzzzz"), context(app))
+                    GetAssignmentTool.Input(assignmentPublicID: "zzzzzz"), mcpContext(app))
             }
         }
     }

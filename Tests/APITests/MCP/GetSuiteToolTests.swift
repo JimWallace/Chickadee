@@ -8,14 +8,6 @@ import Vapor
 @testable import APIServer
 
 @Suite struct GetSuiteToolTests {
-    private func context(_ app: Application) -> ToolContext {
-        ToolContext(
-            request: makeTestRequest(on: app),
-            subject: "tester",
-            grantedScopes: [.read]
-        )
-    }
-
     private let manifest = """
         {"schemaVersion":1,"testSuites":[\
         {"tier":"public","script":"test_a.sh","points":2,"name":"Test A","sectionID":"sec1"},\
@@ -35,7 +27,7 @@ import Vapor
                 on: app, testSetupID: "setup_s", courseID: courseID, title: "Lab")
 
             let output = try await GetSuiteTool().execute(
-                GetSuiteTool.Input(assignmentPublicID: assignment.publicID), context(app))
+                GetSuiteTool.Input(assignmentPublicID: assignment.publicID), mcpContext(app))
 
             #expect(output.sections.map(\.name) == ["Part A", "Part B"])
             #expect(output.items.map(\.name) == ["test_a.sh", "test_b.sh"])
@@ -83,7 +75,7 @@ import Vapor
                 on: app, testSetupID: "setup_tl", courseID: courseID, title: "Lab")
 
             let output = try await GetSuiteTool().execute(
-                GetSuiteTool.Input(assignmentPublicID: assignment.publicID), context(app))
+                GetSuiteTool.Input(assignmentPublicID: assignment.publicID), mcpContext(app))
 
             // Assignment-wide default is reported at the top level.
             #expect(output.timeLimitSeconds == 20)
@@ -112,7 +104,7 @@ import Vapor
                 on: app, testSetupID: "setup_sv", courseID: courseID, title: "Lab")
 
             let output = try await GetSuiteTool().execute(
-                GetSuiteTool.Input(assignmentPublicID: assignment.publicID), context(app))
+                GetSuiteTool.Input(assignmentPublicID: assignment.publicID), mcpContext(app))
 
             let sec = try #require(output.sections.first { $0.id == "sec1" })
             #expect(sec.variables.map(\.name) == ["cap"])
@@ -142,7 +134,7 @@ import Vapor
                 on: app, testSetupID: "setup_fam", courseID: courseID, title: "Lab")
 
             let output = try await GetSuiteTool().execute(
-                GetSuiteTool.Input(assignmentPublicID: assignment.publicID), context(app))
+                GetSuiteTool.Input(assignmentPublicID: assignment.publicID), mcpContext(app))
 
             let row = try #require(output.items.first { $0.kind == "family" })
             #expect(row.familyID == "tax")
@@ -182,7 +174,7 @@ import Vapor
                 on: app, testSetupID: "setup_chk", courseID: courseID, title: "Lab")
 
             let output = try await GetSuiteTool().execute(
-                GetSuiteTool.Input(assignmentPublicID: assignment.publicID), context(app))
+                GetSuiteTool.Input(assignmentPublicID: assignment.publicID), mcpContext(app))
 
             let row = try #require(output.items.first { $0.kind == "check" })
             #expect(row.filename == nil)
@@ -191,29 +183,12 @@ import Vapor
         }
     }
 
-    @Test func deniesWhenSubjectNotEnrolled() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
-            let course = try await makeTestCourse(on: app, code: "CS246", name: "OOP")
-            let courseID = try course.requireID()
-            _ = try await makeTestUser(on: app, username: "tester", role: "instructor")
-            try await makeTestSetup(on: app, id: "setup_s", courseID: courseID, manifest: manifest)
-            let assignment = try await makeTestAssignment(
-                on: app, testSetupID: "setup_s", courseID: courseID, title: "Lab")
-
-            await #expect(throws: MCPToolError.self) {
-                _ = try await GetSuiteTool().execute(
-                    GetSuiteTool.Input(assignmentPublicID: assignment.publicID), context(app))
-            }
-        }
-    }
-
     @Test func unknownAssignmentThrows() async throws {
         let app = try await makeTestApp()
         try await withApp(app) { app in
             await #expect(throws: MCPToolError.self) {
                 _ = try await GetSuiteTool().execute(
-                    GetSuiteTool.Input(assignmentPublicID: "zzzzzz"), context(app))
+                    GetSuiteTool.Input(assignmentPublicID: "zzzzzz"), mcpContext(app))
             }
         }
     }
