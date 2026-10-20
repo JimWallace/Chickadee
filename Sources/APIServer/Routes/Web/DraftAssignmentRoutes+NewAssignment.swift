@@ -31,6 +31,11 @@ extension DraftAssignmentRoutes {
             throw WebAssignmentError.forbidden(action: "open the new-assignment page")
         }
         let courseState = try await req.resolveActiveCourse(for: user)
+        // The form creates an assignment, an instructor action: a TA is not
+        // shown a form whose save would be refused.
+        if let courseID = courseState.activeCourseUUID {
+            try await requireCourseWriteAccess(caller: user, courseID: courseID, atLeast: .instructor, db: req.db)
+        }
         let q = (try? req.query.decode(NewQuery.self))
 
         let sections = try await loadNewAssignmentSectionPicker(

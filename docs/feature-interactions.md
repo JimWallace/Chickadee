@@ -34,6 +34,18 @@ because line numbers go out of date.
 
 ## Deadlines and visibility
 
+### Assignment creation
+
+- **Writers:** quick publish (`POST /instructor`), the new-assignment form
+  (`GET /instructor/new`, `POST /instructor/new/draft`,
+  `POST /instructor/new/save`), MCP `create_assignment`, a clone and course
+  bundle import.
+- **Rule:** creating an assignment is an instructor action. The web handlers
+  call `requireActiveCourseForWrite(atLeast: .instructor)`, and MCP
+  `create_assignment` calls `resolveCourseForWrite(atLeast: .instructor)`.
+  Both go through `evaluateCourseWrite`, so the archived block is the same.
+  A new creation path states the same floor.
+
 ### The class deadline: `APIAssignment.dueAt`
 
 - **Writers:**

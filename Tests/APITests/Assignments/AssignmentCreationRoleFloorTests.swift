@@ -109,6 +109,26 @@ import VaporTesting
         }
     }
 
+    private func newAssignmentPage(as actor: Actor) async throws -> HTTPStatus {
+        var observed: HTTPStatus = .internalServerError
+        try await app.asyncTest(
+            .GET, "/instructor/new",
+            beforeRequest: { req in req.headers.add(name: .cookie, value: actor.cookie) },
+            afterResponse: { res in observed = res.status })
+        return observed
+    }
+
+    @Test func onlyAnInstructorSeesTheNewAssignmentForm() async throws {
+        try await withApp(app) { _ in
+            let courseID = try await course("CFPAGE")
+            let ta = try await actor("cf_page_ta", role: .ta, courseID: courseID)
+            let instructor = try await actor("cf_page_instructor", role: .instructor, courseID: courseID)
+
+            #expect(try await newAssignmentPage(as: ta) == .forbidden)
+            #expect(try await newAssignmentPage(as: instructor) == .ok)
+        }
+    }
+
     @Test func anInstructorCanCreateAnAssignment() async throws {
         try await withApp(app) { _ in
             let courseID = try await course("CFINS")
