@@ -23,8 +23,9 @@ name: Documentation audit
 #
 # The inputs are `main`'s own files, so there is no untrusted text here. The
 # layers are the same as in the other agent workflows anyway: the `audit` job,
-# where the model runs, is read-only, and the `file` job, which files the
-# issue, runs no model.
+# where the model runs, is read-only (.github/actions/claude-agent), and the
+# `file` job, which files the issue, runs no model and cleans the text with
+# scripts/ci-agent-sanitize.sh.
 #
 # WHAT IT NEEDS. The same repository secret as ui-review.yml. Without it the
 # job says so and passes.
@@ -50,10 +51,9 @@ jobs:
     permissions:
       contents: read
       issues: read
-      id-token: write
     outputs:
-      outcome: ${{ steps.audit.outcome }}
-      result: ${{ steps.audit.outputs.structured_output }}
+      outcome: ${{ steps.audit.outputs.outcome }}
+      result: ${{ steps.audit.outputs.structured-output }}
       previous: ${{ steps.scope.outputs.open }}
 
     steps:
@@ -63,22 +63,8 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
-      - name: Check for credentials
-        id: credentials
-        env:
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-        run: |
-          if [ -n "$ANTHROPIC_API_KEY" ] || [ -n "$CLAUDE_CODE_OAUTH_TOKEN" ]; then
-            echo "present=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "present=false" >> "$GITHUB_OUTPUT"
-            echo "::warning::No ANTHROPIC_API_KEY or CLAUDE_CODE_OAUTH_TOKEN secret is set, so the documentation audit did not run."
-          fi
-
       - name: Work out the scope and find the previous audit
         id: scope
-        if: steps.credentials.outputs.present == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -126,12 +112,12 @@ jobs:
 
       - name: Audit the documentation
         id: audit
-        if: steps.credentials.outputs.present == 'true'
-        continue-on-error: true
-        uses: anthropics/claude-code-action@v1
+        uses: ./.github/actions/claude-agent
         with:
-          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
-          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          name: docs-audit
+          anthropic-api-key: ${{ secrets.ANTHROPIC_API_KEY }}
+          claude-code-oauth-token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          github-token: ${{ github.token }}
           prompt: |
             You are the Chickadee docs-audit agent. Your brief is the file
             .claude/agents/docs-audit.md in the checked-out tree. Read it
@@ -151,17 +137,16 @@ jobs:
             full report as Markdown in the `report` field of the structured
             output, and the number of findings in `findings`, counted from
             the report itself. A later step files the report as an issue.
-          claude_args: |
-            --model sonnet
-            --max-turns 150
-            --allowedTools "Read,Grep,Glob,Bash(git log:*),Bash(git show:*),Bash(git ls-files:*)"
-            --disallowedTools "Edit,Write,WebFetch,WebSearch,Read(//proc/**),Read(//sys/**),Read(//etc/**),Read(//tmp/**),Read(//github/**),Read(//root/**),Read(//home/runner/work/_temp/**),Read(~/.*/**)"
-            --json-schema '{"type":"object","properties":{"findings":{"type":"integer"},"report":{"type":"string"}},"required":["findings","report"]}'
+          model: sonnet
+          max-turns: "150"
+          allowed-tools: "Read,Grep,Glob,Bash(git log:*),Bash(git show:*),Bash(git ls-files:*)"
+          disallowed-tools: "WebFetch,Bash(curl:*),Bash(wget:*),Bash(gh:*)"
+          json-schema: '{"type":"object","properties":{"findings":{"type":"integer"},"report":{"type":"string"}},"required":["findings","report"]}'
 
       - name: Say so if the audit did not complete
-        if: steps.credentials.outputs.present == 'true' && steps.audit.outcome != 'success'
+        if: steps.audit.outputs.ran == 'true' && steps.audit.outputs.outcome != 'success'
         env:
-          OUTCOME: ${{ steps.audit.outcome }}
+          OUTCOME: ${{ steps.audit.outputs.outcome }}
         run: |
           echo "::warning::The documentation audit did not complete (step outcome: $OUTCOME). Re-run the workflow."
           {
@@ -176,11 +161,18 @@ jobs:
     if: needs.audit.outputs.outcome == 'success'
     runs-on: ubuntu-latest
     timeout-minutes: 5
-    # No model runs in this job, and no repository code is checked out.
+    # No model runs in this job. The checkout is `main`, for the sanitize
+    # script.
     permissions:
+      contents: read
       issues: write
 
     steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
       - name: File the report
         env:
           GH_TOKEN: ${{ github.token }}
@@ -193,21 +185,18 @@ jobs:
             echo "::warning::The documentation audit returned no report. Re-run the workflow."
             exit 0
           fi
-          if grep -qE 'sk-ant-|gh[pousr]_[A-Za-z0-9]{20,}|github_pat_|eyJ[A-Za-z0-9_-]{20,}\.|BEGIN [A-Z ]*PRIVATE KEY' report.md; then
-            echo "::error::The report looks like it holds a credential. It was not filed."
+          # An issue body holds at most 65,536 characters. The sanitize
+          # script cuts on a line and says so; the full report is an artifact.
+          run_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+          if ! scripts/ci-agent-sanitize.sh --max-chars 60000 \
+              --cut-note "_The report is cut here. The full report is the \`docs-audit-report\` artifact of run ${run_url}._" \
+              report.md body.md; then
+            echo "::error::The report was refused. It was not filed."
             exit 1
           fi
-          findings="$(jq -r '.findings // 0' <<< "$RESULT")"
-          # An issue body holds at most 65,536 characters. Cut on a line, say
-          # so, and keep the full report as an artifact.
           cp report.md docs-audit-report.md
-          awk '{ total += length($0) + 1; if (total > 60000) exit; print }' report.md \
-            | sed 's/@/@\xE2\x80\x8B/g' > body.md
-          if [ "$(wc -c < body.md)" -lt "$(wc -c < report.md)" ]; then
-            printf '\n\n_The report is cut here. The full report is the `docs-audit-report` artifact of run %s._\n' \
-              "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" >> body.md
-          fi
-          printf '\n---\n_Generated by [Claude Code](https://claude.ai/code)_\n' >> body.md
+          findings="$(jq -r '.findings // 0' <<< "$RESULT")"
+          case "$findings" in '' | *[!0-9]*) findings="?" ;; esac
           gh label create docs-audit --repo "$GITHUB_REPOSITORY" --color 0e8a16 \
             --description "Monthly documentation drift audit (docs-audit.yml)" --force
           if ! url="$(gh issue create --repo "$GITHUB_REPOSITORY" --label docs-audit \

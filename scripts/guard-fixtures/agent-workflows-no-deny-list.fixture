@@ -1,0 +1,9 @@
+# An agent step with no deny list of its own. ui-review, interaction-review
+# and ui-audit ran this way until #2711.
+guard="scripts/check-agent-workflows.sh"
+files=".github/workflows/ci-triage.yml"
+description="a claude-agent step with no disallowed-tools"
+expect="passes no disallowed-tools"
+apply() {
+    sed -i '/^          disallowed-tools:/d' .github/workflows/ci-triage.yml
+}
