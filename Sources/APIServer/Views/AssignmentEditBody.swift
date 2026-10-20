@@ -17,6 +17,7 @@
 // a browser strips a nested form, and each of them persists through its own
 // endpoint, so it neither closes nor re-validates the assignment.
 
+import Core
 import Elementary
 
 struct AssignmentEditBody: HTML {
@@ -859,7 +860,10 @@ private struct EditAchievementsBlock: HTML {
     let edit: EditAssignmentContext
 
     var body: some HTML {
-        section(.id("achievements-block"), .data("assignment-id", value: edit.assignmentID), .class("editor-block")) {
+        section(
+            .id("achievements-block"), .data("assignment-id", value: edit.assignmentID),
+            .data("level", value: AchievementLevel.assignment.rawValue), .class("editor-block")
+        ) {
             div(.class("editor-block-head")) {
                 h2 { "Achievements" }
                 div(.class("toolbar toolbar--end")) {
@@ -968,6 +972,7 @@ private struct AchievementConditionRow: HTML {
                 for signal in signalOptions {
                     option(
                         .value(signal.value), .data("unit", value: signal.unit), .data("scope", value: signal.scopes),
+                        .data("levels", value: signal.levels),
                         .data("ref-control", value: signal.refControl), .data("ref-field", value: signal.refField),
                         .data("ref-label", value: signal.refLabel),
                         .data("ref-placeholder", value: signal.refPlaceholder),

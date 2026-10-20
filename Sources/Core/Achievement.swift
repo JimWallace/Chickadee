@@ -206,23 +206,36 @@ public struct AchievementCondition: Codable, Equatable, Sendable {
     public let comparator: ConditionComparator
     /// The threshold the signal is compared against.  Units follow `signal`:
     /// percent (0–100) for `grade` / `gradeJumpPercent`, a count for `attempts`,
-    /// milliseconds for `executionTimeMs`.  Ignored for `testPass`.
+    /// milliseconds for `executionTimeMs`, a count of assignments (or of
+    /// awards, or of concepts) for a course signal.  Ignored for `testPass`.
     public let value: Double
     /// The graded artifact a `grade` or `testPass` condition reads — a specific
     /// test (`testPass`) or, for `grade`, a suite item / section (nil =
-    /// whole-assignment grade).  nil for the submission-level signals.
+    /// whole-assignment grade).  For a course signal, the set of assignments
+    /// it counts over (`courseSection`, `concept` or `assignments`; nil = every
+    /// assignment in the course).  nil for the submission-level signals.
     public let target: AchievementTarget?
+    /// `assignmentsAtGrade` only: the percent (0–100) an assignment's best
+    /// grade must reach to count.  nil for every other signal.
+    public let gradeFloor: Double?
+    /// `achievementsEarned` only: the `Achievement.id` of the assignment-level
+    /// award to count, or nil to count any.  nil for every other signal.
+    public let achievementRef: String?
 
     public init(
         signal: AchievementSignal,
         comparator: ConditionComparator,
         value: Double,
-        target: AchievementTarget? = nil
+        target: AchievementTarget? = nil,
+        gradeFloor: Double? = nil,
+        achievementRef: String? = nil
     ) {
         self.signal = signal
         self.comparator = comparator
         self.value = value
         self.target = target
+        self.gradeFloor = gradeFloor
+        self.achievementRef = achievementRef
     }
 }
 
@@ -273,6 +286,30 @@ public enum AchievementSignal: String, Codable, CaseIterable, Sendable {
     /// assignment, so a `.section` target would name a share of a reference
     /// nothing measured.
     case classCoverage
+
+    // MARK: Course signals (docs/achievement-rewards.md, decision 3)
+    //
+    // Each one counts across a course's assignments rather than reading one
+    // submission, so only a course achievement can carry it
+    // (`allowedLevels`). Every count is over the assignments students can
+    // see, scoped by the condition's `target`.
+
+    /// Assignments with at least one graded submission.
+    case assignmentsGraded
+    /// Assignments whose best grade reaches the condition's `gradeFloor`.
+    case assignmentsAtGrade
+    /// Assignments with a submission that passed every test it ran.
+    case assignmentsFullMarks
+    /// Assignments with a graded submission at least
+    /// `WardrobeProgress.earlyLeadSeconds` before the due date.
+    case assignmentsEarly
+    /// Assignments where every test passed after an attempt where some did not.
+    case assignmentsComeback
+    /// Assignment-level awards in the student's ledger, filtered by the
+    /// condition's `achievementRef` (nil = any).
+    case achievementsEarned
+    /// Distinct concepts with full marks on a tagged assignment.
+    case conceptsAtFullMarks
 }
 
 extension AchievementSignal {
@@ -292,7 +329,32 @@ extension AchievementSignal {
             return false
         case .itemsCovered, .classCoverage:
             return true
+        case .assignmentsGraded, .assignmentsAtGrade, .assignmentsFullMarks, .assignmentsEarly,
+            .assignmentsComeback, .achievementsEarned, .conceptsAtFullMarks:
+            return false
         }
+    }
+
+    /// True when this signal counts across a course's assignments rather than
+    /// reading one submission or one assignment's class.
+    public var readsTheCourse: Bool {
+        switch self {
+        case .grade, .attempts, .executionTimeMs, .gradeJumpPercent, .testPass, .itemsCovered,
+            .standing, .matchesWon, .classCoverage:
+            return false
+        case .assignmentsGraded, .assignmentsAtGrade, .assignmentsFullMarks, .assignmentsEarly,
+            .assignmentsComeback, .achievementsEarned, .conceptsAtFullMarks:
+            return true
+        }
+    }
+
+    /// The levels an achievement carrying this signal may live at. A course
+    /// signal reads across assignments, so nothing in one manifest can
+    /// evaluate it; every other signal reads one assignment, so no course can.
+    /// The editor and the validator derive their lists from this, so a signal
+    /// a level cannot evaluate is refused at save time.
+    public var allowedLevels: [AchievementLevel] {
+        readsTheCourse ? [.course, .site] : [.assignment]
     }
 
     /// True when this signal is a student's place in a round robin's
@@ -307,7 +369,8 @@ extension AchievementSignal {
         switch self {
         case .standing, .matchesWon: return true
         case .grade, .attempts, .executionTimeMs, .gradeJumpPercent, .testPass, .itemsCovered,
-            .classCoverage:
+            .classCoverage, .assignmentsGraded, .assignmentsAtGrade, .assignmentsFullMarks,
+            .assignmentsEarly, .assignmentsComeback, .achievementsEarned, .conceptsAtFullMarks:
             return false
         }
     }
@@ -344,7 +407,9 @@ public enum AchievementScope: String, Codable, CaseIterable, Sendable {
 /// What graded signal an achievement condition reads.
 public struct AchievementTarget: Codable, Equatable, Sendable {
     public let kind: TargetKind
-    /// The script filename (`suiteItem` / `testPass`) or section id (`section`)
+    /// The script filename (`suiteItem` / `testPass`), section id (`section`),
+    /// course section id (`courseSection`), `AssignmentConcept` raw value
+    /// (`concept`) or comma-separated assignment public IDs (`assignments`)
     /// the target refers to; nil for `assignmentGrade`.
     public let ref: String?
 
@@ -354,7 +419,7 @@ public struct AchievementTarget: Codable, Equatable, Sendable {
     }
 }
 
-public enum TargetKind: String, Codable, Sendable {
+public enum TargetKind: String, Codable, CaseIterable, Sendable {
     /// The whole-assignment grade percent (earnedPoints / totalPoints).
     case assignmentGrade
     /// One suite item's fractional `score` (the partial-credit metric).
@@ -363,6 +428,21 @@ public enum TargetKind: String, Codable, Sendable {
     case section
     /// Pass/fail of one referenced test (for a `testPass` condition).
     case testPass
+    /// A course signal counts the assignments in one course section.
+    case courseSection
+    /// A course signal counts the assignments tagged with one concept.
+    case concept
+    /// A course signal counts exactly the assignments `ref` lists.
+    case assignments
+
+    /// True for the kinds that name a set of a course's assignments, which is
+    /// what a course signal counts over.
+    public var namesCourseAssignments: Bool {
+        switch self {
+        case .assignmentGrade, .suiteItem, .section, .testPass: return false
+        case .courseSection, .concept, .assignments: return true
+        }
+    }
 }
 
 /// What a student gets for earning an achievement.

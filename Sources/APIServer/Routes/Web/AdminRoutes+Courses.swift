@@ -400,6 +400,9 @@ extension AdminRoutes {
                 try await APISubmission.query(on: db)
                     .filter(\.$testSetupID ~~ setupIDs).delete()
             }
+            // The course's own awards name the student, keyed by the course
+            // with no foreign key (docs/achievement-rewards.md, S3).
+            try await AchievementAwardStore.deleteCourseAwards(forCourse: courseID, on: db)
 
             // 4. Assignments. A class composite's slots and contributions map
             // students to their work, so they go explicitly, not only by the

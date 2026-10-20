@@ -91,6 +91,10 @@ struct AchievementSignalOption: Encodable {
     /// — the same shape (and the same idiom) as the editor's `data-scope`
     /// attributes, so the dropdown can hide an option the save would refuse.
     let scopes: String
+    /// Space-separated `AchievementLevel` values this signal may be used at
+    /// (`AchievementSignal.allowedLevels`). The editor hides an option that
+    /// its own level cannot evaluate, as it hides one by scope.
+    let levels: String
     /// Which input this signal's reference needs, if any: "" | "text" | "sections".
     let refControl: String
     /// The `ConditionRow` field the reference serializes to.
@@ -139,6 +143,30 @@ enum AchievementSignalPresentation {
                 signal, "Class coverage",
                 "share of the reference the class's combined contributions cover", unit: "%",
                 ref: .none)
+        case .assignmentsGraded:
+            return make(signal, "Assignments graded", "assignments with a graded submission", unit: "", ref: .none)
+        case .assignmentsAtGrade:
+            return make(
+                signal, "Assignments at grade", "assignments whose best grade reaches a floor", unit: "",
+                ref: .none)
+        case .assignmentsFullMarks:
+            return make(
+                signal, "Full-marks assignments", "assignments where every test passed", unit: "", ref: .none)
+        case .assignmentsEarly:
+            return make(
+                signal, "Assignments early", "assignments submitted ahead of the due date", unit: "",
+                ref: .none)
+        case .assignmentsComeback:
+            return make(
+                signal, "Comebacks", "assignments where every test passed after an attempt that did not",
+                unit: "", ref: .none)
+        case .achievementsEarned:
+            return make(
+                signal, "Achievements earned", "assignment achievements earned", unit: "", ref: .none)
+        case .conceptsAtFullMarks:
+            return make(
+                signal, "Full-marks concepts", "concepts with full marks on a tagged assignment", unit: "",
+                ref: .none)
         }
     }
 
@@ -149,6 +177,7 @@ enum AchievementSignalPresentation {
         AchievementSignalOption(
             value: signal.rawValue, label: label, detail: detail, unit: unit,
             scopes: signal.allowedScopes.map(\.rawValue).joined(separator: " "),
+            levels: signal.allowedLevels.map(\.rawValue).joined(separator: " "),
             refControl: ref.control, refField: ref.refField, refLabel: ref.label,
             refPlaceholder: ref.placeholder, refReplacesValue: refReplacesValue)
     }

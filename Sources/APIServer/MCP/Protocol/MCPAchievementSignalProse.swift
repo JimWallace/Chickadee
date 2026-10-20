@@ -57,6 +57,32 @@ enum MCPAchievementSignalProse {
                 "classCoverage is a percent (0–100) of the reference that the whole class's "
                 + "combined slot contributions cover, measured by one synthetic corpus run over "
                 + "them; it scopes nothing, so set no sectionRef (classWide goals only)"
+        case .assignmentsGraded:
+            return "assignmentsGraded is a count of assignments with a graded submission (course achievements only)"
+        case .assignmentsAtGrade:
+            return
+                "assignmentsAtGrade is a count of assignments whose best grade reaches gradeFloor "
+                + "percent (course achievements only)"
+        case .assignmentsFullMarks:
+            return
+                "assignmentsFullMarks is a count of assignments where every test passed "
+                + "(course achievements only)"
+        case .assignmentsEarly:
+            return
+                "assignmentsEarly is a count of assignments with a graded submission two days before "
+                + "the due date (course achievements only)"
+        case .assignmentsComeback:
+            return
+                "assignmentsComeback is a count of assignments where every test passed after an "
+                + "attempt that did not (course achievements only)"
+        case .achievementsEarned:
+            return
+                "achievementsEarned is a count of assignment achievements earned, of the one "
+                + "achievementRef names or of any (course achievements only)"
+        case .conceptsAtFullMarks:
+            return
+                "conceptsAtFullMarks is a count of concepts with full marks on a tagged assignment "
+                + "(course achievements only)"
         }
     }
 }

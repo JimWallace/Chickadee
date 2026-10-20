@@ -95,6 +95,13 @@ struct AccountRoutes: RouteCollection {
 
         let github = try await accountGitHubContext(req: req, userID: userID)
 
+        // The course achievements a student has earned in each current
+        // course are stored here, as on their result pages
+        // (docs/achievement-rewards.md, decision 7). Staff earn none.
+        let studentCourses = enrollments.filter { $0.role == .student && !$0.course.isArchived }.map(\.course)
+        await AchievementAwardStore.grantCourseAchievementsOrLog(
+            for: userID, in: studentCourses, on: req.db, logger: req.logger)
+
         let avatarNotice = req.query[String.self, at: "avatar"]
         let avatarPicker = try await Self.avatarPickerContext(
             user: user, spec: spec, handle: handle, isStaff: isStaff, avatarNotice: avatarNotice, req: req)

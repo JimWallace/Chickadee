@@ -51,10 +51,13 @@ public struct WardrobeProgress: Equatable, Sendable {
         public let secondsBeforeDue: Double?
         /// The concept the instructor tagged the assignment with, if any.
         public let concept: AssignmentConcept?
+        /// The grade percent (`GradePercent.of`), nil when the result has
+        /// no points. Only the course signal `assignmentsAtGrade` reads it.
+        public let gradePercent: Int?
 
         public init(
             assignmentID: String, attemptNumber: Int, passCount: Int, totalTests: Int,
-            secondsBeforeDue: Double? = nil, concept: AssignmentConcept? = nil
+            secondsBeforeDue: Double? = nil, concept: AssignmentConcept? = nil, gradePercent: Int? = nil
         ) {
             self.assignmentID = assignmentID
             self.attemptNumber = attemptNumber
@@ -62,6 +65,7 @@ public struct WardrobeProgress: Equatable, Sendable {
             self.totalTests = totalTests
             self.secondsBeforeDue = secondsBeforeDue
             self.concept = concept
+            self.gradePercent = gradePercent
         }
 
         /// Every test it ran passed, and it ran at least one.

@@ -276,6 +276,30 @@ because line numbers go out of date.
     student sees, is the one parallel reader: it reads the same join first,
     then a group the student ranked in, and ranking needs a join.
 
+### The award ledger and course achievements: `achievement_awards`, `courses.achievements`
+
+- **Writers:**
+  - `AchievementAwardStore.record` (assignment badges) and
+    `grantCourseAchievements` (course achievements), from the student's own
+    result page, dashboard and account page only.
+  - `AchievementsEditing.apply(rows:course:on:)` writes
+    `courses.achievements`.
+  - Course deletion (`deleteAwards`, `deleteCourseAwards`) and assignment
+    deletion remove ledger rows.
+- **Readers:** the course evaluator (`courseProgress`, which reads the
+  assignment-level rows for `achievementsEarned`) and the account export.
+- **Rules:**
+  - A ledger row is written off the grading path and is never taken back by
+    a regrade (`docs/achievement-rewards.md`, decision 2). A staff view
+    writes nothing.
+  - A course signal counts only assignments that
+    `assignmentVisibleToStudentByState` admits. A new visibility state must
+    keep that true for the course counts as for the dashboard.
+  - `achievementsEarned` reads the ledger, so the result page stores the
+    assignment badges before it grants the course achievements.
+  - A signal's level (`AchievementSignal.allowedLevels`) decides where it may
+    be saved. The editor and the validator both derive from it.
+
 ---
 
 ## The grading pipeline
