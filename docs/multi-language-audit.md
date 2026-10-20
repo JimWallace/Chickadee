@@ -309,7 +309,7 @@ Racket appears **zero times** in `CLAUDE.md` and **zero times** in
 
 That breaks a pattern the previous four additions kept without exception — R
 (`docs/r-support.md`), Lua and Octave (the "What the *X* run actually cost"
-postmortems in the runbook), C++ (`docs/cpp-support.md` plus the decision memo).
+postmortems, now in `docs/archive/xeus-kernel-postmortems.md`), C++ (`docs/cpp-support.md` plus the decision memo).
 Those postmortems are what turned the runbook from a checklist into a scored
 model, and Racket is the most informative data point yet available: the first
 upload-only language that is *not* compiled, and the first whose contingent

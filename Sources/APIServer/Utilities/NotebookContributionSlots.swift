@@ -39,11 +39,11 @@ enum NotebookContributionSlots {
     static let slotMetadataKey = "chickadee_slot"
 
     /// True when this cell carries a slot marker.
-    static func isSlotCell(_ cell: [String: Any]) -> Bool {
-        guard let metadata = cell["metadata"] as? [String: Any],
+    static func isSlotCell(_ cell: [String: JSONValue]) -> Bool {
+        guard let metadata = cell["metadata"]?.objectValue,
             let raw = metadata[slotMetadataKey]
         else { return false }
-        if let text = raw as? String { return !text.isEmpty }
+        if let text = raw.stringValue { return !text.isEmpty }
         // A number or bool is a legitimate way to write a slot label by hand;
         // only an explicitly empty string means "not a slot".
         return true
@@ -66,7 +66,7 @@ enum NotebookContributionSlots {
     /// Zero means the assignment is an ordinary one, and every caller treats
     /// that as "apply no bound" — which is what keeps every existing
     /// assignment byte-identical through this path.
-    static func declaredSlotCount(inInstructorCells cells: [[String: Any]]) -> Int {
+    static func declaredSlotCount(inInstructorCells cells: [[String: JSONValue]]) -> Int {
         cells.count(where: isSlotCell)
     }
 
@@ -84,8 +84,8 @@ enum NotebookContributionSlots {
     /// unmarked cells) reopens the bypass. Worth revisiting if a real offering
     /// shows students tripping over it.
     static func retainedStudentCells(
-        _ cells: [[String: Any]], limit: Int
-    ) -> [[String: Any]] {
+        _ cells: [[String: JSONValue]], limit: Int
+    ) -> [[String: JSONValue]] {
         guard limit > 0 else { return cells }
         return Array(cells.filter(isSlotCell).prefix(limit))
     }

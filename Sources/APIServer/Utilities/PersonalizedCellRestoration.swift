@@ -49,8 +49,8 @@ enum PersonalizedCellRestoration {
     /// coincidental index collision cannot pass it.
     static func restoreTemplates(in incoming: Data, canonical: Data?) -> Outcome {
         guard
-            var notebook = (try? JSONSerialization.jsonObject(with: incoming)) as? [String: Any],
-            var cells = notebook["cells"] as? [[String: Any]]
+            var notebook = JSONValue.object(from: incoming),
+            var cells = notebook["cells"]?.arrayOfObjects
         else {
             // Not notebook-shaped: the caller has already rejected that, so
             // there is nothing here to restore.
@@ -62,17 +62,16 @@ enum PersonalizedCellRestoration {
 
         guard
             let canonical,
-            let canonicalNotebook = (try? JSONSerialization.jsonObject(with: canonical)) as? [String: Any],
-            let canonicalCells = canonicalNotebook["cells"] as? [[String: Any]]
+            let canonicalCells = NotebookCellSources.cells(from: canonical)
         else {
             // No stored template to restore from — every tagged cell is at risk.
             return .unmatched(
                 placeholders: Set(taggedIndexes.flatMap { taggedPlaceholders(in: cells[$0]) }).sorted())
         }
 
-        var canonicalByID: [String: [String: Any]] = [:]
+        var canonicalByID: [String: [String: JSONValue]] = [:]
         for cell in canonicalCells {
-            if let id = cell["id"] as? String, !id.isEmpty {
+            if let id = cell["id"]?.stringValue, !id.isEmpty {
                 canonicalByID[id] = cell
             }
         }
@@ -93,8 +92,8 @@ enum PersonalizedCellRestoration {
 
         guard unmatched.isEmpty else { return .unmatched(placeholders: unmatched.sorted()) }
 
-        notebook["cells"] = cells
-        guard let encoded = try? JSONSerialization.data(withJSONObject: notebook) else {
+        notebook["cells"] = .array(cells.map(JSONValue.object))
+        guard let encoded = JSONValue.data(fromObject: notebook) else {
             return .restored(incoming)
         }
         return .restored(encoded)
@@ -104,11 +103,8 @@ enum PersonalizedCellRestoration {
 
     /// The placeholder names a cell was personalized for, or `[]` when the cell
     /// carries no personalization tag.
-    private static func taggedPlaceholders(in cell: [String: Any]) -> [String] {
-        guard
-            let metadata = cell["metadata"] as? [String: Any],
-            let tag = metadata[NotebookSubstitution.fencedCellMetadataKey] as? String
-        else {
+    private static func taggedPlaceholders(in cell: [String: JSONValue]) -> [String] {
+        guard let tag = cell["metadata"]?[NotebookSubstitution.fencedCellMetadataKey]?.stringValue else {
             return []
         }
         return tag.split(separator: ",").map(String.init).filter { !$0.isEmpty }
@@ -118,18 +114,18 @@ enum PersonalizedCellRestoration {
     /// with no cell ids — the same position, provided that cell really is the
     /// template for `names`.
     private static func templateCell(
-        for cell: [String: Any],
+        for cell: [String: JSONValue],
         at index: Int,
         names: [String],
-        canonicalByID: [String: [String: Any]],
-        canonicalCells: [[String: Any]]
-    ) -> [String: Any]? {
-        if let id = cell["id"] as? String, !id.isEmpty {
+        canonicalByID: [String: [String: JSONValue]],
+        canonicalCells: [[String: JSONValue]]
+    ) -> [String: JSONValue]? {
+        if let id = cell["id"]?.stringValue, !id.isEmpty {
             return canonicalByID[id]
         }
         guard canonicalCells.indices.contains(index) else { return nil }
         let candidate = canonicalCells[index]
-        guard (candidate["cell_type"] as? String) == "code" else { return nil }
+        guard candidate["cell_type"]?.stringValue == "code" else { return nil }
         let carried = Set(NotebookSubstitution.placeholderNames(inSource: NotebookCellSources.cellSource(candidate)))
         guard carried.isSuperset(of: names) else { return nil }
         return candidate
@@ -138,12 +134,14 @@ enum PersonalizedCellRestoration {
     /// `cell` with the template's source text and without the personalization
     /// tag — everything else the author changed (outputs, other metadata, cell
     /// type) is left exactly as they left it.
-    private static func restoring(_ cell: [String: Any], toSourceOf template: [String: Any]) -> [String: Any] {
+    private static func restoring(
+        _ cell: [String: JSONValue], toSourceOf template: [String: JSONValue]
+    ) -> [String: JSONValue] {
         var restored = cell
         restored["source"] = template["source"]
-        if var metadata = restored["metadata"] as? [String: Any] {
+        if var metadata = restored["metadata"]?.objectValue {
             metadata.removeValue(forKey: NotebookSubstitution.fencedCellMetadataKey)
-            restored["metadata"] = metadata
+            restored["metadata"] = .object(metadata)
         }
         return restored
     }

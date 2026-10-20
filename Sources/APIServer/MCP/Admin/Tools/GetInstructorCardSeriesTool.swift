@@ -82,20 +82,14 @@ struct GetInstructorCardSeriesTool: DiagnosticTool {
             .all()
             .compactMap(\.id)
 
-        let studentIDs = try await enrolledStudentIDs(courseUUID: courseUUID, on: context.db)
+        // The course's students, as the instructor dashboard scopes them
+        // (`InstructorDashboardRoutes+Cards`).
+        let studentIDs = try await CourseRoster.studentIDs(in: courseUUID, on: context.db)
 
         let series = try await context.request.application.diagnostics.instructorCardSeries(
             setupIDs: setupIDs, studentIDs: studentIDs, on: context.db)
         return Output(
             courseCode: course.code, courseKey: course.urlKey, courseTerm: course.term?.displayName,
             generatedAt: series.generatedAt, windows: series.windows)
-    }
-
-    /// The course's enrolled students, matching the instructor dashboard's
-    /// scoping (`InstructorDashboardRoutes+Cards`).  Empty when the course has
-    /// no enrollments.
-    private func enrolledStudentIDs(courseUUID: UUID, on db: any Database) async throws -> Set<UUID> {
-        // Students are `.student`-role enrollments now (#417 Slice G2).
-        try await studentUserIDsInCourse(courseUUID, on: db)
     }
 }

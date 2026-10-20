@@ -84,13 +84,9 @@ extension WebRoutes {
     /// The setup of an arena request, for course staff, when its activity is
     /// a tournament kind. Anything else is a 404.
     private func requireArenaSetup(_ req: Request) async throws -> APITestSetup {
-        let user = try req.auth.require(APIUser.self)
-        guard let setupID = req.parameters.get("testSetupID"),
-            let setup = try await APITestSetup.find(setupID, on: req.db),
-            setup.decodedManifest()?.activity?.kind.aggregation == .bracket,
-            try await isCourseStaff(user, inCourse: setup.courseID, db: req.db)
-        else { throw AppError.notFound(resource: "Tournament") }
-        return setup
+        try await ActivityRequest.resolve(
+            req, resource: "Tournament", audience: .staff, matching: { $0.kind.aggregation == .bracket }
+        ).setup
     }
 }
 

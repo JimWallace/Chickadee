@@ -82,7 +82,7 @@ None.
 - ✅ **§11 Build hygiene.** Release build (`-c release`) succeeds with zero
   warnings (the `JSFunction`-deprecation warning was fixed by moving to the
   unified `JSObject`). Artifact path/naming follows the vendored convention.
-- ✅ **§12 Documentation.** `docs/runner-wasm-migration.md` records the staged
+- ✅ **§12 Documentation.** `docs/archive/runner-wasm-migration.md` records the staged
   plan and the embedded-async `_Concurrency` requirement; the new bridge entry
   points are commented.
 

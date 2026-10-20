@@ -44,13 +44,7 @@ import VaporTesting
             let setup = try await makeTestSetup(on: app, id: setupID, courseID: courseID, manifest: manifest)
             let assignment = try await makeTestAssignment(on: app, testSetupID: setupID, courseID: courseID)
 
-            let session = try await ActivitySessionStore.open(
-                assignmentID: assignment.requireID(), groupID: labA, by: nil, now: Date().addingTimeInterval(-60),
-                on: app.db)
-            let joinedAt = Date().addingTimeInterval(-30)
-            try await ActivitySessionStore.join(
-                code: ActivitySessionCode.code(secret: session.codeSecret, at: joinedAt), userID: studentID,
-                now: joinedAt, on: app.db)
+            try await joinSession(assignmentID: assignment.requireID(), groupID: labA, userID: studentID, on: app.db)
             await CompositeSlots.dealOnOpen(setup: setup, assignment: assignment, userID: studentID, on: app.db)
 
             func feed(_ query: String, cookie: String) async throws -> (HTTPStatus, [Int]) {

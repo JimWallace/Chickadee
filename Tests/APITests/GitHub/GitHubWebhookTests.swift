@@ -26,10 +26,7 @@ import VaporTesting
 
     init() async throws {
         app = try await makeTestApp(prefix: "chickadee-github-webhook")
-        directory = FileManager.default.temporaryDirectory
-            .appendingPathComponent("chickadee-github-webhook-\(UUID().uuidString)")
-        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        app.githubAppSecretsFilePath = directory.appendingPathComponent(".github-app-secrets").path
+        directory = try GitHubTestApp.useSecretsDirectory(on: app, prefix: "chickadee-github-webhook")
     }
 
     deinit {
@@ -37,14 +34,7 @@ import VaporTesting
     }
 
     private func registerApp(webhookSecret: String? = secret) async throws {
-        try await APIGitHubApp(
-            conversion: GitHubManifestConversion(
-                id: 42, slug: "chickadee-courses", name: "Chickadee", clientID: "Iv1.client",
-                clientSecret: "client-secret", webhookSecret: webhookSecret, pem: "pem",
-                htmlURL: "https://github.com/apps/chickadee-courses", owner: nil)
-        ).save(on: app.db)
-        try GitHubAppSecrets(privateKeyPEM: "pem", clientSecret: "client-secret", webhookSecret: webhookSecret)
-            .write(path: app.githubAppSecretsFilePath)
+        try await GitHubTestApp.register(on: app, pem: "pem", webhookSecret: webhookSecret)
     }
 
     /// A course repository row for a student on an assignment.

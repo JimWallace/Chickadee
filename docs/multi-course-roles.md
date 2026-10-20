@@ -225,10 +225,14 @@ representable and creatable.
     checks, notebook/solution edits, global inputs, datasets, achievements,
     retest/reset/grade-override, and per-student deadline extensions (an
     individual accommodation, sibling to grade-override — *not* the
-    assignment-wide deadline).
+    assignment-wide deadline). Every display reorder is here too, web and
+    MCP: course sections, section items, assignments and content items
+    (#2713). Reordering is display organization, so the floor is one value,
+    `SortOrderRenumbering.roleFloor`.
   - **`.instructor`** — course *lifecycle* and structure: enrollment/roster/
     staff management, assignment create/delete/open/close and the
-    assignment-wide due date, course sections, archive, BrightSpace binding,
+    assignment-wide due date, course sections (create, rename, delete, move an
+    assignment between them; not the reorder), archive, BrightSpace binding,
     test-setup upload.
 - **The convention is now enforced, not just written down.**
   `RouteAuthorizationMatrixTests` walks the live route table and crosses every

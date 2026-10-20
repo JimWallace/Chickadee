@@ -68,7 +68,7 @@ name: Mutation-testing probe (macOS)
 #   * muter#308 — four further schemata-generation defects on v16, open, no fix.
 #     Why a green probe would still not be grounds to trust a score against real
 #     Chickadee source: this probe is three lines of Swift.
-# Full write-up: docs/handoff-mutation-testing.md.
+# Full write-up: docs/archive/handoff-mutation-testing.md.
 on:
   workflow_dispatch:
     inputs:

@@ -162,13 +162,12 @@ import VaporTesting
     @Test func setActivityTurnsItOnAndKeepsItWhenAbsent() async throws {
         let app = try await makeTestApp()
         try await withApp(app) { app in
-            let course = try await makeTestCourse(on: app, code: "CS135", name: "Designing Programs")
-            let courseID = try course.requireID()
-            let tester = try await makeTestUser(on: app, username: "tester", role: "instructor")
-            try await makeTestEnrollment(on: app, userID: tester.requireID(), courseID: courseID)
-            try await makeTestSetup(on: app, id: "setup_rpg", courseID: courseID, manifest: TestManifests.workerEmpty)
-            let assignment = try await makeTestAssignment(on: app, testSetupID: "setup_rpg", courseID: courseID)
-            _ = try await CourseGroupStore.createSet(courseID: courseID, name: "Lab sections", on: app.db)
+            let scenario = try await TestScenario.make(
+                on: app, code: "CS135", courseName: "Designing Programs", setupID: "setup_rpg",
+                manifest: TestManifests.workerEmpty)
+            try await scenario.enroll("tester", role: "instructor", on: app)
+            let assignment = scenario.assignment
+            _ = try await CourseGroupStore.createSet(courseID: scenario.courseID, name: "Lab sections", on: app.db)
             let context = ToolContext(
                 request: makeTestRequest(on: app), subject: "tester", grantedScopes: [.read, .write])
 

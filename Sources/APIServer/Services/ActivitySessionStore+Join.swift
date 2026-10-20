@@ -53,11 +53,9 @@ extension ActivitySessionStore {
         guard group.removedAt == nil, try await runsPerGroup(assignment, on: db),
             try await APICourse.find(assignment.courseID, on: db)?.isArchived == false
         else { throw ActivitySessionError.sessionClosed }
-        let enrollment = try await APICourseEnrollment.query(on: db)
-            .filter(\.$course.$id == assignment.courseID)
-            .filter(\.$userID == userID)
-            .first()
-        guard enrollment?.role == .student else { throw ActivitySessionError.notAStudent }
+        guard let enrollment = try await CourseRoster.enrollment(of: userID, in: assignment.courseID, on: db),
+            CourseRoster.isStudent(enrollment)
+        else { throw ActivitySessionError.notAStudent }
 
         let sessionID = try session.requireID()
         let existing = try await APIActivitySessionAttendance.query(on: db)

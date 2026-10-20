@@ -37,19 +37,17 @@ import VaporTesting
     }
 
     private func fixture(_ tag: String) async throws -> Fixture {
-        let courseID = try await makeTestCourse(on: app, code: "CP\(tag)").requireID()
-        let student = try await makeTestUser(on: app, username: "cp_student_\(tag)", role: "student")
-        try await makeTestEnrollment(on: app, userID: student.requireID(), courseID: courseID)
         var props = TestProperties(language: nil, datasets: [spec])
         props.gradingMode = .worker
         props.testSuites = [TestSuiteEntry(tier: .pub, script: "tests.py")]
         let setupID = "cpsetup_\(tag)"
-        try await makeTestSetup(on: app, id: setupID, courseID: courseID, manifest: try encodeManifest(props))
+        let scenario = try await TestScenario.make(
+            on: app, code: "CP\(tag)", setupID: setupID, manifest: try encodeManifest(props), title: "Cohort lab")
+        let studentID = try await scenario.enroll("cp_student_\(tag)", on: app)
         let sharedDir = app.testSetupsDirectory + "shared/\(setupID)/"
         try FileManager.default.createDirectory(atPath: sharedDir, withIntermediateDirectories: true)
         try poolCSV.write(toFile: sharedDir + "cases.csv", atomically: true, encoding: .utf8)
-        _ = try await makeTestAssignment(on: app, testSetupID: setupID, courseID: courseID, title: "Cohort lab")
-        return Fixture(courseID: courseID, studentID: try student.requireID(), setupID: setupID)
+        return Fixture(courseID: scenario.courseID, studentID: studentID, setupID: setupID)
     }
 
     private func submission(_ fx: Fixture, userID: UUID?, kind: String) async throws -> APISubmission {

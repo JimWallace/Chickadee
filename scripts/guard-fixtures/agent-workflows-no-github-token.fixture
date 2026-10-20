@@ -1,0 +1,9 @@
+# An agent step with no github-token. claude-code-action then trades the OIDC
+# token for a Claude App token with write scopes, whatever the job declares.
+guard="scripts/check-agent-workflows.sh"
+files=".github/workflows/mutation-pretriage.yml"
+description="a claude-agent step with no github-token"
+expect="passes no github-token"
+apply() {
+    sed -i '/^          github-token:/d' .github/workflows/mutation-pretriage.yml
+}

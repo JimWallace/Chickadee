@@ -20,18 +20,17 @@ extension WebRoutes {
 
     @Sendable
     func compositeSnapshot(req: Request) async throws -> Response {
-        let user = try req.auth.require(APIUser.self)
+        // The assignment is looked up before the gate, as the setup is: each
+        // of them missing is the same 404, before the viewer is checked.
         guard let setupID = req.parameters.get("testSetupID"),
-            let setup = try await APITestSetup.find(setupID, on: req.db),
-            let activity = setup.decodedManifest()?.activity, activity.kind == .classComposite,
-            let spec = activity.composite,
             let assignmentID = try await assignmentByTestSetupID(setupID, on: req.db)?.id
         else { throw AppError.notFound(resource: "Class composite") }
-
-        let isStaff = try await isCourseStaff(user, inCourse: setup.courseID, db: req.db)
-        if !isStaff {
-            try await req.cachedRequireCourseEnrollment(caller: user, courseID: setup.courseID)
-        }
+        let gate = try await ActivityRequest.resolve(
+            req, resource: "Class composite", audience: .course,
+            matching: { $0.kind == .classComposite && $0.composite != nil })
+        let (user, setup, isStaff) = (gate.user, gate.setup, gate.isStaff)
+        let activity = gate.activity
+        guard let spec = activity.composite else { throw AppError.notFound(resource: "Class composite") }
         // A composite that runs per lab group draws one group's image: the one
         // staff ask for, or the one a student's slot is in
         // (docs/lab-groups.md, slice 4).

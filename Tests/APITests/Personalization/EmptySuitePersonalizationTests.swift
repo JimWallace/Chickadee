@@ -50,14 +50,11 @@ import Vapor
     @Test func globalInputsSucceedOnEmptySuite() async throws {
         let app = try await makeTestApp()
         try await withApp(app) { app in
-            let course = try await makeTestCourse(on: app, code: "CS246", name: "OOP")
-            let courseID = try course.requireID()
-            let tester = try await makeTestUser(on: app, username: "tester", role: "instructor")
-            try await makeTestEnrollment(on: app, userID: tester.requireID(), courseID: courseID)
-            let manifest = TestManifests.emptySuite
-            try await makeTestSetup(on: app, id: "setup_empty", courseID: courseID, manifest: manifest)
-            let assignment = try await makeTestAssignment(
-                on: app, testSetupID: "setup_empty", courseID: courseID, title: "Fresh")
+            let scenario = try await TestScenario.make(
+                on: app, code: "CS246", courseName: "OOP", setupID: "setup_empty",
+                manifest: TestManifests.emptySuite, title: "Fresh")
+            try await scenario.enroll("tester", role: "instructor", on: app)
+            let assignment = scenario.assignment
 
             // Reproduce a brand-new assignment: an empty setup zip (no test files).
             let setup = try #require(try await APITestSetup.find("setup_empty", on: app.db))

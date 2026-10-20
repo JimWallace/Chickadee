@@ -34,27 +34,31 @@ You review one uncommitted change to Chickadee against the project rules.
   any name. Search for the concept, not for the name. The same rule applies
   outside the UI: a second helper, resolver or type for a concept the code
   already has a name for.
-- The "What Not To Do" list: Vapor in `Core/`, a `couldNotRun` status, a new
-  environment variable, `@unchecked Sendable` outside a Fluent `Model`.
-- Language rules: no inferred language, no defaulted `language:` parameter,
-  no `language == .cpp` where a `LanguageDescriptor` fact exists.
+- The "What Not To Do" list: a `couldNotRun` status, a new environment
+  variable, a runner JSON protocol, a per-language build strategy in Swift.
+- Language rules: no inferred language, no `language == .cpp` where a
+  `LanguageDescriptor` fact exists.
 - Course rules: no code-only course lookup.
-- Coding conventions: no force unwraps outside tests, explicit error enums,
-  one primary type per file, file name matches the type.
+- Coding conventions: explicit error enums, one primary type per file, file
+  name matches the type.
 - Memory safety: each new `unsafe` mark needs a comment that says why no safe
   API exists. Flag a mark where swift-system, NIO or the standard library has
   a safe API for the same call.
-- View rules: no inline `<script>` or `on*=` attributes (the CSP blocks
-  them), no `.style(` or `HTMLRaw(` in an Elementary view, and a fixture in
-  `ElementaryPageFixtures` for every new page type.
-- UI rules: no inline `style=""` except the allowed cases, design tokens,
-  chrome text of one sentence or less.
-- Testing rules: Swift Testing only, no skips with `Issue.record`, time
-  limits on suites that spawn subprocesses. Flag any edit to an existing test.
-- Versioning: a change to `VERSION`, `ChickadeeVersion.swift` or
-  `CHANGELOG.md` is an error; a missing `changelog.d/` fragment is a finding.
+- UI rules: chrome text of one sentence or less.
+- Testing rules: no skips with `Issue.record`, time limits on suites that
+  spawn subprocesses.
+- Versioning: a missing `changelog.d/` fragment is a finding.
 - MCP copy: no hard-coded language or tier lists; the authoring-voice
   constant and the CLAUDE.md "Voice and Register" text stay identical.
+
+Do not check what a tool already enforces. `scripts/format-lint.sh` runs
+swift-format, SwiftLint (force unwraps, `.style(`, `HTMLRaw(`) and the
+`scripts/` guards (`@unchecked Sendable`, a defaulted `language:` parameter,
+XCTest, inline styles and handlers, design tokens). `ElementaryPageGuardTests`
+holds every rendered page to the view rules. The Core target has no Vapor
+dependency. The settings deny list blocks edits to `VERSION`,
+`ChickadeeVersion.swift` and `CHANGELOG.md`, and a hook asks before an edit
+to an existing test.
 
 ## How you report
 

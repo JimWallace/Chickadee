@@ -16,19 +16,14 @@ set -euo pipefail
 # A long-lived child is `SupervisedProcess`; a one-shot run is `Subprocess.run`
 # (see `PersonalizationEvaluator` and Tests/TestSupport/InterpreterSpawn.swift).
 #
-# Comment lines are skipped, so prose that names the type is fine.
+# Lines that start with `//` are skipped, so prose that names the type is fine.
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$repo_root"
+# shellcheck source=lib/grep-guard.sh
+. "scripts/lib/grep-guard.sh"
 
-pattern='(^|[^A-Za-z0-9_])(Foundation\.)?Process(\(\)|\.run\(|\.launchedProcess\()'
-
-hits=$(
-  find Sources Tests -name '*.swift' -print0 \
-    | xargs -0 grep -nE "$pattern" \
-    | grep -vE '^[^:]+:[0-9]+:[[:space:]]*(//|\*|/\*)' \
-    || true
-)
+hits=$(code_matches '(^|[^A-Za-z0-9_])(Foundation\.)?Process(\(\)|\.run\(|\.launchedProcess\()' Sources Tests)
 
 if [ -n "$hits" ]; then
   echo "ERROR: Foundation Process launch(es) found. Launch through swift-subprocess"

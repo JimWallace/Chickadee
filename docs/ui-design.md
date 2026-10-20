@@ -1067,7 +1067,7 @@ finding.
 When the same finding occurs on three or more pages, do not report it again
 each month. Make it a rule elsewhere in this document, and a guard when the
 rule is mechanical. That is how the widget audit turned ten findings into
-five guards (`docs/ui-consistency-audit.md`).
+five guards (`docs/archive/ui-consistency-audit.md`).
 
 ### Who uses the UI, and for what
 
@@ -1254,11 +1254,9 @@ and a per-page wiring file reads it (`assignment-edit-page.js` /
 `assignment-new-page.js` are the worked examples: shared editor modules,
 per-page URL builders).
 
-Since #1516 this is no longer only a tooling rule.  The CSP `script-src`
-carries no `'unsafe-inline'`, so **an inline script in a template does not
-run** and **an `onclick=` / `onchange=` attribute never fires** — and
-neither failure is loud: the control simply stops responding.  Two things
-follow.
+Since #1516 this is no longer only a tooling rule: the CSP `script-src`
+carries no `'unsafe-inline'`. The rule is in `Sources/APIServer/Views/CLAUDE.md`.
+Two things follow for the guards.
 
 - A one-line `<script>` must be a **data** block.  Guard 3b skips one-line
   elements because that is the shape of the JSON islands; written without a
@@ -1393,14 +1391,9 @@ swift test --filter WebRoutes
 and check the page by eye in both light and dark mode — the guards prove the
 values route through the system; they cannot prove the page *looks* right.
 
-The `ui-review` agent (`.claude/agents/ui-review.md`) reviews the layer
-above the guards: a construct that duplicates the vocabulary under another
-name, an idiom heavier than the cheapest that fits, copy over house length,
-a page that steps outside its archetype.  Run it from a Claude Code session
-on any change touching `Sources/APIServer/Views/`, `Public/styles.css` or a
-page-wiring `Public/*.js`; CI runs the same brief on every such pull request
-(`.github/workflows/ui-review.yml`) and fails the job on a `changes
-requested` verdict.
+The `ui-review` agent reviews the layer above the guards. When to run it,
+and why it is unconditional, is in `Sources/APIServer/Views/CLAUDE.md`, "The
+`ui-review` Agent".
 The visual-regression harness (`Tools/visual-regression/`, CI
 `visual-regression.yml`) automates that last check for the key pages: it
 screenshots them in both schemes and diffs against committed baselines.  An
@@ -1452,7 +1445,7 @@ tell you.
   remove it from `SPACING_STEPS` in `scripts/check-design-tokens.sh` in the
   same PR.
 - **Migration queue** — superseded as an inventory by
-  [ui-consistency-audit.md](ui-consistency-audit.md) (2026-08), which
+  [ui-consistency-audit.md](archive/ui-consistency-audit.md) (2026-08), which
   audited the whole widget layer, found this queue's five entries were an
   undercount (seven titlebar clones, seventeen action-row names, fourteen
   muted-hint names, …), and carries the sliced conversion plan. Convert

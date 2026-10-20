@@ -54,7 +54,7 @@ func syncLearnGroupSet(
             groupByD2LUserID[d2lUserID] = group.groupID
         }
     }
-    let studentIDs = try await CourseGroupStore.enrolledStudentIDs(courseID: set.courseID, on: db)
+    let studentIDs = try await CourseRoster.studentIDs(in: set.courseID, on: db)
     let students = try await APIUser.query(on: db).filter(\.$id ~~ Array(studentIDs)).all()
     var members: [UUID: String] = [:]
     for student in students {

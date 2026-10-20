@@ -85,7 +85,7 @@ func assembleClassCorpus(
         .filter { students?.contains($0.key) ?? true }
     guard !latestByUser.isEmpty else { return nil }
 
-    var contributed: [(user: UUID, cells: [[String: Any]])] = []
+    var contributed: [(user: UUID, cells: [[String: JSONValue]])] = []
     for userID in latestByUser.keys.sorted(by: { $0.uuidString < $1.uuidString }) {
         guard let submission = latestByUser[userID],
             submission.filename?.lowercased().hasSuffix(".ipynb") == true,
@@ -105,16 +105,14 @@ func assembleClassCorpus(
     }
     guard !contributed.isEmpty else { return nil }
 
-    guard var corpus = (try? JSONSerialization.jsonObject(with: instructorData)) as? [String: Any]
-    else { return nil }
-    corpus["cells"] = contributed.flatMap(\.cells) + instructorCells.filter(isTestCell)
-    // `.sortedKeys` is what makes "the same inputs give the same bytes" true.
-    // Without it every object's keys come out in whatever order the parse
-    // produced, so two assemblies of an unchanged corpus differ byte for byte —
-    // which makes two runs incomparable and re-hashes an artifact that did not
-    // change.
-    guard let bytes = try? JSONSerialization.data(withJSONObject: corpus, options: [.sortedKeys])
-    else { return nil }
+    guard var corpus = JSONValue.object(from: instructorData) else { return nil }
+    corpus["cells"] = .array((contributed.flatMap(\.cells) + instructorCells.filter(isTestCell)).map(JSONValue.object))
+    // Sorted keys (`JSONValue.data(fromObject:)`) are what make "the same
+    // inputs give the same bytes" true. Without them every object's keys come
+    // out in dictionary order, so two assemblies of an unchanged corpus differ
+    // byte for byte — which makes two runs incomparable and re-hashes an
+    // artifact that did not change.
+    guard let bytes = JSONValue.data(fromObject: corpus) else { return nil }
     return ClassCorpus(notebook: bytes, contributors: contributed.map(\.user))
 }
 

@@ -47,13 +47,7 @@ struct NotebookExtractor {
 
         // Delegate to the shared, dependency-free core so the native worker and
         // the (wasm) browser runner extract notebooks identically.
-        let inputCells = cells.map { cell in
-            NotebookCell(
-                cellType: cell["cell_type"]?.stringValue ?? "",
-                source: NotebookCellSources.cellSource(cell)
-            )
-        }
-        let extracted = extractPython(cells: inputCells, filename: filename)
+        let extracted = extractPython(cells: notebookCells(cells), filename: filename)
 
         // Through the policy, not a private `> 0` — same reason as
         // `notebookJSONObject` above.
@@ -64,6 +58,17 @@ struct NotebookExtractor {
             source: extracted.executableModule,
             introspectableSource: extracted.introspectableSource,
             codeCellCount: extracted.codeCellCount
+        )
+    }
+}
+
+/// The notebook's JSON cells as RunnerCore `NotebookCell`s — the one input
+/// every RunnerCore extractor takes.
+func notebookCells(_ cells: [[String: JSONValue]]) -> [NotebookCell] {
+    cells.map { cell in
+        NotebookCell(
+            cellType: cell["cell_type"]?.stringValue ?? "",
+            source: NotebookCellSources.cellSource(cell)
         )
     }
 }
@@ -243,61 +248,28 @@ func protectedExtractionSkippedWarning(notebook: String, source: String) -> Stri
 }
 
 /// The per-language assembly of one notebook's cells into a source module.
+///
+/// Every arm is a RunnerCore extractor — the same implementation the browser
+/// runner calls through wasm, so the two extractors cannot drift. The verbatim
+/// languages (`extractR` / `extractLua` / `extractOctave` / `extractCpp` /
+/// `extractRacket` / `extractJava`, all over one `extractWithCellMarkers`) keep
+/// cell boundaries as inert marker comments, which `chickadee_student_cells()`
+/// splits on; Python labels each cell through `wrapCellForResilientLoad`.
+///
+/// One case per language, not a ternary or a `default`: a ternary compiles
+/// forever and once routed Octave to the R extractor, and a merged arm once
+/// mapped Python to it too.
 private func assembleExtractedSource(
     language: AssignmentLanguage, cells: [[String: JSONValue]], filename: String
 ) -> String {
+    let inputCells = notebookCells(cells)
     switch language {
-    case .r, .lua, .octave, .cpp, .racket, .java:
-        // Flattening concatenates cells, which loses the boundaries a
-        // source-level check (`.cellContains`) needs.  Python keeps them
-        // because `wrapCellForResilientLoad` labels each cell; the others get
-        // the same information from inert marker comments, which
-        // `chickadee_student_cells()` splits on.  The assembly lives in
-        // RunnerCore (`extractR` / `extractLua` / `extractOctave` / `extractCpp` /
-        // `extractRacket` / `extractJava`, all over one
-        // `extractWithCellMarkers`) — the same implementation the browser
-        // runner calls via wasm, so the two extractors cannot drift.
-        let inputCells = cells.map { cell in
-            NotebookCell(
-                cellType: cell["cell_type"]?.stringValue ?? "",
-                source: NotebookCellSources.cellSource(cell)
-            )
-        }
-        // A switch rather than the `== .lua ? … : …` ternary this used to
-        // be: the ternary compiles forever and would have routed Octave to
-        // the R extractor (runbook item 5's shape, one size smaller).
-        let extracted: ExtractedVerbatimNotebook
-        switch language {
-        case .lua: extracted = extractLua(cells: inputCells, filename: filename)
-        case .octave: extracted = extractOctave(cells: inputCells, filename: filename)
-        case .cpp: extracted = extractCpp(cells: inputCells, filename: filename)
-        case .racket: extracted = extractRacket(cells: inputCells, filename: filename)
-        case .java: extracted = extractJava(cells: inputCells, filename: filename)
-        case .r: extracted = extractR(cells: inputCells, filename: filename)
-        case .python:
-            // Unreachable: the OUTER switch assembles Python itself. Kept as a
-            // trap rather than folded in with `.r`, where it silently mapped
-            // Python to the R extractor — the exact compiler-invisible shape
-            // the surrounding comment says this switch exists to avoid. A later
-            // cleanup that merged Python into this group would have extracted
-            // every Python notebook as R.
-            preconditionFailure("Python notebooks are assembled by the outer switch")
-        }
-        return extracted.source
-    case .python:
-        var assembled = "# Generated from \(filename)\n\n"
-        for (index, cell) in cells.enumerated() {
-            guard cell["cell_type"]?.stringValue == "code" else { continue }
-            var src = NotebookCellSources.cellSource(cell)
-            while src.last?.isWhitespace == true { src.removeLast() }
-            guard !src.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { continue }
-            let cellSource = sanitizeCellForModule(src)
-            guard !cellSource.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-                continue
-            }
-            assembled +=
-                wrapCellForResilientLoad(cellSource, label: "cell \(index + 1)") + "\n\n"
-        }
-        return assembled
+    case .python: return extractPython(cells: inputCells, filename: filename).executableModule
+    case .r: return extractR(cells: inputCells, filename: filename).source
+    case .lua: return extractLua(cells: inputCells, filename: filename).source
+    case .octave: return extractOctave(cells: inputCells, filename: filename).source
+    case .cpp: return extractCpp(cells: inputCells, filename: filename).source
+    case .racket: return extractRacket(cells: inputCells, filename: filename).source
+    case .java: return extractJava(cells: inputCells, filename: filename).source
     }
 }

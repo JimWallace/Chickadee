@@ -27,6 +27,11 @@ jobs:
   # The -ci image, not the plain one: the JupyterLite guards
   # (verify-jupyterlite.sh, check-xeus-vendored.sh, check-env-vendored-sync.sh)
   # are python3 scripts, and the plain image has no python3 (#2428).
+  #
+  # The Claude Code hook tests (.claude/hooks/) ride here for the same reason:
+  # the hooks are Python, and their format case runs swift-format, so they need
+  # python3 AND the toolchain. This image carries both. They had a job of their
+  # own on this same image until #2719.
   guard-self-tests:
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -39,67 +44,50 @@ jobs:
       - uses: actions/checkout@v7
       - name: Every guard fails on its own defect
         run: scripts/check-guards.sh
+      - name: Claude Code hook behaviour tests
+        if: ${{ !cancelled() }}
+        run: scripts/test-claude-hooks.py
 
-  # The mutation tooling is Python, so this needs python3 and NOTHING else --
-  # no Swift, no container. It rode in format-lint for one commit and failed
-  # with `python3: not found`: that job runs the PLAIN swift image, which is the
-  # toolchain alone. The -ci image is the one carrying python3, and pulling a
-  # ~GB container to run 18 unit tests would be the wrong fix for a job that
-  # never touches Swift.
-  mutation-trend-tests:
+  # Self-tests of tools that need only python3, bash and node, which the bare
+  # runner has. No Swift and no container. Three jobs until #2719, each starting
+  # a runner for one to three short scripts.
+  #
+  # Each step after the first runs when an earlier one failed, as in
+  # guard-self-tests, so one red check does not hide the result of the others.
+  #
+  # Not format-lint: that job runs the PLAIN swift image, which is the toolchain
+  # alone, with no python3. The mutation tests rode there for one commit and
+  # failed with `python3: not found`.
+  script-self-tests:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
+
       - name: Mutation tooling self-tests
         # `*_test.py`, not one named file: report_test.py existed for a week
         # before anything ran it, because the pattern named its neighbour.
         run: python3 -m unittest discover -s Tools/mutation -p '*_test.py' -v
 
-  # The auto-deploy daemon is bash that runs as root on the production host, so
-  # its tests stub docker, curl and the clock (scripts/test-chickadee-deployer.sh).
-  # The runner hosts' update script is tested the same way.
-  # They need bash and python3 and nothing else, like the job above.
-  deployer-tests:
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    steps:
-      - uses: actions/checkout@v7
+      # The auto-deploy daemon is bash that runs as root on the production
+      # host, so its tests stub docker, curl and the clock. The runner hosts'
+      # update script and the snapshot retention are tested the same way.
       - name: Auto-deploy daemon behaviour tests
+        if: ${{ !cancelled() }}
         run: scripts/test-chickadee-deployer.sh
       - name: Runner update script behaviour tests
+        if: ${{ !cancelled() }}
         run: scripts/test-chickadee-runner-update.sh
       - name: Snapshot retention behaviour tests
+        if: ${{ !cancelled() }}
         run: scripts/test-snapshot-retention.sh
 
-  # The Claude Code hooks (.claude/hooks/) are Python, and their format case
-  # runs swift-format, so this needs python3 AND the toolchain. format-lint's
-  # plain swift image has no python3, which is why this is not a step there.
-  # The -ci image carries both, as for guard-self-tests.
-  claude-hooks-tests:
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    container:
-      image: ghcr.io/jimwallace/chickadee/swift-ci:6.4-resolute
-      credentials:
-        username: ${{ github.actor }}
-        password: ${{ secrets.GITHUB_TOKEN }}
-    steps:
-      - uses: actions/checkout@v7
-      - name: Claude Code hook behaviour tests
-        run: scripts/test-claude-hooks.py
-
-  # The class-handle word lists (Sources/Core/AvatarHandle.swift) against the
-  # review data in Tools/handle-review/data. Node only, like the two jobs above
-  # need only python3: the runner image has it, and no Swift is involved.
-  # Exits non-zero on any red flag. AvatarHandleTests reads the same data;
-  # this job keeps the tool itself, which a person reads, from rotting.
-  handle-review:
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    steps:
-      - uses: actions/checkout@v7
+      # The class-handle word lists (Sources/Core/AvatarHandle.swift) against
+      # the review data in Tools/handle-review/data. Exits non-zero on any red
+      # flag. AvatarHandleTests reads the same data; this step keeps the tool
+      # itself, which a person reads, from rotting.
       - name: Class-handle word-list review
+        if: ${{ !cancelled() }}
         run: node Tools/handle-review/review.mjs > /dev/null
 
   format-lint:
@@ -212,6 +200,12 @@ jobs:
       - name: Build-retry helper self-tests
         run: scripts/ci-build-retry.sh --self-test
 
+      - name: Agent text cleanup self-tests
+        run: scripts/ci-agent-sanitize.sh --self-test
+
+      - name: Agent workflows share one setup and one cleanup
+        run: scripts/check-agent-workflows.sh
+
   # Single shared compile of the whole package + all test targets.  The
   # resulting `.build/` tree is cached and reused by every test job below
   # via `swift test --skip-build`, replacing five from-scratch compiles
@@ -227,8 +221,8 @@ jobs:
   # `.build/` sound.  That was left over from the `restore-keys` design and
   # did nothing under exact-match caching: neither outcome above reads a
   # source mtime.  It cost about two minutes per run (an apt-get install plus
-  # the mtime walk) and is gone.  `docker-build.yml` keeps the step because
-  # its release cache still restores by prefix.
+  # the mtime walk) and is gone.  `docker-build.yml` dropped it for the same
+  # reason when its release cache moved to an exact match (#2712).
   build:
     runs-on: ubuntu-latest
     timeout-minutes: 25
@@ -295,17 +289,13 @@ jobs:
 
       # LoadTestTests rides this lane: like CoreTests, it is pure logic with no
       # database, interpreter or network (docs/load-testing.md).
+      #
+      # The lane script skips the build on an exact cache hit, and then fails
+      # on any skipped test.
       - name: Run CoreTests
-        run: |
-          mkdir -p "${RUNNER_TEMP}/xunit"
-          if [ "${{ steps.setup.outputs.cache-hit }}" = "true" ]; then
-            swift test --skip-build --parallel --filter "CoreTests|LoadTestTests" --xunit-output "${RUNNER_TEMP}/xunit/core-tests.xml"
-          else
-            swift test --parallel --filter "CoreTests|LoadTestTests" --xunit-output "${RUNNER_TEMP}/xunit/core-tests.xml"
-          fi
-
-      - name: No test was skipped
-        run: scripts/check-no-skipped-tests.sh "${RUNNER_TEMP}"/xunit/*-swift-testing.xml
+        env:
+          CACHE_HIT: ${{ steps.setup.outputs.cache-hit }}
+        run: scripts/ci-swift-test-lane.sh core-tests --parallel --filter "CoreTests|LoadTestTests"
 
   api-tests:
     runs-on: ubuntu-latest
@@ -384,23 +374,13 @@ jobs:
         # Testing's internal scheduler to four in-flight tests at a
         # time — enough headroom for the connection pool to keep up,
         # with most of the parallelism speedup preserved.
+        #
+        # The lane script skips the build on an exact cache hit, and then
+        # fails on any skipped test (scripts/check-no-skipped-tests.sh).
         env:
           SWT_EXPERIMENTAL_MAXIMUM_PARALLELIZATION_WIDTH: "4"
-        run: |
-          mkdir -p "${RUNNER_TEMP}/xunit"
-          if [ "${{ steps.setup.outputs.cache-hit }}" = "true" ]; then
-            swift test --skip-build --filter APITests --xunit-output "${RUNNER_TEMP}/xunit/api-tests.xml"
-          else
-            swift test --filter APITests --xunit-output "${RUNNER_TEMP}/xunit/api-tests.xml"
-          fi
-
-      # A test that needs an interpreter declares it with a ConditionTrait, so
-      # an absent tool is a SKIPPED test with a reason, not a silent early
-      # return. The CI image carries every interpreter, so a skip here is a
-      # defect in the image or the probe, and this step makes it a red job
-      # naming the test and the reason.
-      - name: No test was skipped
-        run: scripts/check-no-skipped-tests.sh "${RUNNER_TEMP}"/xunit/*-swift-testing.xml
+          CACHE_HIT: ${{ steps.setup.outputs.cache-hit }}
+        run: scripts/ci-swift-test-lane.sh api-tests --filter APITests
 
   api-tests-postgres:
     runs-on: ubuntu-latest
@@ -470,23 +450,13 @@ jobs:
         # Testing's internal scheduler to four in-flight tests at a
         # time — well under the connection cap, with most of the
         # parallelism speedup preserved.
+        #
+        # The lane script skips the build on an exact cache hit, and then
+        # fails on any skipped test (scripts/check-no-skipped-tests.sh).
         env:
           SWT_EXPERIMENTAL_MAXIMUM_PARALLELIZATION_WIDTH: "4"
-        run: |
-          mkdir -p "${RUNNER_TEMP}/xunit"
-          if [ "${{ steps.setup.outputs.cache-hit }}" = "true" ]; then
-            swift test --skip-build --filter APITests --xunit-output "${RUNNER_TEMP}/xunit/api-tests.xml"
-          else
-            swift test --filter APITests --xunit-output "${RUNNER_TEMP}/xunit/api-tests.xml"
-          fi
-
-      # A test that needs an interpreter declares it with a ConditionTrait, so
-      # an absent tool is a SKIPPED test with a reason, not a silent early
-      # return. The CI image carries every interpreter, so a skip here is a
-      # defect in the image or the probe, and this step makes it a red job
-      # naming the test and the reason.
-      - name: No test was skipped
-        run: scripts/check-no-skipped-tests.sh "${RUNNER_TEMP}"/xunit/*-swift-testing.xml
+          CACHE_HIT: ${{ steps.setup.outputs.cache-hit }}
+        run: scripts/ci-swift-test-lane.sh api-tests --filter APITests
 
   browser-runner-tests:
     runs-on: ubuntu-latest
@@ -609,18 +579,13 @@ jobs:
         # == cores rather than 2x cores, which is a weaker constraint than it
         # was when it was chosen. Nothing here depends on that; it is flagged
         # so the next person to tune it knows what box they are tuning for.
+        #
+        # The lane script skips the build on an exact cache hit, and then
+        # fails on any skipped test.
         env:
           SWT_EXPERIMENTAL_MAXIMUM_PARALLELIZATION_WIDTH: "4"
-        run: |
-          mkdir -p "${RUNNER_TEMP}/xunit"
-          if [ "${{ steps.setup.outputs.cache-hit }}" = "true" ]; then
-            swift test --skip-build --filter WorkerTests --xunit-output "${RUNNER_TEMP}/xunit/worker-tests.xml"
-          else
-            swift test --filter WorkerTests --xunit-output "${RUNNER_TEMP}/xunit/worker-tests.xml"
-          fi
-
-      - name: No test was skipped
-        run: scripts/check-no-skipped-tests.sh "${RUNNER_TEMP}"/xunit/*-swift-testing.xml
+          CACHE_HIT: ${{ steps.setup.outputs.cache-hit }}
+        run: scripts/ci-swift-test-lane.sh worker-tests --filter WorkerTests
 
       - name: Print the wedge watchdog dump
         # WedgeWatchdog writes its thread table to a file before it aborts,
@@ -646,10 +611,7 @@ jobs:
     needs:
       - format-lint
       - guard-self-tests
-      - mutation-trend-tests
-      - deployer-tests
-      - claude-hooks-tests
-      - handle-review
+      - script-self-tests
       - build
       - core-tests
       - api-tests
@@ -660,18 +622,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Gate on Swift test job results
-        env:
-          NEEDS_JSON: ${{ toJSON(needs) }}
-        run: |
-          echo "${NEEDS_JSON}"
-          failed="$(echo "${NEEDS_JSON}" | python3 -c '
-          import json, sys
-          needs = json.load(sys.stdin)
-          print(" ".join(sorted(name for name, need in needs.items() if need["result"] != "success")))
-          ')"
-          if [ -n "${failed}" ]; then
-            echo "::error::jobs not successful: ${failed}"
-            exit 1
-          fi
-          echo "All Swift test jobs green."
+      - uses: actions/checkout@v7
+        with:
+          sparse-checkout: .github/actions/gate
+      - uses: ./.github/actions/gate
+        with:
+          needs: ${{ toJSON(needs) }}

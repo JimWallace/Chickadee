@@ -23,9 +23,11 @@ name: Weekly digest
 #
 # UNTRUSTED TEXT. ZAP and CodeQL findings quote application responses, and
 # release notes are written by upstream projects. So the `digest` job, where
-# the model runs, is read-only; the agent may read only digest/ and fetch only
-# from github.com; and the `file` job, which runs no model, refuses
-# credential-shaped text, caps the length, breaks @mentions and removes images.
+# the model runs, is read-only, and the agent gets only that job's token
+# (.github/actions/claude-agent); the agent may read only digest/ and fetch
+# only from github.com; and the `file` job, which runs no model, refuses
+# credential-shaped text, caps the length, breaks @mentions and removes images
+# (scripts/ci-agent-sanitize.sh).
 #
 # Why WebFetch at all: the release notes are how the digest can say whether a
 # kernel update looks breaking. The agent has no shell and reads only digest/,
@@ -59,10 +61,9 @@ jobs:
       issues: read
       pull-requests: read
       security-events: read
-      id-token: write
     outputs:
-      outcome: ${{ steps.digest.outcome }}
-      result: ${{ steps.digest.outputs.structured_output }}
+      outcome: ${{ steps.digest.outputs.outcome }}
+      result: ${{ steps.digest.outputs.structured-output }}
       previous: ${{ steps.collect.outputs.open }}
 
     steps:
@@ -71,25 +72,11 @@ jobs:
           fetch-depth: 1
           persist-credentials: false
 
-      - name: Check for credentials
-        id: credentials
-        env:
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-        run: |
-          if [ -n "$ANTHROPIC_API_KEY" ] || [ -n "$CLAUDE_CODE_OAUTH_TOKEN" ]; then
-            echo "present=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "present=false" >> "$GITHUB_OUTPUT"
-            echo "::warning::No ANTHROPIC_API_KEY or CLAUDE_CODE_OAUTH_TOKEN secret is set, so the weekly digest did not run."
-          fi
-
       # Each source goes into its own file. A source that cannot be read gets
       # a file that says why, so the digest reports the gap and does not
       # read it as "nothing to report".
       - name: Collect the weekly reports
         id: collect
-        if: steps.credentials.outputs.present == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
           R: ${{ github.repository }}
@@ -186,12 +173,12 @@ jobs:
 
       - name: Write the digest
         id: digest
-        if: steps.credentials.outputs.present == 'true'
-        continue-on-error: true
-        uses: anthropics/claude-code-action@v1
+        uses: ./.github/actions/claude-agent
         with:
-          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
-          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          name: weekly-digest
+          anthropic-api-key: ${{ secrets.ANTHROPIC_API_KEY }}
+          claude-code-oauth-token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          github-token: ${{ github.token }}
           prompt: |
             Write the weekly digest for the Chickadee repository: one short
             report that says what is new this week and what needs a person.
@@ -231,17 +218,16 @@ jobs:
             4. **Flakes**: the tally and the change from the previous one.
             5. **Dependabot**: one line per open PR: number, package, risk.
             Plain, short sentences. No exclamation marks or emoji.
-          claude_args: |
-            --model haiku
-            --max-turns 40
-            --allowedTools "Read(./digest/**),WebFetch(domain:github.com)"
-            --disallowedTools "Bash,Edit,Write,WebSearch,Glob,Grep,Read(//proc/**),Read(//sys/**),Read(//etc/**),Read(//tmp/**),Read(//github/**),Read(//root/**),Read(//home/runner/work/_temp/**),Read(~/.*/**),Read(./.git/**)"
-            --json-schema '{"type":"object","properties":{"needsPerson":{"type":"integer"},"digest":{"type":"string"}},"required":["needsPerson","digest"]}'
+          model: haiku
+          max-turns: "40"
+          allowed-tools: "Read(./digest/**),WebFetch(domain:github.com)"
+          disallowed-tools: "Bash,Glob,Grep"
+          json-schema: '{"type":"object","properties":{"needsPerson":{"type":"integer"},"digest":{"type":"string"}},"required":["needsPerson","digest"]}'
 
       - name: Say so if the digest did not complete
-        if: steps.credentials.outputs.present == 'true' && steps.digest.outcome != 'success'
+        if: steps.digest.outputs.ran == 'true' && steps.digest.outputs.outcome != 'success'
         env:
-          OUTCOME: ${{ steps.digest.outcome }}
+          OUTCOME: ${{ steps.digest.outputs.outcome }}
         run: |
           echo "::warning::The weekly digest did not complete (step outcome: $OUTCOME). Re-run the workflow."
           echo "Weekly digest did not complete (step outcome: $OUTCOME)." >> "$GITHUB_STEP_SUMMARY"
@@ -252,11 +238,18 @@ jobs:
     if: needs.digest.outputs.outcome == 'success'
     runs-on: ubuntu-latest
     timeout-minutes: 5
-    # No model runs in this job, and no repository code is checked out.
+    # No model runs in this job. The checkout is `main`, for the sanitize
+    # script.
     permissions:
+      contents: read
       issues: write
 
     steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
       - name: File the digest
         env:
           GH_TOKEN: ${{ github.token }}
@@ -268,17 +261,14 @@ jobs:
             echo "::error::The weekly digest came back empty or unreadable, so no digest was filed this week."
             exit 1
           fi
-          if grep -qE 'sk-ant-|gh[pousr]_[A-Za-z0-9]{20,}|github_pat_|eyJ[A-Za-z0-9_-]{20,}\.|BEGIN [A-Z ]*PRIVATE KEY' raw.md; then
-            echo "::error::The digest looks like it holds a credential. It was not filed."
+          # No live @mentions and no images: an image URL in a public issue is
+          # fetched by every reader's browser. The sanitize script does both.
+          if ! scripts/ci-agent-sanitize.sh --max-chars 30000 raw.md body.md; then
+            echo "::error::The digest was refused. It was not filed."
             exit 1
           fi
           needs="$(jq -r '.needsPerson // 0' <<< "$RESULT")"
           case "$needs" in ''|*[!0-9]*) needs="?" ;; esac
-          # No live @mentions and no images: an image URL in a public issue is
-          # fetched by every reader's browser.
-          awk '{ total += length($0) + 1; if (total > 30000) exit; print }' raw.md \
-            | sed -e 's/@/@\xE2\x80\x8B/g' -e 's/!\[/[/g' > body.md
-          printf '\n---\n_Generated by [Claude Code](https://claude.ai/code)_\n' >> body.md
           gh label create weekly-digest --repo "$GITHUB_REPOSITORY" --color c5def5 \
             --description "Weekly digest of the scheduled reports (weekly-digest.yml)" --force
           if ! url="$(gh issue create --repo "$GITHUB_REPOSITORY" --label weekly-digest \

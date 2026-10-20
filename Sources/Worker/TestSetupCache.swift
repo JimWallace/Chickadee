@@ -40,7 +40,7 @@ actor TestSetupCache {
     /// `task.value` — awaiting `Task.value` is not cancellation-responsive,
     /// and doing so from a job slot was the wait that made `daemon.run()`
     /// ignore cancellation on the artifact-download path (issue #1233,
-    /// docs/ci-flakiness.md "what in daemon.run() ignores cancellation").
+    /// docs/archive/ci-flakiness-history.md "what in daemon.run() ignores cancellation").
     private struct InFlightPopulation {
         /// Identity for the finish handshake. A population cancelled by its
         /// last waiter's detach unwinds asynchronously, and a fresh acquirer

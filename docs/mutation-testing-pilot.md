@@ -24,9 +24,9 @@ with a weekly one.** `mutation-weekly.yml` sweeps the whole logic tier
 method-and-cost record those workflows cite; the current scope and its
 reasoning live in `Tools/mutation/config.json`, and the running state of the
 whole effort in
-[handoff-mutation-testing.md](handoff-mutation-testing.md).
+[handoff-mutation-testing.md](archive/handoff-mutation-testing.md).
 
-Read [handoff-mutation-testing.md](handoff-mutation-testing.md) first for why
+Read [handoff-mutation-testing.md](archive/handoff-mutation-testing.md) first for why
 stock Muter cannot do this, and
 [mutation-testing-spike.md](archive/mutation-testing-spike.md) for the root cause.
 For reading a *series* of runs rather than this one — what the score means, and
