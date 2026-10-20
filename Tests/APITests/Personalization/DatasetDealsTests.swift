@@ -38,19 +38,18 @@ import VaporTesting
     }
 
     private func fixture(_ tag: String, activity: ClassActivity? = nil) async throws -> Fixture {
-        let courseID = try await makeTestCourse(on: app, code: "DD\(tag)").requireID()
         var props = TestProperties(language: .python, datasets: [spec])
         props.gradingMode = .worker
         props.activity = activity
         props.testSuites = [TestSuiteEntry(tier: .pub, script: "tests.py")]
         let setupID = "ddsetup_\(tag)"
-        try await makeTestSetup(on: app, id: setupID, courseID: courseID, manifest: try encodeManifest(props))
+        let scenario = try await TestScenario.make(
+            on: app, code: "DD\(tag)", setupID: setupID, manifest: try encodeManifest(props), title: "Registry")
         let sharedDir = app.testSetupsDirectory + "shared/\(setupID)/"
         try FileManager.default.createDirectory(atPath: sharedDir, withIntermediateDirectories: true)
         try poolCSV.write(toFile: sharedDir + "cases.csv", atomically: true, encoding: .utf8)
-        let assignment = try await makeTestAssignment(
-            on: app, testSetupID: setupID, courseID: courseID, title: "Registry")
-        return Fixture(courseID: courseID, assignmentID: try assignment.requireID(), setupID: setupID, manifest: props)
+        return Fixture(
+            courseID: scenario.courseID, assignmentID: scenario.assignmentID, setupID: setupID, manifest: props)
     }
 
     private func student(_ name: String, in fx: Fixture, role: String = "student") async throws -> UUID {
