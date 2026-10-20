@@ -47,21 +47,18 @@ struct PerGroupActivityFixture {
         students: [(username: String, lab: Lab?)],
         withSubmissions: Bool = false
     ) async throws -> PerGroupActivityFixture {
-        let course = try await makeTestCourse(on: app, code: code, mode: .closed)
-        let courseID = try course.requireID()
+        let scenario = try await TestScenario.make(
+            on: app, code: code, mode: .closed, setupID: setupID,
+            properties: TestProperties(
+                testSuites: [TestSuiteEntry(tier: .pub, script: "match.sh")], language: nil,
+                activity: activity, achievements: achievements))
+        let courseID = scenario.courseID
         let set = try await CourseGroupStore.createSet(courseID: courseID, name: "Lab sections", on: app.db)
         let labA = try await CourseGroupStore.addGroup(named: "Lab 101", to: set, on: app.db).requireID()
         let labB = try await CourseGroupStore.addGroup(named: "Lab 102", to: set, on: app.db).requireID()
-        let props = TestProperties(
-            testSuites: [TestSuiteEntry(tier: .pub, script: "match.sh")], language: nil,
-            activity: activity, achievements: achievements)
-        let manifest = try #require(String(data: JSONEncoder().encode(props), encoding: .utf8))
-        let setup = try await makeTestSetup(on: app, id: setupID, courseID: courseID, manifest: manifest)
-        let assignment = try await makeTestAssignment(on: app, testSetupID: setupID, courseID: courseID)
         var ids: [UUID] = []
         for (username, lab) in students {
-            let id = try await makeTestStudent(on: app, username: username).requireID()
-            try await makeTestEnrollment(on: app, userID: id, courseID: courseID)
+            let id = try await scenario.enroll(username, on: app)
             if let lab {
                 let group = lab == .a ? labA : labB
                 try await CourseGroupStore.setMembership(userID: id, groupID: group, in: set, on: app.db)
@@ -72,9 +69,9 @@ struct PerGroupActivityFixture {
             ids.append(id)
         }
         return PerGroupActivityFixture(
-            courseID: courseID, set: set, setup: setup,
-            activity: try #require(setup.decodedManifest()?.activity),
-            assignmentID: try assignment.requireID(), labA: labA, labB: labB, students: ids)
+            courseID: courseID, set: set, setup: scenario.setup,
+            activity: try #require(scenario.setup.decodedManifest()?.activity),
+            assignmentID: scenario.assignmentID, labA: labA, labB: labB, students: ids)
     }
 
     /// Joins `userID` to the session of `group`, as `joinSession` does.
