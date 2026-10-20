@@ -567,7 +567,7 @@ const EVAL_PROBE_PAGE = `<!doctype html><meta charset="utf-8"><title>auto-comput
 <body><pre id="log"></pre><script>
 window.__result = null;
 (async () => {
-  const worker = new Worker('/python-eval-worker.js');
+  const worker = new Worker('/eval-worker.js?lang=python');
   let counter = 0;
   const pending = new Map();
   worker.onmessage = (event) => {
@@ -646,7 +646,7 @@ window.__result = null;
 // value.
 const EVAL_PROBES = {
     r: {
-        worker: '/r-eval-worker.js',
+        worker: '/eval-worker.js?lang=r',
         cells: [
             'classify <- function(bmi) if (bmi < 18.5) "under" else "ok"',
             'this_name_does_not_exist()',
@@ -664,7 +664,7 @@ const EVAL_PROBES = {
         expression: 'classify(30)',
     },
     lua: {
-        worker: '/lua-eval-worker.js',
+        worker: '/eval-worker.js?lang=lua',
         cells: [
             'function classify(bmi) if bmi < 18.5 then return "under" else return "ok" end end',
             'this_name_does_not_exist()',
@@ -684,7 +684,7 @@ const EVAL_PROBES = {
         expression: 'classify(30)',
     },
     octave: {
-        worker: '/octave-eval-worker.js',
+        worker: '/eval-worker.js?lang=octave',
         cells: [
             'function r = classify(bmi)\n if bmi < 18.5\n  r = "under";\n else\n  r = "ok";\n end\nend',
             'this_name_does_not_exist()',

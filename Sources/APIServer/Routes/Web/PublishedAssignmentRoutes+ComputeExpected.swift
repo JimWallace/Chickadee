@@ -6,7 +6,7 @@
 // solution — in the assignment's OWN language.
 //
 // WHY THIS IS A SERVER ENDPOINT AND NOT A SECOND BROWSER RUNTIME.
-// The editor already had auto-compute: `/python-eval-worker.js`, a Python kernel
+// The editor already had auto-compute: the Python eval worker, a Python kernel
 // in a Web Worker. It worked, and it only ever worked for Python — on an R,
 // Lua, Octave, C++ or Racket assignment it did not fail, it computed a PYTHON
 // answer for a value that would be compared against that language's result.

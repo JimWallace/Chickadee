@@ -106,10 +106,10 @@ test('autoComputeWorker is the seeded in-page worker, or null for the server rou
   // language (#1956).
   const lang = loadWith({
     ...R_SEED,
-    autoComputeWorker: '/r-eval-worker.js',
+    autoComputeWorker: '/eval-worker.js?lang=r',
     autoComputeRuntimeSource: 'chickadee_runtime <- TRUE'
   });
-  assert.equal(lang.autoComputeWorker(), '/r-eval-worker.js');
+  assert.equal(lang.autoComputeWorker(), '/eval-worker.js?lang=r');
   assert.equal(lang.facts().autoComputeRuntimeSource, 'chickadee_runtime <- TRUE');
 
   // A language with no kernel (C++, Racket, Java) seeds no worker, and the

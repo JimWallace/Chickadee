@@ -27,12 +27,15 @@ const NONCE = /[0-9a-f]{32}/;
 /// Loads `workerFile` the way a browser worker does. `importScripts` reads the
 /// file from Public/, except the vendored bootstrap, which only a real kernel
 /// needs. Returns the worker's context and every message it posted.
+/// `workerFile` may carry a query, as `eval-worker.js?lang=lua` does (#2721);
+/// the worker sees it in `location.search`, after the version.
 function loadWorker(workerFile) {
+    const [file, query] = workerFile.split('?');
     const posted = [];
     const context = {
         console,
         crypto: globalThis.crypto,
-        location: { search: '?v=test' },
+        location: { search: '?v=test' + (query ? '&' + query : '') },
         postMessage: (message) => { posted.push(message); },
     };
     context.self = context;
@@ -44,8 +47,8 @@ function loadWorker(workerFile) {
         vm.runInContext(fs.readFileSync(path.join(PUBLIC, file), 'utf8'), vmContext,
             { filename: file });
     };
-    vm.runInContext(fs.readFileSync(path.join(PUBLIC, workerFile), 'utf8'), vmContext,
-        { filename: workerFile });
+    vm.runInContext(fs.readFileSync(path.join(PUBLIC, file), 'utf8'), vmContext,
+        { filename: file });
     return { context, posted };
 }
 
@@ -272,22 +275,22 @@ const RUNTIME = 'RUNTIME_SOURCE';
 
 const EVALUATORS = [
     {
-        file: 'python-eval-worker.js', label: 'Python', kernelName: 'xpython', maxWaitMs: 60000,
+        file: 'eval-worker.js?lang=python', label: 'Python', kernelName: 'xpython', maxWaitMs: 60000,
         // Python defines no seeded runtime. Its call cell reports a
         // `__chickadee_kind__` payload, and the worker reads the value out.
         bootCell: null,
         callValue: JSON.stringify({ __chickadee_kind__: 'value', value: 7 }), callResult: 7,
     },
     {
-        file: 'r-eval-worker.js', label: 'R', kernelName: 'xr', maxWaitMs: 60000,
+        file: 'eval-worker.js?lang=r', label: 'R', kernelName: 'xr', maxWaitMs: 60000,
         bootCell: () => RUNTIME,
     },
     {
-        file: 'lua-eval-worker.js', label: 'Lua', kernelName: 'xlua', maxWaitMs: 60000,
+        file: 'eval-worker.js?lang=lua', label: 'Lua', kernelName: 'xlua', maxWaitMs: 60000,
         bootCell: (c) => c.ChickadeeLuaEvalShared.bootCell(RUNTIME),
     },
     {
-        file: 'octave-eval-worker.js', label: 'Octave', kernelName: 'xoctave', maxWaitMs: 90000,
+        file: 'eval-worker.js?lang=octave', label: 'Octave', kernelName: 'xoctave', maxWaitMs: 90000,
         bootCell: (c) => c.ChickadeeOctaveEvalShared.bootCell(RUNTIME),
     },
 ];
@@ -373,7 +376,7 @@ for (const evaluator of EVALUATORS) {
 
 /// A Python worker whose call cell reports `kind` as its payload.
 async function pythonCall(kind, message = {}) {
-    const worker = loadWorker('python-eval-worker.js');
+    const worker = loadWorker('eval-worker.js?lang=python');
     const calls = fakeKernel(worker.context, (code) => (code.includes('solve')
         ? payload(code, { value: JSON.stringify(kind), error: null }) : null));
     const replies = await send(worker, {
@@ -382,7 +385,7 @@ async function pythonCall(kind, message = {}) {
     return { worker, calls, replies };
 }
 
-test('python-eval-worker.js: call runs the cell python-eval-shared.js builds', async () => {
+test('eval-worker.js?lang=python: call runs the cell python-eval-shared.js builds', async () => {
     for (const captureStdout of [false, true]) {
         const { worker, calls } = await pythonCall(
             { __chickadee_kind__: 'value', value: 3 }, { args: ['a"b', [1, null]], captureStdout });
@@ -393,26 +396,26 @@ test('python-eval-worker.js: call runs the cell python-eval-shared.js builds', a
     }
 });
 
-test('python-eval-worker.js: a None return is returnedNone, not the value null', async () => {
+test('eval-worker.js?lang=python: a None return is returnedNone, not the value null', async () => {
     const { replies } = await pythonCall({ __chickadee_kind__: 'none' });
     assert.deepEqual(replies, [{ id: 1, ok: true, result: null, returnedNone: true }]);
 });
 
-test('python-eval-worker.js: a type that does not round-trip is unsupported, with its reason', async () => {
+test('eval-worker.js?lang=python: a type that does not round-trip is unsupported, with its reason', async () => {
     for (const reason of ['coroutine', 'async-generator', 'generator', 'set', 'tuple', 'bytes', 'complex']) {
         const { replies } = await pythonCall({ __chickadee_kind__: 'unsupported', reason });
         assert.deepEqual(replies, [{ id: 1, ok: true, unsupported: reason }]);
     }
 });
 
-test('python-eval-worker.js: a value of any JSON shape comes back parsed', async () => {
+test('eval-worker.js?lang=python: a value of any JSON shape comes back parsed', async () => {
     const value = { a: [1, 2], b: true, c: 'line\nbreak' };
     const { replies } = await pythonCall({ __chickadee_kind__: 'value', value });
     assert.deepEqual(replies, [{ id: 1, ok: true, result: value }]);
 });
 
-test('python-eval-worker.js: an exception in the call is an error reply', async () => {
-    const worker = loadWorker('python-eval-worker.js');
+test('eval-worker.js?lang=python: an exception in the call is an error reply', async () => {
+    const worker = loadWorker('eval-worker.js?lang=python');
     fakeKernel(worker.context, (code) => (code.includes('solve')
         ? payload(code, { value: null, error: 'NameError: solve not defined in solution notebook' })
         : null));

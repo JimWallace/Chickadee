@@ -462,7 +462,7 @@ function loadFamilyEditor() {
   const timers = [];
   const seed = {
     textContent: JSON.stringify({
-      name: 'python', displayName: 'Python', autoComputeWorker: '/python-eval-worker.js',
+      name: 'python', displayName: 'Python', autoComputeWorker: '/eval-worker.js?lang=python',
     }),
   };
   const solution = { cells: [{ cell_type: 'code', source: 'def f(x):\n    return x\n' }] };

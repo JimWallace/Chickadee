@@ -11,7 +11,7 @@ That cost is paid by three consumers, each on a student's critical path:
 |---|---|---|
 | the JupyterLite editor | `@jupyterlite/xeus-extension` | no — vendored bundle |
 | browser grading | `xeus-kernel-shared.js` | yes |
-| the pattern-family editor's auto-compute | `python-eval-worker.js` | yes |
+| the pattern-family editor's auto-compute | `eval-worker.js?lang=python` | yes |
 
 This note records what that costs, measured, and what can be done about it.
 
@@ -198,7 +198,7 @@ it is recorded here as such rather than asserted.
 
 ### The eval worker keeps the full environment
 
-`python-eval-worker.js` evaluates instructor expressions for pattern-family
+`eval-worker.js?lang=python` evaluates instructor expressions for pattern-family
 auto-compute. It was the obvious second candidate and is deliberately left
 alone: its smoke asserts that *every package the environment declares* actually
 imports, which is a real guard against a well-formed-but-broken env (the urllib3

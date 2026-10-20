@@ -6,10 +6,9 @@
 // auto-compute computes is the value the generated test asserts, on the same
 // interpreter and the same package set.
 //
-// The language comes from `?lang=` on the worker URL, or from
-// `self.ChickadeeEvalLanguage`, which each `<language>-eval-worker.js` entry
-// file sets before it loads this one. `LanguageDescriptor` names those entry
-// files (#2721).
+// The language comes from `?lang=` on the worker URL. `LanguageDescriptor`
+// names `/eval-worker.js?lang=<language>` for each in-page language, and this
+// file holds one entry for each (#2721).
 //
 // The protocol, the boot and the error handling are `serveEvalWorker` in
 // xeus-kernel-shared.js. The editor sends `call`, and `<language>-eval-shared.js`
@@ -29,7 +28,7 @@
 // SharedArrayBuffer is involved.  Same path the browser-grading smoke exercises.
 
 var _search = self.location.search || '';
-var _lang = (/[?&]lang=([a-z]+)/.exec(_search) || [])[1] || self.ChickadeeEvalLanguage;
+var _lang = (/[?&]lang=([a-z]+)/.exec(_search) || [])[1];
 // Only the cache-busting version goes on to the scripts this loads.
 var _version = /[?&](v=[^&]*)/.exec(_search);
 var _suffix = _version ? '?' + _version[1] : '';

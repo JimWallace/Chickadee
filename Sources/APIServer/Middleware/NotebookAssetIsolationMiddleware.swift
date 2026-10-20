@@ -51,7 +51,7 @@ struct NotebookAssetIsolationMiddleware: AsyncMiddleware {
     /// chunk, but for our own workers. The global `SecurityHeadersMiddleware`
     /// gives them CORP but never COEP, so without this they are blocked.
     ///
-    /// Deliberately EXCLUDES `/python-eval-worker.js`: it is spawned only by the
+    /// Deliberately EXCLUDES `/eval-worker.js`: it is spawned only by the
     /// assignment-editor pages, which are NOT cross-origin isolated, so it must
     /// not be forced `require-corp`. If an isolated page is ever made to spawn it,
     /// add it here — the editor-smoke worker-spawn probe will flag the regression.

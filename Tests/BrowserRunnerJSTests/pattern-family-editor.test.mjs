@@ -55,7 +55,7 @@ const languageModuleSource = await fs.readFile(
   'utf8',
 );
 
-// The Python eval module, loaded in the order python-eval-worker.js loads it.
+// The Python eval module, loaded in the order eval-worker.js loads it for Python.
 const pythonEvalContext = { console };
 pythonEvalContext.globalThis = pythonEvalContext;
 vm.createContext(pythonEvalContext);
