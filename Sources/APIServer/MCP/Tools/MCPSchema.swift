@@ -195,4 +195,11 @@ enum TestTierValues {
 /// prose renderings of the same set.
 enum AchievementSignalValues {
     static var all: [String] { AchievementSignal.allCases.map(\.rawValue) }
+
+    /// The signals an achievement at `level` may carry
+    /// (`AchievementSignal.allowedLevels`), so a tool's enum offers no signal
+    /// its level refuses.
+    static func at(_ level: AchievementLevel) -> [String] {
+        AchievementSignal.allCases.filter { $0.allowedLevels.contains(level) }.map(\.rawValue)
+    }
 }

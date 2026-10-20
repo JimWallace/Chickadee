@@ -30,16 +30,34 @@ struct ConditionRow: Codable, Sendable {
     /// `itemsCovered`: the suite section whose items the union is taken over.
     /// Empty or absent = every item in the suite.
     var sectionRef: String?
+    /// A course signal: the raw `TargetKind` of the set of assignments it
+    /// counts over. Not `sectionRef`, which names a suite section (`courseSection`, `concept` or `assignments`). Empty or
+    /// absent = every assignment in the course.
+    var targetKind: String?
+    /// A course signal: the course section (id or name), the concept (raw
+    /// value) or the comma-separated assignment public IDs `targetKind` names.
+    var targetRef: String?
+    /// `assignmentsAtGrade`: the percent an assignment's best grade must reach.
+    var gradeFloor: Double?
+    /// `achievementsEarned`: the assignment achievement id to count; empty or
+    /// absent = any.
+    var achievementRef: String?
 
     init(
         signal: String, comparator: String, value: Double? = nil,
-        testRef: String? = nil, sectionRef: String? = nil
+        testRef: String? = nil, sectionRef: String? = nil,
+        targetKind: String? = nil, targetRef: String? = nil,
+        gradeFloor: Double? = nil, achievementRef: String? = nil
     ) {
         self.signal = signal
         self.comparator = comparator
         self.value = value
         self.testRef = testRef
         self.sectionRef = sectionRef
+        self.targetKind = targetKind
+        self.targetRef = targetRef
+        self.gradeFloor = gradeFloor
+        self.achievementRef = achievementRef
     }
 }
 
@@ -88,9 +106,18 @@ enum AchievementsEditing {
 
     // MARK: - Row → domain
 
-    /// Validates one editor row and projects it into the domain `Achievement`.
-    /// Throws `WebAssignmentError.invalidParameter` for bad input.
+    /// Validates one assignment editor row and projects it into the domain
+    /// `Achievement`. Throws `WebAssignmentError.invalidParameter` for bad
+    /// input.
     static func achievement(from input: AchievementRow) throws -> Achievement {
+        try achievement(from: input, at: .assignment)
+    }
+
+    /// Validates one editor row for an achievement at `level` and projects it
+    /// into the domain `Achievement`. A signal that `level` cannot evaluate is
+    /// refused (`AchievementSignal.allowedLevels`), so a row never saves as a
+    /// rule that fires for nobody.
+    static func achievement(from input: AchievementRow, at level: AchievementLevel) throws -> Achievement {
         let name = input.name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !name.isEmpty else {
             throw WebAssignmentError.invalidParameter(name: "name", reason: "Name must not be empty.")
@@ -103,7 +130,20 @@ enum AchievementsEditing {
         let detail = input.detail?.trimmingCharacters(in: .whitespacesAndNewlines)
         let cleanDetail = (detail?.isEmpty == false) ? detail : nil
         let match = ConditionMatch(rawValue: input.match ?? "all") ?? .all
-        let conditions = try (input.conditions ?? []).map(condition(from:))
+        let rawConditions = input.conditions ?? []
+        try validateLevel(
+            of: rawConditions.compactMap { AchievementSignal(rawValue: $0.signal) }, name: name, at: level)
+        let conditions = try rawConditions.map(condition(from:))
+        switch level {
+        case .assignment:
+            break
+        case .course:
+            return try courseAchievement(
+                id: id, name: name, detail: cleanDetail, scope: scope, match: match, conditions: conditions)
+        case .site:
+            throw WebAssignmentError.invalidParameter(
+                name: "level", reason: "Site achievements are defined in code, so no editor saves one.")
+        }
 
         // A signal that reads the whole class cannot be evaluated per student,
         // so an individual badge or a record carrying one would save cleanly and
@@ -182,6 +222,9 @@ enum AchievementsEditing {
             throw WebAssignmentError.invalidParameter(
                 name: "comparator", reason: "Unknown comparator '\(input.comparator)'.")
         }
+        if signal.readsTheCourse {
+            return try courseCondition(signal: signal, comparator: comparator, from: input)
+        }
         if signal == .testPass {
             let ref = (input.testRef ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
             guard !ref.isEmpty else {
@@ -218,6 +261,20 @@ enum AchievementsEditing {
         return AchievementCondition(signal: signal, comparator: comparator, value: value)
     }
 
+    /// Refuses a condition whose signal `level` cannot evaluate.
+    private static func validateLevel(
+        of signals: [AchievementSignal], name: String, at level: AchievementLevel
+    ) throws {
+        guard let offending = signals.first(where: { !$0.allowedLevels.contains(level) }) else { return }
+        let reason =
+            offending.readsTheCourse
+            ? "'\(offending.rawValue)' counts across a course's assignments, so it can only be "
+                + "used on a course achievement."
+            : "'\(offending.rawValue)' reads one assignment, so a course achievement cannot use it. "
+                + "Use a course signal, such as 'assignmentsFullMarks'."
+        throw WebAssignmentError.invalidParameter(name: "signal", reason: "'\(name)': " + reason)
+    }
+
     private static func newID(_ id: String?) -> String {
         if let id, !id.isEmpty { return id }
         return "ach_\(UUID().uuidString.prefix(8))"
@@ -239,12 +296,17 @@ enum AchievementsEditing {
     }
 
     private static func conditionRow(from c: AchievementCondition) -> ConditionRow {
-        ConditionRow(
+        let courseTarget = c.signal.readsTheCourse ? c.target : nil
+        return ConditionRow(
             signal: c.signal.rawValue,
             comparator: c.comparator.rawValue,
             value: c.value,
             testRef: c.signal == .testPass ? c.target?.ref : nil,
-            sectionRef: c.signal == .itemsCovered ? c.target?.ref : nil)
+            sectionRef: c.signal == .itemsCovered ? c.target?.ref : nil,
+            targetKind: courseTarget?.kind.rawValue,
+            targetRef: courseTarget?.ref,
+            gradeFloor: c.gradeFloor,
+            achievementRef: c.achievementRef)
     }
 
     // MARK: - Manifest read/write
@@ -356,6 +418,11 @@ enum AchievementsEditing {
             switch condition.signal {
             case .testPass, .itemsCovered:
                 continue
+            case .assignmentsGraded, .assignmentsAtGrade, .assignmentsFullMarks, .assignmentsEarly,
+                .assignmentsComeback, .achievementsEarned, .conceptsAtFullMarks:
+                // A course signal's target is the set it counts over, checked
+                // against the course by `validate(_:againstCourse:)`.
+                continue
             case .grade, .attempts, .executionTimeMs, .gradeJumpPercent, .standing, .matchesWon,
                 .classCoverage:
                 throw WebAssignmentError.invalidParameter(
@@ -418,7 +485,9 @@ enum AchievementsEditing {
                                 + "test in the suite.")
                     }
                 case .grade, .attempts, .executionTimeMs, .gradeJumpPercent, .standing,
-                    .matchesWon, .classCoverage:
+                    .matchesWon, .classCoverage, .assignmentsGraded, .assignmentsAtGrade,
+                    .assignmentsFullMarks, .assignmentsEarly, .assignmentsComeback, .achievementsEarned,
+                    .conceptsAtFullMarks:
                     continue
                 }
             }

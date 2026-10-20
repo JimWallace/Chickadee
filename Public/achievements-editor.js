@@ -41,6 +41,11 @@
     // the single source of truth.  Nothing per-signal is written here: a JS-side
     // table is exactly the drift the data attributes exist to prevent.
     var SIGNAL_META = {};
+    // signal value -> the levels it may be used at, and this page's level
+    // (the block's data-level): the assignment editor offers no course
+    // signal, and the course editor no assignment one.
+    var SIGNAL_LEVELS = {};
+    var LEVEL = '';
 
     /// What the core needs to phrase a row: the signal facts, the live
     /// section names, the HTML escaper and the dimension labels.
@@ -96,6 +101,16 @@
 
         SIGNAL_META = Core.signalMetaFromOptions(
             condTemplate.content.querySelectorAll('.am-cond-signal option'));
+        LEVEL = block.getAttribute('data-level') || '';
+        // The levels are read when the first condition row is built, not
+        // here: init stays the same small step it always was.
+        var signalLevelsRead = false;
+        function readSignalLevels() {
+            if (signalLevelsRead) return;
+            signalLevelsRead = true;
+            SIGNAL_LEVELS = Core.signalLevelsFromOptions(
+                condTemplate.content.querySelectorAll('.am-cond-signal option'));
+        }
 
         var state = [];
         // Until the initial GET succeeds, saving is disabled: persisting the
@@ -165,6 +180,7 @@
 
         // Build one condition row inside `container` from an optional `cond`.
         function addConditionRow(container, cond) {
+            readSignalLevels();
             container.appendChild(condTemplate.content.cloneNode(true));
             var rowEl = container.lastElementChild;
             var sig = rowEl.querySelector('.am-cond-signal');
@@ -205,12 +221,16 @@
             function syncScope(scope) {
                 var options = Array.prototype.slice.call(sig.options);
                 options.forEach(function (o) {
-                    var allowed = Core.isSignalAllowed(SIGNAL_META[o.value] || {}, scope);
+                    var allowed = Core.isSignalAllowed(SIGNAL_META[o.value] || {}, scope)
+                        && Core.isSignalAtLevel(SIGNAL_LEVELS[o.value], LEVEL);
                     o.hidden = !allowed;
                     o.disabled = !allowed;
                 });
+                var atLevel = options.map(function (o) { return o.value; }).filter(function (v) {
+                    return Core.isSignalAtLevel(SIGNAL_LEVELS[v], LEVEL);
+                });
                 sig.value = Core.signalForScope(
-                    sig.value, options.map(function (o) { return o.value; }), SIGNAL_META, scope);
+                    Core.signalForLevel(sig.value, atLevel, SIGNAL_LEVELS, LEVEL), atLevel, SIGNAL_META, scope);
                 sync();
             }
             rowEl.syncScope = syncScope;

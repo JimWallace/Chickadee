@@ -97,7 +97,7 @@ let achievementRowSchema: JSONValue = .object([
                 "properties": .object([
                     "signal": .object([
                         "type": .string("string"),
-                        "enum": .array(AchievementSignalValues.all.map(JSONValue.string)),
+                        "enum": .array(AchievementSignalValues.at(.assignment).map(JSONValue.string)),
                         "description": .string(MCPAchievementSignalProse.unitsClause + "."),
                     ]),
                     "comparator": .object([

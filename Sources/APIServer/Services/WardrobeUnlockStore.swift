@@ -20,15 +20,28 @@ enum WardrobeUnlockStore {
 
     /// What `userID`'s own graded student submissions show.
     static func progress(for userID: UUID, on db: any Database) async throws -> WardrobeProgress {
-        let results = try await APIResult.query(on: db)
+        WardrobeProgress(graded: try await graded(for: userID, inTestSetups: nil, on: db))
+    }
+
+    /// `userID`'s own graded student submissions, as the rules read them:
+    /// every one, or only those to the test setups in `testSetupIDs`. The
+    /// course achievements read the second form (AchievementAwardStore).
+    static func graded(
+        for userID: UUID, inTestSetups testSetupIDs: Set<String>?, on db: any Database
+    ) async throws -> [WardrobeProgress.Graded] {
+        if let testSetupIDs, testSetupIDs.isEmpty { return [] }
+        var query = APIResult.query(on: db)
             .join(APISubmission.self, on: \APIResult.$submissionID == \APISubmission.$id)
             .filter(APISubmission.self, \.$userID == userID)
             .filter(APISubmission.self, \.$kind == APISubmission.Kind.student)
-            .all()
+        if let testSetupIDs {
+            query = query.filter(APISubmission.self, \.$testSetupID ~~ Array(testSetupIDs))
+        }
+        let results = try await query.all()
         let submissions = try results.map { try $0.joined(APISubmission.self) }
         let dueDates = try await dueDates(of: Set(submissions.map(\.testSetupID)), on: db)
         let concepts = try await concepts(of: Set(submissions.map(\.testSetupID)), on: db)
-        let graded = zip(results, submissions).map { result, submission in
+        return zip(results, submissions).map { result, submission in
             WardrobeProgress.Graded(
                 assignmentID: submission.testSetupID,
                 // A row with no attempt number is not counted as a first try.
@@ -37,9 +50,9 @@ enum WardrobeUnlockStore {
                 totalTests: result.totalTests ?? 0,
                 // The server's own receipt time, so a student cannot forge it.
                 secondsBeforeDue: secondsBeforeDue(submission.submittedAt, dueDates[submission.testSetupID]),
-                concept: concepts[submission.testSetupID])
+                concept: concepts[submission.testSetupID],
+                gradePercent: result.gradePercentValue)
         }
-        return WardrobeProgress(graded: graded)
     }
 
     /// The due date of each test setup's assignment. A setup whose

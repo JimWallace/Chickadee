@@ -686,6 +686,10 @@ extension WebRoutes {
                 testSetupID: submission.testSetupID, submissionID: subID, badges: earned)
             await AchievementAwardStore.recordOrLog(
                 [recorded], earnedBy: awardRecipient, on: req.db, logger: req.logger)
+            // After the assignment's badges, so a course achievement that
+            // counts them sees the ones this page just stored.
+            await AchievementAwardStore.grantCourseAchievementsOrLog(
+                for: awardRecipient, courseOfTestSetup: submission.testSetupID, on: req.db, logger: req.logger)
         }
         return earned + classRecordBadges(classAchievements, props: setupProps)
     }

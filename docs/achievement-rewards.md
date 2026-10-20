@@ -1,6 +1,6 @@
 # Achievements and rewards across the site
 
-**Status: decided; S1 in progress.** The maintainer took the six open
+**Status: decided; S1 and S3 shipped.** The maintainer took the six open
 decisions on 2026-10-17 (see "Decisions taken" at the end). Each took the
 recommended answer. It continues
 [achievements-unification.md](achievements-unification.md) (one editor for
@@ -12,9 +12,9 @@ wardrobe item?), and it gives #2617 (one toast for everything earned) and
 
 | Slice | Content | Issue | State |
 |---|---|---|---|
-| S1 | The award ledger: one stored row for each achievement a student earns | — | in progress |
+| S1 | The award ledger: one stored row for each achievement a student earns | — | shipped |
 | S2 | A wardrobe item as an achievement reward, on an assignment | — | proposed |
-| S3 | Course achievements: the model, the course signals and the evaluator | — | proposed |
+| S3 | Course achievements: the model, the course signals and the evaluator | — | shipped |
 | S4 | The course Achievements tab in the instructor area | — | proposed |
 | S5 | MCP parity for course achievements and the reward field | — | proposed |
 | S6 | The site rules, re-expressed as achievements in code | — | proposed |
@@ -135,7 +135,7 @@ run's record.
 | `assignmentsEarly` | assignments with a graded submission at least 48 hours before the due date (`WardrobeProgress.earlyLeadSeconds`) | a count |
 | `assignmentsComeback` | assignments where every test passed after an attempt where some did not | a count |
 | `achievementsEarned` | assignment-level awards in the ledger, filtered by the condition's `achievementRef` (an `Achievement.id`, or nil for any) | a count |
-| `conceptsMastered` | distinct concepts with full marks on a tagged assignment | a count |
+| `conceptsAtFullMarks` | distinct concepts with full marks on a tagged assignment | a count |
 
 Each one is the arithmetic `WardrobeProgress` already does (`fullMarksAssignments`,
 `earlyAssignments`, `comebackAssignments`, `fullMarksConcepts`). The new work
@@ -162,6 +162,14 @@ the students know about.
 
 `gradeFloor` and `achievementRef` are two new optional fields on
 `AchievementCondition`, `decodeIfPresent`. Old manifests decode unchanged.
+
+**Only "at least", from one (S3).** A course count only grows, and an
+award is kept once it is earned. So `atMost` would go to every student at
+once, and `equals` would depend on which page load happened to see the exact
+count. A course condition takes `atLeast` with a whole number of at least 1,
+and a course achievement needs at least one condition. The validator refuses
+every other shape. `allowedScopes` stays as it is for the course signals; the
+course level itself refuses a scope other than `individual`.
 
 **Scope at the course level (decided).** Slice S3 ships `individual` only. A
 `classWide` course goal ("80% of the class finishes every lab") is the same
@@ -340,8 +348,9 @@ with the rest of `achievements`.
 - `AchievementLevel` (new enum, decision 1).
 - `AchievementSignal`: seven course signals and `allowedLevels` (decision 3).
   `readsTheWholeClass` and `readsTheStandings` return `false` for each of
-  them. `allowedScopes` returns `[.individual]` for each of them until
-  decision 3's second half ships.
+  them. `allowedScopes` is unchanged for them (every scope). The course
+  level refuses a scope other than `individual` until decision 3's second
+  half ships, so the per-signal rule stays one rule.
 - `TargetKind`: `courseSection`, `concept`, `assignments` (decision 3).
 - `AchievementCondition`: `gradeFloor: Double?`, `achievementRef: String?`.
 - `RewardType.wardrobe` and `AchievementReward.item: String?` (decision 4).

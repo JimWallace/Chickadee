@@ -66,6 +66,32 @@
         return current;
     }
 
+    /// signal value -> the levels it may be used at, read off each option's
+    /// `data-levels` (AchievementSignal.allowedLevels). Kept apart from the
+    /// signal meta: the level is a fact of the page, not of a scope change.
+    function signalLevelsFromOptions(options) {
+        var out = {};
+        Array.prototype.forEach.call(options, function (o) {
+            out[o.value] = (o.getAttribute('data-levels') || '').split(/\s+/).filter(Boolean);
+        });
+        return out;
+    }
+
+    /// May a signal be chosen on a page at `level`? A page with no level, or
+    /// a signal with no levels, allows it, as before levels existed.
+    function isSignalAtLevel(levels, level) {
+        return !level || !levels || !levels.length || levels.indexOf(level) >= 0;
+    }
+
+    /// The signal a condition row should show on a page at `level`: its
+    /// current one when the level allows it, otherwise the first value in
+    /// `values` (menu order) that it allows, or the current one when none is.
+    function signalForLevel(current, values, signalLevels, level) {
+        if (isSignalAtLevel(signalLevels[current], level)) return current;
+        var first = values.filter(function (v) { return isSignalAtLevel(signalLevels[v], level); })[0];
+        return first != null ? first : current;
+    }
+
     /// One condition as a human phrase for the table's Earned-when cell.
     /// `ctx.esc` escapes HTML, `ctx.sectionNames` maps section id -> name.
     function condPhrase(c, ctx) {
@@ -175,6 +201,9 @@
         signalMetaFromOptions: signalMetaFromOptions,
         isSignalAllowed: isSignalAllowed,
         signalForScope: signalForScope,
+        signalLevelsFromOptions: signalLevelsFromOptions,
+        isSignalAtLevel: isSignalAtLevel,
+        signalForLevel: signalForLevel,
         condPhrase: condPhrase,
         conditionsText: conditionsText,
         summary: summary,

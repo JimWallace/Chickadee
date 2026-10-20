@@ -95,7 +95,20 @@ extension AchievementCondition {
             // `classCoverageGoalProgress`), and `isSweepEvaluableClassGoal` is
             // what keeps them out of every other shape.
             return false
+        case .assignmentsGraded, .assignmentsAtGrade, .assignmentsFullMarks, .assignmentsEarly,
+            .assignmentsComeback, .achievementsEarned, .conceptsAtFullMarks:
+            // Course signals count across assignments, which one submission
+            // cannot answer. `isSatisfied(by: CourseProgress)` evaluates them.
+            return false
         }
+    }
+
+    /// Whether this predicate holds for a student's work in a course. Only a
+    /// course signal can hold here: every other signal reads one submission,
+    /// so it is unmet, as a course signal is unmet in `AchievementSignals`.
+    public func isSatisfied(by course: CourseProgress) -> Bool {
+        guard let count = course.count(for: self) else { return false }
+        return compare(Double(count))
     }
 
     private func compare(_ lhs: Double) -> Bool {
@@ -117,6 +130,18 @@ extension Achievement {
         switch match {
         case .all: return conditions.allSatisfy { $0.isSatisfied(by: signals) }
         case .any: return conditions.contains { $0.isSatisfied(by: signals) }
+        }
+    }
+
+    /// Whether this course achievement's conditions hold for a student's
+    /// work in the course, honouring `match`. Unlike the per-submission
+    /// overload, no conditions means unmet: a course achievement with nothing
+    /// to count would go to every student the moment a page loads.
+    public func isSatisfied(by course: CourseProgress) -> Bool {
+        guard !conditions.isEmpty else { return false }
+        switch match {
+        case .all: return conditions.allSatisfy { $0.isSatisfied(by: course) }
+        case .any: return conditions.contains { $0.isSatisfied(by: course) }
         }
     }
 
@@ -240,14 +265,17 @@ extension Achievement {
             switch condition.target?.kind {
             case .none, .some(.section):
                 return condition.target == nil || condition.target?.ref?.isEmpty == false
-            case .some(.assignmentGrade), .some(.suiteItem), .some(.testPass):
+            case .some(.assignmentGrade), .some(.suiteItem), .some(.testPass), .some(.courseSection),
+                .some(.concept), .some(.assignments):
                 return false
             }
         case .classCoverage:
             // Scopes nothing: one number for the assignment, so any target
             // would name a share of a reference nothing measured.
             return condition.target == nil
-        case .attempts, .executionTimeMs, .gradeJumpPercent, .testPass, .standing, .matchesWon:
+        case .attempts, .executionTimeMs, .gradeJumpPercent, .testPass, .standing, .matchesWon,
+            .assignmentsGraded, .assignmentsAtGrade, .assignmentsFullMarks, .assignmentsEarly,
+            .assignmentsComeback, .achievementsEarned, .conceptsAtFullMarks:
             return false
         }
     }
@@ -299,7 +327,8 @@ extension TestProperties {
             let slots = compositeCoverageItems
             guard slots.isEmpty else { return Set(slots) }
             entries = testSuites
-        case .some(.assignmentGrade), .some(.suiteItem), .some(.testPass):
+        case .some(.assignmentGrade), .some(.suiteItem), .some(.testPass), .some(.courseSection),
+            .some(.concept), .some(.assignments):
             // Not a set of items; `isSweepEvaluableClassGoal` refuses these
             // shapes, so reaching here means a manifest the sweep skips.
             return []

@@ -145,6 +145,12 @@ final class APICourse: Model, Content, @unchecked Sendable {
     @OptionalField(key: "term_season")
     var termSeasonRaw: String?
 
+    /// The course achievements (docs/achievement-rewards.md, decision 6), as
+    /// a JSON `[Achievement]`, the same shape as a manifest's `achievements`.
+    /// Nil = none. Read and write through `courseAchievements`.
+    @OptionalField(key: "achievements")
+    var achievementsJSON: String?
+
     @Timestamp(key: "created_at", on: .create)
     var createdAt: Date?
 
@@ -194,6 +200,17 @@ extension APICourse {
     static func urlKey(code: String, term: AcademicTerm?) -> String {
         guard let term else { return code }
         return "\(code)-\(term.shortLabel)"
+    }
+}
+
+// MARK: - Course achievements
+
+extension APICourse {
+    /// The course achievements. A column that does not decode reads as none,
+    /// so a page that shows them never fails; saving writes a valid list.
+    var courseAchievements: [Achievement] {
+        get { achievementsJSON.map { JSONColumn.decode($0, defaultValue: []) } ?? [] }
+        set { achievementsJSON = newValue.isEmpty ? nil : JSONColumn.encode(newValue) }
     }
 }
 

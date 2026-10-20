@@ -288,6 +288,31 @@ because line numbers go out of date.
     student sees, is the one parallel reader: it reads the same join first,
     then a group the student ranked in, and ranking needs a join.
 
+### The award ledger and course achievements: `achievement_awards`, `courses.achievements`
+
+- **Writers:**
+  - `AchievementAwardStore.record` (assignment badges) and
+    `grantCourseAchievements` (course achievements), from the student's own
+    pages only: the result page and the dashboard store assignment badges,
+    and the result page and the account page grant course achievements.
+  - `AchievementsEditing.apply(rows:course:on:)` writes
+    `courses.achievements`.
+  - Course deletion (`deleteAwards`, `deleteCourseAwards`) and assignment
+    deletion remove ledger rows.
+- **Readers:** the course evaluator (`courseProgress`, which reads the
+  assignment-level rows for `achievementsEarned`) and the account export.
+- **Rules:**
+  - A ledger row is written off the grading path and is never taken back by
+    a regrade (`docs/achievement-rewards.md`, decision 2). A staff view
+    writes nothing.
+  - A course signal counts only assignments that
+    `assignmentVisibleToStudentByState` admits. A new visibility state must
+    keep that true for the course counts as for the dashboard.
+  - `achievementsEarned` reads the ledger, so the result page stores the
+    assignment badges before it grants the course achievements.
+  - A signal's level (`AchievementSignal.allowedLevels`) decides where it may
+    be saved. The editor and the validator both derive from it.
+
 ---
 
 ## The grading pipeline
@@ -1127,3 +1152,10 @@ When an issue is closed, remove its item and correct the section above.
    chose its path so that an assignment slug `data` still works. But a course
    with the code `data` or `submissions` loses its vanity URLs. No list of
    reserved course codes exists.
+4. **Course achievements in a clone, a bundle and after a deletion
+   (`docs/achievement-rewards.md`, S8).** `CourseCloneService.clone` and the
+   course bundle do not carry `courses.achievements` yet, so a new term
+   starts with none. A course achievement names course sections and
+   assignments by id, and only a save checks them, so deleting a section or
+   an assignment leaves a rule that counts a smaller set. Slice S8 carries
+   the list and remaps the targets.

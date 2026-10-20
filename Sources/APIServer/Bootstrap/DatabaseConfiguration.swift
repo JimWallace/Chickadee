@@ -590,6 +590,9 @@ func registerMigrations(on app: Application) {
     app.migrations.add(CreateGroupAchievementResults())
     app.migrations.add(CreateGroupClassItemCoverage())
     app.migrations.add(AddClassCoverageRunGroup())
+    // Course achievements (docs/achievement-rewards.md, S3): the list on the
+    // course row.
+    app.migrations.add(AddCourseAchievements())
 
     // ---------------------------------------------------------------------
     // DATA MIGRATIONS. Keep these at the end, and add every new schema
