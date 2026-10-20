@@ -133,10 +133,7 @@
 
     if (typeof document !== 'undefined' && typeof window !== 'undefined') {
         var el = function (tag, className, text) {
-            var node = document.createElement(tag);
-            if (className) node.className = className;
-            if (text != null) node.textContent = text;
-            return node;
+            return ChickadeeUI.el(tag, className ? { 'class': className } : null, text);
         };
 
         var execute = function (command, args) {
@@ -334,7 +331,6 @@
 
         var pin = function (itemID, anchor) {
             var shell = document.getElementById('wb-shell');
-            var meta = document.querySelector('meta[name="csrf-token"]');
             var assignmentID = shell && shell.getAttribute('data-assignment-id');
             if (!assignmentID) return Promise.resolve(false);
             return fetch('/instructor/' + encodeURIComponent(assignmentID) + '/suite-anchor', {
@@ -342,7 +338,7 @@
                 credentials: 'same-origin',
                 headers: {
                     'Content-Type': 'application/json',
-                    'x-csrf-token': meta ? meta.getAttribute('content') : '',
+                    'x-csrf-token': ChickadeeUI.getCsrfToken(),
                 },
                 body: JSON.stringify({ script: itemID, anchor: anchor }),
             }).then(function (res) {

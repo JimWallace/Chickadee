@@ -104,7 +104,7 @@ function load({ renderers, language = {} } = {}) {
   vm.createContext(sandbox);
   vm.runInContext(source, sandbox);
 
-  const api = sandbox.initTestEditorModal({ csrfToken: 't', getSectionID: () => '' });
+  const api = sandbox.initTestEditorModal({ getSectionID: () => '' });
   return { api, els, sandbox, docHandlers, bodyHandlers, created };
 }
 

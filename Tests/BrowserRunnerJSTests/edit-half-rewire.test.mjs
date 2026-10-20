@@ -220,14 +220,14 @@ function addTestButton(replaced) {
 
 test('a second shell init upgrades the "+ Add Test" buttons of the new render', () => {
   const h = loadModal();
-  const first = h.sandbox.initTestEditorModal({ csrfToken: 't' });
+  const first = h.sandbox.initTestEditorModal();
   const bodyListeners = h.body.listeners('click');
   const keydown = (h.docHandlers.keydown || []).length;
 
   const replaced = [];
   const button = addTestButton(replaced);
   h.setButtons([button]);
-  const second = h.sandbox.initTestEditorModal({ csrfToken: 't' });
+  const second = h.sandbox.initTestEditorModal();
 
   assert.equal(replaced.length, 1,
     'a swapped half brings plain "+ Add Test" buttons; left as they are, they do nothing');
@@ -265,6 +265,8 @@ function loadSupportFiles() {
     setStatus() {},
     confirmAction: () => Promise.resolve(true),
     showActionError() {},
+    // The token comes from the page, not from the config (#2721).
+    getCsrfToken: () => 'tok',
     fetchJSON: (url, opts) => {
       if (!opts || !opts.method) datasetGets.push(url);
       return Promise.resolve({ datasets: [], diagnostics: [] });
@@ -277,7 +279,6 @@ function loadSupportFiles() {
   const changed = [];
   function init(tag) {
     sandbox.window.initSupportFiles({
-      csrfToken: 'tok-' + tag,
       uploadURL: () => '/instructor/abc/scripts',
       deleteURL: (name) => '/instructor/abc/scripts/' + name + '?from=' + tag,
       datasetsURL: () => '/instructor/abc/datasets',
@@ -307,7 +308,7 @@ test('a re-init binds no second Remove listener, and the one it has uses the lat
   const deletes = h.fetches.filter((f) => f.opts && f.opts.method === 'DELETE');
   assert.equal(deletes.length, 1);
   assert.equal(deletes[0].url, '/instructor/abc/scripts/data.csv?from=swap');
-  assert.equal(deletes[0].opts.headers['x-csrf-token'], 'tok-swap');
+  assert.equal(deletes[0].opts.headers['x-csrf-token'], 'tok');
   assert.deepEqual(h.changed, ['swap']);
 });
 
@@ -498,7 +499,7 @@ function loadFamilyEditor() {
   vm.runInContext(familyEditorSource, ctx);
 
   const config = {
-    csrfToken: 't', initialFamilies: [],
+    initialFamilies: [],
     urls: { solutionNotebook: () => '/s', scanNotebook: () => '/scan', computeExpected: () => '/c' },
   };
 

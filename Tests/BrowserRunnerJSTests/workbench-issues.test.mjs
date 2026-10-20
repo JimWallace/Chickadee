@@ -15,6 +15,17 @@ const require = createRequire(import.meta.url);
 const Rail = require('../../Public/workbench-rail.js');
 const here = path.dirname(fileURLToPath(import.meta.url));
 const source = fs.readFileSync(path.join(here, '../../Public/workbench-rail.js'), 'utf8');
+// The page loads chickadee-ui.js first, and this script builds its rows with
+// ChickadeeUI.el (#2721), so each context runs the real one too.
+const uiSource = fs.readFileSync(path.join(here, '../../Public/chickadee-ui.js'), 'utf8');
+
+/// Runs chickadee-ui.js and then `source` in one context, as the page does.
+function runWithUI(context) {
+  vm.createContext(context);
+  vm.runInContext(uiSource, context);
+  context.ChickadeeUI = context.window.ChickadeeUI;
+  vm.runInContext(source, context);
+}
 
 const issue = (itemID, kind) => ({ itemID, kind });
 
@@ -66,7 +77,10 @@ function element(tag) {
     get textContent() { return this._text + this.children.map((c) => c.textContent).join(''); },
     set textContent(value) { this._text = value; this.children = []; },
     appendChild(child) { this.children.push(child); return child; },
-    setAttribute(name, value) { this.attributes[name] = String(value); },
+    setAttribute(name, value) {
+      this.attributes[name] = String(value);
+      if (name === 'class') this.className = String(value);
+    },
     getAttribute(name) { return this.attributes[name] ?? null; },
     removeAttribute(name) { delete this.attributes[name]; },
     classList: {
@@ -125,7 +139,7 @@ async function loadPage(outlines) {
     fetch: async () => ({ ok: true, json: async () => outlines.shift() }),
   };
   context.self = context;
-  vm.runInNewContext(source, context);
+  runWithUI(context);
   await new Promise((resolve) => setTimeout(resolve, 0));
   const redraw = async () => {
     listeners['chickadee:workbench']({ detail: { type: 'notebook-saved' } });

@@ -19,7 +19,6 @@
         catch (e) { config = {}; }
     }
     var draftID = config.draftID || null;
-    var csrfToken = ChickadeeUI.getCsrfToken();
 
     // ── Pattern family editor (Public/pattern-family-editor.js) ─────────────
     // Wired to draft-scoped URLs; after a save the page reloads so the
@@ -34,7 +33,6 @@
         }
         window.chickadeePatternFamilyEditor = window.initPatternFamilyEditor({
             draftID: draftID,
-            csrfToken: csrfToken,
             initialFamilies: initialFamilies,
             urls: {
                 solutionNotebook: function () {
@@ -108,7 +106,6 @@
     // flow stays unwired (the buttons only do something once a draft exists).
     if (draftID) {
         window.initSupportFiles({
-            csrfToken: csrfToken,
             uploadURL: function () {
                 return '/instructor/new/draft/scripts?draftID=' + encodeURIComponent(draftID);
             },

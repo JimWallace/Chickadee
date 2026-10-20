@@ -116,7 +116,6 @@ function load({ specs = [], diagnostics = null } = {}) {
   vm.runInContext(source, sandbox);
 
   sandbox.window.initSupportFiles({
-    csrfToken: 'csrf',
     uploadURL: () => '/u',
     deleteURL: () => '/d',
     datasetsURL: () => '/instructor/abc/datasets',

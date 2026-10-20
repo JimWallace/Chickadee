@@ -7,7 +7,6 @@
 // this config carries:
 //
 //   window.initSupportFiles({
-//     csrfToken:   value for the x-csrf-token request header
 //     uploadURL:   () => POST target for {filename, content, tier, isTest}
 //     deleteURL:   (name) => DELETE target for one stored support file
 //     datasetsURL: () => GET/PUT target for {datasets: [DatasetSpec]}
@@ -76,7 +75,7 @@
     // replaces the entry for this one file, and PUTs the result — which is
     // also what preserves a spec for a file this page isn't showing (one an
     // agent marked on a file that has since been renamed, say).
-    function initDatasetControls(config, csrfToken) {
+    function initDatasetControls(config) {
         if (typeof config.datasetsURL !== 'function') return;
         if (boundDatasetControls) {
             if (resyncDatasetControls) resyncDatasetControls();
@@ -254,7 +253,7 @@
         }
 
         function fetchState() {
-            return ChickadeeUI.fetchJSON(config.datasetsURL(), { csrfToken: csrfToken })
+            return ChickadeeUI.fetchJSON(config.datasetsURL())
                 .then(function (body) { return body || {}; });
         }
 
@@ -305,7 +304,6 @@
                     if (spec) next.push(merged(current, filename, spec));
                     return ChickadeeUI.fetchJSON(config.datasetsURL(), {
                         method: 'PUT',
-                        csrfToken: csrfToken,
                         body: { datasets: next }
                     });
                 }).then(function (body) {
@@ -444,7 +442,6 @@
             try {
                 await ChickadeeUI.fetchJSON(current.libraryURL(request.op), {
                     method: 'POST',
-                    csrfToken: current.csrfToken || '',
                     body: request.body
                 });
             } catch (e) {
@@ -471,7 +468,6 @@
     }
 
     window.initSupportFiles = function (config) {
-        var csrfToken = config.csrfToken || '';
         var addBtn = document.getElementById('add-support-file-btn');
         var input  = document.getElementById('support-file-upload-input');
         var status = document.getElementById('support-file-upload-status');
@@ -486,7 +482,7 @@
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    'x-csrf-token': csrfToken
+                    'x-csrf-token': ChickadeeUI.getCsrfToken()
                 },
                 credentials: 'same-origin',
                 body: JSON.stringify({
@@ -521,7 +517,7 @@
             });
         }
 
-        initDatasetControls(config, csrfToken);
+        initDatasetControls(config);
         initLibraryControls(config);
 
         deleteConfig = config;
@@ -537,7 +533,7 @@
             try {
                 var resp = await fetch(current.deleteURL(filename), {
                     method: 'DELETE',
-                    headers: { 'x-csrf-token': current.csrfToken || '' },
+                    headers: { 'x-csrf-token': ChickadeeUI.getCsrfToken() },
                     credentials: 'same-origin'
                 });
                 if (!resp.ok) {

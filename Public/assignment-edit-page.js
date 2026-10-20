@@ -39,14 +39,13 @@
 
         var carrier = document.querySelector('[data-assignment-id]');
         var assignmentID = carrier ? (carrier.getAttribute('data-assignment-id') || '') : '';
-        var csrfToken = ChickadeeUI.getCsrfToken();
 
         wireHeader();
         wireSuiteTable(assignmentID);
         dropParkedFamilyEditorBodies();
-        wirePatternFamilyEditor(assignmentID, csrfToken);
+        wirePatternFamilyEditor(assignmentID);
         wireTestEditor(assignmentID);
-        wireSupportFiles(assignmentID, csrfToken);
+        wireSupportFiles(assignmentID);
         wireSelfStartingEditors();
         wireBrightspacePicker();
     }
@@ -147,7 +146,7 @@
     }
 
     // ── Pattern family editor (Public/pattern-family-editor.js) ─────────────
-    function wirePatternFamilyEditor(assignmentID, csrfToken) {
+    function wirePatternFamilyEditor(assignmentID) {
         var seed = document.getElementById('pattern-families-seed');
         var initialFamilies = [];
         if (seed) {
@@ -156,7 +155,6 @@
         }
         window.chickadeePatternFamilyEditor = window.initPatternFamilyEditor({
             assignmentID: assignmentID,
-            csrfToken: csrfToken,
             initialFamilies: initialFamilies,
             urls: {
                 solutionNotebook: function () {
@@ -187,9 +185,8 @@
     }
 
     // ── Support files (Public/support-files.js) ─────────────────────────────
-    function wireSupportFiles(assignmentID, csrfToken) {
+    function wireSupportFiles(assignmentID) {
         window.initSupportFiles({
-            csrfToken: csrfToken,
             uploadURL: function () {
                 return '/instructor/' + encodeURIComponent(assignmentID) + '/scripts';
             },
