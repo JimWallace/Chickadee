@@ -677,7 +677,7 @@ struct ReorderContentItemsTool: ContentTool {
     static let name = "reorder_content_items"
     static let description =
         "Set the display order of content items within one section's content lane, by course code. "
-        + "orderedContentItemIDs must all belong to the same course (and normally the same section) — "
+        + "orderedContentItemIDs must all belong to the same course and the same section — "
         + "they are renumbered 1..n in the given order. Reorders ungraded material only; assignments "
         + "use reorder_assignments and test-suite items use move_suite_item."
     static let inputSchema: JSONValue = .object([
@@ -712,42 +712,15 @@ struct ReorderContentItemsTool: ContentTool {
 
     func execute(_ input: Input, _ context: ToolContext) async throws -> Output {
         let course = try await resolveCourseForWrite(
-            code: input.courseCode, context: context, atLeast: .ta)
-        let courseID = try course.requireID()
-        let uuids = input.orderedContentItemIDs.compactMap {
-            UUID(uuidString: $0.trimmingCharacters(in: .whitespacesAndNewlines))
+            code: input.courseCode, context: context, atLeast: SortOrderRenumbering.roleFloor)
+        let renumbered = try await renumberSectionItemsForMCP(
+            field: "orderedContentItemIDs", course: course, context: context
+        ) { () throws(ReorderError) in
+            try input.orderedContentItemIDs.map(SortOrderItem.parseContent)
         }
-        guard uuids.count == input.orderedContentItemIDs.count else {
-            throw MCPToolError.invalidArguments(detail: "orderedContentItemIDs contains an invalid content-item id.")
-        }
-        guard Set(uuids).count == uuids.count else {
-            throw MCPToolError.invalidArguments(detail: "orderedContentItemIDs contains a duplicate content-item id.")
-        }
-        guard !uuids.isEmpty else {
-            return Output(
-                courseCode: course.code, courseKey: course.urlKey, courseTerm: course.term?.displayName,
-                contentItems: [])
-        }
-        // Scope to this course so a reorder can't renumber another course's items.
-        let items = try await APICourseContentItem.query(on: context.db)
-            .filter(\.$courseID == courseID)
-            .filter(\.$id ~~ uuids)
-            .all()
-        guard items.count == uuids.count else {
-            throw MCPToolError.invalidArguments(
-                detail: "orderedContentItemIDs must all be content items in course \(course.urlKey).")
-        }
-        let byID = Dictionary(
-            uniqueKeysWithValues: items.compactMap { item -> (UUID, APICourseContentItem)? in
-                guard let id = item.id else { return nil }
-                return (id, item)
-            })
-        var ordered: [ContentItemDTO] = []
-        for (index, uuid) in uuids.enumerated() {
-            guard let item = byID[uuid] else { continue }
-            item.sortOrder = index + 1
-            try await item.save(on: context.db)
-            ordered.append(contentItemDTO(from: item))
+        let ordered = renumbered.compactMap { row -> ContentItemDTO? in
+            guard case .content(let item) = row else { return nil }
+            return contentItemDTO(from: item)
         }
         return Output(
             courseCode: course.code, courseKey: course.urlKey, courseTerm: course.term?.displayName,

@@ -148,7 +148,8 @@ extension CourseAdminRoutes {
     // MARK: - POST /instructor/content-items/reorder
 
     /// Persists a new order for the content-item lane. `itemIDs` is the lane's
-    /// ids in display order; each is renumbered 1..n. AJAX (returns `.ok`).
+    /// ids in display order; each is renumbered 1..n by `SortOrderRenumbering`,
+    /// which holds the rules (#2713). AJAX (returns `.ok`).
     @Sendable
     func reorderContentItems(req: Request) async throws -> HTTPStatus {
         struct ReorderBody: Content {
@@ -157,33 +158,16 @@ extension CourseAdminRoutes {
         let user = try req.auth.require(APIUser.self)
         let courseState = try await req.resolveActiveCourse(for: user)
         guard let courseID = courseState.activeCourseUUID else { return .ok }
-        try await requireCourseWriteAccess(caller: user, courseID: courseID, atLeast: .ta, db: req.db)
+        try await requireCourseWriteAccess(
+            caller: user, courseID: courseID, atLeast: SortOrderRenumbering.roleFloor, db: req.db)
 
         let body = try await req.decodeContent(ReorderBody.self)
-        let uuids = body.itemIDs.compactMap { UUID(uuidString: $0) }
-        guard uuids.count == body.itemIDs.count else {
-            throw WebAssignmentError.invalidParameter(
-                name: "itemIDs", reason: "Invalid content-item ID in reorder payload.")
-        }
-        guard !uuids.isEmpty else { return .ok }
-        // Scope to this course so a reorder can't touch another course's items.
-        let items = try await APICourseContentItem.query(on: req.db)
-            .filter(\.$courseID == courseID)
-            .filter(\.$id ~~ uuids)
-            .all()
-        guard items.count == uuids.count else {
-            throw WebAssignmentError.invalidParameter(
-                name: "itemIDs", reason: "Content-item set mismatch in reorder payload.")
-        }
-        let byID = Dictionary(
-            uniqueKeysWithValues: items.compactMap { item -> (UUID, APICourseContentItem)? in
-                guard let id = item.id else { return nil }
-                return (id, item)
-            })
-        for (index, uuid) in uuids.enumerated() {
-            guard let item = byID[uuid] else { continue }
-            item.sortOrder = index + 1
-            try await item.save(on: req.db)
+        do {
+            let items = try body.itemIDs.map(SortOrderItem.parseContent)
+            // Scoped to the active course, so a reorder can't touch another course's items.
+            _ = try await SortOrderRenumbering.renumberSectionItems(items, inCourse: courseID, on: req.db)
+        } catch let error as ReorderError {
+            throw WebAssignmentError.invalidParameter(name: "itemIDs", reason: error.reason)
         }
         return .ok
     }
