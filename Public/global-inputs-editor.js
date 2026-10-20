@@ -2,8 +2,9 @@
 //
 // Slice 1 + Slice 2 of issue #461 — wires the "Global Inputs" panel at the
 // top of the assignment edit page.  All row/value/validation/auto-save
-// mechanics live in the shared core (Public/inputs-editor-core.js, #1126);
-// what remains here is this panel's class names, its endpoint
+// mechanics, and the panel wiring, live in the shared core
+// (Public/inputs-editor-core.js, #1126, #2721); what remains here is this
+// panel's class names, its endpoint
 // (PUT /instructor/:id/global-variables), and its status-line reporting
 // (including server warnings).
 //
@@ -14,28 +15,27 @@
     'use strict';
 
     var core = ChickadeeInputsCore;
-    var editor = core.createEditor({
+    var classes = {
         row: 'js-global-input-row',
         name: 'js-global-input-name',
         value: 'js-global-input-value',
         valid: 'js-global-input-row-valid',
         remove: 'js-global-input-remove'
-    }, {});
+    };
+    var editor = core.createEditor(classes, {});
 
-    // The panels init() has wired, so that init() can run again (#1957).
-    // The workbench calls it after it swaps the edit half: the new half has a
-    // new panel to wire, and a panel wired before is not wired twice.
-    var wiredBlocks = new WeakSet();
-
+    // init() can run again (#1957): the workbench calls it after it swaps the
+    // edit half. The new half has a new panel to wire, and a panel wired
+    // before is not wired twice (`ChickadeeUI.wireOnce`).
     function init() {
         var block = document.getElementById('global-inputs-block');
-        if (!block || wiredBlocks.has(block)) return;
+        if (!block) return;
         var tbody = block.querySelector('tbody.js-global-inputs-body');
         var addBtn = document.getElementById('global-input-add');
         var status = document.getElementById('global-inputs-status');
         var assignmentID = block.getAttribute('data-assignment-id') || '';
         if (!tbody || !assignmentID) return;
-        wiredBlocks.add(block);
+        if (!ChickadeeUI.wireOnce(block, 'global-inputs')) return;
 
         var url = '/instructor/' + encodeURIComponent(assignmentID) + '/global-variables';
 
@@ -50,67 +50,31 @@
                 return Promise.resolve();
             }
             setStatus('Saving…', null);
-            return fetch(url, {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json', 'x-csrf-token': ChickadeeUI.getCsrfToken() },
-                body: JSON.stringify(payload)
-            }).then(function (r) {
-                if (r.ok) {
-                    // Global inputs feed personalization, so a notebook open in
-                    // the workbench's other pane is now a rendering of stale
-                    // values.  The shell raises an advisory chip rather than
-                    // reloading that pane, which would restart the kernel.
-                    ChickadeeUI.notifyWorkbench('inputs-changed');
-                    return r.json().then(function (body) {
-                        var warns = body && body.warnings;
-                        if (warns && warns.length) {
-                            setStatus('Saved. Warnings: ' + warns.join('; '), 'error');
-                        } else {
-                            setStatus('Saved.', 'ok');
-                        }
-                    }).catch(function () { setStatus('Saved.', 'ok'); });
+            return ChickadeeUI.fetchJSON(url, { method: 'PUT', body: payload }).then(function (body) {
+                // Global inputs feed personalization, so a notebook open in
+                // the workbench's other pane is now a rendering of stale
+                // values.  The shell raises an advisory chip rather than
+                // reloading that pane, which would restart the kernel.
+                ChickadeeUI.notifyWorkbench('inputs-changed');
+                var warns = body && body.warnings;
+                if (warns && warns.length) {
+                    setStatus('Saved. Warnings: ' + warns.join('; '), 'error');
+                } else {
+                    setStatus('Saved.', 'ok');
                 }
-                return r.text().catch(function () { return ''; }).then(function (t) {
-                    var msg = ChickadeeUI.extractErrorMessage(t) || ('HTTP ' + r.status);
-                    setStatus('Save failed: ' + msg.slice(0, 240), 'error');
-                });
             }).catch(function (err) {
-                setStatus('Save failed: ' + (err && err.message ? err.message : err), 'error');
+                var msg = String(err && err.message ? err.message : err);
+                setStatus('Save failed: ' + msg.slice(0, 240), 'error');
             });
         }
 
         var saver = core.makeDebouncedSaver(doSave, 500);
-
-        // The amber-cue note (ValueCueNote) shows only while the
-        // table has a row, since the cue it explains is drawn on a row (#1996).
-        var cueNote = block.querySelector('.js-value-cue-note');
-        function syncCueNote() {
-            if (cueNote) cueNote.hidden = !tbody.querySelector('tr');
-        }
-
-        editor.refreshAllRows(tbody);
-        syncCueNote();
-
-        block.addEventListener('input', function (e) {
-            var tr = e.target.closest && e.target.closest('tr.js-global-input-row');
-            if (tr) {
-                editor.refreshAllRows(tbody);
-                saver.schedule();
-            }
-        });
-        block.addEventListener('click', function (e) {
-            var btn = e.target.closest && e.target.closest('.js-global-input-remove');
-            if (btn && block.contains(btn)) {
-                var tr = btn.closest('tr.js-global-input-row');
-                if (tr) { tr.remove(); editor.refreshAllRows(tbody); saver.schedule(); }
-                syncCueNote();
-            }
-        });
+        core.wirePanel(block, tbody, classes, editor, saver);
 
         if (addBtn) {
             addBtn.addEventListener('click', function () {
                 editor.addEmptyRow(tbody);
-                syncCueNote();
+                core.syncCueNote(block, tbody);
             });
         }
 

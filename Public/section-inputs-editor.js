@@ -1,9 +1,9 @@
 // Public/section-inputs-editor.js
 //
 // Slice 4 of issue #461 — per-section inputs panels on the assignment edit
-// page.  All row/value/validation/auto-save mechanics live in the shared
-// core (Public/inputs-editor-core.js, #1126); what remains here is this
-// panel's class names, its endpoint
+// page.  All row/value/validation/auto-save mechanics, and the panel
+// wiring, live in the shared core (Public/inputs-editor-core.js, #1126,
+// #2721); what remains here is this panel's class names, its endpoint
 // (POST /instructor/:id/suite-sections/:sectionID/variables), and its
 // per-form wiring (one form per section, silent console-logged failures).
 //
@@ -15,27 +15,22 @@
     'use strict';
 
     var core = ChickadeeInputsCore;
-    var editor = core.createEditor({
+    var classes = {
         row: 'js-section-var-row',
         name: 'js-section-var-name',
         value: 'js-section-var-value',
         valid: 'js-section-var-row-valid',
         remove: 'js-section-var-remove'
-    }, { removeCell: 'icon' });
+    };
+    var editor = core.createEditor(classes, { removeCell: 'icon' });
 
-    // The elements init() has wired, so that init() can run again (#1957).
+    // The forms init() has wired, so that init() can run again (#1957).
     // The workbench calls it after it swaps the edit half: the new half has
     // new elements to wire, and an element wired before is not wired twice.
-    // A form maps to its { flush, flushPending } object.
+    // A form maps to its { flush, flushPending } object, which a second
+    // init() returns again; the "+ Add Input" buttons use
+    // `ChickadeeUI.wireOnce`.
     var wiredForms = new WeakMap();
-    var wiredAddButtons = new WeakSet();
-
-    /// Shows the form's amber-cue note (ValueCueNote) only while its
-    /// table has a row, since the cue it explains is drawn on a row (#1996).
-    function syncCueNote(form, tbody) {
-        var note = form.querySelector('.js-value-cue-note');
-        if (note) note.hidden = !tbody.querySelector('tr');
-    }
 
     /// Per-form auto-save with debounce + in-flight coalescing.  Returns
     /// a public { flush } object that the main-form submit handler can
@@ -73,26 +68,8 @@
         }
 
         var saver = core.makeDebouncedSaver(doPost, 500);
-
-        editor.refreshAllRows(tbody);
-
-        form.addEventListener('input', function (e) {
-            var tr = e.target.closest && e.target.closest('tr.js-section-var-row');
-            if (tr) {
-                editor.refreshAllRows(tbody);
-                saver.schedule();
-            }
-        });
-        form.addEventListener('click', function (e) {
-            var btn = e.target.closest && e.target.closest('.js-section-var-remove');
-            if (btn && form.contains(btn)) {
-                var tr = btn.closest('tr.js-section-var-row');
-                if (tr) { tr.remove(); editor.refreshAllRows(tbody); saver.schedule(); }
-                syncCueNote(form, tbody);
-            }
-        });
+        core.wirePanel(form, tbody, classes, editor, saver);
         form.addEventListener('submit', function (e) { e.preventDefault(); saver.flush(); });
-        syncCueNote(form, tbody);
 
         var wired = {
             flush: saver.flush,
@@ -122,8 +99,7 @@
         // section header, not inside the form, so look up the form by
         // data-section-id.
         document.querySelectorAll('button.js-section-var-add').forEach(function (btn) {
-            if (wiredAddButtons.has(btn)) return;
-            wiredAddButtons.add(btn);
+            if (!ChickadeeUI.wireOnce(btn, 'section-input-add')) return;
             btn.addEventListener('click', function () {
                 var sid = btn.getAttribute('data-section-id') || '';
                 var form = document.querySelector('form.section-vars-form[data-section-id="' + sid + '"]');
@@ -131,7 +107,7 @@
                 var tbody = form.querySelector('tbody.js-section-vars-body');
                 if (tbody) {
                     editor.addEmptyRow(tbody);
-                    syncCueNote(form, tbody);
+                    core.syncCueNote(form, tbody);
                 }
             });
         });

@@ -24,12 +24,10 @@
 (function (global) {
     'use strict';
 
-    // The renders that init() has wired.  One render of the edit body carries
-    // one `#suite-state-seed`, and a swap brings a new one, so the seed element
-    // is the key.  (Not the `[data-assignment-id]` carrier: on the workbench
-    // that is `#wb-shell`, which a swap keeps.)  A WeakSet lets a discarded
-    // render go.
-    var wiredRenders = new WeakSet();
+    // init() wires each render once (`ChickadeeUI.wireOnce`).  One render of
+    // the edit body carries one `#suite-state-seed`, and a swap brings a new
+    // one, so the seed element is the key.  (Not the `[data-assignment-id]`
+    // carrier: on the workbench that is `#wb-shell`, which a swap keeps.)
 
     // The Test Editor modal.  Its shell is built once per document; init()
     // refreshes this reference.
@@ -37,8 +35,7 @@
 
     function init() {
         var renderKey = document.getElementById('suite-state-seed');
-        if (!renderKey || wiredRenders.has(renderKey)) return;
-        wiredRenders.add(renderKey);
+        if (!ChickadeeUI.wireOnce(renderKey, 'edit-page-render')) return;
 
         var carrier = document.querySelector('[data-assignment-id]');
         var assignmentID = carrier ? (carrier.getAttribute('data-assignment-id') || '') : '';

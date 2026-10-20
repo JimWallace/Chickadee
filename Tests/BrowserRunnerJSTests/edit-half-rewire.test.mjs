@@ -24,8 +24,14 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import vm from 'node:vm';
+import { createRequire } from 'node:module';
 
 const read = (file) => fs.readFile(path.resolve(file), 'utf8');
+// The real wire-once guard and inputs core (#2721), so that a stubbed module
+// still decides "wired already" and wires a panel the way the page does.
+const require = createRequire(import.meta.url);
+const { wireOnce } = require('../../Public/chickadee-ui.js');
+const realInputsCore = require('../../Public/inputs-editor-core.js');
 const editPageSource = await read('Public/assignment-edit-page.js');
 const modalSource = await read('Public/test-editor-modal.js');
 const supportFilesSource = await read('Public/support-files.js');
@@ -81,7 +87,7 @@ function loadEditPage() {
   };
   const sandbox = { document: doc, JSON, Array, Error };
   sandbox.window = sandbox;
-  sandbox.ChickadeeUI = { getCsrfToken: () => 'tok' };
+  sandbox.ChickadeeUI = { getCsrfToken: () => 'tok', wireOnce };
   sandbox.initSuiteTable = () => {
     count('initSuiteTable');
     return {
@@ -321,9 +327,13 @@ function loadSelfStarting(source, doc, extra = {}) {
   sandbox.window = sandbox;
   sandbox.ChickadeeUI = {
     getCsrfToken: () => 'tok', setStatus() {}, notifyWorkbench() {},
-    escapeHtml: (s) => String(s), extractErrorMessage: () => '',
+    escapeHtml: (s) => String(s), extractErrorMessage: () => '', wireOnce,
+    // The achievements panel loads through fetchJSON; a test that counts
+    // loads passes its own fetch.
+    fetchJSON: (url, opts) => (sandbox.fetch ? sandbox.fetch(url, opts) : new Promise(() => {})),
   };
   sandbox.ChickadeeInputsCore ||= {
+    ...realInputsCore,
     createEditor: () => ({ buildPayload: () => null, refreshAllRows() {}, addEmptyRow() {} }),
     makeDebouncedSaver: () => ({ schedule() {}, flush: () => Promise.resolve() }),
   };
@@ -557,6 +567,7 @@ test('section inputs expose the pending-only flush, and it reaches every form', 
     querySelector: () => null,
   }, {
     ChickadeeInputsCore: {
+      ...realInputsCore,
       createEditor: () => ({ buildPayload: () => null, refreshAllRows() {}, addEmptyRow() {} }),
       makeDebouncedSaver: () => {
         const form = forms[made++];
