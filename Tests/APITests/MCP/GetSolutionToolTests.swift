@@ -10,13 +10,6 @@ import Vapor
 @testable import APIServer
 
 @Suite struct GetSolutionToolTests {
-    private func context(_ app: Application, scopes: Set<ContentScope> = [.read]) -> ToolContext {
-        ToolContext(
-            request: makeTestRequest(on: app),
-            subject: "tester",
-            grantedScopes: scopes)
-    }
-
     private let solutionNotebook = #"""
         {"nbformat":4,"nbformat_minor":5,"metadata":{},"cells":[
         {"cell_type":"markdown","metadata":{},"source":["# Solution"]},
@@ -59,7 +52,7 @@ import Vapor
         try await withApp(app) { app in
             let assignment = try await fixture(on: app)
             let output = try await GetSolutionTool().execute(
-                GetSolutionTool.Input(assignmentPublicID: assignment.publicID), context(app))
+                GetSolutionTool.Input(assignmentPublicID: assignment.publicID), mcpContext(app))
 
             #expect(output.cellCount == 2)
             #expect(output.filename == "solution.ipynb")
@@ -82,7 +75,7 @@ import Vapor
             try await assignment.save(on: app.db)
 
             let output = try await GetSolutionTool().execute(
-                GetSolutionTool.Input(assignmentPublicID: assignment.publicID), context(app))
+                GetSolutionTool.Input(assignmentPublicID: assignment.publicID), mcpContext(app))
             #expect(output.cellCount == 2)
         }
     }
@@ -93,7 +86,7 @@ import Vapor
             let assignment = try await fixture(on: app, withSolution: false)
             await #expect(throws: MCPToolError.self) {
                 _ = try await GetSolutionTool().execute(
-                    GetSolutionTool.Input(assignmentPublicID: assignment.publicID), context(app))
+                    GetSolutionTool.Input(assignmentPublicID: assignment.publicID), mcpContext(app))
             }
         }
     }
@@ -104,7 +97,7 @@ import Vapor
             _ = try await fixture(on: app)
             await #expect(throws: MCPToolError.self) {
                 _ = try await GetSolutionTool().execute(
-                    GetSolutionTool.Input(assignmentPublicID: "zzzzzz"), context(app))
+                    GetSolutionTool.Input(assignmentPublicID: "zzzzzz"), mcpContext(app))
             }
         }
     }
@@ -121,7 +114,7 @@ import Vapor
                 on: app, testSetupID: "setup_sol", courseID: courseID, title: "Lab")
             await #expect(throws: MCPToolError.self) {
                 _ = try await GetSolutionTool().execute(
-                    GetSolutionTool.Input(assignmentPublicID: assignment.publicID), context(app))
+                    GetSolutionTool.Input(assignmentPublicID: assignment.publicID), mcpContext(app))
             }
         }
     }

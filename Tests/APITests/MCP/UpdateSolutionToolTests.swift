@@ -10,13 +10,6 @@ import Vapor
 @testable import APIServer
 
 @Suite struct UpdateSolutionToolTests {
-    private func context(_ app: Application, scopes: Set<ContentScope> = [.write]) -> ToolContext {
-        ToolContext(
-            request: makeTestRequest(on: app),
-            subject: "tester",
-            grantedScopes: scopes)
-    }
-
     private func json(_ raw: String) throws -> JSONValue {
         try JSONDecoder().decode(JSONValue.self, from: Data(raw.utf8))
     }
@@ -54,7 +47,7 @@ import Vapor
             let output = try await UpdateSolutionTool().execute(
                 UpdateSolutionTool.Input(
                     assignmentPublicID: assignment.publicID, notebook: try json(twoCellSolution)),
-                context(app))
+                mcpContext(app))
 
             #expect(output.cellCount == 2)
             #expect(output.validationStatus == "pending")
@@ -83,7 +76,7 @@ import Vapor
             let output = try await UpdateSolutionTool().execute(
                 UpdateSolutionTool.Input(
                     assignmentPublicID: assignment.publicID, notebook: try json(twoCellSolution)),
-                context(app))
+                mcpContext(app))
             #expect(output.assignmentClosed)
             let reloaded = try #require(try await APIAssignment.find(assignment.id, on: app.db))
             #expect(!reloaded.isOpen)
@@ -99,7 +92,7 @@ import Vapor
             let output = try await UpdateSolutionTool().execute(
                 UpdateSolutionTool.Input(
                     assignmentPublicID: assignment.publicID, notebook: try json(twoCellSolution)),
-                context(app))
+                mcpContext(app))
             #expect(!output.assignmentClosed)
             let reloaded = try #require(try await APIAssignment.find(assignment.id, on: app.db))
             #expect(!reloaded.isOpen)
@@ -113,11 +106,11 @@ import Vapor
             _ = try await UpdateSolutionTool().execute(
                 UpdateSolutionTool.Input(
                     assignmentPublicID: assignment.publicID, notebook: try json(twoCellSolution)),
-                context(app))
+                mcpContext(app))
 
             let got = try await GetSolutionTool().execute(
                 GetSolutionTool.Input(assignmentPublicID: assignment.publicID),
-                context(app, scopes: [.read]))
+                mcpContext(app, scopes: [.read]))
             #expect(got.cellCount == 2)
         }
     }
@@ -130,7 +123,7 @@ import Vapor
                 _ = try await UpdateSolutionTool().execute(
                     UpdateSolutionTool.Input(
                         assignmentPublicID: assignment.publicID, notebook: .array([])),
-                    context(app))
+                    mcpContext(app))
             }
         }
     }
@@ -144,7 +137,7 @@ import Vapor
                     UpdateSolutionTool.Input(
                         assignmentPublicID: assignment.publicID,
                         notebook: try json(#"{"nbformat":4,"metadata":{}}"#)),
-                    context(app))
+                    mcpContext(app))
             }
         }
     }
@@ -157,7 +150,7 @@ import Vapor
                 _ = try await UpdateSolutionTool().execute(
                     UpdateSolutionTool.Input(
                         assignmentPublicID: "zzzzzz", notebook: try json(twoCellSolution)),
-                    context(app))
+                    mcpContext(app))
             }
         }
     }
@@ -176,7 +169,7 @@ import Vapor
                 _ = try await UpdateSolutionTool().execute(
                     UpdateSolutionTool.Input(
                         assignmentPublicID: assignment.publicID, notebook: try json(twoCellSolution)),
-                    context(app))
+                    mcpContext(app))
             }
         }
     }
@@ -215,7 +208,7 @@ import Vapor
                 UpdateSolutionTool.Input(
                     assignmentPublicID: assignment.publicID,
                     solutionFile: .init(filename: "solution.cpp", content: source)),
-                context(app))
+                mcpContext(app))
 
             #expect(output.solutionFilename == "solution.cpp")
             #expect(output.cellCount == 0)
@@ -240,7 +233,7 @@ import Vapor
                     UpdateSolutionTool.Input(
                         assignmentPublicID: assignment.publicID,
                         notebook: try json(twoCellSolution)),
-                    context(app))
+                    mcpContext(app))
             }
         }
     }
@@ -254,7 +247,7 @@ import Vapor
                     UpdateSolutionTool.Input(
                         assignmentPublicID: assignment.publicID,
                         solutionFile: .init(filename: "solution.py", content: "x = 1")),
-                    context(app))
+                    mcpContext(app))
             }
         }
     }
@@ -268,7 +261,7 @@ import Vapor
                     UpdateSolutionTool.Input(
                         assignmentPublicID: assignment.publicID,
                         solutionFile: .init(filename: "../solution.cpp", content: "int f();")),
-                    context(app))
+                    mcpContext(app))
             }
         }
     }
@@ -279,7 +272,7 @@ import Vapor
             let assignment = try await fixture(on: app)
             await #expect(throws: MCPToolError.self) {
                 _ = try await UpdateSolutionTool().execute(
-                    UpdateSolutionTool.Input(assignmentPublicID: assignment.publicID), context(app))
+                    UpdateSolutionTool.Input(assignmentPublicID: assignment.publicID), mcpContext(app))
             }
             await #expect(throws: MCPToolError.self) {
                 _ = try await UpdateSolutionTool().execute(
@@ -287,7 +280,7 @@ import Vapor
                         assignmentPublicID: assignment.publicID,
                         notebook: try json(twoCellSolution),
                         solutionFile: .init(filename: "solution.cpp", content: "int f();")),
-                    context(app))
+                    mcpContext(app))
             }
         }
     }

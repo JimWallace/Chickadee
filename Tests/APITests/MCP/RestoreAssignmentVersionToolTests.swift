@@ -14,7 +14,6 @@ import Vapor
 @testable import APIServer
 
 @Suite(.serialized) final class RestoreAssignmentVersionToolTests {
-
     let app: Application
 
     init() async throws {
@@ -22,13 +21,6 @@ import Vapor
     }
 
     // MARK: - Fixtures
-
-    private func context(_ app: Application) -> ToolContext {
-        ToolContext(
-            request: makeTestRequest(on: app),
-            subject: "vr_inst",
-            grantedScopes: [.read, .write])
-    }
 
     private func manifest(timeLimit: Int) -> String {
         """
@@ -83,7 +75,7 @@ import Vapor
         try await RestoreAssignmentVersionTool().execute(
             RestoreAssignmentVersionTool.Input(
                 assignmentPublicID: assignment.publicID, version: version),
-            context(app))
+            mcpContext(app, subject: "vr_inst"))
     }
 
     // MARK: - The headline behaviour

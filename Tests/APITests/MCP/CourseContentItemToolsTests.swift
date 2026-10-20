@@ -11,14 +11,6 @@ import Vapor
 @testable import APIServer
 
 @Suite struct CourseContentItemToolsTests {
-    private func context(_ app: Application, subject: String = "tester") -> ToolContext {
-        ToolContext(
-            request: makeTestRequest(on: app),
-            subject: subject,
-            grantedScopes: [.read, .write]
-        )
-    }
-
     /// Course + enrolled instructor "tester".
     @discardableResult
     private func fixture(on app: Application) async throws -> APICourse {
@@ -59,13 +51,13 @@ import Vapor
                     ],
                     description: "Intro", updatedLabel: "2026-05-11",
                     courseSectionID: sectionIDStr, isPublished: true),
-                context(app))
+                mcpContext(app))
             #expect(created.title == "Lecture 1")
             #expect(created.kind == "notebook")
             #expect(created.links.count == 2)
             #expect(created.courseSectionID == sectionIDStr)
 
-            let listed = try await ListContentItemsTool().execute(.init(courseCode: "CS246"), context(app))
+            let listed = try await ListContentItemsTool().execute(.init(courseCode: "CS246"), mcpContext(app))
             #expect(listed.contentItems.count == 1)
             #expect(listed.contentItems.first?.title == "Lecture 1")
             #expect(listed.contentItems.first?.links.map(\.label) == ["PDF", "Notebook"])
@@ -81,7 +73,7 @@ import Vapor
                     .init(
                         courseCode: "CS246", title: "   ", kind: nil, links: nil, description: nil,
                         updatedLabel: nil, courseSectionID: nil, isPublished: nil),
-                    context(app))
+                    mcpContext(app))
             }
         }
     }
@@ -96,7 +88,7 @@ import Vapor
                         courseCode: "CS246", title: "Bad", kind: nil,
                         links: [.init(label: "x", url: "javascript:alert(1)")],
                         description: nil, updatedLabel: nil, courseSectionID: nil, isPublished: nil),
-                    context(app))
+                    mcpContext(app))
             }
         }
     }
@@ -117,7 +109,7 @@ import Vapor
                 .init(
                     courseCode: "CS246", title: "Item", kind: "link", links: nil, description: nil,
                     updatedLabel: nil, courseSectionID: aIDStr, isPublished: true),
-                context(app))
+                mcpContext(app))
 
             let updated = try await UpdateContentItemTool().execute(
                 .init(
@@ -125,7 +117,7 @@ import Vapor
                     links: [.init(label: "Deck", url: "https://example.com/d.pdf")],
                     description: "", updatedLabel: "2026-06-01", isPublished: false,
                     courseSectionID: bIDStr),
-                context(app))
+                mcpContext(app))
             #expect(updated.title == "Renamed")
             #expect(updated.kind == "slides")
             #expect(updated.links.count == 1)
@@ -143,13 +135,13 @@ import Vapor
                 .init(
                     courseCode: "CS246", title: "Item", kind: nil, links: nil, description: nil,
                     updatedLabel: nil, courseSectionID: nil, isPublished: nil),
-                context(app))
+                mcpContext(app))
             await #expect(throws: MCPToolError.self) {
                 _ = try await UpdateContentItemTool().execute(
                     .init(
                         contentItemID: created.contentItemID, title: nil, kind: nil, links: nil,
                         description: nil, updatedLabel: nil, isPublished: nil, courseSectionID: nil),
-                    context(app))
+                    mcpContext(app))
             }
         }
     }
@@ -164,9 +156,9 @@ import Vapor
                 .init(
                     courseCode: "CS246", title: "Doomed", kind: nil, links: nil, description: nil,
                     updatedLabel: nil, courseSectionID: nil, isPublished: nil),
-                context(app))
+                mcpContext(app))
             let out = try await DeleteContentItemTool().execute(
-                .init(contentItemID: created.contentItemID), context(app))
+                .init(contentItemID: created.contentItemID), mcpContext(app))
             #expect(out.removed)
             let id = try #require(UUID(uuidString: created.contentItemID))
             #expect(try await APICourseContentItem.find(id, on: app.db) == nil)
@@ -178,7 +170,7 @@ import Vapor
         try await withApp(app) { app in
             _ = try await fixture(on: app)
             let out = try await DeleteContentItemTool().execute(
-                .init(contentItemID: UUID().uuidString), context(app))
+                .init(contentItemID: UUID().uuidString), mcpContext(app))
             #expect(!out.removed)
         }
     }
@@ -195,20 +187,20 @@ import Vapor
             let one = try await CreateContentItemTool().execute(
                 .init(
                     courseCode: "CS246", title: "One", kind: nil, links: nil, description: nil,
-                    updatedLabel: nil, courseSectionID: sid, isPublished: nil), context(app))
+                    updatedLabel: nil, courseSectionID: sid, isPublished: nil), mcpContext(app))
             let two = try await CreateContentItemTool().execute(
                 .init(
                     courseCode: "CS246", title: "Two", kind: nil, links: nil, description: nil,
-                    updatedLabel: nil, courseSectionID: sid, isPublished: nil), context(app))
+                    updatedLabel: nil, courseSectionID: sid, isPublished: nil), mcpContext(app))
 
             let out = try await ReorderContentItemsTool().execute(
                 .init(
                     courseCode: "CS246",
                     orderedContentItemIDs: [two.contentItemID, one.contentItemID]),
-                context(app))
+                mcpContext(app))
             #expect(out.contentItems.map(\.title) == ["Two", "One"])
 
-            let listed = try await ListContentItemsTool().execute(.init(courseCode: "CS246"), context(app))
+            let listed = try await ListContentItemsTool().execute(.init(courseCode: "CS246"), mcpContext(app))
             #expect(listed.contentItems.map(\.title) == ["Two", "One"])
         }
     }
@@ -227,7 +219,7 @@ import Vapor
                     .init(
                         courseCode: "CS246", title: "Nope", kind: nil, links: nil, description: nil,
                         updatedLabel: nil, courseSectionID: nil, isPublished: nil),
-                    context(app, subject: "pupil"))
+                    mcpContext(app, subject: "pupil"))
             }
         }
     }
@@ -246,7 +238,7 @@ import Vapor
                 .init(
                     courseCode: "CS246", title: "TA material", kind: nil, links: nil,
                     description: nil, updatedLabel: nil, courseSectionID: nil, isPublished: nil),
-                context(app, subject: "ta_user"))
+                mcpContext(app, subject: "ta_user"))
             #expect(created.title == "TA material")
         }
     }
@@ -261,7 +253,7 @@ import Vapor
                     .init(
                         courseCode: "CS999", title: "Sneaky", kind: nil, links: nil, description: nil,
                         updatedLabel: nil, courseSectionID: nil, isPublished: nil),
-                    context(app))
+                    mcpContext(app))
             }
         }
     }
@@ -278,7 +270,7 @@ import Vapor
                 .init(
                     courseCode: "CS246", title: "L1", kind: nil, links: nil, description: nil,
                     updatedLabel: nil, courseSectionID: section.requireID().uuidString,
-                    isPublished: nil), context(app))
+                    isPublished: nil), mcpContext(app))
 
             try await section.delete(on: app.db)
 

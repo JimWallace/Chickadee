@@ -14,7 +14,6 @@ import Vapor
 @testable import APIServer
 
 @Suite(.serialized) final class AssignmentVersionToolsTests {
-
     let app: Application
 
     init() async throws {
@@ -22,13 +21,6 @@ import Vapor
     }
 
     // MARK: - Fixtures
-
-    private func context(_ app: Application) -> ToolContext {
-        ToolContext(
-            request: makeTestRequest(on: app),
-            subject: "vt_inst",
-            grantedScopes: [.read, .write])
-    }
 
     private func manifest(timeLimit: Int) -> String {
         """
@@ -85,7 +77,7 @@ import Vapor
             let output = try await ListAssignmentVersionsTool().execute(
                 ListAssignmentVersionsTool.Input(
                     assignmentPublicID: assignment.publicID, limit: nil, beforeVersion: nil),
-                context(app))
+                mcpContext(app, subject: "vt_inst"))
 
             #expect(output.totalVersions == 2)
             #expect(output.versions.map(\.version) == [2, 1])
@@ -108,7 +100,7 @@ import Vapor
             let output = try await ListAssignmentVersionsTool().execute(
                 ListAssignmentVersionsTool.Input(
                     assignmentPublicID: assignment.publicID, limit: nil, beforeVersion: nil),
-                context(app))
+                mcpContext(app, subject: "vt_inst"))
             #expect(output.currentVersion == 1)
             #expect(output.versions.first?.isCurrent == true)
         }
@@ -129,7 +121,7 @@ import Vapor
             let output = try await ListAssignmentVersionsTool().execute(
                 ListAssignmentVersionsTool.Input(
                     assignmentPublicID: assignment.publicID, limit: nil, beforeVersion: nil),
-                context(app))
+                mcpContext(app, subject: "vt_inst"))
             #expect(output.currentVersion == nil)
             #expect(output.versions.first?.isCurrent == false)
         }
@@ -147,14 +139,14 @@ import Vapor
             let page = try await ListAssignmentVersionsTool().execute(
                 ListAssignmentVersionsTool.Input(
                     assignmentPublicID: assignment.publicID, limit: 2, beforeVersion: nil),
-                context(app))
+                mcpContext(app, subject: "vt_inst"))
             #expect(page.versions.map(\.version) == [4, 3])
             #expect(page.totalVersions == 4)
 
             let next = try await ListAssignmentVersionsTool().execute(
                 ListAssignmentVersionsTool.Input(
                     assignmentPublicID: assignment.publicID, limit: 2, beforeVersion: 3),
-                context(app))
+                mcpContext(app, subject: "vt_inst"))
             #expect(next.versions.map(\.version) == [2, 1])
         }
     }
@@ -165,7 +157,7 @@ import Vapor
             let output = try await ListAssignmentVersionsTool().execute(
                 ListAssignmentVersionsTool.Input(
                     assignmentPublicID: assignment.publicID, limit: nil, beforeVersion: nil),
-                context(app))
+                mcpContext(app, subject: "vt_inst"))
             #expect(output.versions.isEmpty)
             #expect(output.totalVersions == 0)
             #expect(output.currentVersion == nil)
@@ -182,7 +174,7 @@ import Vapor
             let output = try await GetAssignmentVersionTool().execute(
                 GetAssignmentVersionTool.Input(
                     assignmentPublicID: assignment.publicID, version: 1, path: nil, maxBytes: nil),
-                context(app))
+                mcpContext(app, subject: "vt_inst"))
 
             #expect(output.version == 1)
             #expect(output.origin == AssignmentVersionOrigin.baseline)
@@ -210,7 +202,7 @@ import Vapor
                 GetAssignmentVersionTool.Input(
                     assignmentPublicID: assignment.publicID, version: 1, path: "test_a.sh",
                     maxBytes: nil),
-                context(app))
+                mcpContext(app, subject: "vt_inst"))
 
             #expect(output.content == "exit 0\n")
             #expect(output.truncated == false)
@@ -238,7 +230,7 @@ import Vapor
             let output = try await GetAssignmentVersionTool().execute(
                 GetAssignmentVersionTool.Input(
                     assignmentPublicID: assignment.publicID, version: 1, path: nil, maxBytes: nil),
-                context(app))
+                mcpContext(app, subject: "vt_inst"))
 
             let changed = output.files.first { $0.path == "test_a.sh" }
             let same = output.files.first { $0.path == "helper.py" }
@@ -258,7 +250,7 @@ import Vapor
                 GetAssignmentVersionTool.Input(
                     assignmentPublicID: assignment.publicID, version: 1, path: "big.py",
                     maxBytes: 100),
-                context(app))
+                mcpContext(app, subject: "vt_inst"))
 
             #expect(output.truncated == true)
             #expect(output.content?.count == 100)
@@ -279,7 +271,7 @@ import Vapor
                     GetAssignmentVersionTool.Input(
                         assignmentPublicID: assignment.publicID, version: 7, path: nil,
                         maxBytes: nil),
-                    context(app))
+                    mcpContext(app, subject: "vt_inst"))
             }
 
             do {
@@ -287,7 +279,7 @@ import Vapor
                     GetAssignmentVersionTool.Input(
                         assignmentPublicID: assignment.publicID, version: 7, path: nil,
                         maxBytes: nil),
-                    context(app))
+                    mcpContext(app, subject: "vt_inst"))
             } catch let error as MCPToolError {
                 guard case .invalidArguments(let detail) = error else {
                     Issue.record("expected invalidArguments, got \(error)")
@@ -308,7 +300,7 @@ import Vapor
                     GetAssignmentVersionTool.Input(
                         assignmentPublicID: assignment.publicID, version: 1, path: "nope.py",
                         maxBytes: nil),
-                    context(app))
+                    mcpContext(app, subject: "vt_inst"))
                 Issue.record("expected a thrown error for an unknown path")
             } catch let error as MCPToolError {
                 guard case .invalidArguments(let detail) = error else {
