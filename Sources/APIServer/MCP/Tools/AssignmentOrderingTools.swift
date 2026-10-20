@@ -266,6 +266,10 @@ func renumberSectionItemsForMCP(
         return try await SortOrderRenumbering.renumberSectionItems(
             items, inCourse: try course.requireID(), on: context.db)
     } catch let error as ReorderError {
-        throw MCPToolError.invalidArguments(detail: "\(field): \(error.reason)")
+        var detail = "\(field): \(error.reason)"
+        if case .incompleteSection = error {
+            detail += " A section that holds both assignments and content items needs reorder_section_items."
+        }
+        throw MCPToolError.invalidArguments(detail: detail)
     }
 }
