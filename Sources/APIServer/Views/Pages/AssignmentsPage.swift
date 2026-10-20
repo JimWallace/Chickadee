@@ -35,7 +35,12 @@ struct AssignmentsPage: HTML {
     var body: some HTML {
         BaseLayout(title: heading, page: page) {
             InstructorTabs(active: .overview)
-            section(.class("page-section")) {
+            // Public/section-items-dnd.js keeps an assignment in its section
+            // when the viewer may not move it to another one.
+            section(
+                .class("page-section"),
+                .data("assignment-moves", value: controls.manageSections ? "free" : "locked")
+            ) {
                 h2(.class("page-heading")) { heading }
                 div(.class("diagnostics-section")) {
                     div(.class("diagnostics-cards")) {

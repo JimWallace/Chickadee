@@ -338,7 +338,7 @@ private struct CourseAssignmentItemRow: HTML {
         if let assignmentID = row.assignmentID {
             switch row.validationStatus {
             case "passed" where !controls.assignmentLifecycle:
-                span(.class("tier \(statusTierClass)")) { statusLabel }
+                span(.class("tier \(statusTierClass)")) { Self.statusLabel(row.status) }
             case "passed":
                 form(.method(.post), .action("/instructor/\(assignmentID)/status"), .class("status-form")) {
                     CSRFField(token: csrfToken)
@@ -350,10 +350,10 @@ private struct CourseAssignmentItemRow: HTML {
                             .id("status-\(assignmentID)"), .class("form-input"), .name("status"),
                             .dataFlag("ck-submit-on-change")
                         ) {
-                            option(.value("open")) { "open" }.attributes(.selected, when: row.status == "open")
-                            option(.value("preview")) { "staff only" }
-                                .attributes(.selected, when: row.status == "preview")
-                            option(.value("closed")) { "closed" }.attributes(.selected, when: row.status == "closed")
+                            for status in ["open", "preview", "closed"] {
+                                option(.value(status)) { Self.statusLabel(status) }
+                                    .attributes(.selected, when: row.status == status)
+                            }
                         }
                     }
                 }
@@ -383,8 +383,10 @@ private struct CourseAssignmentItemRow: HTML {
         }
     }
 
-    private var statusLabel: String {
-        switch row.status {
+    /// The words for a published status, in the select and in the read-only
+    /// label.
+    private static func statusLabel(_ status: String) -> String {
+        switch status {
         case "open": "open"
         case "preview": "staff only"
         default: "closed"
@@ -395,6 +397,8 @@ private struct CourseAssignmentItemRow: HTML {
         div(.class("assignment-actions-cell")) {
             if controls.createAssignment {
                 publishDetails
+            } else {
+                span(.class("text-muted")) { "An instructor publishes it." }
             }
             if controls.assignmentLifecycle {
                 RowMenu(for: "unpublished setup \(row.setupID)") {

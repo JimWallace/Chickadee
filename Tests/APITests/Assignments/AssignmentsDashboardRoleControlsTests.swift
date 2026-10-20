@@ -69,6 +69,7 @@ import VaporTesting
             "section rename": "action=\"/instructor/sections/\(course.sectionID)/rename\"",
             "section delete": "data-action=\"/instructor/sections/\(course.sectionID)/delete\"",
             "status select": "action=\"/instructor/\(course.assignmentID)/status\"",
+            "move between sections": "data-assignment-moves=\"free\"",
             "duplicate": "action=\"/instructor/\(course.assignmentID)/clone\"",
             "delete assignment": "action=\"/instructor/\(course.assignmentID)/delete\"",
             "publish setup": "class=\"publish-form\"",
@@ -99,6 +100,9 @@ import VaporTesting
             #expect(html.contains("data-add-kind=\"slides\""))
             #expect(html.contains("class=\"tier tier-open\""))
             #expect(html.contains("section-drag-handle"))
+            #expect(html.contains("An instructor publishes it."))
+            // section-items-dnd.js keeps a TA's assignment drag in its section.
+            #expect(html.contains("data-assignment-moves=\"locked\""))
         }
     }
 
@@ -111,6 +115,7 @@ import VaporTesting
             for (name, marker) in instructorOnlyControls(course) {
                 #expect(html.contains(marker), "An instructor does not see the \(name) control")
             }
+            #expect(!html.contains("An instructor publishes it."))
         }
     }
 

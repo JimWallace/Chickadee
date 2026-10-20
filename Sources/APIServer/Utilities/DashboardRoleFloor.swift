@@ -1,4 +1,4 @@
-// APIServer/Helpers/DashboardRoleFloor.swift
+// APIServer/Utilities/DashboardRoleFloor.swift
 //
 // The course-role floors of the instructor dashboard actions that a TA may
 // not take. `ActiveCourseStaffMiddleware` lets a TA into `/instructor`, so
