@@ -9,6 +9,19 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.776] - 2026-10-20
+
+### Added
+
+- **The course Achievements tab (S4).** Course staff now edit a course's
+  achievements on a new Achievements tab in the instructor area, with the
+  same table as the assignment editor. Each condition counts every
+  assignment, one course section, one concept or a chosen list. The tab
+  also shows which students have earned each achievement, the built-in
+  wardrobe rules, and a Recompute button that stores every earned award at
+  once (docs/achievement-rewards.md).
+
+
 ## [0.5.775] - 2026-10-20
 
 ### Security
