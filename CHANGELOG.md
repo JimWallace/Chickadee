@@ -9,6 +9,13 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.763] - 2026-10-20
+
+### Added
+
+- **The web Datasets tab records audit rows (#2724).** Each write that succeeds records one row: create, add version, details, dictionary, publish or unpublish, and delete. The six new actions are in the Courses category of `/admin/audit`. A row names the dataset and its course. It holds no part of the file.
+
+
 ## [0.5.762] - 2026-10-20
 
 ### Changed
