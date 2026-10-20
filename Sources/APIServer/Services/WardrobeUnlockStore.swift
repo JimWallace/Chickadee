@@ -51,7 +51,7 @@ enum WardrobeUnlockStore {
                 // The server's own receipt time, so a student cannot forge it.
                 secondsBeforeDue: secondsBeforeDue(submission.submittedAt, dueDates[submission.testSetupID]),
                 concept: concepts[submission.testSetupID],
-                gradePercent: GradePercent.of(earned: result.earnedPoints ?? 0, total: result.totalPoints ?? 0))
+                gradePercent: result.gradePercentValue)
         }
     }
 

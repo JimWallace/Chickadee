@@ -209,17 +209,8 @@ extension APICourse {
     /// The course achievements. A column that does not decode reads as none,
     /// so a page that shows them never fails; saving writes a valid list.
     var courseAchievements: [Achievement] {
-        get {
-            guard let json = achievementsJSON else { return [] }
-            return (try? JSONDecoder().decode([Achievement].self, from: Data(json.utf8))) ?? []
-        }
-        set {
-            guard !newValue.isEmpty, let data = try? JSONEncoder().encode(newValue) else {
-                achievementsJSON = nil
-                return
-            }
-            achievementsJSON = String(bytes: data, encoding: .utf8)
-        }
+        get { achievementsJSON.map { JSONColumn.decode($0, defaultValue: []) } ?? [] }
+        set { achievementsJSON = newValue.isEmpty ? nil : JSONColumn.encode(newValue) }
     }
 }
 

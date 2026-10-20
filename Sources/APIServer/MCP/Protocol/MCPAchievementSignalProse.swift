@@ -69,8 +69,8 @@ enum MCPAchievementSignalProse {
                 + "(course achievements only)"
         case .assignmentsEarly:
             return
-                "assignmentsEarly is a count of assignments with a graded submission two days before "
-                + "the due date (course achievements only)"
+                "assignmentsEarly is a count of assignments with a graded submission ahead of the due "
+                + "date (course achievements only)"
         case .assignmentsComeback:
             return
                 "assignmentsComeback is a count of assignments where every test passed after an "

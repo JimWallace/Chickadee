@@ -31,7 +31,7 @@ struct ConditionRow: Codable, Sendable {
     /// Empty or absent = every item in the suite.
     var sectionRef: String?
     /// A course signal: the raw `TargetKind` of the set of assignments it
-    /// counts over (`courseSection`, `concept` or `assignments`). Empty or
+    /// counts over. Not `sectionRef`, which names a suite section (`courseSection`, `concept` or `assignments`). Empty or
     /// absent = every assignment in the course.
     var targetKind: String?
     /// A course signal: the course section (id or name), the concept (raw
@@ -134,9 +134,15 @@ enum AchievementsEditing {
         try validateLevel(
             of: rawConditions.compactMap { AchievementSignal(rawValue: $0.signal) }, name: name, at: level)
         let conditions = try rawConditions.map(condition(from:))
-        if level != .assignment {
+        switch level {
+        case .assignment:
+            break
+        case .course:
             return try courseAchievement(
                 id: id, name: name, detail: cleanDetail, scope: scope, match: match, conditions: conditions)
+        case .site:
+            throw WebAssignmentError.invalidParameter(
+                name: "level", reason: "Site achievements are defined in code, so no editor saves one.")
         }
 
         // A signal that reads the whole class cannot be evaluated per student,
