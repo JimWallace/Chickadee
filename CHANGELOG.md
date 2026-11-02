@@ -9,6 +9,13 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.778] - 2026-11-02
+
+### Fixed
+
+- **The weekly mutation sweep loses fewer shards and reports fewer false survivors.** Two source shapes that Muter turns into code that does not compile are gone (a ternary in `CompositeDealing` and `DatasetMaterializer`, an `unsafe` call in `ScriptExecution`), and they cost a whole shard in each of the last two sweeps. `report.py` now counts killed rows against inserted schemata, so a phantom that shares a line with a killed mutant is no longer listed as a survivor; the `Tournament` and `ManifestV2` survivors of the 2026-10-20 and 2026-10-27 sweeps were this. Muter's output is line-buffered, so a shard that times out shows where it stalled. New tests cover the remaining survivors (`CompositeSpecProblem` messages, quoted-cell noise, GitHub-only manifests, dotted R names), and two equivalent mutants are recorded with their reasons.
+
+
 ## [0.5.777] - 2026-11-02
 
 ### Fixed
