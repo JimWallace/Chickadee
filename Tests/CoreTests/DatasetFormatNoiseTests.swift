@@ -144,9 +144,19 @@ import Testing
         #expect(fields[1] != "Ward A, east")
     }
 
+    /// The last two rows pin the quoted-cell test itself. The quoted row at
+    /// variant 2 cannot: lower-casing `"A, b"` gives the same text whether
+    /// the quotes are kept outside or not. So the mutation sweeps of
+    /// 2026-10-20 and 2026-10-27 turned `raw.count >= 2` into `<=` and either
+    /// quote test into `!=`, all of which read a quoted cell as unquoted, and
+    /// nothing noticed. Padding shows the difference, because the spaces land
+    /// inside or outside the quotes. A cell that only ENDS in a quote (a
+    /// height in feet and inches) is not quoted, and making the second `&&`
+    /// an `||` stripped its first and last characters.
     @Test(arguments: [
         ("Ward A", 0, " Ward A "), ("Ward A", 1, "WARD A"), ("Ward A", 2, "ward a"),
         ("120", 1, " 120 "), ("\"A, b\"", 2, "\"a, b\""), ("", 1, ""),
+        ("\"A, b\"", 0, "\" A, b \""), ("5'10\"", 0, " 5'10\" "),
     ])
     func noisyWritesTheVariantItIsGiven(raw: String, variant: UInt64, written: String) {
         #expect(DatasetMaterializer.noisy(Substring(raw), variant: variant) == written)

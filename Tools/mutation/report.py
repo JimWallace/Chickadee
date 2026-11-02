@@ -295,6 +295,39 @@ def main() -> int:
         else:
             phantoms.append((path, reported, operator))
 
+    # A PHANTOM CAN SHARE A LINE WITH A REAL MUTANT, and the check above,
+    # which asks only whether ANY schema sits at the reported line, then passes
+    # it. Count instead. A killed row is always a real mutant, because a
+    # phantom runs the unmutated code and passes. A phantom always reads as
+    # survived. So a site with `inserted` schemata and `killed` killed rows can
+    # hold at most `inserted - killed` real survivors, and any survived row
+    # beyond that is a phantom. Measured in run 40494594871: Tournament.swift
+    # lines 179 and 180 each held one inserted `!=` schema, and Muter reported
+    # one killed and one survived row on each. The `!=` mutant was the killed
+    # one, and the survivor was the never-inserted `>`/`<` flip on the same
+    # line. The sweeps of 2026-10-20 and 2026-10-27 both listed the pair as
+    # open, although TournamentStandingsTests names and kills both mutations.
+    if truth:
+        killed_at: dict[tuple[str, int, str], int] = {}
+        for base, line, operator, _ in killed:
+            site = (repo_path(base, cache), line, operator)
+            killed_at[site] = killed_at.get(site, 0) + 1
+        kept: list[tuple[str, int, str]] = []
+        seen: dict[tuple[str, int, str], int] = {}
+        for site in resolved:
+            inserted = len(mutation_of.get(site, []))
+            seen[site] = seen.get(site, 0) + 1
+            # No extracted body means the count of schemata is unknown, not
+            # zero, so such a site keeps the old per-line verdict.
+            if inserted and seen[site] > inserted - killed_at.get(site, 0):
+                phantoms.append(site)
+            else:
+                kept.append(site)
+        resolved = kept
+        for site in list(mutation_of):
+            if site not in resolved:
+                del mutation_of[site]
+
     # A SECOND WAY A SURVIVOR CAN BE MEANINGLESS, and one only visible now that
     # the original is recorded beside the mutation: Muter's `SwapTernary`
     # sometimes emits the statement UNCHANGED apart from whitespace. Nine of the

@@ -180,6 +180,21 @@ import Testing
         #expect(anchor == NotebookAnchor(kind: .name, name: "count_active_days", rule: .script))
     }
 
+    /// An R name may contain a dot, so a script that reads `goal.steps`
+    /// anchors on `goal.steps` whole, not only on its parts. The Python test
+    /// above still passes when only the parts are kept, so the 2026-10-20
+    /// mutation sweep deleted `result.insert(token)` and nothing noticed;
+    /// every R test that named a dotted variable would have been unlinked.
+    @Test func anRScriptAnchorsToADottedNameWhole() throws {
+        let data = try notebook([
+            .code("count_days <- function(steps, goal) {\n  sum(steps >= goal)\n}\ngoal.steps <- 8000")
+        ])
+        let rSolution = scanNotebookDefinitions(data, language: .r)
+        let request = NotebookAnchorRequest(scriptSource: "testthat::expect_equal(goal.steps, 8000)")
+        let anchor = NotebookTestAnchoring.resolve(request, solution: rSolution)
+        #expect(anchor == NotebookAnchor(kind: .name, name: "goal.steps", rule: .script))
+    }
+
     @Test func aScriptWithSeveralDefinedNamesTakesTheFirstInTheNotebookAndSaysSo() throws {
         let request = NotebookAnchorRequest(scriptSource: "assert summary == average_heart_rate([]) and GOAL > 0")
         let anchor = NotebookTestAnchoring.resolve(request, solution: try solution)

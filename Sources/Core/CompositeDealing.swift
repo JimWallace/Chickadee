@@ -27,9 +27,15 @@ extension CompositeSpec {
         case .centreOut:
             // Nearest the middle first; a tie goes to the lower slot, so the
             // order is total and the same on every server.
+            // An `if`, not a ternary, for the mutation sweep: Muter's
+            // SwapTernary takes only the first operand of an unparenthesised
+            // else-branch, so `da != db ? da < db : a < b` became
+            // `da != db ? a : da < db < b`, which does not compile and cost
+            // the whole shard in the 2026-10-27 sweep.
             return slots.sorted { a, b in
                 let (da, db) = (distanceFromCentre(a), distanceFromCentre(b))
-                return da != db ? da < db : a < b
+                if da != db { return da < db }
+                return a < b
             }
         case .random:
             var generator = SplitMix64(seed: shuffleSeed)
