@@ -349,8 +349,18 @@ FINGERPRINT
 
 # Muter's exit status must not abort the run: a low score is a RESULT. A genuine
 # crash surfaces below as zero mutant outcomes, which IS a failure.
+#
+# LINE-BUFFERED, so a shard that hits the job timeout says where it stalled.
+# Through a pipe Muter's stdout is block-buffered, and the 2026-10-27 sweep
+# lost shards 4 and 5 to the three-hour limit with nothing after the baseline
+# in either log: whatever mutant hung, the buffer holding its progress line
+# died with the job.
+line_buffered=()
+if command -v stdbuf >/dev/null; then
+    line_buffered=(stdbuf -oL -eL)
+fi
 set +e
-"$muter_bin" run --skip-coverage --skip-update-check -f plain "${files_args[@]}" 2>&1 | tee "$raw"
+${line_buffered[@]+"${line_buffered[@]}"} "$muter_bin" run --skip-coverage --skip-update-check -f plain "${files_args[@]}" 2>&1 | tee "$raw"
 echo "==> muter exit status: ${PIPESTATUS[0]}"
 set -e
 

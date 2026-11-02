@@ -99,6 +99,15 @@ run, 43 of 50 in one shard. `Tools/mutation/report.py` quarantines them against
 the guards actually present in the mutated copy. Read survivors from the run
 record or the issue's Survivors section, never from Muter's raw output.
 
+**A survivor that an existing test plainly kills is a phantom on a shared
+line until shown otherwise.** The filter used to ask only whether any schema
+sat at the reported line. Tournament.swift lines 179 and 180 held one inserted
+schema each, and Muter reported one killed and one survived row on each, so the
+survivor was the never-inserted sibling, and the pair stayed open for two weeks
+beside a test whose comment names both mutations. `report.py` now counts: a
+killed row is always real, so a site keeps at most `inserted - killed`
+survivors. Records written before that change still carry such phantoms.
+
 **A `Sources/Core` survivor is weaker evidence than a `Sources/RunnerCore` or
 `Sources/Worker` one.** The sweep skips `APITests` because it dominates the
 runtime, and ~5% of Core is reachable only from there — all four

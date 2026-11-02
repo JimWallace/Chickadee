@@ -472,7 +472,15 @@ final class ScriptCapture: Sendable {
         while true {
             // swift-system can read only into an unsafe buffer, so this stays
             // unsafe until it can read into a span.
-            let bytesRead = unsafe read(stream.readEnd, &chunk, chunk.count)
+            //
+            // The closure is for the mutation sweep, not the compiler. Muter's
+            // parser predates SE-0458 and reads `let x = unsafe read(...)` as
+            // two statements, so RemoveSideEffects deleted the `read(...)` and
+            // left a bare `unsafe`, which does not compile and cost the whole
+            // shard in the 2026-10-27 sweep. RemoveSideEffects deletes
+            // statements only from loop, guard, do and function bodies, never
+            // from a closure, so inside one the misparse is harmless.
+            let bytesRead = { unsafe read(stream.readEnd, &chunk, chunk.count) }()
             if bytesRead > 0 {
                 stream.buffer.append(Data(chunk[0..<bytesRead]))
                 continue

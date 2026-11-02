@@ -233,8 +233,13 @@ public enum DatasetMaterializer {
             }
             var leftover = sampleSize - allocation.reduce(0, +)
             // Largest remainder first; ties by position, so the split is a
-            // function of the inputs alone.
-            remainders.sort { $0.remainder == $1.remainder ? $0.index < $1.index : $0.remainder > $1.remainder }
+            // function of the inputs alone. An `if`, not a ternary: Muter's
+            // SwapTernary mangles a ternary whose else-branch is a bare
+            // comparison into code that does not compile (CompositeDealing).
+            remainders.sort { a, b in
+                if a.remainder != b.remainder { return a.remainder > b.remainder }
+                return a.index < b.index
+            }
             var pass = 0
             while leftover > 0, pass < remainders.count {
                 let i = remainders[pass].index

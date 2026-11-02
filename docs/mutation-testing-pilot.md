@@ -269,6 +269,25 @@ occur.** It is a list of questions, and some of the answers are "correctly, no".
   with SwiftPM's absolute-path module cache. Cost is a cold build every time.
 - The originals are left intact — verified `git status` clean and
   `Sources/RunnerCore/` unmodified after the run.
+- **Two source shapes make Muter write a copy that does not compile**, and one
+  such mutant costs its whole shard (schemata put every mutant in one binary).
+  The 2026-10-20 and 2026-10-27 sweeps each lost shards this way. Both come from
+  Muter's own code at the pinned ref, not from this repository's flags:
+  - *A ternary whose else-branch is a bare binary expression.* SwapTernary
+    swaps the then-branch with only the next operand of the unfolded sequence,
+    so `d != e ? d < e : a < b` became `d != e ? a : d < e < b`. Write an `if`
+    instead, or parenthesise the else-branch. The same flaw is why some
+    SwapTernary mutants come back inert (`p.hasSuffix("/") ? p : p + "/"`).
+  - *`unsafe` (SE-0458) in front of a call.* Muter parses with swift-syntax
+    601, which predates the keyword, so `let n = unsafe read(...)` is two
+    statements to it, and RemoveSideEffects deletes the `read(...)` and leaves
+    a bare `unsafe`. RemoveSideEffects deletes statements only from loop,
+    guard, do and function bodies, never from a closure, so
+    `let n = { unsafe read(...) }()` is immune (`ScriptExecution.drainToEOF`).
+
+  The shard's job log has the compiler error; the report says only
+  `error: Build failed`. Shard membership moves with line counts, so the shard
+  number that dies changes from week to week while the cause stays put.
 
 ## Is it worth a monthly run?
 

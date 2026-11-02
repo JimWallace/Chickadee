@@ -431,5 +431,69 @@ Muter took 00:00:01.000
         self.assertEqual(summary["answeredWithReason"], [])
 
 
+class SharedLinePhantomTests(unittest.TestCase):
+    """A phantom on the same line as a real, killed mutant is still a phantom.
+
+    Run 40494594871 reported Tournament.swift:179 as one killed and one
+    survived RelationalOperatorReplacement, with ONE schema inserted there. A
+    phantom never reads as killed, so the killed row was the inserted mutant
+    and the survivor was a phantom; the per-line check passed it because the
+    line had a schema at all.
+    """
+
+    # One `!=` schema at line 40; Muter reports two rows there.
+    MUTATED = '''\
+import class Foundation.ProcessInfo
+if ProcessInfo.processInfo.environment["Probe_RelationalOperatorReplacement_40_9_400"] != nil {
+    if a == b { return a > b }
+} else {
+    if a != b { return a > b }
+}
+'''
+
+    RAW = """\
+Probe.swift:40  RelationalOperatorReplacement  mutant killed
+Probe.swift:40  RelationalOperatorReplacement  mutant survived
+
+Of the 2 mutants introduced into your code, your test suite killed 1.
+Mutation Score of Test Suite: 50%
+Muter took 00:01:02.000
+"""
+
+    def test_a_survivor_beside_a_killed_lone_schema_is_a_phantom(self):
+        _code, _report, summary = run(self.RAW, self.MUTATED)
+        self.assertEqual(summary["survived"], 0)
+        self.assertEqual([p["line"] for p in summary["phantoms"]], [40])
+        self.assertEqual(summary["survivors"], [])
+
+    def test_a_survivor_is_real_when_a_second_schema_leaves_room(self):
+        two_schemata = self.MUTATED + '''\
+if ProcessInfo.processInfo.environment["Probe_RelationalOperatorReplacement_40_30_430"] != nil {
+    if a != b { return a < b }
+} else {
+    if a != b { return a > b }
+}
+'''
+        _code, _report, summary = run(self.RAW, two_schemata)
+        self.assertEqual(summary["survived"], 1)
+        self.assertEqual(summary["phantoms"], [])
+
+    def test_two_survivors_with_room_for_one_keep_one(self):
+        # Two schemata, one killed row, two survived rows: one survivor is real.
+        raw = """\
+Probe.swift:40  RelationalOperatorReplacement  mutant survived
+Probe.swift:40  RelationalOperatorReplacement  mutant killed
+Probe.swift:40  RelationalOperatorReplacement  mutant survived
+
+Of the 3 mutants introduced into your code, your test suite killed 1.
+Mutation Score of Test Suite: 33%
+Muter took 00:01:02.000
+"""
+        second = self.MUTATED.split("\n", 1)[1].replace("_40_9_400", "_40_30_430")
+        _code, _report, summary = run(raw, self.MUTATED + second)
+        self.assertEqual(summary["survived"], 1)
+        self.assertEqual([p["line"] for p in summary["phantoms"]], [40])
+
+
 if __name__ == "__main__":
     unittest.main()

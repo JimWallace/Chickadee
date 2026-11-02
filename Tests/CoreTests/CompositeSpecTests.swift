@@ -164,6 +164,21 @@ import Testing
         }
     }
 
+    /// A layout mismatch names the layout the compositor does take: a grid
+    /// compositor asks for columns and rows, a slot compositor for a slot
+    /// count. `everyProblemHasAMessage` checks only that text exists, so the
+    /// mutation sweeps of 2026-10-20 and 2026-10-27 swapped the two branches
+    /// of `message` and nothing noticed, although the swap tells an author to
+    /// fix the wrong field.
+    @Test func aLayoutMismatchNamesTheLayoutTheCompositorTakes() {
+        for compositor in [CompositeCompositor.tile, .gallery] {
+            #expect(CompositeSpecProblem.layoutDoesNotFitCompositor(compositor).message.contains("columns and rows"))
+        }
+        for compositor in [CompositeCompositor.sequence, .sum] {
+            #expect(CompositeSpecProblem.layoutDoesNotFitCompositor(compositor).message.contains("slot count"))
+        }
+    }
+
     // MARK: - The lock and reshaping
 
     @Test func structureCoversTheLockedFieldsOnly() {
