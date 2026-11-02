@@ -146,8 +146,14 @@ import VaporTesting
         }
     }
 
-    @Test func eachReservedErrorHasAMessage() {
-        #expect(CourseFormError.message(forQuery: "code_reserved") == CourseFormError.reservedCodeMessage)
-        #expect(CourseCloneFormError.message(forQuery: "clone_code_reserved") == CourseFormError.reservedCodeMessage)
+    // Every test in this class suite owns an `Application`, so even one that
+    // reads no route runs in `withApp`: an app that is never shut down traps
+    // in its deinit and takes the test process with it.
+    @Test func eachReservedErrorHasAMessage() async throws {
+        try await withApp(app) { _ in
+            #expect(CourseFormError.message(forQuery: "code_reserved") == CourseFormError.reservedCodeMessage)
+            #expect(
+                CourseCloneFormError.message(forQuery: "clone_code_reserved") == CourseFormError.reservedCodeMessage)
+        }
     }
 }
