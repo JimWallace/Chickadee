@@ -138,6 +138,13 @@ The Core type, the migration, the model accessor, and tests
   links (instructor list, student index, LTI launch) and the
   `/:courseCode/students/...` family. `CourseContext.urlKey` carries it into
   the dashboards. A course with no term keeps its old URLs.
+- **Reserved keys (#2666).** A course code or key may not be the first
+  segment of a fixed route with two or more segments (`data`, `submissions`,
+  `admin` and the rest), because the router prefers that route to
+  `/:courseCode/:assignmentSlug`. `Routes.reservedCourseKeys` reads the set
+  from the live route table, so a new fixed route reserves its segment on its
+  own. Create, edit (when it moves the course onto one), clone, new term and
+  bundle import refuse such a code (`courseKeyIsReserved`).
 - **Web resolution** (`findActiveCourse(byKey:viewer:on:)`): an exact code
   match first, so a legacy code such as "CS136-W26" still resolves; else a
   key names code and term. With several matches, the viewer's enrolled
