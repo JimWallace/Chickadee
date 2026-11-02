@@ -437,23 +437,18 @@ func slipDayClaimWindowCeiling(
     return heldWindowEnd
 }
 
-/// Database-resolving form of `slipDayClaimWindowCeiling` for one (student,
+/// Loads the slip-day inputs of the reveal gates for one (student,
 /// assignment) pair, mirroring `resolveSlipDayOffer`'s inputs: the course
-/// policy (nil when the course is missing, archived, or has slip days off or
-/// the assignment is a staff-only preview), the student's course-wide
-/// balance, and their unrefunded spends on this assignment.
-///
-/// `extensionDueAt` is the student's raw extension date, passed in because
-/// every caller has already loaded it for the effective-deadline half of the
-/// gate. The caller is always the student viewer — staff bypass reveal gates
-/// before this is consulted.
-func slipDayClaimWindowCeiling(
+/// policy, the student's course-wide balance, and their unrefunded spends on
+/// this assignment. Nil when no claim can be reachable: the course is
+/// missing, archived, or has slip days off; the assignment is a staff-only
+/// preview; or the viewer is not enrolled. The caller is always the student
+/// viewer — staff bypass reveal gates before this is consulted.
+func slipDayClaimState(
     for assignment: APIAssignment,
     user: APIUser,
-    extensionDueAt: Date?,
-    on db: any Database,
-    now: Date = Date()
-) async throws -> Date? {
+    on db: any Database
+) async throws -> SlipDayClaimState? {
     guard let userID = user.id, let assignmentID = assignment.id else { return nil }
     guard assignment.visibility != .preview else { return nil }
     guard
@@ -476,11 +471,8 @@ func slipDayClaimWindowCeiling(
         .filter(\.$refundedAt == nil)
         .count()
 
-    return slipDayClaimWindowCeiling(
+    return SlipDayClaimState(
         policy: policy,
-        dueAt: assignment.dueAt,
         balance: policy.daysPerStudent + adjustment - spentInCourse,
-        spentOnAssignment: spentOnAssignment,
-        hasForeignExtension: extensionDueAt != nil && spentOnAssignment == 0,
-        now: now)
+        spentOnAssignment: spentOnAssignment)
 }

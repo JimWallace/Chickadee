@@ -116,3 +116,39 @@ private func fieldLabel(of line: String) -> String? {
     else { return nil }
     return String(head.split(separator: " ").first ?? head)
 }
+
+/// Applies each suite entry's `FailureDetail` to the raw outcomes a student
+/// reads outside the results page: the JSON results API and the personal
+/// data export (#2662). The rule is the one `renderOutcomeRow` applies — a
+/// failing, non-skipped outcome whose entry is not `.full` — so the same
+/// student cannot read through one door what another door withholds. Staff
+/// callers must not call this: they always read the full text.
+func maskingFailureDetail(
+    of outcomes: [TestOutcome], failureDetailByFilename: [String: FailureDetail]
+) -> [TestOutcome] {
+    guard !failureDetailByFilename.isEmpty else { return outcomes }
+    return outcomes.map { outcome in
+        guard outcome.status != .pass,
+            !parseSkip(shortResult: outcome.shortResult).isSkipped,
+            let detail = failureDetailByFilename[outcome.testName], detail != .full
+        else { return outcome }
+        let masked = maskFailureOutput(
+            shortResult: outcome.shortResult, longResult: outcome.longResult,
+            status: outcome.status, detail: detail)
+        return TestOutcome(
+            testName: outcome.testName, testClass: outcome.testClass, tier: outcome.tier,
+            status: outcome.status, shortResult: masked.shortResult,
+            longResult: masked.longResult, score: outcome.score, points: outcome.points,
+            metric: outcome.metric, composite: outcome.composite,
+            executionTimeMs: outcome.executionTimeMs,
+            memoryUsageBytes: outcome.memoryUsageBytes, attemptNumber: outcome.attemptNumber,
+            isFirstPassSuccess: outcome.isFirstPassSuccess)
+    }
+}
+
+/// A stable fingerprint of a `failureDetailByFilename` map, for a cache key:
+/// relaxing or tightening a setting changes what a student is served, so
+/// it must change the key too.
+func failureDetailFingerprint(_ map: [String: FailureDetail]) -> String {
+    map.sorted { $0.key < $1.key }.map { "\($0.key)=\($0.value.rawValue)" }.joined(separator: ";")
+}
