@@ -942,12 +942,18 @@ because line numbers go out of date.
   - MCP: `resolveMCPCourse`.
   - Uniqueness: `activeCourseCodeIsTaken` and `courseKeysCollide`. Create,
     edit, import and un-archive call them.
+  - Reserved keys: `courseKeyIsReserved`, over `Routes.reservedCourseKeys`
+    (#2666). Create, edit (when it moves the course onto a reserved key),
+    admin clone, new term and import call it. A new door that creates or
+    renames a course calls both checks.
 - **Rules** (`docs/course-terms.md`):
   - Do not add a lookup by code only.
   - On the web, the viewer's own course wins. Then the newest term wins.
   - MCP refuses a write through a code that names more than one course.
   - Every MCP result names `courseKey` and `courseTerm`.
 - **Traps:** key collisions (#2227). Un-archive and the unique index (#1777).
+  A course key that is the first segment of a fixed GET route, which the
+  router prefers to the vanity route `/:courseCode/:assignmentSlug` (#2666).
 
 ### Cloning: `CourseCloneService.clone` and `cloneAssignment`
 
@@ -1163,14 +1169,7 @@ When an issue is closed, remove its item and correct the section above.
    `WebRoutes+IndexRows.swift` is a full inline copy of
    `solutionVisibleToStudent` and `postDeadlineRevealDeadline`. It is
    correct now. It is the most likely place for the next drift.
-3. **Fixed routes and vanity URLs (#2666).** The vanity routes
-   (`VanityURLRoutes.swift`, `/:courseCode/:assignmentSlug`) are registered
-   last, so a fixed route with two segments wins. `/data/:courseKey` and
-   `/submissions/:submissionID` have that shape. `StudentDataRoutes.swift`
-   chose its path so that an assignment slug `data` still works. But a course
-   with the code `data` or `submissions` loses its vanity URLs. No list of
-   reserved course codes exists.
-4. **Course achievements in a clone, a bundle and after a deletion
+3. **Course achievements in a clone, a bundle and after a deletion
    (`docs/achievement-rewards.md`, S8).** `CourseCloneService.clone` and the
    course bundle do not carry `courses.achievements` yet, so a new term
    starts with none. A course achievement names course sections and
