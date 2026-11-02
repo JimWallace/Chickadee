@@ -799,7 +799,10 @@ duplicate.
   `.earned-face-new` and `.earned-face-old` for the crossfade.  It floats
   there, not in the page flow, because it arrives during the celebration and
   must not move the grade band or the results while they animate.  It is not a
-  general toast idiom.  J3 must take this shape too, not a second one.
+  general toast idiom.  J3 must take this shape too, not a second one, and so
+  does a found item (`docs/student-wardrobe.md`, 6c): the layout renders the
+  Quantum Cats ring's toast hidden as `#quantum-cats-found`, and
+  `quantum-cats-egg.js` shows it.
 - **`.wb-shell`** — the assignment workbench (`WorkbenchPage`, NB6, design
   frame 18c).  A `.wb-appbar` (`WorkbenchAppBar`: the `.wb-title` with a ✎
   that opens the Details sheet, the due date and the language in a

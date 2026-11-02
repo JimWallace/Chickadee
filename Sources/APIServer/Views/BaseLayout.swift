@@ -81,6 +81,9 @@ struct BaseLayout<Content: HTML>: HTML {
                     pageContent
                 }
                 .attributes(.class("main-fullbleed"), when: fullBleed)
+                if !embedded, let found = page.currentUser?.foundRingToast {
+                    EarnedToast(page: page, earned: found, id: "quantum-cats-found")
+                }
                 footerScripts
             }
             .attributes(.class("page-fullbleed"), when: fullBleed)
@@ -123,6 +126,10 @@ struct BaseLayout<Content: HTML>: HTML {
         script(.src(page.asset("/app.js"))) {}
         if page.currentUser != nil {
             script(.src(page.asset("/idle-logout.js"))) {}
+            if !embedded {
+                // The Konami code (Public/games/README.md).
+                script(.src(page.asset("/quantum-cats-egg.js"))) {}
+            }
             if inPlaceForms {
                 // Before the multipart interceptor, which defers to it via
                 // `defaultPrevented`.

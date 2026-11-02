@@ -54,8 +54,9 @@ struct DataExportProfile: Codable, Sendable {
     let previousAvatarHandle: String?
     /// Every "Hatch a new bird", oldest first; nil when there is none.
     var avatarHatches: [DataExportAvatarHatch]?
-    /// The wardrobe items the student has earned (docs/student-wardrobe.md,
-    /// W3), oldest first; nil when there is none.
+    /// The wardrobe items the student has earned or found
+    /// (docs/student-wardrobe.md, W3 and 6c), oldest first; nil when there is
+    /// none.
     var wardrobeUnlocks: [DataExportWardrobeUnlock]?
     /// The achievements the student has earned (docs/achievement-rewards.md),
     /// or nil when there are none.
@@ -708,7 +709,7 @@ func dataExportReadme(username: String, generatedAt: Date) -> String {
       behind your generated avatar and its handle, the avatar and handle
       before your last hatch, when you hatched a new one and the
       species each hatch came from and gave you, the wardrobe items
-      you have earned and when, and the achievements you have earned,
+      you have earned or found and when, and the achievements you have earned,
       with the submission that earned each one and when. Passwords are
       stored only as one-way hashes and are never included.
     - `enrollments.json` — the courses you are enrolled in, with each

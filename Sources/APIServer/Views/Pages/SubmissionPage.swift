@@ -57,7 +57,7 @@ struct SubmissionPage: HTML {
                 }
             }
             if let earned = result.bird?.earned {
-                EarnedToast(page: page, earned: earned)
+                EarnedToast(page: page, earned: earned, id: "earned-toast")
             }
             if result.bird?.celebration != nil {
                 script(.src(page.asset("/celebrate-core.js"))) {}

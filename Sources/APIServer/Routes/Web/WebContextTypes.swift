@@ -596,8 +596,8 @@ struct SubmissionEarnedItem: Encodable {
             }
         chip = "New \(kind)"
         name = item.displayName
-        howEarned = "Earned \(item.howEarned)."
-        announcement = "New \(kind) earned: \(item.displayName)."
+        howEarned = "\(item.obtainedVerb) \(item.howEarned)."
+        announcement = "New \(kind) \(item.obtainedVerb.lowercased()): \(item.displayName)."
         field = item.slot.rawValue
         value = item.value
         isRing = item.slot == .border

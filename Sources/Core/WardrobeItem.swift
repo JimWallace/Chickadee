@@ -38,13 +38,17 @@ public enum WardrobeItem: String, CaseIterable, Codable, Sendable {
     case functionRing = "border.function"
     case binaryRing = "border.binary"
     case pulseRing = "border.pulse"
+    /// The Quantum Cats ring, for finding the hidden game. A found item, not
+    /// an earned one: no graded work earns it, so `earned(by:)` never returns
+    /// it. `isFound` items are granted by `WardrobeUnlockStore.grantFound`.
+    case quantumCatsRing = "border.quantumcats"
 
     /// The slot the item belongs to.
     public var slot: AvatarCustomizableSlot {
         switch self {
         case .chirpFace, .slyFace, .dreamyFace: .expression
         case .twoToneRing, .stitchedRing, .lifeRing, .greenLightRing, .ouroborosRing, .functionRing, .binaryRing,
-            .pulseRing:
+            .pulseRing, .quantumCatsRing:
             .border
         }
     }
@@ -63,6 +67,7 @@ public enum WardrobeItem: String, CaseIterable, Codable, Sendable {
         case .functionRing: AvatarBorder.function.rawValue
         case .binaryRing: AvatarBorder.binary.rawValue
         case .pulseRing: AvatarBorder.pulse.rawValue
+        case .quantumCatsRing: AvatarBorder.quantumcats.rawValue
         }
     }
 
@@ -93,7 +98,20 @@ public enum WardrobeItem: String, CaseIterable, Codable, Sendable {
         case .stitchedRing: "for a comeback on three assignments"
         case .lifeRing, .greenLightRing, .ouroborosRing, .functionRing, .binaryRing, .pulseRing:
             "when every test passed on a \(concept?.displayName.lowercased() ?? "concept") lab"
+        case .quantumCatsRing: "by entering the Konami code"
         }
+    }
+
+    /// Whether the item is found rather than earned: granted when a student
+    /// finds something hidden, never by `earned(by:)`.
+    public var isFound: Bool {
+        self == .quantumCatsRing
+    }
+
+    /// The verb a page puts before `howEarned`: "Found" for a found item,
+    /// "Earned" for every other.
+    public var obtainedVerb: String {
+        isFound ? "Found" : "Earned"
     }
 
     /// The concept whose ring this item is; nil for every other item.

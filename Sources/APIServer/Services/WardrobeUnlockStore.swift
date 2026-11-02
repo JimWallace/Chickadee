@@ -99,13 +99,38 @@ enum WardrobeUnlockStore {
     /// again, and the unique index stores an item once when two requests race.
     static func grantEarned(for userID: UUID, on db: any Database) async throws -> Set<WardrobeItem> {
         let stored = try await unlocked(for: userID, on: db)
-        guard stored.count < WardrobeItem.allCases.count else { return stored }
+        // A found item is never earned, so a student who has earned every
+        // earnable item skips the progress queries, found items or not.
+        guard !stored.isSuperset(of: WardrobeItem.allCases.filter { !$0.isFound }) else { return stored }
         let missing = WardrobeItem.earned(by: try await progress(for: userID, on: db)).subtracting(stored)
         guard !missing.isEmpty else { return stored }
         for item in WardrobeItem.allCases where missing.contains(item) {
             try? await APIWardrobeUnlock(userID: userID, item: item).save(on: db)
         }
         return try await unlocked(for: userID, on: db)
+    }
+
+    /// Stores the found item `item` for `userID` (docs/student-wardrobe.md,
+    /// "Found items"). Returns true when this call stored it, and false when
+    /// it was already stored, so the page tells a student once. Refuses an
+    /// earned item: only graded work grants one of those.
+    static func grantFound(
+        _ item: WardrobeItem, for userID: UUID, on db: any Database
+    ) async throws -> Bool {
+        guard item.isFound else {
+            throw AppError.invalidParameter(name: "item", reason: "\(item.rawValue) is earned, not found.")
+        }
+        guard try await !unlocked(for: userID, on: db).contains(item) else { return false }
+        do {
+            try await APIWardrobeUnlock(userID: userID, item: item).save(on: db)
+            return true
+        } catch {
+            // The unique index stores the item once when two requests race:
+            // the loser's write fails, and the item is stored all the same.
+            // Any other failure is a real one.
+            guard try await unlocked(for: userID, on: db).contains(item) else { throw error }
+            return false
+        }
     }
 
     /// Grants as `grantEarned` does, and returns only the items that this
@@ -117,6 +142,8 @@ enum WardrobeUnlockStore {
     static func grantNew(for userID: UUID, on db: any Database) async throws -> [WardrobeItem] {
         let stored = try await unlocked(for: userID, on: db)
         let granted = try await grantEarned(for: userID, on: db).subtracting(stored)
-        return WardrobeItem.allCases.filter(granted.contains)
+        // A found item stored by a concurrent request is not this grant's to
+        // show: the found item's own toast said so.
+        return WardrobeItem.allCases.filter { granted.contains($0) && !$0.isFound }
     }
 }

@@ -53,6 +53,11 @@ struct CurrentUserContext: Encodable {
     /// no bird is stored yet. Built from the spec `navAvatar` draws, so the
     /// tab and the account menu cannot disagree. It never wears the staff ring.
     let tabIconKey: String?
+    /// The Earned toast for the Quantum Cats ring, wearing the user's own
+    /// bird, which the layout renders hidden for the Konami code to show
+    /// (docs/student-wardrobe.md, "Found items"). Nil for course staff, who
+    /// wear the staff ring and cannot choose one, and before a bird is stored.
+    let foundRingToast: SubmissionEarnedItem?
 
     init(user: APIUser, activeCourse: CourseContext? = nil, enrolledCourses: [CourseContext] = []) {
         let normalizedPreferredName = user.preferredName?
@@ -96,5 +101,7 @@ struct CurrentUserContext: Encodable {
             AvatarPresentation(for: $0, size: .small, accessibility: .decorative, isStaff: teaches)
         }
         self.tabIconKey = bird.map(AvatarIconKey.encode)
+        self.foundRingToast =
+            teaches ? nil : bird.map { SubmissionEarnedItem(.quantumCatsRing, wearing: $0, isStaff: false) }
     }
 }

@@ -1044,6 +1044,39 @@ because line numbers go out of date.
   - Only course staff (TA and up) can find the student for a handle.
   - A handle never comes from identity data.
 
+### Wardrobe unlocks: `wardrobe_unlocks`
+
+- **Writers:**
+  - `WardrobeUnlockStore.grantEarned` and `grantNew`, when the account page or
+    a result page loads. They store what graded work earns.
+  - `WardrobeUnlockStore.grantFound`, from `POST /account/wardrobe/found`
+    (`Routes/Web/AccountRoutes+Found.swift`). The Konami script
+    `Public/quantum-cats-egg.js` posts it.
+- **Readers:**
+  - The "Your bird" card (`AvatarPickerContext`) and the avatar save
+    chokepoint (`AvatarCustomization.isOpen`), which offer and accept only
+    stored items.
+  - The result page's Earned toast, which shows what `grantNew` stored.
+  - The data export.
+  - Indirectly, every page that draws a bird: a worn ring shows on
+    leaderboards and rosters (`AvatarPresentation`).
+- **Also reads `WardrobeItem.allCases`:** the course Achievements tab's
+  "Built in" list (`BuiltInRuleRow`), found items included.
+- **Rules** (`docs/student-wardrobe.md`, 6b and 6c):
+  - A stored unlock is never taken back.
+  - `earned(by:)` never returns a found item, and `grantFound` refuses an
+    earned one. `grantEarned` counts only earnable items when it decides to
+    skip the progress queries, and `grantNew` never returns a found item. A
+    new found item needs no change to the grading path.
+  - Course staff wear the staff ring: no surface offers them a ring to wear.
+    The result page's toast skips ring items for them, and the layout
+    renders them no found-ring toast (`CurrentUserContext.foundRingToast`).
+  - Every signed-in page with site chrome carries the hidden found-ring
+    toast (`#quantum-cats-found`) and `quantum-cats-egg.js`. A page that
+    also shows the result page's Earned toast has two, with distinct ids.
+  - The unique index on user and item stores an item once when two requests
+    race.
+
 ### Student data that classmates see
 
 - **Features:** the leaderboard, the class composite, collaborative

@@ -193,6 +193,11 @@ public enum AvatarBorder: String, CaseIterable, Codable, Sendable {
     /// A solid band with one ECG trace (P, QRS, T) at the lower right.
     /// Earned on a health data lab.
     case pulse
+    /// A purple band with an orbit and three electrons, and the Quantum Cats
+    /// cat at the lower right inside an orbit of its own. Found, not earned:
+    /// it opens to a student who finds the hidden game
+    /// (docs/student-wardrobe.md, "Found items").
+    case quantumcats
 
     /// The accent this ring is drawn in; nil for `none` and the patterned rings.
     public var accent: AvatarAccent? { AvatarAccent(rawValue: rawValue) }
@@ -215,6 +220,7 @@ public enum AvatarBorder: String, CaseIterable, Codable, Sendable {
         case .function: .function
         case .binary: .binary
         case .pulse: .pulse
+        case .quantumcats: .quantumcats
         }
     }
 
@@ -238,6 +244,7 @@ public enum AvatarBorder: String, CaseIterable, Codable, Sendable {
         case .twotone: return "Two-tone"
         case .lifering: return "Life ring"
         case .greenlight: return "Green light"
+        case .quantumcats: return "Quantum Cats"
         default: return rawValue.capitalized
         }
     }
@@ -252,6 +259,7 @@ public enum AvatarBorder: String, CaseIterable, Codable, Sendable {
         case .lifering, .greenlight, .ouroboros, .function, .binary, .pulse: .earned
         case .spectrum: .special
         case .snowflake, .blossom, .maple: .seasonal
+        case .quantumcats: .found
         }
     }
 }
@@ -267,6 +275,9 @@ public enum AvatarAvailability: String, CaseIterable, Codable, Sendable {
     /// Open to every student during one term of the year (`AvatarBorder.season`).
     /// A student who chose it keeps it after the term ends.
     case seasonal
+    /// Unlocked by finding something hidden in Chickadee, not by work. Like an
+    /// earned item, it is not shown until it is unlocked.
+    case found
 }
 
 /// The drawn ring: one `<symbol>` each in the sprite (`av-ring-<rawValue>`),
@@ -280,6 +291,7 @@ public enum AvatarRing: String, CaseIterable, Sendable {
     case none, solid, rainbow, spectrum, twotone, stitched, staff
     case snowflake, blossom, maple
     case lifering, greenlight, ouroboros, function, binary, pulse
+    case quantumcats
 
     /// Where the result page's Earned toast starts to draw the ring in,
     /// clockwise from the top: the ring art's own start. The snake of the
