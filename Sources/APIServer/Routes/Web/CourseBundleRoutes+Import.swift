@@ -243,6 +243,14 @@ extension CourseBundleRoutes {
                         Archive it first, then re-import.
                         """)
             }
+            if courseKeyIsReserved(
+                code: manifest.course.code, term: bundledCourseTerm(manifest.course), routes: app.routes)
+            {
+                throw AppError.conflict(
+                    reason: """
+                        The course code "\(manifest.course.code)" is reserved. \(CourseFormError.reservedCodeMessage)
+                        """)
+            }
 
             var t = ImportTally(
                 courseID: UUID(),
