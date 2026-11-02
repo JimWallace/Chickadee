@@ -184,7 +184,7 @@ jobs:
         run: |
           args=()
           while read -r f; do [ -n "$f" ] && args+=(--file "$f"); done < /tmp/mutate-files.txt
-          if ! scripts/mutation-run.sh --muter-src /tmp/muter-src --out mutation-report "${args[@]}"; then
+          if ! bash scripts/mutation-run.sh --muter-src /tmp/muter-src --out mutation-report "${args[@]}"; then
             echo "::warning::Mutation produced no measurable outcome for this diff — either it contains nothing mutable, or the tooling failed. Read the step summary; do not read a score from this run. This is a report, not a gate."
           fi
 

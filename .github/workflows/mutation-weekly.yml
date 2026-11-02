@@ -159,7 +159,7 @@ jobs:
 
       - name: Run shard ${{ matrix.shard }}
         run: |
-          scripts/mutation-run.sh \
+          bash scripts/mutation-run.sh \
             --shard ${{ matrix.shard }} \
             --of ${{ needs.plan.outputs.count }} \
             --muter-src /tmp/muter-src \
