@@ -88,6 +88,9 @@ extension CourseAdminRoutes {
         if try await activeCourseCodeIsTaken(code, term: term, excluding: nil, on: req.db) {
             return req.redirect(to: "/instructor/new-term?error=\(CourseCloneFormError.codeTaken.rawValue)")
         }
+        if courseKeyIsReserved(code: code, term: term, routes: req.application.routes) {
+            return req.redirect(to: "/instructor/new-term?error=\(CourseCloneFormError.codeReserved.rawValue)")
+        }
 
         let userID = try user.requireID()
         let directories = AuthoringDirectories(
