@@ -49,6 +49,11 @@ import Testing
         return url
     }
 
+    // Linux only: the work root lists only the job's own directory, and
+    // /tmp, /var/tmp, HOME and the job's own writes are private and discarded
+    // (#2251). Those come from mount namespaces; macOS `sandbox-exec` can only
+    // allow or deny paths, so it has no private copy to offer.
+    #if os(Linux)
     @Test(.requiresSandbox) func aSiblingJobDirectoryIsInvisible() async throws {
         let script = try writeScript(
             """
@@ -64,6 +69,7 @@ import Testing
         let listed = output.stdout.split(separator: "\n").map(String.init)
         #expect(listed == [ownJob.lastPathComponent], "work root listing: \(listed)")
     }
+    #endif
 
     @Test(.requiresSandbox) func aDirectoryTheEnvironmentNamesIsVisibleAndTheRestOfItsJobIsNot() async throws {
         let opponent = otherJob.appendingPathComponent("opponent", isDirectory: true)
@@ -82,6 +88,8 @@ import Testing
         #expect(!output.stdout.contains("secret visible"))
     }
 
+    // Linux only, for the reason above.
+    #if os(Linux)
     @Test(.requiresSandbox) func theOwnDirectoryIsWritableAndKeepsItsPath() async throws {
         let script = try writeScript(
             """
@@ -180,6 +188,7 @@ import Testing
         #expect(output.exitCode == 0, "stderr: \(output.stderr)")
         #expect(output.stdout.contains("made \(tmpdir.path)/"))
     }
+    #endif
 
     @Test(.requiresSandbox) func anotherSuiteScriptIsHiddenAndTheOwnScriptStillRuns() async throws {
         let other = ownJob.appendingPathComponent("secrettest_other.sh")
@@ -221,5 +230,14 @@ import Testing
         #expect(visible.workRoot.standardizedFileURL == workRoot.standardizedFileURL)
         #expect(
             visible.directories.map(\.path) == [ownJob.standardizedFileURL.path, opponent.standardizedFileURL.path])
+    }
+
+    /// A variable that names the work root itself, as macOS's `TMPDIR` does
+    /// when the runner works in the temporary directory, must not make every
+    /// job visible. The trailing `/` is what let it pass the prefix check.
+    @Test func aVariableNamingTheWorkRootItselfDoesNotOpenIt() {
+        let visible = SandboxVisibleDirectories(
+            workDir: ownJob, environment: ["TMPDIR": workRoot.path + "/", "ROOT": workRoot.path])
+        #expect(visible.directories.map(\.path) == [ownJob.standardizedFileURL.path])
     }
 }

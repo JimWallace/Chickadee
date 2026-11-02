@@ -328,7 +328,14 @@ private final class HandshakePipe: Sendable {
         // If the pipe cannot be made, both ends are -1.
         let ends = try? FileDescriptor.pipe()
         let descriptors = (ends?.readEnd.rawValue ?? -1, ends?.writeEnd.rawValue ?? -1)
-        for descriptor in [descriptors.0, descriptors.1] {
+        // The write end stays inheritable on Darwin, as in `ScriptCapture`: a
+        // `createSession` launch there cannot dup2 a close-on-exec descriptor.
+        #if canImport(Darwin)
+        let closeOnExec = [descriptors.0]
+        #else
+        let closeOnExec = [descriptors.0, descriptors.1]
+        #endif
+        for descriptor in closeOnExec {
             let flags = fcntl(descriptor, F_GETFD)
             if flags != -1 { _ = fcntl(descriptor, F_SETFD, flags | FD_CLOEXEC) }
         }

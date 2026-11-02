@@ -434,6 +434,9 @@ struct SandboxVisibleDirectories {
             guard value.hasPrefix(rootPrefix) else { continue }
             guard let status = try? Stat(FilePath(value)), status.type == .directory else { continue }
             let url = URL(fileURLWithPath: value, isDirectory: true).standardizedFileURL
+            // A value naming the work root itself (macOS's `TMPDIR` ends in
+            // `/`, so it passes the prefix check) would make every job visible.
+            guard url.path != root.path else { continue }
             if !directories.contains(url) { directories.append(url) }
         }
         self.workRoot = root

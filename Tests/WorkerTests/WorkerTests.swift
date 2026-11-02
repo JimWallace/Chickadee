@@ -332,9 +332,12 @@ import Testing
         let runner = SandboxedScriptRunner()
         let output = await runScriptRobustly(runner, script: script, workDir: tmpDir, timeLimitSeconds: 60)
         #expect(output.exitCode == 0, "Sandboxed script should be able to write files in the working directory")
-        // The write is discarded when the script ends (#2251).
+        // The write is discarded when the script ends (#2251). Linux only: the
+        // macOS sandbox has no private overlay, so its writes are kept.
+        #if os(Linux)
         let markerPath = tmpDir.appendingPathComponent("sandboxmarker.txt").path
         #expect(!FileManager.default.fileExists(atPath: markerPath))
+        #endif
     }
 
     // MARK: - SandboxedScriptRunner: network isolation

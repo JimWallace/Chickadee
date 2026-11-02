@@ -32,6 +32,8 @@ import Testing
         return await !isListening(port)
     }
 
+    // Linux only: the census reads `/proc`, which macOS does not have.
+    #if os(Linux)
     /// The socket descriptors held by each child of this process serving
     /// `directory`, keyed by pid. An idle server needs exactly one: its
     /// listening socket. The directory is unique to the calling test, so other
@@ -87,6 +89,7 @@ import Testing
             #expect(count == 1, "server \(pid) holds \(count) sockets")
         }
     }
+    #endif
 
     @Test func aStoppedServerStopsListening() async throws {
         let directory = FileManager.default.temporaryDirectory

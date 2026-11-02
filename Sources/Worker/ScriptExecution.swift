@@ -376,7 +376,19 @@ final class ScriptCapture: Sendable {
         // If the pipe cannot be made, both ends are -1.
         let ends = try? FileDescriptor.pipe()
         let descriptors = (ends?.readEnd.rawValue ?? -1, ends?.writeEnd.rawValue ?? -1)
-        for descriptor in [descriptors.0, descriptors.1] {
+        // On Darwin the write end stays inheritable. `createSession` sends
+        // Subprocess down its fork-then-`posix_spawn(SETEXEC)` path, and there
+        // a dup2 from a close-on-exec descriptor fails with EBADF, so no
+        // script would launch. Darwin does not need the flag for the leak
+        // above: Subprocess spawns every child with
+        // `POSIX_SPAWN_CLOEXEC_DEFAULT`, so no other child inherits a
+        // descriptor it was not handed.
+        #if canImport(Darwin)
+        let closeOnExec = [descriptors.0]
+        #else
+        let closeOnExec = [descriptors.0, descriptors.1]
+        #endif
+        for descriptor in closeOnExec {
             let flags = fcntl(descriptor, F_GETFD)
             if flags != -1 { _ = fcntl(descriptor, F_SETFD, flags | FD_CLOEXEC) }
         }
