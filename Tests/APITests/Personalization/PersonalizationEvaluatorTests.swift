@@ -258,7 +258,7 @@ import Testing
             for index in 0..<6 {
                 group.addTask {
                     try? await PersonalizationEvaluator.evaluate(
-                        seedHex: String(format: "%064x", index + 1),
+                        seedHex: String(cFormat: "%064x", index + 1),
                         staticVariables: [],
                         expressions: [
                             PersonalizationExpression(name: "v", expression: "seed % 100")

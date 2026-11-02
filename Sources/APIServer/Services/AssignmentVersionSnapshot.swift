@@ -156,7 +156,7 @@ enum AssignmentVersionSnapshotBuilder {
         else { return [:] }
 
         var map: [String: String] = [:]
-        for case let url as URL in walker {
+        for case let url as URL in walker.allObjects {
             // Directories and symlinks carry no content worth versioning, and a
             // symlink's target is either already captured as its own entry or
             // points outside the snapshot entirely.

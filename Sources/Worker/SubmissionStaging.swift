@@ -42,7 +42,7 @@ func directorySizeBytes(at directory: URL) -> Int? {
         return nil
     }
     var total: Int = 0
-    for case let url as URL in enumerator {
+    for case let url as URL in enumerator.allObjects {
         guard let values = try? url.resourceValues(forKeys: [.isRegularFileKey, .fileSizeKey]),
             values.isRegularFile == true,
             let size = values.fileSize
@@ -117,7 +117,7 @@ func mergeDirectoryContents(
     }
 
     var skipped: [String] = []
-    for case let sourceURL as URL in enumerator {
+    for case let sourceURL as URL in enumerator.allObjects {
         let values = try sourceURL.resourceValues(forKeys: [.isRegularFileKey])
         guard values.isRegularFile == true else { continue }
 
@@ -406,7 +406,7 @@ func submissionNormalization(
         includingPropertiesForKeys: [.isRegularFileKey],
         options: [.skipsHiddenFiles]
     ) {
-        for case let fileURL as URL in enumerator {
+        for case let fileURL as URL in enumerator.allObjects {
             let values = try? fileURL.resourceValues(forKeys: [.isRegularFileKey])
             guard values?.isRegularFile == true else { continue }
             if pythonSubmissionExtensions.contains(fileURL.pathExtension.lowercased()) {

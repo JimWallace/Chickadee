@@ -34,9 +34,14 @@ import ChickadeeTestSupport
 import Foundation
 import Subprocess
 import Synchronization
-import SystemPackage
 
 @testable import chickadee_runner
+
+#if canImport(System)
+import System
+#else
+import SystemPackage
+#endif
 
 #if canImport(Glibc)
 import Glibc

@@ -64,7 +64,7 @@ extension DatasetDiagnostics {
     /// diagnostics here, multi-variant validation) exercises the same ones.
     public static func preflightSeed(_ index: Int) -> String {
         (0..<4).map { chunk in
-            String(format: "%016llx", fnv1a64("preflight|\(index)|\(chunk)"))
+            String(cFormat: "%016llx", fnv1a64("preflight|\(index)|\(chunk)"))
         }.joined()
     }
 

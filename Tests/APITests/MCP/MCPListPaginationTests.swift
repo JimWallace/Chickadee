@@ -69,7 +69,7 @@ import Testing
     /// size of 100.  Zero-padded names keep the registry's name-sort stable.
     private let dispatcher = MCPDispatcher(
         serverInfo: MCPServerInfo(name: "Chickadee MCP", version: "test"),
-        tools: ToolRegistry((1...150).map { stubTool(named: String(format: "stub_%03d", $0)) })
+        tools: ToolRegistry((1...150).map { stubTool(named: String(cFormat: "stub_%03d", $0)) })
     )
 
     private func toolsList(params: JSONValue?) async throws -> JSONRPCResponse {

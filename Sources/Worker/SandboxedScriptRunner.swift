@@ -703,9 +703,9 @@ private func macOSSandboxProfile(visible: SandboxVisibleDirectories, hiding hidd
     // not traverse /var → /private/var, so we call POSIX realpath(3) directly.
     func realPath(_ url: URL) -> String {
         url.path.withCString { ptr in
-            guard let buf = Darwin.realpath(ptr, nil) else { return url.path }
-            defer { free(buf) }
-            return String(cString: buf)
+            guard let buf = unsafe Darwin.realpath(ptr, nil) else { return url.path }
+            defer { unsafe free(buf) }
+            return unsafe String(cString: buf)
         }
     }
     let visibleRules = visible.directories

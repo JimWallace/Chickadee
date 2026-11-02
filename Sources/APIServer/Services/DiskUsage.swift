@@ -6,6 +6,7 @@
 // box.  The directory walks are blocking, so callers offload them to the
 // thread pool (see AdminRoutes.dashboard).
 
+import Core
 import Fluent
 import Foundation
 import SQLKit
@@ -26,7 +27,7 @@ func directorySizeBytes(at path: String) -> Int {
         return 0
     }
     var total = 0
-    for case let fileURL as URL in enumerator {
+    for case let fileURL as URL in enumerator.allObjects {
         guard let values = try? fileURL.resourceValues(forKeys: [.isRegularFileKey, .fileSizeKey]),
             values.isRegularFile == true,
             let size = values.fileSize
@@ -111,5 +112,5 @@ func humanReadableBytes(_ bytes: Int) -> String {
     if unit == 0 {
         return "\(bytes) B"
     }
-    return String(format: "%.1f %@", value, units[unit])
+    return String(cFormat: "%.1f %@", value, units[unit])
 }

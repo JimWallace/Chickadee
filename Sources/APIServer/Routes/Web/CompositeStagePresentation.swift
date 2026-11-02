@@ -73,7 +73,7 @@ struct CompositeStagePresentation: Encodable {
 
     /// The custom properties that size the frame and the cells.
     var styleProperties: String {
-        let aspect = String(format: "%.4f", aspectRatio)
+        let aspect = String(cFormat: "%.4f", aspectRatio)
         return "--composite-cols: \(cellColumns); --composite-rows: \(cellRows); --composite-aspect: \(aspect)"
     }
 

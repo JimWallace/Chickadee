@@ -21,7 +21,7 @@ import Testing
             throw IssueRecorded("Cannot list \(sources.path)")
         }
         var counts: [String: Int] = [:]
-        for case let file as URL in enumerator where file.pathExtension == "swift" {
+        for case let file as URL in enumerator.allObjects where file.pathExtension == "swift" {
             let lines = try String(contentsOf: file, encoding: .utf8).components(separatedBy: "\n")
             let sites = lines.filter { line in
                 !line.trimmingCharacters(in: .whitespaces).hasPrefix("//") && line.contains("?? .python")

@@ -115,7 +115,7 @@ final class ZipArchiverTests {
         // comfortably past the 64 KB buffer that triggered the hang.
         let fileCount = 3000
         for i in 0..<fileCount {
-            let name = String(format: "submissions_sub_%08d_results_%d.json", i, i)
+            let name = String(cFormat: "submissions_sub_%08d_results_%d.json", i, i)
             try Data("{}\n".utf8).write(to: srcDir.appendingPathComponent(name))
         }
 

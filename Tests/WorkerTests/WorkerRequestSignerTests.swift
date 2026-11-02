@@ -1,4 +1,5 @@
 import ChickadeeTestSupport
+import Core
 import Crypto
 import Foundation
 import Testing
@@ -61,6 +62,6 @@ import FoundationNetworking
 
 private extension Data {
     func hexEncodedString() -> String {
-        map { String(format: "%02x", $0) }.joined()
+        map { String(cFormat: "%02x", $0) }.joined()
     }
 }

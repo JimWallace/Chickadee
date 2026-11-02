@@ -30,10 +30,10 @@ let sourceSettings: [SwiftSetting] =
 let package = Package(
     name: "Chickadee",
     platforms: [
-        // Vapor 5 requires macOS 26.2, so the floor is there already and the
-        // move does not change it (docs/vapor-5-migration.md). Linux is not
-        // affected.
-        .macOS("26.2")
+        // Vapor 5 requires macOS 26.2 (docs/vapor-5-migration.md). The floor is
+        // 27.0 because the worker uses `withTaskCancellationShield`, which the
+        // Darwin standard library ships from macOS 27. Linux is not affected.
+        .macOS("27.0")
     ],
     products: [
         // Exposed so the wasm bridge sub-package (wasm/) can depend on the pure

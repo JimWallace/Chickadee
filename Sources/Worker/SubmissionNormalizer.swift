@@ -406,7 +406,7 @@ struct SubmissionNormalizer {
         }
 
         var files: [URL] = []
-        for case let fileURL as URL in enumerator {
+        for case let fileURL as URL in enumerator.allObjects {
             let values = try? fileURL.resourceValues(forKeys: [.isRegularFileKey])
             if values?.isRegularFile == true {
                 files.append(fileURL)

@@ -18,7 +18,12 @@
 import Foundation
 import Subprocess
 import Synchronization
+
+#if canImport(System)
+import System
+#else
 import SystemPackage
+#endif
 
 final class SupervisedProcess: Sendable {
     /// How the child ended: its status, or the error that kept it from

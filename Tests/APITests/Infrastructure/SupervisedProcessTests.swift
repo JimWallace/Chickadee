@@ -6,10 +6,15 @@
 
 import Foundation
 import Subprocess
-import SystemPackage
 import Testing
 
 @testable import APIServer
+
+#if canImport(System)
+import System
+#else
+import SystemPackage
+#endif
 
 @Suite(.timeLimit(.minutes(1))) final class SupervisedProcessTests {
     private let directory: URL

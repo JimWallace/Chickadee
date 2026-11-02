@@ -731,9 +731,9 @@ func buildStandingsBoard(
 /// fraction keeps up to three decimals with no trailing zeros ("0.75").
 func formatLeaderboardMetric(_ metric: Double) -> String {
     if metric == metric.rounded(), abs(metric) < 1e15 {
-        return String(format: "%.0f", metric)
+        return String(cFormat: "%.0f", metric)
     }
-    var text = String(format: "%.3f", metric)
+    var text = String(cFormat: "%.3f", metric)
     while text.hasSuffix("0") { text.removeLast() }
     if text.hasSuffix(".") { text.removeLast() }
     return text
