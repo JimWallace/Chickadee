@@ -71,6 +71,9 @@ extension AdminRoutes {
         if try await activeCourseCodeIsTaken(code, term: term, excluding: nil, on: req.db) {
             return req.redirect(to: "/admin/courses/new?error=\(CourseFormError.codeTaken.rawValue)")
         }
+        if courseKeyIsReserved(code: code, term: term, routes: req.application.routes) {
+            return req.redirect(to: "/admin/courses/new?error=\(CourseFormError.codeReserved.rawValue)")
+        }
         // The course and its instructor are one transaction: a refused
         // instructor leaves no course without one.
         let allowPlaceholder = req.application.staffPlaceholderAllowed
@@ -294,6 +297,9 @@ extension AdminRoutes {
         }
         if try await activeCourseCodeIsTaken(code, term: term, excluding: nil, on: req.db) {
             return req.redirect(to: "\(back)?error=\(CourseCloneFormError.codeTaken.rawValue)#clone-course")
+        }
+        if courseKeyIsReserved(code: code, term: term, routes: req.application.routes) {
+            return req.redirect(to: "\(back)?error=\(CourseCloneFormError.codeReserved.rawValue)#clone-course")
         }
         let result = try await cloneCourse(source, code: code, name: name, term: term, req: req)
         return req.redirect(to: "/admin/courses/\(try result.course.requireID().uuidString)")
@@ -519,6 +525,15 @@ extension AdminRoutes {
             try await activeCourseCodeIsTaken(code, term: term, excluding: courseID, on: req.db)
         {
             return req.redirect(to: "/admin/courses/\(idString)?error=\(CourseFormError.codeTaken.rawValue)")
+        }
+        // A code or term change may not move the course onto a fixed route's
+        // first segment (#2666). A course that already holds a reserved code
+        // or key keeps it, and can still be renamed or given a term.
+        let routes = req.application.routes
+        if courseKeyIsReserved(code: code, term: term, routes: routes),
+            !courseKeyIsReserved(code: course.code, term: course.term, routes: routes)
+        {
+            return req.redirect(to: "/admin/courses/\(idString)?error=\(CourseFormError.codeReserved.rawValue)")
         }
 
         course.term = term
