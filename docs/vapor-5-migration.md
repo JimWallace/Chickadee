@@ -1,13 +1,30 @@
 # Vapor 5 migration
 
-Chickadee runs on Vapor 4. Vapor 5 is in beta (`5.0.0-beta.4`, October 2026).
-This file records what Chickadee did on Vapor 4 to make the move small, and
-what is left for the move itself. Update it when a step lands or when a new
-beta changes an API listed here.
+Chickadee runs on Vapor 4. Vapor 5 is in beta. `5.0.0-beta.4` is still the
+latest tag on 2026-11-02, and there is no release candidate. This file records
+what Chickadee did on Vapor 4 to make the move small, and what is left for the
+move itself. Update it when a step lands or when a new beta changes an API
+listed here.
 
 The Vapor team advises against the beta for production. Do not start the move
 until Fluent, JWT and response compression support Vapor 5 and a migration guide
 exists.
+
+### Upstream status (checked 2026-11-02)
+
+Recheck these before the move, and update the date when you do.
+
+| Package | State | Blocks the move |
+|---|---|---|
+| `vapor/vapor` | Latest tag `5.0.0-beta.4`. `main` is active (commits to late October). | Yes, until a final release. |
+| Response compression | Only on the `compression` branch of `vapor/vapor` (last commit 1 October), not merged. | Yes. |
+| `vapor/fluent`, `vapor/fluent-kit` | `fluent` has no Vapor 5 branch. `fluent-kit` has a `fluent-5` branch whose last commit is from April 2025. | Yes. This is the long pole: `req.db` and every model wait on it. |
+| `vapor/jwt` | Only `main` and `v4`. Its 5.x releases are for Vapor 4. | Yes. |
+| `vapor/leaf` | No Vapor 5 support. | No. Every page is an Elementary view (`docs/elementary-spike.md`). |
+
+A spike branch on the beta is possible without Fluent, but only for the parts
+that do not touch the database: the test seam, the middleware,
+`HTMLResponse` and `PageRequestContext`, and a route group with no `req.db`.
 
 ---
 
@@ -43,7 +60,7 @@ Each step is safe on Vapor 4 and does not change behaviour.
 | Blocking work uses no event loop | `Utilities/BlockingWork.swift` | `runBlocking` calls `NIOThreadPool.singleton`, the pool Vapor 4 uses. No change. |
 | The support-file client uses no event loop | `MCP/Tools/SupportFileURLFetcher.swift` | No change. |
 | GitHub calls need no `Request` | `GitHub/GitHubCallScope.swift` | The background commit-status post uses `BackgroundGitHubCallScope`. The protocol is the seam for a request without `application`. Its database logs use the application logger, not the request logger. |
-| Lifecycle hooks are async | `Services/PeriodicSweepMonitor.swift`, `Services/ServerHealthAlertService.swift` | Rename `didBootAsync` to `didBoot` and `shutdownAsync` to `shutdown`. The synchronous `boot()` does not run async hooks, so boot with `execute()` or `asyncBoot()`. |
+| Lifecycle hooks are async | The four handlers: `PeriodicSweepLifecycleHandler` (`Services/PeriodicSweepMonitor.swift`), `ServerHealthAlertLifecycleHandler` (`Services/ServerHealthAlertService.swift`), `DataExportDrainLifecycleHandler` (`Services/DataExportService.swift`) and `BackgroundWorkDrainLifecycleHandler` (`Services/BackgroundWork.swift`) | Rename `didBootAsync` to `didBoot` and `shutdownAsync` to `shutdown`. The two drain handlers rely on Vapor running shutdown hooks in reverse registration order; check that Vapor 5 keeps that order. The synchronous `boot()` does not run async hooks, so boot with `execute()` or `asyncBoot()`. |
 | One request-body decode | `Helpers/Request+DecodeContent.swift` | Add `await` inside this one helper. Every call site already awaits it. |
 | One request-body collect | `Helpers/Request+DecodeContent.swift` (`collectBody`) | Delete it: Vapor 5 decodes from the stream. Its one caller is the CSRF token read, which also reads `_csrf` through `decodeContent`, not `content.get(_:at:)`. |
 | Configuration reads through Swift Configuration | `Configuration/EnvironmentSource.swift` | `EnvironmentSource.get` reads through a `ConfigReader` over an `EnvironmentVariablesProvider`, the type Vapor 5 takes. The dotted key `oidc.auth.server` reads `OIDC_AUTH_SERVER`, so every variable name is the same. The library also reads one optional variable of its own, `CONFIG_ACCESS_LOG_FILE`, which turns on an access log; Vapor 5 brings the same behaviour. |
@@ -51,7 +68,7 @@ Each step is safe on Vapor 4 and does not change behaviour.
 | Poll fragments take a `String` | `Routes/Web/PollFragmentResponse.swift` | No `ByteBuffer` in its API. |
 | One test seam | `Tests/APITests/TestRequests.swift` | Re-implement its names on the Vapor 5 `TestClient` (see "The tests"). |
 | Poll fragments in the tests | `PollFragmentResponseTests`, `PollFragmentCSRFTests` | They pass a `String`. |
-| The macOS floor | `Package.swift` | It is `.macOS("26.2")`, the Vapor 5 minimum. No change. |
+| The macOS floor | `Package.swift` | It is `.macOS("27.0")`, for the worker's `withTaskCancellationShield`. That is above 26.2, the Vapor 5 minimum. No change. |
 | A guard keeps it so | `scripts/check-vapor5-readiness.sh` | `format-lint` fails on new event-loop API, on a wait on a future (`).get()`, `body.collect(max:)`) outside two named files, on `content.decode` or `content.get` outside the two helpers, and on a test that uses VaporTesting or builds a `Request` outside the seam. |
 
 ---
@@ -60,11 +77,13 @@ Each step is safe on Vapor 4 and does not change behaviour.
 
 ### Waits for Vapor 5 and Fluent 5
 
-- **`req.application` (about 330 uses), `req.logger` (about 130) and
-  `req.storage` (12).** Wait for the stable `Request` API. `GitHubCallScope`
+Counts are `grep` matches in `Sources/` on 2026-11-02.
+
+- **`req.application` (about 290 uses) and `req.logger` (about 130).** Wait
+  for the stable `Request` API. `req.storage` has no uses left. `GitHubCallScope`
   shows one way to carry the application and the database without a request.
-- **`req.db` (about 880 uses) and the Fluent models.** Wait for Fluent 5.
-- **Headers and status codes** (about 150 uses of `HTTPHeaders`,
+- **`req.db` (about 990 uses) and the Fluent models.** Wait for Fluent 5.
+- **Headers and status codes** (about 160 uses of `HTTPHeaders`,
   `replaceOrAdd` and `first(name:)`). This change is mechanical.
 - **Configuration.** Pass a `ConfigReader` with the same
   `EnvironmentVariablesProvider` to the Vapor 5 `Application`, so Vapor and
@@ -84,7 +103,8 @@ a change now would be done again at the move.
   `Routes/Web/DraftAssignmentRoutes+NewAssignment.swift`. Vapor 5 keeps
   `ByteBuffer` in multipart.
 - The uploaded-bundle body: `Routes/Web/CourseBundleRoutes+Import.swift`.
-- Vapor client requests: `LTI/LTIServiceClient.swift`.
+- Vapor client requests: `LTI/LTIServiceClient.swift`,
+  `BrightSpace/BrightSpaceAPIClient.swift`.
 - AsyncHTTPClient bodies and timeouts (`NIOCore`): `GitHub/GitHubRepoClient.swift`,
   `GitHub/GitHubTransport.swift`, `MCP/Tools/SupportFileURLFetcher.swift`,
   `Routes/Web/AuthRoutes.swift`. Vapor 5 still uses AsyncHTTPClient.
@@ -109,8 +129,13 @@ Left for the move:
 
 - Chickadee's own `withApp(_:_:)` and the Vapor 5 `withApp(configure:_:)` have
   different signatures, so they do not collide. Keep both names.
-- Three Vapor `Client` stand-ins (`BrightSpaceVerbDispatchTests`,
-  `GitHub/ScriptedGitHubClient`, `GitHub/GitHubTransportTests`) and two Fluent
-  `Database` stand-ins (`CourseCloneCleanupTests`,
-  `CourseBundleImportCleanupTests`) return futures. They implement the Vapor 4
-  and Fluent 4 protocols, so they change with those protocols.
+- Ten test stand-ins return futures, because they implement the Vapor 4 and
+  Fluent 4 protocols. They change with those protocols.
+  - Five Vapor `Client` stand-ins: `BrightSpaceVerbDispatchTests`,
+    `BrightSpaceGroupReaderTests`, `GroupSourceRoutesTests`,
+    `GitHub/ScriptedGitHubClient` and `GitHub/GitHubTransportTests`.
+  - Four Fluent `Database` stand-ins: `CourseCloneCleanupTests`,
+    `CourseBundleImportCleanupTests`, `SortOrderRenumberingTests` and
+    `MCP/MCPRoleDatabase`.
+  - One `SessionDriver` stand-in: `UnchangedSessionSkippingDriverTests`. It
+    goes when Fluent 5 removes the `.get()` bridge.
