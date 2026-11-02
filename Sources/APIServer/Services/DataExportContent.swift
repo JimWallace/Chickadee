@@ -9,7 +9,9 @@
 // Privacy rules encoded here:
 //   • Test outcomes are tier-filtered with the same policy as the results
 //     API (`visibleTiers`) — the export contains exactly what the user can
-//     already see, never hidden secret/release detail.
+//     already see, never hidden secret/release detail. Failing outcomes
+//     are masked by each entry's `failureDetail` for a non-staff user, as
+//     the results page and the results API mask them (#2662).
 //   • Audit entries where the user is the *actor* include their own
 //     IP / user-agent; entries where they are only the *subject* omit
 //     those fields (they belong to whoever performed the action).
@@ -405,7 +407,7 @@ private func gatherSubmissions(
         first
     }
 
-    let visibleTiersBySetupID = try await resolveVisibleTiers(
+    let visibility = try await resolveResultVisibility(
         user: user, setups: setups, assignmentBySetupID: assignmentBySetupID, on: db, now: now)
     let latestResults = try await latestResultBySubmissionID(
         submissionIDs: submissions.compactMap(\.id), on: db)
@@ -430,8 +432,11 @@ private func gatherSubmissions(
         var resultsPath: String?
         if let result = latestResults[subID], let resultID = result.id,
             let json = collectionJSONs[resultID],
-            let tiers = visibleTiersBySetupID[submission.testSetupID],
-            let data = tierFilteredCollectionData(collectionJSON: json, visibleTiers: tiers)
+            let tiers = visibility.tiersBySetupID[submission.testSetupID],
+            let data = tierFilteredCollectionData(
+                collectionJSON: json, visibleTiers: tiers,
+                failureDetailByFilename: visibility.failureDetailBySetupID[
+                    submission.testSetupID] ?? [:])
         {
             let path = "submissions/\(subID)/results.json"
             resultFiles[path] = data
@@ -458,19 +463,29 @@ private func gatherSubmissions(
         submissions: rows, resultFiles: resultFiles, fileCopies: fileCopies)
 }
 
-/// The tier set the user may inspect for each test setup, mirroring
+/// What the user may read of each test setup's results.
+private struct ResultVisibility {
+    /// The tier set the user may inspect, per test setup.
+    var tiersBySetupID: [String: Set<String>] = [:]
+    /// The failure-detail settings to apply, per test setup. Empty for a
+    /// setup whose course the user staffs: staff read the full text.
+    var failureDetailBySetupID: [String: [String: FailureDetail]] = [:]
+}
+
+/// What the user may read of each test setup's results, mirroring
 /// `SubmissionQueryRoutes.getResults`: staff of the setup's course see all
-/// tiers; otherwise release is gated on the user's own effective deadline
-/// and secret on a spent reveal token.
-private func resolveVisibleTiers(
+/// tiers and the full failure text; otherwise release is gated on the user's
+/// own effective deadline, secret on a spent reveal token, and each failing
+/// outcome is masked by its entry's `failureDetail` (#2662).
+private func resolveResultVisibility(
     user: APIUser,
     setups: [APITestSetup],
     assignmentBySetupID: [String: APIAssignment],
     on db: any Database,
     now: Date
-) async throws -> [String: Set<String>] {
+) async throws -> ResultVisibility {
     var staffByCourseID: [UUID: Bool] = [:]
-    var tiersBySetupID: [String: Set<String>] = [:]
+    var visibility = ResultVisibility()
     for setup in setups {
         guard let setupID = setup.id else { continue }
         if staffByCourseID[setup.courseID] == nil {
@@ -483,11 +498,15 @@ private func resolveVisibleTiers(
             for: assignment, user: user, on: db)
         let reveal = try await SecretRevealState.resolve(
             assignment: assignment, userID: user.id, isStaff: isStaff, on: db)
-        tiersBySetupID[setupID] = visibleTiers(
+        visibility.tiersBySetupID[setupID] = visibleTiers(
             isStaff: isStaff, effectiveDueAt: releaseDeadline,
             secretRevealed: reveal.revealed, now: now)
+        if !isStaff {
+            visibility.failureDetailBySetupID[setupID] =
+                setup.decodedManifest().map(buildFailureDetailByFilename) ?? [:]
+        }
     }
-    return tiersBySetupID
+    return visibility
 }
 
 private func latestResultBySubmissionID(
@@ -509,15 +528,19 @@ private func latestResultBySubmissionID(
     return latest
 }
 
-/// Decodes a stored collection, filters it to the visible tier set the same
-/// way the results API does (real all-tier grade aggregates, only
-/// inspectable outcomes), and re-encodes it for the zip.
-private func tierFilteredCollectionData(
-    collectionJSON: String, visibleTiers: Set<String>
+/// Decodes a stored collection, filters it to the visible tier set and masks
+/// failure output the same way the results API does (real all-tier grade
+/// aggregates, only inspectable outcomes, each at its entry's failure
+/// detail), and re-encodes it for the zip.
+func tierFilteredCollectionData(
+    collectionJSON: String, visibleTiers: Set<String>,
+    failureDetailByFilename: [String: FailureDetail]
 ) -> Data? {
     guard let full = decodedCollection(from: collectionJSON) else { return nil }
     let visible = full.filtering(tiers: visibleTiers)
-    let filtered = full.replacingOutcomes(with: visible.outcomes)
+    let filtered = full.replacingOutcomes(
+        with: maskingFailureDetail(
+            of: visible.outcomes, failureDetailByFilename: failureDetailByFilename))
     return try? dataExportJSONEncoder().encode(filtered)
 }
 
@@ -700,8 +723,9 @@ func dataExportReadme(username: String, generatedAt: Date) -> String {
       outcomes for that submission. Results reflect what is visible to
       you at export time: details of hidden (secret-tier) tests, and of
       release-tier tests before their deadline, are not itemized —
-      matching what you see on the site. Aggregate counts and grades
-      always cover every test.
+      matching what you see on the site. Where an instructor chose to
+      show only part of a failing test's message, the export shows the
+      same part. Aggregate counts and grades always cover every test.
     - `grading-adjustments.json` — per-student grading records: deadline
       extensions, grade overrides, secret-test reveal tokens you have
       spent, and slip days you have spent (with the deadline each one

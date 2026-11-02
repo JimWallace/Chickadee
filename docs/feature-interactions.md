@@ -154,15 +154,19 @@ because line numbers go out of date.
   claim-window ceiling (`slipDayClaimWindowCeiling`).
 - **Rule:** this is the one resolver for the reveal moment. Release-tier
   output and the solution reveal both use it (`Sources/APIServer/CLAUDE.md`).
+- **One body, two input loaders (#2665):** the pure forms of
+  `postDeadlineRevealDeadline` and `solutionVisibleToStudent`
+  (`AssignmentDeadlineService.swift`) take loaded inputs: the raw extension
+  date and a `SlipDayClaimState`. The database forms load those inputs
+  (`slipDayClaimState(for:user:on:)`) and call them. The dashboard's
+  `solutionRevealAvailable` passes its batch-loaded values
+  (`DashboardSlipDayData.claimState`), so it runs no query for each row.
+  `SolutionRevealParityTests` runs the same cases through both callers.
 - **Parallel paths:**
-  - The dashboard's `solutionRevealAvailable` (`WebRoutes+IndexRows.swift`)
-    has an inline copy of the full calculation. The copy prevents one query
-    for each row.
-  - Three places load the slip-day inputs (policy, balance, spends, staff
-    extension): `loadSlipDayDashboardData`, the slip-day route, and the
-    database form of `slipDayClaimWindowCeiling`.
+  - The slip-day inputs still load in three places: `loadSlipDayDashboardData`,
+    the slip-day route, and `slipDayClaimState`.
   - `slipDayOffer` repeats the window arithmetic.
-  - A change to the reveal rule must go to all of these.
+  - A change to what the inputs are must go to all of these.
 - **Rule:** a link or a button can hide while its URL still serves the
   content. The opposite must never occur (`docs/solution-visibility.md`,
   "Enforcement chokepoints").
@@ -195,7 +199,8 @@ because line numbers go out of date.
 - **Readers:**
   - The notebook routes that serve the solution.
   - The notice on the submission page.
-  - The dashboard copy (see "The reveal moment").
+  - The dashboard row action, through the same pure form (see "The reveal
+    moment").
 - **Rule:** the solution shows only when all four conditions are true
   (`docs/solution-visibility.md`, "The reveal gate"):
   1. The policy is `afterDue`.
@@ -216,10 +221,11 @@ because line numbers go out of date.
     `SubmissionResultPresenter`. The mask applies after release redaction,
     and only for a viewer who is not staff.
   - `NotebookGuideBuilder`.
+  - The JSON results API and the data export, through
+    `maskingFailureDetail` (#2662). The API's ETag includes the settings.
 - **Rule:** the mask is a display policy. It is not a secret
-  (`docs/failure-detail.md`, "Where it is applied").
-- **Known gap:** the JSON results API and the data export return the full
-  text. See "Gaps found while mapping".
+  (`docs/failure-detail.md`, "Where it is applied"). Every door that shows a
+  student their outcomes applies it.
 
 ### Grade push: `requestGradePush`
 
@@ -1153,24 +1159,14 @@ rules above. They are listed here so that the review agent does not report
 them on every pull request. Each one has an issue that holds its decision.
 When an issue is closed, remove its item and correct the section above.
 
-1. **Failure detail outside the web page (#2662).** The JSON results API
-   (`GET /api/v1/submissions/:id/results`) and the data export return the
-   full failure text, also for an entry set to `actualOnly` or
-   `verdictOnly`. `docs/failure-detail.md` calls the setting a display
-   policy, not a secret. But it does not say that these two paths are out of
-   scope.
-2. **The dashboard copy of the reveal rule (#2665).** `solutionRevealAvailable` in
-   `WebRoutes+IndexRows.swift` is a full inline copy of
-   `solutionVisibleToStudent` and `postDeadlineRevealDeadline`. It is
-   correct now. It is the most likely place for the next drift.
-3. **Fixed routes and vanity URLs (#2666).** The vanity routes
+1. **Fixed routes and vanity URLs (#2666).** The vanity routes
    (`VanityURLRoutes.swift`, `/:courseCode/:assignmentSlug`) are registered
    last, so a fixed route with two segments wins. `/data/:courseKey` and
    `/submissions/:submissionID` have that shape. `StudentDataRoutes.swift`
    chose its path so that an assignment slug `data` still works. But a course
    with the code `data` or `submissions` loses its vanity URLs. No list of
    reserved course codes exists.
-4. **Course achievements in a clone, a bundle and after a deletion
+2. **Course achievements in a clone, a bundle and after a deletion
    (`docs/achievement-rewards.md`, S8).** `CourseCloneService.clone` and the
    course bundle do not carry `courses.achievements` yet, so a new term
    starts with none. A course achievement names course sections and

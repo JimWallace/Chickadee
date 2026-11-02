@@ -133,11 +133,23 @@ struct SubmissionQueryRoutes: RouteCollection {
         // toggled — the same result id must then produce a fresh response.
         // Repeat views (the common case: a student re-opening their grade)
         // get a 304 without decoding the collection blob.
+        // A student reads each entry's failure detail (`full` | `actualOnly`
+        // | `verdictOnly`) here as on the results page (#2662); staff read
+        // the full text. The setting is a live display policy, so it is part
+        // of the key: relaxing it must re-serve every past result.
+        var failureDetailByFilename: [String: FailureDetail] = [:]
+        if !access.isStaff,
+            let manifest = try await APITestSetup.find(submission.testSetupID, on: req.db)?
+                .decodedManifest()
+        {
+            failureDetailByFilename = buildFailureDetailByFilename(manifest)
+        }
         let requestedTiersParam = req.query[String.self, at: "tiers"]
         let etagKey = [
             result.id ?? "",
             callerVisibleTiers.sorted().joined(separator: ","),
             requestedTiersParam ?? "*",
+            failureDetailFingerprint(failureDetailByFilename),
         ].joined(separator: "|")
         let etag = "\"\(sha256HexDigest(Data(etagKey.utf8)).prefix(32))\""
         if req.headers[.ifNoneMatch].contains(where: { header in
@@ -163,7 +175,10 @@ struct SubmissionQueryRoutes: RouteCollection {
         // caller may only *inspect* certain outcomes: secret only with a
         // spent reveal token, release after the deadline (instructors see
         // all tiers).
-        let visible = fullCollection.filtering(tiers: callerVisibleTiers)
+        let tierVisible = fullCollection.filtering(tiers: callerVisibleTiers)
+        let visible = tierVisible.replacingOutcomes(
+            with: maskingFailureDetail(
+                of: tierVisible.outcomes, failureDetailByFilename: failureDetailByFilename))
 
         let responseCollection: TestOutcomeCollection
         if let tiersParam = requestedTiersParam {
