@@ -8,8 +8,13 @@
 import Core
 import Fluent
 import Foundation
-import SystemPackage
 import Vapor
+
+#if canImport(System)
+import System
+#else
+import SystemPackage
+#endif
 
 // `AppSecurityConfiguration` lives in `Configuration/SecurityConfig.swift`
 // alongside the other AppConfig substructs.

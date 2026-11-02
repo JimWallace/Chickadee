@@ -19,6 +19,10 @@ import Testing
 
 #if canImport(Glibc)
 import Glibc
+#endif
+#if canImport(System)
+import System
+#else
 import SystemPackage
 #endif
 

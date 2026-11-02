@@ -48,7 +48,12 @@ import Foundation
 import RunnerCore
 import Subprocess
 import Synchronization
+
+#if canImport(System)
+import System
+#else
 import SystemPackage
+#endif
 
 /// A fully-resolved subprocess launch: the executable to exec, its argument
 /// vector, and the exact environment the child receives. Building one is the

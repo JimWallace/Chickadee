@@ -238,7 +238,11 @@ import Testing
             let source = WorkerCommand.terminateSource(draining: daemon)
             var action = sigaction()
             unsafe sigaction(SIGTERM, nil, &action)
+            #if canImport(Darwin)
+            let ignored = unsafe unsafeBitCast(action.__sigaction_u.__sa_handler, to: Int.self) == 1
+            #else
             let ignored = unsafe unsafeBitCast(action.__sigaction_handler.sa_handler, to: Int.self) == 1
+            #endif
             // A source that is released while suspended traps, so resume it
             // before it goes away.
             source.resume()

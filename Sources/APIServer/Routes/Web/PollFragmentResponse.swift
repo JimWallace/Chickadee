@@ -31,6 +31,7 @@
 // different and more invasive change; the win here is on the client, where the
 // repaint was doing real damage.
 
+import Core
 import Crypto
 import Foundation
 import Vapor
@@ -78,7 +79,7 @@ extension Response {
             text = text.replacingOccurrences(of: csrfToken, with: "")
         }
         let digest = SHA256.hash(data: Data(text.utf8))
-        let hex = digest.map { String(format: "%02x", $0) }.joined()
+        let hex = digest.map { String(cFormat: "%02x", $0) }.joined()
         return "W/\"\(hex.prefix(32))\""
     }
 }

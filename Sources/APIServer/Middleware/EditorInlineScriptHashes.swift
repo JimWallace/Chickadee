@@ -78,7 +78,7 @@ enum EditorInlineScriptHashes {
         else { return nil }
 
         var hashes: Set<String> = []
-        for case let url as URL in walker where url.pathExtension.lowercased() == "html" {
+        for case let url as URL in walker.allObjects where url.pathExtension.lowercased() == "html" {
             guard let html = try? Data(contentsOf: url) else { continue }
             for body in executableInlineScriptBodies(inHTML: html) {
                 hashes.insert(sourceExpression(forScriptBody: body))

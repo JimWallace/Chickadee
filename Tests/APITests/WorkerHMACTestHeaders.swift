@@ -2,6 +2,7 @@
 //
 // Signs worker requests in tests the same way the runner signs them.
 
+import Core
 import Crypto
 import Foundation
 import VaporTesting
@@ -50,6 +51,6 @@ func workerHMACHeaders(
 
 private extension Data {
     func hexEncodedString() -> String {
-        map { String(format: "%02x", $0) }.joined()
+        map { String(cFormat: "%02x", $0) }.joined()
     }
 }

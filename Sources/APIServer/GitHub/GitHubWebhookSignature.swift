@@ -4,6 +4,7 @@
 // `X-Hub-Signature-256` must be `sha256=` and the hex HMAC-SHA256 of the raw
 // body under the App's webhook secret. The comparison is constant time.
 
+import Core
 import Crypto
 import Foundation
 
@@ -21,7 +22,7 @@ enum GitHubWebhookSignature {
     /// The header value for `body`, as GitHub computes it. Tests use it.
     static func header(body: Data, secret: String) -> String {
         let mac = HMAC<SHA256>.authenticationCode(for: body, using: SymmetricKey(data: Data(secret.utf8)))
-        return prefix + mac.map { String(format: "%02x", $0) }.joined()
+        return prefix + mac.map { String(cFormat: "%02x", $0) }.joined()
     }
 
     private static func bytes(fromHex hex: String) -> [UInt8]? {

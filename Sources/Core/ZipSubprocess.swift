@@ -23,7 +23,12 @@
 
 public import Foundation
 import Subprocess
+
+#if canImport(System)
+import System
+#else
 import SystemPackage
+#endif
 
 /// Exit status and captured stdout of a zip subprocess run.
 public struct ZipProcessResult: Sendable {

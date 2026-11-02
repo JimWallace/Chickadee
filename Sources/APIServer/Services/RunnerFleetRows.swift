@@ -128,12 +128,12 @@ func formatMs(_ ms: Int) -> String {
 func formatBytes(_ bytes: Int) -> String {
     if bytes < 1024 { return "\(bytes) B" }
     let kb = Double(bytes) / 1024
-    if kb < 1024 { return String(format: "%.0f KB", kb) }
+    if kb < 1024 { return String(cFormat: "%.0f KB", kb) }
     let mb = kb / 1024
-    if mb < 100 { return String(format: "%.1f MB", mb) }
-    if mb < 1024 { return String(format: "%.0f MB", mb) }
+    if mb < 100 { return String(cFormat: "%.1f MB", mb) }
+    if mb < 1024 { return String(cFormat: "%.0f MB", mb) }
     let gb = mb / 1024
-    return String(format: "%.1f GB", gb)
+    return String(cFormat: "%.1f GB", gb)
 }
 
 func overheadMs(for metric: JobExecutionMetric) -> Int? {

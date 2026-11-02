@@ -61,7 +61,7 @@ import Testing
         // Ten different students, because the claim is about every slice, not
         // about a lucky one.
         for student in 0..<10 {
-            let seed = String(repeating: String(format: "%04x", student * 997 + 13), count: 16)
+            let seed = String(repeating: String(cFormat: "%04x", student * 997 + 13), count: 16)
             let out = DatasetMaterializer.materialize(source: pool, spec: spec(size: 20), seedHex: seed)
             let present = Set(wards(out))
             #expect(

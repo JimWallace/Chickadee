@@ -13,6 +13,7 @@
 // sidesteps SQLite's ambiguous Date storage in raw SQL.  Both paths produce
 // the same `RunnerLoadPoint` list, so the card math downstream is identical.
 
+import Core
 import Fluent
 import Foundation
 import SQLKit
@@ -319,7 +320,7 @@ extension OperationalDiagnosticsService {
         // Align buckets to the window start (matching BucketWindow.bucketIndex)
         // rather than the epoch, so SQL bucket indices map straight onto the
         // response array.
-        let windowStartEpoch = String(format: "%.3f", window.windowStart.timeIntervalSince1970)
+        let windowStartEpoch = String(cFormat: "%.3f", window.windowStart.timeIntervalSince1970)
         // Per-row utilization, rounded half-away-from-zero and clamped to
         // [0, 100] — exactly as the Swift accumulator does; NULL when the
         // runner reported no capacity, so it drops out of the util aggregates.

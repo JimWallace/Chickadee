@@ -200,12 +200,18 @@ public enum StarvationRecorder {
         return "\(runnable)/\(total)"
     }
 
+    // The macOS 27 SDK marks `String(format:)` `@unsafe`; on Linux it is not,
+    // and an `unsafe` with nothing unsafe under it is a warning there.
     static func fmt(_ value: Double) -> String {
+        #if canImport(Darwin)
+        unsafe String(format: "%.1f", value)
+        #else
         String(format: "%.1f", value)
+        #endif
     }
 
     static func percent(_ value: Double?) -> String {
-        value.map { String(format: "%.1f%%", $0) } ?? "-"
+        value.map { fmt($0) + "%" } ?? "-"
     }
 
     static func binaryBytes(_ bytes: Int) -> String {
@@ -216,6 +222,6 @@ public enum StarvationRecorder {
             value /= 1_024
             unit += 1
         }
-        return String(format: "%.1f%@", value, units[unit])
+        return fmt(value) + units[unit]
     }
 }

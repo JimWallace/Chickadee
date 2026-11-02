@@ -169,14 +169,14 @@ func estimatePercentText(_ fraction: Double) -> String {
     let percent = fraction * 100
     if percent >= 99.95 { return "100%" }
     if percent >= 10 { return "\(Int(percent.rounded()))%" }
-    if percent >= 0.1 { return String(format: "%.1f%%", percent) }
+    if percent >= 0.1 { return String(cFormat: "%.1f%%", percent) }
     return "<0.1%"
 }
 
 /// A normalized divergence as chip-sized text: two decimals, with a floor
 /// marker rather than a "0.00" that would claim identical distributions.
 func estimateUnitsText(_ value: Double) -> String {
-    value < 0.005 ? "<0.01" : String(format: "%.2f", value)
+    value < 0.005 ? "<0.01" : String(cFormat: "%.2f", value)
 }
 
 private func estimateMeasureName(_ measure: DatasetColumnDivergence.Measure) -> String {

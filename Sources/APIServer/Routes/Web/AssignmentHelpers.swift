@@ -138,7 +138,7 @@ func formatPoints(_ value: Double) -> String {
     if rounded == rounded.rounded() {
         return String(Int(rounded.rounded()))
     }
-    var s = String(format: "%.2f", rounded)
+    var s = String(cFormat: "%.2f", rounded)
     while s.hasSuffix("0") { s.removeLast() }
     if s.hasSuffix(".") { s.removeLast() }
     return s

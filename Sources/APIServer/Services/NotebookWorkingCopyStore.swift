@@ -248,7 +248,6 @@ func ensureUserNotebookWorkingCopy(
     application: Application,
     logger: Logger
 ) async throws -> Data {
-    let fileManager = FileManager.default
     let resolvedRelativePath = relativePath ?? userNotebookWorkingCopyRelativePath(setupID: setupID, userID: userID)
     let workingCopyPath =
         application.directory.publicDirectory
@@ -262,7 +261,7 @@ func ensureUserNotebookWorkingCopy(
     // cooperative-pool threads on disk reads/writes.
     if let overwriteWith {
         try await runBlocking {
-            try fileManager.createDirectory(atPath: workingCopyDir, withIntermediateDirectories: true)
+            try FileManager.default.createDirectory(atPath: workingCopyDir, withIntermediateDirectories: true)
             try overwriteWith.write(to: URL(fileURLWithPath: workingCopyPath))
         }
         await createSupportFileSymlinks(setup: fallbackSetup, studentDir: workingCopyDir, application: application)
@@ -342,7 +341,7 @@ func ensureUserNotebookWorkingCopy(
     }
 
     try await runBlocking {
-        try fileManager.createDirectory(atPath: workingCopyDir, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(atPath: workingCopyDir, withIntermediateDirectories: true)
         try processedData.write(to: URL(fileURLWithPath: workingCopyPath))
     }
     await createSupportFileSymlinks(setup: fallbackSetup, studentDir: workingCopyDir, application: application)
@@ -384,7 +383,7 @@ func discardOtherNotebookViewCopy(
     guard fileManager.fileExists(atPath: path) else { return }
     do {
         try await runBlocking {
-            try fileManager.removeItem(atPath: path)
+            try FileManager.default.removeItem(atPath: path)
         }
     } catch {
         logger.warning(

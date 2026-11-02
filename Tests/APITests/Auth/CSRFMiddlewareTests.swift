@@ -1,3 +1,4 @@
+import Core
 import Testing
 import VaporTesting
 
@@ -119,7 +120,7 @@ import VaporTesting
             let (_, cookie) = try await fetch("seed", on: app)
             let salt = "0123456789abcdef"
             let digest = SHA256.hash(data: Array("\(salt)-\(Self.knownSecret)".utf8))
-            let token = "\(salt)-\(digest.map { String(format: "%02x", $0) }.joined())"
+            let token = "\(salt)-\(digest.map { String(cFormat: "%02x", $0) }.joined())"
             let result = try await post(token: token, cookie: cookie, on: app)
             #expect(result.status == .ok)
         }

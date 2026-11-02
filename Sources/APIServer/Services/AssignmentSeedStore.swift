@@ -8,6 +8,7 @@
 // assignment_personalization_seeds: under a race, the loser's INSERT fails
 // and we re-fetch the winner.
 
+import Core
 import Fluent
 import Foundation
 import Vapor
@@ -83,6 +84,6 @@ enum AssignmentSeedStore {
                 word >>= 8
             }
         }
-        return bytes.map { String(format: "%02x", $0) }.joined()
+        return bytes.map { String(cFormat: "%02x", $0) }.joined()
     }
 }
