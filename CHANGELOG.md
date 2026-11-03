@@ -9,6 +9,19 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.799] - 2026-11-03
+
+### Fixed
+
+- **MCP `delete_support_file` refuses a file that a test depends on.** The web
+  delete and MCP `delete_support_file` now call one service,
+  `deleteFileFromSetup`. Before, the MCP path ran the steps by hand and did not
+  check `dependsOn`, so an agent could delete a support file that a suite entry
+  still needed. The dataset edit moved into `Services/` in the same way: the
+  web `PUT /datasets` routes and MCP `set_dataset` both call
+  `applyDatasetsEdit` (#2771).
+
+
 ## [0.5.798] - 2026-11-03
 
 ### Fixed
