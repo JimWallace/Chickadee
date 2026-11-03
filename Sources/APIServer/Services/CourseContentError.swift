@@ -31,8 +31,8 @@ enum CourseContentError: Error, Sendable, Equatable, CustomStringConvertible {
         case .emptyTitle:
             return "Title must not be empty."
         case .unknownKind:
-            let kinds = ContentItemKind.allCases.map(\.rawValue).joined(separator: ", ")
-            return "kind must be one of: \(kinds)."
+            // The same list `MCPEnumProse.parse` names, from one source.
+            return "kind must be one of: \(MCPEnumProse<ContentItemKind>.oneOfList)."
         case .linkMissingURL(let label):
             return "The link labelled \"\(label)\" is missing a URL."
         case .unsafeLinkURL(let url):

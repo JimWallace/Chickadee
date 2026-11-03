@@ -25,8 +25,8 @@ enum CourseSectionError: Error, Sendable, Equatable, CustomStringConvertible {
         case .emptyName:
             return "Section name must not be empty."
         case .unknownGradingMode:
-            let modes = GradingMode.allCases.map(\.rawValue).joined(separator: ", ")
-            return "defaultGradingMode must be one of: \(modes)."
+            // The same list `MCPEnumProse.parse` names, from one source.
+            return "defaultGradingMode must be one of: \(MCPEnumProse<GradingMode>.oneOfList)."
         }
     }
 }
