@@ -185,10 +185,12 @@ enum CourseBundleService {
             .sorted { ($0.username) < ($1.username) }
 
         let subIDs = submissions.compactMap(\.id)
+        // Chunked: one IN list of every submission in a course passes the
+        // driver bind limit for a large course (#2764).
         var results: [APIResult] = []
-        if !subIDs.isEmpty {
-            results = try await APIResult.query(on: db)
-                .filter(\.$submissionID ~~ subIDs)
+        for chunk in chunkedForInFilter(subIDs) {
+            results += try await APIResult.query(on: db)
+                .filter(\.$submissionID ~~ chunk)
                 .all()
         }
         // The bundle carries the full collection blob per result (#1173:

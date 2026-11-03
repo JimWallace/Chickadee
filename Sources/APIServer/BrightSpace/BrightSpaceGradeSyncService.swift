@@ -168,18 +168,24 @@ func clearPendingFlag(_ rows: [any BrightSpaceSyncFlaggable], on db: any Databas
 /// that previously errored, back-dating `pendingSince` so the next sweep
 /// retries it immediately. The "hard reset" half of "Sync now".
 func requeueErroredGradePushes(courseUUID: UUID, on db: any Database) async throws {
-    let resultKeys = try await courseStudentResultIDs(courseUUID: courseUUID, on: db)
+    let setupIDs = try await courseSetupIDs(courseUUID: courseUUID, on: db)
+    // The join scopes the query by the course's few setup IDs, not by a list of
+    // every submission ID, which passes the driver bind limit for a large
+    // course (#2764). SQL drops the rows with no error; the Swift check also drops
+    // an empty error string, as before.
     let results =
-        resultKeys.isEmpty
+        setupIDs.isEmpty
         ? []
         : try await APIResult.query(on: db)
-            .filter(\.$submissionID ~~ resultKeys)
+            .join(APISubmission.self, on: \APIResult.$submissionID == \APISubmission.$id)
+            .filter(APISubmission.self, \.$testSetupID ~~ setupIDs)
+            .filter(APISubmission.self, \.$kind == APISubmission.Kind.student)
+            .filter(\.$brightspaceSyncError != nil)
             .all()
     try await requeueForImmediateSync(
         results.filter { ($0.brightspaceSyncError ?? "").isEmpty == false }, on: db)
     // Errored override-only pushes (no-submission students) live on the
     // override row, not a result row — re-queue those too.
-    let setupIDs = try await courseSetupIDs(courseUUID: courseUUID, on: db)
     let overrides =
         setupIDs.isEmpty
         ? []
@@ -200,18 +206,6 @@ func requeueErroredGradePushes(courseUUID: UUID, on db: any Database) async thro
             .all()
     try await requeueForImmediateSync(
         clears.filter { ($0.brightspaceSyncError ?? "").isEmpty == false }, on: db)
-}
-
-/// Submission IDs (used as result-query keys) for all student submissions
-/// in the active course's test setups.
-private func courseStudentResultIDs(courseUUID: UUID, on db: any Database) async throws -> [String] {
-    let setupIDs = try await courseSetupIDs(courseUUID: courseUUID, on: db)
-    guard !setupIDs.isEmpty else { return [] }
-    return try await APISubmission.query(on: db)
-        .filter(\.$testSetupID ~~ setupIDs)
-        .filter(\.$kind == APISubmission.Kind.student)
-        .all()
-        .compactMap(\.id)
 }
 
 /// Distinct test setup IDs for the active course's assignments.  Used to
