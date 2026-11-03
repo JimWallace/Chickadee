@@ -7,8 +7,8 @@
 //
 // Course-section structure is **instructor-level** (#417): it is course
 // LIFECYCLE, not assignment content, so every handler here except the reorder
-// calls `requireCourseWriteAccess(atLeast: CourseRoleFloor.manageSections)` on top of the `/instructor`
-// group's `ActiveCourseStaffMiddleware` (which only proves TA+ in the caller's
+// calls `requireCourseWriteAccess(atLeast: CourseRoleFloor.manageSections)`
+// on top of the `/instructor` group's `ActiveCourseStaffMiddleware` (which only proves TA+ in the caller's
 // *active* course).  The floor is stated in three other places — the
 // convention comment on `evaluateCourseWrite`, the header of
 // `CourseAdminRoutes+ContentItems.swift` ("course-section structure stays

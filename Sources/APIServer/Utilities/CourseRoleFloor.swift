@@ -14,7 +14,8 @@
 import Core
 
 enum CourseRoleFloor {
-    /// Create an assignment: the new-assignment form, its draft and save,
+    /// Create an assignment: the new-assignment form, writes to its draft
+    /// setup (`loadDraftSetupForWrite`, including draft suite edits), save,
     /// quick publish of an unpublished setup, duplicate, and the MCP
     /// `create_assignment` and `clone_assignment` tools.
     static let createAssignment: CourseRole = .instructor

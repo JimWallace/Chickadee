@@ -7,7 +7,8 @@
 // redirect-to-`/instructor` convention. All routes sit under the `/instructor`
 // group (staff-gated by `ActiveCourseStaffMiddleware`); each mutating handler
 // additionally scopes the write to the resource's own course via
-// `requireCourseWriteAccess(atLeast: CourseRoleFloor.manageContentItems)` (TA) — content authoring is TA+, matching
+// `requireCourseWriteAccess(atLeast: CourseRoleFloor.manageContentItems)`
+// (TA) — content authoring is TA+, matching
 // script / notebook editing (course-section structure stays instructor-level).
 
 import Core

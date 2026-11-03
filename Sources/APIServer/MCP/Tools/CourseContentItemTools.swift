@@ -10,8 +10,9 @@
 // These mirror the web instructor handlers (`CourseAdminRoutes+ContentItems.swift`)
 // and sit beside the course-section tools (`CourseSectionTools.swift`). Content
 // authoring is TA+ (matching script / notebook editing), so the write tools use
-// `resolveCourseForWrite(atLeast: CourseRoleFloor.manageContentItems)`. Content items own no test setup, so
-// editing them never closes an assignment, re-validates, or re-grades.
+// `resolveCourseForWrite(atLeast: CourseRoleFloor.manageContentItems)`.
+// Content items own no test setup, so editing them never closes an
+// assignment, re-validates, or re-grades.
 
 import Core
 import Fluent
