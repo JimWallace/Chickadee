@@ -41,32 +41,21 @@ Edit `.env`:
 | Variable | What to set |
 |---|---|
 | `RUNNER_SHARED_SECRET` | **Required for Docker Compose** — the runner container mounts no volumes, so this is the only channel by which it learns the secret, and Compose refuses to start without it. Generate one with `openssl rand -base64 32`. A server with no separate runner container may leave it unset and fall back to the auto-generated three-word `.worker-secret`. |
-| `DATABASE_BACKEND` | Optional. Leave unset or set to `sqlite` to keep the current default backend. Set to `postgres` to use PostgreSQL. |
-| `SQLITE_PATH` | Optional. Path to the SQLite file. Defaults to `/data/chickadee.sqlite` in the containerized deployment. |
-| `DATABASE_HOST` / `DATABASE_PORT` / `DATABASE_NAME` / `DATABASE_USER` / `DATABASE_PASSWORD` | Required only when `DATABASE_BACKEND=postgres`. |
-| `DATABASE_MAX_CONNECTIONS_PER_EVENT_LOOP` | Optional Fluent pool size per event loop. Defaults: 4 on Postgres, 1 on SQLite. Total Postgres connections is roughly this value times CPU cores; raise it if long admin reports overlap enough to produce `ConnectionPoolTimeoutError`, and keep the product under the Postgres `max_connections` budget shared with the runner and any second server process. |
+| `DATABASE_PASSWORD` | **Set before the first start.** The bundled `db` service creates its database with this password, and the server connects with it. Compose falls back to `change-me`. |
+| `DATABASE_HOST` / `DATABASE_PORT` / `DATABASE_NAME` / `DATABASE_USER` | Optional with Compose: they default to the bundled `db` service (`db`, `5432`, `chickadee`, `chickadee`). Set them to use another Postgres. Outside Compose all five `DATABASE_*` variables are required. |
+| `DATABASE_MAX_CONNECTIONS_PER_EVENT_LOOP` | Optional Fluent pool size per event loop. Defaults to 4. Total Postgres connections is roughly this value times CPU cores; raise it if long admin reports overlap enough to produce `ConnectionPoolTimeoutError`, and keep the product under the Postgres `max_connections` budget shared with the runner and any second server process. |
 | `AUTH_MODE` | `local` for username/password; `sso` for OIDC |
 | `PUBLIC_BASE_URL` | Your public URL, e.g. `https://chickadee.example.com` |
 
-### Database backend selection
+### The database
 
-SQLite remains the default backend for existing deployments. If you do nothing,
-Chickadee will continue to use the single-file SQLite database at
-`/data/chickadee.sqlite`.
+Chickadee stores everything in PostgreSQL. SQLite support was removed in 0.5,
+and nothing moves a SQLite database into Postgres. The Compose file starts a
+`db` service (Postgres 16) and points the server at it.
 
-To opt into PostgreSQL, set:
-
-```env
-DATABASE_BACKEND=postgres
-DATABASE_HOST=db
-DATABASE_PORT=5432
-DATABASE_NAME=chickadee
-DATABASE_USER=chickadee
-DATABASE_PASSWORD=change-me
-```
-
-If `DATABASE_BACKEND=postgres` is selected and any required setting is missing,
-the server now fails fast at startup with a clear configuration error.
+The server refuses to start unless `DATABASE_HOST`, `DATABASE_PORT`,
+`DATABASE_NAME`, `DATABASE_USER` and `DATABASE_PASSWORD` all have values. The
+error names each missing one.
 
 ### 2. Pull and start
 
@@ -84,8 +73,8 @@ The Compose runner mounts no volumes and receives the secret through
 server prefers over any persisted `.worker-secret` file.
 
 It used to mount the data volume read-only, purely to read
-`/data/.worker-secret`. That volume also holds the SQLite database, every
-submission, and the results tree — and a test script runs as the same uid as
+`/data/.worker-secret`. That volume also holds every submission and the
+results tree — and a test script runs as the same uid as
 the runner, so the secret file's `0600` mode was no barrier. A student script
 could read the HMAC secret and sign worker API calls, defeating the environment
 allowlist that withholds it. Enabling `--sandbox` would not have closed it: the
@@ -275,27 +264,13 @@ The runner checks the cgroups at startup with one sandboxed command. Its
 docker compose logs runner | grep runner_configuration
 ```
 
-### Optional PostgreSQL service example
+### The Postgres service
 
-The default deployment path stays on SQLite. If you want to prepare a Postgres
-deployment without changing the default path, add a service like this to your
-Compose file and set the database env vars above on the `server` service:
-
-```yaml
-services:
-  db:
-    image: postgres:16
-    restart: unless-stopped
-    environment:
-      POSTGRES_DB: chickadee
-      POSTGRES_USER: chickadee
-      POSTGRES_PASSWORD: change-me
-    volumes:
-      - chickadee-postgres:/var/lib/postgresql/data
-```
-
-This PR only makes backend selection configurable. It does not migrate any
-existing SQLite data into PostgreSQL for you.
+The `db` service in `docker-compose.yml` is required. It keeps its data in the
+`chickadee-postgres` volume and loads `pg_stat_statements` for the admin MCP
+tool `get_query_stats`. To use a Postgres outside Compose, set the five
+`DATABASE_*` variables to it. Compose still starts the bundled `db` service,
+because the server depends on it, but the server does not use it.
 
 Check status:
 
@@ -402,9 +377,10 @@ merge to `main` reaches it with a blue-green deploy, and there is no manual
 step ([docs/zero-downtime-deploy.md](../docs/zero-downtime-deploy.md)).
 
 `scripts/server-deploy.sh` is the fallback for a host without the daemon. It
-backs up the SQLite database when present, pulls the new image, restarts the
-services, and confirms that the health check passes. Run it from the repository
-root:
+backs up the data volume, pulls the new image, restarts the services, and
+confirms that the health check passes. It does not back up the database:
+take a snapshot first with `scripts/snapshot.sh` (see "Snapshots and
+rollback"). Run it from the repository root:
 
 ```bash
 scripts/server-deploy.sh
@@ -612,7 +588,7 @@ Backend-only observability is built in:
   assignment, result receipt, and job finalisation.
 - Structured runner logs cover startup, config, poll cycles, job acceptance,
   per-test execution, result submission, errors, timeouts, and shutdown.
-- SQLite now stores `job_execution_metrics` and `runner_snapshots`.
+- The database stores `job_execution_metrics` and `runner_snapshots`.
 - Authenticated admins can query `GET /admin/metrics` for queue depth, in-flight
   jobs, active runners, per-runner load, and recent timing/status summaries.
 
@@ -711,12 +687,13 @@ expired. Never commit `.mcp-signing-key`.
 
 ### Data persistence
 
-All persistent data lives in the `chickadee-data` named volume:
-- `chickadee.sqlite` — the default SQLite database
-- `submissions/`, `testsetups/`, `results/` — uploaded files
+Persistent data lives in two named volumes:
+- `chickadee-data` holds `submissions/`, `testsetups/`, `results/` and the
+  server's secrets and key files.
+- `chickadee-postgres` holds the database.
 
-If you switch to PostgreSQL, the server data volume still stores uploaded files
-and secrets, but the database itself lives in the Postgres data volume instead.
+The command below backs up the data volume only. For the database, take a
+snapshot (next section), which captures both.
 
 ```bash
 # Back up the data volume
@@ -729,17 +706,13 @@ docker run --rm \
 ### Snapshots and rollback
 
 `scripts/snapshot.sh` and `scripts/restore.sh` provide point-in-time snapshot
-and restore for **PostgreSQL deployments** (Docker Compose). Each snapshot
+and restore for Docker Compose deployments. Each snapshot
 captures the database (`pg_dump -Fc`) plus the on-disk artifacts that the
 database rows reference (`testsetups/`, `submissions/`, `results/`,
 `.worker-secret`, `.local-runner-autostart`, and the three key files
 `.mcp-signing-key`, `.lti-tool-key` and `.github-app-secrets`) into a timestamped directory
 under `backups/snapshot-<TS>[-<label>]/`. A `manifest.json` is written last
 so a partial snapshot can be detected and refused.
-
-> **SQLite deployments are not supported by these scripts** — the existing
-> `scripts/server-deploy.sh` already tars the entire data volume (including
-> `chickadee.sqlite`) before every deploy, which is sufficient.
 
 #### Taking a snapshot
 
@@ -749,8 +722,8 @@ scripts/snapshot.sh --label pre-appscan   # any [A-Za-z0-9._-]+ identifier
 ```
 
 The script:
-- verifies `DATABASE_BACKEND=postgres` and that the `db` service is
-  accepting connections,
+- verifies that `DATABASE_USER` and `DATABASE_NAME` are set and that the `db`
+  service is accepting connections,
 - dumps Postgres via `docker compose exec db pg_dump -Fc`,
 - archives the artifact paths from the `chickadee-data` volume,
 - writes `manifest.json` last (atomic-publish trick),

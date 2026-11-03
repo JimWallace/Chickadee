@@ -676,7 +676,8 @@ because line numbers go out of date.
   endpoints (`browser-result`, `runner-submit`, `browser-failover`).
 - **Readers:** the attempt-number readers (First-Try-Perfect, the
   prior-attempt delta), Pathfinder (`awardFirstToSubmitRecords`), the
-  operational diagnostics and job metrics, and the runner claim queue.
+  operational diagnostics and job metrics, and the runner job claim
+  (`WorkerJobClaim`).
 - **Rules:**
   - `SubmissionIntake.accept` is the one intake chokepoint (#2768). Each door
     keeps its own checks (enrollment, `requireOpenStudentAssignment`, the

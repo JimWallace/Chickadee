@@ -61,7 +61,8 @@ COMPOSE_FILE="${CHICKADEE_COMPOSE_FILE:-$COMPOSE_DIR/docker-compose.yml}"
 # host-specific configuration in an override file would therefore have had it
 # ignored here — and since resolve_env_file below is what supplies the new
 # container's entire environment, that means booting the server on the base
-# file's defaults. On a Postgres host, that is SQLite.
+# file's defaults. Before SQLite support was removed, on a Postgres host that
+# meant SQLite.
 mapfile -t COMPOSE_FILES < <(chickadee_compose_file_args "$COMPOSE_DIR" "$COMPOSE_FILE")
 IMAGE="${CHICKADEE_IMAGE:-ghcr.io/jimwallace/chickadee:latest}"
 
