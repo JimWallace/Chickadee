@@ -328,7 +328,7 @@ from reverse proxies.
 
 Concurrent runner instances poll `/worker/request` simultaneously. To prevent
 two runners from claiming the same job, all claims are serialised through
-`WorkerClaimQueue` — a Swift actor (in `WorkerJobRoutes.swift`) eagerly
+`WorkerClaimQueue` — a Swift actor (in `Services/WorkerClaimQueue.swift`) eagerly
 initialised at server startup. The actor executes claim transactions one at a
 time; each transaction atomically finds a pending job and marks it assigned.
 

@@ -103,148 +103,23 @@ struct WorkerJobRoutes: RouteCollection {
         return profileUpsert.profile?.capabilityProfile
     }
 
-    /// Finds and claims the best pending job for this runner.
-    ///
-    /// Structure (2026-07 audit): candidate collection, per-candidate
-    /// requirement loading, and compatibility evaluation are all reads and
-    /// run OUTSIDE the serialized claim section — holding the global
-    /// WorkerClaimQueue (and a write transaction) across those queries
-    /// multiplied the serialized section by the number of skipped candidates
-    /// exactly when the queue was deepest. Only the claim itself is
-    /// serialized, and it is an atomic compare-and-set
-    /// (`UPDATE … WHERE status = 'pending'`), so a candidate another runner
-    /// claimed between our scan and our claim matches zero rows and the walk
-    /// simply moves to the next candidate.
+    /// Finds and claims the best pending job for this runner. The claim
+    /// logic is in `WorkerJobClaim` (#2774).
     private func claimNextEligibleJob(
         req: Request, body: WorkerActivityPayload, runnerProfile: RunnerCapabilityProfile?
     ) async throws -> ClaimedJob? {
-        // Idle-poll short-circuit (2026-07 audit): most polls find nothing to
-        // claim, yet each one previously entered the globally-serialized
-        // claim section and opened a write transaction issuing 2–3 candidate
-        // SELECTs. One cheap indexed existence probe (status prefix of
-        // idx_submissions_status_kind_submitted_at) outside the serialized
-        // section answers the empty case. Deliberately a fresh DB read, not
-        // cached state: there is nothing to invalidate, it is correct across
-        // processes, and a submission enqueued right after the probe is
-        // simply seen by the runner's next poll — the same pickup latency
-        // the poll cadence already implies. The claim transaction below
-        // re-reads candidates, so this never affects claim atomicity.
-        let hasPendingWork =
-            try await APISubmission.query(on: req.db)
-            .filter(\.$status == SubmissionStatus.pending.rawValue)
-            .field(\.$id)
-            .first() != nil
-        guard hasPendingWork else { return nil }
-
-        let evaluator = ClaimEvaluator(
-            assignmentRequirements: req.application.assignmentRequirements,
-            compatibilityMatcher: CompatibilityMatcher(),
-            db: req.db,
-            application: req.application,
-            logger: req.logger
-        )
-
-        let candidates = try await collectClaimCandidates(on: req.db)
-        return try await evaluateAndClaimCandidate(
-            candidates: candidates,
-            body: body,
-            runnerProfile: runnerProfile,
-            evaluator: evaluator,
-            claim: { try await atomicallyClaimSubmission(id: $0, req: req, body: body) }
-        )
+        try await WorkerJobClaim.claimNextEligibleJob(
+            body: body, runnerProfile: runnerProfile,
+            db: req.db, application: req.application, logger: req.logger)
     }
 
-    /// Atomically claims one submission. Both backends claim only the
-    /// already-evaluated candidate id — ordering and the requirement-
-    /// compatibility walk stay in `evaluateAndClaimCandidate` — and both
-    /// return nil on a lost race so the walk moves to the next candidate.
-    ///
-    /// **Postgres (#1172):** a short transaction takes a row lock with
-    /// `SELECT … FOR UPDATE SKIP LOCKED` and updates the locked row. SKIP
-    /// LOCKED means a row another claimer holds is skipped (nil) instead of
-    /// waited on, so concurrent claims from any number of processes scale
-    /// natively — no in-process serialization at all.
-    ///
-    /// **SQLite:** compare-and-set — the UPDATE's `status == pending` guard
-    /// means concurrent claimers cannot both win (the same conditional-
-    /// UPDATE idiom the MCP single-use token consumption uses), and the
-    /// re-read confirms *this* worker won. The WorkerClaimQueue
-    /// serializes in-process claim attempts so concurrent polls don't
-    /// thrash SQLite's write lock.
-    ///
-    /// Internal (not private) so the claim semantics are directly testable —
-    /// the lost-race path can't be triggered deterministically through the
-    /// HTTP endpoint. ClaimCompareAndSetTests pin both backends: the same
-    /// suite runs against SQLite (api-tests) and Postgres
-    /// (api-tests-postgres).
+    /// Forwards to `WorkerJobClaim.claimSubmission`. ClaimCompareAndSetTests
+    /// call the claim through the route type.
     func atomicallyClaimSubmission(
         id submissionID: String, req: Request, body: WorkerActivityPayload
     ) async throws -> APISubmission? {
-        if let sql = req.db as? (any SQLDatabase), sql.dialect.name == "postgresql" {
-            return try await claimViaPostgresRowLock(id: submissionID, req: req, body: body)
-        }
-        return try await req.application.workerClaimQueue.run {
-            // Three quick attempts: the claim queue already serializes this
-            // process's claims, so a lock here is another process's write.
-            try await withTransientDatabaseLockRetry(
-                on: req.db, maxAttempts: 3, backoff: .fixed(.milliseconds(20))
-            ) {
-                try await APISubmission.query(on: req.db)
-                    .filter(\.$id == submissionID)
-                    .filter(\.$status == SubmissionStatus.pending.rawValue)
-                    .set(\.$status, to: SubmissionStatus.assigned.rawValue)
-                    .set(\.$workerID, to: body.workerID)
-                    .set(\.$assignedAt, to: Date())
-                    .update()
-                guard
-                    let fresh = try await APISubmission.find(submissionID, on: req.db),
-                    fresh.status == SubmissionStatus.assigned.rawValue,
-                    fresh.workerID == body.workerID
-                else { return nil }
-                return fresh
-            }
-        }
-    }
-
-    /// Postgres claim (#1172): lock the pending row (or bail if another
-    /// claimer holds it / already flipped it), stamp it, and re-read inside
-    /// the same transaction. The transaction spans exactly these three
-    /// statements — candidate evaluation happens outside, before the call.
-    private func claimViaPostgresRowLock(
-        id submissionID: String, req: Request, body: WorkerActivityPayload
-    ) async throws -> APISubmission? {
-        try await req.db.transaction { db in
-            guard let sql = db as? (any SQLDatabase) else {
-                throw WorkerJobError.internalInconsistency(
-                    reason: "Postgres claim transaction did not expose SQLDatabase")
-            }
-            // SKIP LOCKED: a concurrently-locked row is skipped, not waited
-            // on — the loser sees zero rows immediately and walks on to its
-            // next candidate instead of queueing behind the winner.
-            let locked = try await sql.raw(
-                """
-                SELECT id FROM submissions
-                WHERE id = \(bind: submissionID)
-                  AND status = \(bind: SubmissionStatus.pending.rawValue)
-                FOR UPDATE SKIP LOCKED
-                """
-            ).first()
-            guard locked != nil else { return nil }
-
-            try await APISubmission.query(on: db)
-                .filter(\.$id == submissionID)
-                .set(\.$status, to: SubmissionStatus.assigned.rawValue)
-                .set(\.$workerID, to: body.workerID)
-                .set(\.$assignedAt, to: Date())
-                .update()
-
-            guard
-                let fresh = try await APISubmission.find(submissionID, on: db),
-                fresh.status == SubmissionStatus.assigned.rawValue,
-                fresh.workerID == body.workerID
-            else { return nil }
-            return fresh
-        }
+        try await WorkerJobClaim.claimSubmission(
+            id: submissionID, workerID: body.workerID, db: req.db, application: req.application)
     }
 
     /// Records "job assigned" diagnostics outside the claim transaction so
@@ -402,7 +277,7 @@ struct WorkerJobRoutes: RouteCollection {
             manifest: claimed.manifest, seedHex: assignmentSeed, courseSeedHex: courseSeed, dealNumber: dealNumber,
             sourceDirectory: datasetSharedDir)
 
-        let opponentSet = try await Self.jobOpponentSet(
+        let opponentSet = try await JobOpponentSelection.jobOpponentSet(
             manifest: claimed.manifest, submission: submission, base: base, on: req.db)
         return Job(
             submissionID: submissionID,
@@ -421,228 +296,13 @@ struct WorkerJobRoutes: RouteCollection {
         )
     }
 
-    /// Both opponent fields of a job, from one read of the activity: the
-    /// single opponent of a bot, hill or tournament match, or the classmate
-    /// list of a matrix job. The classmates are queried ONCE here and handed
-    /// to both builders; each used to call `chooseClassmates` itself, inside
-    /// the serialized claim section (#1750).
+    /// Forwards to `JobOpponentSelection.jobOpponentSet` (#2774). The
+    /// activity tests call it through the route type.
     static func jobOpponentSet(
         manifest: TestProperties, submission: APISubmission, base: String, on db: any Database
     ) async throws(WorkerJobError) -> (opponent: JobOpponent?, opponents: [JobOpponent]?) {
-        guard let activity = manifest.activity, activity.stagesAnOpponent, let submissionID = submission.id
-        else { return (nil, nil) }
-        if playsPractice(activity: activity, submission: submission) {
-            return (practiceOpponent(activity: activity, submissionID: submissionID), nil)
-        }
-        var classmates: [ChosenOpponent] = []
-        if activity.kind.opponentSource == .classmates {
-            do {
-                // A re-claim (retest) of a STANDINGS kind replaces the whole
-                // result: rows from an earlier claim against classmates who
-                // have since resubmitted would otherwise stay completed and
-                // inflate the standings (#1744). A UNION kind keeps them: a
-                // kill stays with the tester after the target fixes the
-                // fault, and the union counts distinct students, so an old
-                // row cannot count twice (#2187).
-                if activity.kind.aggregation == .standings {
-                    try await voidCompletedMatrixRows(submissionID: submissionID, on: db)
-                }
-                classmates = try await chooseClassmates(for: submission, activity: activity, on: db)
-            } catch {
-                throw WorkerJobError.internalInconsistency(
-                    reason: "Could not choose the classmates for \(submissionID): \(error)")
-            }
-        }
-        return (
-            try await jobOpponent(
-                activity: activity, submission: submission, base: base, classmates: classmates, on: db),
-            try await jobOpponents(
-                activity: activity, classmates: classmates, submission: submission, base: base, on: db)
-        )
-    }
-
-    /// Whether a run plays practice instead of the class: a run that is not
-    /// a student's own entry (a validation run or a class corpus run) on a
-    /// kind that plays the class (classmates or the champion). Such a run
-    /// plays the bundled bot, or nobody, and opens no match row.
-    ///
-    /// It used to play the live class: a re-validation of a large round
-    /// robin cost one suite run per student, its verdict depended on the
-    /// students' code, and the rows it opened never completed, because the
-    /// class effects read only a `.student` result (#2188).
-    static func playsPractice(activity: ClassActivity, submission: APISubmission) -> Bool {
-        let notAnEntry = [
-            APISubmission.Kind.validation, APISubmission.Kind.starterValidation, APISubmission.Kind.classAggregate,
-        ].contains(submission.kind)
-        let source = activity.kind.opponentSource
-        return notAnEntry && (source == .classmates || source == .champion)
-    }
-
-    /// The bundled bot as a practice opponent, with its usual seed; nil when
-    /// the activity names no bot.
-    static func practiceOpponent(activity: ClassActivity, submissionID: String) -> JobOpponent? {
-        activity.opponentFile.map { file in
-            JobOpponent(
-                supportFile: file,
-                matchSeed: JobOpponent.matchSeed(
-                    submissionID: submissionID, opponentIdentity: JobOpponent.supportFileIdentity(file)))
-        }
-    }
-
-    /// The opponents a MATRIX job plays (round robin), each with its own open
-    /// match row; nil for every other job. With no classmate yet the job is
-    /// built like a bot match through `jobOpponent`, so this returns nil
-    /// then too. `classmates` is the list `jobOpponentSet` chose.
-    static func jobOpponents(
-        activity: ClassActivity, classmates: [ChosenOpponent], submission: APISubmission, base: String,
-        on db: any Database
-    ) async throws(WorkerJobError) -> [JobOpponent]? {
-        guard activity.kind.opponentSource == .classmates, !classmates.isEmpty,
-            let submissionID = submission.id
-        else { return nil }
-        do {
-            var opponents: [JobOpponent] = []
-            for chosen in classmates {
-                guard let classmate = chosen.champion, let classmateID = classmate.id else { continue }
-                let seed = JobOpponent.matchSeed(submissionID: submissionID, opponentIdentity: chosen.identity)
-                try await openMatch(
-                    testSetupID: submission.testSetupID, submissionID: submissionID,
-                    opponent: chosen, seed: seed, on: db)
-                guard let url = URL(string: "\(base)/api/v1/worker/submissions/\(classmateID)/download") else {
-                    throw WorkerJobError.internalInconsistency(
-                        reason: "Failed to build a classmate download URL from base=\(base)")
-                }
-                opponents.append(
-                    JobOpponent(
-                        supportFile: nil, matchSeed: seed, submissionID: classmateID,
-                        submissionURL: url, submissionFilename: classmate.filename))
-            }
-            return opponents
-        } catch let error as WorkerJobError {
-            throw error
-        } catch {
-            throw WorkerJobError.internalInconsistency(
-                reason: "Could not open the matches for \(submissionID): \(error)")
-        }
-    }
-
-    /// The opponent a match job stages (docs/class-activities.md), or nil for
-    /// an ordinary run — and for a bot activity whose bot is not chosen yet,
-    /// which grades as it did before the primitive existed. Read from the
-    /// FULL manifest: `runnerSanitized()` strips the activity block, which is
-    /// why the runner learns this from the job.
-    ///
-    /// For king of the hill this also OPENS the match row (`openMatch`), so
-    /// the result path knows which opponent the job played. A database error
-    /// there is the claim's error: a match graded with no row could never
-    /// move the hill, which would read as a loss.
-    static func jobOpponent(
-        activity: ClassActivity, submission: APISubmission, base: String, classmates: [ChosenOpponent],
-        on db: any Database
-    ) async throws(WorkerJobError) -> JobOpponent? {
-        guard activity.stagesAnOpponent, let submissionID = submission.id else { return nil }
-        switch activity.kind.opponentSource {
-        case .none:
-            return nil
-        case .paired:
-            return try await pairedJobOpponent(activity: activity, submission: submission, base: base, on: db)
-        case .classmates:
-            // With classmates to play, `jobOpponents` carries them. With
-            // none yet, the bot stands in as a single opponent — one open
-            // row, completed from the collection's match entry.
-            guard classmates.isEmpty else { return nil }
-            do {
-                let bot = ChosenOpponent(
-                    champion: nil,
-                    identity: activity.opponentFile.map(JobOpponent.supportFileIdentity)
-                        ?? JobOpponent.noOpponentIdentity)
-                let seed = JobOpponent.matchSeed(submissionID: submissionID, opponentIdentity: bot.identity)
-                try await openMatch(
-                    testSetupID: submission.testSetupID, submissionID: submissionID,
-                    opponent: bot, seed: seed, on: db)
-                guard activity.opponentFile != nil else { return nil }
-                return JobOpponent(supportFile: activity.opponentFile, matchSeed: seed)
-            } catch {
-                throw WorkerJobError.internalInconsistency(
-                    reason: "Could not open the match for \(submissionID): \(error)")
-            }
-        case .supportFile:
-            return JobOpponent(
-                supportFile: activity.opponentFile,
-                matchSeed: JobOpponent.matchSeed(
-                    submissionID: submissionID,
-                    opponentIdentity: JobOpponent.supportFileIdentity(activity.opponentFile)))
-        case .champion:
-            do {
-                let chosen = try await chooseOpponent(for: submission, activity: activity, on: db)
-                let seed = JobOpponent.matchSeed(submissionID: submissionID, opponentIdentity: chosen.identity)
-                try await openMatch(
-                    testSetupID: submission.testSetupID, submissionID: submissionID,
-                    opponent: chosen, seed: seed, on: db)
-                if let champion = chosen.champion, let championID = champion.id {
-                    guard
-                        let url = URL(
-                            string: "\(base)/api/v1/worker/submissions/\(championID)/download")
-                    else {
-                        throw WorkerJobError.internalInconsistency(
-                            reason: "Failed to build the champion download URL from base=\(base)")
-                    }
-                    return JobOpponent(
-                        supportFile: nil, matchSeed: seed, submissionID: championID,
-                        submissionURL: url, submissionFilename: champion.filename)
-                }
-                // The bot holds the hill, or nobody does: the job carries the
-                // bot when there is one, and no opponent at all otherwise —
-                // the row is open either way, so a passing match takes it.
-                guard activity.opponentFile != nil else { return nil }
-                return JobOpponent(supportFile: activity.opponentFile, matchSeed: seed)
-            } catch let error as WorkerJobError {
-                throw error
-            } catch {
-                throw WorkerJobError.internalInconsistency(
-                    reason: "Could not open the match for \(submissionID): \(error)")
-            }
-        }
-    }
-
-    /// The opponent of a tournament match (docs/class-activities.md,
-    /// "Tournaments"): the entrant it is paired with, staged on the hill's
-    /// single-submission contract, with its row opened under the round. A
-    /// student's own submission on such an assignment plays the bundled
-    /// bot, if one is chosen, as practice, with no row.
-    static func pairedJobOpponent(
-        activity: ClassActivity, submission: APISubmission, base: String, on db: any Database
-    ) async throws(WorkerJobError) -> JobOpponent? {
-        guard let submissionID = submission.id else { return nil }
-        do {
-            guard let paired = try await pairedOpponent(for: submission, on: db) else {
-                guard submission.kind == APISubmission.Kind.student, let file = activity.opponentFile else {
-                    return nil
-                }
-                return JobOpponent(
-                    supportFile: file,
-                    matchSeed: JobOpponent.matchSeed(
-                        submissionID: submissionID, opponentIdentity: JobOpponent.supportFileIdentity(file)))
-            }
-            guard let awayID = paired.away.id else { return nil }
-            let chosen = ChosenOpponent(champion: paired.away, identity: JobOpponent.submissionIdentity(awayID))
-            let seed = JobOpponent.matchSeed(submissionID: submissionID, opponentIdentity: chosen.identity)
-            try await openMatch(
-                testSetupID: submission.testSetupID, submissionID: submissionID,
-                opponent: chosen, seed: seed, round: paired.slot.round, on: db)
-            guard let url = URL(string: "\(base)/api/v1/worker/submissions/\(awayID)/download") else {
-                throw WorkerJobError.internalInconsistency(
-                    reason: "Failed to build the opponent download URL from base=\(base)")
-            }
-            return JobOpponent(
-                supportFile: nil, matchSeed: seed, submissionID: awayID,
-                submissionURL: url, submissionFilename: paired.away.filename)
-        } catch let error as WorkerJobError {
-            throw error
-        } catch {
-            throw WorkerJobError.internalInconsistency(
-                reason: "Could not open the tournament match for \(submissionID): \(error)")
-        }
+        try await JobOpponentSelection.jobOpponentSet(
+            manifest: manifest, submission: submission, base: base, on: db)
     }
 
     private func encodeJobResponse(_ job: Job) throws -> Response {
