@@ -1,3 +1,0 @@
-### Changed
-
-- **CI skips the Swift suite for changes that cannot affect it (#2781).** A new `changes` job in `swift-tests.yml` runs `scripts/ci-swift-suite-scope.sh`. A pull request that changes only Markdown that no Swift file names (`docs/`, `changelog.d/`, the root changelogs) skips the build and the four Swift test lanes. The release commit runs the build job alone, to save the build cache for the new tree. `swift-tests-gate` still reports on every pull request, and it fails closed: a skip passes only when the scope allows it. Each push to `main` now has its own concurrency group, so a release commit no longer cancels the run of its merge commit, and the concurrency comment now says what GitHub does.
