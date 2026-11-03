@@ -39,9 +39,11 @@ enum CoursePurge {
         let submissions = try await APISubmission.query(on: db)
             .filter(\.$testSetupID ~~ setupIDs).all()
         let subIDs = submissions.compactMap(\.id)
-        if !subIDs.isEmpty {
+        // Chunked: one IN list of every submission in a course passes the
+        // driver bind limit for a large course (#2764).
+        for chunk in chunkedForInFilter(subIDs) {
             try await APIResult.query(on: db)
-                .filter(\.$submissionID ~~ subIDs).delete()
+                .filter(\.$submissionID ~~ chunk).delete()
         }
 
         // 3. Collect the submission zip paths, then delete the submission
