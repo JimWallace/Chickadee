@@ -315,7 +315,12 @@ jobs:
     needs: changes
     if: needs.changes.outputs.scope != 'skip'
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    # A cold build no longer fits in 25 minutes. On 2026-11-03 two runs (one
+    # on main) took about 2 min of setup, 4.5 min of package fetch and 18 min
+    # of compile, and were cancelled while saving the cache, so the time was
+    # lost and every lane was skipped. 40 leaves room for that and for one
+    # Family 7 retry.
+    timeout-minutes: 40
     container:
       image: ghcr.io/jimwallace/chickadee/swift:6.4-resolute
       credentials:
@@ -334,6 +339,24 @@ jobs:
         with:
           build-cache: save
 
+      # On a miss, a cold build spent about 4.5 minutes cloning 41 packages
+      # (2026-11-03). `.build/repositories` holds SwiftPM's git mirrors of
+      # them, so restoring it turns those clones into small fetches.
+      #
+      # Unlike `.build`, this cache MAY restore by prefix: a mirror is only a
+      # git object store, and SwiftPM fetches any revision it lacks. Only a
+      # push to main saves it. A PR can read main's caches but not another
+      # PR's, so one entry on main serves every PR, and a PR save would only
+      # spend the repository's cache budget (docs/ci-flakiness.md, Family 8).
+      - name: Restore SwiftPM package mirrors
+        id: spm-mirrors
+        if: steps.setup.outputs.cache-hit != 'true'
+        uses: actions/cache/restore@v6
+        with:
+          path: .build/repositories
+          key: ${{ runner.os }}-spm-mirrors-v1-${{ hashFiles('Package.resolved') }}
+          restore-keys: ${{ runner.os }}-spm-mirrors-v1-
+
       # Exact cache hit: artifacts already match this exact tree, skip even the
       # near-no-op build.  Any miss = clean cold build (no stale-object reuse).
       #
@@ -346,6 +369,16 @@ jobs:
       - name: Build all targets and tests
         if: steps.setup.outputs.cache-hit != 'true'
         run: scripts/ci-build-retry.sh
+
+      - name: Save SwiftPM package mirrors
+        if: >-
+          github.event_name == 'push'
+          && steps.setup.outputs.cache-hit != 'true'
+          && steps.spm-mirrors.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: .build/repositories
+          key: ${{ steps.spm-mirrors.outputs.cache-primary-key }}
 
   core-tests:
     runs-on: ubuntu-latest
@@ -371,7 +404,7 @@ jobs:
         id: setup
         uses: ./.github/actions/swift-test-setup
         with:
-          build-cache: restore
+          build-cache: require
           # zip and unzip are for ZipSubprocessTests (`.requiresZipTools`).
           # The action also probes for every grading interpreter, although
           # CoreTests starts none of them. The interpreter list is in the
@@ -451,7 +484,7 @@ jobs:
         id: setup
         uses: ./.github/actions/swift-test-setup
         with:
-          build-cache: restore
+          build-cache: require
           tools: zip unzip
 
       - name: Run APITests
@@ -572,7 +605,7 @@ jobs:
         id: setup
         uses: ./.github/actions/swift-test-setup
         with:
-          build-cache: restore
+          build-cache: require
           # `file` is for the MIME detection of SubmissionNormalizer. `make`
           # is the pre-test build step of the runner, which the hung-make
           # timeout test of WorkerDaemonTests needs (`.requiresMake`). The

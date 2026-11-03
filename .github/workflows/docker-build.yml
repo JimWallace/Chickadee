@@ -77,9 +77,18 @@ jobs:
       # `.github/actions/swift-test-setup/action.yml` lists four past cases.
       # The cost: each Sources change gets a cold release build, about 13
       # minutes (#2712).
-      - name: Cache release build artifacts
+      #
+      # A pull request restores this cache but never saves it. A cache saved
+      # on a PR ref is readable only by that PR, so a PR save served nothing
+      # but its own re-runs, and each one (~0.66 GB) pushed other entries out
+      # of the repository's 10 GB cache budget (docs/ci-flakiness.md, Family
+      # 8). Pushes to main and tags save it. The tag build hits only when the
+      # run for the release commit on main has already saved; the two runs
+      # start together, so the tag build usually builds cold, as it did before.
+      # The cost on a PR: a re-run rebuilds cold unless main saved this tree.
+      - name: Restore release build artifacts
         id: build-cache
-        uses: actions/cache@v6
+        uses: actions/cache/restore@v6
         with:
           path: .build
           key: ${{ runner.os }}-release-${{ steps.setup.outputs.toolchain-key }}-${{ hashFiles('Package.resolved', 'Package.swift', 'Sources/**') }}
@@ -95,6 +104,13 @@ jobs:
           # undefined ICU symbols. Only the static release link is affected.
           swift build -c release --static-swift-stdlib --build-system native --product chickadee-server
           swift build -c release --static-swift-stdlib --build-system native --product chickadee-runner
+
+      - name: Save release build artifacts
+        if: github.event_name != 'pull_request' && steps.build-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: .build
+          key: ${{ steps.build-cache.outputs.cache-primary-key }}
 
       # The image gets each binary without its debug data and its symbol
       # table: server 301 MB to 121 MB, runner 98 MB to 64 MB (measured on
@@ -242,8 +258,11 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           # BuildKit layer cache for the runtime image (apt deps, asset copies).
+          # A pull request reads it but does not write it, for the reason on
+          # the release cache above: a PR's entries serve only that PR and
+          # spend the repository's cache budget.
           cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-to: ${{ github.event_name != 'pull_request' && 'type=gha,mode=max' || '' }}
 
       # Three properties of the Public layers that a green smoke test cannot see.
       #

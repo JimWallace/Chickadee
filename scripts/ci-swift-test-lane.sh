@@ -15,7 +15,10 @@ set -euo pipefail
 #
 # CACHE_HIT is the `cache-hit` output of the swift-test-setup action. When it is
 # `true`, the build job already compiled this exact tree, so the lane skips the
-# build. Any other value builds first.
+# build. Any other value builds first. In swift-tests.yml that branch does not
+# run: the lanes use `build-cache: require`, which fails the setup step on a
+# miss instead of a cold build inside the test step's budget
+# (docs/ci-flakiness.md, Family 8).
 
 if [ "$#" -lt 1 ]; then
     echo "Usage: scripts/ci-swift-test-lane.sh REPORT-NAME SWIFT-TEST-ARGUMENT..." >&2
