@@ -22,7 +22,7 @@ extension InstructorDashboardRoutes {
     /// silently become a different threshold.
     @Sendable
     func savePassingThresholdSetting(req: Request) async throws -> Response {
-        let assignment = try await loadAssignmentForWrite(req, atLeast: .instructor)
+        let assignment = try await loadAssignmentForWrite(req, atLeast: CourseRoleFloor.studentOptions)
         struct ThresholdBody: Content {
             var passingThresholdPercent: String?
         }

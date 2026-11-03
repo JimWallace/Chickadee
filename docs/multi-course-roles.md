@@ -240,6 +240,16 @@ representable and creatable.
     assignment-wide due date, course sections (create, rename, delete, move an
     assignment between them; not the reorder), archive, BrightSpace binding,
     test-setup upload.
+- **A named operation has one floor constant (#2772).** `CourseRoleFloor`
+  (`Utilities/CourseRoleFloor.swift`) names the floor of each operation that
+  more than one surface gates: assignment creation, the assignment lifecycle,
+  course sections, content items, the course dataset library, Student
+  Options, the class activity and the BrightSpace binding. The web route, its
+  MCP twin and the view that offers its control read the same constant.
+  `CourseRoleFloorGuardTests` lists the files that implement a named
+  operation and refuses a literal floor in them, except the one-offs it lists
+  with a reason. An operation with no name keeps its literal floor. To name
+  one, add the constant, move its call sites, and add its files to the test.
 - **The convention is now enforced, not just written down.**
   `RouteAuthorizationMatrixTests` walks the live route table and crosses every
   parameterized `/instructor` and `/courses` route with `CourseRole.allCases`,

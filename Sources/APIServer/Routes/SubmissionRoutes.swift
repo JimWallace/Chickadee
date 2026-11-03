@@ -32,35 +32,22 @@ struct SubmissionRoutes: RouteCollection {
         // against another course's setup by ID (#417 Slice D).
         try await requireCourseEnrollment(caller: caller, courseID: setup.courseID, db: req.db)
 
-        let submissionsDir = req.application.submissionsDirectory
-        let subID = freshShortID(prefix: "sub")
-        let zipPath = submissionsDir + "\(subID).zip"
-
         guard let zipData = body.zipBase64.data(using: .utf8),
             let decoded = Data(base64Encoded: zipData)
         else {
             throw AppError.invalidParameter(name: "zipBase64", reason: "not valid base-64")
         }
-        // Offload the disk write to the NIO thread pool so a deadline-spike of
-        // concurrent submissions doesn't serialize on synchronous file I/O.
-        try await req.fileio.writeFile(.init(data: decoded), at: zipPath)
 
-        // Attempt number for API submissions stays per-setup (no user identity
-        // on this path), assigned race-free inside one transaction.
-        let submission = APISubmission(
-            id: subID,
-            testSetupID: body.testSetupID,
-            zipPath: zipPath,
-            attemptNumber: 0,  // assigned by saveSubmissionWithNextAttemptNumber
-            kind: APISubmission.Kind.student
-        )
-        try await saveSubmissionWithNextAttemptNumber(submission, userID: nil, on: req.db)
-        await req.application.diagnostics.recordSubmissionCreated(
-            submission: submission,
-            on: req.db,
-            logger: req.logger
-        )
-        await ensureLocalRunnerForSubmissionIfNeeded(req: req)
+        // This route group is course staff only (`ActiveCourseStaffMiddleware`
+        // in routes.swift). The row has no owner, so it is no student's
+        // attempt: its attempt number is counted per setup and it awards no
+        // Pathfinder. No deadline gate runs, because staff are never gated.
+        let intake = SubmissionIntake(req: req)
+        let subID = intake.submissionID
+        try await intake.accept(
+            setup: setup, owner: nil,
+            artifact: .bytes(decoded, fileExtension: "zip"),
+            filename: nil, status: .pending)
 
         return SubmissionCreatedResponse(submissionID: subID)
     }
@@ -82,55 +69,23 @@ struct SubmissionRoutes: RouteCollection {
         // Scope intake to the setup's own course (see createSubmission) (#417 Slice D).
         try await requireCourseEnrollment(caller: caller, courseID: setup.courseID, db: req.db)
 
-        let submissionsDir = req.application.submissionsDirectory
-        let subID = freshShortID(prefix: "sub")
-
-        // Derive extension from the provided filename, default to original ext.
-        let ext = URL(fileURLWithPath: submittedFilename).pathExtension
-        let filePath = submissionsDir + "\(subID).\(ext.isEmpty ? "bin" : ext)"
+        let intake = SubmissionIntake(req: req)
+        let subID = intake.submissionID
 
         // For .ipynb submissions, merge the instructor's hidden test cells back in
         // before saving, so the worker grades with the full authoritative test suite.
-        let fileData: Data
-        if submittedFilename.hasSuffix(".ipynb") {
-            // The instructor-notebook disk read and the JSON merge are both
-            // blocking work; run them on the NIO thread pool so a deadline-spike
-            // of concurrent .ipynb submissions doesn't serialize on the
-            // cooperative executor.
-            let source = NotebookSourceRef(setup)
-            let studentBytes = body.file
-            // Cached (#1171): a deadline spike of .ipynb submissions shares one
-            // notebook resolution instead of one unzip per upload.
-            let instructorData = try? await req.application.notebookBytesCache.notebookData(
-                for: source)
-            if let instructorData {
-                fileData = try await runBlocking {
-                    mergeNotebook(student: studentBytes, instructor: instructorData)
-                }
-            } else {
-                fileData = studentBytes  // no instructor notebook → submit as-is
-            }
-        } else {
-            fileData = body.file  // .py or other files — no merge needed
-        }
-        // Offload the disk write to the NIO thread pool (see createSubmission).
-        try await req.fileio.writeFile(.init(data: fileData), at: filePath)
+        let fileData =
+            submittedFilename.hasSuffix(".ipynb")
+            ? try await intake.mergedWithInstructorNotebook(body.file, setup: setup)
+            : body.file  // .py or other files — no merge needed
 
-        let submission = APISubmission(
-            id: subID,
-            testSetupID: body.testSetupID,
-            zipPath: filePath,
-            attemptNumber: 0,  // assigned by saveSubmissionWithNextAttemptNumber
-            filename: submittedFilename,
-            kind: APISubmission.Kind.student
-        )
-        try await saveSubmissionWithNextAttemptNumber(submission, userID: nil, on: req.db)
-        await req.application.diagnostics.recordSubmissionCreated(
-            submission: submission,
-            on: req.db,
-            logger: req.logger
-        )
-        await ensureLocalRunnerForSubmissionIfNeeded(req: req)
+        // Derive the stored extension from the provided filename. No owner and
+        // no deadline gate, as in createSubmission.
+        let ext = URL(fileURLWithPath: submittedFilename).pathExtension
+        try await intake.accept(
+            setup: setup, owner: nil,
+            artifact: .bytes(fileData, fileExtension: ext.isEmpty ? "bin" : ext),
+            filename: submittedFilename, status: .pending)
 
         return SubmissionCreatedResponse(submissionID: subID)
     }

@@ -1,3 +1,4 @@
+// @ts-check
 // Public/notebook-core.js
 //
 // The pure rules behind the notebook page (notebook.js), in three groups:

@@ -1,7 +1,7 @@
 // Regression tests for the empty-suite zip-repack bug: `repackZipFromDirectory`
 // shelled out to `zip -r .`, which aborts with "Nothing to do!" (exit 12) on an
 // empty source directory. That raw `ScriptZipError` escaped GlobalInputsService
-// (which only maps WebAssignmentError), so adding personalization to a
+// (which only maps AppError), so adding personalization to a
 // brand-new assignment — whose setup zip has no test files yet — failed with an
 // opaque error. The fix emits a valid empty archive instead.
 

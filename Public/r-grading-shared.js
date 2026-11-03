@@ -1,3 +1,4 @@
+// @ts-check
 // Public/r-grading-shared.js
 //
 // Grading semantics for the R browser grader — the R analogue of

@@ -74,7 +74,7 @@ extension AchievementsEditing {
         var seen = Set<String>()
         return try achievements.map { achievement in
             guard seen.insert(achievement.id).inserted else {
-                throw WebAssignmentError.invalidParameter(
+                throw AppError.invalidParameter(
                     name: "id", reason: "Duplicate achievement id '\(achievement.id)'.")
             }
             let conditions = try achievement.conditions.map { condition in
@@ -106,11 +106,11 @@ extension AchievementsEditing {
             if let byName = context.sectionIDsByName[ref] {
                 return AchievementTarget(kind: .courseSection, ref: byName)
             }
-            throw WebAssignmentError.invalidParameter(
+            throw AppError.invalidParameter(
                 name: "targetRef", reason: "'\(name)' counts course section '\(ref)', which this course does not have.")
         case .concept:
             guard AssignmentConcept(rawValue: ref) != nil else {
-                throw WebAssignmentError.invalidParameter(
+                throw AppError.invalidParameter(
                     name: "targetRef",
                     reason: "'\(name)' counts concept '\(ref)', which is not a concept. Use one of "
                         + AssignmentConcept.allCases.map(\.rawValue).joined(separator: ", ") + ".")
@@ -119,17 +119,17 @@ extension AchievementsEditing {
         case .assignments:
             let ids = CourseProgress.publicIDs(in: ref)
             guard !ids.isEmpty else {
-                throw WebAssignmentError.invalidParameter(
+                throw AppError.invalidParameter(
                     name: "targetRef", reason: "'\(name)' counts a list of assignments that names none.")
             }
             if let missing = ids.first(where: { !context.assignmentPublicIDs.contains($0) }) {
-                throw WebAssignmentError.invalidParameter(
+                throw AppError.invalidParameter(
                     name: "targetRef",
                     reason: "'\(name)' counts assignment '\(missing)', which this course does not have.")
             }
             return AchievementTarget(kind: .assignments, ref: ids.joined(separator: ","))
         case .assignmentGrade, .suiteItem, .section, .testPass:
-            throw WebAssignmentError.invalidParameter(
+            throw AppError.invalidParameter(
                 name: "targetKind",
                 reason: "'\(name)' counts over a '\(target.kind.rawValue)', which names no set of assignments.")
         }
@@ -146,13 +146,13 @@ extension AchievementsEditing {
         conditions: [AchievementCondition]
     ) throws -> Achievement {
         guard scope == .individual else {
-            throw WebAssignmentError.invalidParameter(
+            throw AppError.invalidParameter(
                 name: "scope",
                 reason: "'\(name)': a course achievement is awarded to one student. Use the "
                     + "'individual' scope.")
         }
         guard !conditions.isEmpty else {
-            throw WebAssignmentError.invalidParameter(
+            throw AppError.invalidParameter(
                 name: "conditions",
                 reason: "'\(name)' has no conditions. A course achievement needs at least one, or "
                     + "every student would earn it at once.")
@@ -169,19 +169,19 @@ extension AchievementsEditing {
         signal: AchievementSignal, comparator: ConditionComparator, from input: ConditionRow
     ) throws -> AchievementCondition {
         guard comparator == .atLeast else {
-            throw WebAssignmentError.invalidParameter(
+            throw AppError.invalidParameter(
                 name: "comparator",
                 reason: "'\(signal.rawValue)' is a count that only grows, so it takes 'atLeast' only.")
         }
         let value = input.value ?? 0
         guard value >= 1, value == value.rounded() else {
-            throw WebAssignmentError.invalidParameter(
+            throw AppError.invalidParameter(
                 name: "value", reason: "'\(signal.rawValue)' needs a whole number of at least 1.")
         }
         var gradeFloor: Double?
         if signal == .assignmentsAtGrade {
             guard let floor = input.gradeFloor, (0...100).contains(floor) else {
-                throw WebAssignmentError.invalidParameter(
+                throw AppError.invalidParameter(
                     name: "gradeFloor", reason: "'assignmentsAtGrade' needs a grade floor of 0–100%.")
             }
             gradeFloor = floor
@@ -201,14 +201,14 @@ extension AchievementsEditing {
         guard !raw.isEmpty else { return nil }
         guard let kind = TargetKind(rawValue: raw), kind.namesCourseAssignments else {
             let kinds = TargetKind.allCases.filter(\.namesCourseAssignments).map(\.rawValue)
-            throw WebAssignmentError.invalidParameter(
+            throw AppError.invalidParameter(
                 name: "targetKind",
                 reason: "Unknown set of assignments '\(raw)'. Use one of " + kinds.joined(separator: ", ")
                     + ", or none for every assignment in the course.")
         }
         let ref = (input.targetRef ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         guard !ref.isEmpty else {
-            throw WebAssignmentError.invalidParameter(
+            throw AppError.invalidParameter(
                 name: "targetRef", reason: "A '\(kind.rawValue)' set needs a reference.")
         }
         return AchievementTarget(kind: kind, ref: ref)

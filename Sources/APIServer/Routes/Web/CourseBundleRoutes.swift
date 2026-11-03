@@ -48,10 +48,7 @@ struct CourseBundleRoutes: RouteCollection {
         let caller = try req.auth.require(APIUser.self)
         guard caller.isAdmin else { throw AppError.forbidden(action: "export a course") }
 
-        guard let courseIDStr = req.parameters.get("courseID"),
-            let courseUUID = UUID(uuidString: courseIDStr),
-            let course = try await APICourse.find(courseUUID, on: req.db)
-        else { throw AppError.notFound(resource: "Course") }
+        let (course, courseUUID, courseIDStr) = try await loadCourse(req)
 
         let data = try await loadExportData(courseUUID: courseUUID, on: req.db, logger: req.logger)
         let bundleIDs = assignExportBundleIDs(data: data)
@@ -108,8 +105,12 @@ struct CourseBundleRoutes: RouteCollection {
         let dateStr = iso8601String(Date()).prefix(10)
         let safeCourseCode = course.code.replacingOccurrences(of: "/", with: "-")
         let bundleName = "chickadee-bundle-\(safeCourseCode)-\(dateStr).zip"
+        // A UUID prefix keeps two same-day exports of one course apart.
+        // `zip -r` adds to an existing archive, so a shared path would merge
+        // them, and one stream's cleanup would delete the other's file
+        // (#2767). The download name stays `bundleName`.
         let bundleZipPath = FileManager.default.temporaryDirectory
-            .appendingPathComponent(bundleName).path
+            .appendingPathComponent("\(UUID().uuidString)-\(bundleName)").path
 
         // No defer here: the response body streams AFTER this handler
         // returns, so the temp zip must outlive the handler. streamTemporaryZip
@@ -212,10 +213,12 @@ struct CourseBundleRoutes: RouteCollection {
             .sorted { ($0.username) < ($1.username) }
 
         let subIDs = submissions.compactMap(\.id)
+        // Chunked: one IN list of every submission in a course passes the
+        // driver bind limit for a large course (#2764).
         var results: [APIResult] = []
-        if !subIDs.isEmpty {
-            results = try await APIResult.query(on: db)
-                .filter(\.$submissionID ~~ subIDs)
+        for chunk in chunkedForInFilter(subIDs) {
+            results += try await APIResult.query(on: db)
+                .filter(\.$submissionID ~~ chunk)
                 .all()
         }
         // The bundle carries the full collection blob per result (#1173:
