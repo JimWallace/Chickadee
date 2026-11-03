@@ -63,6 +63,31 @@ func preferredCourse(among candidates: [APICourse], viewer: UUID?, on db: any Da
     return pool.min(by: courseListPrecedes)
 }
 
+/// Why a course may not take a code and term.
+enum CourseCodeConflict: Equatable, Sendable {
+    /// The code or URL key is the first segment of a fixed route, so the
+    /// course's vanity links would not reach it (`ReservedCourseKeys`, #2666).
+    case reserved
+    /// Another active course answers the same key (`activeCourseCodeIsTaken`).
+    case taken
+
+    /// The words every door shows for `.reserved`.
+    static let reservedMessage =
+        "This code is a page address on this server, so links to the course would not reach it. Choose another code."
+}
+
+/// The check every door that creates, renames, imports or un-archives a
+/// course applies: the reserved keys first, then the active-course rule. One
+/// function so that no door can apply one rule without the other.
+func courseCodeConflict(
+    _ code: String, term: AcademicTerm?, excluding courseID: UUID?,
+    reserved: ReservedCourseKeys, on db: any Database
+) async throws -> CourseCodeConflict? {
+    if reserved.reserves(code: code, term: term) { return .reserved }
+    if try await activeCourseCodeIsTaken(code, term: term, excluding: courseID, on: db) { return .taken }
+    return nil
+}
+
 /// True when a non-archived course other than `excluding` already uses
 /// `code` in the same term ("no term" is one term), or when the two courses
 /// would answer one URL key (`courseKeysCollide`). The first is the rule of

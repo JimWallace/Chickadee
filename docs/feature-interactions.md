@@ -946,14 +946,20 @@ because line numbers go out of date.
 - **Resolvers:**
   - The web: `findActiveCourse(byKey:viewer:on:)`.
   - MCP: `resolveMCPCourse`.
-  - Uniqueness: `activeCourseCodeIsTaken` and `courseKeysCollide`. Create,
-    edit, import and un-archive call them.
+  - Uniqueness: `courseCodeConflict`, which checks `ReservedCourseKeys` and
+    then `activeCourseCodeIsTaken` (with `courseKeysCollide`). Create, edit,
+    clone, new term, import, un-archive and the `-COPY` generator call it. A
+    new door calls it too, never one check alone.
 - **Rules** (`docs/course-terms.md`):
   - Do not add a lookup by code only.
   - On the web, the viewer's own course wins. Then the newest term wins.
   - MCP refuses a write through a code that names more than one course.
   - Every MCP result names `courseKey` and `courseTerm`.
-- **Traps:** key collisions (#2227). Un-archive and the unique index (#1777).
+- **Traps:** key collisions (#2227). Un-archive and the unique index (#1777). A code equal to the first
+  segment of any fixed route (#2666): the router prefers a constant segment and
+  never backtracks, so the course loses its vanity links. The reserved set is
+  read from `app.routes.all`, and the `courseKeyShadowed` health rule reports
+  an active course that holds one.
 
 ### Cloning: `CourseCloneService.clone` and `cloneAssignment`
 
@@ -1159,14 +1165,7 @@ rules above. They are listed here so that the review agent does not report
 them on every pull request. Each one has an issue that holds its decision.
 When an issue is closed, remove its item and correct the section above.
 
-1. **Fixed routes and vanity URLs (#2666).** The vanity routes
-   (`VanityURLRoutes.swift`, `/:courseCode/:assignmentSlug`) are registered
-   last, so a fixed route with two segments wins. `/data/:courseKey` and
-   `/submissions/:submissionID` have that shape. `StudentDataRoutes.swift`
-   chose its path so that an assignment slug `data` still works. But a course
-   with the code `data` or `submissions` loses its vanity URLs. No list of
-   reserved course codes exists.
-2. **Course achievements in a clone, a bundle and after a deletion
+1. **Course achievements in a clone, a bundle and after a deletion
    (`docs/achievement-rewards.md`, S8).** `CourseCloneService.clone` and the
    course bundle do not carry `courses.achievements` yet, so a new term
    starts with none. A course achievement names course sections and
