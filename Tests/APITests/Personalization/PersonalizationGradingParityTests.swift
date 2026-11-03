@@ -29,11 +29,13 @@ import VaporTesting
 
     private let workerSecret = "test-parity-secret"
 
-    /// Worker-mode manifest with a seed-dependent `=` expression, so the two
+    /// Browser-mode manifest with a seed-dependent `=` expression, so the two
     /// paths only agree if they resolve the same seed AND evaluate it the same
-    /// way (a constant expression would mask a seed mismatch).
+    /// way (a constant expression would mask a seed mismatch). Browser mode,
+    /// because a student reads the seed only on such a setup (#2763); the
+    /// worker still claims the submission, as it does for the failover.
     private let personalizedManifest = """
-        {"schemaVersion":1,"testSuites":[{"tier":"public","script":"test.sh"}],\
+        {"schemaVersion":1,"gradingMode":"browser","testSuites":[{"tier":"public","script":"test.sh"}],\
         "timeLimitSeconds":10,\
         "globalExpressions":[{"name":"k","expression":"seed % 9973"}]}
         """

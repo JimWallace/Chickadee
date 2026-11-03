@@ -1,0 +1,3 @@
+### Security
+
+- **The browser-runner manifest and seed endpoints serve a student only a browser-graded setup (#2763 follow-up).** Before this change, a student enrolled in the course could read `/api/v1/browser-runner/testsetups/:id/manifest` and `/seed` for an open worker-graded assignment. The manifest names every test, with its tier. The seed answer carries the student's resolved personalization inputs, which can encode expected answers. Now a caller who is not course staff gets 403 on both unless the effective grading mode is `browser`, as for the zip download. A manifest that does not decode also refuses a student. Staff keep access. The seed of a setup with no assignment is still an empty answer.
