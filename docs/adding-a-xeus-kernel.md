@@ -211,8 +211,10 @@ reads each file's own `name:` field to find the directory it vendors into, so
 **a fifth environment is picked up with no edit to the check** — the property
 the `chickadee-*` glob above notably does not have. `.github/workflows/
 kernel-currency.yml` runs it weekly and goes red when a re-vendor would change
-what ships, which is the only thing that ever says a kernel has moved: nothing
-in this repository changes when upstream publishes one, and Dependabot cannot
+what ships, then dispatches the re-vendor in publish mode, which opens the
+update as an auto-merging pull request. It is the only thing that ever says a
+kernel has moved: nothing in this repository changes when upstream publishes
+one, and Dependabot cannot
 watch the environments (its `conda` ecosystem needs a file named
 `environment.yml`, an anaconda.org channel, a host platform, and a pinned
 version — all four of which we are not).

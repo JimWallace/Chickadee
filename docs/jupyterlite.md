@@ -117,9 +117,13 @@ repo.prefix.dev**. This was long documented as something *CI cannot do*, and
 that was simply **wrong** — a hosted runner has unrestricted network and
 micromamba is a single ~7 MB download. Re-vendoring is now a workflow:
 `.github/workflows/revendor-kernels.yml`, on demand or when a PR changes an
-environment file. It does not run unattended, because the output is ~100 MB of
-content-hashed binary assets and an automatic rebuild would bury unrelated work
-in unreviewable diffs.
+environment file. It never commits onto unrelated work, because the output is
+~100 MB of content-hashed binary assets. When the weekly
+`kernel-currency.yml` finds the kernels behind their channels, it dispatches
+the workflow in publish mode: a rebuild from `main` on its own
+`kernels/revendor-*` branch, opened as an auto-merging pull request whose CI
+tests the new kernels. Publishing needs the `RELEASE_TOKEN` secret; the header
+of the workflow says why.
 
 That false belief had a cost worth remembering. Adding a name to
 `environment-*.yml` changes nothing until the kernel is rebuilt, so
