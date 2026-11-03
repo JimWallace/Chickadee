@@ -84,7 +84,7 @@ enum SubmissionRetentionService {
             return counts
         }
 
-        // Non-SQL fallback (not hit by the sqlite/postgres drivers in use).
+        // Non-SQL fallback (not hit by the Postgres driver in use).
         let submissions = try await APISubmission.query(on: db)
             .filter(\.$testSetupID ~~ setupIDs)
             .field(\.$testSetupID)

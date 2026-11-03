@@ -22,7 +22,8 @@ are cheap:
 
 - Were tests still *completing* at the tail of the log? A wedge stops; a
   collapse keeps finishing tests slowly.
-- Did **`api-tests-postgres`** pass? Same target, same commit, different lane.
+- Did **`api-tests`** pass on `main` at the same base, or on a rerun of this
+  commit? Same target, different machine.
 - What do the `[ci-pressure]` telemetry lines say?
 
 **Do not read anything into per-test or per-suite durations in that log.**

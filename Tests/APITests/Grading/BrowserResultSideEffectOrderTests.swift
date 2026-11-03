@@ -15,19 +15,9 @@
 // `flagResultForBrightSpaceSync`, only reads, and returns immediately when no
 // BrightSpace credentials are configured — which is the smoke's case.)
 //
-// WHY IT THREW AT ALL, given SQLite is meant to wait. sqlite-nio installs a
-// busy handler that returns 1 forever, so ordinary lock contention never
-// surfaces as an error — which is why "add a busy_timeout" is the wrong fix and
-// why this took three sightings to place. What a busy handler cannot cover is
-// `SQLITE_BUSY_SNAPSHOT`: a WAL read snapshot made stale by another
-// connection's commit. SQLite returns that IMMEDIATELY, bypassing the handler,
-// because waiting cannot help — only restarting the transaction can, which is
-// what `withTransientDatabaseLockRetry` does. Every badge helper is
-// read-then-write, the exact shape that hits it, and the page's own result
-// polling supplies the concurrent commits.
-//
-// The fix is two things, and the second is the one that matters: retry the
-// side effects, and make them unable to fail the request either way. A class
+// It threw because the database, then SQLite, returned a stale-snapshot lock
+// error to a read-then-write transaction. SQLite is gone, but the rule stands:
+// a side effect of a stored grade must not be able to fail the request. A class
 // badge is worth an ordinary amount. A student's grade is not worth losing for
 // one.
 //
@@ -121,21 +111,16 @@ import Testing
                 window.contains("bestEffort("),
                 """
                 \(sideEffect) is not inside `bestEffort`, so it can throw and turn a stored grade \
-                into a 500. Wrap it — it retries the transient WAL snapshot race and logs anything \
-                that survives.
+                into a 500. Wrap it — it logs the failure instead.
                 """)
         }
     }
 
-    /// The retry is what makes "best effort" actually award the badge most of
-    /// the time, rather than quietly dropping it on the first stale snapshot.
-    @Test func theBestEffortWrapperRetriesRatherThanOnlySwallowing() throws {
+    /// The wrapper swallows a failure, so it must log it.
+    @Test func theBestEffortWrapperLogsWhatItSwallows() throws {
         let body = try Self.sideEffectBody()
         let wrapper = try #require(body.range(of: "func bestEffort("))
         let after = body[wrapper.upperBound...].prefix(400)
-        #expect(
-            after.contains("withTransientDatabaseLockRetry"),
-            "bestEffort swallows without retrying, so a transient race silently loses the badge")
         #expect(
             after.contains("logger.warning"),
             "a swallowed failure must still be visible in the logs")

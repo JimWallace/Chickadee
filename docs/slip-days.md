@@ -68,12 +68,10 @@ the budget, the ledger, and the affordances:
 
 Stacking means there is no per-assignment UNIQUE constraint to absorb a lost
 race, so `SlipDayStore.spend` is genuinely transactional: one transaction
-that (on Postgres) first takes a `FOR UPDATE` row lock on the (user, course)
+that first takes a `FOR UPDATE` row lock on the (user, course)
 enrollment row — serializing every balance mutation for that student — then
 inserts the ledger row and asserts the budget invariant *after* the insert,
-rolling back on violation. On SQLite the single-writer lock provides the
-serialization; an interleaved loser fails BUSY (fails closed) rather than
-double-spending. Refunds run under the same lock. Never call
+rolling back on violation. Refunds run under the same lock. Never call
 `SlipDayStore.spend`/`refund` inside an enclosing `db.transaction`.
 
 ### Staff extensions take precedence

@@ -9,7 +9,7 @@ import Foundation
 /// transaction and removes `filePaths` only after that transaction commits.
 ///
 /// Before #2766 each delete was its own auto-commit, and the files went first.
-/// A `SQLITE_BUSY` after the result delete left a live assignment whose
+/// A database error after the result delete left a live assignment whose
 /// submissions had no results, so its students showed as ungraded. Now a
 /// failure at any step rolls every row back, and no file is gone.
 enum AssignmentDeletion {

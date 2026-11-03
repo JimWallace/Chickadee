@@ -739,7 +739,7 @@ projects it.
     `recordTournamentMatch`, all in one transaction. The transaction starts
     with one conditional update that claims the match (`claimArenaMatch`), so
     of two presenters who post one match at once, one lands it and the other
-    gets a 409, on SQLite and Postgres alike. A failure rolls the claim back,
+    gets a 409. A failure rolls the claim back,
     so the match waits again and the presenter can replay it.
 - **Limits.** The arena runs in one browser, one match at a time. A bracket of
   `n` entrants plays `n - 1` matches. The match runs with the presenter's

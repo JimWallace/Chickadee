@@ -102,8 +102,8 @@ student has earned:
 Unique on `(user_id, level, owner_id, achievement_id)`. The write is an
 upsert that tolerates a unique violation, like `wardrobe_unlocks`.
 
-`owner_id` is required. A unique index treats two NULLs as different values
-on both SQLite and Postgres, so a NULL owner for the site level would let one
+`owner_id` is required. A Postgres unique index treats two NULLs as different
+values, so a NULL owner for the site level would let one
 site award be stored twice. The site level uses the owner `site`.
 
 Today an individual badge is computed on every view (`earnedIndividualBadges`)

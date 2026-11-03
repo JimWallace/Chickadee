@@ -475,17 +475,16 @@ struct AdminRoutes: RouteCollection {
         let deletedUsername = user.username
         let deletedRole = user.role
 
-        // The columns that name a user with NO foreign key on either backend
-        // are cleared here, before the row goes (docs/operational-diagnostics.md
-        // "User-row foreign-key cascade"). Every other reference is a declared
-        // FK, which both backends enforce: SQLite because `configureDatabase`
-        // turns foreign keys on. `UserReferenceScanTests` lists the FK-less
+        // The columns that name a user with NO foreign key are cleared here,
+        // before the row goes (docs/operational-diagnostics.md "User-row
+        // foreign-key cascade"). Every other reference is a declared FK.
+        // `UserReferenceScanTests` lists the FK-less
         // columns, so a new one must be cleared here or kept on purpose there
         // (#1808).
         //
         // `class_achievements.user_id` and `submissions.retested_by_user_id`
-        // gained an FK on Postgres only (`AddUserFKConstraints`); SQLite cannot
-        // add one after the fact, so both are cleared here for both backends.
+        // gained their FKs late (`AddUserFKConstraints`), and the cleanup from
+        // before that, when SQLite could not add them, agrees with them.
         try await APIClassAchievement.query(on: req.db)
             .filter(\.$userID == uuid)
             .delete()

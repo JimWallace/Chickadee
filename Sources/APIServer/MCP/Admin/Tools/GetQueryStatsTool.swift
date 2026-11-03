@@ -27,7 +27,7 @@ struct GetQueryStatsTool: DiagnosticTool {
     struct Output: Encodable, Sendable {
         /// false when the statistics cannot be read; `note` says why.
         let available: Bool
-        /// notPostgres | notPreloaded | extensionMissing | ready
+        /// notPreloaded | extensionMissing | ready
         let state: String
         let note: String?
         let orderBy: String
@@ -74,7 +74,7 @@ struct GetQueryStatsTool: DiagnosticTool {
         + "total time (where the database spends its time, the default), mean time (the slowest "
         + "single statements) or calls (the statements that run most often). Use it after "
         + "get_metrics_snapshot or get_request_metrics shows a slow route, to find the statement "
-        + "behind it. Returns available=false with a note when the database is SQLite or the "
+        + "behind it. Returns available=false with a note when the pg_stat_statements "
         + "extension is not loaded. Read-only; only SELECT/INSERT/UPDATE/DELETE/MERGE statements are "
         + "returned, which Postgres normalizes with every constant replaced by a placeholder."
     static let inputSchema: JSONValue = .object([

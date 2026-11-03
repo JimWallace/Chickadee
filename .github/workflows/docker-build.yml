@@ -155,10 +155,9 @@ jobs:
       contents: read
       packages: write
 
-    # Postgres for the smoke test below. Production runs postgres, and the
-    # server's /health answers 503 whenever its database check fails — so a
-    # smoke test on the sqlite default proves the binary starts and nothing
-    # about the path the deploy gate actually keys on.
+    # Postgres for the smoke test below: the server's only backend. Its
+    # /health answers 503 whenever its database check fails, which is the
+    # path the deploy gate keys on.
     services:
       postgres:
         image: ghcr.io/jimwallace/chickadee/postgres:16
@@ -326,9 +325,10 @@ jobs:
       #
       # `AUTH_MODE=local` is required, not cosmetic: the server refuses to boot
       # under any other mode without OIDC credentials, and a smoke test is not
-      # the place to hold real ones. Everything else runs at its default —
-      # sqlite, no worker secret (one is generated), no MCP — which is enough to
-      # prove the binary starts, migrations apply, and the HTTP server serves.
+      # the place to hold real ones. Apart from the database and MCP below,
+      # everything runs at its default (no worker secret: one is generated),
+      # which is enough to prove the binary starts, migrations apply, and the
+      # HTTP server serves.
       #
       # `PUBLIC_BASE_URL` is what actually MOUNTS the MCP surfaces. Setting
       # `MCP_MODE` alone is not enough — without an issuer/resource the server
@@ -376,7 +376,6 @@ jobs:
               -e MCP_MODE=read_write \
               -e PUBLIC_BASE_URL=http://127.0.0.1:8080 \
               -e MCP_ALLOW_OPEN_GUARDS=true \
-              -e DATABASE_BACKEND=postgres \
               -e DATABASE_HOST=127.0.0.1 \
               -e DATABASE_PORT=5432 \
               -e DATABASE_NAME=chickadee_smoke \

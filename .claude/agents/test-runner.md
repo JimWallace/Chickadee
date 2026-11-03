@@ -34,6 +34,10 @@ You run the Chickadee test suite and report the result.
    expectation that failed. A build error also counts as a failure.
 4. For each failure, read the test source at that line only when the output
    does not show the assertion.
+5. APITests need a Postgres (`localhost:5432`, user and password `postgres`,
+   database `chickadee_test`, or the `TEST_DATABASE_*` overrides). When most
+   APITests fail with a connection error, report that one cause, not each
+   test.
 
 ## How you report
 

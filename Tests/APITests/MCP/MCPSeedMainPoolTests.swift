@@ -13,7 +13,6 @@
 
 import Core
 import Fluent
-import FluentSQLiteDriver
 import Foundation
 import Testing
 import Vapor
@@ -24,13 +23,13 @@ import Vapor
 
     private let manifestWithRoom = TestManifests.emptySuite
 
-    /// A second, unmigrated in-memory database with NO
+    /// A second, unmigrated database (an empty schema) with NO
     /// `assignment_personalization_seeds` table — stands in for the
     /// least-privilege `.mcp` pool, where that table is unreachable. Caller owns
     /// shutdown.
     private func makeSeedlessPool() async throws -> Application {
         try await makeTestingApplication { app in
-            try configureDatabase(app, settings: .sqliteInMemory())
+            try await configureEmptyPostgresTestSchema(app)
         }
     }
 
@@ -134,8 +133,8 @@ import Vapor
         try await withTestApp { app in
             // Model production: a dedicated MCP pool that, like the chickadee_mcp
             // role, cannot see assignment_personalization_seeds. A fresh,
-            // unmigrated in-memory DB has no such table at all.
-            app.databases.use(.sqlite(SQLiteConfiguration(storage: .memory)), as: .mcp)
+            // unmigrated empty schema has no such table at all.
+            try await registerEmptyPostgresSchemaPool(on: app, as: .mcp)
             app.usesDedicatedMCPDatabase = true
 
             let context = ToolContext(

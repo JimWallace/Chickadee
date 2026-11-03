@@ -3,8 +3,7 @@
 // Creates the on-disk directories the server reads/writes (results,
 // test setups, submissions) and seeds the Application storage with
 // their paths plus the auxiliary service stores that depend on them
-// (worker secret, local-runner autostart, worker activity tracker,
-// claim queue).
+// (worker secret, local-runner autostart, worker activity tracker).
 //
 // Extracted from configure(_:) in #496.
 
@@ -49,7 +48,6 @@ func bootstrapAppDirectories(_ app: Application, workDir: String, cliWorkerSecre
     let localRunnerAutoStartEnabled =
         readLocalRunnerAutoStartFromDisk(filePath: localRunnerAutoStartFile) ?? false
 
-    app.storage[WorkerClaimQueueKey.self] = WorkerClaimQueue()
     app.storage[WorkerSecretStoreKey.self] = WorkerSecretStore(initialOverride: startupWorkerSecret)
     app.storage[WorkerActivityStoreKey.self] = WorkerActivityStore()
     // Seeded eagerly (like the stores above) so request handlers never hit

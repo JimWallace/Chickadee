@@ -23,7 +23,6 @@ import VaporTesting
 
     init() async throws {
         self.app = try await makeTestApp(prefix: "chickadee-parity")
-        app.storage[WorkerClaimQueueKey.self] = WorkerClaimQueue()
         await app.workerSecretStore.setRuntimeOverride(workerSecret)
     }
 

@@ -21,9 +21,6 @@ import VaporTesting
 
     init() async throws {
         self.app = try await makeTestApp(prefix: "chickadee-worker")
-
-        // Initialize the claim queue before requests start (mirrors configure() eager-init pattern).
-        app.storage[WorkerClaimQueueKey.self] = WorkerClaimQueue()
         // Set the shared secret so WorkerHMACAuthMiddleware validates signed requests
         await app.workerSecretStore.setRuntimeOverride(workerSecret)
     }
