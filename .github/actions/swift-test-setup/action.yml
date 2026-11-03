@@ -19,7 +19,9 @@ inputs:
     description: >
       What to do with the shared .build cache. "save" restores it and saves it
       when the job ends (the swift-tests.yml build job only). "restore" only
-      restores it. "none" does not touch it.
+      restores it. "require" restores it and fails the job when the restore is
+      not an exact hit (the swift-tests.yml test lanes, which run after the
+      build job saved the key). "none" does not touch it.
     required: true
   tools:
     description: >
@@ -48,9 +50,9 @@ runs:
         BUILD_CACHE: ${{ inputs.build-cache }}
       run: |
         case "$BUILD_CACHE" in
-          save|restore|none) ;;
+          save|restore|require|none) ;;
           *)
-            echo "::error::build-cache must be save, restore or none. It is '${BUILD_CACHE}'."
+            echo "::error::build-cache must be save, restore, require or none. It is '${BUILD_CACHE}'."
             exit 1
             ;;
         esac
@@ -95,11 +97,28 @@ runs:
 
     - name: Restore the build cache
       id: restore
-      if: inputs.build-cache == 'restore'
+      if: inputs.build-cache == 'restore' || inputs.build-cache == 'require'
       uses: actions/cache/restore@v6
       with:
         path: .build
         key: ${{ steps.build-key.outputs.key }}
+
+    # A lane that runs after the build job saved this exact key and still
+    # misses lost the cache, most likely to eviction under the cache size
+    # limit (docs/ci-flakiness.md, Family 8). A cold build there only spends
+    # the test step budget and times out like a wedge, with no test run. Fail
+    # here instead, with the cause and the re-run that works. This step, not
+    # `fail-on-cache-miss`, so the message names the family, and so a restore
+    # that only warned on a transport error (cache-hit not 'true') fails the
+    # same way.
+    - name: Require an exact build cache hit
+      if: inputs.build-cache == 'require' && steps.restore.outputs.cache-hit != 'true'
+      shell: bash
+      env:
+        KEY: ${{ steps.build-key.outputs.key }}
+      run: |
+        echo "::error title=Build cache miss (CI flakiness Family 8)::The build job saved ${KEY}, but this job could not restore it. The cache was probably evicted, or a concurrent run on the same tree had not finished saving it. This is not caused by the diff. Use Re-run all jobs, not /rerun-failed, so that the build job saves the cache again. See docs/ci-flakiness.md, Family 8."
+        exit 1
 
     # The swift-ci image has all of these. The apt-get path is the fallback
     # for a stale image (for example, a toolchain change before mirror-images.yml

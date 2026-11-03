@@ -363,7 +363,7 @@ jobs:
         id: setup
         uses: ./.github/actions/swift-test-setup
         with:
-          build-cache: restore
+          build-cache: require
           # zip and unzip are for ZipSubprocessTests (`.requiresZipTools`).
           # The action also probes for every grading interpreter, although
           # CoreTests starts none of them. The interpreter list is in the
@@ -445,7 +445,7 @@ jobs:
         id: setup
         uses: ./.github/actions/swift-test-setup
         with:
-          build-cache: restore
+          build-cache: require
           tools: zip unzip
 
       - name: Run APITests
@@ -522,7 +522,7 @@ jobs:
         id: setup
         uses: ./.github/actions/swift-test-setup
         with:
-          build-cache: restore
+          build-cache: require
           tools: zip unzip
 
       - name: Run APITests against PostgreSQL
@@ -643,7 +643,7 @@ jobs:
         id: setup
         uses: ./.github/actions/swift-test-setup
         with:
-          build-cache: restore
+          build-cache: require
           # `file` is for the MIME detection of SubmissionNormalizer. `make`
           # is the pre-test build step of the runner, which the hung-make
           # timeout test of WorkerDaemonTests needs (`.requiresMake`). The
