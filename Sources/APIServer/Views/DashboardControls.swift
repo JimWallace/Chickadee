@@ -16,8 +16,8 @@ struct DashboardControls {
             guard let viewer else { return false }
             return viewer.isAdmin || viewer.activeCourse.map { $0.role >= floor } == true
         }
-        createAssignment = meets(DashboardRoleFloor.createAssignment)
-        assignmentLifecycle = meets(DashboardRoleFloor.assignmentLifecycle)
-        manageSections = meets(DashboardRoleFloor.manageSections)
+        createAssignment = meets(CourseRoleFloor.createAssignment)
+        assignmentLifecycle = meets(CourseRoleFloor.assignmentLifecycle)
+        manageSections = meets(CourseRoleFloor.manageSections)
     }
 }

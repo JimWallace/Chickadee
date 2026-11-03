@@ -128,7 +128,7 @@ struct CreateAssignmentTool: ContentTool {
         // `courseCode` may be a bare code or a course key, so the output reports
         // the resolved course rather than echoing the argument.
         let course = try await resolveCourseForWrite(
-            code: input.courseCode, context: context, atLeast: .instructor)
+            code: input.courseCode, context: context, atLeast: CourseRoleFloor.createAssignment)
         let courseID = try course.requireID()
 
         let data: Data

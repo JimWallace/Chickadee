@@ -35,7 +35,7 @@ extension DraftAssignmentRoutes {
         // shown a form whose save would be refused.
         if let courseID = courseState.activeCourseUUID {
             try await requireCourseWriteAccess(
-                caller: user, courseID: courseID, atLeast: DashboardRoleFloor.createAssignment, db: req.db)
+                caller: user, courseID: courseID, atLeast: CourseRoleFloor.createAssignment, db: req.db)
         }
         let q = (try? req.query.decode(NewQuery.self))
 
@@ -145,7 +145,7 @@ extension DraftAssignmentRoutes {
         // Creating an assignment is an instructor action. A TA passes the area
         // gate (`ActiveCourseStaffMiddleware`), so the floor is stated here.
         let courseID = try await req.requireActiveCourseForWrite(
-            user, atLeast: DashboardRoleFloor.createAssignment, action: "creating an assignment"
+            user, atLeast: CourseRoleFloor.createAssignment, action: "creating an assignment"
         ).requireID()
 
         let payload = try await parseNewAssignmentDraftPayload(req: req)
@@ -303,7 +303,7 @@ extension DraftAssignmentRoutes {
     func saveNewAssignment(req: Request) async throws -> Response {
         let saveUser = try req.auth.require(APIUser.self)
         let courseID = try await req.requireActiveCourseForWrite(
-            saveUser, atLeast: DashboardRoleFloor.createAssignment, action: "creating an assignment"
+            saveUser, atLeast: CourseRoleFloor.createAssignment, action: "creating an assignment"
         ).requireID()
 
         let form = try await parseSaveNewAssignmentForm(req: req)
@@ -703,7 +703,7 @@ extension DraftAssignmentRoutes {
             // the handler has already checked with `requireActiveCourseForWrite`.
             let caller = try req.auth.require(APIUser.self)
             try await requireCourseWriteAccess(
-                caller: caller, courseID: existing.courseID, atLeast: .instructor, db: req.db)
+                caller: caller, courseID: existing.courseID, atLeast: CourseRoleFloor.createAssignment, db: req.db)
             return existing
         }
 
@@ -748,7 +748,7 @@ extension DraftAssignmentRoutes {
 
         let publishUser = try req.auth.require(APIUser.self)
         let courseID = try await req.requireActiveCourseForWrite(
-            publishUser, atLeast: DashboardRoleFloor.createAssignment, action: "publishing an assignment"
+            publishUser, atLeast: CourseRoleFloor.createAssignment, action: "publishing an assignment"
         ).requireID()
         let body = try await req.decodeContent(PublishBody.self)
 

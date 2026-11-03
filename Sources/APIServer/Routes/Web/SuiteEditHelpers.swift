@@ -78,7 +78,8 @@ func loadDraftSetupForRead(_ req: Request) async throws -> APITestSetup {
 func loadDraftSetupForWrite(_ req: Request) async throws -> APITestSetup {
     let setup = try await loadDraftSetup(req)
     let caller = try req.auth.require(APIUser.self)
-    try await requireCourseWriteAccess(caller: caller, courseID: setup.courseID, atLeast: .instructor, db: req.db)
+    try await requireCourseWriteAccess(
+        caller: caller, courseID: setup.courseID, atLeast: CourseRoleFloor.createAssignment, db: req.db)
     return setup
 }
 
