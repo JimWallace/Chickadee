@@ -9,6 +9,16 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.805] - 2026-11-03
+
+### Changed
+
+- **A Swift test lane that misses the build cache fails fast (CI flakiness Family 8).** On 2026-11-03, `worker-tests` could not restore the `.build` cache that the `build` job of the same run had saved, most likely because the cache was evicted. It compiled cold and hit its 15-minute step limit before any test ran, which looked like a wedge. The Swift test lanes of `swift-tests.yml` now use `build-cache: require` on `swift-test-setup`, which fails the setup step with an error that names the family and says to re-run all jobs. `docs/ci-flakiness.md` documents the family.
+- **Pull requests no longer save the release or BuildKit caches.** The repository's Actions cache was over its 10 GB limit, and a cache saved on a pull request is readable only by that pull request. `docker-build.yml` now restores both caches on a pull request and saves them only on pushes to `main` and on tags. A re-run of a pull request now rebuilds the release binaries cold.
+- **The Swift Tests `build` job may run for 40 minutes, up from 25.** A cold build (package fetch plus compile) now takes about 25 minutes, so two runs on 2026-11-03, one of them on `main`, were cancelled while they saved the build cache.
+- **A cold Swift Tests build restores SwiftPM's package mirrors.** The `build` job spent about 4.5 minutes cloning 41 packages on a cache miss. It now restores `.build/repositories` from one cache entry that pushes to `main` save, so a pull request fetches only what changed.
+
+
 ## [0.5.804] - 2026-11-03
 
 ### Fixed
