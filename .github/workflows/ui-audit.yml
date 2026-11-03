@@ -60,6 +60,27 @@ jobs:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
       options: --privileged
+    # Postgres for the server this job boots. scripts/lib/scratch-database.sh
+    # creates a database per boot in it, through psql in the swift-ci image.
+    services:
+      postgres:
+        image: ghcr.io/jimwallace/chickadee/postgres:16
+        credentials:
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      TEST_DATABASE_HOST: postgres
+      TEST_DATABASE_PORT: "5432"
+      TEST_DATABASE_USER: postgres
+      TEST_DATABASE_PASSWORD: postgres
 
     steps:
       - uses: actions/checkout@v7

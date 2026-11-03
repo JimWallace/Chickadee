@@ -379,10 +379,8 @@ private func recordMatrixMatches(
 /// Two results landing together each wrote their own row, read the leader
 /// without the other's row, and set the record, so the later write could
 /// name a student the standings did not show first (#2192, the #1752
-/// family). A no-op `UPDATE` of the setup row takes that row's lock on
-/// Postgres and the write lock on SQLite. The second ingest waits for the
-/// first to commit (or, on SQLite, is retried by the caller's
-/// `withTransientDatabaseLockRetry`) and then reads both rows.
+/// family). A no-op `UPDATE` of the setup row takes that row's lock, so the
+/// second ingest waits for the first to commit and then reads both rows.
 private func lockStandings(of setupID: String, on db: any Database) async throws {
     guard let sql = db as? (any SQLDatabase) else { return }
     try await sql.raw(

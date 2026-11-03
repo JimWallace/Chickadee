@@ -384,13 +384,11 @@ jobs:
     runs-on: ubuntu-latest
     needs: [changes, build]
     if: needs.changes.outputs.scope == 'full'
-    # 25, matching api-tests-postgres, which runs the SAME target. This lane
-    # had the tighter ceiling despite the wider run-to-run spread (2.2x vs
-    # 1.4x over 18 main runs) — an inversion, not a decision. Note the budget
-    # the step actually gets is this minus ~95s of container init + checkout +
-    # artifact restore. See docs/ci-flakiness.md Family 5; the entry is
-    # explicit that this buys headroom for the ordinary 441s tail and would
-    # NOT have saved the 5x starvation event that prompted it.
+    # Postgres is the server's only backend, so this is the one APITests lane.
+    # Until SQLite support was removed, a second lane ran the same target on
+    # SQLite. See docs/ci-flakiness.md Family 5 for the budget: it buys
+    # headroom for the ordinary tail and would not survive a 5x starvation
+    # event.
     timeout-minutes: 25
     container:
       # swift-ci = the mirrored toolchain + baked-in test packages (see
@@ -400,95 +398,19 @@ jobs:
       credentials:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
-      # `/tmp` is a RAM disk for this job, and that is the single largest
-      # lever on `api-tests` cost. `FileManager.default.temporaryDirectory`
+      # `/tmp` is a RAM disk for this job. `FileManager.default.temporaryDirectory`
       # resolves to `/tmp` here (the runner sets no TMPDIR in the container),
-      # and the suite builds ~3,200 Vapor test applications in it: each one
-      # gets a temp directory tree AND a real SQLite file, because sqlite-kit
-      # backs a `.memory` database with an on-disk temp file, then runs 60
-      # migrations against it. That is tens of thousands of small
-      # transactional fsyncs per run.
-      #
-      # Measured, full APITests at this job's parallelization width, same
-      # machine and build, `/tmp` on disk vs `/tmp` on tmpfs:
-      #
-      #   on disk  287.6 s / 274.9 s   PSI io_full 20-27 % of wall clock
-      #   on tmpfs 165.7 s / 162.1 s   PSI io_full  0.0-0.2 %
-      #
-      # 42 % off the step, and the "every task on the box is blocked on disk"
-      # stall that dominated it disappears. Peak tmpfs usage across a full run
-      # was 4 MiB, so the 2 GiB cap is three orders of magnitude of headroom,
-      # not a budget — and tmpfs only occupies the RAM it actually holds.
-      #
-      # On the runner itself the first three measured runs were 189 s, 230 s
-      # and 217 s against a 291 s main median, with io_full 0.0 % in every
-      # window of all three. The stall is reliably gone; the size of the
-      # saving is -25 % to -35 % at n=3 and firms up with the main population.
+      # and the suite builds thousands of Vapor test applications, each with
+      # its own temp directory tree. On the old SQLite lane, which also kept
+      # its database file in `/tmp`, tmpfs cut the step by 42 % and removed an
+      # io_full stall of 20-27 % of wall clock. Here the database lives in the
+      # postgres service container on the runner's real disk, which tmpfs
+      # cannot reach, so the win is smaller; it still takes the per-application
+      # temp trees off disk.
       #
       # `exec` is load-bearing: Docker's --tmpfs defaults to noexec, and the
       # suite writes generated test scripts into these directories and then
       # runs them. Without it, every execution-path suite fails.
-      #
-      # See docs/ci-flakiness.md Family 5 for why the cost matters beyond the
-      # cost: the lane's failure mode is being killed at the ceiling during a
-      # throughput collapse, and halving the ordinary cost doubles the
-      # collapse the lane can absorb.
-      options: "--privileged --tmpfs /tmp:rw,exec,size=2g"
-
-    steps:
-      - uses: actions/checkout@v7
-
-      # The swift-ci image has the test dependencies, so the probe normally
-      # only does a check. The action tells why each lane probes for EVERY
-      # grading interpreter (the Rscript silent-skip trap).
-      - name: Swift test setup
-        id: setup
-        uses: ./.github/actions/swift-test-setup
-        with:
-          build-cache: restore
-          tools: zip unzip
-
-      - name: Run APITests
-        # Swift Testing schedules many class-suite instances in parallel
-        # regardless of the swift test --parallel flag.  Each test app
-        # opens its own SQLite connection pool with one connection per
-        # EventLoop, and at unbounded parallelism the combined pool
-        # requests time out (AsyncKit "Connection request timed out").
-        # `SWT_EXPERIMENTAL_MAXIMUM_PARALLELIZATION_WIDTH=4` caps Swift
-        # Testing's internal scheduler to four in-flight tests at a
-        # time — enough headroom for the connection pool to keep up,
-        # with most of the parallelism speedup preserved.
-        #
-        # The lane script skips the build on an exact cache hit, and then
-        # fails on any skipped test (scripts/check-no-skipped-tests.sh).
-        env:
-          SWT_EXPERIMENTAL_MAXIMUM_PARALLELIZATION_WIDTH: "4"
-          CACHE_HIT: ${{ steps.setup.outputs.cache-hit }}
-        run: scripts/ci-swift-test-lane.sh api-tests --filter APITests
-
-  api-tests-postgres:
-    runs-on: ubuntu-latest
-    needs: [changes, build]
-    if: needs.changes.outputs.scope == 'full'
-    timeout-minutes: 25
-    container:
-      # swift-ci: see the api-tests job note.
-      image: ghcr.io/jimwallace/chickadee/swift-ci:6.4-resolute
-      credentials:
-        username: ${{ github.actor }}
-        password: ${{ secrets.GITHUB_TOKEN }}
-      # Same tmpfs `/tmp` as the api-tests lane, for the same reason and with
-      # the same `exec` requirement — see that job for the measurement.
-      #
-      # On THIS lane the win is much smaller and not yet established: 382 s
-      # and 342 s against a 391 s main median. The `[ci-pressure]` telemetry
-      # says why, and that part does not rest on durations — this lane still
-      # runs at io_full 10.5-14.7 %, because
-      # its database is not in `/tmp` at all. It is in the postgres service
-      # container, writing to the runner's real disk, where moving our own
-      # temp directory to RAM cannot reach it. Kept anyway: it still takes the
-      # per-application temp trees off disk, and two lanes running the same
-      # target are worth more identical than they are worth micro-tuned.
       options: "--privileged --tmpfs /tmp:rw,exec,size=2g"
     services:
       postgres:
@@ -505,19 +427,18 @@ jobs:
           --health-interval 10s
           --health-timeout 5s
           --health-retries 10
-
     env:
-      TEST_DATABASE_BACKEND: postgres
       TEST_DATABASE_HOST: postgres
       TEST_DATABASE_PORT: "5432"
       TEST_DATABASE_NAME: chickadee_test
       TEST_DATABASE_USER: postgres
       TEST_DATABASE_PASSWORD: postgres
-
     steps:
       - uses: actions/checkout@v7
 
-      # The same setup as the api-tests job.
+      # The swift-ci image has the test dependencies, so the probe normally
+      # only does a check. The action tells why each lane probes for EVERY
+      # grading interpreter (the Rscript silent-skip trap).
       - name: Swift test setup
         id: setup
         uses: ./.github/actions/swift-test-setup
@@ -525,7 +446,7 @@ jobs:
           build-cache: restore
           tools: zip unzip
 
-      - name: Run APITests against PostgreSQL
+      - name: Run APITests
         # Swift Testing schedules many class-suite instances in parallel
         # regardless of the swift test --parallel flag, and during the
         # FluentKit migration step each Application opens multiple
@@ -716,7 +637,6 @@ jobs:
       - build
       - core-tests
       - api-tests
-      - api-tests-postgres
       - browser-runner-tests
       - worker-tests
     if: always() && !cancelled()
@@ -730,6 +650,6 @@ jobs:
         with:
           needs: ${{ toJSON(needs) }}
           allowed-skipped: >-
-            ${{ needs.changes.outputs.scope == 'skip' && 'build core-tests api-tests api-tests-postgres worker-tests'
-             || needs.changes.outputs.scope == 'build' && 'core-tests api-tests api-tests-postgres worker-tests'
+            ${{ needs.changes.outputs.scope == 'skip' && 'build core-tests api-tests worker-tests'
+             || needs.changes.outputs.scope == 'build' && 'core-tests api-tests worker-tests'
              || '' }}

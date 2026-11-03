@@ -4,9 +4,10 @@
 # test against it, tear it down, and exit with the test's result.
 #
 # This is the single-config runner (used by CI and by selftest.sh). It boots
-# the server with local auth on an ephemeral SQLite DB so no external services
-# are needed, then drives the real JupyterLite editor through the real
-# middleware chain — which is where the COEP/header regressions actually bit us.
+# the server with local auth on a throwaway Postgres database (see
+# scripts/lib/scratch-database.sh for the connection it needs), then drives
+# the real JupyterLite editor through the real middleware chain — which is
+# where the COEP/header regressions actually bit us.
 #
 # Env knobs:
 #   CHICKADEE_SERVER_BIN   path to the built server (default: debug build)
@@ -38,14 +39,21 @@ if [ ! -x "$BIN" ]; then
   fi
 fi
 
+# shellcheck source=../../scripts/lib/scratch-database.sh
+. "$REPO_ROOT/scripts/lib/scratch-database.sh"
+
 cleanup() {
   if [ -n "${SRV_PID:-}" ] && kill -0 "$SRV_PID" 2>/dev/null; then
     kill "$SRV_PID" 2>/dev/null || true
     wait "$SRV_PID" 2>/dev/null || true
   fi
+  chickadee_scratch_db_drop
   rm -rf "$WORKDIR"
 }
 trap cleanup EXIT
+
+# A fresh Postgres database for this boot, dropped by cleanup.
+chickadee_scratch_db_create smoke || exit 2
 
 echo "run-smoke: booting $BIN on 127.0.0.1:$PORT"
 # Launch from the repo root: Vapor's DirectoryConfiguration.detect() resolves
@@ -56,8 +64,6 @@ echo "run-smoke: booting $BIN on 127.0.0.1:$PORT"
   cd "$REPO_ROOT"
   ENABLE_NON_SSO_AUTH_MODES=true \
   AUTH_MODE=local \
-  DATABASE_BACKEND=sqlite \
-  SQLITE_PATH="$WORKDIR/smoke.sqlite" \
   MCP_MODE=off \
   LOG_LEVEL=info \
     exec "$BIN" serve --hostname 127.0.0.1 --port "$PORT"
@@ -85,7 +91,7 @@ if [ "$ready" -ne 1 ]; then
 fi
 
 # Run the check; on failure dump the server log tail BEFORE the EXIT trap wipes
-# the work dir, so a server-side 500 (e.g. a SQLite "database is locked") is
+# the work dir, so a server-side 500 is
 # visible in CI instead of hiding behind the browser's generic "500" message.
 set +e
 node "${SMOKE_CHECK:-editor-check.mjs}" "http://127.0.0.1:$PORT"

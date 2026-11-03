@@ -91,7 +91,7 @@ extension ElementaryPageFixtures {
                     AdminStorageRow(label: "Database", formatted: "2.0 MB"),
                     AdminStorageRow(label: "Submissions", formatted: "3.0 MB"),
                 ],
-                totalFormatted: "5.0 MB", dbBackend: "sqlite", assignments: assignments, totalBytes: 5_000_000,
+                totalFormatted: "5.0 MB", dbBackend: "postgres", assignments: assignments, totalBytes: 5_000_000,
                 disk: disk, libraries: libraries)
             return AdminStoragePage(
                 page: page(currentUser: signedInAdmin), storage: storage,

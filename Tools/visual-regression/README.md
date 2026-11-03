@@ -1,6 +1,6 @@
 # Visual regression harness (#1136)
 
-Boots a real `chickadee-server` on an ephemeral SQLite DB, seeds a course +
+Boots a real `chickadee-server` on a throwaway Postgres database, seeds a course +
 assignment + student + pending submission over the real HTTP API, screenshots
 the key pages in **both** colour schemes with Chromium, and diffs the PNGs
 against the committed baselines in `baselines/`.

@@ -44,7 +44,6 @@ let package = Package(
         .package(url: "https://github.com/vapor/vapor.git", from: "4.121.4"),
         .package(url: "https://github.com/vapor/fluent.git", from: "4.13.0"),
         .package(url: "https://github.com/vapor/fluent-postgres-driver.git", from: "2.12.0"),
-        .package(url: "https://github.com/vapor/fluent-sqlite-driver.git", from: "4.9.0"),
         // Every web page is an Elementary view (docs/elementary-spike.md).
         // Pre-1.0, so pinned to the minor.
         .package(url: "https://github.com/elementary-swift/elementary.git", .upToNextMinor(from: "0.8.2")),
@@ -135,7 +134,6 @@ let package = Package(
                 .product(name: "Vapor", package: "vapor"),
                 .product(name: "Fluent", package: "fluent"),
                 .product(name: "FluentPostgresDriver", package: "fluent-postgres-driver"),
-                .product(name: "FluentSQLiteDriver", package: "fluent-sqlite-driver"),
                 .product(name: "Elementary", package: "elementary"),
                 .product(name: "JWT", package: "jwt"),
                 // RSA key generation for the LTI 1.3 tool key; JWTKit can
@@ -276,7 +274,6 @@ let package = Package(
                 .target(name: "ChickadeeTestSupport"),
                 .product(name: "VaporTesting", package: "vapor"),
                 .product(name: "FluentPostgresDriver", package: "fluent-postgres-driver"),
-                .product(name: "FluentSQLiteDriver", package: "fluent-sqlite-driver"),
                 .product(name: "Elementary", package: "elementary"),
                 .product(name: "AsyncHTTPClient", package: "async-http-client"),
             ],

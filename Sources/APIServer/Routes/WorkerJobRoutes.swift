@@ -1,6 +1,5 @@
 import Core
 import Fluent
-import FluentSQLiteDriver
 import Foundation
 import SQLKit
 import Vapor
@@ -119,7 +118,7 @@ struct WorkerJobRoutes: RouteCollection {
         id submissionID: String, req: Request, body: WorkerActivityPayload
     ) async throws -> APISubmission? {
         try await WorkerJobClaim.claimSubmission(
-            id: submissionID, workerID: body.workerID, db: req.db, application: req.application)
+            id: submissionID, workerID: body.workerID, db: req.db)
     }
 
     /// Records "job assigned" diagnostics outside the claim transaction so

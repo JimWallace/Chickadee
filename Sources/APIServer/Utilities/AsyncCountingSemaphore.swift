@@ -1,8 +1,7 @@
 // APIServer/Utilities/AsyncCountingSemaphore.swift
 //
 // The one async semaphore in the server. It bounds concurrent personalization
-// evaluations (#1156) and, with one permit, serializes SQLite job claims
-// (`WorkerClaimQueue`).
+// evaluations (#1156).
 
 /// Minimal counting semaphore for async contexts: `acquire` suspends (no
 /// thread parked) once `width` slots are in use; `release` hands the slot to

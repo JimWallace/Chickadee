@@ -71,16 +71,14 @@ enum PostgresSchemaPoolError: Error, CustomStringConvertible {
 /// A process-wide pool of pre-migrated Postgres schemas, handed out one per
 /// test Application and swept clean on return.
 ///
-/// **Why.** Measured on this lane (local Postgres 16.13, the same probe shape
-/// as the SQLite template note in `configureTestDatabase`):
+/// **Why.** Measured on this lane (local Postgres 16.13):
 /// `Application.make` + shutdown is 0.9 ms,
 /// adding connect + `CREATE SCHEMA` takes it to 11.0 ms, and adding
 /// `autoMigrate` takes it to 450.6 ms. **The 60 migrations are ~98 % of what a
-/// Postgres test application costs**, which is the SQLite lane's finding again
-/// on the lane that could not use the SQLite lane's fix.
+/// Postgres test application costs**, multiplied by every test application.
 ///
 /// **Why not a template database.** `CREATE DATABASE … TEMPLATE` is the obvious
-/// analogue of the file copy, and it was spiked and rejected: 195.8 ms to
+/// answer, and it was spiked and rejected: 195.8 ms to
 /// create plus 158.9 ms to drop, against ~460 ms to migrate. 1.3x is not worth
 /// a second mechanism, and it needs a connection outside the test database to
 /// issue it.
@@ -90,12 +88,10 @@ enum PostgresSchemaPoolError: Error, CustomStringConvertible {
 /// DELETE sweep in one `DO` block (244x)**. TRUNCATE is 44 catalog updates and
 /// 44 file truncations; DELETE against tables one test left nearly empty is a
 /// few pages of WAL. So a returned schema is emptied and handed straight back
-/// out, and the per-test cost stops depending on the migration count at all —
-/// the same O(1)-in-migrations property the SQLite template has.
+/// out, and the per-test cost stops depending on the migration count at all.
 ///
-/// An actor for the same reason `MigratedSQLiteTemplate` is one: the first
-/// caller pays for a migration run and every other caller must wait for that
-/// result rather than racing to build its own.
+/// An actor because the first caller pays for a migration run and every other
+/// caller must wait for that result rather than racing to build its own.
 actor MigratedPostgresSchemaPool {
     static let shared = MigratedPostgresSchemaPool()
 
@@ -219,8 +215,8 @@ actor MigratedPostgresSchemaPool {
             // The slot is reserved BEFORE the first suspension. Actors are
             // reentrant across `await`, so a count incremented after the build
             // would let every concurrent first-caller through this test at
-            // once — the same reentrancy hole that built the SQLite template
-            // three times per run, recorded above.
+            // once — the reentrancy hole that once built the old SQLite
+            // template three times per run.
             created += 1
             nextSchemaIndex += 1
             let index = nextSchemaIndex
@@ -367,7 +363,7 @@ actor MigratedPostgresSchemaPool {
             // migration) — except now it happens `capacity` times per process
             // instead of ~1,100.
             app.logger.logLevel = logLevel
-            try configureDatabase(app, settings: try postgresSettings(settings, searchPath: [name]))
+            configureDatabase(app, settings: postgresSettings(settings, searchPath: [name]))
             registerMigrations(on: app)
             try await app.autoMigrate()
             try await app.asyncShutdown()
@@ -523,9 +519,9 @@ actor MigratedPostgresSchemaPool {
         if let maintenanceTask { return try await maintenanceTask.value }
         guard let settings else { throw PostgresSchemaPoolError.notConfigured }
         let level = logLevel
-        // A `Task`, not an `Application?`, for the reentrancy reason spelled
-        // out on `MigratedSQLiteTemplate.buildTask`: an `if let` followed by an
-        // async build is a window every concurrent first-caller walks through.
+        // A `Task`, not an `Application?`, for reentrancy: an `if let`
+        // followed by an async build is a window every concurrent
+        // first-caller walks through.
         let task = Task { try await Self.makeMaintenanceApplication(settings: settings, logLevel: level) }
         maintenanceTask = task
         do {
@@ -540,19 +536,14 @@ actor MigratedPostgresSchemaPool {
         settings: DatabaseSettings, logLevel: Logger.Level
     ) async throws -> Application {
         let app = try await Application.make(.testing)
-        do {
-            app.logger.logLevel = logLevel
-            // One connection per event loop, against the default of 4. This
-            // pool issues one short statement at a time and the lane already
-            // runs close enough to Postgres's 100-connection cap that the
-            // workflow comment explains the parallelization width by it.
-            try configureDatabase(
-                app, settings: try postgresSettings(settings, searchPath: nil, maxConnectionsPerEventLoop: 1))
-            return app
-        } catch {
-            try? await app.asyncShutdown()
-            throw error
-        }
+        app.logger.logLevel = logLevel
+        // One connection per event loop, against the default of 4. This
+        // pool issues one short statement at a time and the lane already
+        // runs close enough to Postgres's 100-connection cap that the
+        // workflow comment explains the parallelization width by it.
+        configureDatabase(
+            app, settings: postgresSettings(settings, searchPath: nil, maxConnectionsPerEventLoop: 1))
+        return app
     }
 }
 
@@ -564,18 +555,15 @@ actor MigratedPostgresSchemaPool {
 ///
 /// `atexit` does not run when the process is killed or aborts — a SIGILL from a
 /// leaked `Application`, or the CI job-level timeout, both strand the schemas.
-/// That is accepted rather than solved, for the same reason the SQLite template
-/// accepts it: the CI database lives in a service container that is discarded
-/// with the job. The `ck_pool_<tag>` naming is what makes a stranded set
+/// That is accepted rather than solved: the CI database lives in a service
+/// container that is discarded with the job. The `ck_pool_<tag>` naming is what makes a stranded set
 /// identifiable in a developer's long-lived database.
 private enum PostgresSchemaPoolCleanup {
     /// A list, not just the shared pool. `MigratedPostgresSchemaPool` is
     /// constructible, so a second one exists the moment a test wants to drive
     /// the mechanism without draining the shared pool — and a cleanup that
-    /// knew only about `shared` would leak that one's schemas. The SQLite
-    /// template's cleanup keeps a list for the same reason and learned it the
-    /// same way: make the cleanup correct independently of how many things
-    /// there turn out to be.
+    /// knew only about `shared` would leak that one's schemas. Make the
+    /// cleanup correct independently of how many things there turn out to be.
     private static let registered = Mutex<[MigratedPostgresSchemaPool]>([])
 
     static func register(_ pool: MigratedPostgresSchemaPool) {

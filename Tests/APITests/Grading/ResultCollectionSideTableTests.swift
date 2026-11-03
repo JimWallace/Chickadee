@@ -106,7 +106,7 @@ import VaporTesting
     @Test func chunkedBackfillCopiesEveryBlobAndDropsTheColumn() async throws {
         let app = try await Application.make(.testing)
         do {
-            try configureDatabase(app, settings: .sqliteInMemory())
+            try await configureEmptyPostgresTestSchema(app)
             let sql = try #require(app.db as? any SQLDatabase)
 
             // Legacy shape: minimal parents + a results table that still

@@ -4,7 +4,7 @@
 // The least-privilege `chickadee_mcp` Postgres role is deny-by-omission: any
 // table the MCP tools read must carry an explicit GRANT in that file, or every
 // affected tool call fails in production with "permission denied" — invisible
-// to the SQLite/owner-role test runs. That is exactly how #1176's
+// to the owner-role test runs. That is exactly how #1176's
 // `result_collections` side table broke `get_validation_result` (the grants
 // file predated the table). This suite fails the build when a table read
 // through `MCPStudentDataBoundary` (or its blob side table) is missing a

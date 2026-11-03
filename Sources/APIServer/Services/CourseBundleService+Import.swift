@@ -161,9 +161,7 @@ extension CourseBundleService {
     // ── 6. Transactional import ───────────────────────────────────────
     // The conflict check (formerly step 5) is now the first thing inside the
     // transaction so there is no outstanding req.db cursor before the transaction
-    // begins. On SQLite this prevents "busy: cannot commit transaction — SQL
-    // statements in progress" errors caused by an open cursor from a pre-transaction
-    // query lingering when the COMMIT fires.
+    // begins.
     //
     // Returns a tally from the closure to avoid captured-var mutation warnings
     // (errors in Swift 6 strict mode).

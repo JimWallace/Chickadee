@@ -19,9 +19,9 @@ import VaporTesting
 
     /// Inserts an audit_log row and back-dates its `created_at` to `daysOld`
     /// days ago.  `@Timestamp(on: .create)` only fires on first insert, so a
-    /// second save with an explicit `createdAt` preserves the override —
-    /// portable across SQLite and Postgres (a raw SQL UPDATE binding the
-    /// timestamp as text trips Postgres's strict timestamptz typing).
+    /// second save with an explicit `createdAt` preserves the override (a raw
+    /// SQL UPDATE binding the timestamp as text trips Postgres's strict
+    /// timestamptz typing).
     @discardableResult
     private func seedEntry(action: String, daysOld: Int) async throws -> UUID {
         let entry = APIAuditLogEntry(action: action)
