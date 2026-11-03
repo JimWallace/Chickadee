@@ -9,6 +9,13 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.794] - 2026-11-03
+
+### Security
+
+- **The browser-runner setup download serves a student only a browser-graded setup (#2763).** Before this change, a student enrolled in the course could download the setup zip of an open worker-graded assignment through `/api/v1/browser-runner/testsetups/:id/download`. That zip holds the release and secret test scripts. Now a caller who is not course staff gets 403 unless the effective grading mode is `browser`. A manifest that does not decode also refuses the download for a student, and the server logs it. Staff keep access. The grader-only filter now copies the zip off the cooperative pool and streams the copy from disk.
+
+
 ## [0.5.793] - 2026-11-03
 
 ### Fixed
