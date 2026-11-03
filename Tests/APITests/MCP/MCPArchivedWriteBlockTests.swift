@@ -40,8 +40,7 @@ import Vapor
     // MARK: - Assignment-scoped content write (authorizedAssignmentAndSetupForWrite)
 
     @Test func contentWriteBlockedOnArchivedCourse() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let fx = try await fixture(on: app, archived: true)
             await #expect(throws: MCPToolError.self) {
                 _ = try await SetTimeLimitTool().execute(
@@ -51,8 +50,7 @@ import Vapor
     }
 
     @Test func contentWriteSucceedsOnLiveCourse() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             // Same tool + fixture shape, non-archived → must succeed, so the
             // block above is attributable to the archived state, not the fixture.
             let fx = try await fixture(on: app, archived: false, code: "LIVEMCP")
@@ -65,8 +63,7 @@ import Vapor
     // MARK: - Read invariant: archived courses stay READABLE (authorizedAssignmentAndSetup)
 
     @Test func readToolStillWorksOnArchivedCourse() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let fx = try await fixture(on: app, archived: true, code: "ARCHRD")
             // get_suite routes through the READ resolver; it must NOT be blocked
             // by the archived state — grade audits / lookups stay available. The
@@ -80,8 +77,7 @@ import Vapor
     // MARK: - Course-code write resolver (resolveCourseForWrite)
 
     @Test func createCourseSectionBlockedOnArchivedCourse() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             _ = try await fixture(on: app, archived: true, code: "ARCHSEC")
             await #expect(throws: MCPToolError.self) {
                 _ = try await CreateCourseSectionTool().execute(
@@ -93,8 +89,7 @@ import Vapor
     // MARK: - Read invariant on the course-code resolver (resolveCourse)
 
     @Test func listCourseSectionsStillWorksOnArchivedCourse() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             _ = try await fixture(on: app, archived: true, code: "ARCHLS")
             // list_course_sections routes through the READ resolveCourse; an
             // archived course must still list (here: empty), not 403.

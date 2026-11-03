@@ -29,8 +29,7 @@ import Vapor
     /// The stand-in must refuse what the role refuses, or every test below
     /// passes for the wrong reason.
     @Test func theStandInRefusesWhatTheRoleRefuses() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             try app.useMCPRoleDatabase()
             let courseID = try await course(on: app)
             try await makeTestSetup(on: app, id: "setup_role", courseID: courseID)
@@ -60,8 +59,7 @@ import Vapor
     /// `assignment_versions` is not granted, and `try?` hid the failure. It
     /// must also carry the declared language, or a restore to v1 drops it.
     @Test func createAssignmentRecordsVersionOneWithTheLanguage() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             try app.useMCPRoleDatabase()
             _ = try await course(on: app)
             let notebook = #"{"nbformat":4,"nbformat_minor":5,"metadata":{},"cells":[]}"#
@@ -87,8 +85,7 @@ import Vapor
     /// row, which the role may only read, and the first version goes to
     /// `assignment_versions`.
     @Test func cloneAssignmentCopiesTheSolutionAndRecordsVersionOne() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             try app.useMCPRoleDatabase()
             let courseID = try await course(on: app)
             try await makeTestSetup(on: app, id: "setup_src", courseID: courseID)
@@ -119,8 +116,7 @@ import Vapor
     /// pool. The role was granted that table with the dataset library tools,
     /// so this read needs no owner pool; the test keeps it that way.
     @Test func cloneAssignmentKeepsALibraryDataset() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             try app.useMCPRoleDatabase()
             let courseID = try await course(on: app)
             let directory = app.testSetupsDirectory
@@ -155,8 +151,7 @@ import Vapor
     /// Gap 5: the row-level security policy shows the role only validation
     /// submissions, so the starter run was never found.
     @Test func getSuiteReportsTheStarterRun() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             try app.useMCPRoleDatabase()
             let courseID = try await course(on: app)
             try await makeTestSetup(on: app, id: "setup_starter", courseID: courseID)
@@ -180,8 +175,7 @@ import Vapor
     /// The starter run is read on the owner pool, where no row-level security
     /// applies, so only the kind filter keeps other submissions out of it.
     @Test func getSuiteNeverReportsAStudentOrSolutionRunAsTheStarterRun() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             try app.useMCPRoleDatabase()
             let courseID = try await course(on: app)
             try await makeTestSetup(on: app, id: "setup_starter", courseID: courseID)

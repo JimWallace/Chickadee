@@ -63,8 +63,7 @@ import VaporTesting
     // MARK: - Dealing
 
     @Test func slotsAreDealtInOrderAndDoNotChange() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let spec = spec()
             let f = try await fixture(spec, on: app)
             let ids = try await students(3, on: app)
@@ -83,8 +82,7 @@ import VaporTesting
     /// More students than slots: the second round starts only when the first
     /// is full, and repeats the order.
     @Test func aSecondRoundStartsWhenEverySlotIsTaken() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let spec = spec(columns: 2, rows: 1)
             let f = try await fixture(spec, on: app)
             var dealt: [Int] = []
@@ -99,8 +97,7 @@ import VaporTesting
     }
 
     @Test func aFreedSlotIsDealtAgain() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let spec = spec()
             let f = try await fixture(spec, on: app)
             let ids = try await students(3, on: app)
@@ -116,8 +113,7 @@ import VaporTesting
 
     /// Students who open the page at the same moment each get their own slot.
     @Test func concurrentDealsGiveEveryStudentADifferentSlot() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let spec = spec()
             let f = try await fixture(spec, on: app)
             let ids = try await students(6, on: app)
@@ -137,8 +133,7 @@ import VaporTesting
 
     /// A dealt slot locks the structure before any student has submitted.
     @Test func aDealtSlotLocksTheStructure() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let spec = spec()
             let f = try await fixture(spec, on: app)
             #expect(try await !ActivityAuthoring.compositeStructureLocked(setup: f.setup, on: app.db))
@@ -159,8 +154,7 @@ import VaporTesting
     }
 
     @Test func aCompositeIsRefusedOnAnAssignmentWithNoLanguage() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let course = try await makeTestCourse(on: app, code: "CS135", name: "Designing Programs")
             let manifest = #"{"schemaVersion":1,"languageDeclared":true,"testSuites":[],"timeLimitSeconds":10}"#
             let setup = try await makeTestSetup(
@@ -179,8 +173,7 @@ import VaporTesting
     // MARK: - Delivery to the grader
 
     @Test func aStudentRunCarriesTheDealtSlotAsPythonLiterals() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let spec = spec(columns: 3, rows: 2)
             let f = try await fixture(spec, on: app)
             let ids = try await students(5, on: app)
@@ -196,8 +189,7 @@ import VaporTesting
     }
 
     @Test func aValidationRunGetsSlotZeroAndDealsNothing() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let f = try await fixture(spec(), on: app)
             let manifest = try #require(f.setup.decodedManifest())
             let inputs = await CompositeSlots.gradingInputs(
@@ -211,8 +203,7 @@ import VaporTesting
     /// Never fail while grading: with no language there is no inputs file,
     /// so the composite inputs are left out rather than refused.
     @Test func noLanguageOrAnotherKindCarriesNoCompositeInputs() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let f = try await fixture(spec(), on: app)
             let manifest = try #require(f.setup.decodedManifest())
             let id = try await students(1, on: app)[0]
@@ -234,8 +225,7 @@ import VaporTesting
     /// A staff member's own submission is stored as a student one; grading
     /// gives it the reference slot and deals nothing.
     @Test func aStaffSubmissionGetsSlotZeroAndIsNotDealt() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let f = try await fixture(spec(), on: app)
             // A global "instructor" is seeded as course staff on enrolment.
             let ta = try await makeTestUser(on: app, username: "slot_staff", role: "instructor")
@@ -260,8 +250,7 @@ import VaporTesting
     // MARK: - Dealing on open
 
     @Test func dealOnOpenDealsOnlyInsideTheWindow() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let spec = spec()
             let f = try await fixture(spec, on: app)
             let id = try await students(1, on: app)[0]

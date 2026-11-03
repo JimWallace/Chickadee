@@ -22,8 +22,7 @@ import Vapor
     }
 
     @Test func aContentItemInAnUnseenCourseIsLeftAndReportedAsNotRemoved() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let (_, hidden) = try await fixture(on: app)
             let item = APICourseContentItem(courseID: hidden, sortOrder: 0, title: "Theirs")
             try await item.save(on: app.db)
@@ -37,8 +36,7 @@ import Vapor
     }
 
     @Test func aCourseSectionInAnUnseenCourseIsLeftAndReportedAsNotRemoved() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let (_, hidden) = try await fixture(on: app)
             let section = APICourseSection(
                 name: "Theirs", defaultGradingMode: "browser", sortOrder: 0, courseID: hidden)
@@ -53,8 +51,7 @@ import Vapor
     }
 
     @Test func aVisibleCourseStillRefusesARoleThatIsTooLow() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let (visible, _) = try await fixture(on: app)
             let student = try await makeTestUser(on: app, username: "stu", role: "mcp")
             try await makeTestEnrollment(on: app, userID: student.requireID(), courseID: visible)

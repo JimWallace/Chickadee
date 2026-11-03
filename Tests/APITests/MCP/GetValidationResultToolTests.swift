@@ -66,8 +66,7 @@ import Vapor
     // MARK: - Happy path
 
     @Test func returnsPerTestOutcomesForLinkedValidation() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await fixture(on: app)
             try await makeTestSubmission(
                 on: app, id: "sub_val", setupID: "setup_val", userID: testerID(on: app),
@@ -105,8 +104,7 @@ import Vapor
     /// what the suite needs is indistinguishable from a content bug — which is
     /// exactly how a mixed fleet burned a day of debugging.
     @Test func reportsWhichRunnerProducedTheResultAndItsVersion() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await fixture(on: app)
             let submission = try await makeTestSubmission(
                 on: app, id: "sub_val", setupID: "setup_val", userID: testerID(on: app),
@@ -135,8 +133,7 @@ import Vapor
     /// A pending / no-result assignment reports no attribution rather than
     /// inventing one.
     @Test func reportsNoRunnerAttributionWhenThereIsNoResult() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await fixture(on: app)
             let output = try await run(app, publicID: assignment.publicID)
             #expect(output.runnerID == nil)
@@ -145,8 +142,7 @@ import Vapor
     }
 
     @Test func resolvesMostRecentValidationWhenNoLink() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await fixture(on: app)
             // No validationSubmissionID link; a validation submission + result
             // exists for the setup and should be resolved by the fallback.
@@ -171,8 +167,7 @@ import Vapor
     // MARK: - Guardrails
 
     @Test func neverSurfacesStudentSubmissions() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await fixture(on: app)
             // A graded STUDENT submission + result exists, but no validation run.
             // The tool must not resolve or surface the student's result.
@@ -195,8 +190,7 @@ import Vapor
     }
 
     @Test func emptyWhenNoResultYet() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await fixture(on: app)
             try await assignment.save(on: app.db)
 
@@ -208,8 +202,7 @@ import Vapor
     }
 
     @Test func unknownAssignmentThrows() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             _ = try await fixture(on: app)
             await #expect(throws: MCPToolError.self) {
                 _ = try await run(app, publicID: "zzzzzz")
@@ -220,8 +213,7 @@ import Vapor
     // MARK: - Multi-variant batch
 
     @Test func reportsTheVariantBatchWithFailingOutcomesOnly() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await fixture(on: app)
 
             // A failed variant with a stored run: one passing and one failing
@@ -273,8 +265,7 @@ import Vapor
     }
 
     @Test func variantsAreEmptyWhenNoBatchExists() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await fixture(on: app)
             let output = try await run(app, publicID: assignment.publicID)
             #expect(output.variants.isEmpty)

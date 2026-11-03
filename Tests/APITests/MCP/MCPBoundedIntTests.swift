@@ -33,8 +33,7 @@ import Vapor
     }
 
     @Test func queryLogsRefusesAnUnknownLevel() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             _ = try await makeTestUser(on: app, username: "ql-admin", role: "admin")
             let context = AdminToolContext(
                 request: makeTestRequest(on: app),

@@ -54,8 +54,7 @@ import Vapor
     }
 
     @Test func createsNewTestScriptWithMetadata() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await fixture(on: app)
             let output = try await AuthorScriptTool().execute(
                 input(
@@ -83,8 +82,7 @@ import Vapor
     }
 
     @Test func createsTestScriptWithPerTestTimeLimitOverride() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await fixture(on: app)
             _ = try await AuthorScriptTool().execute(
                 input(
@@ -100,8 +98,7 @@ import Vapor
     }
 
     @Test func rejectsOutOfRangePerTestTimeLimit() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await fixture(on: app)
             await #expect(throws: MCPToolError.self) {
                 _ = try await AuthorScriptTool().execute(
@@ -115,8 +112,7 @@ import Vapor
     }
 
     @Test func replacesExistingScriptBodyAndKeepsTierWhenOmitted() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await fixture(on: app)
             // Create as secret.
             _ = try await AuthorScriptTool().execute(
@@ -139,8 +135,7 @@ import Vapor
     }
 
     @Test func writesSupportFileWithoutSuiteEntry() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await fixture(on: app)
             let output = try await AuthorScriptTool().execute(
                 input(assignment, filename: "helpers.py", content: "def gen():\n    return 1\n", tier: "support"),
@@ -158,8 +153,7 @@ import Vapor
     }
 
     @Test func rejectsPathSeparatorsInFilename() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await fixture(on: app)
             await #expect(throws: MCPToolError.self) {
                 _ = try await AuthorScriptTool().execute(
@@ -169,8 +163,7 @@ import Vapor
     }
 
     @Test func rejectsEmptyContent() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await fixture(on: app)
             await #expect(throws: MCPToolError.self) {
                 _ = try await AuthorScriptTool().execute(
@@ -180,8 +173,7 @@ import Vapor
     }
 
     @Test func rejectsInvalidTier() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await fixture(on: app)
             await #expect(throws: MCPToolError.self) {
                 _ = try await AuthorScriptTool().execute(
@@ -193,8 +185,7 @@ import Vapor
     // MARK: - failureDetail
 
     @Test func setsAndRevertsFailureDetail() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await fixture(on: app)
             _ = try await AuthorScriptTool().execute(
                 input(
@@ -229,8 +220,7 @@ import Vapor
     }
 
     @Test func rejectsAnUnknownFailureDetail() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await fixture(on: app)
             await #expect(throws: MCPToolError.self) {
                 _ = try await AuthorScriptTool().execute(

@@ -26,8 +26,7 @@ import Vapor
     // MARK: - watchValidation
 
     @Test func watchReturnsImmediatelyWhenAlreadyTerminal() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await fixture(on: app)
             assignment.validationStatus = "passed"
             try await assignment.save(on: app.db)
@@ -47,8 +46,7 @@ import Vapor
     }
 
     @Test func watchTimesOutWhileStillPending() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await fixture(on: app)
             assignment.validationStatus = "pending"
             try await assignment.save(on: app.db)
@@ -65,8 +63,7 @@ import Vapor
     }
 
     @Test func watchObservesRunningThenPassedTransition() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await fixture(on: app)
             let tester = try #require(
                 try await APIUser.query(on: app.db).filter(\.$username == "tester").first())
@@ -106,8 +103,7 @@ import Vapor
     // MARK: - ValidateAssignmentTool
 
     @Test func toolReturnsTerminalStatus() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await fixture(on: app)
             assignment.validationStatus = "failed"
             try await assignment.save(on: app.db)
@@ -122,8 +118,7 @@ import Vapor
     }
 
     @Test func toolTimesOutWhilePending() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await fixture(on: app)
             assignment.validationStatus = "pending"
             try await assignment.save(on: app.db)
@@ -137,8 +132,7 @@ import Vapor
     }
 
     @Test func toolUnknownAssignmentThrows() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             _ = try await fixture(on: app)
             await #expect(throws: MCPToolError.self) {
                 _ = try await ValidateAssignmentTool().execute(
@@ -149,8 +143,7 @@ import Vapor
     }
 
     @Test func toolDeniesWhenSubjectNotEnrolled() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let course = try await makeTestCourse(on: app, code: "CS246", name: "OOP")
             let courseID = try course.requireID()
             _ = try await makeTestUser(on: app, username: "tester", role: "instructor")

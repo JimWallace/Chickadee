@@ -31,8 +31,7 @@ import Vapor
     }
 
     @Test func setsAKindHiddenByDefaultAndSeedsTheRecord() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let (assignment, _) = try await fixture(on: app)
             let out = try await SetActivityTool().execute(
                 .init(assignmentPublicID: assignment.publicID, kind: "bestMetric", leaderboardVisibility: nil),
@@ -63,8 +62,7 @@ import Vapor
     }
 
     @Test func settingTwiceSeedsOneRecordAndVisibilityChangesFreely() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let (assignment, _) = try await fixture(on: app)
             _ = try await SetActivityTool().execute(
                 .init(assignmentPublicID: assignment.publicID, kind: "beatTheInstructor", leaderboardVisibility: nil),
@@ -82,8 +80,7 @@ import Vapor
     }
 
     @Test func kindIsLockedOnceAStudentHasSubmittedButVisibilityIsNot() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let (assignment, courseID) = try await fixture(on: app)
             _ = try await SetActivityTool().execute(
                 .init(assignmentPublicID: assignment.publicID, kind: "bestMetric", leaderboardVisibility: nil),
@@ -114,8 +111,7 @@ import Vapor
     }
 
     @Test func clearingRemovesTheBlockAndOnlyTheSeededRecord() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let (assignment, _) = try await fixture(on: app)
             _ = try await SetActivityTool().execute(
                 .init(assignmentPublicID: assignment.publicID, kind: "bestMetric", leaderboardVisibility: nil),
@@ -137,8 +133,7 @@ import Vapor
     }
 
     @Test func rejectsAnUnknownKindOrVisibility() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let (assignment, _) = try await fixture(on: app)
             await #expect(throws: MCPToolError.self) {
                 _ = try await SetActivityTool().execute(
@@ -157,8 +152,7 @@ import Vapor
     /// A call that only moves the session window keeps a visible board
     /// visible; a kind change starts hidden (#2190).
     @Test func absentVisibilityKeepsTheStoredValueWhileTheKindIsUnchanged() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let (assignment, _) = try await fixture(on: app)
             let tool = SetActivityTool()
             _ = try await tool.execute(
@@ -189,8 +183,7 @@ import Vapor
     }
 
     @Test func serverInfoListsEveryKind() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let out = try await GetServerInfoTool().execute(GetServerInfoTool.Input(), mcpContext(app))
             #expect(out.activityKinds.map(\.name) == ActivityKind.allCases.map(\.rawValue))
             for kind in out.activityKinds {
@@ -206,8 +199,7 @@ import Vapor
     /// been applied. Validate the real results, as the client does — including
     /// kind "none", where opponentSource is null too.
     @Test func resultsValidateAgainstTheOutputSchemaWhenBoundsAndOpponentAreUnset() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let (assignment, _) = try await fixture(on: app)
             let schema = try #require(SetActivityTool.outputSchema)
             for kind in ["beatTheInstructor", SetActivityTool.noActivityChoice] {

@@ -48,8 +48,7 @@ import Vapor
     // MARK: - Integration: global inputs on an empty suite
 
     @Test func globalInputsSucceedOnEmptySuite() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let scenario = try await TestScenario.make(
                 on: app, code: "CS246", courseName: "OOP", setupID: "setup_empty",
                 manifest: TestManifests.emptySuite, title: "Fresh")

@@ -21,8 +21,7 @@ import VaporTesting
         """
 
     @Test func materializationSkipsWhenInputsAreUnchanged() async throws {
-        let app = try await makeTestApp(prefix: "chickadee-dsc")
-        try await withApp(app) { app in
+        try await withTestApp(prefix: "chickadee-dsc") { app in
             let course = try await makeTestCourse(on: app, code: "DS101")
             let courseID = try course.requireID()
             let user = try await makeTestUser(on: app, username: "ds_student")

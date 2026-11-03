@@ -224,7 +224,10 @@ extension Application {
 /// in-memory sessions, the production migration list, and the full route
 /// tree mounted.
 ///
-/// Caller owns the lifecycle — wrap the test body in `withApp(app) { ... }`
+/// Most tests want `withTestApp { app in ... }`, which builds the app and
+/// tears it down. Call this directly only when the app must outlive one body
+/// (a class suite's stored `app`) or be changed before it runs; then the
+/// caller owns the lifecycle — wrap the test body in `withApp(app) { ... }`
 /// (which tears the app down, temp state included) or pair the call with
 /// `app.tearDownTestApp()`.  For unit tests that need a bare app
 /// (single-middleware isolation, custom auth modes, custom database
@@ -308,4 +311,18 @@ func makeTestApp(
 
         try routes(app)
     }
+}
+
+/// Builds the standard test app (`makeTestApp`), runs `body` against it, and
+/// tears it down however the body ends (`withApp`). The one scope a test body
+/// needs; `withWebRoutesApp` and `withAssignmentRoutesApp` are older names for
+/// it.
+func withTestApp(
+    prefix: String = "chickadee-test",
+    authMode: AuthMode = .local,
+    appConfig: AppConfig? = nil,
+    _ body: (Application) async throws -> Void
+) async throws {
+    let app = try await makeTestApp(prefix: prefix, authMode: authMode, appConfig: appConfig)
+    try await withApp(app, body)
 }

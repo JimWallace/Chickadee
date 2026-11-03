@@ -55,8 +55,7 @@ import Vapor
     }
 
     @Test func aPartCountReplacesTheSampleAndIsReportedBack() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await fixture(on: app, code: "PTN1")
             let out = try await set(app, assignment, code: "PTN1", partCount: 2)
             #expect(out.datasets.first?.kind == "partition")
@@ -68,8 +67,7 @@ import Vapor
     }
 
     @Test func anOmittedPartCountKeepsThePartitionAndZeroEndsIt() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await fixture(on: app, code: "PTN2")
             _ = try await set(app, assignment, code: "PTN2", partCount: 2)
             _ = try await set(
@@ -87,8 +85,7 @@ import Vapor
     }
 
     @Test func anUnusablePartitionIsRefused() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await fixture(on: app, code: "PTN3")
             // A sample beside a part count, and more parts than rows.
             await #expect(throws: MCPToolError.self) {
@@ -104,8 +101,7 @@ import Vapor
     /// A partition gives each student their own rows, so an activity that
     /// ranks students refuses it, as it refuses a sample.
     @Test func aRankedActivityRefusesAPartition() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await fixture(on: app, code: "PTN4", activity: .bestMetric, sampled: false)
             await #expect(throws: MCPToolError.self) {
                 _ = try await set(app, assignment, code: "PTN4", partCount: 2)

@@ -14,8 +14,7 @@ import VaporTesting
 @Suite(.serialized) struct AdminUserEnrollErrorTests {
 
     @Test func anArchivedCourseIsRefusedAndThePageSaysSo() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let admin = try await loginUser(
                 username: "enroll_error_admin", password: "pw", role: "admin", on: app)
             let subjectID = try await makeTestUser(on: app, username: "enroll_error_subject").requireID()
@@ -45,8 +44,7 @@ import VaporTesting
     }
 
     @Test func anUnknownErrorCodeShowsNothing() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let admin = try await loginUser(
                 username: "enroll_error_admin2", password: "pw", role: "admin", on: app)
             let subjectID = try await makeTestUser(on: app, username: "enroll_error_subject2").requireID()

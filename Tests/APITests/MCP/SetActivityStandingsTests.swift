@@ -32,8 +32,7 @@ import Vapor
     }
 
     @Test func theRoundRobinSeedsTheLeaderRecordInsteadOfTheMetricRecord() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await fixture(on: app, gradingMode: "worker")
             let out = try await SetActivityTool().execute(
                 .init(assignmentPublicID: assignment.publicID, kind: "roundRobin", leaderboardVisibility: nil),
@@ -61,8 +60,7 @@ import Vapor
     /// dimension under its own name — and swaps it for the standings leader
     /// when the kind changes to a round robin.
     @Test func theTournamentKindSeedsTheWinnerRecord() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await fixture(on: app, gradingMode: "worker")
             let out = try await SetActivityTool().execute(
                 .init(assignmentPublicID: assignment.publicID, kind: "elimination", leaderboardVisibility: nil),
@@ -89,8 +87,7 @@ import Vapor
     /// instructor may author one. Switching to it takes the other kinds'
     /// seeded records away.
     @Test func theTestsAndCodeKindSeedsNoRecord() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await fixture(on: app, gradingMode: "worker")
             _ = try await SetActivityTool().execute(
                 .init(assignmentPublicID: assignment.publicID, kind: "roundRobin", leaderboardVisibility: nil),
@@ -118,8 +115,7 @@ import Vapor
         ("bestMetric", true), ("roundRobin", true), ("elimination", true), ("testsVersusImplementations", false),
     ])
     func theReportNamesTheRecordTheAggregationSeeds(kind: String, seeded: Bool) async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await fixture(on: app, gradingMode: "worker")
             let out = try await SetActivityTool().execute(
                 .init(assignmentPublicID: assignment.publicID, kind: kind, leaderboardVisibility: nil),
@@ -130,8 +126,7 @@ import Vapor
 
     /// Worker-only by construction, like the hill: it stages classmates.
     @Test func theTestsAndCodeKindIsRefusedOnABrowserGradedAssignment() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await fixture(on: app, gradingMode: "browser")
             await #expect(throws: MCPToolError.self) {
                 _ = try await SetActivityTool().execute(
@@ -145,8 +140,7 @@ import Vapor
 
     /// Worker-only by construction, like the hill.
     @Test func theRoundRobinIsRefusedOnABrowserGradedAssignment() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await fixture(on: app, gradingMode: "browser")
             await #expect(throws: MCPToolError.self) {
                 _ = try await SetActivityTool().execute(

@@ -25,8 +25,7 @@ import VaporTesting
 
     @Test func routeIsAbsentWhenDisabled() async throws {
         let config = AppConfig.testDefaults(uwDates: UWDatesConfig(enabled: false))
-        let app = try await makeTestApp(prefix: "chickadee-uwdates", appConfig: config)
-        try await withApp(app) { app in
+        try await withTestApp(prefix: "chickadee-uwdates", appConfig: config) { app in
             try await app.asyncTest(.GET, "/api/v1/uw-dates") { res async in
                 #expect(res.status == .notFound)
             }

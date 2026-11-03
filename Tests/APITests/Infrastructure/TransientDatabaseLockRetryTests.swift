@@ -34,8 +34,7 @@ import Vapor
     }
 
     @Test func aLockIsRetriedUntilItSucceeds() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             var attempts = 0
             let value = try await withTransientDatabaseLockRetry(
                 on: app.db, maxAttempts: 3, backoff: .fixed(.zero)
@@ -57,8 +56,7 @@ import Vapor
     }
 
     @Test func anUnrelatedErrorIsThrownAtOnce() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             var attempts = 0
             await #expect(throws: UnrelatedError.self) {
                 try await withTransientDatabaseLockRetry(on: app.db, backoff: .fixed(.zero)) {
@@ -71,8 +69,7 @@ import Vapor
     }
 
     @Test func theLastLockIsThrownWhenTheAttemptsRunOut() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             var attempts = 0
             await #expect(throws: WrappedLockError.self) {
                 try await withTransientDatabaseLockRetry(on: app.db, maxAttempts: 4, backoff: .fixed(.zero)) {
@@ -86,8 +83,7 @@ import Vapor
 
     /// The default doubles from 10 ms, as the attempt-number retry always did.
     @Test func theDefaultBackoffDoublesFromTenMilliseconds() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             var attempts = 0
             let started = ContinuousClock.now
             _ = try await withTransientDatabaseLockRetry(on: app.db, maxAttempts: 3) {

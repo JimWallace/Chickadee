@@ -112,8 +112,7 @@ import Vapor
     }
 
     @Test func aGlobalExpressionIsRefusedButALiteralVariableIsNot() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await fixture(on: app, id: "setup_undeclared_g")
 
             // A literal needs a syntax only when it is RENDERED, which is a
@@ -145,8 +144,7 @@ import Vapor
     }
 
     @Test func aSectionExpressionIsRefusedToo() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await fixture(on: app, id: "setup_undeclared_s")
             do {
                 _ = try await UpdateSectionVariablesTool().execute(
@@ -173,8 +171,7 @@ import Vapor
     /// assignment supported. The notebook path never needed the answer and
     /// still doesn't.
     @Test func aSolutionFileIsRefusedWhileANotebookSolutionIsNot() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await fixture(on: app, id: "setup_undeclared_x")
             do {
                 _ = try await UpdateSolutionTool().execute(

@@ -8,8 +8,7 @@ import VaporTesting
 
     @Test(arguments: StaticSprite.allCases) func theSpriteIsReadWithOrWithoutTheCache(sprite: StaticSprite) async throws
     {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let uncached = app.sprite(sprite)
             #expect(uncached.contains("<symbol"))
             app.loadSprites()

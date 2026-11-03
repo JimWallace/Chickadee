@@ -32,8 +32,7 @@ import Vapor
     }
 
     @Test func writesNotebookAndPersists() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await fixture(on: app)
             let output = try await UpdateNotebookTool().execute(
                 UpdateNotebookTool.Input(
@@ -54,8 +53,7 @@ import Vapor
     }
 
     @Test func createsFlatFileWhenAbsent() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await fixture(on: app, withNotebook: false)
             // Setup begins with no flat notebook.
             let before = try #require(try await APITestSetup.find("setup_nb", on: app.db))
@@ -78,8 +76,7 @@ import Vapor
     /// threw 401 inside its swallow-all catch, and the edit silently kept the
     /// assignment's stale validationStatus with no validation enqueued.
     @Test func enqueuesValidationWithoutSessionUser() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await fixture(on: app)
             let tester = try #require(
                 try await APIUser.query(on: app.db).filter(\.$username == "tester").first())
@@ -130,8 +127,7 @@ import Vapor
     }
 
     @Test func rejectsNonObjectNotebook() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await fixture(on: app)
             await #expect(throws: MCPToolError.self) {
                 _ = try await UpdateNotebookTool().execute(
@@ -143,8 +139,7 @@ import Vapor
     }
 
     @Test func rejectsNotebookWithoutCells() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await fixture(on: app)
             await #expect(throws: MCPToolError.self) {
                 _ = try await UpdateNotebookTool().execute(
@@ -157,8 +152,7 @@ import Vapor
     }
 
     @Test func unknownAssignmentThrows() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             _ = try await fixture(on: app)
             await #expect(throws: MCPToolError.self) {
                 _ = try await UpdateNotebookTool().execute(

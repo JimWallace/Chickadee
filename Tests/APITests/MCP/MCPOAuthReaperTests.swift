@@ -10,8 +10,7 @@ import VaporTesting
 
 @Suite struct MCPOAuthReaperTests {
     @Test func reapsExpiredCodesAndDeadGrantsKeepsLiveOnes() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let now = Date()
             // user_id is a FK to users; use a real account for all rows.
             let uid = try await makeTestUser(on: app, username: "reaper-subject").requireID()

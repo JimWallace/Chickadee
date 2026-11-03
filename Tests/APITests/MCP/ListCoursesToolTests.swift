@@ -8,8 +8,7 @@ import Vapor
 
 @Suite struct ListCoursesToolTests {
     @Test func instructorSeesOnlyEnrolledCourses() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let cs136 = try await makeTestCourse(on: app, code: "CS136", name: "Systems")
             _ = try await makeTestCourse(on: app, code: "CS246", name: "OOP")
             let tester = try await makeTestUser(on: app, username: "tester", role: "instructor")
@@ -22,8 +21,7 @@ import Vapor
     }
 
     @Test func studentSubjectIsDenied() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let cs136 = try await makeTestCourse(on: app, code: "CS136", name: "Systems")
             let student = try await makeTestUser(on: app, username: "stud")
             try await makeTestEnrollment(on: app, userID: student.requireID(), courseID: try cs136.requireID())
@@ -38,8 +36,7 @@ import Vapor
     @Test func adminSeesOnlyEnrolledCourses() async throws {
         // Admins are enrollment-scoped like everyone else: an agent token never
         // reaches further than the courses its human is enrolled in.
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let cs136 = try await makeTestCourse(on: app, code: "CS136", name: "Systems")
             _ = try await makeTestCourse(on: app, code: "CS246", name: "OOP")
             let boss = try await makeTestUser(on: app, username: "boss", role: "admin")
@@ -54,8 +51,7 @@ import Vapor
     @Test func archivedCoursesAreHidden() async throws {
         // Mirrors the dashboard tab strip: archiving a course drops it from the
         // agent's view even while the enrollment row remains.
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let cs136 = try await makeTestCourse(on: app, code: "CS136", name: "Systems")
             let old = try await makeTestCourse(on: app, code: "CS001", name: "Retired")
             old.isArchived = true
@@ -71,8 +67,7 @@ import Vapor
     }
 
     @Test func unknownSubjectIsDenied() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             _ = try await makeTestCourse(on: app, code: "CS136", name: "Systems")
             await #expect(throws: MCPToolError.self) {
                 _ = try await ListCoursesTool().execute(

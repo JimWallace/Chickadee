@@ -47,8 +47,7 @@ import Vapor
     }
 
     @Test func reportsOutcomesWhenTheVariantBatchCannotBeRead() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let (assignment, testerID) = try await fixture(on: app)
             try await makeTestSubmission(
                 on: app, id: "sub_val", setupID: "setup_val", userID: testerID,
@@ -72,8 +71,7 @@ import Vapor
     }
 
     @Test func reportsTheWarningWhenThereIsNoResultYet() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let (assignment, _) = try await fixture(on: app)
             try await app.db.schema(ValidationVariant.schema).delete()
 
@@ -86,8 +84,7 @@ import Vapor
     }
 
     @Test func readsTheVariantBatchWithoutAWarningWhenTheTableIsReadable() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let (assignment, _) = try await fixture(on: app)
 
             let output = try await run(app, publicID: assignment.publicID)

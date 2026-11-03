@@ -36,8 +36,7 @@ import Vapor
     }
 
     @Test func queuesAFreshRunForTheNamedRunner() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await fixture(on: app)
             await app.workerActivityStore.markActive(workerID: "Starling", hostname: "starling-runner")
 
@@ -58,8 +57,7 @@ import Vapor
     }
 
     @Test func queuesARunForAnyRunnerWithoutAName() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await fixture(on: app)
             let output = try await run(assignment, runnerID: nil, app)
 
@@ -74,8 +72,7 @@ import Vapor
     /// A misspelled or offline runner fails at once, naming the runners that
     /// are online, instead of delaying the run by the fallback time.
     @Test func refusesARunnerThatIsNotOnline() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await fixture(on: app)
             await app.workerActivityStore.markActive(workerID: "Sparrow", hostname: "sparrow-runner")
             await app.workerActivityStore.markActive(
@@ -95,8 +92,7 @@ import Vapor
 
     /// A re-run changes no content, so an open assignment stays open.
     @Test func leavesAnOpenAssignmentOpen() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await fixture(on: app)
             #expect(assignment.isOpen)
             _ = try await run(assignment, runnerID: nil, app)
@@ -106,8 +102,7 @@ import Vapor
     }
 
     @Test func refusesAnAssignmentWithNoSolution() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await fixture(on: app)
             assignment.validationSubmissionID = nil
             try await assignment.save(on: app.db)

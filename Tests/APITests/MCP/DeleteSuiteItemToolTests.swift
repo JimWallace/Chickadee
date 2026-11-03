@@ -48,8 +48,7 @@ import Vapor
     }
 
     @Test func deletesAHandWrittenScript() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await fixture(on: app, seedScript: "extra_test.py")
             #expect(try await reloadItems(assignment, on: app.db).contains { $0.script?.script == "extra_test.py" })
 
@@ -67,8 +66,7 @@ import Vapor
     }
 
     @Test func deletesAFamily() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await fixture(on: app, seedFamily: true)
             let output = try await DeleteSuiteItemTool().execute(
                 DeleteSuiteItemTool.Input(
@@ -86,8 +84,7 @@ import Vapor
     /// Removing a graded item closes a currently-open assignment so students
     /// can't submit against the not-yet-revalidated suite, and reports it.
     @Test func closesAnOpenAssignmentAndReportsIt() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await fixture(on: app, seedScript: "extra_test.py")
             #expect(assignment.visibility == .open)  // makeTestAssignment defaults isOpen: true
 
@@ -106,8 +103,7 @@ import Vapor
     /// A suite edit auto-re-grades existing student submissions against the new
     /// suite (the automatic equivalent of the "Retest all" button).
     @Test func reGradesExistingSubmissions() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await fixture(on: app, seedScript: "extra_test.py")
             let student = try await makeTestUser(on: app, username: "stu", role: "student")
             try await makeTestSubmission(
@@ -129,8 +125,7 @@ import Vapor
     }
 
     @Test func unknownScriptThrows() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await fixture(on: app)
             await #expect(throws: MCPToolError.self) {
                 _ = try await DeleteSuiteItemTool().execute(
@@ -143,8 +138,7 @@ import Vapor
     }
 
     @Test func noTargetThrows() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await fixture(on: app)
             await #expect(throws: MCPToolError.self) {
                 _ = try await DeleteSuiteItemTool().execute(
@@ -157,8 +151,7 @@ import Vapor
     }
 
     @Test func multipleTargetsThrows() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await fixture(on: app, seedScript: "extra_test.py")
             await #expect(throws: MCPToolError.self) {
                 _ = try await DeleteSuiteItemTool().execute(

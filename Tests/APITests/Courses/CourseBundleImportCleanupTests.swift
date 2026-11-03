@@ -83,8 +83,7 @@ private let emptyNotebookJSON = #"{"cells":[],"metadata":{},"nbformat":4,"nbform
     /// and submissions directories hold what they held before, and no course
     /// row exists.
     @Test func aFailedImportLeavesNoFiles() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let extractDir = try writeExtractedBundle()
             defer { try? FileManager.default.removeItem(at: extractDir) }
             try FileManager.default.createDirectory(

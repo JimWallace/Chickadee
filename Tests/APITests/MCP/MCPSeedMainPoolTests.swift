@@ -131,8 +131,7 @@ import Vapor
     /// `ensureSeed(on: context.mainDB)` call `preview_personalization` makes: it
     /// succeeds precisely because it does NOT require any grant on the mcp role.
     @Test func mainDBReachesSeedTableButLeastPrivilegeMCPPoolDoesNot() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             // Model production: a dedicated MCP pool that, like the chickadee_mcp
             // role, cannot see assignment_personalization_seeds. A fresh,
             // unmigrated in-memory DB has no such table at all.

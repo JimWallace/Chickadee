@@ -28,8 +28,7 @@ import Vapor
     }
 
     @Test func getReturnsBuiltInDefaultsBeforeCuration() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await fixture(on: app)
             let output = try await GetAchievementsTool().execute(
                 .init(assignmentPublicID: assignment.publicID), mcpContext(app, scopes: [.read]))
@@ -40,8 +39,7 @@ import Vapor
     }
 
     @Test func updateReplacesListWholesaleAndSeedsBuiltIns() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await fixture(on: app)
             let rows: [AchievementRow] = [
                 AchievementRow(
@@ -71,8 +69,7 @@ import Vapor
     }
 
     @Test func updateWithEmptyArrayClearsAll() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await fixture(on: app)
             _ = try await UpdateAchievementsTool().execute(
                 .init(
@@ -87,8 +84,7 @@ import Vapor
     }
 
     @Test func invalidScopeThrows() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await fixture(on: app)
             await #expect(throws: MCPToolError.self) {
                 _ = try await UpdateAchievementsTool().execute(
@@ -101,8 +97,7 @@ import Vapor
     }
 
     @Test func classWideWithoutShareThrows() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await fixture(on: app)
             await #expect(throws: MCPToolError.self) {
                 _ = try await UpdateAchievementsTool().execute(
