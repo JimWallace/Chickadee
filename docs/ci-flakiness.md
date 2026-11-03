@@ -252,11 +252,13 @@ finishes. It is the opposite of Family 5: Family 6 stops completely.
    now launches through swift-subprocess, and `stop()` does not wait.
 2. glibc 2.41 and later holds an abort lock during `posix_spawn`. A
    swift-subprocess child made by `clone3` could inherit that lock held and
-   block before exec. `Package.swift` pins swift-subprocess to the fork
-   `JimWallace/swift-subprocess`, branch `chickadee/abort-lock-fix`. Return to
-   upstream when a release has an equal fix. The upstream report is
-   [swiftlang/swift-subprocess#375](https://github.com/swiftlang/swift-subprocess/issues/375),
-   and #1597 has the steps to move back. `SubprocessSpawnRaceTests` pins it.
+   block before exec. Upstream 1.0.1 (swiftlang/swift-subprocess#365) avoids
+   it: on glibc 2.34 or later the Linux child comes from `posix_spawn`, not a
+   raw `clone3`, for every configuration Chickadee uses, and Chickadee depends
+   on 1.0.2. The raw path survives only for setuid, setgid or setgroups, and
+   for `createSession` together with `processGroupID`; do not add either
+   without rereading [swiftlang/swift-subprocess#375](https://github.com/swiftlang/swift-subprocess/issues/375).
+   `SubprocessSpawnRaceTests` pins it.
 
 **Handling if it reappears.** The watchdog writes its thread table to
 `/tmp/chickadee-wedge-dump-<pid>.txt`. The `worker-tests` lane prints that
