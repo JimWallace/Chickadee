@@ -880,7 +880,10 @@ because line numbers go out of date.
     enrollment: login, enrollment, CSV, staff provisioning, bundle import, a
     new term, the MCP account, auto-enrollment in `.auto` courses, and LTI
     launch.
-  - The role-change routes.
+  - `CourseEnrollmentService`: unenroll, set role and staff invite, for the
+    instructor roster and the admin pages alike (#2770). The caller is the
+    admin bypass of the last-instructor guard. The staff invite makes a
+    placeholder account only when `staffPlaceholderAllowed` is true.
 - **Readers.** All of them go through `courseRole(of:inCourse:db:)`:
   - `requireCourseRole` and `requireCourseEnrollment`.
   - `isCourseStaff` and `isStaffAnywhere`.
