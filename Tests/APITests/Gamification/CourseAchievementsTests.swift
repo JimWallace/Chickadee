@@ -26,14 +26,14 @@ import VaporTesting
     // MARK: - Levels
 
     @Test func anAssignmentRefusesACourseSignal() {
-        #expect(throws: WebAssignmentError.self) {
+        #expect(throws: AppError.self) {
             try AchievementsEditing.achievement(from: Self.row([Self.graded()]))
         }
     }
 
     @Test func aCourseRefusesAnAssignmentSignal() {
         let grade = ConditionRow(signal: "grade", comparator: "atLeast", value: 50)
-        #expect(throws: WebAssignmentError.self) {
+        #expect(throws: AppError.self) {
             try AchievementsEditing.achievement(from: Self.row([grade]), at: .course)
         }
     }
@@ -44,7 +44,7 @@ import VaporTesting
         #expect(achievement.reward.type == .badge)
         #expect(achievement.conditions.first?.signal == .assignmentsGraded)
         for scope in ["classWide", "record"] {
-            #expect(throws: WebAssignmentError.self) {
+            #expect(throws: AppError.self) {
                 try AchievementsEditing.achievement(from: Self.row([Self.graded()], scope: scope), at: .course)
             }
         }
@@ -54,18 +54,18 @@ import VaporTesting
         for bad in [
             Self.graded(comparator: "atMost"), Self.graded(comparator: "equals"), Self.graded(0), Self.graded(1.5),
         ] {
-            #expect(throws: WebAssignmentError.self) {
+            #expect(throws: AppError.self) {
                 try AchievementsEditing.achievement(from: Self.row([bad]), at: .course)
             }
         }
-        #expect(throws: WebAssignmentError.self) {
+        #expect(throws: AppError.self) {
             try AchievementsEditing.achievement(from: Self.row([]), at: .course)
         }
     }
 
     @Test func assignmentsAtGradeNeedsAFloor() throws {
         let noFloor = ConditionRow(signal: "assignmentsAtGrade", comparator: "atLeast", value: 2)
-        #expect(throws: WebAssignmentError.self) {
+        #expect(throws: AppError.self) {
             try AchievementsEditing.achievement(from: Self.row([noFloor]), at: .course)
         }
         var withFloor = noFloor
@@ -80,7 +80,7 @@ import VaporTesting
         let blank = ConditionRow(
             signal: "assignmentsGraded", comparator: "atLeast", value: 1, targetKind: "concept", targetRef: " ")
         for bad in [section, blank] {
-            #expect(throws: WebAssignmentError.self) {
+            #expect(throws: AppError.self) {
                 try AchievementsEditing.achievement(from: Self.row([bad]), at: .course)
             }
         }
@@ -115,7 +115,7 @@ import VaporTesting
     @Test(arguments: [("courseSection", "Unit 9"), ("concept", "cooking"), ("assignments", "LAB001,LAB404")])
     func aTargetTheCourseDoesNotHaveIsRefused(kind: String, ref: String) throws {
         let achievement = try Self.targeted(kind, ref)
-        #expect(throws: WebAssignmentError.self) {
+        #expect(throws: AppError.self) {
             try AchievementsEditing.validate([achievement], againstCourse: Self.context)
         }
     }

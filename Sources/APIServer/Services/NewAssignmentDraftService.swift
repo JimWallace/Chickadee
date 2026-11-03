@@ -131,7 +131,7 @@ struct NewAssignmentDraftService {
         // scaffold into. Refused rather than silently written, so the button
         // cannot promise students an editor that cannot serve them.
         guard let data = defaultNotebookData(title: notebookTitle, language: scaffoldLanguage)
-        else { throw WebAssignmentError.unprocessable(reason: uploadOnlyNotebookScaffoldMessage) }
+        else { throw AppError.unprocessable(reason: uploadOnlyNotebookScaffoldMessage) }
         let dir = try ensureDraftNotebookDirectory(
             testSetupsDirectory: application.testSetupsDirectory, setupID: setupID)
         let path = dir + "assignment.ipynb"
@@ -193,7 +193,7 @@ struct NewAssignmentDraftService {
         guard
             let data = defaultNotebookData(
                 title: "\(notebookTitle) Solution", language: scaffoldLanguage)
-        else { throw WebAssignmentError.unprocessable(reason: uploadOnlyNotebookScaffoldMessage) }
+        else { throw AppError.unprocessable(reason: uploadOnlyNotebookScaffoldMessage) }
         let path = draftSolutionNotebookPath(
             testSetupsDirectory: application.testSetupsDirectory, setupID: setupID)
         _ = try ensureDraftNotebookDirectory(
@@ -229,7 +229,7 @@ struct NewAssignmentDraftService {
             let sourceData = existing
                 ?? defaultNotebookData(
                     title: "\(notebookTitle) Solution", language: scaffoldLanguage)
-        else { throw WebAssignmentError.unprocessable(reason: uploadOnlyNotebookScaffoldMessage) }
+        else { throw AppError.unprocessable(reason: uploadOnlyNotebookScaffoldMessage) }
         let normalized = normalizeNotebookForJupyterLite(sourceData)
         let path = draftSolutionNotebookPath(
             testSetupsDirectory: application.testSetupsDirectory, setupID: setupID)

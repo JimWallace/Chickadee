@@ -55,7 +55,7 @@ func uniqueAssignmentSlug(
         let exists = try await query.count() > 0
         if !exists { return candidate }
     }
-    throw WebAssignmentError.internalFailure(reason: "Unable to allocate assignment URL slug")
+    throw AppError.internalFailure(reason: "Unable to allocate assignment URL slug")
 }
 
 func isValidAssignmentPublicID(_ value: String) -> Bool {
@@ -65,7 +65,7 @@ func isValidAssignmentPublicID(_ value: String) -> Bool {
 
 func assignmentPublicIDParameter(from req: Request) throws -> String {
     guard let raw = req.parameters.get("assignmentID"), isValidAssignmentPublicID(raw) else {
-        throw WebAssignmentError.notFound(resource: "Assignment")
+        throw AppError.notFound(resource: "Assignment")
     }
     return raw
 }
@@ -124,5 +124,5 @@ func createAssignmentWithUniquePublicID(
         return assignment
     }
 
-    throw WebAssignmentError.internalFailure(reason: "Unable to allocate assignment URL id")
+    throw AppError.internalFailure(reason: "Unable to allocate assignment URL id")
 }

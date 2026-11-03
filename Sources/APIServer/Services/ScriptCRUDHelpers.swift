@@ -42,12 +42,12 @@ func createScriptInSetup(
 ) async throws -> CreatedScript {
     let cleaned = sanitizeSuiteFilename(body.filename)
     guard !cleaned.isEmpty, cleaned == body.filename else {
-        throw WebAssignmentError.invalidParameter(name: "filename", reason: "Invalid filename '\(body.filename)'")
+        throw AppError.invalidParameter(name: "filename", reason: "Invalid filename '\(body.filename)'")
     }
 
     // Reject duplicate filenames.
     if await listZipEntries(zipPath: setup.zipPath).contains(cleaned) {
-        throw WebAssignmentError.conflict(reason: "A file named '\(cleaned)' already exists in this setup")
+        throw AppError.conflict(reason: "A file named '\(cleaned)' already exists in this setup")
     }
 
     // Slice 1: prepend assignment-scope variables before write so the saved
@@ -99,23 +99,23 @@ func createScriptInSetup(
 /// its manifest entry and its marks (`clearFileMarks`).
 func deleteScriptFromSetup(setup: APITestSetup, filename: String, on db: any Database) async throws {
     guard await listZipEntries(zipPath: setup.zipPath).contains(filename) else {
-        throw WebAssignmentError.notFound(resource: "File '\(filename)' in setup zip")
+        throw AppError.notFound(resource: "File '\(filename)' in setup zip")
     }
 
     if let familyID = generatedByFamilyID(manifestJSON: setup.manifest, filename: filename) {
-        throw WebAssignmentError.conflict(
+        throw AppError.conflict(
             reason:
                 "'\(filename)' is generated from pattern family '\(familyID)'. Remove it via the family editor (delete the case, or delete the whole family)."
         )
     }
 
     if let refusal = libraryAttachmentRefusal(manifest: setup.decodedManifest(), filename: filename) {
-        throw WebAssignmentError.conflict(reason: refusal)
+        throw AppError.conflict(reason: refusal)
     }
 
     let dependents = manifestDependents(manifestJSON: setup.manifest, filename: filename)
     guard dependents.isEmpty else {
-        throw WebAssignmentError.conflict(
+        throw AppError.conflict(
             reason:
                 "Cannot delete '\(filename)': the following scripts depend on it: \(dependents.joined(separator: ", "))"
         )
@@ -124,7 +124,7 @@ func deleteScriptFromSetup(setup: APITestSetup, filename: String, on db: any Dat
     do {
         try await removeScriptFromZip(zipPath: setup.zipPath, filename: filename)
     } catch ScriptZipError.zipFailed, ScriptZipError.extractFailed {
-        throw WebAssignmentError.internalFailure(reason: "Failed to update setup zip")
+        throw AppError.internalFailure(reason: "Failed to update setup zip")
     }
 
     // Conditional, and applied again to a newer manifest if another edit

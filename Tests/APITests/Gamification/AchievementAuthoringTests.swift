@@ -128,7 +128,7 @@ import VaporTesting
     /// 0% forever with no error anywhere.
     @Test func saveRefusesASectionRefThatMatchesNoSuiteSection() throws {
         let achievement = try AchievementsEditing.achievement(from: unionRow(sectionRef: "typo"))
-        #expect(throws: WebAssignmentError.self) {
+        #expect(throws: AppError.self) {
             try AchievementsEditing.validate([achievement], againstManifest: try bugHuntManifest())
         }
         // The same goal against a real section saves.
@@ -169,7 +169,7 @@ import VaporTesting
                     ConditionRow(signal: "itemsCovered", comparator: "atLeast", value: 3)
                 ],
                 recordDimension: "firstToSolve")
-            #expect(throws: WebAssignmentError.self) {
+            #expect(throws: AppError.self) {
                 try AchievementsEditing.achievement(from: row)
             }
         }
@@ -194,7 +194,7 @@ import VaporTesting
     @Test func saveStillRefusesAClassGoalTheSweepCannotEvaluate() {
         var row = unionRow(sectionRef: "bugs")
         row.conditions?.append(ConditionRow(signal: "grade", comparator: "atLeast", value: 50))
-        #expect(throws: WebAssignmentError.self) {
+        #expect(throws: AppError.self) {
             try AchievementsEditing.achievement(from: row)
         }
     }

@@ -76,7 +76,7 @@ extension DraftAssignmentRoutes {
     /// Parses the save-new-assignment body — `suiteFiles` decodes both the
     /// array-typed (`suiteFiles[]`) and single-bare-`File` (Safari) shapes
     /// through `multipartFiles` — and returns the fields a typed handler
-    /// would expect.  Throws `WebAssignmentError.invalidParameter` when the
+    /// would expect.  Throws `AppError.invalidParameter` when the
     /// body isn't recognised.
     func parseSaveNewAssignmentForm(req: Request) async throws -> SaveNewAssignmentForm {
         struct SaveBody: Content {
@@ -95,7 +95,7 @@ extension DraftAssignmentRoutes {
         }
 
         guard let body = try? await req.decodeContent(SaveBody.self) else {
-            throw WebAssignmentError.invalidParameter(
+            throw AppError.invalidParameter(
                 name: "request body",
                 reason: "Invalid assignment upload payload"
             )

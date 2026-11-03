@@ -1,6 +1,6 @@
 // The tool erasure maps a refusal to the MCP vocabulary for every tool (#1940).
 //
-// Before it, only the tools that caught `WebAssignmentError` or `AbortError`
+// Before it, only the tools that caught `AppError` or `AbortError`
 // themselves mapped it. `set_grading_mode`, `set_time_limit` and
 // `set_minimum_runner_version` did not, so a refusal from their shared
 // manifest helpers reached the agent as an opaque -32603.
@@ -77,7 +77,7 @@ import Vapor
         }
     }
 
-    /// The one remaining `from` maps every `WebAssignmentError`: `forbidden`
+    /// The one remaining `from` maps every `AppError`: `forbidden`
     /// is a permission refusal, `internalFailure` is a server failure, and
     /// every other case is a refusal the agent can act on.
     @Test(arguments: [

@@ -171,7 +171,7 @@ private func loadAssignmentAndSetup(_ req: Request) async throws -> (APIAssignme
     guard
         let assignment = try await assignmentByPublicID(idStr, on: req.db),
         let setup = try await APITestSetup.find(assignment.testSetupID, on: req.db)
-    else { throw WebAssignmentError.notFound(resource: "Assignment '\(idStr)'") }
+    else { throw AppError.notFound(resource: "Assignment '\(idStr)'") }
     return (assignment, setup)
 }
 
@@ -189,7 +189,7 @@ private func loadAssignmentAndSetup(_ req: Request) async throws -> (APIAssignme
 func loadAssignment(_ req: Request) async throws -> APIAssignment {
     let idStr = try assignmentPublicIDParameter(from: req)
     guard let assignment = try await assignmentByPublicID(idStr, on: req.db) else {
-        throw WebAssignmentError.notFound(resource: "Assignment '\(idStr)'")
+        throw AppError.notFound(resource: "Assignment '\(idStr)'")
     }
     return assignment
 }

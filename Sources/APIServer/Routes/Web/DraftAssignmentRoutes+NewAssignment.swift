@@ -28,7 +28,7 @@ extension DraftAssignmentRoutes {
         }
         let user = try req.auth.require(APIUser.self)
         guard let userID = user.id else {
-            throw WebAssignmentError.forbidden(action: "open the new-assignment page")
+            throw AppError.forbidden(action: "open the new-assignment page")
         }
         let courseState = try await req.resolveActiveCourse(for: user)
         // The form creates an assignment, an instructor action: a TA is not
@@ -140,7 +140,7 @@ extension DraftAssignmentRoutes {
     func updateNewAssignmentDraft(req: Request) async throws -> Response {
         let user = try req.auth.require(APIUser.self)
         guard let userID = user.id else {
-            throw WebAssignmentError.forbidden(action: "edit a new-assignment draft")
+            throw AppError.forbidden(action: "edit a new-assignment draft")
         }
         // Creating an assignment is an instructor action. A TA passes the area
         // gate (`ActiveCourseStaffMiddleware`), so the floor is stated here.
@@ -157,7 +157,7 @@ extension DraftAssignmentRoutes {
             sectionIDRaw: payload.sectionIDRaw
         )
         guard let setupID = setup.id else {
-            throw WebAssignmentError.internalFailure(reason: "Draft test setup persisted without an id")
+            throw AppError.internalFailure(reason: "Draft test setup persisted without an id")
         }
 
         // Declared BEFORE the draft service runs, so pattern families and
@@ -171,7 +171,7 @@ extension DraftAssignmentRoutes {
                     setup: setup, to: try parseLanguageChoice(payload.assignmentLanguage),
                     on: req.db)
             } catch {
-                throw WebAssignmentError.unprocessable(
+                throw AppError.unprocessable(
                     reason: (error as? any AbortError)?.reason
                         ?? unknownLanguageMessage(payload.assignmentLanguage))
             }
@@ -223,7 +223,7 @@ extension DraftAssignmentRoutes {
 
     fileprivate func parseNewAssignmentDraftPayload(req: Request) async throws -> NewAssignmentDraftPayload {
         guard let body = try? await req.decodeContent(DraftBody.self) else {
-            throw WebAssignmentError.invalidParameter(name: "request body", reason: "Invalid assignment draft payload")
+            throw AppError.invalidParameter(name: "request body", reason: "Invalid assignment draft payload")
         }
 
         let assignmentName =
@@ -753,7 +753,7 @@ extension DraftAssignmentRoutes {
         let body = try await req.decodeContent(PublishBody.self)
 
         guard let setup = try await APITestSetup.find(body.testSetupID, on: req.db) else {
-            throw WebAssignmentError.invalidParameter(
+            throw AppError.invalidParameter(
                 name: "testSetupID",
                 reason: "unknown test setup '\(body.testSetupID)'"
             )
@@ -762,7 +762,7 @@ extension DraftAssignmentRoutes {
         // there too. The area gate sees only the active course, not the setup's
         // own course (#2742). The dashboard offers only active-course setups.
         guard setup.courseID == courseID else {
-            throw WebAssignmentError.forbidden(action: "publish a test setup from another course")
+            throw AppError.forbidden(action: "publish a test setup from another course")
         }
 
         // Reject if a draft/open assignment already exists for this setup.

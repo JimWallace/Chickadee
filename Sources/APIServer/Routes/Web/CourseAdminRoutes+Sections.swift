@@ -46,11 +46,11 @@ extension CourseAdminRoutes {
         let body = try await req.decodeContent(CreateSectionBody.self)
         let name = body.name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !name.isEmpty else {
-            throw WebAssignmentError.invalidParameter(name: "name", reason: "Section name must not be empty.")
+            throw AppError.invalidParameter(name: "name", reason: "Section name must not be empty.")
         }
         let mode = body.defaultGradingMode
         guard mode == "browser" || mode == "worker" else {
-            throw WebAssignmentError.invalidParameter(
+            throw AppError.invalidParameter(
                 name: "defaultGradingMode", reason: "defaultGradingMode must be 'browser' or 'worker'.")
         }
         let maxOrder =
@@ -83,7 +83,7 @@ extension CourseAdminRoutes {
             let ids = try body.sectionIDs.map(SortOrderRenumbering.sectionID)
             _ = try await SortOrderRenumbering.renumberSections(ids, inCourse: courseID, on: req.db)
         } catch let error as ReorderError {
-            throw WebAssignmentError.invalidParameter(name: "sectionIDs", reason: error.reason)
+            throw AppError.invalidParameter(name: "sectionIDs", reason: error.reason)
         }
         return .ok
     }
@@ -101,23 +101,23 @@ extension CourseAdminRoutes {
         guard let sectionIDStr = req.parameters.get("sectionID"),
             let sectionUUID = UUID(uuidString: sectionIDStr)
         else {
-            throw WebAssignmentError.notFound(resource: "Section")
+            throw AppError.notFound(resource: "Section")
         }
         guard let section = try await APICourseSection.find(sectionUUID, on: req.db),
             section.courseID == courseID
         else {
-            throw WebAssignmentError.notFound(resource: "Section")
+            throw AppError.notFound(resource: "Section")
         }
         try await requireCourseWriteAccess(
             caller: user, courseID: section.courseID, atLeast: DashboardRoleFloor.manageSections, db: req.db)
         let body = try await req.decodeContent(RenameSectionBody.self)
         let name = body.name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !name.isEmpty else {
-            throw WebAssignmentError.invalidParameter(name: "name", reason: "Section name must not be empty.")
+            throw AppError.invalidParameter(name: "name", reason: "Section name must not be empty.")
         }
         let mode = body.defaultGradingMode
         guard mode == "browser" || mode == "worker" else {
-            throw WebAssignmentError.invalidParameter(
+            throw AppError.invalidParameter(
                 name: "defaultGradingMode", reason: "defaultGradingMode must be 'browser' or 'worker'.")
         }
         section.name = name
@@ -135,12 +135,12 @@ extension CourseAdminRoutes {
         guard let sectionIDStr = req.parameters.get("sectionID"),
             let sectionUUID = UUID(uuidString: sectionIDStr)
         else {
-            throw WebAssignmentError.notFound(resource: "Section")
+            throw AppError.notFound(resource: "Section")
         }
         guard let section = try await APICourseSection.find(sectionUUID, on: req.db),
             section.courseID == courseID
         else {
-            throw WebAssignmentError.notFound(resource: "Section")
+            throw AppError.notFound(resource: "Section")
         }
         try await requireCourseWriteAccess(
             caller: user, courseID: section.courseID, atLeast: DashboardRoleFloor.manageSections, db: req.db)
@@ -160,7 +160,7 @@ extension CourseAdminRoutes {
         let courseID = try await req.requireActiveCourseID(for: user, action: "managing sections")
         let assignment = try await loadAssignment(req)
         guard assignment.courseID == courseID else {
-            throw WebAssignmentError.notFound(resource: "Assignment '\(assignment.publicID)'")
+            throw AppError.notFound(resource: "Assignment '\(assignment.publicID)'")
         }
         // `loadAssignment` is the deliberately unauthorized loader, so this is
         // the only role check on the path. Which section an assignment sits in

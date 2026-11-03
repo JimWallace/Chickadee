@@ -221,7 +221,7 @@ struct InstructorDashboardRoutes: RouteCollection {
             try await AssignmentAuthoringService.setOpenState(
                 assignment, open: true, audit: .web(req), on: req.db)
         } catch AssignmentAuthoringError.validationNotPassed {
-            throw WebAssignmentError.validationRequired(
+            throw AppError.validationRequired(
                 reason: "Assignment cannot be opened until runner validation passes."
             )
         }
@@ -280,7 +280,7 @@ struct InstructorDashboardRoutes: RouteCollection {
         do {
             return try parse()
         } catch {
-            throw WebAssignmentError.invalidParameter(name: name, reason: error.reason)
+            throw AppError.invalidParameter(name: name, reason: error.reason)
         }
     }
 
@@ -299,15 +299,15 @@ struct InstructorDashboardRoutes: RouteCollection {
                 caller: caller, courseID: courseID, atLeast: SortOrderRenumbering.roleFloor, db: req.db)
         }
         guard let courseID = courses.first else {
-            throw WebAssignmentError.invalidParameter(name: name, reason: ReorderError.unknownItem.reason)
+            throw AppError.invalidParameter(name: name, reason: ReorderError.unknownItem.reason)
         }
         guard courses.count == 1 else {
-            throw WebAssignmentError.invalidParameter(name: name, reason: ReorderError.mixedSections.reason)
+            throw AppError.invalidParameter(name: name, reason: ReorderError.mixedSections.reason)
         }
         do {
             _ = try await SortOrderRenumbering.renumberSectionItems(items, inCourse: courseID, on: req.db)
         } catch let error as ReorderError {
-            throw WebAssignmentError.invalidParameter(name: name, reason: error.reason)
+            throw AppError.invalidParameter(name: name, reason: error.reason)
         }
     }
 
@@ -323,7 +323,7 @@ struct InstructorDashboardRoutes: RouteCollection {
 
         let body = try await req.decodeContent(StatusBody.self)
         guard let visibility = AssignmentVisibility(rawValue: body.status) else {
-            throw WebAssignmentError.invalidParameter(
+            throw AppError.invalidParameter(
                 name: "status",
                 reason: "unsupported status '\(body.status)'"
             )
@@ -332,7 +332,7 @@ struct InstructorDashboardRoutes: RouteCollection {
             try await AssignmentAuthoringService.setVisibility(
                 assignment, visibility, audit: .web(req), on: req.db)
         } catch AssignmentAuthoringError.validationNotPassed {
-            throw WebAssignmentError.validationRequired(
+            throw AppError.validationRequired(
                 reason: "Assignment cannot be opened until runner validation passes."
             )
         }
@@ -484,7 +484,7 @@ struct InstructorDashboardRoutes: RouteCollection {
         let caller = try req.auth.require(APIUser.self)
         let setupID = req.parameters.get("setupID") ?? ""
         guard let setup = try await APITestSetup.find(setupID, on: req.db) else {
-            throw WebAssignmentError.notFound(resource: "Test setup '\(setupID)'")
+            throw AppError.notFound(resource: "Test setup '\(setupID)'")
         }
         // Scope the delete to the setup's own course (the :setupID param-taking
         // route is otherwise drivable cross-course / against an archived course;
@@ -497,7 +497,7 @@ struct InstructorDashboardRoutes: RouteCollection {
             .filter(\.$testSetupID == setupID)
             .count() > 0
         guard !hasAssignment else {
-            throw WebAssignmentError.conflict(
+            throw AppError.conflict(
                 reason: "Test setup '\(setupID)' has a published assignment and cannot be deleted from this endpoint."
             )
         }

@@ -66,7 +66,7 @@ extension PublishedAssignmentRoutes {
         let (assignment, setup) = try await loadAssignmentAndSetupForWrite(req, atLeast: .ta)
         let input = try await req.decodeContent(ComputeExpectedRequest.self)
         guard let manifest = setup.decodedManifest() else {
-            throw WebAssignmentError.invalidParameter(
+            throw AppError.invalidParameter(
                 name: "assignmentID", reason: "Manifest is not valid JSON")
         }
 
