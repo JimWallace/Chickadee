@@ -24,12 +24,13 @@
 //      can lie), and the whole request is bounded by a connect/read/overall
 //      timeout (which also stops the fetch being used as an internal port
 //      scanner via timing).
-//
-// One honest residual: AsyncHTTPClient does its own DNS and won't let us pin the
-// address we just validated, so there is a theoretical DNS-rebinding TOCTOU
-// window between our check and its connect.  Disallowing redirects (4) shrinks
-// it; closing it entirely would require a host allowlist, which is deliberately
-// not part of this design.
+//   6. The connection goes to an address that passed check 3.  The host is
+//      resolved once, here, and AsyncHTTPClient's `dnsOverride` pins the
+//      connection to one checked address, so the client does not resolve the
+//      name a second time.  A zero-TTL record cannot pass the check and then
+//      point the connection at a private address (DNS rebinding, #2780).  TLS
+//      still sends SNI for, and validates the certificate against, the
+//      original hostname: `dnsOverride` changes only where the socket connects.
 //
 // `BlockedIPClassifier` is split out as a pure, network-free function so the
 // security-critical range logic is exhaustively unit-tested without DNS.
@@ -120,34 +121,14 @@ enum SupportFileURLFetcher {
     static func fetchBytes(urlString: String, on request: Request) async throws -> Data {
         let host = try validate(urlString)
 
-        // Resolve + classify before connecting.  An IP literal is classified
-        // directly; a hostname is resolved (off the event loop) and every
-        // returned address must be public.
-        let addresses: [String]
-        if BlockedIPClassifier.isIPLiteral(host) {
-            addresses = [host]
-        } else {
-            addresses = try await runBlocking {
-                try resolveHostAddresses(host)
-            }
+        let dnsOverride = try await pinnedDNSOverride(
+            urlString: urlString, host: host, logger: request.logger
+        ) { name in
+            try await runBlocking { try resolveHostAddresses(name) }
         }
-        guard !addresses.isEmpty else { throw SupportFileFetchError.dnsFailed(host: host) }
-        for ip in addresses where BlockedIPClassifier.isBlocked(ip) {
-            // The resolved address is instructor-URL infrastructure, not a
-            // client IP, but it still goes in metadata: the admin query_logs
-            // buffer redacts the "ip" key while console logging keeps it.
-            request.logger.warning(
-                "mcp.support_file_fetch.blocked host=\(host)",
-                metadata: ["ip": .string("\(ip)")])
-            throw SupportFileFetchError.blockedAddress(host: host, ip: ip)
-        }
-
-        let configuration = HTTPClient.Configuration(
-            redirectConfiguration: .disallow,
-            timeout: .init(connect: connectTimeout, read: readTimeout))
         // The default event-loop group is NIO's shared one, the same group
         // Vapor 4 serves from; naming no group keeps this Vapor 5-ready.
-        let client = HTTPClient(configuration: configuration)
+        let client = HTTPClient(configuration: clientConfiguration(dnsOverride: dnsOverride))
 
         // Run the request, then shut the dedicated client down exactly once
         // regardless of outcome (a per-call client keeps the no-redirect config
@@ -164,6 +145,72 @@ enum SupportFileURLFetcher {
         request.logger.info(
             "mcp.support_file_fetch host=\(host) bytes=\(bytes.count) status=ok")
         return bytes
+    }
+
+    /// Resolves the host once, refuses the fetch if any address is not public,
+    /// and returns the `dnsOverride` map that pins the connection to a checked
+    /// address.  `resolve` is called at most once, so the address the client
+    /// connects to is an address that this check saw.
+    ///
+    /// An IP-literal host needs no pin: the client does no DNS for it, and the
+    /// literal itself is the address that was checked.
+    static func pinnedDNSOverride(
+        urlString: String,
+        host: String,
+        logger: Logger,
+        resolve: @Sendable (String) async throws -> [String]
+    ) async throws -> [String: String] {
+        if BlockedIPClassifier.isIPLiteral(host) {
+            try refuseBlocked([host], host: host, logger: logger)
+            return [:]
+        }
+        // AsyncHTTPClient looks up the override by the host that
+        // `URL(string:)` parses.  If that host is not the one checked here,
+        // the override would not apply and the client would resolve the name
+        // again, so refuse the URL instead (fail closed).
+        guard URL(string: urlString)?.host == host else {
+            throw SupportFileFetchError.invalidURL(urlString)
+        }
+        let addresses = try await resolve(host)
+        try refuseBlocked(addresses, host: host, logger: logger)
+        guard let address = connectionAddress(from: addresses) else {
+            throw SupportFileFetchError.dnsFailed(host: host)
+        }
+        return [host: address]
+    }
+
+    /// The client configuration for one fetch: no redirects, the timeouts, and
+    /// the address pin from `pinnedDNSOverride`.
+    static func clientConfiguration(dnsOverride: [String: String]) -> HTTPClient.Configuration {
+        var configuration = HTTPClient.Configuration(
+            redirectConfiguration: .disallow,
+            timeout: .init(connect: connectTimeout, read: readTimeout))
+        configuration.dnsOverride = dnsOverride
+        return configuration
+    }
+
+    /// The checked address to connect to.  An IPv4 address comes first when
+    /// there is one: a pin gives the client one address and no fallback, and a
+    /// container often has no IPv6 route.
+    static func connectionAddress(from addresses: [String]) -> String? {
+        addresses.first { BlockedIPClassifier.parseIPv4($0) != nil } ?? addresses.first
+    }
+
+    /// Throws `dnsFailed` for an empty list and `blockedAddress` for the first
+    /// non-public address.
+    private static func refuseBlocked(
+        _ addresses: [String], host: String, logger: Logger
+    ) throws(SupportFileFetchError) {
+        guard !addresses.isEmpty else { throw SupportFileFetchError.dnsFailed(host: host) }
+        for ip in addresses where BlockedIPClassifier.isBlocked(ip) {
+            // The resolved address is instructor-URL infrastructure, not a
+            // client IP, but it still goes in metadata: the admin query_logs
+            // buffer redacts the "ip" key while console logging keeps it.
+            logger.warning(
+                "mcp.support_file_fetch.blocked host=\(host)",
+                metadata: ["ip": .string("\(ip)")])
+            throw SupportFileFetchError.blockedAddress(host: host, ip: ip)
+        }
     }
 
     /// Fetches the URL under the SSRF guards and returns the body as UTF-8 text.

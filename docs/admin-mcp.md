@@ -68,7 +68,7 @@ especially true for the motivating browser error.
 ## 2. Why a separate service, not more tools on `/mcp`
 
 The existing MCP server is built around one invariant, stated explicitly in
-`Sources/APIServer/Helpers/CourseAccessHelpers.swift` and enforced in
+`Sources/APIServer/Services/CourseAccess.swift` and enforced in
 `ToolContext.authorizeCourseAccess`:
 
 > *Agent scope ⊆ human scope, enforced by course enrollment, with no admin

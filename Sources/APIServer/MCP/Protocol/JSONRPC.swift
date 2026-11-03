@@ -183,16 +183,6 @@ struct JSONRPCError: Error, Encodable, Equatable, Sendable {
             ]))
     }
 
-    /// Processing the request needs a client capability the request did not
-    /// declare.  Unreachable today — this server implements no server-initiated
-    /// interaction — but defined so the code is never improvised later.
-    static func missingRequiredClientCapability(_ capabilities: [String]) -> JSONRPCError {
-        JSONRPCError(
-            code: missingRequiredClientCapabilityCode,
-            message: "Missing required client capability",
-            data: .object(["requiredCapabilities": .array(capabilities.map { .string($0) })]))
-    }
-
     // MCP authorization: the authenticated token lacks a scope the requested
     // tool requires.  Sits in the older -32000…-32019 sub-range, which the
     // 2026-07-28 spec discourages for new codes but leaves valid (the reserved

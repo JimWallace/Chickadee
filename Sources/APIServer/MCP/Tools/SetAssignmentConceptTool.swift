@@ -72,7 +72,7 @@ struct SetAssignmentConceptTool: ContentTool {
             ? nil : try MCPEnumProse<AssignmentConcept>.parse(token, field: "concept")
         // Instructor-level, matching the web Student Options route.
         let (assignment, _) = try await context.authorizedAssignmentAndSetupForWrite(
-            publicID: input.assignmentPublicID, atLeast: .instructor)
+            publicID: input.assignmentPublicID, atLeast: CourseRoleFloor.studentOptions)
         assignment.concept = concept
         try await assignment.save(on: context.db)
         return Output(

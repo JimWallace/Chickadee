@@ -43,7 +43,12 @@ cite them by letter:
 ### Adding staff who have not logged in
 
 Three forms add a person to a course at a staff role before their first login.
-All three call `provisionStaffEnrollment` (`Routes/Web/StaffProvisioning.swift`).
+All three reach `provisionStaffEnrollment` (`Routes/Web/StaffProvisioning.swift`):
+the new-course form calls it directly, inside its transaction. The two staff
+forms, and the unenroll and set-role actions on the instructor
+roster and the admin pages, go through `CourseEnrollmentService`
+(`Routes/Web/CourseEnrollmentService.swift`). The admin bypass of the
+last-instructor guard is the caller, not a second copy of the handler.
 
 | Form | Route | Who |
 |---|---|---|
@@ -62,9 +67,10 @@ The rules:
   (`winaccountname` at UW), so a placeholder named by an email is never
   adopted: the real login makes a second account and the role stays on the
   orphan. The form refuses it and asks for the username.
-- Under `AUTH_MODE=local`, the admin forms make no placeholder, because
-  nothing can adopt one. The person must register first. (The instructor
-  roster form keeps its earlier behaviour.)
+- Under `AUTH_MODE=local`, no form makes a placeholder, because nothing can
+  adopt one. The person must register first. The rule is
+  `Application.staffPlaceholderAllowed`, and it is the same on all three
+  forms (#2770).
 - The new-course form creates the course and enrolls its instructor in one
   transaction. A refused instructor leaves no course.
 - A placeholder is audited as `user.provisioned`, and each enrollment as
@@ -96,7 +102,7 @@ model is single-course-shaped** in two ways:
    [course-terms.md](course-terms.md).)
 
 The recent fix leaned on a principle already stated in
-`Sources/APIServer/Helpers/CourseAccessHelpers.swift`:
+`Sources/APIServer/Services/CourseAccess.swift`:
 
 > Everyone — instructors included — must be enrolled in the specific course
 > that owns the resource. … admins see — and their agents may act on — exactly
@@ -119,7 +125,7 @@ same way it is already *visibility*-scoped to a course.
 |---|---|---|
 | Global role | `Sources/APIServer/Models/APIUser.swift` — `UserRole` enum, `role` field, `isInstructor`/`isAdmin` | One string column on the user. `isInstructor == (role == .instructor \|\| role == .admin)`. |
 | Enrollment | `Sources/APIServer/Models/APICourseEnrollment.swift` | Join row `(user_id, course_id)`. As of Phase 1 it also carries a per-course `role` (`CourseRole`), seeded behaviour-preservingly from the global role and **not yet read** — the global role still governs capability until Phases 2–4 wire this in. |
-| Access policy | `Sources/APIServer/Helpers/CourseAccessHelpers.swift` — `requireCourseEnrollment`, `userIsEnrolled`, `enrolledCourses` | The single chokepoint both the web routes and MCP tools resolve course access through. Admin is the one bypass. |
+| Access policy | `Sources/APIServer/Services/CourseAccess.swift` — `requireCourseEnrollment`, `userIsEnrolled`, `enrolledCourses` | The single chokepoint both the web routes and MCP tools resolve course access through. Admin is the one bypass. |
 | Active-course resolution | `APIUser.swift` — `resolveActiveCourse`, `CourseContext`, `ResolvedCourseState` | Picks the active course from session/DB, auto-enrolls `.auto` courses, returns the enrolled set. |
 | View context | `APIUser.swift` — `CurrentUserContext` | Carries `isAdmin`, `isInstructor`, `activeCourse`, `enrolledCourses` into the views. The nav (`Sources/APIServer/Views/SiteNav.swift`, inside `BaseLayout`) reads these. |
 | Route gating | `Sources/APIServer/Middleware/RoleMiddleware.swift`; groups in `Sources/APIServer/routes.swift` (`.authenticated` / `.instructor` / `.admin`) | Coarse, **global**-role gates at the group level. |
@@ -127,7 +133,7 @@ same way it is already *visibility*-scoped to a course.
 
 The good news: visibility is *already* funnelled through one resolver
 (`enrolledCourses` / `resolveActiveCourse`) and access through one helper
-(`CourseAccessHelpers`). Those are the seams Theme 1 threads a role through —
+(`CourseAccess`). Those are the seams Theme 1 threads a role through —
 there is no scattered role logic to chase down.
 
 ---
@@ -195,7 +201,7 @@ representable and creatable.
 
 ### 3.4 Auth path (permissions) — **chokepoint implemented**
 
-- `CourseAccessHelpers` is the chokepoint: `requireCourseRole(caller:courseID:
+- `CourseAccess` is the chokepoint: `requireCourseRole(caller:courseID:
   atLeast: CourseRole, db:)` is in, and `requireCourseEnrollment` is now its
   `.student` case (a one-call delegation, so every existing caller is
   unchanged). Authority is **purely per-course** — admin bypass only, no global
@@ -217,7 +223,7 @@ representable and creatable.
 - **Write-policy core + role-floor convention (#1113).** The write policy
   (admin bypass → per-course role floor → archived block) lives once, in
   `evaluateCourseWrite(user:courseID:atLeast:db:) -> CourseWriteDenial?`
-  (`CourseAccessHelpers.swift`); the web (`requireCourseWriteAccess` → `Abort`)
+  (`CourseAccess.swift`); the web (`requireCourseWriteAccess` → `Abort`)
   and MCP (`ToolContext.authorizeCourseWriteAccess` → `MCPToolError`) wrappers
   only map the denial, so the two surfaces cannot drift. There are **no
   default `atLeast` values** — every call site states its floor explicitly:
@@ -234,6 +240,16 @@ representable and creatable.
     assignment-wide due date, course sections (create, rename, delete, move an
     assignment between them; not the reorder), archive, BrightSpace binding,
     test-setup upload.
+- **A named operation has one floor constant (#2772).** `CourseRoleFloor`
+  (`Utilities/CourseRoleFloor.swift`) names the floor of each operation that
+  more than one surface gates: assignment creation, the assignment lifecycle,
+  course sections, content items, the course dataset library, Student
+  Options, the class activity and the BrightSpace binding. The web route, its
+  MCP twin and the view that offers its control read the same constant.
+  `CourseRoleFloorGuardTests` lists the files that implement a named
+  operation and refuses a literal floor in them, except the one-offs it lists
+  with a reason. An operation with no name keeps its literal floor. To name
+  one, add the constant, move its call sites, and add its files to the test.
 - **The convention is now enforced, not just written down.**
   `RouteAuthorizationMatrixTests` walks the live route table and crosses every
   parameterized `/instructor` and `/courses` route with `CourseRole.allCases`,

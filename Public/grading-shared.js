@@ -1,3 +1,4 @@
+// @ts-check
 // Public/grading-shared.js
 //
 // Grading semantics that more than one browser grading worker needs: the

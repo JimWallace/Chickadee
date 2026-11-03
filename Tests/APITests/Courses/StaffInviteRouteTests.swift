@@ -20,7 +20,7 @@ import VaporTesting
     let app: Application
 
     init() async throws {
-        self.app = try await makeTestApp(prefix: "chickadee-staff-invite")
+        self.app = try await makeTestApp(prefix: "chickadee-staff-invite", authMode: .dual)
     }
 
     /// A non-archived `.closed` course with `actor` (a *global student*) enrolled

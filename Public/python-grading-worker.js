@@ -1,3 +1,4 @@
+// @ts-check
 // Public/python-grading-worker.js
 //
 // The Python browser-grading substrate: boots the vendored xeus-python kernel

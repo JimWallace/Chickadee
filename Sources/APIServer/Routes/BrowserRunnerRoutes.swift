@@ -37,7 +37,8 @@ struct BrowserRunnerRoutes: RouteCollection {
 
     /// Session-authenticated test setup artifact download.
     /// Restricted to users enrolled in the course that owns the test setup,
-    /// plus instructors and admins.
+    /// plus instructors and admins. A caller who is not course staff gets only
+    /// a browser-graded setup whose manifest decodes (#2763).
     @Sendable
     func downloadTestSetup(req: Request) async throws -> Response {
         let caller = try req.auth.require(APIUser.self)
@@ -62,6 +63,12 @@ struct BrowserRunnerRoutes: RouteCollection {
             try await requireCourseEnrollment(caller: caller, courseID: setup.courseID, db: req.db)
         }
 
+        // Only a browser-graded setup is a student's to download (#2763). The
+        // browser runner fetches this zip only on a browser-graded page, but
+        // the zip of a worker-graded setup also holds its release and secret
+        // scripts. Staff keep access: they can read the setup anyway.
+        let manifest = try await requireBrowserRunnerAccess(setup: setup, caller: caller, req: req)
+
         // Grader-only files (answer keys, reserved holdout sets) must never reach
         // a browser-graded student — the whole stored zip is streamed into the
         // kernel's filesystem, which a determined student can inspect. Stream a filtered
@@ -70,22 +77,74 @@ struct BrowserRunnerRoutes: RouteCollection {
         // zip upload; section adoption keeps worker grading), so this filter is
         // the backstop for setups that predate the rule — the common case
         // declares none and takes the no-copy streaming fast path.
-        let graderOnly = setup.decodedManifest()?.graderOnlyFiles ?? []
+        let graderOnly = manifest?.graderOnlyFiles ?? []
         guard !graderOnly.isEmpty else {
             return try await req.fileio.asyncStreamFile(at: setup.zipPath)
         }
-        let fm = FileManager.default
-        let tempDir = fm.temporaryDirectory.appendingPathComponent("ck-browser-zip-\(UUID().uuidString)")
-        try fm.createDirectory(at: tempDir, withIntermediateDirectories: true)
-        defer { try? fm.removeItem(at: tempDir) }
+        return try await streamFilteredSetupZip(zipPath: setup.zipPath, removing: graderOnly, req: req)
+    }
+
+    /// The decoded manifest of a setup that `caller` may read through the
+    /// browser runner: the zip, the manifest and the seed (#2763). Throws for a
+    /// non-staff caller when the setup is not browser-graded, and when its
+    /// manifest does not decode: with no manifest there is no grading mode and
+    /// no grader-only list, so the request fails closed. Staff get the
+    /// manifest, or nil when it does not decode.
+    ///
+    /// Only `browser-runner.js` calls these endpoints, and only on a
+    /// browser-graded page. For a worker-graded setup the zip holds the release
+    /// and secret scripts, the manifest names every test, and the seed carries
+    /// resolved inputs that can encode expected answers. The worker receives
+    /// these in its job; a student never needs them.
+    @discardableResult
+    private func requireBrowserRunnerAccess(
+        setup: APITestSetup, caller: APIUser, req: Request
+    ) async throws -> TestProperties? {
+        let manifest = setup.decodedManifest()
+        if try await req.cachedIsCourseStaff(caller, inCourse: setup.courseID) {
+            return manifest
+        }
+        guard let manifest else {
+            req.logger.warning(
+                "browser-runner request refused: the manifest does not decode",
+                metadata: ["testSetupID": .string(setup.id ?? "")])
+            throw AppError.forbiddenReason(reason: "This test setup cannot be read.")
+        }
+        guard manifest.effectiveGradingMode == .browser else {
+            throw AppError.forbiddenReason(reason: "This assignment is not graded in the browser.")
+        }
+        return manifest
+    }
+
+    /// Streams a copy of the setup zip with `removing` deleted. The copy is
+    /// made off the cooperative pool, and the response streams it from disk.
+    /// The temporary directory is removed when the stream completes, or at
+    /// once if the copy fails. The copy is new for each request, so the
+    /// conditional and range headers are dropped: a 304 or a partial answer
+    /// would skip the completion hook and leave the directory on disk.
+    private func streamFilteredSetupZip(
+        zipPath: String, removing graderOnly: [String], req: Request
+    ) async throws -> Response {
+        let tempDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("ck-browser-zip-\(UUID().uuidString)")
         let tempZip = tempDir.appendingPathComponent("setup.zip").path
-        try fm.copyItem(atPath: setup.zipPath, toPath: tempZip)
-        // writes:[:] — pure deletion of the grader-only entries from the copy.
-        try await applyScriptChangesToZip(zipPath: tempZip, writes: [:], deletions: graderOnly)
-        let filtered = try Data(contentsOf: URL(fileURLWithPath: tempZip))
-        var headers = HTTPHeaders()
-        headers.contentType = HTTPMediaType(type: "application", subType: "zip")
-        return Response(status: .ok, headers: headers, body: .init(data: filtered))
+        do {
+            try await runBlocking {
+                let fm = FileManager.default
+                try fm.createDirectory(at: tempDir, withIntermediateDirectories: true)
+                try fm.copyItem(atPath: zipPath, toPath: tempZip)
+            }
+            // writes:[:] — pure deletion of the grader-only entries from the copy.
+            try await applyScriptChangesToZip(zipPath: tempZip, writes: [:], deletions: graderOnly)
+            req.headers.remove(name: .ifNoneMatch)
+            req.headers.remove(name: .range)
+            return try await req.fileio.asyncStreamFile(at: tempZip) { _ in
+                try? FileManager.default.removeItem(at: tempDir)
+            }
+        } catch {
+            try? FileManager.default.removeItem(at: tempDir)
+            throw error
+        }
     }
 
     // MARK: - GET /api/v1/browser-runner/testsetups/:id/manifest
@@ -116,6 +175,8 @@ struct BrowserRunnerRoutes: RouteCollection {
         {
             try await requireCourseEnrollment(caller: caller, courseID: setup.courseID, db: req.db)
         }
+        // Browser-graded only for a student, as for the zip (#2763).
+        try await requireBrowserRunnerAccess(setup: setup, caller: caller, req: req)
 
         // Serve the runner contract only. The stored manifest also holds
         // authoring data that must not reach a student's browser: `=`
@@ -175,6 +236,9 @@ struct BrowserRunnerRoutes: RouteCollection {
             return BrowserRunnerSeedResponse(
                 seed: nil, personalizedInputs: nil, personalizedFiles: nil, language: nil, opponent: nil)
         }
+        // Browser-graded only for a student, as for the zip (#2763). The empty
+        // seed above carries nothing, so only this branch is gated.
+        try await requireBrowserRunnerAccess(setup: setup, caller: caller, req: req)
         guard let userID = caller.id, let assignmentID = assignment.id else {
             return BrowserRunnerSeedResponse(
                 seed: nil, personalizedInputs: nil, personalizedFiles: nil, language: nil, opponent: nil)

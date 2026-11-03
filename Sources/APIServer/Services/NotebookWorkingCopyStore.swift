@@ -796,9 +796,12 @@ func writeDatasetFiles(
 
     // Dataset resolution reads the source CSV and materializes a per-student
     // slice, then writes one file per dataset — synchronous I/O + CPU. Thread
-    // pool (#1156).
-    let wrote: Bool =
-        (try? await runBlocking {
+    // pool (#1156). A failed write is not a success (#2776): caching the
+    // fingerprint after one left the student with a stale dataset until a
+    // restart, so a failure skips the record and the next visit retries.
+    let wrote: Bool
+    do {
+        wrote = try await runBlocking {
             guard
                 let files = DatasetDeals.withholdingUndealtParts(
                     DatasetResolver.resolve(
@@ -807,15 +810,30 @@ func writeDatasetFiles(
                     manifest: props, dealNumber: dealNumber)
             else { return false }
 
+            // Every file is attempted, as before; the first failure is
+            // thrown after the loop.
+            var firstFailure: (any Error)?
             for (filename, content) in files {
                 // Defense-in-depth (#1104): resolver keys are validated bare
                 // filenames, but never join an unvetted name onto the student dir.
                 guard FilenameSafety.bareFilename(filename) != nil else { continue }
                 let dest = studentDir + "/" + filename
-                try? content.write(toFile: dest, atomically: true, encoding: .utf8)
+                do {
+                    try content.write(toFile: dest, atomically: true, encoding: .utf8)
+                } catch {
+                    firstFailure = firstFailure ?? error
+                }
             }
+            if let firstFailure { throw firstFailure }
             return true
-        }) ?? false
+        }
+    } catch {
+        // The user id goes in metadata only (compliance audit F-1).
+        application.logger.warning(
+            "Dataset materialization failed for setup \(setupID): \(error)",
+            metadata: ["user_id": .string(userID.uuidString)])
+        return
+    }
 
     if wrote, let state {
         await cache.record(userID: userID, setupID: setupID, fingerprint: state.fingerprint)

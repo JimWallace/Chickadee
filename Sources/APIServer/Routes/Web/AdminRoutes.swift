@@ -205,7 +205,9 @@ struct AdminRoutes: RouteCollection {
 
         // This list belongs to no one course, so the staff ring means "teaches
         // somewhere", as on the account page (docs/student-wardrobe.md).
-        let staff = try await AvatarStore.courseStaff(among: users.compactMap(\.id), on: db)
+        // Every user is on this list, so the staff set is read whole rather
+        // than through an IN list of every user ID (#2777).
+        let staff = try await AvatarStore.allCourseStaff(on: db)
         var rows: [AdminUserRow] = []
         for user in users {
             // Each person's own seeded bird, the one their account page shows.

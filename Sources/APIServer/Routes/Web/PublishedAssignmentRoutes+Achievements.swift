@@ -17,18 +17,12 @@ import Vapor
 
 extension PublishedAssignmentRoutes {
 
-    /// The editor row types are shared with the MCP tools; these aliases keep the
-    /// `PublishedAssignmentRoutes.AchievementInput` / `.ConditionInput` spelling
-    /// the web layer (and its tests) use.
-    typealias ConditionInput = ConditionRow
-    typealias AchievementInput = AchievementRow
-
     struct AchievementsBody: Content {
-        var achievements: [AchievementInput]
+        var achievements: [AchievementRow]
     }
 
     struct AchievementsResponse: Content {
-        var achievements: [AchievementInput]
+        var achievements: [AchievementRow]
     }
 
     // MARK: - GET /instructor/:assignmentID/achievements

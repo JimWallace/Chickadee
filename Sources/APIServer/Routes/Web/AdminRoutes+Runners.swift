@@ -1,7 +1,7 @@
 // APIServer/Routes/Web/AdminRoutes+Runners.swift
 //
 // Admin runner / worker dashboard routes. The row and timing helpers they
-// share with the admin-diagnostics MCP tools are in Services/RunnerFleetRows.swift.
+// share with the admin-diagnostics MCP tools are in Helpers/RunnerFleetRows.swift.
 // All routes are registered in AdminRoutes.boot().
 
 import Core

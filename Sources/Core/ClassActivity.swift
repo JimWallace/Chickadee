@@ -545,7 +545,7 @@ public struct ClassActivity: Codable, Equatable, Sendable {
     /// practice opponent on a bracket. Nil when nothing is staged, and nil on
     /// a kind whose opponent the worker chooses (`opponentNeedsWorker`). The
     /// worker stages the same file for the same submissions
-    /// (`WorkerJobRoutes.jobOpponent`, `pairedJobOpponent`).
+    /// (`JobOpponentSelection.jobOpponent`, `pairedJobOpponent`).
     public var browserStagedBot: String? {
         switch kind.opponentSource {
         case .supportFile, .paired: return opponentFile

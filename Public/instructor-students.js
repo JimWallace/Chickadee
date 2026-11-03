@@ -1,3 +1,4 @@
+// @ts-check
 // Page wiring for the instructor students roster (InstructorStudentsPage):
 // row-click navigation, the roster's own enrolled and pending counts, and the
 // empty-state message — all re-applied after each background repaint by

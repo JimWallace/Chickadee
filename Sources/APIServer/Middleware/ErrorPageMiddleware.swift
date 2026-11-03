@@ -85,7 +85,7 @@ struct ErrorPageMiddleware: AsyncMiddleware {
 /// Returns a humane user-facing message for an HTTP error.  When the caller
 /// supplied an explicit `reason:` (i.e., not the HTTP status reason phrase),
 /// the reason is returned verbatim — typed errors like
-/// `WebAssignmentError.forbidden(action:)` already produce friendly text and
+/// `AppError.forbidden(action:)` already produce friendly text and
 /// we don't want to clobber them.  When the reason is empty or matches the
 /// generic reason phrase (i.e., a bare `Abort(.notFound)` with no message),
 /// substitute a status-appropriate friendly default.

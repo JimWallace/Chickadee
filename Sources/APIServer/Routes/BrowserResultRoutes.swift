@@ -82,41 +82,18 @@ struct BrowserResultRoutes: RouteCollection {
         // no native worker runs here (browser results are stored as-is), but if
         // this submission is later re-graded by a worker (a retest, or the
         // browser-mode backstop) the authoritative suite has its cells.
-        let subsDir = req.application.submissionsDirectory
-        let subID = freshShortID(prefix: "sub")
-        let nbPath = subsDir + "\(subID).ipynb"
-        let instructorData: Data
-        do {
-            // Cached (#1171): this runs per browser-graded submission, and the
-            // uncached path is a serialized unzip subprocess per call.
-            instructorData = try await req.application.notebookBytesCache.notebookData(
-                for: NotebookSourceRef(setup))
-        } catch {
-            req.logger.warning(
-                "Could not load instructor notebook for \(setup.id ?? "?"): \(error) — hidden test cells will not be injected"
-            )
-            instructorData = body.notebook
-        }
-        let notebookToSave = mergeNotebook(student: body.notebook, instructor: instructorData)
-        // Offloaded to the NIO thread pool: a synchronous write pins a
-        // cooperative-pool thread for its duration, and these are the routes a
-        // whole lab section hits at once.
-        try await req.fileio.writeFile(.init(data: notebookToSave), at: nbPath)
-
-        // Create the submission record as "complete" immediately — browser
-        // results are authoritative and no native worker re-run is queued.
-        // The attempt number is assigned race-free inside one transaction.
-        let submission = APISubmission(
-            id: subID,
-            testSetupID: body.testSetupID,
-            zipPath: nbPath,
-            attemptNumber: 0,  // assigned by saveSubmissionWithNextAttemptNumber
-            status: SubmissionStatus.complete.rawValue,
-            filename: "\(subID).ipynb",
-            userID: caller.id,
-            kind: APISubmission.Kind.student
-        )
-        try await saveSubmissionWithNextAttemptNumber(submission, userID: caller.id, on: req.db)
+        //
+        // The row is stored "complete": browser results are authoritative and
+        // no native worker re-run is queued, so the intake records no enqueue,
+        // wakes no runner and awards nothing. Pathfinder waits for the result.
+        let intake = SubmissionIntake(req: req)
+        let subID = intake.submissionID
+        let submission = try await intake.accept(
+            setup: setup, owner: caller,
+            artifact: .bytes(
+                try await intake.mergedWithInstructorNotebook(body.notebook, setup: setup),
+                fileExtension: "ipynb"),
+            filename: "\(subID).ipynb", status: .complete)
         let attemptNumber = submission.attemptNumber ?? 1
 
         // Persist the browser result, tagged source="browser".  The browser
@@ -144,9 +121,9 @@ struct BrowserResultRoutes: RouteCollection {
 
         // Everything below is a side effect of a grade that is already stored,
         // so none of it may fail the submission (`ResultIngestEffects`, #1708).
-        // Pathfinder is awarded here rather than at upload because this route
-        // creates the submission row. Then the same class-level effects the
-        // worker report applies.
+        // Pathfinder is awarded here, not by the intake, because a complete
+        // row is a real submission only once its result is stored. Then the
+        // same class-level effects the worker report applies.
         let effects = ResultIngestEffects(application: req.application, db: req.db, logger: req.logger)
         if let userID = caller.id {
             await effects.awardFirstToSubmit(setup: setup, userID: userID, submissionID: subID)
@@ -201,59 +178,17 @@ struct BrowserResultRoutes: RouteCollection {
                 reason: "Browser-graded assignments must be submitted through the browser runner.")
         }
 
-        let subsDir = req.application.submissionsDirectory
-        let subID = freshShortID(prefix: "sub")
-        let nbPath = subsDir + "\(subID).ipynb"
-
-        // Always merge with canonical instructor notebook so hidden tests are present.
-        let instructorData: Data
-        do {
-            // Cached (#1171): this runs per browser-graded submission, and the
-            // uncached path is a serialized unzip subprocess per call.
-            instructorData = try await req.application.notebookBytesCache.notebookData(
-                for: NotebookSourceRef(setup))
-        } catch {
-            req.logger.warning(
-                "Could not load instructor notebook for \(setup.id ?? "?"): \(error) — hidden test cells will not be injected"
-            )
-            instructorData = body.notebook
-        }
-        let notebookToSave = mergeNotebook(student: body.notebook, instructor: instructorData)
-        // Offloaded to the NIO thread pool: a synchronous write pins a
-        // cooperative-pool thread for its duration, and these are the routes a
-        // whole lab section hits at once.
-        try await req.fileio.writeFile(.init(data: notebookToSave), at: nbPath)
-
-        let submittedFilename = normalizedNotebookFilename(body.filename)
-        let submission = APISubmission(
-            id: subID,
-            testSetupID: body.testSetupID,
-            zipPath: nbPath,
-            attemptNumber: 0,  // assigned by saveSubmissionWithNextAttemptNumber
-            status: SubmissionStatus.pending.rawValue,
-            filename: submittedFilename,
-            userID: caller.id,
-            kind: APISubmission.Kind.student
-        )
-        try await saveSubmissionWithNextAttemptNumber(submission, userID: caller.id, on: req.db)
-
-        // First-to-submit records (Pathfinder) — same as the zip-upload and
-        // browser-result paths (audit A2). Best effort: the submission is
-        // already stored (#1708).
-        if let userID = caller.id {
-            await ResultIngestEffects(application: req.application, db: req.db, logger: req.logger)
-                .awardFirstToSubmit(setup: setup, userID: userID, submissionID: subID)
-        }
-
-        // For browser-mode test setups the client-side WASM runner picks up the job;
-        // waking the local native runner would waste resources and claim nothing
-        // (WorkerJobRoutes filters out browser-mode submissions).
-        let isWorkerMode =
-            (decodeManifest(from: manifestData))
-            .map { $0.effectiveGradingMode == .worker } ?? true
-        if isWorkerMode {
-            await ensureLocalRunnerForSubmissionIfNeeded(req: req)
-        }
+        // Always merge with canonical instructor notebook so hidden tests are
+        // present. The browser-mode check above means a runner grades this row,
+        // so the intake records the enqueue and wakes the local runner.
+        let intake = SubmissionIntake(req: req)
+        let subID = intake.submissionID
+        try await intake.accept(
+            setup: setup, owner: caller,
+            artifact: .bytes(
+                try await intake.mergedWithInstructorNotebook(body.notebook, setup: setup),
+                fileExtension: "ipynb"),
+            filename: normalizedNotebookFilename(body.filename), status: .pending)
 
         return RunnerSubmissionResponse(submissionID: subID)
     }
@@ -329,44 +264,20 @@ struct BrowserResultRoutes: RouteCollection {
 
         // Persist the notebook artifact, merged with the instructor notebook so
         // the backstop runs the hidden (release/secret) test cells too — exactly
-        // as `browser-result` does.
-        let subsDir = req.application.submissionsDirectory
-        let subID = freshShortID(prefix: "sub")
-        let nbPath = subsDir + "\(subID).ipynb"
-        let studentData = Data(body.notebook.utf8)
-        let instructorData: Data
-        do {
-            instructorData = try await req.application.notebookBytesCache.notebookData(
-                for: NotebookSourceRef(setup))
-        } catch {
-            req.logger.warning(
-                "Browser failover: could not load instructor notebook for \(setup.id ?? "?"): \(error) — hidden test cells will not be injected"
-            )
-            instructorData = studentData
-        }
-        let notebookToSave = mergeNotebook(student: studentData, instructor: instructorData)
-        // Offloaded to the NIO thread pool: a synchronous write pins a
-        // cooperative-pool thread for its duration, and these are the routes a
-        // whole lab section hits at once.
-        try await req.fileio.writeFile(.init(data: notebookToSave), at: nbPath)
-
-        let submission = APISubmission(
-            id: subID,
-            testSetupID: body.testSetupID,
-            zipPath: nbPath,
-            attemptNumber: 0,  // assigned by saveSubmissionWithNextAttemptNumber
-            status: SubmissionStatus.pending.rawValue,
-            filename: "\(subID).ipynb",
-            userID: userID,
-            kind: APISubmission.Kind.student
-        )
-        try await saveSubmissionWithNextAttemptNumber(submission, userID: userID, on: req.db)
-
-        // A failover row IS the student's real submission for this attempt —
-        // if they're the first in the class to submit, the frozen browser run
-        // must not cost them the record (audit A2).
-        await ResultIngestEffects(application: req.application, db: req.db, logger: req.logger)
-            .awardFirstToSubmit(setup: setup, userID: userID, submissionID: subID)
+        // as `browser-result` does. A failover row IS the student's real
+        // submission for this attempt: if they're the first in the class to
+        // submit, the frozen browser run must not cost them the record (audit
+        // A2). The backstop claims browser-mode pending rows, so unlike a
+        // browser result the intake records the enqueue and wakes the local
+        // runner.
+        let intake = SubmissionIntake(req: req)
+        let subID = intake.submissionID
+        try await intake.accept(
+            setup: setup, owner: caller,
+            artifact: .bytes(
+                try await intake.mergedWithInstructorNotebook(Data(body.notebook.utf8), setup: setup),
+                fileExtension: "ipynb"),
+            filename: "\(subID).ipynb", status: .pending)
 
         req.logger.warning(
             "Browser grading failed/froze for setup \(body.testSetupID); enqueued worker backstop grade \(subID)"
@@ -386,11 +297,6 @@ struct BrowserResultRoutes: RouteCollection {
             source: "backstop"
         )
         try? await diagnostic.save(on: req.db)
-
-        // Wake a local runner in development (production runners poll
-        // continuously). The backstop claims browser-mode pending rows, so unlike
-        // `runner-submit` we DO want to nudge the runner for a browser setup here.
-        await ensureLocalRunnerForSubmissionIfNeeded(req: req)
 
         return RunnerSubmissionResponse(submissionID: subID)
     }

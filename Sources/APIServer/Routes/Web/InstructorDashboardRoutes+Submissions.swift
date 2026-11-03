@@ -7,7 +7,7 @@
 // the per-student actions (history, retest, notebook reset, grade overrides)
 // live in `InstructorDashboardRoutes+StudentActions.swift`; the shared
 // "highest grade wins" folds live in
-// `Helpers/BestGradePercentBySubmissionID.swift`.
+// `Services/BestGradePercentBySubmissionID.swift`.
 
 import Core
 import Elementary

@@ -1,3 +1,4 @@
+// @ts-check
 // Account page: personal-data export status poll (#557).
 //
 // Loaded only while the page shows an in-progress export. Polls the status

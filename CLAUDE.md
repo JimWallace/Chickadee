@@ -56,7 +56,7 @@ on a file there.
 
 | File | Holds |
 |---|---|
-| `Sources/APIServer/CLAUDE.md` | REST API, auth and roles in detail, `AppConfig`, runner trust, courses and deadlines, class goals, authoring editors, pattern families, browser isolation |
+| `Sources/APIServer/CLAUDE.md` | Where shared code goes (`Helpers/`, `Services/`, `Utilities/`), REST API, auth and roles in detail, `AppConfig`, runner trust, courses and deadlines, class goals, authoring editors, pattern families, browser isolation |
 | `Sources/APIServer/MCP/CLAUDE.md` | MCP server, the student-data wall, derived language and tier prose |
 | `Sources/APIServer/Views/CLAUDE.md` | Elementary pages, UI and stylesheet rules (also for `Public/styles.css` and `Public/*.js`), the `ui-review` agent |
 | `Sources/Worker/CLAUDE.md` | Sandbox boundary, test setup cache, runner flags |

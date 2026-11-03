@@ -111,7 +111,7 @@ import Testing
 
     @Test func aTierThatIsNotATierIsRefusedNotStored() throws {
         let props = TestProperties(language: nil)
-        #expect(throws: WebAssignmentError.self) {
+        #expect(throws: AppError.self) {
             try makeWorkerManifestJSON(
                 preserving: props,
                 testSuites: [
