@@ -430,50 +430,29 @@ struct InstructorDashboardRoutes: RouteCollection {
     @Sendable
     func deleteAssignment(req: Request) async throws -> Response {
         let assignment = try await loadAssignmentForWrite(req, atLeast: DashboardRoleFloor.assignmentLifecycle)
-        let setupID = assignment.testSetupID
-
-        // Delete related submissions and their result rows for this setup.
-        let submissions = try await APISubmission.query(on: req.db)
-            .filter(\.$testSetupID == setupID)
-            .all()
-        let submissionIDs = submissions.compactMap(\.id)
-        if !submissionIDs.isEmpty {
-            try await APIResult.query(on: req.db)
-                .filter(\.$submissionID ~~ submissionIDs)
-                .delete()
-            // Variant rows must go before their submissions: the FK is
-            // `.setNull`, so deleting the submissions first would leave the
-            // batch as unlinked rows for a setup that no longer exists.
-            try await ValidationVariant.query(on: req.db)
-                .filter(\.$testSetupID == setupID)
-                .delete()
-            try await APISubmission.query(on: req.db)
-                .filter(\.$id ~~ submissionIDs)
-                .delete()
+        // Every row goes in one transaction, and the files go only after it
+        // commits (#2766). A failure midway rolls back every row, and the
+        // rows still name files that are still on disk.
+        let removed = try await req.db.transaction { db in
+            try await AssignmentDeletion.deleteRows(of: assignment, on: db)
         }
-        // The awards this assignment's work earned go with that work.
-        try await AchievementAwardStore.deleteAwards(forTestSetups: [setupID], on: req.db)
-
-        // Delete setup artifacts and setup row so it disappears from the assignments list.
-        if let setup = try await APITestSetup.find(setupID, on: req.db) {
-            try? FileManager.default.removeItem(atPath: setup.zipPath)
-            if let notebookPath = setup.notebookPath, !notebookPath.isEmpty {
-                try? FileManager.default.removeItem(atPath: notebookPath)
-            }
-            removeMaterializedNotebookFiles(req: req, setupID: setupID)
-            try await setup.delete(on: req.db)
+        for path in removed.filePaths {
+            try? FileManager.default.removeItem(atPath: path)
+        }
+        if removed.setupDeleted {
+            removeMaterializedNotebookFiles(req: req, setupID: assignment.testSetupID)
         }
 
-        // Recorded BEFORE the row goes: after the delete there is no assignment
-        // to attribute the event to, and no version row survives either — this
-        // is the only trace that the assignment ever existed.
+        // Recorded after the commit, so a delete that rolled back leaves no
+        // false trace. The in-memory model still carries the title and the
+        // course, and no version row survives the delete: this is the only
+        // trace that the assignment ever existed.
         await AuditLogger.recordAssignmentLifecycle(
             .assignmentDeleted, assignment: assignment,
             metadata: [
                 "title": assignment.title,
-                "submissions_deleted": String(submissionIDs.count),
+                "submissions_deleted": String(removed.submissionCount),
             ], on: req)
-        try await assignment.delete(on: req.db)
         return req.redirect(to: "/instructor")
     }
 
