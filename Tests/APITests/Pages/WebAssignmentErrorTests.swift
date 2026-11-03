@@ -1,9 +1,9 @@
 // Tests/APITests/Pages/WebAssignmentErrorTests.swift
 //
 // Tests for `AppError` (issue #442 typed-errors migration).
-// As of the June 2026 audit the enum was folded into `AppError`
-// (`AppError` is now a typealias), so these tests pin the
-// unified vocabulary:
+// As of the June 2026 audit the separate instructor-route enum was folded
+// into `AppError`, and its alias was removed in #2783, so these tests pin
+// the unified vocabulary:
 //
 //   1. Each enum case maps to the expected HTTP status, so future tweaks
 //      to the switch statement can't silently drop a status code.
