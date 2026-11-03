@@ -44,6 +44,10 @@ cite them by letter:
 
 Three forms add a person to a course at a staff role before their first login.
 All three call `provisionStaffEnrollment` (`Routes/Web/StaffProvisioning.swift`).
+The two staff forms, and the unenroll and set-role actions on the instructor
+roster and the admin pages, go through `CourseEnrollmentService`
+(`Routes/Web/CourseEnrollmentService.swift`). The admin bypass of the
+last-instructor guard is the caller, not a second copy of the handler.
 
 | Form | Route | Who |
 |---|---|---|
@@ -62,9 +66,10 @@ The rules:
   (`winaccountname` at UW), so a placeholder named by an email is never
   adopted: the real login makes a second account and the role stays on the
   orphan. The form refuses it and asks for the username.
-- Under `AUTH_MODE=local`, the admin forms make no placeholder, because
-  nothing can adopt one. The person must register first. (The instructor
-  roster form keeps its earlier behaviour.)
+- Under `AUTH_MODE=local`, no form makes a placeholder, because nothing can
+  adopt one. The person must register first. The rule is
+  `Application.staffPlaceholderAllowed`, and it is the same on all three
+  forms (#2770).
 - The new-course form creates the course and enrolls its instructor in one
   transaction. A refused instructor leaves no course.
 - A placeholder is audited as `user.provisioned`, and each enrollment as

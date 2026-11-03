@@ -99,7 +99,8 @@ extension InstructorDashboardRoutes {
                 courseEnrollmentMode: courseEnrollmentMode,
                 rosterReadOnly: courseIsArchived || !canManageRoster,
                 staffForm: StaffFieldsContext(
-                    idPrefix: "add-staff", placeholderAllowed: true, defaultRole: .ta,
+                    idPrefix: "add-staff", placeholderAllowed: req.application.staffPlaceholderAllowed,
+                    defaultRole: .ta,
                     errorQuery: req.query[String.self, at: "staffError"]),
                 showsGroups: showsGroups
             )

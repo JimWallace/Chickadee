@@ -145,16 +145,12 @@ extension AdminRoutes {
         guard let role = CourseRole(rawValue: body?.role ?? ""), role >= .ta else {
             return req.redirect(to: "\(back)?staffError=\(StaffFormError.role.rawValue)#add-staff-panel")
         }
-        let result: StaffProvisioningResult
         do {
-            result = try await provisionStaffEnrollment(
-                identifier: identifier, role: role, courseID: courseID,
-                allowPlaceholder: req.application.staffPlaceholderAllowed, on: req.db)
+            _ = try await CourseEnrollmentService.inviteStaff(
+                identifier: identifier, role: role, courseID: courseID, source: "admin_staff_invite", on: req)
         } catch let error as StaffProvisioningError {
             return req.redirect(to: "\(back)?staffError=\(StaffFormError(error).rawValue)#add-staff-panel")
         }
-        await recordStaffProvisioning(
-            result, role: role, courseID: courseID, source: "admin_staff_invite", on: req)
         return req.redirect(to: "\(back)?staffAdded=1")
     }
 
@@ -586,18 +582,8 @@ extension AdminRoutes {
             throw AppError.badRequest(reason: "The course or user ID is not valid.")
         }
 
-        try await APICourseEnrollment.query(on: req.db)
-            .filter(\.$course.$id == courseID)
-            .filter(\.$userID == userID)
-            .delete()
-
-        await AuditLogger.record(
-            action: .enrollmentRemoved,
-            targetType: .enrollment,
-            targetID: userIDString,
-            metadata: ["course_id": courseIDString, "subject_user_id": userIDString],
-            on: req
-        )
+        try await CourseEnrollmentService.unenroll(
+            userID: userID, courseID: courseID, caller: try req.auth.require(APIUser.self), on: req)
         return req.redirect(to: "/admin/courses/\(courseIDString)")
     }
 
@@ -627,25 +613,12 @@ extension AdminRoutes {
         }
 
         guard
-            let enrollment = try await APICourseEnrollment.query(on: req.db)
-                .filter(\.$course.$id == courseID)
-                .filter(\.$userID == userID)
-                .first()
+            try await CourseEnrollmentService.setRole(
+                newRole, userID: userID, courseID: courseID,
+                caller: try req.auth.require(APIUser.self), on: req)
         else {
             throw AppError.notFound(resource: "Enrollment")
         }
-        enrollment.role = newRole
-        try await enrollment.save(on: req.db)
-
-        await AuditLogger.record(
-            action: .enrollmentRoleChanged,
-            targetType: .enrollment,
-            targetID: userIDString,
-            metadata: [
-                "course_id": courseIDString, "subject_user_id": userIDString, "role": newRole.rawValue,
-            ],
-            on: req
-        )
         return req.redirect(to: "/admin/courses/\(courseIDString)")
     }
 
@@ -741,18 +714,8 @@ extension AdminRoutes {
             throw AppError.badRequest(reason: "The course or user ID is not valid.")
         }
 
-        try await APICourseEnrollment.query(on: req.db)
-            .filter(\.$userID == userID)
-            .filter(\.$course.$id == courseID)
-            .delete()
-
-        await AuditLogger.record(
-            action: .enrollmentRemoved,
-            targetType: .enrollment,
-            targetID: idString,
-            metadata: ["course_id": courseIDString, "subject_user_id": idString],
-            on: req
-        )
+        try await CourseEnrollmentService.unenroll(
+            userID: userID, courseID: courseID, caller: try req.auth.require(APIUser.self), on: req)
         return req.redirect(to: "/admin/users/\(idString)")
     }
 

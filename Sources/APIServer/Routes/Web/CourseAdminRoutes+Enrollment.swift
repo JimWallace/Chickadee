@@ -146,26 +146,9 @@ extension CourseAdminRoutes {
         let caller = try req.auth.require(APIUser.self)
         try await requireCourseWriteAccess(caller: caller, courseID: courseID, atLeast: .instructor, db: req.db)
 
-        if let enrollment = try await APICourseEnrollment.query(on: req.db)
-            .filter(\.$course.$id == courseID)
-            .filter(\.$userID == userID)
-            .first()
-        {
-            // Don't let a non-admin unenroll the course's last instructor (#417 Slice B).
-            if enrollment.role == .instructor {
-                try await ensureNotLastInstructor(
-                    caller: caller, courseID: courseID, removing: userID, db: req.db)
-            }
-            try await enrollment.delete(on: req.db)
-        }
-
-        await AuditLogger.record(
-            action: .enrollmentRemoved,
-            targetType: .enrollment,
-            targetID: userIDString,
-            metadata: ["course_id": courseIDString, "subject_user_id": userIDString],
-            on: req
-        )
+        // A non-admin cannot unenroll the course's last instructor (#417 Slice B).
+        try await CourseEnrollmentService.unenroll(
+            userID: userID, courseID: courseID, caller: caller, on: req)
         return req.redirect(to: "/instructor")
     }
 
@@ -355,12 +338,13 @@ extension CourseAdminRoutes {
     // or TA to *their* course by username or email. Unlike the CSV path — which
     // records a pre-enrollment that seeds to `.student` on first login — this
     // materializes the account immediately (SSO-style placeholder, adopted on
-    // first login by username) and enrolls it at the chosen staff role, so the
+    // first login by username, so SSO deployments only) and enrolls it at the chosen staff role, so the
     // role sticks. Instructor-only: TAs are read-only on the roster, so this
     // uses the `.instructor` write floor rather than the `.ta` content floor.
     // An email address finds only an existing account: a placeholder needs the
-    // username that SSO reports. The admin course pages share this path
-    // (`provisionStaffEnrollment`).
+    // username that SSO reports. Under local sign-in only, no placeholder is
+    // made, because nothing can adopt one (#2770). The admin course pages
+    // share this path (`CourseEnrollmentService.inviteStaff`).
 
     @Sendable
     func instructorInviteStaff(req: Request) async throws -> Response {
@@ -387,16 +371,12 @@ extension CourseAdminRoutes {
         guard let role = CourseRole(rawValue: body?.role ?? ""), role >= .ta else {
             return req.redirect(to: "/instructor/students?staffError=\(StaffFormError.role.rawValue)#add-staff-panel")
         }
-        let result: StaffProvisioningResult
         do {
-            result = try await provisionStaffEnrollment(
-                identifier: identifier, role: role, courseID: courseID,
-                allowPlaceholder: true, on: req.db)
+            _ = try await CourseEnrollmentService.inviteStaff(
+                identifier: identifier, role: role, courseID: courseID, source: "staff_invite", on: req)
         } catch let error as StaffProvisioningError {
             return req.redirect(to: "/instructor/students?staffError=\(StaffFormError(error).rawValue)#add-staff-panel")
         }
-        await recordStaffProvisioning(
-            result, role: role, courseID: courseID, source: "staff_invite", on: req)
         return req.redirect(to: "/instructor/students?staffAdded=1")
     }
 
@@ -427,31 +407,13 @@ extension CourseAdminRoutes {
             throw WebAssignmentError.invalidParameter(name: "role", reason: "Unknown per-course role.")
         }
 
+        // A non-admin cannot demote the course's last instructor (#417 Slice B).
         guard
-            let enrollment = try await APICourseEnrollment.query(on: req.db)
-                .filter(\.$course.$id == courseID)
-                .filter(\.$userID == userID)
-                .first()
+            try await CourseEnrollmentService.setRole(
+                newRole, userID: userID, courseID: courseID, caller: caller, on: req)
         else {
             throw WebAssignmentError.notFound(resource: "Enrollment")
         }
-        // Don't let a non-admin demote the course's last instructor (#417 Slice B).
-        if enrollment.role == .instructor, newRole != .instructor {
-            try await ensureNotLastInstructor(
-                caller: caller, courseID: courseID, removing: userID, db: req.db)
-        }
-        enrollment.role = newRole
-        try await enrollment.save(on: req.db)
-
-        await AuditLogger.record(
-            action: .enrollmentRoleChanged,
-            targetType: .enrollment,
-            targetID: userIDString,
-            metadata: [
-                "course_id": courseIDString, "subject_user_id": userIDString, "role": newRole.rawValue,
-            ],
-            on: req
-        )
         return req.redirect(to: "/instructor/students")
     }
 }
