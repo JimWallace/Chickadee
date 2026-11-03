@@ -594,6 +594,11 @@ func registerMigrations(on app: Application) {
     // course row.
     app.migrations.add(AddCourseAchievements())
 
+    // The `completed_at` index on job metrics and the `course_id` indexes on
+    // course sections and content items (#2778). Index only; the tables are
+    // created far above.
+    app.migrations.add(CreateCompletedAtAndCourseIndexes())
+
     // ---------------------------------------------------------------------
     // DATA MIGRATIONS. Keep these at the end, and add every new schema
     // migration ABOVE this block (#1805).
