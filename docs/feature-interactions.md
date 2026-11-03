@@ -526,6 +526,15 @@ because line numbers go out of date.
   the native worker grades a retest or a failover of a browser-graded
   submission. For this reason, the two graders must agree, and the language
   gate also covers browser assignments.
+- **Consumer:** `BrowserRunnerRoutes.requireBrowserRunnerAccess` reads the
+  effective mode for the browser-runner download, manifest and seed (#2763).
+  A caller who is not course staff gets 403 unless the mode is `browser`, or
+  when the manifest does not decode. Staff pass, so the notebook preview,
+  instructor validation and the Present-page arena still work.
+- **Parallel path that differs on purpose:** on a manifest that does not
+  decode, `decodeManifestGradingMode` seeds the notebook page with `browser`,
+  but `requireBrowserRunnerAccess` refuses a student. The runner then fails
+  with a visible error and fails over to the worker. Nothing leaks.
 
 ### What a runner receives: `RunnerManifest` and the cache key
 
@@ -551,7 +560,8 @@ because line numbers go out of date.
   - `DatasetSeedDerivation.effectiveSeed`.
 - **Parallel paths.** These must give the same values:
   - The worker job payload (`WorkerJobRoutes.buildJobPayload`).
-  - The browser seed endpoint (`BrowserRunnerRoutes.getAssignmentSeed`).
+  - The browser seed endpoint (`BrowserRunnerRoutes.getAssignmentSeed`). It
+    answers a student only for a browser-graded setup (#2763).
   - Both use `gradingInputs`, `CompositeSlots` and `DatasetResolver.resolve`.
 - **Parallel paths.** The student's download must give the same bytes as
   grading:

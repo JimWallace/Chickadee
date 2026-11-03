@@ -56,6 +56,8 @@ substitutes into starter-notebook `{{name}}` placeholders.
     testsetups/:id/seed`, resolved by the same `AssignmentSeedStore.ensureSeed`)
     and injects it into `os.environ` before tests run, so a seed-reading
     test grades identically whether it runs on the worker or in the browser.
+    The seed endpoint answers a student only for a browser-graded setup
+    (#2763); for a worker-graded one the seed reaches only the worker.
   - Pattern-family `$name` references targeting an expression row are now
     supported for **grade-time** use: a case's `$name` arg or its Expected
     cell (`expectedVarRef`) may point at a per-student `=` expression, whose
