@@ -44,8 +44,7 @@ import Vapor
     }
 
     @Test func returnsLinkedSolutionNotebook() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await fixture(on: app)
             let output = try await GetSolutionTool().execute(
                 GetSolutionTool.Input(assignmentPublicID: assignment.publicID), mcpContext(app))
@@ -63,8 +62,7 @@ import Vapor
     /// With no linked validation submission, the most recent `kind == .validation`
     /// submission for the setup is used as the solution.
     @Test func fallsBackToLatestValidationSubmission() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await fixture(on: app)
             // Unlink the explicit pointer; the fallback query should still find it.
             assignment.validationSubmissionID = nil
@@ -77,8 +75,7 @@ import Vapor
     }
 
     @Test func throwsWhenNoSolutionOnFile() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await fixture(on: app, withSolution: false)
             await #expect(throws: MCPToolError.self) {
                 _ = try await GetSolutionTool().execute(
@@ -88,8 +85,7 @@ import Vapor
     }
 
     @Test func unknownAssignmentThrows() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             _ = try await fixture(on: app)
             await #expect(throws: MCPToolError.self) {
                 _ = try await GetSolutionTool().execute(

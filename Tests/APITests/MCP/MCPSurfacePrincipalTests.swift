@@ -13,8 +13,7 @@ import VaporTesting
 
 @Suite(.serialized) struct MCPSurfacePrincipalTests {
     @Test func theTwoSurfacesKeepSeparateSlots() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let req = makeTestRequest(on: app)
             #expect(req.mcpPrincipal == nil)
             #expect(req.adminMcpPrincipal == nil)

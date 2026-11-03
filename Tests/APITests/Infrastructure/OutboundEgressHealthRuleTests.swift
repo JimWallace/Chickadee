@@ -56,8 +56,7 @@ import VaporTesting
     // MARK: - Reachability means reached, not happy
 
     @Test func aResponseCountsAsReachedAndOnlyATransportErrorDoesNot() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             // Stands in for a 503 from the far end: it returned, so the network
             // path works and this must not read as a severed egress.
             let status = try await app.recordingReachability(.identityProvider) { 503 }
@@ -145,8 +144,7 @@ import VaporTesting
     // MARK: - Wiring
 
     @Test func theRuleIsEvaluatedAlongsideTheOthers() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let results = await evaluateHealthRules(on: app, configuration: configuration)
             #expect(results[.outboundEgressFailing] != nil)
         }

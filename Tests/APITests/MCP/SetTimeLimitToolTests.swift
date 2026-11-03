@@ -19,8 +19,7 @@ import Vapor
     }
 
     @Test func setsDefaultTimeLimitWithoutClosing() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await fixture(on: app)
             #expect(assignment.visibility == .open)
 
@@ -37,8 +36,7 @@ import Vapor
     }
 
     @Test func rejectsZero() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await fixture(on: app)
             await #expect(throws: MCPToolError.self) {
                 _ = try await SetTimeLimitTool().execute(
@@ -48,8 +46,7 @@ import Vapor
     }
 
     @Test func rejectsNegative() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await fixture(on: app)
             await #expect(throws: MCPToolError.self) {
                 _ = try await SetTimeLimitTool().execute(
@@ -59,8 +56,7 @@ import Vapor
     }
 
     @Test func rejectsAboveMax() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await fixture(on: app)
             await #expect(throws: MCPToolError.self) {
                 _ = try await SetTimeLimitTool().execute(
@@ -70,8 +66,7 @@ import Vapor
     }
 
     @Test func acceptsBoundaryValues() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await fixture(on: app)
             let low = try await SetTimeLimitTool().execute(
                 .init(assignmentPublicID: assignment.publicID, seconds: 1), mcpContext(app))

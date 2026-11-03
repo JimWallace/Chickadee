@@ -27,8 +27,7 @@ import Vapor
     // MARK: - resources/list
 
     @Test func listReturnsManifestsOnlyForAccessibleCourses() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let courseA = try await makeTestCourse(on: app, code: "CS136", name: "Intro")
             let courseB = try await makeTestCourse(on: app, code: "CS246", name: "OOP")
             let prof = try await makeTestUser(on: app, username: "prof", role: "instructor")
@@ -52,8 +51,7 @@ import Vapor
     @Test func listForAdminIsEnrollmentScoped() async throws {
         // Admins are enrollment-scoped like everyone else: the agent's listing
         // covers exactly the courses the admin is enrolled in.
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let courseA = try await makeTestCourse(on: app, code: "CS136", name: "Intro")
             let courseB = try await makeTestCourse(on: app, code: "CS246", name: "OOP")
             let boss = try await makeTestUser(on: app, username: "boss", role: "admin")
@@ -74,8 +72,7 @@ import Vapor
     }
 
     @Test func listRejectsStudentSubject() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let course = try await makeTestCourse(on: app, code: "CS136", name: "Intro")
             let student = try await makeTestUser(on: app, username: "stu", role: "student")
             try await makeTestEnrollment(
@@ -89,8 +86,7 @@ import Vapor
     // MARK: - Authoring-guide docs
 
     @Test func listIncludesAuthoringGuides() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let prof = try await makeTestUser(on: app, username: "prof", role: "instructor")
             // MCP eligibility is per-course staff now (#417 Slice G2); enrol prof
             // so the subject is staff-anywhere even for the global-guide listing.
@@ -104,8 +100,7 @@ import Vapor
     }
 
     @Test func readReturnsGuideMarkdown() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let prof = try await makeTestUser(on: app, username: "prof", role: "instructor")
             // MCP eligibility is per-course staff now (#417 Slice G2); enrol prof.
             let course = try await makeTestCourse(on: app, code: "CS136", name: "Intro")
@@ -120,8 +115,7 @@ import Vapor
     }
 
     @Test func readRejectsUnknownGuideSlug() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             _ = try await makeTestUser(on: app, username: "prof", role: "instructor")
             await #expect(throws: MCPToolError.self) {
                 _ = try await MCPResourceProvider().read(
@@ -131,8 +125,7 @@ import Vapor
     }
 
     @Test func readRejectsStudentSubjectForGuides() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             _ = try await makeTestUser(on: app, username: "stu", role: "student")
             await #expect(throws: MCPToolError.self) {
                 _ = try await MCPResourceProvider().read(
@@ -145,8 +138,7 @@ import Vapor
     // MARK: - resources/read
 
     @Test func readReturnsManifestJSON() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let course = try await makeTestCourse(on: app, code: "CS136", name: "Intro")
             let prof = try await makeTestUser(on: app, username: "prof", role: "instructor")
             try await makeTestEnrollment(
@@ -164,8 +156,7 @@ import Vapor
     }
 
     @Test func readDeniesInaccessibleAssignment() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let courseA = try await makeTestCourse(on: app, code: "CS136", name: "Intro")
             let courseB = try await makeTestCourse(on: app, code: "CS246", name: "OOP")
             let prof = try await makeTestUser(on: app, username: "prof", role: "instructor")
@@ -185,8 +176,7 @@ import Vapor
     }
 
     @Test func readRejectsMalformedURI() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let course = try await makeTestCourse(on: app, code: "CS136", name: "Intro")
             let prof = try await makeTestUser(on: app, username: "prof", role: "instructor")
             try await makeTestEnrollment(
@@ -203,8 +193,7 @@ import Vapor
     // MARK: - Authoring-guidance resources
 
     @Test func voiceGuideAndCourseGuidanceListAndRead() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let course = try await makeTestCourse(on: app, code: "CS136", name: "Intro")
             course.mcpInstructions = "  Refer to the textbook as CP4.  "
             try await course.save(on: app.db)
@@ -232,8 +221,7 @@ import Vapor
     }
 
     @Test func courseGuidanceScopedToAuthoringAuthority() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             // "tutor" is staff in STAFF01 (so MCP-eligible) but only a student
             // in GUID01, the course carrying guidance — GUID01's guidance must
             // neither list nor read for them.
@@ -271,8 +259,7 @@ import Vapor
     /// A termed course lists under its key, and reads by that key, by the key
     /// in another case, and by the bare code (#1782).
     @Test func courseGuidanceReadsATermedCourseByKeyOrCode() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let course = APICourse(
                 code: "CS137", name: "Termed", enrollmentMode: .closed,
                 term: AcademicTerm(year: 2026, season: .fall))

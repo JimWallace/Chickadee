@@ -42,8 +42,7 @@ import Vapor
     // ── set_submission_mode ────────────────────────────────────────────────
 
     @Test func setsUploadOnlyAndReportsWorkerGrading() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await fixture(on: app, manifest: workerManifest)
 
             let out = try await SetSubmissionModeTool().execute(
@@ -58,8 +57,7 @@ import Vapor
     }
 
     @Test func refusesUploadOnlyWhileBrowserGraded() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await fixture(on: app, manifest: browserManifest)
             await #expect(throws: MCPToolError.self) {
                 _ = try await SetSubmissionModeTool().execute(
@@ -72,8 +70,7 @@ import Vapor
     }
 
     @Test func rejectsUnknownSubmissionMode() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await fixture(on: app, manifest: workerManifest)
             await #expect(throws: MCPToolError.self) {
                 _ = try await SetSubmissionModeTool().execute(
@@ -84,8 +81,7 @@ import Vapor
     }
 
     @Test func deniesSubmissionModeWhenSubjectNotEnrolled() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await fixture(
                 on: app, manifest: workerManifest, enroll: false)
             await #expect(throws: MCPToolError.self) {
@@ -99,8 +95,7 @@ import Vapor
     // ── set_assignment_language ────────────────────────────────────────────
 
     @Test func declaresCppOnAnUploadOnlyAssignment() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await fixture(on: app, manifest: workerManifest)
             _ = try await SetSubmissionModeTool().execute(
                 .init(assignmentPublicID: assignment.publicID, submissionMode: "uploadOnly"),
@@ -122,8 +117,7 @@ import Vapor
     /// The web rule (#2486): an upload-only language switches the submission
     /// and grading modes instead of refusing, even from browser grading.
     @Test func cppOnANotebookAssignmentSwitchesToUploadOnlyAndWorker() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await fixture(on: app, manifest: browserManifest)
             let out = try await SetAssignmentLanguageTool().execute(
                 .init(assignmentPublicID: assignment.publicID, language: "cpp"), mcpContext(app))
@@ -140,8 +134,7 @@ import Vapor
 
     /// "none" is a declaration, as it is in the web Language select.
     @Test func declaresNone() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let declared =
                 #"{"schemaVersion":1,"gradingMode":"worker","testSuites":[],"timeLimitSeconds":10,"language":"r"}"#
             let assignment = try await fixture(on: app, manifest: declared)
@@ -157,8 +150,7 @@ import Vapor
 
     /// The web door calls the same function, so it refuses the same change.
     @Test func changeDeclaredLanguageRefusesOnceGeneratedTestsExist() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let generated = #"""
                 {"schemaVersion":1,"gradingMode":"worker","timeLimitSeconds":10,"language":"python",\
                 "testSuites":[{"tier":"public","script":"publictest_bmi_01.py","generatedBy":"bmi"}]}
@@ -179,8 +171,7 @@ import Vapor
     /// The invariant from the other side: once an assignment IS C++, it cannot
     /// be flipped back to a notebook workflow it has no kernel for.
     @Test func refusesNotebookModeOnACppAssignment() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await fixture(on: app, manifest: workerManifest)
             _ = try await SetSubmissionModeTool().execute(
                 .init(assignmentPublicID: assignment.publicID, submissionMode: "uploadOnly"),
@@ -198,8 +189,7 @@ import Vapor
     }
 
     @Test func refusesALanguageChangeOnceGeneratedTestsExist() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let generated = #"""
                 {"schemaVersion":1,"gradingMode":"worker","timeLimitSeconds":10,\
                 "testSuites":[{"tier":"public","script":"publictest_bmi_01.py","generatedBy":"bmi"}]}
@@ -221,8 +211,7 @@ import Vapor
     /// rather than tripping the generated-scripts guard — otherwise a retry, or
     /// an agent re-asserting known state, fails on an assignment it cannot fix.
     @Test func redeclaringTheSameLanguageIsANoOp() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let generated = #"""
                 {"schemaVersion":1,"gradingMode":"worker","timeLimitSeconds":10,"language":"r",\
                 "testSuites":[{"tier":"public","script":"publictest_bmi_01.R","generatedBy":"bmi"}]}
@@ -237,8 +226,7 @@ import Vapor
     }
 
     @Test func rejectsUnknownLanguage() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await fixture(on: app, manifest: workerManifest)
             await #expect(throws: MCPToolError.self) {
                 _ = try await SetAssignmentLanguageTool().execute(
@@ -248,8 +236,7 @@ import Vapor
     }
 
     @Test func deniesLanguageWhenSubjectNotEnrolled() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await fixture(
                 on: app, manifest: workerManifest, enroll: false)
             await #expect(throws: MCPToolError.self) {

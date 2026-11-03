@@ -36,8 +36,7 @@ private func sharedDirectory(for setupID: String, on app: Application) -> String
 
 @Suite struct SharedSupportFilesCloneTests {
     @Test func aClonedAssignmentGetsItsSupportFiles() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let course = try await makeTestCourse(on: app, code: "CLONE_SHARED")
             let courseID = try course.requireID()
             let zipPath = app.testSetupsDirectory + "setup_clone_src.zip"

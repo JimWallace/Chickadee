@@ -28,8 +28,7 @@ import Vapor
     }
 
     @Test func renamesAndChangesGradingMode() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let course = try await fixture(on: app)
             let section = try await makeSection(
                 on: app, name: "Labs", mode: "browser", order: 1, courseID: course.requireID())
@@ -48,8 +47,7 @@ import Vapor
     }
 
     @Test func renameRequiresAtLeastOneField() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let course = try await fixture(on: app)
             let section = try await makeSection(
                 on: app, name: "Labs", mode: "browser", order: 1, courseID: course.requireID())
@@ -62,8 +60,7 @@ import Vapor
     }
 
     @Test func deletesASectionAndUngroupsAssignments() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let course = try await fixture(on: app)
             let courseID = try course.requireID()
             let section = try await makeSection(
@@ -87,8 +84,7 @@ import Vapor
     }
 
     @Test func deleteUnknownSectionIsIdempotent() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             _ = try await fixture(on: app)
             let out = try await DeleteCourseSectionTool().execute(
                 .init(courseSectionID: UUID().uuidString), mcpContext(app))
@@ -98,8 +94,7 @@ import Vapor
     }
 
     @Test func reordersSections() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let course = try await fixture(on: app)
             let courseID = try course.requireID()
             let a = try await makeSection(on: app, name: "A", mode: "browser", order: 1, courseID: courseID)
@@ -123,8 +118,7 @@ import Vapor
     }
 
     @Test func reorderRejectsNonPermutation() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let course = try await fixture(on: app)
             let courseID = try course.requireID()
             let a = try await makeSection(on: app, name: "A", mode: "browser", order: 1, courseID: courseID)
@@ -138,8 +132,7 @@ import Vapor
     }
 
     @Test func deniesForeignCourseSection() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             _ = try await fixture(on: app)  // tester enrolled only in CS246
             let other = try await makeTestCourse(on: app, code: "CS999", name: "Other")
             let foreign = try await makeSection(

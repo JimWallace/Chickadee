@@ -83,8 +83,7 @@ import Vapor
     // MARK: - Through a running app
 
     @Test func theRuleFiresInTheFullEvaluationWhenTheDataDiskIsLow() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             app.diskSpaceProbe = { _ in DiskSpace(freeBytes: 4 << 30, totalBytes: 93 << 30) }
             let results = await evaluateHealthRules(on: app, configuration: .default)
             let evaluation = try #require(results[.diskSpaceLow])
@@ -94,8 +93,7 @@ import Vapor
     }
 
     @Test func theStorageToolReportsTheDataDisk() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             app.diskSpaceProbe = { _ in DiskSpace(freeBytes: 25 << 30, totalBytes: 100 << 30) }
             let context = try await StorageUsage.context(app: app)
             #expect(context.disk == DiskSpace(freeBytes: 25 << 30, totalBytes: 100 << 30))

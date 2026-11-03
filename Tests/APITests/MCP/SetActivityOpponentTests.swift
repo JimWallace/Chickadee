@@ -44,8 +44,7 @@ import Vapor
     }
 
     @Test func choosesASupportFileAndReportsIt() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await fixture(on: app)
             let out = try await SetActivityTool().execute(
                 .init(
@@ -66,8 +65,7 @@ import Vapor
     /// A graded script and a file the zip lacks are both refused, and the
     /// refusal lists what may be chosen.
     @Test func refusesAFileThatIsNotASupportFile() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await fixture(on: app)
             for bad in ["ghost.py", "match.sh", "../bot.py"] {
                 await #expect(throws: MCPToolError.self, "\(bad)") {
@@ -84,8 +82,7 @@ import Vapor
     }
 
     @Test func refusesAFileOnAKindWithNoOpponent() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await fixture(on: app)
             await #expect(throws: MCPToolError.self) {
                 _ = try await SetActivityTool().execute(
@@ -102,8 +99,7 @@ import Vapor
     /// other. A kind whose opponent the worker chooses at claim (the hill)
     /// is refused: the browser has no claim step.
     @Test func refusesAWorkerChosenOpponentOnABrowserGradedAssignment() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await fixture(on: app, manifest: browserManifest)
             await #expect(throws: MCPToolError.self) {
                 _ = try await SetActivityTool().execute(
@@ -119,8 +115,7 @@ import Vapor
     /// on a browser-graded assignment is allowed (docs/class-activities.md,
     /// "Browser grading").
     @Test func allowsChoosingABotOnABrowserGradedAssignment() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await fixture(on: app, manifest: browserManifest)
             let chosen = try await SetActivityTool().execute(
                 .init(
@@ -137,8 +132,7 @@ import Vapor
     /// Absent keeps it across a visibility-only call, "" clears it, and a
     /// kind change starts from none.
     @Test func absentKeepsTheStoredFileAndEmptyClears() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await fixture(on: app)
             let tool = SetActivityTool()
             let first = try await tool.execute(

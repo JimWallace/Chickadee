@@ -22,8 +22,7 @@ private let solutionNotebook = #"""
 
     /// The solution exists only as a validation submission on the source.
     @Test func aClonedAssignmentGetsItsSolutionSource() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let course = try await makeTestCourse(on: app, code: "CLONE_SOLN")
             let courseID = try course.requireID()
             let sourceSetup = try await makeTestSetup(on: app, id: "setup_clone_soln", courseID: courseID)

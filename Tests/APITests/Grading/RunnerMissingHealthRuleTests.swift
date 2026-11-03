@@ -123,8 +123,7 @@ import VaporTesting
     }
 
     @Test func itReadsTheNewestSnapshotPerRunnerInsideTheWindow() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             try await recordSnapshot("Sparrow", at: ago(3 * 86_400), on: app)
             try await recordSnapshot("Sparrow", at: ago(2 * 86_400), on: app)
             try await recordSnapshot("Starling", at: ago(30), on: app)
@@ -141,8 +140,7 @@ import VaporTesting
     }
 
     @Test func theEvaluatorFiresFromPersistedSnapshotsAlone() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             // Nothing is in the in-memory activity store, as after a restart.
             try await recordSnapshot("Sparrow", at: ago(86_400), on: app)
             try await recordSnapshot("Starling", at: ago(10), on: app)

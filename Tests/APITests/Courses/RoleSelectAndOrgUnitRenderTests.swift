@@ -57,8 +57,7 @@ import VaporTesting
     }
 
     @Test func theAdminCoursePageRendersTheSameRoleSelect() async throws {
-        let app = try await makeTestApp(prefix: "chickadee-role-select")
-        try await withApp(app) { _ in
+        try await withTestApp(prefix: "chickadee-role-select") { app in
             let cookie = try await loginAsAdmin("role_select_admin", on: app)
             let course = try await makeTestCourse(on: app, code: "ROLE101")
             let courseID = try course.requireID()

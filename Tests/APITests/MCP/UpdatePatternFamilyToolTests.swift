@@ -42,8 +42,7 @@ import Vapor
     }
 
     @Test func disablesACase() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await fixture(on: app)
             let output = try await UpdatePatternFamilyTool().execute(
                 UpdatePatternFamilyTool.Input(
@@ -59,8 +58,7 @@ import Vapor
     }
 
     @Test func setsDefaultsTierAndPoints() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await fixture(on: app)
             let output = try await UpdatePatternFamilyTool().execute(
                 UpdatePatternFamilyTool.Input(
@@ -80,8 +78,7 @@ import Vapor
     }
 
     @Test func editsCaseArgsAndExpected() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await fixture(on: app)
             // Use a non-integral double: an integral value (16.0) would round-trip
             // through the manifest JSON as the integer 16, an inherent JSON
@@ -106,8 +103,7 @@ import Vapor
     }
 
     @Test func setsAndClearsDefaultAndPerCaseHints() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await fixture(on: app)
             // Set a family-wide default hint and a per-case hint on case 01.
             _ = try await UpdatePatternFamilyTool().execute(
@@ -141,8 +137,7 @@ import Vapor
     }
 
     @Test func defaultHintOnlyIsAValidChangeSet() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await fixture(on: app)
             // defaultHint alone (no tier/points/case edits) must be accepted.
             _ = try await UpdatePatternFamilyTool().execute(
@@ -156,8 +151,7 @@ import Vapor
     }
 
     @Test func setsAndClearsFamilyAndPerCaseTimeLimits() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await fixture(on: app)
             // Set a family default and a per-case override on case 01.
             _ = try await UpdatePatternFamilyTool().execute(
@@ -198,8 +192,7 @@ import Vapor
     }
 
     @Test func rejectsOutOfRangeTimeLimit() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await fixture(on: app)
             // 601 is above the 1...600 ceiling.
             await #expect(throws: MCPToolError.self) {
@@ -221,8 +214,7 @@ import Vapor
     }
 
     @Test func setsPerStudentExpectedVarRefAndClearsOnLiteralEdit() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             // Seed the family AND a global `=` expression the case can reference.
             let course = try await makeTestCourse(on: app, code: "CS246", name: "OOP")
             let courseID = try course.requireID()
@@ -261,8 +253,7 @@ import Vapor
     }
 
     @Test func rejectsExpectedVarRefToUndeclaredExpression() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             // Fixture has no global expressions, so "nope" resolves to nothing.
             let assignment = try await fixture(on: app)
             await #expect(throws: MCPToolError.self) {
@@ -276,8 +267,7 @@ import Vapor
     }
 
     @Test func wrongArgCountThrows() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await fixture(on: app)
             // BMI family declares one parameter; two args must be rejected by
             // the kind validation that runs on save (mapped from Vapor Abort).
@@ -295,8 +285,7 @@ import Vapor
     }
 
     @Test func unknownCaseKeyInCasesThrows() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await fixture(on: app)
             await #expect(throws: MCPToolError.self) {
                 _ = try await UpdatePatternFamilyTool().execute(
@@ -309,8 +298,7 @@ import Vapor
     }
 
     @Test func argVarRefsLengthMismatchThrows() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await fixture(on: app)
             await #expect(throws: MCPToolError.self) {
                 _ = try await UpdatePatternFamilyTool().execute(
@@ -326,8 +314,7 @@ import Vapor
     }
 
     @Test func duplicateCaseEditThrows() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await fixture(on: app)
             await #expect(throws: MCPToolError.self) {
                 _ = try await UpdatePatternFamilyTool().execute(
@@ -343,8 +330,7 @@ import Vapor
     }
 
     @Test func unknownFamilyThrows() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await fixture(on: app)
             await #expect(throws: MCPToolError.self) {
                 _ = try await UpdatePatternFamilyTool().execute(
@@ -357,8 +343,7 @@ import Vapor
     }
 
     @Test func unknownCaseKeyThrows() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await fixture(on: app)
             await #expect(throws: MCPToolError.self) {
                 _ = try await UpdatePatternFamilyTool().execute(
@@ -372,8 +357,7 @@ import Vapor
     }
 
     @Test func invalidTierThrows() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await fixture(on: app)
             await #expect(throws: MCPToolError.self) {
                 _ = try await UpdatePatternFamilyTool().execute(
@@ -387,8 +371,7 @@ import Vapor
     }
 
     @Test func emptyChangeSetThrows() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await fixture(on: app)
             await #expect(throws: MCPToolError.self) {
                 _ = try await UpdatePatternFamilyTool().execute(
@@ -401,8 +384,7 @@ import Vapor
     }
 
     @Test func overlappingEnableDisableThrows() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await fixture(on: app)
             await #expect(throws: MCPToolError.self) {
                 _ = try await UpdatePatternFamilyTool().execute(
@@ -416,8 +398,7 @@ import Vapor
     }
 
     @Test func addsNewCases() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await fixture(on: app)
             let output = try await UpdatePatternFamilyTool().execute(
                 UpdatePatternFamilyTool.Input(
@@ -446,8 +427,7 @@ import Vapor
     }
 
     @Test func addCaseWithExistingKeyThrows() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await fixture(on: app)
             // Key "01" already exists — adding it is a collision; the caller
             // should edit via `cases` instead.
@@ -465,8 +445,7 @@ import Vapor
     }
 
     @Test func addCaseWrongArgCountThrows() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await fixture(on: app)
             // BMI declares one parameter; a new case with two args must be
             // rejected by the kind validation that runs on save.
@@ -485,8 +464,7 @@ import Vapor
     }
 
     @Test func editsAndClearsDependsOn() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             // Seed two families so one can depend on the other.
             let course = try await makeTestCourse(on: app, code: "CS246", name: "OOP")
             let courseID = try course.requireID()
@@ -525,8 +503,7 @@ import Vapor
     }
 
     @Test func setsAndClearsFamilyAndPerCaseFailureDetail() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await fixture(on: app)
             _ = try await UpdatePatternFamilyTool().execute(
                 UpdatePatternFamilyTool.Input(
@@ -564,8 +541,7 @@ import Vapor
     }
 
     @Test func rejectsAnUnknownFailureDetail() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await fixture(on: app)
             await #expect(throws: MCPToolError.self) {
                 _ = try await UpdatePatternFamilyTool().execute(
@@ -580,8 +556,7 @@ import Vapor
     /// `ioComparison` replaces a `program_io` family's comparison and is left
     /// untouched when omitted.
     @Test func setsAndKeepsTheProgramIOComparison() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let io = PatternFamily(
                 id: "io", name: "IO", kind: .programIO, functionName: "", paramNames: ["stdin"],
                 cases: [PatternCase(key: "01", label: "sum", args: [.string("3\n4\n")], expected: .string("7"))],

@@ -15,8 +15,7 @@ import Vapor
 
 @Suite struct CourseAccessHelpersTests {
     @Test func enrolledCoursesReturnsOnlyEnrollmentRowsSortedByCode() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let zz = try await makeTestCourse(on: app, code: "ZZ100", name: "Last")
             let aa = try await makeTestCourse(on: app, code: "AA100", name: "First")
             _ = try await makeTestCourse(on: app, code: "CS246", name: "Not enrolled")
@@ -30,8 +29,7 @@ import Vapor
     }
 
     @Test func enrolledCoursesHidesArchived() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let live = try await makeTestCourse(on: app, code: "CS136", name: "Live")
             let old = try await makeTestCourse(on: app, code: "CS001", name: "Retired")
             old.isArchived = true
@@ -46,8 +44,7 @@ import Vapor
     }
 
     @Test func enrolledCoursesCarriesNoAdminBypass() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             _ = try await makeTestCourse(on: app, code: "CS136", name: "Systems")
             let boss = try await makeTestUser(on: app, username: "boss", role: "admin")
 
@@ -57,8 +54,7 @@ import Vapor
     }
 
     @Test func userIsEnrolledTracksTheEnrollmentRow() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let course = try await makeTestCourse(on: app, code: "CS136", name: "Systems")
             let user = try await makeTestUser(on: app, username: "prof", role: "instructor")
 
@@ -75,8 +71,7 @@ import Vapor
     // MARK: - Per-request role memo (#1382 item 3)
 
     @Test func cachedCourseRoleIsMemoizedPerRequest() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let course = try await makeTestCourse(on: app, code: "CS136", name: "Systems")
             let user = try await makeTestUser(on: app, username: "ta_user")
             let enrollment = APICourseEnrollment(
@@ -100,8 +95,7 @@ import Vapor
     }
 
     @Test func cachedEnrollmentGuardMatchesTheFreeFunction() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let course = try await makeTestCourse(on: app, code: "CS136", name: "Systems")
             let courseID = try course.requireID()
             let outsider = try await makeTestUser(on: app, username: "outsider")
@@ -127,8 +121,7 @@ import Vapor
     @Test func mcpCourseAccessDeniesUnenrolledAdmin() async throws {
         // The MCP path: an admin token is enrollment-scoped — denied before
         // enrolling, allowed after, revoked again on unenroll.
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let course = try await makeTestCourse(on: app, code: "CS136", name: "Systems")
             let boss = try await makeTestUser(on: app, username: "boss", role: "admin")
             let context = ToolContext(

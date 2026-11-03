@@ -11,8 +11,7 @@ import VaporTesting
 
 @Suite struct MCPOAuthModelsTests {
     @Test func clientPersistsAndParsesRedirectURIs() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let client = MCPOAuthClient(
                 clientID: "cid-123", name: "Course Bot",
                 redirectURIs: ["https://a.example/cb", "https://b.example/cb"])
@@ -27,8 +26,7 @@ import VaporTesting
     }
 
     @Test func authorizationCodePersists() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let user = try await makeTestUser(on: app, username: "consenting-human", role: "instructor")
             let userID = try user.requireID()
             let code = MCPAuthorizationCode(
@@ -47,8 +45,7 @@ import VaporTesting
     }
 
     @Test func grantPersists() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let user = try await makeTestUser(on: app, username: "grant-human", role: "instructor")
             let userID = try user.requireID()
             let grant = MCPGrant(

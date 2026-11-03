@@ -47,8 +47,7 @@ private let emptyZipBytes: [UInt8] = [0x50, 0x4B, 0x05, 0x06] + [UInt8](repeatin
     /// A submission whose path leaves the extract directory is refused, and
     /// the file it names is not copied into the submissions directory.
     @Test func anImportCannotCopyAFileOutsideTheBundle() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let fm = FileManager.default
             let root = fm.temporaryDirectory.appendingPathComponent("cb-path-\(UUID().uuidString)")
             defer { try? fm.removeItem(at: root) }

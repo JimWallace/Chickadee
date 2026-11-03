@@ -160,8 +160,7 @@ import VaporTesting
     }
 
     @Test func setActivityTurnsItOnAndKeepsItWhenAbsent() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let scenario = try await TestScenario.make(
                 on: app, code: "CS135", courseName: "Designing Programs", setupID: "setup_rpg",
                 manifest: TestManifests.workerEmpty)

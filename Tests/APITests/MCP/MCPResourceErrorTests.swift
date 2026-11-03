@@ -20,8 +20,7 @@ import Vapor
     }
 
     @Test func listRefusesAnIneligibleAccountWithItsReason() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let course = try await makeTestCourse(on: app, code: "CS136", name: "Intro")
             let student = try await makeTestUser(on: app, username: "stu", role: "student")
             try await makeTestEnrollment(on: app, userID: student.requireID(), courseID: course.requireID())
@@ -36,8 +35,7 @@ import Vapor
     }
 
     @Test func readStillRefusesAnUnknownResource() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let course = try await makeTestCourse(on: app, code: "CS136", name: "Intro")
             let prof = try await makeTestUser(on: app, username: "prof", role: "instructor")
             try await makeTestEnrollment(on: app, userID: prof.requireID(), courseID: course.requireID())

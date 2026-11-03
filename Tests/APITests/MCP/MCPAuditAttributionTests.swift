@@ -11,8 +11,7 @@ import Vapor
 
 @Suite struct MCPAuditAttributionTests {
     @Test func toolCallIsAuditedAsUsernameMCP() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let course = try await makeTestCourse(on: app, code: "CS246", name: "OOP")
             let courseID = try course.requireID()
             let prof = try await makeTestUser(on: app, username: "jsmith", role: "instructor")

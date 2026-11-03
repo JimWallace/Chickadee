@@ -12,17 +12,13 @@ import VaporTesting
 
 @testable import APIServer
 
-/// Stands up the standard AssignmentRoutes test app and runs the body
-/// against it.  Shuts the app down before returning.
-///
-/// Same standup as `withWebRoutesApp` — the two names exist so suites read
-/// naturally, not because the apps differ. Change app configuration in
-/// `withWebRoutesApp` (WebRoutesHelpers.swift) and both inherit it.
+/// `withTestApp` under the name the AssignmentRoutes suites use, with their
+/// temp directory prefix.
 func withAssignmentRoutesApp(
     prefix: String = "chickadee-art",
     _ body: (Application) async throws -> Void
 ) async throws {
-    try await withWebRoutesApp(prefix: prefix, body)
+    try await withTestApp(prefix: prefix, body)
 }
 
 // MARK: - Auth helpers

@@ -50,8 +50,7 @@ import Vapor
     // MARK: - Marking
 
     @Test func marksSupportFileAsDataset_withoutClosing() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await fixture(on: app)
             #expect(assignment.visibility == .open)
 
@@ -71,8 +70,7 @@ import Vapor
     }
 
     @Test func reMarkingReplacesTheSpecInPlace() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await fixture(on: app)
             _ = try await run(app, publicID: assignment.publicID, filename: "cases.csv", sampleSize: 2)
             let out = try await run(
@@ -83,8 +81,7 @@ import Vapor
     }
 
     @Test func supportFileListingReportsTheMark() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await fixture(on: app)
             _ = try await run(app, publicID: assignment.publicID, filename: "cases.csv", sampleSize: 2)
 
@@ -101,8 +98,7 @@ import Vapor
     // MARK: - Clearing
 
     @Test func removeClearsTheMarkAndDropsTheManifestKey() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await fixture(on: app)
             _ = try await run(app, publicID: assignment.publicID, filename: "cases.csv", sampleSize: 2)
 
@@ -119,8 +115,7 @@ import Vapor
     // MARK: - Validation
 
     @Test func rejectsMissingSampleSize() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await fixture(on: app)
             await #expect(throws: MCPToolError.self) {
                 _ = try await run(app, publicID: assignment.publicID, filename: "cases.csv")
@@ -129,8 +124,7 @@ import Vapor
     }
 
     @Test func rejectsNonPositiveSampleSize() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await fixture(on: app)
             await #expect(throws: MCPToolError.self) {
                 _ = try await run(
@@ -140,8 +134,7 @@ import Vapor
     }
 
     @Test func rejectsUnbundledFile() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await fixture(on: app)
             await #expect(throws: MCPToolError.self) {
                 _ = try await run(
@@ -151,8 +144,7 @@ import Vapor
     }
 
     @Test func rejectsGradedScriptAndNotebooks() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await fixture(on: app)
             for name in ["test_a.sh", "assignment.ipynb", "solution.ipynb"] {
                 await #expect(throws: MCPToolError.self, "\(name) must be rejected") {
@@ -164,8 +156,7 @@ import Vapor
     }
 
     @Test func rejectsPathTraversal() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await fixture(on: app)
             await #expect(throws: MCPToolError.self) {
                 _ = try await run(
@@ -181,8 +172,7 @@ import Vapor
     // 2 and passes at 3.
 
     @Test func marksAStratifiedDataset() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await fixture(on: app)
             let out = try await run(
                 app, publicID: assignment.publicID, filename: "cases.csv",
@@ -200,8 +190,7 @@ import Vapor
     }
 
     @Test func supportFileListingReportsTheStratum() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await fixture(on: app)
             _ = try await run(
                 app, publicID: assignment.publicID, filename: "cases.csv",
@@ -218,8 +207,7 @@ import Vapor
     }
 
     @Test func aPlainMarkReportsItsKindToo() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await fixture(on: app)
             _ = try await run(app, publicID: assignment.publicID, filename: "cases.csv", sampleSize: 2)
 
@@ -234,8 +222,7 @@ import Vapor
     }
 
     @Test func rejectsAColumnTheFileDoesNotHave() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await fixture(on: app)
             await #expect(throws: MCPToolError.self) {
                 _ = try await run(
@@ -246,8 +233,7 @@ import Vapor
     }
 
     @Test func rejectsASampleTooSmallToHoldEveryCategory() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await fixture(on: app)
             // Three distinct ages, two rows to give out.
             await #expect(throws: MCPToolError.self) {
@@ -259,8 +245,7 @@ import Vapor
     }
 
     @Test func aBlankColumnMeansAPlainRowSample() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await fixture(on: app)
             let out = try await run(
                 app, publicID: assignment.publicID, filename: "cases.csv",
@@ -277,8 +262,7 @@ import Vapor
     }
 
     @Test func storesAndReportsATransform() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await fixture(on: app)
             let out = try await run(
                 app, publicID: assignment.publicID, filename: "cases.csv", sampleSize: 2,
@@ -302,8 +286,7 @@ import Vapor
     /// setting drops another. Changing the sample size must not clear the
     /// transforms the caller did not mention.
     @Test func anUnrelatedEditPreservesTransforms() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await fixture(on: app)
             _ = try await run(
                 app, publicID: assignment.publicID, filename: "cases.csv", sampleSize: 2,
@@ -321,8 +304,7 @@ import Vapor
     }
 
     @Test func anEmptyTransformListClearsThem() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await fixture(on: app)
             _ = try await run(
                 app, publicID: assignment.publicID, filename: "cases.csv", sampleSize: 2,
@@ -337,8 +319,7 @@ import Vapor
     }
 
     @Test func refusesATransformNamingAColumnTheFileDoesNotHave() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await fixture(on: app)
             await #expect(throws: MCPToolError.self) {
                 try await run(
@@ -349,8 +330,7 @@ import Vapor
     }
 
     @Test func refusesATransformWithNoRate() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await fixture(on: app)
             await #expect(throws: MCPToolError.self) {
                 try await run(

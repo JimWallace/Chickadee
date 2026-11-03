@@ -32,8 +32,7 @@ import Vapor
     // MARK: - create + list
 
     @Test func createsAndListsAContentItem() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let course = try await fixture(on: app)
             let section = try await makeSection(
                 on: app, name: "Lectures", order: 1, courseID: course.requireID())
@@ -62,8 +61,7 @@ import Vapor
     }
 
     @Test func createRejectsEmptyTitle() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             _ = try await fixture(on: app)
             await #expect(throws: MCPToolError.self) {
                 _ = try await CreateContentItemTool().execute(
@@ -76,8 +74,7 @@ import Vapor
     }
 
     @Test func createRejectsUnsafeLinkURL() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             _ = try await fixture(on: app)
             await #expect(throws: MCPToolError.self) {
                 _ = try await CreateContentItemTool().execute(
@@ -93,8 +90,7 @@ import Vapor
     // MARK: - update
 
     @Test func updatesFieldsAndMovesSection() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let course = try await fixture(on: app)
             let courseID = try course.requireID()
             let a = try await makeSection(on: app, name: "A", order: 1, courseID: courseID)
@@ -125,8 +121,7 @@ import Vapor
     }
 
     @Test func updateRequiresAtLeastOneField() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             _ = try await fixture(on: app)
             let created = try await CreateContentItemTool().execute(
                 .init(
@@ -146,8 +141,7 @@ import Vapor
     // MARK: - delete
 
     @Test func deletesAContentItem() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             _ = try await fixture(on: app)
             let created = try await CreateContentItemTool().execute(
                 .init(
@@ -163,8 +157,7 @@ import Vapor
     }
 
     @Test func deleteUnknownIsIdempotent() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             _ = try await fixture(on: app)
             let out = try await DeleteContentItemTool().execute(
                 .init(contentItemID: UUID().uuidString), mcpContext(app))
@@ -175,8 +168,7 @@ import Vapor
     // MARK: - reorder
 
     @Test func reordersContentItems() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let course = try await fixture(on: app)
             let section = try await makeSection(
                 on: app, name: "Lectures", order: 1, courseID: course.requireID())
@@ -205,8 +197,7 @@ import Vapor
     // MARK: - authorization
 
     @Test func createDeniedForStudent() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let course = try await fixture(on: app)
             let student = try await makeTestUser(on: app, username: "pupil", role: "student")
             try await makeTestEnrollment(
@@ -222,8 +213,7 @@ import Vapor
     }
 
     @Test func createAllowedForTA() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let course = try await fixture(on: app)
             let ta = try await makeTestUser(on: app, username: "ta_user", role: "student")
             // Manually enroll at the TA rung (content authoring is TA+).
@@ -241,8 +231,7 @@ import Vapor
     }
 
     @Test func deniesForeignCourse() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             _ = try await fixture(on: app)  // tester enrolled only in CS246
             _ = try await makeTestCourse(on: app, code: "CS999", name: "Other")
             await #expect(throws: MCPToolError.self) {
@@ -258,8 +247,7 @@ import Vapor
     // MARK: - model behaviour
 
     @Test func deletingSectionUngroupsContentItems() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let course = try await fixture(on: app)
             let section = try await makeSection(
                 on: app, name: "Lectures", order: 1, courseID: course.requireID())

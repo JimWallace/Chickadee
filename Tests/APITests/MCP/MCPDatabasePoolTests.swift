@@ -11,8 +11,7 @@ import Vapor
 
 @Suite struct MCPDatabasePoolTests {
     @Test func defaultsToSharedPool() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             // No MCP_DATABASE_USER/PASSWORD configured → no dedicated pool, so
             // ToolContext.db falls back to the shared default connection.
             #expect(app.usesDedicatedMCPDatabase == false)

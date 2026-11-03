@@ -9,8 +9,7 @@ import Vapor
 
 @Suite struct GetAssignmentToolTests {
     @Test func returnsDetailForEnrolledSubject() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let course = try await makeTestCourse(on: app, code: "CS246", name: "OOP")
             let courseID = try course.requireID()
             let tester = try await makeTestUser(on: app, username: "tester", role: "instructor")
@@ -32,8 +31,7 @@ import Vapor
     }
 
     @Test func reportsSecretRevealEnabled() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let course = try await makeTestCourse(on: app, code: "CS246", name: "OOP")
             let courseID = try course.requireID()
             let tester = try await makeTestUser(on: app, username: "tester", role: "instructor")
@@ -51,8 +49,7 @@ import Vapor
     }
 
     @Test func reportsPassingThreshold() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let course = try await makeTestCourse(on: app, code: "CS246", name: "OOP")
             let courseID = try course.requireID()
             let tester = try await makeTestUser(on: app, username: "tester", role: "instructor")
@@ -74,8 +71,7 @@ import Vapor
     }
 
     @Test func reportsWorkerGradingMode() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let course = try await makeTestCourse(on: app, code: "CS246", name: "OOP")
             let courseID = try course.requireID()
             let tester = try await makeTestUser(on: app, username: "tester", role: "instructor")
@@ -97,8 +93,7 @@ import Vapor
     /// `set_submission_mode` tells its caller to read the current mode from
     /// this tool, which for a long time did not return it at all.
     @Test func reportsSubmissionModeAndLanguage() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let course = try await makeTestCourse(on: app, code: "CS246", name: "OOP")
             let courseID = try course.requireID()
             let tester = try await makeTestUser(on: app, username: "tester", role: "instructor")
@@ -121,8 +116,7 @@ import Vapor
     /// A notebook assignment keeps the default, and a language-less shell suite
     /// reports no language rather than guessing Python.
     @Test func defaultsToNotebookSubmissionModeAndNoLanguage() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let course = try await makeTestCourse(on: app, code: "CS246", name: "OOP")
             let courseID = try course.requireID()
             let tester = try await makeTestUser(on: app, username: "tester", role: "instructor")
@@ -142,8 +136,7 @@ import Vapor
     /// so reporting a raw "browser" here would name a path that cannot run.
     /// This pair is what `create_assignment` used to persist for C++.
     @Test func reportsEffectiveGradingModeForUploadOnly() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let course = try await makeTestCourse(on: app, code: "CS246", name: "OOP")
             let courseID = try course.requireID()
             let tester = try await makeTestUser(on: app, username: "tester", role: "instructor")
@@ -168,8 +161,7 @@ import Vapor
     /// (#1753). The real encoding is validated against the output schema, as
     /// a client does.
     @Test func reportsTheActivityWindowAndEncodesUnsetBoundsAsNull() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let course = try await makeTestCourse(on: app, code: "CS246", name: "OOP")
             let courseID = try course.requireID()
             let tester = try await makeTestUser(on: app, username: "tester", role: "instructor")
@@ -204,8 +196,7 @@ import Vapor
     }
 
     @Test func unknownAssignmentThrows() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             await #expect(throws: MCPToolError.self) {
                 _ = try await GetAssignmentTool().execute(
                     GetAssignmentTool.Input(assignmentPublicID: "zzzzzz"), mcpContext(app))

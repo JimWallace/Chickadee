@@ -25,8 +25,7 @@ import Vapor
     }
 
     @Test func createRefusesAnUnknownKindAndNamesTheLegalOnes() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             try await fixture(on: app)
             await #expect(
                 throws: MCPToolError.invalidArguments(
@@ -39,8 +38,7 @@ import Vapor
     }
 
     @Test func createWithoutAKindStillMakesALink() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             try await fixture(on: app)
             let out = try await create(kind: nil, app)
             let id = try #require(UUID(uuidString: out.contentItemID))
@@ -57,8 +55,7 @@ import Vapor
     }
 
     @Test func reorderSectionItemsRefusesAnUnknownItemType() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             try await fixture(on: app)
             await #expect(throws: MCPToolError.self) {
                 _ = try await ReorderSectionItemsTool().execute(

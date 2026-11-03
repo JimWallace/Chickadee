@@ -60,8 +60,7 @@ import Vapor
     }
 
     @Test func removesASupportFileFromTheZip() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await fixture(
                 on: app, support: ["helpers.R": "f <- function() 1\n", "keep.R": "g <- function() 2\n"])
             await #expect(entries(app).contains("helpers.R"))
@@ -78,8 +77,7 @@ import Vapor
     /// A graded test is owned by delete_suite_item; tearing the file out from
     /// under its manifest entry would leave a suite row pointing at nothing.
     @Test func refusesAGradedTest() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await fixture(on: app, seedScript: "publictest_thing.py")
             await #expect(throws: MCPToolError.self) {
                 try await run(app, assignment, "publictest_thing.py")
@@ -89,8 +87,7 @@ import Vapor
     }
 
     @Test func refusesReservedSetupMembers() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await fixture(
                 on: app,
                 support: [
@@ -106,8 +103,7 @@ import Vapor
     }
 
     @Test func refusesAnUnknownFilename() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await fixture(on: app, support: ["helpers.R": "x <- 1\n"])
             await #expect(throws: MCPToolError.self) {
                 try await run(app, assignment, "nope.R")
@@ -116,8 +112,7 @@ import Vapor
     }
 
     @Test func refusesAPathSeparator() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await fixture(on: app, support: ["helpers.R": "x <- 1\n"])
             await #expect(throws: MCPToolError.self) {
                 try await run(app, assignment, "../helpers.R")
@@ -129,8 +124,7 @@ import Vapor
     /// A graderOnly mark naming the deleted file must go with it, so a later
     /// file reusing the name doesn't silently inherit "withhold from students".
     @Test func clearsAGraderOnlyMark() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let manifest = #"""
                 {"schemaVersion":1,"testSuites":[],"timeLimitSeconds":10,\#
                 "graderOnlyFiles":["answers.R","other.R"]}
@@ -152,8 +146,7 @@ import Vapor
     /// file reusing the name does not inherit a per-student slice. The old
     /// dictionary edit read the mark under the wrong key and never cleared it.
     @Test func clearsADatasetMark() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let manifest = #"""
                 {"schemaVersion":1,"testSuites":[],"timeLimitSeconds":10,\#
                 "datasets":[{"file":"data.csv","kind":"rowSample","sampleSize":3},\#
@@ -174,8 +167,7 @@ import Vapor
     /// Removing a support file closes a currently-open assignment so students
     /// can't submit against the not-yet-revalidated setup, and reports it.
     @Test func closesAnOpenAssignmentAndReportsIt() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await fixture(on: app, support: ["helpers.R": "x <- 1\n"])
             #expect(assignment.visibility == .open)  // makeTestAssignment defaults isOpen: true
 
@@ -193,8 +185,7 @@ import Vapor
     /// `.placeholder` entry (an empty zip is invalid), which is a support file
     /// by that predicate — hence b.R, c.R, .placeholder.
     @Test func reportsTheRemainingSupportFileCount() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await fixture(
                 on: app, support: ["a.R": "1\n", "b.R": "2\n", "c.R": "3\n"])
             let output = try await run(app, assignment, "a.R")

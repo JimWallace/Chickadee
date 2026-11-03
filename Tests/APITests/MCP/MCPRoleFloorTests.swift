@@ -38,8 +38,7 @@ import Vapor
     // MARK: - TA: content editing YES, course lifecycle NO
 
     @Test func taMayEditContentButNotLifecycle() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await fixture(on: app, role: .ta, code: "TAFLOOR")
 
             // Content edit (set_time_limit → `.ta` floor) succeeds for a TA.
@@ -66,8 +65,7 @@ import Vapor
     // MARK: - Instructor: both content editing AND lifecycle
 
     @Test func instructorMayEditContentAndLifecycle() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await fixture(on: app, role: .instructor, code: "INSTFLOOR")
 
             // Content still works.
