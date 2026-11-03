@@ -24,6 +24,7 @@ public enum ZipArchiverError: Error, CustomStringConvertible {
     case processFailed(String, Int32)
     case executableNotFound(String)
     case pathTraversalDetected(String)
+    case outputAlreadyExists(String)
 
     public var description: String {
         switch self {
@@ -33,6 +34,8 @@ public enum ZipArchiverError: Error, CustomStringConvertible {
             return "Executable not found: \(path)"
         case .pathTraversalDetected(let entry):
             return "Zip entry would escape destination directory: \(entry)"
+        case .outputAlreadyExists(let path):
+            return "Zip output path already exists: \(path)"
         }
     }
 }
@@ -49,7 +52,14 @@ public enum ZipArchiverError: Error, CustomStringConvertible {
 /// output is what used to overflow the discarded-output buffer.  The real
 /// deadlock guard is `runZipProcess` capturing and bounding child output,
 /// but staying quiet avoids generating megabytes of output nobody reads.
+///
+/// The output path must not exist. `zip -r` adds to an existing archive
+/// instead of replacing it, so a reused path would silently merge two
+/// archives. Callers pass a fresh, unique path (#2767).
 public func createZipArchive(sourceDir: URL, outputPath: String) async throws {
+    guard !FileManager.default.fileExists(atPath: outputPath) else {
+        throw ZipArchiverError.outputAlreadyExists(outputPath)
+    }
     try await runZipProcessExpectingSuccess(
         executablePath: "/usr/bin/zip",
         arguments: ["-q", "-r", outputPath, "."],

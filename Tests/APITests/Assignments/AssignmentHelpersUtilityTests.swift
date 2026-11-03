@@ -14,24 +14,27 @@ final class AssignmentHelpersUtilityTests {
 
     @Test func gradePercentFromCollectionJSONPrefersWeightedPointsAndFallsBackToCounts() {
         #expect(
-            gradePercentFromCollectionJSON(
-                #"{"earnedPoints":7,"totalPoints":8,"passCount":1,"totalTests":4}"#
-            ) == 88)
+            CollectionGradeFields(
+                json:
+                    #"{"earnedPoints":7,"totalPoints":8,"passCount":1,"totalTests":4}"#
+            )?.gradePercent == 88)
 
         // Fractional earnedPoints (partial credit) rounds correctly: 2.75/4 = 68.75% → 69.
         #expect(
-            gradePercentFromCollectionJSON(
-                #"{"earnedPoints":2.75,"totalPoints":4,"passCount":3,"totalTests":4}"#
-            ) == 69)
+            CollectionGradeFields(
+                json:
+                    #"{"earnedPoints":2.75,"totalPoints":4,"passCount":3,"totalTests":4}"#
+            )?.gradePercent == 69)
         #expect(CollectionGradeFields(json: #"{"earnedPoints":2.75,"totalPoints":4}"#)?.gradePoints == 2.75)
 
         #expect(
-            gradePercentFromCollectionJSON(
-                #"{"passCount":3,"totalTests":4}"#
-            ) == 75)
+            CollectionGradeFields(
+                json:
+                    #"{"passCount":3,"totalTests":4}"#
+            )?.gradePercent == 75)
 
-        #expect(gradePercentFromCollectionJSON(#"{"passCount":0,"totalTests":0}"#) == nil)
-        #expect(gradePercentFromCollectionJSON("not-json") == nil)
+        #expect(CollectionGradeFields(json: #"{"passCount":0,"totalTests":0}"#)?.gradePercent == nil)
+        #expect(CollectionGradeFields(json: "not-json")?.gradePercent == nil)
     }
 
     @Test func formatPointsTrimsTrailingZeros() {

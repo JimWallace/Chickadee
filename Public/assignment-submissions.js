@@ -1,3 +1,4 @@
+// @ts-check
 // Submissions stat card (AssignmentSubmissionsPage): cycle the pre-rendered
 // 24h/7d/30d sparklines on click/Enter/Space. Each window's bars are
 // server-rendered (the 24h view is the only one visible without JS); this
@@ -22,7 +23,7 @@
         if (valueEl) valueEl.textContent = active.getAttribute('data-subm-headline') || '';
     }
     card.addEventListener('click', function () { show(index + 1); });
-    card.addEventListener('keydown', function (event) {
+    card.addEventListener('keydown', function (/** @type {KeyboardEvent} */ event) {
         if (event.key === 'Enter' || event.key === ' ') {
             event.preventDefault();
             show(index + 1);

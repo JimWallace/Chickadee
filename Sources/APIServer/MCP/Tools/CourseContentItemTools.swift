@@ -10,8 +10,9 @@
 // These mirror the web instructor handlers (`CourseAdminRoutes+ContentItems.swift`)
 // and sit beside the course-section tools (`CourseSectionTools.swift`). Content
 // authoring is TA+ (matching script / notebook editing), so the write tools use
-// `resolveCourseForWrite(atLeast: .ta)`. Content items own no test setup, so
-// editing them never closes an assignment, re-validates, or re-grades.
+// `resolveCourseForWrite(atLeast: CourseRoleFloor.manageContentItems)`.
+// Content items own no test setup, so editing them never closes an
+// assignment, re-validates, or re-grades.
 
 import Core
 import Fluent
@@ -425,7 +426,7 @@ struct CreateContentItemTool: ContentTool {
             throw MCPToolError.invalidArguments(detail: "title must not be empty.")
         }
         let course = try await resolveCourseForWrite(
-            code: input.courseCode, context: context, atLeast: .ta)
+            code: input.courseCode, context: context, atLeast: CourseRoleFloor.manageContentItems)
         let courseID = try course.requireID()
         // An absent kind is a link; an unknown one is refused, as update does,
         // rather than stored as a link without a word (#2337).
@@ -647,7 +648,7 @@ struct DeleteContentItemTool: ContentTool {
         else {
             return Output(contentItemID: raw, removed: false)
         }
-        try await context.authorizeCourseWriteAccess(item.courseID, atLeast: .ta)
+        try await context.authorizeCourseWriteAccess(item.courseID, atLeast: CourseRoleFloor.manageContentItems)
         if let itemID = item.id {
             ContentAttachmentStore.removeDirectory(context.request.application, itemID: itemID)
         }

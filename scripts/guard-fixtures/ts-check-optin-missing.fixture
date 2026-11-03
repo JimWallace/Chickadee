@@ -1,0 +1,9 @@
+# A first-party file that drops out of type checking. tsc then skips it, and a
+# misspelt shared global in it is found only at run time (#2782).
+guard="scripts/check-ts-check-optin.sh"
+files="Public/sparkline.js"
+description="a Public/*.js file without its // @ts-check line"
+expect="does not opt in to type checking"
+apply() {
+    sed -i '1d' Public/sparkline.js
+}

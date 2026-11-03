@@ -11,7 +11,7 @@
 // notebook `{{undeclared}}` scan, and a save-time eval against the acting
 // user's own seed), then re-renders the setup through `applyPatternFamilies`
 // so generated tests + raw scripts pick up the new literal values.  It throws
-// `WebAssignmentError` on validation failure; each surface maps that to its
+// `AppError` on validation failure; each surface maps that to its
 // own error type (the web layer renders the HTTP status directly; MCP tools
 // translate to `MCPToolError`).
 
@@ -129,37 +129,37 @@ enum GlobalInputsService {
         var seenNames: Set<String> = []
         for v in variables {
             guard isValidSharedName(v.name, language: language) else {
-                throw WebAssignmentError.unprocessable(
+                throw AppError.unprocessable(
                     reason: "Global variable name '\(v.name)' is not valid here — expected "
                         + sharedNameExpectation(for: language) + ".")
             }
             guard !reservedNames.contains(v.name) else {
-                throw WebAssignmentError.unprocessable(
+                throw AppError.unprocessable(
                     reason: "'\(v.name)' is reserved for Chickadee's personalization seed. " + "Choose another name.")
             }
             guard seenNames.insert(v.name).inserted else {
-                throw WebAssignmentError.unprocessable(
+                throw AppError.unprocessable(
                     reason: "Duplicate global input name '\(v.name)'.")
             }
         }
         for e in expressions {
             guard isValidSharedName(e.name, language: language) else {
-                throw WebAssignmentError.unprocessable(
+                throw AppError.unprocessable(
                     reason: "Global expression name '\(e.name)' is not valid here — expected "
                         + sharedNameExpectation(for: language) + ".")
             }
             guard !reservedNames.contains(e.name) else {
-                throw WebAssignmentError.unprocessable(
+                throw AppError.unprocessable(
                     reason: "'\(e.name)' is reserved for Chickadee's personalization seed. " + "Choose another name.")
             }
             let trimmed = e.expression.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !trimmed.isEmpty else {
-                throw WebAssignmentError.unprocessable(
+                throw AppError.unprocessable(
                     reason: "Global expression '\(e.name)' has an empty body. "
                         + "Provide a Python expression after the leading `=` (e.g. `= seed % 26`).")
             }
             guard seenNames.insert(e.name).inserted else {
-                throw WebAssignmentError.unprocessable(
+                throw AppError.unprocessable(
                     reason: "Duplicate global input name '\(e.name)'. "
                         + "Names must be unique across literal values and expressions.")
             }
@@ -171,7 +171,7 @@ enum GlobalInputsService {
         for section in manifest.sections {
             for sv in section.variables {
                 guard !seenNames.contains(sv.name) else {
-                    throw WebAssignmentError.unprocessable(
+                    throw AppError.unprocessable(
                         reason: "Global input name '\(sv.name)' is already used by "
                             + "section '\(section.name)'. Section and global names share a "
                             + "namespace; rename one to avoid shadowing.")
@@ -196,7 +196,7 @@ enum GlobalInputsService {
         let unknown = used.filter { !declared.contains($0) }
         guard !unknown.isEmpty else { return }
         let list = unknown.map { "{{\($0)}}" }.joined(separator: ", ")
-        throw WebAssignmentError.unprocessable(
+        throw AppError.unprocessable(
             reason: "Starter notebook references unknown placeholder(s): \(list). "
                 + "Declare them as global or section inputs first.")
     }
@@ -233,7 +233,7 @@ enum GlobalInputsService {
         // `PersonalizationSubstitution.resolve` keeps its stated default,
         // because it runs when a student opens the notebook.
         guard let language = AssignmentLanguage.resolve(manifest: manifest) else {
-            throw WebAssignmentError.unprocessable(reason: undeclaredLanguageExpressionMessage)
+            throw AppError.unprocessable(reason: undeclaredLanguageExpressionMessage)
         }
         let seedHex = try await AssignmentSeedStore.ensureSeed(
             userID: userID, assignmentID: assignmentID, on: seedDB)
@@ -252,17 +252,17 @@ enum GlobalInputsService {
                 language: language)
         } catch let PersonalizationEvaluatorError.nonZeroExit(_, stderr) {
             let tail = stderr.split(separator: "\n").suffix(3).joined(separator: " ")
-            throw WebAssignmentError.unprocessable(
+            throw AppError.unprocessable(
                 reason: "One of your expressions failed to evaluate: \(tail). "
                     + "Fix the expression(s) and save again.")
         } catch PersonalizationEvaluatorError.timedOut {
-            throw WebAssignmentError.unprocessable(
+            throw AppError.unprocessable(
                 reason:
                     "Expression evaluation timed out "
                     + "(>\(PersonalizationEvaluator.defaultTimeoutSeconds(for: language))s). "
                     + "Simplify the expressions or move heavy lifting into a support module.")
         } catch {
-            throw WebAssignmentError.internalFailure(reason: "Expression evaluator failed: \(error)")
+            throw AppError.internalFailure(reason: "Expression evaluator failed: \(error)")
         }
     }
 
@@ -270,7 +270,7 @@ enum GlobalInputsService {
 
     private static func decoded(_ setup: APITestSetup) throws -> TestProperties {
         guard let manifest = setup.decodedManifest() else {
-            throw WebAssignmentError.internalFailure(reason: "Manifest is not valid JSON.")
+            throw AppError.internalFailure(reason: "Manifest is not valid JSON.")
         }
         return manifest
     }

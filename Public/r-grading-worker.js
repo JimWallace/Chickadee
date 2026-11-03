@@ -1,3 +1,4 @@
+// @ts-check
 // Public/r-grading-worker.js
 //
 // The R browser-grading substrate: boots the vendored xeus-r kernel in a Web

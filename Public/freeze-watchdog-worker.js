@@ -1,3 +1,4 @@
+// @ts-check
 // Public/freeze-watchdog-worker.js
 //
 // Main-thread freeze detector for the student notebook editor page.

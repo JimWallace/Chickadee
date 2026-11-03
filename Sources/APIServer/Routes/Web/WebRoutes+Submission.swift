@@ -127,34 +127,6 @@ func submissionRejectionMessage(manifest: TestProperties?) -> String {
     "That file type is not accepted. " + submissionAcceptHintText(manifest: manifest)
 }
 
-/// Saves a student submission whose file is already stored, then runs what
-/// every student submission runs next. Shared by the upload form and a GitHub
-/// submission (docs/github-submissions.md slice 3), so the two cannot drift.
-func recordStudentSubmission(
-    _ submission: APISubmission, setup: APITestSetup, user: APIUser, req: Request
-) async throws {
-    // Attempt number is scoped to this student for this test setup,
-    // assigned race-free inside one transaction (concurrent submits used
-    // to share a number, corrupting the prior-attempt delta and the
-    // First-Try-Perfect badge).
-    try await saveSubmissionWithNextAttemptNumber(submission, userID: user.id, on: req.db)
-    await req.application.diagnostics.recordSubmissionCreated(
-        submission: submission, on: req.db, logger: req.logger
-    )
-
-    // Award Pathfinder to the first STUDENT in the class who submits.
-    // The shared helper carries the v0.4.127 role gate (an admin/TA/
-    // instructor testing the assignment must not lock in the immutable
-    // badge) and is the same code path the notebook submission routes use.
-    // Best effort: the submission is already stored (#1708).
-    if let uid = user.id {
-        await ResultIngestEffects(application: req.application, db: req.db, logger: req.logger)
-            .awardFirstToSubmit(setup: setup, userID: uid, submissionID: try submission.requireID())
-    }
-
-    await ensureLocalRunnerForSubmissionIfNeeded(req: req)
-}
-
 extension WebRoutes {
 
     // MARK: - GET /testsetups/:id/submit
@@ -272,8 +244,8 @@ extension WebRoutes {
         {
             return req.redirect(to: "/testsetups/\(setupID)/submit?error=filetype")
         }
-        let subsDir = req.application.submissionsDirectory
-        let subID = freshShortID(prefix: "sub")
+        let intake = SubmissionIntake(req: req)
+        let subID = intake.submissionID
 
         // Decode the uploaded bytes. Vapor's File type captures the original
         // filename from the multipart Content-Disposition header automatically.
@@ -282,29 +254,14 @@ extension WebRoutes {
 
         // Detect whether the upload is a zip by checking PK magic bytes.
         let isZip = fileData.prefix(4) == Data([0x50, 0x4B, 0x03, 0x04])
-        let ext: String = {
-            if isZip { return "zip" }
-            return inferredRawSubmissionExtension(data: fileData, uploadFilename: uploadFilename)
-        }()
-        let storedExt = isZip ? "zip" : ext
-        let filePath = subsDir + "\(subID).\(storedExt)"
-        // Offloaded to the NIO thread pool, matching the API submission path: a
-        // synchronous write pins a cooperative-pool thread while the handler
-        // still holds the whole body in memory, and a deadline burst is exactly
-        // when this route is hot.
-        try await req.fileio.writeFile(.init(data: fileData), at: filePath)
+        let storedExt =
+            isZip ? "zip" : inferredRawSubmissionExtension(data: fileData, uploadFilename: uploadFilename)
         let fallbackFilename = isZip ? nil : (uploadFilename ?? "submission.\(storedExt)")
 
-        let submission = APISubmission(
-            id: subID,
-            testSetupID: setupID,
-            zipPath: filePath,
-            attemptNumber: 0,  // assigned by saveSubmissionWithNextAttemptNumber
-            filename: fallbackFilename,
-            userID: user.id,
-            kind: APISubmission.Kind.student
-        )
-        try await recordStudentSubmission(submission, setup: setup, user: user, req: req)
+        try await intake.accept(
+            setup: setup, owner: user,
+            artifact: .bytes(fileData, fileExtension: storedExt),
+            filename: fallbackFilename, status: .pending)
         return req.redirect(to: "/submissions/\(subID)")
     }
 

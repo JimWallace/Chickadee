@@ -36,7 +36,7 @@ func applySuiteEdit(
         switch item.kind {
         case "script":
             guard let s = item.script else {
-                throw WebAssignmentError.invalidParameter(
+                throw AppError.invalidParameter(
                     name: "items",
                     reason: "Suite item kind=script is missing `script` payload.")
             }
@@ -56,7 +56,7 @@ func applySuiteEdit(
                     )))
         case "family":
             guard var f = item.family else {
-                throw WebAssignmentError.invalidParameter(
+                throw AppError.invalidParameter(
                     name: "items",
                     reason: "Suite item kind=family is missing `family` payload.")
             }
@@ -82,14 +82,14 @@ func applySuiteEdit(
             // so a reorder save round-trips check specs unchanged.  The
             // dedicated `PUT /checks` endpoint stays for the check modal.
             guard let c = item.check else {
-                throw WebAssignmentError.invalidParameter(
+                throw AppError.invalidParameter(
                     name: "items",
                     reason: "Suite item kind=check is missing `check` payload.")
             }
             authored.append(.check(id: c.id, sectionID: item.sectionID))
             nextChecks.append(c)
         default:
-            throw WebAssignmentError.invalidParameter(
+            throw AppError.invalidParameter(
                 name: "items",
                 reason: "Unknown suite item kind '\(item.kind)'.")
         }
@@ -268,7 +268,7 @@ func buildSuitePayload(fromManifest manifest: String, zipPath: String? = nil) as
 func parseFailureDetail(_ raw: String?, script: String) throws -> FailureDetail? {
     guard let raw, !raw.isEmpty else { return nil }
     guard let detail = FailureDetail(rawValue: raw) else {
-        throw WebAssignmentError.invalidParameter(
+        throw AppError.invalidParameter(
             name: "failureDetail",
             reason:
                 "Script \(script): failureDetail must be one of "

@@ -29,7 +29,7 @@ extension InstructorDashboardRoutes {
             submission.testSetupID == assignment.testSetupID,
             submission.kind == APISubmission.Kind.student
         else {
-            throw WebAssignmentError.notFound(resource: "Submission")
+            throw AppError.notFound(resource: "Submission")
         }
         let student: APIUser? =
             if let userID = submission.userID {

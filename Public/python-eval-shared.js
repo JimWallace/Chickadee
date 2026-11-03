@@ -1,3 +1,4 @@
+// @ts-check
 // Public/python-eval-shared.js
 //
 // The cells the pattern-family editor's auto-compute runs on the xeus-python

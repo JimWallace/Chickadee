@@ -24,7 +24,7 @@ extension PublishedAssignmentRoutes {
         let (_, setup) = try await loadAssignmentAndSetupForWrite(req, atLeast: .ta)
         let body: SuiteAnchorPayload
         do { body = try await req.decodeContent(SuiteAnchorPayload.self) } catch {
-            throw WebAssignmentError.invalidParameter(
+            throw AppError.invalidParameter(
                 name: "request body", reason: "Invalid anchor payload: \(error.localizedDescription)")
         }
         let anchor = body.anchor?.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -32,11 +32,11 @@ extension PublishedAssignmentRoutes {
 
         try await mutateManifest(setup: setup, on: req.db) { props in
             guard let index = props.testSuites.firstIndex(where: { $0.script == body.script }) else {
-                throw WebAssignmentError.invalidParameter(
+                throw AppError.invalidParameter(
                     name: "script", reason: "The suite has no test named '\(body.script)'.")
             }
             guard !props.testSuites[index].isGenerated else {
-                throw WebAssignmentError.invalidParameter(
+                throw AppError.invalidParameter(
                     name: "script",
                     reason: "'\(body.script)' is generated, so its check or family names its cell.")
             }

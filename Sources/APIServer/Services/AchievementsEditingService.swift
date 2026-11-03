@@ -107,7 +107,7 @@ enum AchievementsEditing {
     // MARK: - Row → domain
 
     /// Validates one assignment editor row and projects it into the domain
-    /// `Achievement`. Throws `WebAssignmentError.invalidParameter` for bad
+    /// `Achievement`. Throws `AppError.invalidParameter` for bad
     /// input.
     static func achievement(from input: AchievementRow) throws -> Achievement {
         try achievement(from: input, at: .assignment)
@@ -120,10 +120,10 @@ enum AchievementsEditing {
     static func achievement(from input: AchievementRow, at level: AchievementLevel) throws -> Achievement {
         let name = input.name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !name.isEmpty else {
-            throw WebAssignmentError.invalidParameter(name: "name", reason: "Name must not be empty.")
+            throw AppError.invalidParameter(name: "name", reason: "Name must not be empty.")
         }
         guard let scope = AchievementScope(rawValue: input.scope) else {
-            throw WebAssignmentError.invalidParameter(
+            throw AppError.invalidParameter(
                 name: "scope", reason: "Unknown scope '\(input.scope)'.")
         }
         let id = newID(input.id)
@@ -141,7 +141,7 @@ enum AchievementsEditing {
             return try courseAchievement(
                 id: id, name: name, detail: cleanDetail, scope: scope, match: match, conditions: conditions)
         case .site:
-            throw WebAssignmentError.invalidParameter(
+            throw AppError.invalidParameter(
                 name: "level", reason: "Site achievements are defined in code, so no editor saves one.")
         }
 
@@ -150,7 +150,7 @@ enum AchievementsEditing {
         // never fire for anyone. Refuse it here: the editor hides the option
         // off-scope, but MCP writes the row as JSON and has no dropdown.
         if scope != .classWide, let offending = conditions.first(where: \.signal.readsTheWholeClass) {
-            throw WebAssignmentError.invalidParameter(
+            throw AppError.invalidParameter(
                 name: "signal",
                 reason: "'\(offending.signal.rawValue)' reads the whole class, so it can only be "
                     + "used on an achievement awarded to the class together.")
@@ -163,12 +163,12 @@ enum AchievementsEditing {
                 reward: AchievementReward(type: .badge, label: name))
         case .classWide:
             guard let classPercent = input.classPercent, (0...100).contains(classPercent) else {
-                throw WebAssignmentError.invalidParameter(
+                throw AppError.invalidParameter(
                     name: "classPercent", reason: "Class share must be 0–100.")
             }
             let points = input.points ?? 0
             guard points >= 0 else {
-                throw WebAssignmentError.invalidParameter(
+                throw AppError.invalidParameter(
                     name: "points", reason: "Bonus points must be ≥ 0.")
             }
             let goal = Achievement(
@@ -183,7 +183,7 @@ enum AchievementsEditing {
             // class's coverage union.  Richer goals used to save fine and then
             // be silently mis-evaluated as grade-only (audit A4).
             guard goal.isSweepEvaluableClassGoal else {
-                throw WebAssignmentError.invalidParameter(
+                throw AppError.invalidParameter(
                     name: "conditions",
                     reason: "A class goal supports at most one condition, and it must be "
                         + "'grade at least X%' or 'items covered at least N'. "
@@ -196,13 +196,13 @@ enum AchievementsEditing {
             // a question for the author, not a silent "first to solve"
             // (audit A17).  The web form always sends one; an MCP agent may not.
             guard let raw = input.recordDimension, !raw.isEmpty else {
-                throw WebAssignmentError.invalidParameter(
+                throw AppError.invalidParameter(
                     name: "recordDimension",
                     reason: "A record needs a record dimension: one of "
                         + RecordDimension.allCases.map(\.rawValue).joined(separator: ", ") + ".")
             }
             guard let dim = RecordDimension(rawValue: raw) else {
-                throw WebAssignmentError.invalidParameter(
+                throw AppError.invalidParameter(
                     name: "recordDimension",
                     reason: "Unknown record dimension '\(raw)'.")
             }
@@ -215,11 +215,11 @@ enum AchievementsEditing {
 
     private static func condition(from input: ConditionRow) throws -> AchievementCondition {
         guard let signal = AchievementSignal(rawValue: input.signal) else {
-            throw WebAssignmentError.invalidParameter(
+            throw AppError.invalidParameter(
                 name: "signal", reason: "Unknown condition signal '\(input.signal)'.")
         }
         guard let comparator = ConditionComparator(rawValue: input.comparator) else {
-            throw WebAssignmentError.invalidParameter(
+            throw AppError.invalidParameter(
                 name: "comparator", reason: "Unknown comparator '\(input.comparator)'.")
         }
         if signal.readsTheCourse {
@@ -228,7 +228,7 @@ enum AchievementsEditing {
         if signal == .testPass {
             let ref = (input.testRef ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
             guard !ref.isEmpty else {
-                throw WebAssignmentError.invalidParameter(
+                throw AppError.invalidParameter(
                     name: "testRef", reason: "A 'test passes' condition needs a test filename.")
             }
             return AchievementCondition(
@@ -239,7 +239,7 @@ enum AchievementsEditing {
             let ref = (input.sectionRef ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
             let count = input.value ?? 0
             guard count >= 0 else {
-                throw WebAssignmentError.invalidParameter(
+                throw AppError.invalidParameter(
                     name: "value", reason: "Value must not be negative.")
             }
             return AchievementCondition(
@@ -251,11 +251,11 @@ enum AchievementsEditing {
         let value = input.value ?? 0
         if signal == .grade || signal == .gradeJumpPercent || signal == .classCoverage {
             guard (0...100).contains(value) else {
-                throw WebAssignmentError.invalidParameter(
+                throw AppError.invalidParameter(
                     name: "value", reason: "A percent value must be 0–100.")
             }
         } else if value < 0 {
-            throw WebAssignmentError.invalidParameter(
+            throw AppError.invalidParameter(
                 name: "value", reason: "Value must not be negative.")
         }
         return AchievementCondition(signal: signal, comparator: comparator, value: value)
@@ -272,7 +272,7 @@ enum AchievementsEditing {
                 + "used on a course achievement."
             : "'\(offending.rawValue)' reads one assignment, so a course achievement cannot use it. "
                 + "Use a course signal, such as 'assignmentsFullMarks'."
-        throw WebAssignmentError.invalidParameter(name: "signal", reason: "'\(name)': " + reason)
+        throw AppError.invalidParameter(name: "signal", reason: "'\(name)': " + reason)
     }
 
     private static func newID(_ id: String?) -> String {
@@ -403,13 +403,13 @@ enum AchievementsEditing {
         case (.individual, .badge), (.classWide, .points), (.record, _):
             break
         case (.individual, .title), (.individual, .points):
-            throw WebAssignmentError.invalidParameter(
+            throw AppError.invalidParameter(
                 name: "reward",
                 reason: "'\(achievement.name)' is an individual achievement with a "
                     + "'\(achievement.reward.type.rawValue)' reward. An individual achievement "
                     + "is a badge; a title belongs to a record and points to a class goal.")
         case (.classWide, .badge), (.classWide, .title):
-            throw WebAssignmentError.invalidParameter(
+            throw AppError.invalidParameter(
                 name: "reward",
                 reason: "'\(achievement.name)' is a class goal with a "
                     + "'\(achievement.reward.type.rawValue)' reward. A class goal awards points.")
@@ -425,7 +425,7 @@ enum AchievementsEditing {
                 continue
             case .grade, .attempts, .executionTimeMs, .gradeJumpPercent, .standing, .matchesWon,
                 .classCoverage:
-                throw WebAssignmentError.invalidParameter(
+                throw AppError.invalidParameter(
                     name: "target",
                     reason: "'\(achievement.name)' puts a target on a '\(condition.signal.rawValue)' "
                         + "condition, which reads the whole assignment. Only 'testPass' (a test) "
@@ -443,7 +443,7 @@ enum AchievementsEditing {
         var seen = Set<String>()
         for achievement in achievements {
             guard seen.insert(achievement.id).inserted else {
-                throw WebAssignmentError.invalidParameter(
+                throw AppError.invalidParameter(
                     name: "id", reason: "Duplicate achievement id '\(achievement.id)'.")
             }
             try validateEvaluableShape(achievement)
@@ -463,7 +463,7 @@ enum AchievementsEditing {
                 case .testPass:
                     guard let ref = condition.target?.ref, validRefs.contains(ref) else {
                         let ref = condition.target?.ref ?? ""
-                        throw WebAssignmentError.invalidParameter(
+                        throw AppError.invalidParameter(
                             name: "testRef",
                             reason: "'\(ref)' doesn't match any test in this suite. "
                                 + "Use the test's script filename (e.g. secrettest_x.py) "
@@ -476,7 +476,7 @@ enum AchievementsEditing {
                     // audit A1/A17 closed for `testPass` refs.
                     guard let ref = condition.target?.ref else { continue }
                     guard sectionIDs.contains(ref) else {
-                        throw WebAssignmentError.invalidParameter(
+                        throw AppError.invalidParameter(
                             name: "sectionRef",
                             reason: "'\(achievement.name)' points at suite section '\(ref)', which "
                                 + "this assignment does not have — a deleted section leaves a rule "

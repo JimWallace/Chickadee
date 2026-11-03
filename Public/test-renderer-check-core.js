@@ -1,3 +1,4 @@
+// @ts-check
 // Public/test-renderer-check-core.js
 //
 // The decisions behind the notebook-check body renderer
