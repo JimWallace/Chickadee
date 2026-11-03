@@ -9,6 +9,13 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.789] - 2026-11-03
+
+### Security
+
+- **The MCP support-file URL fetch connects to the address it checked (#2780).** The fetcher resolved the host and checked every address, but AsyncHTTPClient resolved the host again when it connected, so a zero-TTL record could pass the check and then send the connection to a private address. The fetcher now resolves once and pins the connection to a checked address with `dnsOverride`. IPv4 comes first when the answer has one. TLS still validates the certificate against the original hostname.
+
+
 ## [0.5.788] - 2026-11-03
 
 ### Fixed
