@@ -337,9 +337,9 @@ extension CourseAdminRoutes {
     // Self-serve staff invite (#417 Slice F). An instructor adds a co-instructor
     // or TA to *their* course by username or email. Unlike the CSV path — which
     // records a pre-enrollment that seeds to `.student` on first login — this
-    // materializes the account immediately (SSO-style placeholder, adopted on
-    // first login by username, so SSO deployments only) and enrolls it at the chosen staff role, so the
-    // role sticks. Instructor-only: TAs are read-only on the roster, so this
+    // materializes the account immediately (an SSO-style placeholder, adopted
+    // on first login by username) and enrolls it at the chosen staff role, so
+    // the role sticks. Instructor-only: TAs are read-only on the roster, so this
     // uses the `.instructor` write floor rather than the `.ta` content floor.
     // An email address finds only an existing account: a placeholder needs the
     // username that SSO reports. Under local sign-in only, no placeholder is
@@ -372,7 +372,7 @@ extension CourseAdminRoutes {
             return req.redirect(to: "/instructor/students?staffError=\(StaffFormError.role.rawValue)#add-staff-panel")
         }
         do {
-            _ = try await CourseEnrollmentService.inviteStaff(
+            try await CourseEnrollmentService.inviteStaff(
                 identifier: identifier, role: role, courseID: courseID, source: "staff_invite", on: req)
         } catch let error as StaffProvisioningError {
             return req.redirect(to: "/instructor/students?staffError=\(StaffFormError(error).rawValue)#add-staff-panel")

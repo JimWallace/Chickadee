@@ -85,11 +85,10 @@ enum CourseEnrollmentService {
     /// `role` is a staff role.
     static func inviteStaff(
         identifier: String, role: CourseRole, courseID: UUID, source: String, on req: Request
-    ) async throws -> StaffProvisioningResult {
+    ) async throws {
         let result = try await provisionStaffEnrollment(
             identifier: identifier, role: role, courseID: courseID,
             allowPlaceholder: req.application.staffPlaceholderAllowed, on: req.db)
         await recordStaffProvisioning(result, role: role, courseID: courseID, source: source, on: req)
-        return result
     }
 }

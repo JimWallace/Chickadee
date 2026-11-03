@@ -146,7 +146,7 @@ extension AdminRoutes {
             return req.redirect(to: "\(back)?staffError=\(StaffFormError.role.rawValue)#add-staff-panel")
         }
         do {
-            _ = try await CourseEnrollmentService.inviteStaff(
+            try await CourseEnrollmentService.inviteStaff(
                 identifier: identifier, role: role, courseID: courseID, source: "admin_staff_invite", on: req)
         } catch let error as StaffProvisioningError {
             return req.redirect(to: "\(back)?staffError=\(StaffFormError(error).rawValue)#add-staff-panel")
