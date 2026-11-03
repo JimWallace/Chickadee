@@ -49,15 +49,7 @@ extension CourseAdminRoutes {
     @Sendable
     func setCourseEnrollmentMode(req: Request) async throws -> Response {
         struct Body: Content { var enrollmentMode: String? }
-        guard
-            let idString = req.parameters.get("courseID"),
-            let courseID = UUID(uuidString: idString),
-            let course = try await APICourse.find(courseID, on: req.db)
-        else {
-            throw WebAssignmentError.notFound(resource: "Course")
-        }
-        let caller = try req.auth.require(APIUser.self)
-        try await requireCourseWriteAccess(caller: caller, courseID: courseID, atLeast: .instructor, db: req.db)
+        let (course, _, _) = try await loadCourseForWrite(req, atLeast: .instructor)
         let body = try? await req.decodeContent(Body.self)
         course.enrollmentMode = CourseEnrollmentMode(rawValue: body?.enrollmentMode ?? "") ?? .open
         try await course.save(on: req.db)
