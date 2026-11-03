@@ -94,7 +94,7 @@ import Testing
         guard let result = await Self.run(probe.command, probe.versionArguments) else { return }
         // A shell reports 127 for "command not found"; that is absence, not a
         // broken probe.
-        guard result.status != 127 else { return }
+        guard result.status != 127, !isMacOSJavaStubWithoutAJDK(probe.command) else { return }
         #expect(
             result.status == 0,
             """
