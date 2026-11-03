@@ -28,8 +28,7 @@ import VaporTesting
     }
 
     @Test func theUserPageShowsEachOfferingsTermNewestFirst() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let cookie = try await loginUser(
                 username: "term_admin", password: "testpassword", role: "admin", on: app)
             let offerings = try await makeOfferings(on: app)
@@ -46,8 +45,7 @@ import VaporTesting
     }
 
     @Test func theMCPPageShowsEachOfferingsTermNewestFirst() async throws {
-        let app = try await makeTestApp(appConfig: .testDefaults(authMode: .local, mcp: .default))
-        try await withApp(app) { app in
+        try await withTestApp(appConfig: .testDefaults(authMode: .local, mcp: .default)) { app in
             let cookie = try await loginUser(
                 username: "term_mcp_admin", password: "testpassword", role: "admin", on: app)
             let offerings = try await makeOfferings(on: app)

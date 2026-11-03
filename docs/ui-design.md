@@ -799,7 +799,10 @@ duplicate.
   `.earned-face-new` and `.earned-face-old` for the crossfade.  It floats
   there, not in the page flow, because it arrives during the celebration and
   must not move the grade band or the results while they animate.  It is not a
-  general toast idiom.  J3 must take this shape too, not a second one.
+  general toast idiom.  J3 must take this shape too, not a second one, and so
+  does a found item (`docs/student-wardrobe.md`, 6c): the layout renders the
+  Quantum Cats ring's toast hidden as `#quantum-cats-found`, and
+  `quantum-cats-egg.js` shows it.
 - **`.wb-shell`** — the assignment workbench (`WorkbenchPage`, NB6, design
   frame 18c).  A `.wb-appbar` (`WorkbenchAppBar`: the `.wb-title` with a ✎
   that opens the Details sheet, the due date and the language in a
@@ -1377,12 +1380,21 @@ the JS gate (CI runs it in the `browser-runner-tests` job):
 
 ```bash
 scripts/eslint.sh
+scripts/typecheck-js.sh
 node --test Tests/BrowserRunnerJSTests/*.mjs
 ```
 
 ESLint is a correctness gate (`eslint:recommended`, zero warnings), not a
 formatter; scope and shared globals live in `eslint.config.mjs`.  New
 cross-file API should hang off `ChickadeeUI` rather than adding a global.
+
+`scripts/typecheck-js.sh` runs `tsc --noEmit` over `jsconfig.json` (#2782).
+There is no build step: types go in JSDoc comments only, and the files are
+still served as-is. A file is checked when its first line is `// @ts-check`.
+Every new `Public/*.js` file opts in. `scripts/ts-check-pending.txt` lists the
+files that do not yet, and `scripts/check-ts-check-optin.sh` makes that list
+shrink-only. A new cross-file global needs a line in
+`types/chickadee-globals.d.ts`, or tsc reports the name as unknown.
 
 For changes that add or restructure markup (not just CSS values), also run
 the render tests for the affected routes, e.g.:

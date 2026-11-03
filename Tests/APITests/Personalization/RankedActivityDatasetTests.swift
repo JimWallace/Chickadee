@@ -109,8 +109,7 @@ import Vapor
     // MARK: - The activity door
 
     @Test func aRankedKindIsRefusedOnAnAssignmentWithPersonalData() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let (_, setup) = try await fixture(
                 on: app, code: "RKA1", activity: nil, datasets: [DatasetSpec(file: "cases.csv", sampleSize: 3)])
             await #expect(throws: AppError.self) {
@@ -122,8 +121,7 @@ import Vapor
     }
 
     @Test func aCompositeIsAllowedOnAnAssignmentWithPersonalData() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let (_, setup) = try await fixture(
                 on: app, code: "RKA2", activity: nil, datasets: [DatasetSpec(file: "cases.csv", sampleSize: 3)])
             try await ActivityAuthoring.setActivity(
@@ -135,8 +133,7 @@ import Vapor
     // MARK: - The dataset doors
 
     @Test func theDatasetsPutRefusesASampleOnARankedActivity() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let (_, setup) = try await fixture(on: app, code: "RKD1", activity: .kingOfTheHill, datasets: [])
             await #expect(throws: AppError.self) {
                 try await applyDatasetsEdit(
@@ -147,8 +144,7 @@ import Vapor
     }
 
     @Test func setDatasetRefusesASampleOnARankedActivity() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let (assignment, setup) = try await fixture(on: app, code: "RKD2", activity: .roundRobin, datasets: [])
             await #expect(throws: MCPToolError.self) {
                 _ = try await SetDatasetTool().execute(
@@ -165,8 +161,7 @@ import Vapor
     /// A legacy manifest that already pairs a ranked activity with personal
     /// data can still be edited toward the rule: clearing the sample passes.
     @Test func anInheritedPairCanBeEditedTowardTheRule() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let (_, setup) = try await fixture(
                 on: app, code: "RKD3", activity: .bestMetric,
                 datasets: [DatasetSpec(file: "cases.csv", sampleSize: 3)])
@@ -178,8 +173,7 @@ import Vapor
     // MARK: - The library attach
 
     @Test func theLibraryAttachRefusesASampleOnARankedActivityAndAcceptsTheWholeFile() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let (_, setup) = try await fixture(on: app, code: "RKL1", activity: .bestMetric, datasets: [])
             let blobs = AssignmentVersionBlobStore(testSetupsDirectory: app.testSetupsDirectory)
             let dataset = try await CourseDatasetService.create(

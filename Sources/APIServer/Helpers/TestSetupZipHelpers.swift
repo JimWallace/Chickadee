@@ -376,7 +376,7 @@ func createRunnerSetupZip(
         do {
             try await replaceSetupZip(zipPath: zipPath, withContentsOf: tempDir)
         } catch {
-            throw WebAssignmentError.internalFailure(reason: "Failed to package setup zip")
+            throw AppError.internalFailure(reason: "Failed to package setup zip")
         }
     }
     let hasMakefile = storedNameByIndex.values.contains {

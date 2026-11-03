@@ -434,16 +434,12 @@ import VaporTesting
             let bReports = bPlays.map { report($0, submissionID: "race_b1", won: true, score: 1) }
             let aOutcomes = [outcome("match", metric: 0, status: .fail, score: 0)]
             let bOutcomes = [outcome("match", metric: 2)]
-            async let landA: Void = withTransientDatabaseLockRetry(on: db) {
-                try await recordActivityMatch(
-                    testSetupID: setupID, userID: aID, submissionID: "race_a1",
-                    outcomes: aOutcomes, matches: aReports, on: db)
-            }
-            async let landB: Void = withTransientDatabaseLockRetry(on: db) {
-                try await recordActivityMatch(
-                    testSetupID: setupID, userID: bID, submissionID: "race_b1",
-                    outcomes: bOutcomes, matches: bReports, on: db)
-            }
+            async let landA: Void = recordActivityMatch(
+                testSetupID: setupID, userID: aID, submissionID: "race_a1",
+                outcomes: aOutcomes, matches: aReports, on: db)
+            async let landB: Void = recordActivityMatch(
+                testSetupID: setupID, userID: bID, submissionID: "race_b1",
+                outcomes: bOutcomes, matches: bReports, on: db)
             _ = try await (landA, landB)
 
             let leader = try #require(

@@ -75,7 +75,7 @@ import VaporTesting
     @Test func aManifestThatDoesNotDecodeIsRefused() async throws {
         try await withApp(app) { app in
             let setup = try await storedSetup(manifest: "not a manifest", on: app)
-            await #expect(throws: WebAssignmentError.self) {
+            await #expect(throws: AppError.self) {
                 try await mutateManifest(setup: setup, on: app.db) { props in
                     props.timeLimitSeconds = 45
                 }

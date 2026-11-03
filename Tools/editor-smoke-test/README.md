@@ -72,6 +72,13 @@ swift build                      # from the repo root
 ./run-smoke.sh                   # boots a server, runs the check, tears down
 ```
 
+Each boot gets a throwaway Postgres database, which
+`scripts/lib/scratch-database.sh` creates with `psql` and drops on exit. It
+connects as the test suite does: `localhost:5432`, user and password
+`postgres`, overridden by `TEST_DATABASE_HOST`, `TEST_DATABASE_PORT`,
+`TEST_DATABASE_USER` and `TEST_DATABASE_PASSWORD` (see "Local development" in
+the root README).
+
 `run-smoke.sh` honours `CHICKADEE_SERVER_BIN` and `PORT`; the `SMOKE_*` knobs
 (`SMOKE_SIMULATE_FROZEN`, `SMOKE_SIMULATE_NO_SYNC`, `SMOKE_EXPECT_ISOLATED`,
 `SMOKE_BROWSER`) are read by `editor-check.mjs`. The editor is cross-origin

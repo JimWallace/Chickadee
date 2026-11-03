@@ -14,8 +14,7 @@ import Vapor
 @Suite struct MCPCourseSectionIDTests {
     @Test(arguments: [nil, "", "  ", "none", "NONE"])
     func anAbsentSectionIsNil(raw: String?) async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let id = try await resolveCourseSectionID(
                 raw, inCourse: UUID(), owner: "assignment", context: mcpContext(app))
             #expect(id == nil)
@@ -23,8 +22,7 @@ import Vapor
     }
 
     @Test func aSectionInThisCourseResolves() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let course = try await makeTestCourse(on: app, code: "CS246", name: "OOP")
             let section = APICourseSection(
                 name: "Labs", defaultGradingMode: "browser", sortOrder: 0, courseID: try course.requireID())
@@ -37,8 +35,7 @@ import Vapor
     }
 
     @Test func aSectionInAnotherCourseIsRefusedNamingTheOwner() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let mine = try await makeTestCourse(on: app, code: "CS246", name: "OOP")
             let other = try await makeTestCourse(on: app, code: "CS136", name: "Intro")
             let section = APICourseSection(
@@ -56,8 +53,7 @@ import Vapor
     }
 
     @Test func aMalformedIdIsRefused() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             await #expect(throws: MCPToolError.invalidArguments(detail: "courseSectionID \"x\" is not a valid id.")) {
                 _ = try await resolveCourseSectionID(
                     "x", inCourse: UUID(), owner: "assignment", context: mcpContext(app))

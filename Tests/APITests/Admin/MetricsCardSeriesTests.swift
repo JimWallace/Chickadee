@@ -93,9 +93,7 @@ import VaporTesting
     }
 
     /// The load series sums concurrent runners' busy slots and capacity within
-    /// a bucket, and reports the window's peak pair.  Exercises the Swift
-    /// aggregation on SQLite locally; `api-tests-postgres` runs the same
-    /// assertions through the Postgres SQL path.
+    /// a bucket, and reports the window's peak pair, through the SQL path.
     @Test func runnerLoadPointsSumConcurrentRunners() async throws {
         try await withApp(app) { _ in
             let now = Date()
@@ -129,9 +127,7 @@ import VaporTesting
     }
 
     /// Per-display-bucket runner summaries: per-snapshot utilization is
-    /// averaged and peaked within each bucket.  Exercises the Swift aggregation
-    /// on SQLite locally; `api-tests-postgres` runs the same assertions through
-    /// the Postgres SQL path, pinning the two paths to identical output.
+    /// averaged and peaked within each bucket, through the SQL path.
     @Test func runnerTimeseriesSummariesAggregatePerBucket() async throws {
         try await withApp(app) { _ in
             let now = Date()
@@ -158,8 +154,7 @@ import VaporTesting
     }
 
     /// The instructor card series buckets student submissions per window and
-    /// reports distinct active students / assignments.  Runs on SQLite locally
-    /// and the Postgres path in CI.
+    /// reports distinct active students / assignments.
     @Test func instructorCardSeriesBucketsSubmissions() async throws {
         try await withApp(app) { _ in
             let now = Date()

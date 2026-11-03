@@ -1,6 +1,6 @@
 # Visual regression harness (#1136)
 
-Boots a real `chickadee-server` on an ephemeral SQLite DB, seeds a course +
+Boots a real `chickadee-server` on a throwaway Postgres database, seeds a course +
 assignment + student + pending submission over the real HTTP API, screenshots
 the key pages in **both** colour schemes with Chromium, and diffs the PNGs
 against the committed baselines in `baselines/`.
@@ -63,6 +63,10 @@ cd Tools/visual-regression
 npm ci
 ./run-visual.sh
 ```
+
+The server runs on a throwaway Postgres database, the same way as the editor
+smoke harness (`Tools/editor-smoke-test/README.md`), so a local Postgres must
+be running.
 
 Exit 1 on drift, with `*.diff.png` / `*.actual.png` evidence. In CI
 (`visual-regression.yml`, path-filtered, not a required check) the evidence

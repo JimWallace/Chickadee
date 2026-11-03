@@ -23,7 +23,7 @@ section. Keep one `## Family N` heading for each family.
 | 2 | webkit grading hang, `grading-probe (webkit)` `hangs=N/12` | open (contained by a tolerance) | `hangs=1/12` on webkit; a `::warning` "AMBIENT FLAKE TOLERATED" on a PR run. The breadcrumb trail stops before `suite_done`. | A tolerated warning is not your diff. Read the breadcrumbs before you decide. |
 | 3 | webkit editor smoke, post-idle execute, `smoke (webkit)` | open (contained by a retry) | `post-idle execute passed? 0 (want 1)`; a `::warning` "FLAKE RETRY". | Not your diff when one retry passes. One retry is automatic, and a second failure fails the gate. Then check the tells before you re-run. |
 | 4 | `worker-tests` SIGABRT from the wedge watchdog (URLSession cancel deadlock, upstream) | open (mitigated first-party) | `worker-tests` fails (not `cancelled`) after about 5 minutes with `exited with unexpected signal code 6`. The dump has `WedgeWatchdog.abortWedgedProcess` and a `CancelState.cancel` / `withStatusRecordLock` pair. | Not your diff. One `/rerun-failed`. For a mutation shard, re-run that shard. |
-| 5 | `api-tests` killed at its ceiling during a throughput collapse | mitigated (closed for monitoring) | `api-tests` reads `cancelled` at its 25-minute ceiling. Tests still complete at the tail of the log. `api-tests-postgres` passed on the same commit. | Not your diff if the tells match. One `/rerun-failed`. Read the `[ci-pressure]` lines. |
+| 5 | `api-tests` killed at its ceiling during a throughput collapse | mitigated (closed for monitoring) | `api-tests` reads `cancelled` at its 25-minute ceiling. Tests still complete at the tail of the log. `api-tests` passed on `main` at the same base, or on a re-run. | Not your diff if the tells match. One `/rerun-failed`. Read the `[ci-pressure]` lines. |
 | 6 | `worker-tests` cancelled at its ceiling after the move to resolute | fixed | `worker-tests` reads `cancelled`. `[ci-pressure]` shows `scopes=0.0/min` with `self cpu=0.0%`. Some `WorkerDaemonTests` record "Time limit was exceeded". | It should not recur. If it does, read the printed wedge dump. |
 | 7 | `build` exits 139 as Swift Build starts planning (libdispatch, upstream) | open (upstream bug; in-job retry) | Step `Build all targets and tests` red within about 90 s. Exit 139. The last build line is `[Planning 1 / N]`. `DispatchWorker` crashed in `_dispatch_event_loop_drain`. A `::warning` "Family 7 retry" on a green job is one absorbed hit. | Not your diff: nothing compiled. One `/rerun-failed`. Never read the diff for it. |
 
@@ -43,8 +43,9 @@ Do these steps in this order.
 4. **For a `cancelled` job, examine the tail of the log.**
    - Were tests still *completing* at the tail? A wedge stops. A collapse
      (Family 5) continues to finish tests slowly.
-   - Did `api-tests-postgres` pass on the same commit? It runs the same
-     target.
+   - Did `api-tests` pass on `main` at the same base, or on a re-run of
+     this commit? (Until SQLite support was removed, a second lane ran the
+     same target on the same commit.)
    - What do the `[ci-pressure]` lines say? `scopes=0.0/min` with
      `self cpu=0.0%` is a stop (Family 6). A HINT line names its own cause.
    - On `main`, make sure that the `Run APITests` step ran to the budget.
@@ -110,9 +111,9 @@ after a healthy grade. Read the breadcrumb trail first:
 - If the trail stops **before** `suite_done`, it is this family.
 - If the trail reaches `suite_done` and then `submit_failed` with a 500, it is
   a server-side failure of the result POST. That is not this family. Two such
-  causes are fixed (side effects after the result save run best-effort, and
-  `withWriteLockedTransaction` opens the attempt-number transaction with
-  `BEGIN IMMEDIATE`, #1919). A new one is a new bug. `run-smoke.sh` prints
+  causes are fixed: side effects after the result save run best-effort, and
+  the attempt-number write-lock failure (#1919) went away with SQLite
+  support. A new one is a new bug. `run-smoke.sh` prints
   the error-level lines of the whole server log before the tail. Read them.
 
 **Chromium is rarer, not immune.** One chromium hang (2026-08-04) did not
@@ -185,12 +186,13 @@ Swift Testing and are true of every run.
 **What changed.** Two changes halved the cost of the lane, and the collapse
 did not occur in 88 `main` runs after them:
 
-- The `api-tests` and `api-tests-postgres` containers mount `/tmp` as a tmpfs
-  (`--tmpfs /tmp:rw,exec,size=2g`). `exec` is necessary: the suite writes
+- The `api-tests` container mounts `/tmp` as a tmpfs
+  (`--tmpfs /tmp:rw,exec,size=2g`), as both lanes did while there was a
+  SQLite lane. `exec` is necessary: the suite writes
   scripts there and runs them.
-- Test applications no longer run all migrations each time. The sqlite lane
-  copies a migrated template file. The postgres lane recycles migrated schemas
-  from `MigratedPostgresSchemaPool`.
+- Test applications no longer run all migrations each time. They recycle
+  migrated schemas from `MigratedPostgresSchemaPool`. (The SQLite lane, since
+  removed, copied a migrated template file.)
 
 The cause of the collapse is not known. It stopped after the cost went down.
 The open leads are fsync latency variance, something inside the test process,
@@ -250,11 +252,13 @@ finishes. It is the opposite of Family 5: Family 6 stops completely.
    now launches through swift-subprocess, and `stop()` does not wait.
 2. glibc 2.41 and later holds an abort lock during `posix_spawn`. A
    swift-subprocess child made by `clone3` could inherit that lock held and
-   block before exec. `Package.swift` pins swift-subprocess to the fork
-   `JimWallace/swift-subprocess`, branch `chickadee/abort-lock-fix`. Return to
-   upstream when a release has an equal fix. The upstream report is
-   [swiftlang/swift-subprocess#375](https://github.com/swiftlang/swift-subprocess/issues/375),
-   and #1597 has the steps to move back. `SubprocessSpawnRaceTests` pins it.
+   block before exec. Upstream 1.0.1 (swiftlang/swift-subprocess#365) avoids
+   it: on glibc 2.34 or later the Linux child comes from `posix_spawn`, not a
+   raw `clone3`, for every configuration Chickadee uses, and Chickadee depends
+   on 1.0.2. The raw path survives only for setuid, setgid or setgroups, and
+   for `createSession` together with `processGroupID`; do not add either
+   without rereading [swiftlang/swift-subprocess#375](https://github.com/swiftlang/swift-subprocess/issues/375).
+   `SubprocessSpawnRaceTests` pins it.
 
 **Handling if it reappears.** The watchdog writes its thread table to
 `/tmp/chickadee-wedge-dump-<pid>.txt`. The `worker-tests` lane prints that

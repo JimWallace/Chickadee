@@ -30,12 +30,15 @@ keeps the short form and points here.
     directories, Vapor app fixtures). For Vapor apps, store `let app`
     and wrap each `@Test` body in `try await withApp(app) { _ in ... }`
     so teardown is deterministic (`withApp` runs the full
-    `tearDownTestApp`: shutdown plus removal of the app's temp
-    directories and sqlite-kit's fake-memory database file — #1298);
+    `tearDownTestApp`: shutdown, the return of its pooled Postgres
+    schema, and removal of the app's temp directories — #1298);
     the next test's `init` builds a fresh app.
-- **`with*App` helpers** for DB-backed suite clusters
-  (`withWebRoutesApp`, `withAssignmentRoutesApp`, `withPatternFamilyFixture`).
-  See `Tests/APITests/WebRoutesHelpers.swift` etc. for the pattern.
+- **`withTestApp { app in ... }`** for a test that needs the standard app
+  for one body: it builds the app (`makeTestApp`) and tears it down
+  (`withApp`). Call `makeTestApp` yourself only for a stored `app` or an
+  app you change before the body runs. `withWebRoutesApp` and
+  `withAssignmentRoutesApp` are older names for `withTestApp`; other
+  `with*App` helpers (`withPatternFamilyFixture`) also seed rows.
 - **`.serialized` on DB- or env-touching suites.** Swift Testing runs
   tests in parallel within a suite by default; `.serialized` gates
   within-suite parallelism. For cross-suite serialization (e.g. tests

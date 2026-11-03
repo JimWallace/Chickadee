@@ -3,7 +3,7 @@
 //
 // The `chickadee_mcp` role is deny-by-omission. A table that an MCP tool
 // queries on `ToolContext.db` with no GRANT fails in production with
-// "permission denied", and the SQLite and owner-role test runs cannot see it.
+// "permission denied", and the owner-role test runs cannot see it.
 // `course_content_items` broke every content-item tool this way.
 //
 // `MCPLeastPrivilegeGrantSyncTests` covers the student-data tables behind
@@ -40,8 +40,8 @@ import Testing
     private static let scannedHelpers = [
         "Sources/APIServer/Services/SectionPlacement.swift",
         "Sources/APIServer/Services/AssignmentAuthoringService.swift",
-        "Sources/APIServer/Helpers/ManifestFieldEdits.swift",
-        "Sources/APIServer/Helpers/CourseAccessHelpers.swift",
+        "Sources/APIServer/Services/ManifestFieldEdits.swift",
+        "Sources/APIServer/Services/CourseAccess.swift",
     ]
 
     private struct Allowance {

@@ -3,10 +3,10 @@ set -euo pipefail
 
 # Runs one Swift test lane of swift-tests.yml, then fails on any skipped test.
 #
-# The core, api, api-postgres and worker lanes each held the same tail: make the
+# The core, api and worker lanes each held the same tail: make the
 # xUnit directory, pass `--skip-build` when the shared `.build` cache was an
 # exact hit, run `swift test`, then run check-no-skipped-tests.sh on the report.
-# Four copies of one branch drift, so the tail lives here (#2719).
+# Three copies of one branch drift, so the tail lives here (#2719).
 #
 # Usage: scripts/ci-swift-test-lane.sh REPORT-NAME SWIFT-TEST-ARGUMENT...
 #

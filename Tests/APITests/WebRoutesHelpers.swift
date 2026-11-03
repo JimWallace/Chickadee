@@ -16,16 +16,13 @@ import VaporTesting
 
 @testable import APIServer
 
-/// Stands up a Vapor app configured for the WebRoutes test suite and
-/// runs the supplied body against it.  The app is shut down before the
-/// closure returns (success or failure), so per-test cleanup is
-/// deterministic.
+/// `withTestApp` under the name the WebRoutes suites use, with their temp
+/// directory prefix.
 func withWebRoutesApp(
     prefix: String = "chickadee-wrt",
     _ body: (Application) async throws -> Void
 ) async throws {
-    let app = try await makeTestApp(prefix: prefix)
-    try await withApp(app, body)
+    try await withTestApp(prefix: prefix, body)
 }
 
 // MARK: - Auth helpers

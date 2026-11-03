@@ -150,14 +150,16 @@ func openMatch(
         existing.round = round
         try await existing.update(on: db)
     } else {
-        // Ignore the conflict: two claims of one submission at once, first
-        // insert wins — the same shape as `awardImmutableBadge`.
+        // Ignore the conflict only: two claims of one submission at once,
+        // first insert wins — the same shape as `awardImmutableBadge`. Any
+        // other failure is thrown, so a lost connection no longer drops the
+        // match row in silence (#2776).
         let row = APIMatchResult(
             testSetupID: testSetupID, submissionID: submissionID,
             opponentSubmissionID: opponent.champion?.id, opponentIdentity: opponent.identity,
             seed: seed, createdAt: Date())
         row.round = round
-        try? await row.save(on: db)
+        try await row.createIgnoringConflict(on: db)
     }
 }
 
@@ -275,14 +277,6 @@ func recordActivityMatch(
     }
 }
 
-/// Inserts the first champion row of a setup's course-wide hill
-/// (`Hill.crownFirst`).
-func crownFirstChampion(
-    testSetupID: String, userID: UUID, submissionID: String, on db: any Database
-) async throws -> Bool {
-    try await Hill.course(testSetupID: testSetupID).crownFirst(userID: userID, submissionID: submissionID, on: db)
-}
-
 // MARK: - Round robin
 
 /// Completes a matrix job's open rows from the worker's per-match reports —
@@ -385,10 +379,8 @@ private func recordMatrixMatches(
 /// Two results landing together each wrote their own row, read the leader
 /// without the other's row, and set the record, so the later write could
 /// name a student the standings did not show first (#2192, the #1752
-/// family). A no-op `UPDATE` of the setup row takes that row's lock on
-/// Postgres and the write lock on SQLite. The second ingest waits for the
-/// first to commit (or, on SQLite, is retried by the caller's
-/// `withTransientDatabaseLockRetry`) and then reads both rows.
+/// family). A no-op `UPDATE` of the setup row takes that row's lock, so the
+/// second ingest waits for the first to commit and then reads both rows.
 private func lockStandings(of setupID: String, on db: any Database) async throws {
     guard let sql = db as? (any SQLDatabase) else { return }
     try await sql.raw(
@@ -537,10 +529,4 @@ func standingSignals(
         testSetupID: testSetupID, courseID: setup.courseID, groupID: isPerGroup ? own.groupID : nil, on: db)
     guard let row = ranked.first(where: { $0.standing.userID == userID }) else { return nil }
     return (row.rank, row.standing.wins)
-}
-
-/// The course-wide hill's current holder; nil when the bot or nobody holds
-/// it. A lab group's hill is read through `Hill.group`.
-func currentChampion(testSetupID: String, on db: any Database) async throws -> APIActivityChampion? {
-    try await Hill.course(testSetupID: testSetupID).holder(on: db) as? APIActivityChampion
 }

@@ -39,6 +39,8 @@ extension HealthRule {
             return "a job waits \(Int(unclaimableJobsMinimumWaitSeconds / 60)) min and no online runner can grade it"
         case .diskSpaceLow:
             return "less than \(Int((diskSpaceLowFreeFraction * 100).rounded()))% of the data disk is free"
+        case .courseKeyShadowed:
+            return "an active course's code is the first segment of a fixed route"
         }
     }
 }

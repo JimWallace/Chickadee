@@ -2,7 +2,7 @@
 
 Chickadee records backend-only observability for submission jobs, runner
 activity, and server request timing. There is still no dashboard UI in this
-layer; operators use structured logs, SQLite data, and one protected JSON
+layer; operators use structured logs, the database, and one protected JSON
 endpoint.
 
 ## What Is Collected
@@ -163,7 +163,7 @@ The extension needs two steps:
    then runs `CREATE EXTENSION pg_stat_statements SCHEMA public;`.
 
 Until both steps are done, `get_query_stats` returns `available: false` with a
-note that says which step is missing. On SQLite it reports `notPostgres`.
+note that says which step is missing.
 
 On the host, from the compose directory, after you edit the `db` command:
 
@@ -376,6 +376,15 @@ when a full disk has stopped Postgres. `get_storage_usage` and `/admin/storage`
 show the same free space. The deploy daemon has its own check: see
 [zero-downtime-deploy.md](zero-downtime-deploy.md), state `disk_low`.
 
+`courseKeyShadowed` ("Course links shadowed by a page address") fires when an
+active course's code or URL key is the first segment of a fixed route, such as
+`data`, `lab` or `login` (#2666). The router tries a fixed segment before a
+parameter and never backtracks, so every vanity link of that course is a 404 or
+the wrong page. Every door that creates or renames a course refuses such a
+code, so the rule fires only for a course that held the code before that check,
+or when a new fixed route takes an existing course's code. Rename the course on
+its admin page. See [course-terms.md](course-terms.md).
+
 ## Deployment Examples
 
 Docker Compose:
@@ -450,9 +459,9 @@ the user row is hard-deleted via `POST /admin/users/:userID/delete`.
 | Table | Column | On delete | Notes |
 |---|---|---|---|
 | `submissions` | `user_id` | SET NULL | Submission row preserved as immutable grade history; "anonymous attempt." |
-| `submissions` | `retested_by_user_id` | SET NULL | Submission row preserved; retest attribution drops. **Enforced by `AddUserFKConstraints` on Postgres; by `AdminRoutes.deleteUser` on SQLite.** |
+| `submissions` | `retested_by_user_id` | SET NULL | Submission row preserved; retest attribution drops. **Enforced by `AddUserFKConstraints`, and cleared again by `AdminRoutes.deleteUser`.** |
 | `course_enrollments` | `user_id` | CASCADE | Enrollment row goes when the user goes. |
-| `class_achievements` | `user_id` | CASCADE | Derived per-user row; goes with the user. **Enforced by `AddUserFKConstraints` on Postgres; by `AdminRoutes.deleteUser` on SQLite.** |
+| `class_achievements` | `user_id` | CASCADE | Derived per-user row; goes with the user. **Enforced by `AddUserFKConstraints`, and cleared again by `AdminRoutes.deleteUser`.** |
 | `leaderboard_entries` | `user_id` | CASCADE | Derived per-user ranking row (class activities); goes with the user. DB-level cascade on both engines (the FK is declared at create time). |
 | `tournament_runs` | `started_by`, `winner_user_id` | SET NULL | Run row preserved (it is the bracket's history); who started it and who won it drop. No FK on either backend; **enforced by `AdminRoutes.deleteUser`** (#1808). |
 | `class_item_coverage`, `group_class_item_coverage` | `user_id` | **preserved** | Coverage never retreats when a student drops (docs/collaborative-class-assignments.md; the second table is each lab's, docs/lab-groups.md slice 5b). No FK on either backend, on purpose. |
@@ -490,11 +499,9 @@ the user row is hard-deleted via `POST /admin/users/:userID/delete`.
 Of the FK constraints above, two (`submissions.retested_by_user_id` and
 `class_achievements.user_id`) were created as bare UUID columns and lack
 a DB-level constraint on existing deployments. The `AddUserFKConstraints`
-migration adds them on Postgres. SQLite cannot add an FK to an existing
-column without recreating the table, so on SQLite the same semantics are
-enforced by application code in `AdminRoutes.deleteUser` — it explicitly
-clears `class_achievements` rows and nulls `retested_by_user_id`
-references before deleting the user row. Both backends end up with the
-same observable behaviour. `UserReferenceScanTests` reads the `Create*`
+migration adds them. `AdminRoutes.deleteUser` also clears
+`class_achievements` rows and nulls `retested_by_user_id` references before
+it deletes the user row. That code dates from SQLite, which could not add
+these constraints, and it agrees with them. `UserReferenceScanTests` reads the `Create*`
 migrations for every user column with no FK, so a new one fails CI until
 it is cleared in `deleteUser` or named in the kept-on-purpose list.

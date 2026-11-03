@@ -79,7 +79,7 @@ import Testing
             Array(AvatarBorder.allCases.dropFirst(6))
                 == [
                     .rainbow, .spectrum, .twotone, .stitched, .snowflake, .blossom, .maple,
-                    .lifering, .greenlight, .ouroboros, .function, .binary, .pulse,
+                    .lifering, .greenlight, .ouroboros, .function, .binary, .pulse, .quantumcats,
                 ])
     }
 

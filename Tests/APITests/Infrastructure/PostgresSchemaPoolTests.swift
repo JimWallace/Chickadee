@@ -225,8 +225,7 @@ import Vapor
         let app = try await Application.make(.testing)
         do {
             app.logger.logLevel = .warning
-            try configureDatabase(
-                app, settings: try postgresSettings(settings, searchPath: [schema]))
+            configureDatabase(app, settings: postgresSettings(settings, searchPath: [schema]))
             try await body(app)
             try await app.asyncShutdown()
         } catch {
@@ -244,45 +243,24 @@ import Vapor
 
     /// Hazard: a test whose body throws must still hand its schema back, or
     /// the pool loses capacity and the run eventually blocks on an empty pool.
-    ///
-    /// Asserted on both lanes, against whatever that lane's per-test database
-    /// actually is: the pooled lease on Postgres, the migrated-template copy
-    /// on SQLite. The SQLite branch also pins that the pool never engages
-    /// there at all, which is the other thing this change must not get wrong.
     @Test func aThrowingTestBodyStillReleasesItsTestDatabase() async throws {
         struct DeliberateFailure: Error {}
 
         let app = try await makeTestApp(prefix: "chickadee-pool-throw")
         let lease = app.storage[PooledPostgresSchemaKey.self]
-        let templateCopy = app.storage[TestSQLiteDatabaseFileKey.self]
 
         await #expect(throws: DeliberateFailure.self) {
             try await withApp(app) { _ in throw DeliberateFailure() }
         }
 
-        switch try await testSettings().backend {
-        case .postgres:
-            let lease = try #require(lease, "the postgres lane must hand out a pooled lease")
-            #expect(!(await MigratedPostgresSchemaPool.shared.isOutstanding(lease)))
-        case .sqlite:
-            let copy = try #require(templateCopy, "the sqlite lane must hand out a template copy")
-            #expect(!FileManager.default.fileExists(atPath: copy))
-            #expect(await MigratedPostgresSchemaPool.shared.statistics().schemasCreated == 0)
-        }
+        let pooled = try #require(lease, "a test app must hand out a pooled lease")
+        #expect(!(await MigratedPostgresSchemaPool.shared.isOutstanding(pooled)))
     }
 
     /// The sweep empties the schema and leaves the migration log alone — the
     /// two halves of "a recycled schema is indistinguishable from a freshly
     /// migrated one".
     @Test func aReturnedSchemaComesBackEmptyWithItsMigrationLogIntact() async throws {
-        guard try await testSettings().backend == .postgres else {
-            // There is no pool on the sqlite lane, so the assertion that
-            // belongs here is the one that lane DOES owe: that this change
-            // never reached it. A silent return would be the skip this
-            // repository keeps getting burned by.
-            #expect(await MigratedPostgresSchemaPool.shared.statistics().schemasCreated == 0)
-            return
-        }
         try await withPrivatePool(capacity: 1) { pool, settings in
             let first = try await pool.checkOut(settings: settings, logLevel: .warning)
             var migrationsBefore = 0
@@ -311,14 +289,6 @@ import Vapor
     /// recycled — and refusing it must not cost the pool the capacity, or one
     /// bad test wedges every test after it.
     @Test func aStructurallyChangedSchemaIsRefusedAndReplaced() async throws {
-        guard try await testSettings().backend == .postgres else {
-            // There is no pool on the sqlite lane, so the assertion that
-            // belongs here is the one that lane DOES owe: that this change
-            // never reached it. A silent return would be the skip this
-            // repository keeps getting burned by.
-            #expect(await MigratedPostgresSchemaPool.shared.statistics().schemasCreated == 0)
-            return
-        }
         try await withPrivatePool(capacity: 1) { pool, settings in
             let lease = try await pool.checkOut(settings: settings, logLevel: .warning)
             try await withSchemaConnection(lease.schemaName, settings: settings) { app in
@@ -347,14 +317,6 @@ import Vapor
     /// honest version of this assertion on the shared pool is "stall every
     /// other test for 90 seconds".
     @Test func anExhaustedPoolBlocksInsteadOfCreatingMoreSchemas() async throws {
-        guard try await testSettings().backend == .postgres else {
-            // There is no pool on the sqlite lane, so the assertion that
-            // belongs here is the one that lane DOES owe: that this change
-            // never reached it. A silent return would be the skip this
-            // repository keeps getting burned by.
-            #expect(await MigratedPostgresSchemaPool.shared.statistics().schemasCreated == 0)
-            return
-        }
         let shortWait = Duration.milliseconds(750)
         try await withPrivatePool(capacity: 1, checkoutTimeout: shortWait) { pool, settings in
             let held = try await pool.checkOut(settings: settings, logLevel: .warning)

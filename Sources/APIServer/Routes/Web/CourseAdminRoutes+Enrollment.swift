@@ -27,7 +27,7 @@ extension CourseAdminRoutes {
             let course = try await APICourse.find(courseID, on: req.db),
             !course.isArchived
         else {
-            throw WebAssignmentError.noActiveCourse(action: "managing enrollments")
+            throw AppError.noActiveCourse(action: "managing enrollments")
         }
         // Enrollment is an instructor action. A TA passes the area gate, so the
         // form states the floor of the POST it feeds (#2743).
@@ -49,15 +49,7 @@ extension CourseAdminRoutes {
     @Sendable
     func setCourseEnrollmentMode(req: Request) async throws -> Response {
         struct Body: Content { var enrollmentMode: String? }
-        guard
-            let idString = req.parameters.get("courseID"),
-            let courseID = UUID(uuidString: idString),
-            let course = try await APICourse.find(courseID, on: req.db)
-        else {
-            throw WebAssignmentError.notFound(resource: "Course")
-        }
-        let caller = try req.auth.require(APIUser.self)
-        try await requireCourseWriteAccess(caller: caller, courseID: courseID, atLeast: .instructor, db: req.db)
+        let (course, _, _) = try await loadCourseForWrite(req, atLeast: .instructor)
         let body = try? await req.decodeContent(Body.self)
         course.enrollmentMode = CourseEnrollmentMode(rawValue: body?.enrollmentMode ?? "") ?? .open
         try await course.save(on: req.db)
@@ -81,7 +73,7 @@ extension CourseAdminRoutes {
             let courseID = UUID(uuidString: idString),
             let course = try await APICourse.find(courseID, on: req.db)
         else {
-            throw WebAssignmentError.invalidParameter(name: "courseID", reason: "Invalid course.")
+            throw AppError.invalidParameter(name: "courseID", reason: "Invalid course.")
         }
 
         // The archived-course block lives inside requireCourseWriteAccess —
@@ -139,33 +131,16 @@ extension CourseAdminRoutes {
             let userIDString = req.parameters.get("userID"),
             let userID = UUID(uuidString: userIDString)
         else {
-            throw WebAssignmentError.invalidParameter(
+            throw AppError.invalidParameter(
                 name: "courseID/userID", reason: "Invalid courseID or userID parameter")
         }
 
         let caller = try req.auth.require(APIUser.self)
         try await requireCourseWriteAccess(caller: caller, courseID: courseID, atLeast: .instructor, db: req.db)
 
-        if let enrollment = try await APICourseEnrollment.query(on: req.db)
-            .filter(\.$course.$id == courseID)
-            .filter(\.$userID == userID)
-            .first()
-        {
-            // Don't let a non-admin unenroll the course's last instructor (#417 Slice B).
-            if enrollment.role == .instructor {
-                try await ensureNotLastInstructor(
-                    caller: caller, courseID: courseID, removing: userID, db: req.db)
-            }
-            try await enrollment.delete(on: req.db)
-        }
-
-        await AuditLogger.record(
-            action: .enrollmentRemoved,
-            targetType: .enrollment,
-            targetID: userIDString,
-            metadata: ["course_id": courseIDString, "subject_user_id": userIDString],
-            on: req
-        )
+        // A non-admin cannot unenroll the course's last instructor (#417 Slice B).
+        try await CourseEnrollmentService.unenroll(
+            userID: userID, courseID: courseID, caller: caller, on: req)
         return req.redirect(to: "/instructor")
     }
 
@@ -186,7 +161,7 @@ extension CourseAdminRoutes {
             let userIDString = req.parameters.get("userID"),
             let userID = UUID(uuidString: userIDString)
         else {
-            throw WebAssignmentError.invalidParameter(
+            throw AppError.invalidParameter(
                 name: "courseID/userID", reason: "Invalid courseID or userID parameter")
         }
 
@@ -239,7 +214,7 @@ extension CourseAdminRoutes {
             let preIDString = req.parameters.get("preEnrollmentID"),
             let preID = UUID(uuidString: preIDString)
         else {
-            throw WebAssignmentError.invalidParameter(
+            throw AppError.invalidParameter(
                 name: "courseID/preEnrollmentID", reason: "Invalid courseID or preEnrollmentID parameter")
         }
 
@@ -284,7 +259,7 @@ extension CourseAdminRoutes {
             let preIDString = req.parameters.get("preEnrollmentID"),
             let preID = UUID(uuidString: preIDString)
         else {
-            throw WebAssignmentError.invalidParameter(
+            throw AppError.invalidParameter(
                 name: "courseID/preEnrollmentID", reason: "Invalid courseID or preEnrollmentID parameter")
         }
 
@@ -297,7 +272,7 @@ extension CourseAdminRoutes {
                 .filter(\.$course.$id == courseID)
                 .first()
         else {
-            throw WebAssignmentError.notFound(resource: "Pre-enrollment")
+            throw AppError.notFound(resource: "Pre-enrollment")
         }
 
         let body = try? await req.decodeContent(Body.self)
@@ -354,13 +329,14 @@ extension CourseAdminRoutes {
     // Self-serve staff invite (#417 Slice F). An instructor adds a co-instructor
     // or TA to *their* course by username or email. Unlike the CSV path — which
     // records a pre-enrollment that seeds to `.student` on first login — this
-    // materializes the account immediately (SSO-style placeholder, adopted on
-    // first login by username) and enrolls it at the chosen staff role, so the
-    // role sticks. Instructor-only: TAs are read-only on the roster, so this
+    // materializes the account immediately (an SSO-style placeholder, adopted
+    // on first login by username) and enrolls it at the chosen staff role, so
+    // the role sticks. Instructor-only: TAs are read-only on the roster, so this
     // uses the `.instructor` write floor rather than the `.ta` content floor.
     // An email address finds only an existing account: a placeholder needs the
-    // username that SSO reports. The admin course pages share this path
-    // (`provisionStaffEnrollment`).
+    // username that SSO reports. Under local sign-in only, no placeholder is
+    // made, because nothing can adopt one (#2770). The admin course pages
+    // share this path (`CourseEnrollmentService.inviteStaff`).
 
     @Sendable
     func instructorInviteStaff(req: Request) async throws -> Response {
@@ -373,7 +349,7 @@ extension CourseAdminRoutes {
             let courseIDString = req.parameters.get("courseID"),
             let courseID = UUID(uuidString: courseIDString)
         else {
-            throw WebAssignmentError.invalidParameter(name: "courseID", reason: "Invalid courseID parameter")
+            throw AppError.invalidParameter(name: "courseID", reason: "Invalid courseID parameter")
         }
 
         let caller = try req.auth.require(APIUser.self)
@@ -387,16 +363,12 @@ extension CourseAdminRoutes {
         guard let role = CourseRole(rawValue: body?.role ?? ""), role >= .ta else {
             return req.redirect(to: "/instructor/students?staffError=\(StaffFormError.role.rawValue)#add-staff-panel")
         }
-        let result: StaffProvisioningResult
         do {
-            result = try await provisionStaffEnrollment(
-                identifier: identifier, role: role, courseID: courseID,
-                allowPlaceholder: true, on: req.db)
+            try await CourseEnrollmentService.inviteStaff(
+                identifier: identifier, role: role, courseID: courseID, source: "staff_invite", on: req)
         } catch let error as StaffProvisioningError {
             return req.redirect(to: "/instructor/students?staffError=\(StaffFormError(error).rawValue)#add-staff-panel")
         }
-        await recordStaffProvisioning(
-            result, role: role, courseID: courseID, source: "staff_invite", on: req)
         return req.redirect(to: "/instructor/students?staffAdded=1")
     }
 
@@ -416,7 +388,7 @@ extension CourseAdminRoutes {
             let userIDString = req.parameters.get("userID"),
             let userID = UUID(uuidString: userIDString)
         else {
-            throw WebAssignmentError.invalidParameter(
+            throw AppError.invalidParameter(
                 name: "courseID/userID", reason: "Invalid courseID or userID parameter")
         }
         try await requireCourseWriteAccess(caller: caller, courseID: courseID, atLeast: .instructor, db: req.db)
@@ -424,34 +396,16 @@ extension CourseAdminRoutes {
         struct Body: Content { var role: String? }
         let body = try? await req.decodeContent(Body.self)
         guard let newRole = CourseRole(rawValue: body?.role ?? "") else {
-            throw WebAssignmentError.invalidParameter(name: "role", reason: "Unknown per-course role.")
+            throw AppError.invalidParameter(name: "role", reason: "Unknown per-course role.")
         }
 
+        // A non-admin cannot demote the course's last instructor (#417 Slice B).
         guard
-            let enrollment = try await APICourseEnrollment.query(on: req.db)
-                .filter(\.$course.$id == courseID)
-                .filter(\.$userID == userID)
-                .first()
+            try await CourseEnrollmentService.setRole(
+                newRole, userID: userID, courseID: courseID, caller: caller, on: req)
         else {
-            throw WebAssignmentError.notFound(resource: "Enrollment")
+            throw AppError.notFound(resource: "Enrollment")
         }
-        // Don't let a non-admin demote the course's last instructor (#417 Slice B).
-        if enrollment.role == .instructor, newRole != .instructor {
-            try await ensureNotLastInstructor(
-                caller: caller, courseID: courseID, removing: userID, db: req.db)
-        }
-        enrollment.role = newRole
-        try await enrollment.save(on: req.db)
-
-        await AuditLogger.record(
-            action: .enrollmentRoleChanged,
-            targetType: .enrollment,
-            targetID: userIDString,
-            metadata: [
-                "course_id": courseIDString, "subject_user_id": userIDString, "role": newRole.rawValue,
-            ],
-            on: req
-        )
         return req.redirect(to: "/instructor/students")
     }
 }

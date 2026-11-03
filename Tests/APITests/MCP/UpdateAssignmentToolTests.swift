@@ -28,8 +28,7 @@ import Vapor
     }
 
     @Test func opensAndPersists() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await enrolledAssignment(on: app, isOpen: false)
             let output = try await UpdateAssignmentTool().execute(
                 UpdateAssignmentTool.Input(assignmentPublicID: assignment.publicID, isOpen: true),
@@ -41,8 +40,7 @@ import Vapor
     }
 
     @Test func openingPastDueSetsOverride() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await enrolledAssignment(
                 on: app, dueAt: Date().addingTimeInterval(-3600), isOpen: false)
             _ = try await UpdateAssignmentTool().execute(
@@ -54,8 +52,7 @@ import Vapor
     }
 
     @Test func closesAndPersists() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await enrolledAssignment(on: app, isOpen: true)
             let output = try await UpdateAssignmentTool().execute(
                 UpdateAssignmentTool.Input(assignmentPublicID: assignment.publicID, isOpen: false),
@@ -67,8 +64,7 @@ import Vapor
     }
 
     @Test func setsPreviewVisibilityWithoutRequiringValidation() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             // Preview is a pure visibility flip: no validation gate.
             let assignment = try await enrolledAssignment(
                 on: app, validationStatus: "pending", isOpen: false)
@@ -84,8 +80,7 @@ import Vapor
     }
 
     @Test func allowsPreviewOnOpenAssignment() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             // No one-way restriction: open → preview is allowed.
             let assignment = try await enrolledAssignment(
                 on: app, validationStatus: "passed", isOpen: true)
@@ -100,8 +95,7 @@ import Vapor
     }
 
     @Test func refusesOpenUntilValidationPasses() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await enrolledAssignment(on: app, validationStatus: "pending")
             await #expect(throws: MCPToolError.self) {
                 _ = try await UpdateAssignmentTool().execute(
@@ -114,8 +108,7 @@ import Vapor
     }
 
     @Test func updatesTitle() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await enrolledAssignment(on: app)
             let output = try await UpdateAssignmentTool().execute(
                 UpdateAssignmentTool.Input(assignmentPublicID: assignment.publicID, title: "  Renamed  "),
@@ -127,8 +120,7 @@ import Vapor
     }
 
     @Test func setsFutureDueDateWithoutOverride() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await enrolledAssignment(on: app)
             _ = try await UpdateAssignmentTool().execute(
                 UpdateAssignmentTool.Input(
@@ -141,8 +133,7 @@ import Vapor
     }
 
     @Test func clearsDueDateWithEmptyString() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await enrolledAssignment(on: app, dueAt: Date().addingTimeInterval(3600))
             _ = try await UpdateAssignmentTool().execute(
                 UpdateAssignmentTool.Input(assignmentPublicID: assignment.publicID, dueAt: ""),
@@ -153,8 +144,7 @@ import Vapor
     }
 
     @Test func setsAndClearsOpenDate() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await enrolledAssignment(on: app)
             let setOutput = try await UpdateAssignmentTool().execute(
                 UpdateAssignmentTool.Input(
@@ -173,8 +163,7 @@ import Vapor
     }
 
     @Test func openingClearsPendingOpenDate() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await enrolledAssignment(on: app, isOpen: false)
             // Schedule a future open, then explicitly open now — the open date
             // must be consumed so the student gate and auto-open sweep agree.
@@ -190,8 +179,7 @@ import Vapor
     }
 
     @Test func rejectsInvalidOpenDate() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await enrolledAssignment(on: app)
             await #expect(throws: MCPToolError.self) {
                 _ = try await UpdateAssignmentTool().execute(
@@ -202,8 +190,7 @@ import Vapor
     }
 
     @Test func appliesTitleDueAndOpenTogether() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await enrolledAssignment(on: app, isOpen: false)
             let output = try await UpdateAssignmentTool().execute(
                 UpdateAssignmentTool.Input(
@@ -217,8 +204,7 @@ import Vapor
     }
 
     @Test func rejectsEmptyTitle() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await enrolledAssignment(on: app)
             await #expect(throws: MCPToolError.self) {
                 _ = try await UpdateAssignmentTool().execute(
@@ -229,8 +215,7 @@ import Vapor
     }
 
     @Test func rejectsInvalidDueDate() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await enrolledAssignment(on: app)
             await #expect(throws: MCPToolError.self) {
                 _ = try await UpdateAssignmentTool().execute(
@@ -241,8 +226,7 @@ import Vapor
     }
 
     @Test func requiresAtLeastOneField() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await enrolledAssignment(on: app)
             await #expect(throws: MCPToolError.self) {
                 _ = try await UpdateAssignmentTool().execute(
@@ -252,8 +236,7 @@ import Vapor
     }
 
     @Test func setsAndClearsSecretRevealEnabled() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await enrolledAssignment(on: app)
 
             let enabled = try await UpdateAssignmentTool().execute(
@@ -275,8 +258,7 @@ import Vapor
     }
 
     @Test func deniesWhenSubjectNotEnrolled() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let course = try await makeTestCourse(on: app, code: "CS246", name: "OOP")
             let courseID = try course.requireID()
             _ = try await makeTestUser(on: app, username: "tester", role: "instructor")
@@ -297,8 +279,7 @@ import Vapor
     // MARK: - solutionVisibility
 
     @Test func refusesSolutionRevealWithoutASolutionOnFile() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             // No validation status, no validation submission, no draft: there
             // is nothing to reveal, so enabling must fail loudly (the
             // student-facing routes only fail soft).
@@ -316,8 +297,7 @@ import Vapor
     }
 
     @Test func setsAndClearsSolutionVisibility() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await enrolledAssignment(on: app, validationStatus: "passed")
             let enabled = try await UpdateAssignmentTool().execute(
                 UpdateAssignmentTool.Input(
@@ -339,8 +319,7 @@ import Vapor
     }
 
     @Test func rejectsUnknownSolutionVisibility() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await enrolledAssignment(on: app, validationStatus: "passed")
             await #expect(throws: MCPToolError.self) {
                 _ = try await UpdateAssignmentTool().execute(
@@ -355,8 +334,7 @@ import Vapor
     // MARK: - passingThresholdPercent
 
     @Test func setsAndClearsPassingThreshold() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await enrolledAssignment(on: app)
             let set = try await UpdateAssignmentTool().execute(
                 UpdateAssignmentTool.Input(
@@ -378,8 +356,7 @@ import Vapor
     }
 
     @Test func rejectsOutOfRangePassingThreshold() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await enrolledAssignment(on: app)
             for bad in [-5, 101] {
                 await #expect(throws: MCPToolError.self) {

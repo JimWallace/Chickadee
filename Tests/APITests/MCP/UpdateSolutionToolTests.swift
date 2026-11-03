@@ -36,8 +36,7 @@ import Vapor
     }
 
     @Test func storesSolutionAsPendingValidationSubmission() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await fixture(on: app)
             let output = try await UpdateSolutionTool().execute(
                 UpdateSolutionTool.Input(
@@ -64,8 +63,7 @@ import Vapor
     }
 
     @Test func closesOpenAssignmentOnEdit() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await fixture(on: app)  // makeTestAssignment defaults isOpen: true
             #expect(assignment.isOpen)
             let output = try await UpdateSolutionTool().execute(
@@ -79,8 +77,7 @@ import Vapor
     }
 
     @Test func leavesClosedAssignmentClosed() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await fixture(on: app)
             assignment.visibility = .closed
             try await assignment.save(on: app.db)
@@ -95,8 +92,7 @@ import Vapor
     }
 
     @Test func roundTripsWithGetSolution() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await fixture(on: app)
             _ = try await UpdateSolutionTool().execute(
                 UpdateSolutionTool.Input(
@@ -111,8 +107,7 @@ import Vapor
     }
 
     @Test func rejectsNonObjectNotebook() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await fixture(on: app)
             await #expect(throws: MCPToolError.self) {
                 _ = try await UpdateSolutionTool().execute(
@@ -124,8 +119,7 @@ import Vapor
     }
 
     @Test func rejectsNotebookWithoutCells() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await fixture(on: app)
             await #expect(throws: MCPToolError.self) {
                 _ = try await UpdateSolutionTool().execute(
@@ -138,8 +132,7 @@ import Vapor
     }
 
     @Test func unknownAssignmentThrows() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             _ = try await fixture(on: app)
             await #expect(throws: MCPToolError.self) {
                 _ = try await UpdateSolutionTool().execute(
@@ -175,8 +168,7 @@ import Vapor
     }
 
     @Test func storesASourceFileSolutionUnderItsOwnName() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await cppFixture(on: app)
             let source = "#include <string>\nstd::string f() { return \"ok\"; }\n"
 
@@ -201,8 +193,7 @@ import Vapor
     }
 
     @Test func refusesANotebookForALanguageWithNoNotebookWorkflow() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await cppFixture(on: app)
             await #expect(throws: MCPToolError.self) {
                 _ = try await UpdateSolutionTool().execute(
@@ -215,8 +206,7 @@ import Vapor
     }
 
     @Test func refusesASolutionFilenameTheLanguageDoesNotRecognize() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await cppFixture(on: app)
             await #expect(throws: MCPToolError.self) {
                 _ = try await UpdateSolutionTool().execute(
@@ -229,8 +219,7 @@ import Vapor
     }
 
     @Test func refusesASolutionFilenameWithAPathSeparator() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await cppFixture(on: app)
             await #expect(throws: MCPToolError.self) {
                 _ = try await UpdateSolutionTool().execute(
@@ -243,8 +232,7 @@ import Vapor
     }
 
     @Test func refusesNeitherShapeAndBothShapes() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await fixture(on: app)
             await #expect(throws: MCPToolError.self) {
                 _ = try await UpdateSolutionTool().execute(

@@ -68,8 +68,7 @@ import VaporTesting
 
     @Test(arguments: cases)
     func staffAnywhereHonoursIncludingArchived(_ testCase: Case) async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let user = try await makeTestUser(on: app, username: "subject")
             for (index, enrollment) in testCase.enrollments.enumerated() {
                 let course = try await makeTestCourse(
@@ -86,8 +85,7 @@ import VaporTesting
 
     @Test(arguments: [false, true])
     func adminIsStaffWhatever(includingArchived: Bool) async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let admin = try await makeTestUser(on: app, username: "admin-subject", role: "admin")
             #expect(try await isStaffAnywhere(admin, includingArchived: includingArchived, db: app.db))
         }

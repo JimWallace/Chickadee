@@ -29,8 +29,7 @@ import Vapor
     }
 
     @Test func reordersAssignments() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let course = try await fixture(on: app)
             let courseID = try course.requireID()
             let a = try await makeAssignment(on: app, setupID: "s_a", title: "A", courseID: courseID)
@@ -58,8 +57,7 @@ import Vapor
     @Test func reorderRefusesSubset() async throws {
         // Per-section ordering names the whole section (#2713): a subset would
         // leave a named and an unnamed assignment at the same position.
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let course = try await fixture(on: app)
             let courseID = try course.requireID()
             let a = try await makeAssignment(on: app, setupID: "s_a", title: "A", courseID: courseID)
@@ -82,8 +80,7 @@ import Vapor
     }
 
     @Test func reorderRejectsDuplicateID() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let course = try await fixture(on: app)
             let courseID = try course.requireID()
             let a = try await makeAssignment(on: app, setupID: "s_a", title: "A", courseID: courseID)
@@ -98,8 +95,7 @@ import Vapor
     }
 
     @Test func reorderRejectsInvalidID() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             _ = try await fixture(on: app)
             await #expect(throws: MCPToolError.self) {
                 _ = try await ReorderAssignmentsTool().execute(
@@ -110,8 +106,7 @@ import Vapor
     }
 
     @Test func deniesUnenrolledCourse() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             _ = try await fixture(on: app)  // tester enrolled only in CS246
             let other = try await makeTestCourse(on: app, code: "CS999", name: "Other")
             let foreign = try await makeAssignment(

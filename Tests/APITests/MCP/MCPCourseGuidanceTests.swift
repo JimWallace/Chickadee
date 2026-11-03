@@ -73,8 +73,7 @@ import Vapor
     }
 
     @Test func staffCoursesWithTextContributeGuidanceInCodeOrder() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let user = try await makeTestUser(on: app, username: "guidance_user")
             let userID = try user.requireID()
 
@@ -104,8 +103,7 @@ import Vapor
     }
 
     @Test func uncustomizedAuthorableCoursesResolveToTheDefault() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let user = try await makeTestUser(on: app, username: "guidance_user")
             let userID = try user.requireID()
 
@@ -125,8 +123,7 @@ import Vapor
     }
 
     @Test func coursesWithoutAuthoringAuthorityResolveToNothing() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let user = try await makeTestUser(on: app, username: "guidance_user")
             let userID = try user.requireID()
 
@@ -149,8 +146,7 @@ import Vapor
     }
 
     @Test func adminQualifiesThroughAnyEnrollment() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             // Admins bypass the per-course role floor on writes
             // (evaluateCourseWrite), so a student-role enrollment still counts
             // for them — but enrollment is still required.
@@ -177,8 +173,7 @@ import Vapor
     }
 
     @Test func unknownSubjectResolvesToNoGuidance() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let guidance = try await mcpCourseGuidance(forSubject: "nobody_here", db: app.db)
             #expect(guidance.isEmpty)
         }
@@ -204,8 +199,7 @@ import Vapor
     }
 
     @Test func initializeCarriesPerCourseGuidanceForTheSubject() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let user = try await makeTestUser(on: app, username: "guidance_user")
             let course = try await makeTestCourse(on: app, code: "CS136")
             course.mcpInstructions = "Refer to the textbook as CP4."
@@ -220,8 +214,7 @@ import Vapor
     }
 
     @Test func initializeWithoutGuidanceServesTheHouseTextExactly() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             _ = try await makeTestUser(on: app, username: "guidance_user")
             let instructions = try await initializeInstructions(app, subject: "guidance_user")
             #expect(instructions == MCPServerInstructions.text)
@@ -231,8 +224,7 @@ import Vapor
     @Test func initializeIsUnchangedForACourseStillOnTheDefault() async throws {
         // An authorable course that has not customized its voice must not add
         // a redundant copy of the default to the handshake.
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let user = try await makeTestUser(on: app, username: "guidance_user")
             let course = try await makeTestCourse(on: app, code: "CS136")
             try await enroll(try user.requireID(), in: course, as: .instructor, on: app)

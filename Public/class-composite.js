@@ -1,3 +1,4 @@
+// @ts-check
 // Public/class-composite.js
 //
 // Wires the class-composite view (docs/class-composite.md, slice 5). Every

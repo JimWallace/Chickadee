@@ -8,9 +8,8 @@ import Vapor
 // Tests that mutate process env vars must wrap their body in
 // `withTestEnvironment`, which acquires the shared async env lock.  The
 // same lock serializes against `configureTestDatabase`'s env read and
-// against every other env-touching suite, so the SQLite api-tests job
-// doesn't see a transient `TEST_DATABASE_BACKEND=postgres` from a
-// concurrently-running test.
+// against every other env-touching suite, so no test sees a transient
+// `TEST_DATABASE_*` value from a concurrently-running test.
 @Suite(.serialized)
 struct APIServerAppTests {
 
@@ -193,7 +192,7 @@ struct APIServerAppTests {
             to: URL(fileURLWithPath: wordlistPath), atomically: true, encoding: .utf8
         )
 
-        let resolved = resolveStartupWorkerSecret(
+        let resolved = try resolveStartupWorkerSecret(
             cliWorkerSecret: " cli-secret ",
             workerSecretFilePath: secretPath,
             workerSecretWordlistPath: wordlistPath
@@ -216,7 +215,7 @@ struct APIServerAppTests {
         try await withTestEnvironment([
             "RUNNER_SHARED_SECRET": "env-secret"
         ]) {
-            let resolved = resolveStartupWorkerSecret(
+            let resolved = try resolveStartupWorkerSecret(
                 cliWorkerSecret: nil,
                 workerSecretFilePath: secretPath,
                 workerSecretWordlistPath: wordlistPath
@@ -240,7 +239,7 @@ struct APIServerAppTests {
         try await withTestEnvironment([
             "RUNNER_SHARED_SECRET": nil
         ]) {
-            let resolved = resolveStartupWorkerSecret(
+            let resolved = try resolveStartupWorkerSecret(
                 cliWorkerSecret: nil,
                 workerSecretFilePath: secretPath,
                 workerSecretWordlistPath: wordlistPath
@@ -261,7 +260,7 @@ struct APIServerAppTests {
         try await withTestEnvironment([
             "RUNNER_SHARED_SECRET": nil
         ]) {
-            let resolved = resolveStartupWorkerSecret(
+            let resolved = try resolveStartupWorkerSecret(
                 cliWorkerSecret: nil,
                 workerSecretFilePath: secretPath,
                 workerSecretWordlistPath: wordlistPath
@@ -347,7 +346,7 @@ struct APIServerAppTests {
         try await withTestEnvironment([
             "RUNNER_SHARED_SECRET": "cli-arg-secret"
         ]) {
-            let resolved = resolveStartupWorkerSecret(
+            let resolved = try resolveStartupWorkerSecret(
                 cliWorkerSecret: "cli-arg-secret",
                 workerSecretFilePath: secretPath,
                 workerSecretWordlistPath: wordlistPath

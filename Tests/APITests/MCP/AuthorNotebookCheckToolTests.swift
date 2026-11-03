@@ -29,8 +29,7 @@ import Vapor
     }
 
     @Test func createsADataFrameShapeCheckAndCloses() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await fixture(on: app)
             #expect(assignment.visibility == .open)
 
@@ -54,8 +53,7 @@ import Vapor
     }
 
     @Test func replacesAnExistingCheckByID() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await fixture(on: app)
             _ = try await AuthorNotebookCheckTool().execute(
                 .init(
@@ -81,8 +79,7 @@ import Vapor
     }
 
     @Test func figureCountCheck() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await fixture(on: app)
             let out = try await AuthorNotebookCheckTool().execute(
                 .init(assignmentPublicID: assignment.publicID, id: "figs", kind: "figure_count", minFigures: 2),
@@ -94,8 +91,7 @@ import Vapor
     }
 
     @Test func setsCheckTimeLimitAndSurfacesInGetSuite() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await fixture(on: app)
             _ = try await AuthorNotebookCheckTool().execute(
                 .init(
@@ -117,8 +113,7 @@ import Vapor
     }
 
     @Test func rejectsOutOfRangeCheckTimeLimit() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await fixture(on: app)
             await #expect(throws: MCPToolError.self) {
                 _ = try await AuthorNotebookCheckTool().execute(
@@ -131,8 +126,7 @@ import Vapor
     }
 
     @Test func rejectsUnknownKind() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await fixture(on: app)
             await #expect(throws: MCPToolError.self) {
                 _ = try await AuthorNotebookCheckTool().execute(
@@ -143,8 +137,7 @@ import Vapor
     }
 
     @Test func rejectsMalformedSpec() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await fixture(on: app)
             // data_frame_shape requires variable + expectedRows + expectedCols; omit them.
             await #expect(throws: MCPToolError.self) {
@@ -156,8 +149,7 @@ import Vapor
     }
 
     @Test func setsCheckFailureDetailAndSurfacesInGetSuite() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await fixture(on: app)
             _ = try await AuthorNotebookCheckTool().execute(
                 .init(

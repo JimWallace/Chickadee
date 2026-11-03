@@ -31,8 +31,7 @@ import Vapor
     }
 
     @Test func setsGateWithoutClosing() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await fixture(on: app)
             #expect(assignment.visibility == .open)
 
@@ -50,8 +49,7 @@ import Vapor
     }
 
     @Test func clearsGateOnNull() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await fixture(on: app)
             _ = try await SetMinimumRunnerVersionTool().execute(
                 .init(assignmentPublicID: assignment.publicID, minimumRunnerVersion: "0.5.0"),
@@ -72,8 +70,7 @@ import Vapor
     }
 
     @Test func clearsGateOnBlankString() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await fixture(on: app)
             _ = try await SetMinimumRunnerVersionTool().execute(
                 .init(assignmentPublicID: assignment.publicID, minimumRunnerVersion: "0.5.0"),
@@ -86,8 +83,7 @@ import Vapor
     }
 
     @Test func rejectsUnparseableVersion() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await fixture(on: app)
             await #expect(throws: MCPToolError.self) {
                 _ = try await SetMinimumRunnerVersionTool().execute(
@@ -98,8 +94,7 @@ import Vapor
     }
 
     @Test func deniesTABelowInstructorFloor() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await fixture(on: app, role: .ta)
             await #expect(throws: MCPToolError.self) {
                 _ = try await SetMinimumRunnerVersionTool().execute(
@@ -110,8 +105,7 @@ import Vapor
     }
 
     @Test func readToolsEchoTheGate() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await fixture(on: app)
             _ = try await SetMinimumRunnerVersionTool().execute(
                 .init(assignmentPublicID: assignment.publicID, minimumRunnerVersion: "0.5.0"),

@@ -74,7 +74,7 @@ import Testing
     func aStampedResultAgreesWithItsBlob(json: String) {
         let result = APIResult(id: "r", submissionID: "s")
         result.stampGradeFields(from: json)
-        #expect(result.gradePercentValue == gradePercentFromCollectionJSON(json))
+        #expect(result.gradePercentValue == CollectionGradeFields(json: json)?.gradePercent)
         #expect(result.gradePointsValue == CollectionGradeFields(json: json)?.gradePoints)
         #expect(result.gradeTotalPointsValue == CollectionGradeFields(json: json)?.gradeTotalPoints)
     }

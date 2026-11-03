@@ -57,8 +57,7 @@ import VaporTesting
     // MARK: - Start, end, reopen
 
     @Test func aReopenKeepsTheRowAndDrawsANewSecret() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let f = try await fixture(on: app)
             let start = Date(timeIntervalSince1970: 1_000_000)
             let first = try await ActivitySessionStore.open(
@@ -79,8 +78,7 @@ import VaporTesting
     }
 
     @Test func startingAnOpenSessionKeepsItsSecret() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let f = try await fixture(on: app)
             let start = Date(timeIntervalSince1970: 1_000_000)
             let first = try await ActivitySessionStore.open(
@@ -95,8 +93,7 @@ import VaporTesting
     // MARK: - Joining
 
     @Test func joiningRecordsAttendanceAndPlacesAStudentInNoGroup() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let f = try await fixture(on: app)
             let session = try await ActivitySessionStore.open(
                 assignmentID: f.assignmentID, groupID: f.labB, by: nil, on: app.db)
@@ -112,8 +109,7 @@ import VaporTesting
     }
 
     @Test func aMemberCannotJoinAnotherLabsSession() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let f = try await fixture(on: app)
             let session = try await ActivitySessionStore.open(
                 assignmentID: f.assignmentID, groupID: f.labB, by: nil, on: app.db)
@@ -127,8 +123,7 @@ import VaporTesting
     }
 
     @Test func aWrongCodeAnOldCodeAClosedSessionAndAnOutsiderAreRefused() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let f = try await fixture(on: app)
             let now = Date()
             let session = try await ActivitySessionStore.open(
@@ -155,8 +150,7 @@ import VaporTesting
     }
 
     @Test func turningTheFlagOffEndsTheSessions() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let f = try await fixture(on: app)
             let labA = try await ActivitySessionStore.open(
                 assignmentID: f.assignmentID, groupID: f.labA, by: nil, on: app.db)
@@ -180,8 +174,7 @@ import VaporTesting
     }
 
     @Test func removingAGroupEndsItsSession() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let f = try await fixture(on: app)
             let labB = try await ActivitySessionStore.open(
                 assignmentID: f.assignmentID, groupID: f.labB, by: nil, on: app.db)
@@ -196,8 +189,7 @@ import VaporTesting
     // MARK: - The student's session
 
     @Test func onlyAStudentWhoJoinedPlays() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let f = try await fixture(on: app)
             func current(_ user: UUID, at date: Date = Date()) async throws -> UUID? {
                 try await ActivitySessionStore.currentSession(
@@ -218,8 +210,7 @@ import VaporTesting
     }
 
     @Test func aSecondJoinMovesTheStudentBackAndAnEarlierLabsJoinDoesNotCount() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let f = try await fixture(on: app)
             let start = Date(timeIntervalSince1970: 1_000_000)
             func at(_ offset: TimeInterval) -> Date { start.addingTimeInterval(offset) }
@@ -257,8 +248,7 @@ import VaporTesting
     // MARK: - Removal and wrong codes
 
     @Test func aRemovedStudentStopsPlayingAndCannotRejoinThisRun() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let f = try await fixture(on: app)
             let start = Date().addingTimeInterval(-60)
             let session = try await ActivitySessionStore.open(
@@ -290,8 +280,7 @@ import VaporTesting
     }
 
     @Test func removingAStudentUndoesTheGroupTheirJoinGaveThem() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let f = try await fixture(on: app)
             let session = try await ActivitySessionStore.open(
                 assignmentID: f.assignmentID, groupID: f.labB, by: nil, on: app.db)
@@ -312,8 +301,7 @@ import VaporTesting
     }
 
     @Test func tooManyWrongCodesStopJoiningForAWhile() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let f = try await fixture(on: app)
             let session = try await ActivitySessionStore.open(
                 assignmentID: f.assignmentID, groupID: f.labA, by: nil, on: app.db)
@@ -336,8 +324,7 @@ import VaporTesting
     // MARK: - Data export
 
     @Test func aStudentsDataExportListsTheSessionsTheyJoined() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let f = try await fixture(on: app)
             let session = try await ActivitySessionStore.open(
                 assignmentID: f.assignmentID, groupID: f.labA, by: nil, on: app.db)

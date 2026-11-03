@@ -30,8 +30,7 @@ import Vapor
     }
 
     @Test func createsAssignmentWithNotebook() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             try await enrolledCourse(on: app)
             let output = try await CreateAssignmentTool().execute(
                 CreateAssignmentTool.Input(
@@ -63,8 +62,7 @@ import Vapor
     }
 
     @Test func emptyTitleThrows() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             try await enrolledCourse(on: app)
             await #expect(throws: MCPToolError.self) {
                 _ = try await CreateAssignmentTool().execute(
@@ -76,8 +74,7 @@ import Vapor
     }
 
     @Test func unknownCourseThrows() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             try await enrolledCourse(on: app)
             await #expect(throws: MCPToolError.self) {
                 _ = try await CreateAssignmentTool().execute(
@@ -89,8 +86,7 @@ import Vapor
     }
 
     @Test func rejectsNotebookWithoutCells() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             try await enrolledCourse(on: app)
             await #expect(throws: MCPToolError.self) {
                 _ = try await CreateAssignmentTool().execute(
@@ -167,8 +163,7 @@ import Vapor
     }
 
     @Test func anUnknownLanguageIsRejectedBeforeAnythingIsCreated() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             try await enrolledCourse(on: app)
             await #expect(throws: MCPToolError.self) {
                 _ = try await CreateAssignmentTool().execute(
@@ -189,8 +184,7 @@ import Vapor
     /// on: it has to be distinguishable from an assignment nobody has been
     /// asked about, because every downstream refusal reads that difference.
     @Test func declaringNoneRecordsAnAnsweredQuestionWithNoLanguage() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             try await enrolledCourse(on: app)
             let output = try await CreateAssignmentTool().execute(
                 CreateAssignmentTool.Input(

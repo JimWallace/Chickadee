@@ -29,8 +29,7 @@ import Vapor
     }
 
     @Test func returnsNotebookWithCells() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await fixture(on: app)
             // Replace the default empty notebook with a two-cell one.
             try twoCellNotebook.write(
@@ -53,8 +52,7 @@ import Vapor
     }
 
     @Test func returnsEmptyCellsForBlankNotebook() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await fixture(on: app)
             let output = try await GetNotebookTool().execute(
                 GetNotebookTool.Input(assignmentPublicID: assignment.publicID), mcpContext(app))
@@ -63,8 +61,7 @@ import Vapor
     }
 
     @Test func unknownAssignmentThrows() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             _ = try await fixture(on: app)
             await #expect(throws: MCPToolError.self) {
                 _ = try await GetNotebookTool().execute(
@@ -74,8 +71,7 @@ import Vapor
     }
 
     @Test func throwsWhenNoNotebook() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             // Setup without a flat notebook and only an empty zip → nothing to return.
             let assignment = try await fixture(on: app, withNotebook: false)
             await #expect(throws: MCPToolError.self) {

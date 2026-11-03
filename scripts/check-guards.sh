@@ -33,6 +33,7 @@ set -uo pipefail
 #     guard="scripts/check-design-tokens.sh"   # the guard to run
 #     args="--check"                           # optional: its arguments
 #     files="Public/styles.css"                # files apply() modifies
+#     created="Sources/New.swift"              # optional: files apply() adds
 #     description="a raw hex colour in a rule body"
 #     expect="colour literal"                  # substring its output must have
 #     apply() { ... }                          # introduce the defect
@@ -40,6 +41,10 @@ set -uo pipefail
 # `args` exists for the guards that are a check only under a flag: run bare,
 # `generate-js-constants.sh` rewrites the file a fixture just broke, and
 # `ci-compose-env.sh` writes a .env into the repository root.
+#
+# `created` exists for the rules about a file name: the defect is a new file,
+# which no backup can restore. Each path must not exist before apply(), and
+# it is deleted on every exit path, as `files` are restored.
 #
 # Adding a rule to a guard means adding a fixture. That is the price of the
 # rule, and it is the cheapest possible: proving once that the thing you just
@@ -51,11 +56,16 @@ cd "$repo_root"
 fixture_dir="scripts/guard-fixtures"
 backup_dir="$(mktemp -d)"
 current_files=""
+current_created=""
 status=0
 passed=0
 failed=0
 
 restore_current() {
+    for f in $current_created; do
+        rm -f "$f"
+    done
+    current_created=""
     [ -z "$current_files" ] && return 0
     for f in $current_files; do
         if [ -f "$backup_dir/$(echo "$f" | tr '/' '_')" ]; then
@@ -117,15 +127,17 @@ for fixture in "${fixtures[@]}"; do
     # variables or an apply() into the next.
     meta="$(
         args=""
+        created=""
         # shellcheck disable=SC1090
         source "$fixture"
-        printf '%s\n%s\n%s\n%s\n%s\n' "$guard" "$files" "$description" "$expect" "$args"
+        printf '%s\n%s\n%s\n%s\n%s\n%s\n' "$guard" "$files" "$description" "$expect" "$args" "$created"
     )"
     guard="$(sed -n 1p <<<"$meta")"
     files="$(sed -n 2p <<<"$meta")"
     description="$(sed -n 3p <<<"$meta")"
     expect="$(sed -n 4p <<<"$meta")"
     args="$(sed -n 5p <<<"$meta")"
+    created="$(sed -n 6p <<<"$meta")"
 
     if [ ! -x "$guard" ] && [ ! -f "$guard" ]; then
         echo "✘ $name — names a guard that does not exist: $guard"
@@ -161,6 +173,12 @@ for fixture in "${fixtures[@]}"; do
         echo "note: git cannot report file status here; relying on backup/restore."
         git_mute_warned=1
     fi
+    for f in $created; do
+        if [ -e "$f" ]; then
+            dirty="$f (exists, but the fixture creates it)"
+            break
+        fi
+    done
     if [ -n "$dirty" ]; then
         echo "✘ $name — refusing to run: $dirty"
         echo "    This fixture edits and restores that file; commit or stash first."
@@ -171,6 +189,7 @@ for fixture in "${fixtures[@]}"; do
         cp "$f" "$backup_dir/$(echo "$f" | tr '/' '_')"
     done
     current_files="$files"
+    current_created="$created"
 
     ( # shellcheck disable=SC1090
       source "$fixture"; apply )

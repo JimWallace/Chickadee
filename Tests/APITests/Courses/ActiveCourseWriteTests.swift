@@ -96,8 +96,7 @@ import VaporTesting
     // MARK: - evaluateCourseWrite returns the course it loads
 
     @Test func evaluateCourseWriteReturnsTheLoadedCourse() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let course = try await makeTestCourse(on: app, code: "CS136")
             let courseID = try course.requireID()
             let instructor = try await makeTestUser(on: app, username: "prof", role: "instructor")
@@ -117,8 +116,7 @@ import VaporTesting
     }
 
     @Test func evaluateCourseWriteNamesEachDenial() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let course = try await makeTestCourse(on: app, code: "CS136")
             let courseID = try course.requireID()
             let archived = try await makeTestCourse(on: app, code: "CS001", archived: true)
@@ -143,8 +141,7 @@ import VaporTesting
     }
 
     @Test func adminBypassLoadsTheCourseAndAllowsAMissingOne() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let course = try await makeTestCourse(on: app, code: "CS136")
             let admin = try await makeTestUser(on: app, username: "boss", role: "admin")
 

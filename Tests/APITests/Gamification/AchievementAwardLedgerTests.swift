@@ -287,8 +287,7 @@ import VaporTesting
     }
 
     @Test func deletingTheCourseDeletesItsAwards() async throws {
-        let app = try await makeTestApp(prefix: "chickadee-delete-awards")
-        try await withApp(app) { app in
+        try await withTestApp(prefix: "chickadee-delete-awards") { app in
             let cookie = try await loginAsAdmin("delete_awards_admin", on: app)
             let student = try await makeTestUser(on: app, username: "awards_student", role: "student")
             let course = try await makeTestCourse(on: app, code: "AWD101", name: "Awards", archived: true)

@@ -56,7 +56,7 @@ on a file there.
 
 | File | Holds |
 |---|---|
-| `Sources/APIServer/CLAUDE.md` | REST API, auth and roles in detail, `AppConfig`, runner trust, courses and deadlines, class goals, authoring editors, pattern families, browser isolation |
+| `Sources/APIServer/CLAUDE.md` | Where shared code goes (`Helpers/`, `Services/`, `Utilities/`), REST API, auth and roles in detail, `AppConfig`, runner trust, courses and deadlines, class goals, authoring editors, pattern families, browser isolation |
 | `Sources/APIServer/MCP/CLAUDE.md` | MCP server, the student-data wall, derived language and tier prose |
 | `Sources/APIServer/Views/CLAUDE.md` | Elementary pages, UI and stylesheet rules (also for `Public/styles.css` and `Public/*.js`), the `ui-review` agent |
 | `Sources/Worker/CLAUDE.md` | Sandbox boundary, test setup cache, runner flags |
@@ -443,7 +443,7 @@ The reason for each rule is in
   use `CustomExecutionTrait`, a hand-rolled trait, or an experimental API.
 - **`@Suite struct` by default.** Use a `final class` with `init` / `deinit` for
   expensive per-test state, and wrap each Vapor test body in `withApp(app)`.
-  DB-backed suite clusters use the `with*App` helpers.
+  A test that needs the standard app for one body uses `withTestApp { app in }`.
 - **`.serialized` on a suite that touches the database or the environment.**
   Across suites, use `withAsyncEnvLock` or `withMockURLProtocolLock`.
 - **No force unwraps in tests.** Use `try #require(value)`.

@@ -15,7 +15,7 @@ import VaporTesting
         // needs one (accessing request.db with no default database configured
         // is a process-killing fatalError on Linux, not a catchable throw).
         do {
-            try configureDatabase(app, settings: .sqliteInMemory())
+            try await configureEmptyPostgresTestSchema(app)
             app.migrations.add(CreateWorkerNonces())
             try await app.autoMigrate()
         } catch {

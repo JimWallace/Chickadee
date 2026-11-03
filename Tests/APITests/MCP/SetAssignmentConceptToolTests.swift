@@ -37,8 +37,7 @@ import Vapor
     }
 
     @Test func setsAndClearsWithoutClosing() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await fixture(on: app)
             #expect(assignment.visibility == .open)
 
@@ -59,8 +58,7 @@ import Vapor
     }
 
     @Test func refusesAnUnknownConceptAndChangesNothing() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await fixture(on: app)
             _ = try await SetAssignmentConceptTool().execute(
                 .init(assignmentPublicID: assignment.publicID, concept: "binary"), mcpContext(app))
@@ -73,8 +71,7 @@ import Vapor
     }
 
     @Test func deniesTABelowInstructorFloor() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await fixture(on: app, role: .ta)
             await #expect(throws: MCPToolError.self) {
                 _ = try await SetAssignmentConceptTool().execute(
@@ -85,8 +82,7 @@ import Vapor
     }
 
     @Test func deniesAnUnenrolledCaller() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await fixture(on: app, enroll: false)
             await #expect(throws: MCPToolError.self) {
                 _ = try await SetAssignmentConceptTool().execute(
@@ -96,8 +92,7 @@ import Vapor
     }
 
     @Test func getAssignmentEchoesTheConcept() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await fixture(on: app)
             let before = try await GetAssignmentTool().execute(
                 .init(assignmentPublicID: assignment.publicID), mcpContext(app))

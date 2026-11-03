@@ -16,8 +16,7 @@ import VaporTesting
     private let resource = "https://chickadee.example/mcp"
 
     @Test func mcpReadsUseTheDefaultPoolUntilADedicatedOneIsConfigured() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             #expect(app.mcpDatabaseID == nil)
             app.usesDedicatedMCPDatabase = true
             #expect(app.mcpDatabaseID == .mcp)

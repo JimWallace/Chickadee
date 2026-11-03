@@ -1,7 +1,7 @@
 // Unit tests for the TA lock in Public/section-items-dnd.js (#2743).
 //
 // Moving an assignment to another section is an instructor action
-// (`DashboardRoleFloor.manageSections`). The dashboard marks the page
+// (`CourseRoleFloor.manageSections`). The dashboard marks the page
 // `data-assignment-moves="locked"` for a viewer who may not do it. Then an
 // assignment row stays in its own section, a content item still moves, and
 // the within-section reorder (TA and above) still runs.

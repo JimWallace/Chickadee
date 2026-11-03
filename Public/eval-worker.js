@@ -1,3 +1,4 @@
+// @ts-check
 // Public/eval-worker.js
 //
 // The pattern-family editor's auto-compute substrate, for every in-page kernel
@@ -111,6 +112,7 @@ importScripts('/eval-protocol-shared.js' + _suffix);
 // Each language names its own scripts, so no URL is built from the query.
 _evaluator.scripts.forEach(function (script) { importScripts(script + _suffix); });
 
+/** @type {any} */
 var _eval = self[_evaluator.shared];
 var _config = _evaluator.config(_eval);
 _config.label = _evaluator.label;

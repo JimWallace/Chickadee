@@ -4,8 +4,7 @@
 // latest-pick + count, the best-percent fold (both grade branches, the
 // half-away-from-zero boundary, the nil-columns row), and the scoping rules
 // (other users, validation runs, out-of-scope setups). These run the real
-// SQL on whichever driver the suite is configured for — SQLite in the
-// default lane, Postgres in api-tests-postgres.
+// SQL on Postgres.
 
 import Core
 import Fluent

@@ -42,7 +42,7 @@ enum SectionInputsService {
     /// no section with `sectionID` exists.
     static func current(setup: APITestSetup, sectionID: String) throws -> Inputs? {
         guard let manifest = setup.decodedManifest() else {
-            throw WebAssignmentError.internalFailure(reason: "Manifest is not valid JSON.")
+            throw AppError.internalFailure(reason: "Manifest is not valid JSON.")
         }
         guard let section = manifest.sections.first(where: { $0.id == sectionID }) else { return nil }
         return Inputs(variables: section.variables, expressions: section.expressions)
@@ -64,7 +64,7 @@ enum SectionInputsService {
         seedDB: any Database
     ) async throws {
         guard let manifest = setup.decodedManifest() else {
-            throw WebAssignmentError.internalFailure(reason: "Manifest is not valid JSON.")
+            throw AppError.internalFailure(reason: "Manifest is not valid JSON.")
         }
 
         // 1. Per-row validation across this section's vars + expressions.
@@ -96,37 +96,37 @@ enum SectionInputsService {
         var seenNames: Set<String> = []
         for v in variables {
             guard isValidSharedName(v.name, language: language) else {
-                throw WebAssignmentError.unprocessable(
+                throw AppError.unprocessable(
                     reason: "Section input name '\(v.name)' is not valid here — expected "
                         + sharedNameExpectation(for: language) + ".")
             }
             guard v.name != "seed" else {
-                throw WebAssignmentError.unprocessable(
+                throw AppError.unprocessable(
                     reason: "'seed' is reserved for Chickadee's personalization seed.")
             }
             guard seenNames.insert(v.name).inserted else {
-                throw WebAssignmentError.unprocessable(
+                throw AppError.unprocessable(
                     reason: "Duplicate section input name '\(v.name)'.")
             }
         }
         for e in expressions {
             guard isValidSharedName(e.name, language: language) else {
-                throw WebAssignmentError.unprocessable(
+                throw AppError.unprocessable(
                     reason: "Section expression name '\(e.name)' is not valid here — expected "
                         + sharedNameExpectation(for: language) + ".")
             }
             guard e.name != "seed" else {
-                throw WebAssignmentError.unprocessable(
+                throw AppError.unprocessable(
                     reason: "'seed' is reserved for Chickadee's personalization seed.")
             }
             let trimmed = e.expression.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !trimmed.isEmpty else {
-                throw WebAssignmentError.unprocessable(
+                throw AppError.unprocessable(
                     reason: "Section expression '\(e.name)' has an empty body. "
                         + "Provide a Python expression after the leading `=`.")
             }
             guard seenNames.insert(e.name).inserted else {
-                throw WebAssignmentError.unprocessable(
+                throw AppError.unprocessable(
                     reason: "Duplicate section input name '\(e.name)'. "
                         + "Names must be unique across literal values and expressions.")
             }
@@ -150,7 +150,7 @@ enum SectionInputsService {
             for e in section.expressions { otherNames.insert(e.name) }
         }
         for n in seenNames where otherNames.contains(n) {
-            throw WebAssignmentError.unprocessable(
+            throw AppError.unprocessable(
                 reason: "Section input '\(n)' is already used by a global input or another section. "
                     + "Names share one namespace across the assignment; rename to avoid shadowing.")
         }
@@ -184,7 +184,7 @@ enum SectionInputsService {
         // content and inputs could genuinely precede the first graded script;
         // creation declares now, so there is nothing to wait for.
         guard let language else {
-            throw WebAssignmentError.unprocessable(reason: undeclaredLanguageExpressionMessage)
+            throw AppError.unprocessable(reason: undeclaredLanguageExpressionMessage)
         }
 
         let seedHex = try await AssignmentSeedStore.ensureSeed(
@@ -206,17 +206,17 @@ enum SectionInputsService {
                 language: language)
         } catch let PersonalizationEvaluatorError.nonZeroExit(_, stderr) {
             let tail = stderr.split(separator: "\n").suffix(3).joined(separator: " ")
-            throw WebAssignmentError.unprocessable(
+            throw AppError.unprocessable(
                 reason: "One of your section expressions failed to evaluate: \(tail). "
                     + "Fix the expression(s) and save again.")
         } catch PersonalizationEvaluatorError.timedOut {
-            throw WebAssignmentError.unprocessable(
+            throw AppError.unprocessable(
                 reason:
                     "Expression evaluation timed out "
                     + "(>\(PersonalizationEvaluator.defaultTimeoutSeconds(for: language))s). "
                     + "Simplify the expressions or move heavy lifting into a support module.")
         } catch {
-            throw WebAssignmentError.internalFailure(reason: "Expression evaluator failed: \(error)")
+            throw AppError.internalFailure(reason: "Expression evaluator failed: \(error)")
         }
     }
 
@@ -230,7 +230,7 @@ enum SectionInputsService {
     ) async throws {
         try await mutateManifest(setup: setup, on: db) { props in
             guard let idx = props.sections.firstIndex(where: { $0.id == sectionID }) else {
-                throw WebAssignmentError.notFound(resource: "Section '\(sectionID)'")
+                throw AppError.notFound(resource: "Section '\(sectionID)'")
             }
             props.sections[idx].variables = inputs.variables
             props.sections[idx].expressions = inputs.expressions

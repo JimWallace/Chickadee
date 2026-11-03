@@ -7,7 +7,7 @@
 //   - AssignmentDraftHelpers.swift (now in Helpers/, #2142)
 //   - AssignmentRequirementHelpers.swift
 //   - AssignmentSlugHelpers.swift (now in Helpers/, #2143)
-//   - ManifestFileHelpers.swift (now in Helpers/, #1726)
+//   - ManifestJSON.swift (now in Services/, #1726, #2775)
 //   - MultipartHelpers.swift
 //   - NotebookScaffoldHelpers.swift (now in Helpers/, #2142)
 //   - RunnerValidationHelpers.swift (now Services/RunnerValidationService.swift, #2140)
@@ -124,12 +124,6 @@ func dueAtLocalInputString(_ date: Date?) -> String {
     return fmt.string(from: date)
 }
 
-/// The grade percent recorded on a submission result: weighted when present,
-/// else passed tests over all tests.
-func gradePercentFromCollectionJSON(_ collectionJSON: String) -> Int? {
-    CollectionGradeFields(json: collectionJSON)?.gradePercent
-}
-
 /// Formats a (possibly fractional) points value for display: whole numbers show
 /// without a decimal ("3"), partial credit shows up to two trimmed decimals
 /// ("2.75", "2.5").
@@ -177,7 +171,7 @@ private func loadAssignmentAndSetup(_ req: Request) async throws -> (APIAssignme
     guard
         let assignment = try await assignmentByPublicID(idStr, on: req.db),
         let setup = try await APITestSetup.find(assignment.testSetupID, on: req.db)
-    else { throw WebAssignmentError.notFound(resource: "Assignment '\(idStr)'") }
+    else { throw AppError.notFound(resource: "Assignment '\(idStr)'") }
     return (assignment, setup)
 }
 
@@ -195,7 +189,7 @@ private func loadAssignmentAndSetup(_ req: Request) async throws -> (APIAssignme
 func loadAssignment(_ req: Request) async throws -> APIAssignment {
     let idStr = try assignmentPublicIDParameter(from: req)
     guard let assignment = try await assignmentByPublicID(idStr, on: req.db) else {
-        throw WebAssignmentError.notFound(resource: "Assignment '\(idStr)'")
+        throw AppError.notFound(resource: "Assignment '\(idStr)'")
     }
     return assignment
 }

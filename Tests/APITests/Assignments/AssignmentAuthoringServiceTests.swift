@@ -33,8 +33,7 @@ import Vapor
     }
 
     @Test func opensWhenNoDueDateAndNoOverride() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await makeAssignment(on: app)
             try await AssignmentAuthoringService.setOpenState(assignment, open: true, audit: audit(app), on: app.db)
             #expect(assignment.isOpen)
@@ -43,8 +42,7 @@ import Vapor
     }
 
     @Test func openingPastDueSetsDeadlineOverride() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await makeAssignment(on: app, dueAt: Date().addingTimeInterval(-3600))
             try await AssignmentAuthoringService.setOpenState(assignment, open: true, audit: audit(app), on: app.db)
             #expect(assignment.isOpen)
@@ -54,8 +52,7 @@ import Vapor
     }
 
     @Test func openingBeforeDueDoesNotSetOverride() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await makeAssignment(on: app, dueAt: Date().addingTimeInterval(3600))
             try await AssignmentAuthoringService.setOpenState(assignment, open: true, audit: audit(app), on: app.db)
             #expect(assignment.isOpen)
@@ -64,8 +61,7 @@ import Vapor
     }
 
     @Test func openingIsRefusedUntilValidationPasses() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await makeAssignment(on: app, validationStatus: "pending")
             await #expect(throws: AssignmentAuthoringError.validationNotPassed) {
                 try await AssignmentAuthoringService.setOpenState(assignment, open: true, audit: audit(app), on: app.db)
@@ -76,8 +72,7 @@ import Vapor
     }
 
     @Test func openingAllowedWhenValidationPassed() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await makeAssignment(on: app, validationStatus: "passed")
             try await AssignmentAuthoringService.setOpenState(assignment, open: true, audit: audit(app), on: app.db)
             #expect(assignment.isOpen)
@@ -85,8 +80,7 @@ import Vapor
     }
 
     @Test func updateMetadataSetsTitleAndFutureDue() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await makeAssignment(on: app)
             let due = Date().addingTimeInterval(86_400)
             try await AssignmentAuthoringService.updateMetadata(
@@ -98,8 +92,7 @@ import Vapor
     }
 
     @Test func updateMetadataClearsDueDate() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await makeAssignment(on: app, dueAt: Date().addingTimeInterval(86_400))
             try await AssignmentAuthoringService.updateMetadata(
                 assignment, dueAt: .clear, audit: audit(app), on: app.db)
@@ -108,8 +101,7 @@ import Vapor
     }
 
     @Test func updateMetadataOpenPastDueSetsOverrideInOneCall() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await makeAssignment(on: app)
             try await AssignmentAuthoringService.updateMetadata(
                 assignment, dueAt: .set(Date().addingTimeInterval(-3600)), open: true, audit: audit(app), on: app.db)
@@ -119,8 +111,7 @@ import Vapor
     }
 
     @Test func closeClearsIsOpen() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await makeAssignment(on: app)
             assignment.visibility = .open
             try await assignment.save(on: app.db)
@@ -132,8 +123,7 @@ import Vapor
     // MARK: - Three-state visibility (Preview)
 
     @Test func previewNeedsNoValidation() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             // Switching to preview is a pure visibility flip — it must not be
             // gated on validation the way opening to students is.
             let assignment = try await makeAssignment(on: app, validationStatus: "pending")
@@ -145,8 +135,7 @@ import Vapor
     }
 
     @Test func previewIsOpenForStaffAndClosedForStudents() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await makeAssignment(on: app, validationStatus: "passed")
             try await AssignmentAuthoringService.setVisibility(assignment, .preview, audit: audit(app), on: app.db)
             let staff = try await makeTestUser(on: app, username: "prof", role: "instructor")
@@ -162,8 +151,7 @@ import Vapor
     }
 
     @Test func previewThenOpenSucceeds() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await makeAssignment(on: app, validationStatus: "passed")
             try await AssignmentAuthoringService.setVisibility(assignment, .preview, audit: audit(app), on: app.db)
             try await AssignmentAuthoringService.setVisibility(assignment, .open, audit: audit(app), on: app.db)
@@ -172,8 +160,7 @@ import Vapor
     }
 
     @Test func openToPreviewIsAllowed() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             // No one-way restriction: an instructor can pull a live assignment
             // back to staff-only (it just becomes hidden from students again).
             let assignment = try await makeAssignment(on: app, validationStatus: "passed")
@@ -184,8 +171,7 @@ import Vapor
     }
 
     @Test func scheduledOpenSweepPublishesPreview() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await makeAssignment(on: app, validationStatus: "passed")
             try await AssignmentAuthoringService.setVisibility(assignment, .preview, audit: audit(app), on: app.db)
             // An open date on a Preview assignment is the staff workflow "test
@@ -201,8 +187,7 @@ import Vapor
     }
 
     @Test func scheduledOpenSweepHoldsPreviewUntilValidationPasses() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await makeAssignment(on: app, validationStatus: "pending")
             try await AssignmentAuthoringService.setVisibility(assignment, .preview, audit: audit(app), on: app.db)
             assignment.startsAt = Date().addingTimeInterval(-3600)

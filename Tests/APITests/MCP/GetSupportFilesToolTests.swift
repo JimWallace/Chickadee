@@ -47,8 +47,7 @@ import Vapor
     // MARK: - List mode
 
     @Test func listsOnlySupportFiles() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await fixture(on: app)
 
             let output = try await run(app, publicID: assignment.publicID)
@@ -64,8 +63,7 @@ import Vapor
     // MARK: - Read mode
 
     @Test func readsSupportFileContent() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await fixture(on: app)
 
             let output = try await run(app, publicID: assignment.publicID, filename: "cases.csv")
@@ -77,8 +75,7 @@ import Vapor
     }
 
     @Test func readsNestedSupportFile() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await fixture(on: app)
 
             let output = try await run(
@@ -88,8 +85,7 @@ import Vapor
     }
 
     @Test func capsContentAtMaxBytesOnUTF8Boundary() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await fixture(on: app)
             // "é" is 2 bytes in UTF-8; a 5-byte cap lands mid-character and
             // must back off to the previous boundary ("abcd", 4 bytes).
@@ -108,8 +104,7 @@ import Vapor
     // MARK: - Boundaries
 
     @Test func redirectsGradedScriptToGetSuite() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await fixture(on: app)
             await #expect(throws: MCPToolError.self) {
                 _ = try await run(app, publicID: assignment.publicID, filename: "test_a.sh")
@@ -118,8 +113,7 @@ import Vapor
     }
 
     @Test func redirectsNotebookToDedicatedTool() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await fixture(on: app)
             await #expect(throws: MCPToolError.self) {
                 _ = try await run(
@@ -129,8 +123,7 @@ import Vapor
     }
 
     @Test func unknownFilenameThrows() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await fixture(on: app)
             await #expect(throws: MCPToolError.self) {
                 _ = try await run(app, publicID: assignment.publicID, filename: "missing.csv")

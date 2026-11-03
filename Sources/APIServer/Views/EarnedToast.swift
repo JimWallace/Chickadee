@@ -20,6 +20,10 @@ import Elementary
 struct EarnedToast: HTML {
     let page: PageRequestContext
     let earned: SubmissionEarnedItem
+    /// "earned-toast" on the result page, which earned-toast.js shows.
+    /// "quantum-cats-found" in the layout, which quantum-cats-egg.js shows
+    /// (docs/student-wardrobe.md, "Found items").
+    var id = "earned-toast"
 
     /// Written as a custom attribute because SwiftLint bans the style
     /// modifier in views. It holds only a custom property, which the
@@ -30,7 +34,7 @@ struct EarnedToast: HTML {
 
     var body: some HTML {
         div(
-            .id("earned-toast"), .class("nb-graded nb-graded-earned"), .role("status"), .hidden,
+            .id(id), .class("nb-graded nb-graded-earned"), .role("status"), .hidden,
             .data("announce", value: earned.announcement), .custom(name: "style", value: customProperties)
         ) {
             // Decorative: the text names the item.

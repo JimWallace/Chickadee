@@ -1,0 +1,10 @@
+# A file under Services/ may not have a Helpers name (#2775): the name says
+# the file belongs in Helpers/. A new such file must fail the guard.
+guard="scripts/check-utilities-imports.sh"
+files=""
+created="Sources/APIServer/Services/FixtureHelpers.swift"
+description="a Services file named *Helpers"
+expect="has a Helpers name"
+apply() {
+    printf 'import Foundation\n' > Sources/APIServer/Services/FixtureHelpers.swift
+}

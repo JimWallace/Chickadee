@@ -12,7 +12,7 @@ import Foundation
 import Vapor
 
 /// Domain errors from assignment-authoring operations, mapped to transport
-/// errors by callers (`WebAssignmentError` on the web, `MCPToolError` over MCP).
+/// errors by callers (`AppError` on the web, `MCPToolError` over MCP).
 enum AssignmentAuthoringError: Error, Sendable, Equatable {
     /// Opening was refused because runner validation has not passed.
     case validationNotPassed

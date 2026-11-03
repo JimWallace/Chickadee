@@ -1,7 +1,7 @@
 // Regression tests for the empty-suite zip-repack bug: `repackZipFromDirectory`
 // shelled out to `zip -r .`, which aborts with "Nothing to do!" (exit 12) on an
 // empty source directory. That raw `ScriptZipError` escaped GlobalInputsService
-// (which only maps WebAssignmentError), so adding personalization to a
+// (which only maps AppError), so adding personalization to a
 // brand-new assignment — whose setup zip has no test files yet — failed with an
 // opaque error. The fix emits a valid empty archive instead.
 
@@ -48,8 +48,7 @@ import Vapor
     // MARK: - Integration: global inputs on an empty suite
 
     @Test func globalInputsSucceedOnEmptySuite() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let scenario = try await TestScenario.make(
                 on: app, code: "CS246", courseName: "OOP", setupID: "setup_empty",
                 manifest: TestManifests.emptySuite, title: "Fresh")

@@ -10,8 +10,7 @@ import Vapor
 
 @Suite struct ListAssignmentsToolTests {
     @Test func listsAssignmentsForCourseSortedByTitle() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let course = try await makeTestCourse(on: app, code: "CS136", name: "Systems Programming")
             let courseID = try course.requireID()
             let tester = try await makeTestUser(on: app, username: "tester", role: "instructor")
@@ -29,8 +28,7 @@ import Vapor
     }
 
     @Test func deniesWhenSubjectNotEnrolledInCourse() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let course = try await makeTestCourse(on: app, code: "CS136", name: "Systems Programming")
             let courseID = try course.requireID()
             // "tester" exists but is NOT enrolled in CS136.
@@ -46,8 +44,7 @@ import Vapor
     }
 
     @Test func adminSubjectIsEnrollmentScoped() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let course = try await makeTestCourse(on: app, code: "CS136", name: "Systems Programming")
             let courseID = try course.requireID()
             // Admins are enrollment-scoped like everyone else: denied before
@@ -69,8 +66,7 @@ import Vapor
     }
 
     @Test func enrolledStudentSubjectIsDenied() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let course = try await makeTestCourse(on: app, code: "CS136", name: "Systems Programming")
             let courseID = try course.requireID()
             // A student enrolled in the course still may not use MCP.
@@ -87,8 +83,7 @@ import Vapor
     }
 
     @Test func unknownCourseThrowsToolError() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             await #expect(throws: MCPToolError.self) {
                 _ = try await ListAssignmentsTool().execute(
                     ListAssignmentsTool.Input(courseCode: "NOPE"), mcpContext(app))
@@ -118,8 +113,7 @@ import Vapor
     }
 
     @Test func dispatcherToolsCallReturnsContentAndStructured() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let course = try await makeTestCourse(on: app, code: "CS246", name: "OOP")
             let courseID = try course.requireID()
             let tester = try await makeTestUser(on: app, username: "tester", role: "instructor")
@@ -144,8 +138,7 @@ import Vapor
     }
 
     @Test func dispatcherToolsCallUnknownToolIsInvalidParams() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let dispatcher = MCPDispatcher(serverInfo: MCPServerInfo(name: "t", version: "t"))
             let request = JSONRPCRequest(
                 jsonrpc: "2.0", id: .number(3), method: "tools/call",
@@ -156,8 +149,7 @@ import Vapor
     }
 
     @Test func dispatcherRejectsWriteToolWithoutWriteScope() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let registry = ToolRegistry([UpdateAssignmentTool().erased()])
             let dispatcher = MCPDispatcher(serverInfo: MCPServerInfo(name: "t", version: "t"), tools: registry)
             // A read-only caller invoking the content:write tool is rejected

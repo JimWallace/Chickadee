@@ -33,8 +33,7 @@ import Vapor
     /// request still gets the user it resolved, so it did not look again; a
     /// new request looks again and is refused.
     @Test func theSubjectIsResolvedOncePerRequest() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let (user, _) = try await instructor(on: app)
             let request = makeTestRequest(on: app)
             let first = try await context(app, request: request).requireEligibleSubject()
@@ -54,8 +53,7 @@ import Vapor
 
     /// The kept answer belongs to the subject it was resolved for.
     @Test func anotherSubjectOnTheSameRequestIsResolvedAfresh() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             _ = try await instructor(on: app)
             let request = makeTestRequest(on: app)
             _ = try await context(app, request: request).requireEligibleSubject()
@@ -67,8 +65,7 @@ import Vapor
 
     /// A refusal is not kept: the next ask looks again.
     @Test func aRefusalIsNotKept() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let request = makeTestRequest(on: app)
             await #expect(throws: MCPToolError.self) {
                 _ = try await context(app, request: request).requireEligibleSubject()
@@ -82,8 +79,7 @@ import Vapor
     /// `evaluateCourseWrite` exempts an admin, so the separate enrollment
     /// check still refuses an admin's agent in a course the admin is not in.
     @Test func anAdminsAgentStillNeedsAnEnrollmentToWrite() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let other = try await makeTestCourse(on: app, code: "OTHER", name: "Other")
             let (_, enrolled) = try await instructor(on: app, role: "admin")
             try await context(app).authorizeCourseWriteAccess(
@@ -99,8 +95,7 @@ import Vapor
     /// A non-admin with no enrollment gets the same refusal as before, now
     /// from `evaluateCourseWrite`.
     @Test func aNonAdminWithNoEnrollmentIsRefusedTheSameWay() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let other = try await makeTestCourse(on: app, code: "OTHER", name: "Other")
             _ = try await instructor(on: app)
             await #expect(

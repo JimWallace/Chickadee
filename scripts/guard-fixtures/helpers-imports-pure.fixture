@@ -1,10 +1,10 @@
-# Helpers/ holds code that works with a request, a database driver type or a
-# model (#2144). A Helpers file that imports neither Vapor nor Fluent
-# and names no model is pure, belongs in Utilities/, and must fail the guard.
+# Helpers/ holds the HTTP edge (#2144, #2775). A Helpers file whose code names
+# no request-layer type is database, domain or pure code, and must fail the
+# guard. Renaming the one type the file extends removes its only edge name.
 guard="scripts/check-utilities-imports.sh"
-files="Sources/APIServer/Helpers/Request+DecodeContent.swift"
-description="a Helpers file with no framework import and no model"
-expect="names no model"
+files="Sources/APIServer/Helpers/ClientResponse+Body.swift"
+description="a Helpers file that names no request-layer type"
+expect="names no request-layer type"
 apply() {
-    sed -i '/^import Vapor$/d' Sources/APIServer/Helpers/Request+DecodeContent.swift
+    sed -i 's/ClientResponse/ClientReply/g' Sources/APIServer/Helpers/ClientResponse+Body.swift
 }

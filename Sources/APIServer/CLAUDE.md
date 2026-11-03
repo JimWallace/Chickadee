@@ -6,6 +6,27 @@ views have their own files: `MCP/CLAUDE.md` and `Views/CLAUDE.md`.
 
 ---
 
+## Where Shared Code Goes
+
+`Helpers/`, `Services/` and `Utilities/` sit below `Routes/`
+(`scripts/check-layering.sh`). Each holds one kind of code
+(#1730, #2144, #2775):
+
+- **`Helpers/` holds the HTTP edge.** Its code takes, extends or builds a
+  Vapor request-layer type: `Request`, `Response`, `ClientResponse`, an HTTP
+  body (`Content`, a multipart `File`) or an `AbortError`.
+- **`Services/` holds database and domain logic.** It takes a database or a
+  `ServiceContext`, never a `Request`. No file there has a `*Helpers` name.
+- **`Utilities/` holds pure code.** No file there imports Vapor or a database
+  module.
+- **`Bootstrap/`** holds app setup and `Application` storage.
+
+When one file mixes the two, split it: the lookup goes to `Services/`, and
+the `Request` wrapper goes to `Helpers/` (for example
+`Services/CourseAccess.swift` and `Helpers/Request+CourseRoleMemo.swift`).
+`scripts/check-utilities-imports.sh` enforces all three rules in
+`format-lint`, with fixtures in `scripts/check-guards.sh`.
+
 ## REST API
 
 Base path: `/api/v1`
@@ -80,7 +101,7 @@ Per-course roles on the enrollment row: `student` < `ta` < `instructor`
   acting for them stay enrollment-scoped)
 
 Enforcement chokepoints: `requireCourseRole(atLeast:)` / `evaluateCourseWrite`
-in `CourseAccessHelpers.swift` (web + MCP share the policy); the `/instructor`
+in `CourseAccess.swift` (web + MCP share the policy); the `/instructor`
 area gate is `ActiveCourseStaffMiddleware` (staff in the *active* course), with
 per-resource gates on every parameterized route. See `docs/multi-course-roles.md`.
 
@@ -125,7 +146,9 @@ Do not add a new variable (root `CLAUDE.md`, "What Not To Do").
 
 **Worker secret is auto-generated.** If no secret is provided at startup, a
 random three-word diceware passphrase is generated from the EFF wordlist and
-persisted to `.worker-secret`. The runner reads it from `RUNNER_SHARED_SECRET`.
+persisted to `.worker-secret`. Startup fails when the wordlist has fewer than
+2048 words or the generated secret cannot be saved (#2776); a saved secret is
+read first, so it still starts. The runner reads it from `RUNNER_SHARED_SECRET`.
 All runner↔server requests are HMAC-signed (`WorkerHMACAuthMiddleware`).
 
 **Local runner autostart.** The server can spawn a `chickadee-runner` subprocess
@@ -203,8 +226,8 @@ build a fresh dict: it drops `languageDeclared`.
 the runner. See `docs/personalization-eval-runtime.md`.
 
 Instructor validation is a `kind == .validation` submission, graded by the
-**native worker** (`WorkerJobRoutes.collectClaimCandidates`). It never runs a
-kernel. There is no `assignment-validate.js`.
+**native worker** (`collectClaimCandidates` in `WorkerClaimEvaluation.swift`).
+It never runs a kernel. There is no `assignment-validate.js`.
 Each validation also queues a **starter run**, a `kind == .starterValidation`
 submission that grades the assignment notebook with the same seed
 (`StarterValidationRun`, NB8). A runner claims it after every solution run. It

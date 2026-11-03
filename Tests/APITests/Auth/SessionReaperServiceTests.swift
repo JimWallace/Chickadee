@@ -2,12 +2,11 @@
 //
 // Covers reapStaleSessions — the hourly sweep that ages stale rows out of
 // Vapor's `_fluent_sessions` table.  The reaper previously hand-rolled raw SQL
-// comparing the `timestamp` column to a text-bound cutoff, which SQLite
-// accepted but Postgres rejected (`timestamp < text`), so the sweep threw every
-// hour and sessions never got reaped.  The fix moved it onto a Fluent typed
-// query (matching AuditLogReaperService / UserActivityEventReaperService); these
-// tests pin the deletion semantics AND, when run under the Postgres CI job,
-// prove the sweep no longer throws on Postgres.
+// comparing the `timestamp` column to a text-bound cutoff, which Postgres
+// rejected (`timestamp < text`), so the sweep threw every hour and sessions
+// never got reaped.  The fix moved it onto a Fluent typed query (matching
+// AuditLogReaperService / UserActivityEventReaperService); these tests pin the
+// deletion semantics and prove the sweep no longer throws.
 
 import Fluent
 import Foundation
@@ -28,9 +27,8 @@ import VaporTesting
     /// Creates a well-formed `_fluent_sessions` row via Vapor's own
     /// `SessionRecord` (so the json `data` column is written correctly), then
     /// stamps `created_at` explicitly through the reaper's Fluent model so the
-    /// timestamp comparison is exercised identically on SQLite and Postgres
-    /// (rather than leaning on the column DEFAULT, whose SQLite text encoding
-    /// would make the comparison trivially true/false).
+    /// timestamp comparison is exercised on a chosen value rather than on the
+    /// column DEFAULT.
     @discardableResult
     private func makeSession(key: String, createdAt: Date?) async throws -> UUID {
         let record = SessionRecord(key: SessionID(string: key), data: SessionData())
@@ -74,9 +72,8 @@ import VaporTesting
         }
     }
 
-    /// A row Vapor writes takes `created_at` from the column default, which
-    /// SQLite stores as text. The sweep must age it out like any other row
-    /// (#1810); on SQLite it used to keep every such row for ever.
+    /// A row Vapor writes takes `created_at` from the column default. The
+    /// sweep must age it out like any other row (#1810).
     @Test func reapsASessionThatTookItsTimestampFromTheColumnDefault() async throws {
         try await withApp(app) { _ in
             let record = SessionRecord(key: SessionID(string: "reaper-default"), data: SessionData())
