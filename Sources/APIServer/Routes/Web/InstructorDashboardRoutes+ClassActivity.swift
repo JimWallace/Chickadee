@@ -26,7 +26,7 @@ extension InstructorDashboardRoutes {
     /// to the edit page with an error banner rather than writing anything.
     @Sendable
     func saveActivityLeaderboardSetting(req: Request) async throws -> Response {
-        let (assignment, setup) = try await loadAssignmentAndSetupForWrite(req, atLeast: .instructor)
+        let (assignment, setup) = try await loadAssignmentAndSetupForWrite(req, atLeast: CourseRoleFloor.classActivity)
         guard let current = currentManifestActivity(setup.manifest) else {
             return req.redirect(
                 to: "/instructor/\(assignment.publicID)/edit"
@@ -89,7 +89,7 @@ extension InstructorDashboardRoutes {
     /// refusal comes back as the edit page's error banner.
     @Sendable
     func saveActivityOpponentFile(req: Request) async throws -> Response {
-        let (assignment, setup) = try await loadAssignmentAndSetupForWrite(req, atLeast: .instructor)
+        let (assignment, setup) = try await loadAssignmentAndSetupForWrite(req, atLeast: CourseRoleFloor.classActivity)
         let editPath = "/instructor/\(assignment.publicID)/edit"
         guard let current = currentManifestActivity(setup.manifest) else {
             return req.redirect(
@@ -134,7 +134,7 @@ extension InstructorDashboardRoutes {
     /// instructor-entered local datetime (#1118).
     @Sendable
     func saveActivityWindow(req: Request) async throws -> Response {
-        let (assignment, setup) = try await loadAssignmentAndSetupForWrite(req, atLeast: .instructor)
+        let (assignment, setup) = try await loadAssignmentAndSetupForWrite(req, atLeast: CourseRoleFloor.classActivity)
         let editPath = "/instructor/\(assignment.publicID)/edit"
         guard let current = currentManifestActivity(setup.manifest) else {
             return req.redirect(
@@ -199,7 +199,7 @@ extension InstructorDashboardRoutes {
     /// structural change under live submissions.
     @Sendable
     func saveActivityComposite(req: Request) async throws -> Response {
-        let (assignment, setup) = try await loadAssignmentAndSetupForWrite(req, atLeast: .instructor)
+        let (assignment, setup) = try await loadAssignmentAndSetupForWrite(req, atLeast: CourseRoleFloor.classActivity)
         let editPath = "/instructor/\(assignment.publicID)/edit"
         func refuse(_ message: String) -> Response {
             let encoded = message.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
@@ -242,7 +242,7 @@ extension InstructorDashboardRoutes {
     /// earlier render.
     @Sendable
     func prepareCompositeReference(req: Request) async throws -> Response {
-        let (assignment, setup) = try await loadAssignmentAndSetupForWrite(req, atLeast: .instructor)
+        let (assignment, setup) = try await loadAssignmentAndSetupForWrite(req, atLeast: CourseRoleFloor.classActivity)
         let editPath = "/instructor/\(assignment.publicID)/edit"
         let queued: Int
         do {
@@ -276,7 +276,7 @@ extension InstructorDashboardRoutes {
     /// submissions page's error banner.
     @Sendable
     func runTournament(req: Request) async throws -> Response {
-        let (assignment, setup) = try await loadAssignmentAndSetupForWrite(req, atLeast: .instructor)
+        let (assignment, setup) = try await loadAssignmentAndSetupForWrite(req, atLeast: CourseRoleFloor.classActivity)
         let caller = try req.auth.require(APIUser.self)
         let submissionsPath = "/instructor/\(assignment.publicID)/submissions"
         struct RunBody: Content {

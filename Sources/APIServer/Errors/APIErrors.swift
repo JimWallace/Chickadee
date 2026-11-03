@@ -81,11 +81,10 @@ enum WorkerJobError: AbortError, CustomStringConvertible {
 // MARK: - General-purpose application errors
 
 /// General-purpose typed errors for route handlers — the single web/API
-/// error vocabulary.  Formerly split into `AppError` (general routes) and
-/// `WebAssignmentError` (instructor assignment routes), which duplicated
-/// six of eight cases verbatim; the two assignment-specific cases
-/// (`noActiveCourse`, `validationRequired`) were folded in here and
-/// `WebAssignmentError` is now a typealias (June 2026 audit).
+/// error vocabulary.  The instructor assignment routes once had their own
+/// enum, which duplicated six of eight cases verbatim; its two
+/// assignment-specific cases (`noActiveCourse`, `validationRequired`) were
+/// folded in here (June 2026 audit), and its alias was removed (#2783).
 ///
 /// Every route and middleware in `APIServer` throws one of these (or an
 /// area enum such as `WorkerJobError`) rather than a bare `Abort`, so each
@@ -192,12 +191,3 @@ enum AppError: AbortError, CustomStringConvertible {
         }
     }
 }
-
-// MARK: - Web instructor assignment routes
-
-/// Historical name for the instructor-assignment route error vocabulary.
-/// The enum's cases were folded into `AppError` (June 2026 audit; the two
-/// vocabularies duplicated six of eight cases verbatim).  ~230 throw/catch
-/// sites still use this name; the typealias keeps them source-compatible.
-/// New code should write `AppError` directly.
-typealias WebAssignmentError = AppError

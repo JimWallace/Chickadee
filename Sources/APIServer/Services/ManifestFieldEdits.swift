@@ -47,7 +47,7 @@ func mutateManifest(
 ) async throws {
     try await mutateManifestJSON(setup: setup, on: db) { manifest in
         guard var props = decodeManifest(fromJSON: manifest) else {
-            throw WebAssignmentError.internalFailure(reason: "Test setup manifest could not be decoded.")
+            throw AppError.internalFailure(reason: "Test setup manifest could not be decoded.")
         }
         try mutate(&props)
         return try encodeManifest(props)

@@ -159,11 +159,11 @@ func makeWorkerManifestJSON(
     activity: ClassActivity? = nil
 ) throws -> String {
     guard let grading = GradingMode(rawValue: gradingMode) else {
-        throw WebAssignmentError.invalidParameter(
+        throw AppError.invalidParameter(
             name: "gradingMode", reason: "Unknown grading mode \"\(gradingMode)\".")
     }
     guard let submission = SubmissionMode(rawValue: submissionMode) else {
-        throw WebAssignmentError.invalidParameter(
+        throw AppError.invalidParameter(
             name: "submissionMode", reason: "Unknown submission mode \"\(submissionMode)\".")
     }
     var props = TestProperties(
@@ -224,7 +224,7 @@ func rebuildDraftManifestJSON(
         next.gradingMode = .worker
     } else {
         guard let grading = GradingMode(rawValue: sectionGradingMode) else {
-            throw WebAssignmentError.invalidParameter(
+            throw AppError.invalidParameter(
                 name: "gradingMode", reason: "Unknown grading mode \"\(sectionGradingMode)\".")
         }
         next.submissionMode = .notebook
@@ -266,7 +266,7 @@ extension TestSuiteEntry {
     /// where every later decode of the manifest would fail.
     fileprivate init(configured entry: ConfiguredSuiteEntry) throws {
         guard let tier = TestTier(rawValue: entry.tier) else {
-            throw WebAssignmentError.invalidParameter(
+            throw AppError.invalidParameter(
                 name: "tier", reason: "\"\(entry.tier)\" is not a test tier.")
         }
         self.init(

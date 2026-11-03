@@ -46,7 +46,7 @@ extension PublishedAssignmentRoutes {
 
         let (_, setup) = try await loadAssignmentAndSetupForWrite(req, atLeast: .ta)
         guard let sectionID = req.parameters.get("sectionID"), !sectionID.isEmpty else {
-            throw WebAssignmentError.notFound(resource: "Section")
+            throw AppError.notFound(resource: "Section")
         }
         let body = try await req.decodeContent(Body.self)
         try await renameSuiteSectionCore(setup: setup, sectionID: sectionID, name: body.name, on: req.db)
@@ -59,7 +59,7 @@ extension PublishedAssignmentRoutes {
     func deleteSuiteSection(req: Request) async throws -> Response {
         let (_, setup) = try await loadAssignmentAndSetupForWrite(req, atLeast: .ta)
         guard let sectionID = req.parameters.get("sectionID"), !sectionID.isEmpty else {
-            throw WebAssignmentError.notFound(resource: "Section")
+            throw AppError.notFound(resource: "Section")
         }
         try await deleteSuiteSectionCore(setup: setup, sectionID: sectionID, on: req.db)
         return redirectToEdit(req: req)
@@ -86,7 +86,7 @@ extension PublishedAssignmentRoutes {
 
         let (assignment, setup) = try await loadAssignmentAndSetupForWrite(req, atLeast: .ta)
         guard let sectionID = req.parameters.get("sectionID"), !sectionID.isEmpty else {
-            throw WebAssignmentError.notFound(resource: "Section")
+            throw AppError.notFound(resource: "Section")
         }
         let body = try await req.decodeContent(Body.self)
 

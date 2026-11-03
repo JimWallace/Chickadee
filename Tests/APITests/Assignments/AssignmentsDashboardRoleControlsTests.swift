@@ -2,7 +2,7 @@
 //
 // The assignments dashboard (`GET /instructor`) serves a TA and an instructor.
 // It shows a control only to a viewer who meets the floor of the route that
-// the control calls (`DashboardRoleFloor`), so a TA is not offered an action
+// the control calls (`CourseRoleFloor`), so a TA is not offered an action
 // that the server refuses with 403 (#2743). A TA keeps the TA actions: retest,
 // edit, the material items and the read-only status.
 

@@ -87,7 +87,7 @@ import VaporTesting
     }
 
     private func champion(_ app: Application, _ setup: APITestSetup) async throws -> APIActivityChampion? {
-        try await currentChampion(testSetupID: try setup.requireID(), on: app.db)
+        try await Hill.course(testSetupID: try setup.requireID()).holder(on: app.db) as? APIActivityChampion
     }
 
     private func championRecord(_ app: Application, _ setup: APITestSetup) async throws -> APIClassAchievement? {
@@ -271,11 +271,11 @@ import VaporTesting
             let fx = try await fixture(app, prefix: "race", manifest: try hillManifest())
             let setupID = try fx.setup.requireID()
             #expect(
-                try await crownFirstChampion(
-                    testSetupID: setupID, userID: try fx.a.requireID(), submissionID: "race_a1", on: app.db))
+                try await Hill.course(testSetupID: setupID).crownFirst(
+                    userID: try fx.a.requireID(), submissionID: "race_a1", on: app.db))
             #expect(
-                try await crownFirstChampion(
-                    testSetupID: setupID, userID: try fx.b.requireID(), submissionID: "race_b1", on: app.db)
+                try await Hill.course(testSetupID: setupID).crownFirst(
+                    userID: try fx.b.requireID(), submissionID: "race_b1", on: app.db)
                     == false)
             let held = try #require(try await champion(app, fx.setup))
             #expect(held.userID == (try fx.a.requireID()))

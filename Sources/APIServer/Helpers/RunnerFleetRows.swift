@@ -26,46 +26,16 @@ private struct WorkerStatusCountRow: Decodable {
 func makeWorkerRows(req: Request) async throws -> [AdminWorkerRow] {
     let workers = await req.application.workerActivityStore.snapshotsSortedByRecent()
 
-    // Grouped COUNT by (worker_id, status) rather than loading the entire
-    // submissions table into memory and tallying per worker in Swift — the
-    // submissions table grows without bound across terms.
-    var assignedByWorkerID: [String: Int] = [:]
-    var processedByWorkerID: [String: Int] = [:]
-    if let sql = req.db as? (any SQLDatabase) {
-        let counts = try await sql.select()
-            .column("worker_id")
-            .column("status")
-            .column(SQLFunction("COUNT", args: SQLLiteral.all), as: "total")
-            .from("submissions")
-            .groupBy("worker_id")
-            .groupBy("status")
-            .all(decoding: WorkerStatusCountRow.self)
-        for row in counts {
-            guard let workerID = row.workerID, !workerID.isEmpty else { continue }
-            switch row.status {
-            case SubmissionStatus.assigned.rawValue:
-                assignedByWorkerID[workerID, default: 0] += row.total
-            case SubmissionStatus.complete.rawValue, SubmissionStatus.failed.rawValue:
-                processedByWorkerID[workerID, default: 0] += row.total
-            default:
-                break
-            }
-        }
-    } else {
-        let submissions = try await APISubmission.query(on: req.db).all()
-        for submission in submissions {
-            guard let workerID = submission.workerID, !workerID.isEmpty else { continue }
-            if submission.statusValue == .assigned {
-                assignedByWorkerID[workerID, default: 0] += 1
-            }
-            if submission.statusValue == .complete || submission.statusValue == .failed {
-                processedByWorkerID[workerID, default: 0] += 1
-            }
-        }
-    }
+    // Grouped COUNT by (worker_id, status), limited to the runners in the
+    // activity store and to the three statuses the rows show. A row for any
+    // other worker or status is never read, so the query reads the
+    // (worker_id, status) index for the known runners only, not the whole
+    // submissions table, which grows without bound across terms (#2777).
+    let runnerIDs = workers.map(\.workerID).filter { !$0.isEmpty }
+    let (assignedByWorkerID, processedByWorkerID) = try await workerJobCounts(
+        workerIDs: runnerIDs, on: req.db)
 
     // Fetch rolling averages (last 50 jobs per runner) via the diagnostics service.
-    let runnerIDs = workers.map(\.workerID).filter { !$0.isEmpty }
     let averages =
         (try? await req.application.diagnostics.rollingAverages(
             for: runnerIDs, sampleSize: 50, on: req.db
@@ -99,6 +69,50 @@ func makeWorkerRows(req: Request) async throws -> [AdminWorkerRow] {
         }
         return compare == .orderedAscending
     }
+}
+
+/// Per worker in `workerIDs`: the jobs it holds now (`assigned`) and the jobs
+/// it finished (`complete` or `failed`). A worker with no such job is absent
+/// from both maps.
+func workerJobCounts(
+    workerIDs: [String], on db: any Database
+) async throws -> (assigned: [String: Int], processed: [String: Int]) {
+    var assigned: [String: Int] = [:]
+    var processed: [String: Int] = [:]
+    guard !workerIDs.isEmpty else { return (assigned, processed) }
+    let assignedStatus = SubmissionStatus.assigned.rawValue
+    let processedStatuses = [SubmissionStatus.complete.rawValue, SubmissionStatus.failed.rawValue]
+    func tally(workerID: String?, status: String?, total: Int) {
+        guard let workerID, !workerID.isEmpty else { return }
+        if status == assignedStatus {
+            assigned[workerID, default: 0] += total
+        } else if let status, processedStatuses.contains(status) {
+            processed[workerID, default: 0] += total
+        }
+    }
+    if let sql = db as? (any SQLDatabase) {
+        let counts = try await sql.select()
+            .column("worker_id")
+            .column("status")
+            .column(SQLFunction("COUNT", args: SQLLiteral.all), as: "total")
+            .from(APISubmission.schema)
+            .where("worker_id", .in, workerIDs)
+            .where("status", .in, [assignedStatus] + processedStatuses)
+            .groupBy("worker_id")
+            .groupBy("status")
+            .all(decoding: WorkerStatusCountRow.self)
+        for row in counts {
+            tally(workerID: row.workerID, status: row.status, total: row.total)
+        }
+    } else {
+        let submissions = try await APISubmission.query(on: db)
+            .filter(\.$workerID ~~ workerIDs)
+            .all()
+        for submission in submissions {
+            tally(workerID: submission.workerID, status: submission.status, total: 1)
+        }
+    }
+    return (assigned, processed)
 }
 
 func formatMs(_ ms: Int) -> String {
