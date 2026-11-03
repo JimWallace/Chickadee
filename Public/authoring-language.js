@@ -1,3 +1,4 @@
+// @ts-check
 // Public/authoring-language.js
 //
 // The assignment language, for every authoring editor in the browser.

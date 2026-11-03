@@ -1,3 +1,4 @@
+// @ts-check
 // Public/lua-grading-shared.js
 //
 // Grading semantics for the Lua browser grader — the Lua sibling of

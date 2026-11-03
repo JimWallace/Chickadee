@@ -1,3 +1,4 @@
+// @ts-check
 // Public/lua-grading-worker.js
 //
 // The Lua browser-grading substrate: boots the vendored xeus-lua kernel in a

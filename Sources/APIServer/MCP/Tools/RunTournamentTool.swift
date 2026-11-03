@@ -91,7 +91,7 @@ struct RunTournamentTool: ContentTool {
             throw MCPToolError.invalidArguments(detail: "schedule must be \(MCPActivityProse.scheduleTokens).")
         }
         let (assignment, setup) = try await context.authorizedAssignmentAndSetupForWrite(
-            publicID: input.assignmentPublicID, atLeast: .instructor)
+            publicID: input.assignmentPublicID, atLeast: CourseRoleFloor.classActivity)
         // Choosing a lab group is choosing students, which no MCP tool does
         // (docs/lab-groups.md, decision 11): a per-group run starts on the
         // submissions page.

@@ -289,9 +289,9 @@ As built (slice 3):
   found that way, and the login stored on their link is updated (#2206).
   Only when neither finds an installation on the linked account is the result
   "not installed".
-- The save goes through `recordStudentSubmission`, the helper the upload form
-  now uses too, so attempt numbers, diagnostics, the first-to-submit award and
-  the local-runner start cannot drift between the two.
+- The save goes through `SubmissionIntake`, which every submission door uses
+  (#2768), so attempt numbers, diagnostics, the first-to-submit award and the
+  local-runner start cannot drift between the doors.
 - Each GitHub submission is logged with the submission ID, the repository ID
   and the SHA. Tokens are never logged.
 - The GitHub calls are closures on the Application (`GitHubRepoClient`), so

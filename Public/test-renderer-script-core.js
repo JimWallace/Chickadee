@@ -1,3 +1,4 @@
+// @ts-check
 // Public/test-renderer-script-core.js
 //
 // The decisions behind the custom-script body renderer
