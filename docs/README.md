@@ -94,6 +94,7 @@ not exist.
 
 - [admin-mcp.md](admin-mcp.md) — the read-only admin diagnostics MCP surface
 - [ai-assisted-feedback.md](ai-assisted-feedback.md) — an instructor's own AI agent drafts feedback on written reasoning through MCP, behind two opt-in gates and staff review
+- [assignment-review.md](assignment-review.md) — the `chickadee-review` Claude Code plugin: rule-based checks plus read-only reviewer agents for one assignment, and its pilot log (#2747)
 - [mcp-client-allowlist-brief.md](mcp-client-allowlist-brief.md) — the implementation brief for the MCP client allowlist
 - [compliance/](compliance/) — the UW approval package: student-data audits, tool and data-flow inventories
 

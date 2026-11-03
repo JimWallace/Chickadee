@@ -170,6 +170,16 @@ Point an MCP client (e.g. the Claude connector, or the MCP Inspector's OAuth mod
 
 The access token's subject is the **human**; the agent is recorded separately (`client_id` / `agent_name`) so its actions are auditable as "*human*, via *agent*" (`mcp.tool_called`). Manage or revoke authorizations at **`/agents`** ("Connected agents"), or `POST /oauth/revoke` (RFC 7009). Replaying a rotated refresh token revokes the whole grant.
 
+### Reviewing an assignment with Claude Code
+
+The `chickadee-review` plugin in this repository runs `check_assignment` and a group of read-only reviewer agents over one assignment and returns one report. Install it in Claude Code with:
+
+```text
+/plugin install chickadee-review --marketplace JimWallace/Chickadee
+```
+
+Setup, sign-in and the pilot log are in [docs/assignment-review.md](docs/assignment-review.md).
+
 ### Admin-minted tokens (for headless / CI use)
 
 For non-interactive agents (no human in the loop), mint a token directly. In the web UI go to **Admin → MCP**:
