@@ -9,6 +9,17 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.786] - 2026-11-03
+
+### Fixed
+
+- **Three five-second polls no longer load whole tables (#2777).** The admin Users list reads the staff ring with one query, not an IN list of every user ID. The admin runners count reads only the known runners and the three counted statuses. The staff leaderboard counts submissions per student with one `GROUP BY`. The pages show the same output.
+
+### Fixed
+
+- **Runner job slots no longer stall each other on workspace I/O (#2779).** The workspace setup, the submission staging and normalization, the disk-usage walk and the recursive teardown now run off the runner's daemon actor. With `--max-jobs` above 1, a large teardown in one slot no longer holds up the heartbeats, polls and reports of the other slots. The order of the steps and the cleanup guarantees do not change.
+
+
 ## [0.5.785] - 2026-11-03
 
 ### Fixed
