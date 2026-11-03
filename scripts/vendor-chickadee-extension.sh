@@ -2,8 +2,8 @@
 # Put the prebuilt @chickadee/jupyterlite-extension into the committed
 # JupyterLite bundle, as `jupyter lite build` would (notebook views, NB2).
 #
-# `scripts/build-jupyterlite.sh` federates the extension from
-# Tools/jupyterlite/requirements.txt and applies Tools/jupyterlite/overrides.json.
+# `scripts/build-jupyterlite.sh` federates the extension that
+# scripts/setup-jupyterlite.sh installed and applies Tools/jupyterlite/overrides.json.
 # That full rebuild needs micromamba and rewrites ~100 MB of kernels, so it runs
 # only in revendor-kernels.yml. Between rebuilds this script makes the same
 # three changes to Public/jupyterlite:
