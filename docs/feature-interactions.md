@@ -991,8 +991,9 @@ because line numbers go out of date.
 - **Resolvers:**
   - The web: `findActiveCourse(byKey:viewer:on:)`.
   - MCP: `resolveMCPCourse`.
-  - Uniqueness: `courseCodeConflict`, which checks `ReservedCourseKeys` and
-    then `activeCourseCodeIsTaken` (with `courseKeysCollide`). Create, edit,
+  - Uniqueness: `courseCodeConflict`, which checks a new code against
+    `CourseCodeSyntax` and `ReservedCourseKeys`, and then every code against
+    `activeCourseCodeIsTaken` (with `courseKeysCollide`). Create, edit,
     clone, new term, import, un-archive and the `-COPY` generator call it. A
     new door calls it too, never one check alone.
 - **Rules** (`docs/course-terms.md`):
@@ -1004,7 +1005,10 @@ because line numbers go out of date.
   segment of any fixed route (#2666): the router prefers a constant segment and
   never backtracks, so the course loses its vanity links. The reserved set is
   read from `app.routes.all`, and the `courseKeyShadowed` health rule reports
-  an active course that holds one.
+  an active course that holds one. A code with a character a link cannot carry,
+  such as `/` or `?`: the link splits or ends there, so it is a 404. A space
+  works: RoutingKit decodes each parameter.
+  `courseCodeNotURLSafe` reports such a course.
 
 ### Cloning: `CourseCloneService.clone` and `cloneAssignment`
 

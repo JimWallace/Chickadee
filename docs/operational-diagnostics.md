@@ -385,6 +385,13 @@ code, so the rule fires only for a course that held the code before that check,
 or when a new fixed route takes an existing course's code. Rename the course on
 its admin page. See [course-terms.md](course-terms.md).
 
+`courseCodeNotURLSafe` ("Course code not usable in a link") fires when an
+active course's code has a character a link cannot carry: `/`, `\`, `?`, `#`,
+`%` or a control character, or the code is `.` or `..`. The link splits or ends
+at that character, so every link to that course is a 404. Every
+door refuses such a code for a new code, so the rule fires only for a course
+that held one before that check. Rename the course on its admin page.
+
 ## Deployment Examples
 
 Docker Compose:
