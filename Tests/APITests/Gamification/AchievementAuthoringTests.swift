@@ -17,7 +17,7 @@ import VaporTesting
 
     private func classGoalRow(
         name: String, thresholdPercent: Double, classPercent: Double, points: Int
-    ) -> PublishedAssignmentRoutes.AchievementInput {
+    ) -> AchievementRow {
         .init(
             id: nil, name: name, detail: nil, scope: "classWide", match: "all",
             conditions: [

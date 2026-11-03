@@ -124,12 +124,6 @@ func dueAtLocalInputString(_ date: Date?) -> String {
     return fmt.string(from: date)
 }
 
-/// The grade percent recorded on a submission result: weighted when present,
-/// else passed tests over all tests.
-func gradePercentFromCollectionJSON(_ collectionJSON: String) -> Int? {
-    CollectionGradeFields(json: collectionJSON)?.gradePercent
-}
-
 /// Formats a (possibly fractional) points value for display: whole numbers show
 /// without a decimal ("3"), partial credit shows up to two trimmed decimals
 /// ("2.75", "2.5").

@@ -11,10 +11,8 @@ import Foundation
 import Vapor
 
 /// The URL slug for an assignment title: lowercase ASCII letters and digits,
-/// every other run of characters collapsed to one hyphen. `VanityURLRoutes`
-/// keeps `slugify` as its name for this rule, because the vanity routes own
-/// the URL shape; the body lives here so the slug allocator below the routes
-/// needs no upward call (#2143).
+/// every other run of characters collapsed to one hyphen. The body lives here,
+/// below the routes, so the slug allocator needs no upward call (#2143).
 func assignmentSlug(fromTitle title: String) -> String {
     let parts = title.lowercased().split { !$0.isASCII || (!$0.isLetter && !$0.isNumber) }
     return parts.joined(separator: "-")

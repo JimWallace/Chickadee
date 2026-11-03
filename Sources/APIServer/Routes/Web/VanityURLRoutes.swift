@@ -103,8 +103,4 @@ struct VanityURLRoutes: RouteCollection {
     static func vanityPath(courseCode: String, assignmentSlug: String) -> String {
         "/\(courseCode)/\(assignmentSlug)"
     }
-
-    static func slugify(_ title: String) -> String {
-        assignmentSlug(fromTitle: title)
-    }
 }
