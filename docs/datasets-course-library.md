@@ -592,7 +592,7 @@ and `docs/mcp-authoring-roadmap.md` (`MCPRoadmapDocSyncTests`).
   sources in the new course (D10). A dataset keeps its published flag;
   the new course has no students until enrollment opens. The version rows
   are new, so their dates are the clone's.
-- **Bundle export and import** (`CourseBundleRoutes`). A bundle that carries
+- **Bundle export and import** (`CourseBundleService`). A bundle that carries
   the library is `schemaVersion` 2. Its manifest has a `datasets` list
   (`BundledDataset`), and each version's bytes are at `datasets/<sha256>`, one
   file per hash. A course with no dataset still exports version 1, so a

@@ -9,7 +9,7 @@ import Vapor
 /// Ensures at most one worker-job claim operation executes at a time —
 /// **SQLite only** (#1172 moved Postgres to `FOR UPDATE SKIP LOCKED`, which
 /// needs no in-process serialization). Claim *correctness* comes from the
-/// compare-and-set UPDATE in `atomicallyClaimSubmission` (its
+/// compare-and-set UPDATE in `WorkerJobClaim.claimSubmission` (its
 /// `status == pending` guard is atomic); this queue exists so concurrent
 /// in-process polls don't thrash SQLite's write lock and burn busy-retries.
 /// The section it guards is one UPDATE + one SELECT (2026-07 audit —

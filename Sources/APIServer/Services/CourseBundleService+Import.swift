@@ -1,8 +1,9 @@
-// APIServer/Routes/Web/CourseBundleRoutes+Import.swift
+// APIServer/Services/CourseBundleService+Import.swift
 //
-// Course bundle import: the POST /admin/courses/import handler and its
-// phase helpers.  Split from CourseBundleRoutes.swift (which keeps boot +
-// export) — no behaviour changes.
+// Course bundle import: the checks on an extracted bundle, the import
+// transaction and its phase helpers. Moved from
+// Routes/Web/CourseBundleRoutes+Import.swift (#2774) with no behaviour
+// change; the route keeps the upload, the extraction and the result page.
 //
 // Import rules:
 //   - Same course code, active     → reject with error message
@@ -19,97 +20,42 @@
 //     not true of any imported assignment.
 
 import Core
-import Elementary
 import Fluent
 import Foundation
 import SystemPackage
 import Vapor
 
-extension CourseBundleRoutes {
+extension CourseBundleService {
 
-    // MARK: - POST /admin/courses/import
+    // MARK: - Import
 
-    @Sendable
-    func importCourse(req: Request) async throws -> Response {
-        let caller = try req.auth.require(APIUser.self)
-        guard caller.isAdmin else { throw AppError.forbidden(action: "import a course") }
-
-        let uploadBuffer = try await readUploadedBundleBuffer(req: req)
-
-        let tmpZipPath = FileManager.default.temporaryDirectory
-            .appendingPathComponent("chickadee-import-\(UUID().uuidString).zip").path
-        let extractDir = FileManager.default.temporaryDirectory
-            .appendingPathComponent("chickadee-import-ex-\(UUID().uuidString)", isDirectory: true)
-
-        defer {
-            try? FileManager.default.removeItem(atPath: tmpZipPath)
-            try? FileManager.default.removeItem(at: extractDir)
-        }
-
-        try await extractUploadedBundle(
-            req: req, buffer: uploadBuffer, tmpZipPath: tmpZipPath, extractDir: extractDir)
-
+    /// Checks an extracted bundle and imports it as a new course, in one
+    /// transaction. The caller owns `extractDir` and removes it.
+    static func importExtractedBundle(
+        extractDir: URL, app: Application, db: any Database
+    ) async throws -> ImportTally {
         let manifest = try parseBundleManifest(extractDir: extractDir)
 
         try validateBundleFiles(manifest: manifest, extractDir: extractDir)
         try validateBundleKinds(manifest: manifest)
 
-        let setupsDir = req.application.testSetupsDirectory
-        let subsDir = req.application.submissionsDirectory
-        let contentFilesDir = req.application.contentFilesDirectory
+        let setupsDir = app.testSetupsDirectory
+        let subsDir = app.submissionsDirectory
+        let contentFilesDir = app.contentFilesDirectory
 
-        let tally = try await performImportTransaction(
-            app: req.application,
-            db: req.db,
+        return try await performImportTransaction(
+            app: app,
+            db: db,
             manifest: manifest,
             dirs: BundleImportDirectories(
                 extractDir: extractDir, setupsDir: setupsDir,
                 subsDir: subsDir, contentFilesDir: contentFilesDir)
         )
-
-        await AuditLogger.record(
-            action: .courseBundleImported,
-            targetType: .course,
-            targetID: tally.courseID.uuidString,
-            metadata: [
-                "course_code": tally.courseCode,
-                "test_setups": String(tally.testSetupsImported),
-                "assignments": String(tally.assignmentsImported),
-                "submissions": String(tally.submissionsImported),
-            ],
-            on: req
-        )
-        return try await renderImportResult(req: req, tally: tally)
-    }
-
-    // ── 1. Receive the uploaded bundle ────────────────────────────────
-
-    private func readUploadedBundleBuffer(req: Request) async throws -> ByteBuffer {
-        struct BundleUpload: Content {
-            let file: File
-        }
-        let upload = try await req.decodeContent(BundleUpload.self)
-        guard upload.file.data.readableBytes > 0 else {
-            throw AppError.badRequest(reason: "Empty bundle upload")
-        }
-        // The ByteBuffer goes straight to fileio — the old
-        // ByteBuffer → [UInt8] → Data chain held three full copies of a
-        // potentially multi-hundred-MB bundle in heap at once (#1158).
-        return upload.file.data
-    }
-
-    // ── 2. Save to temp file and extract ─────────────────────────────
-
-    private func extractUploadedBundle(
-        req: Request, buffer: ByteBuffer, tmpZipPath: String, extractDir: URL
-    ) async throws {
-        try await req.fileio.writeFile(buffer, at: tmpZipPath)
-        try await extractZipArchive(zipPath: tmpZipPath, into: extractDir)
     }
 
     // ── 3. Parse bundle.json ──────────────────────────────────────────
 
-    private func parseBundleManifest(extractDir: URL) throws -> CourseBundleManifest {
+    private static func parseBundleManifest(extractDir: URL) throws -> CourseBundleManifest {
         let bundleJSONPath = extractDir.appendingPathComponent("bundle.json")
         guard let manifestData = try? Data(contentsOf: bundleJSONPath) else {
             throw AppError.badRequest(reason: "bundle.json not found in archive")
@@ -136,7 +82,7 @@ extension CourseBundleRoutes {
 
     // ── 4. Validate all referenced files exist ────────────────────────
 
-    private func validateBundleFiles(
+    private static func validateBundleFiles(
         manifest: CourseBundleManifest, extractDir: URL
     ) throws {
         for setup in manifest.testSetups {
@@ -193,7 +139,7 @@ extension CourseBundleRoutes {
     /// section grading mode this server does not know. The import refuses
     /// it here and names the item, instead of importing the item as a link
     /// in silence (#2172).
-    private func validateBundleKinds(manifest: CourseBundleManifest) throws {
+    private static func validateBundleKinds(manifest: CourseBundleManifest) throws {
         for item in manifest.contentItems ?? [] {
             _ = try bundledContentItemKind(item)
         }
@@ -206,7 +152,7 @@ extension CourseBundleRoutes {
     /// extract dir: only `content/<uuid>` is accepted (its last component must be
     /// a UUID), so a hostile `bundleFilename` can't traverse out of the extract
     /// dir. Returns nil for anything else.
-    private func safeContentAttachmentSource(extractDir: URL, bundleFilename: String) -> URL? {
+    private static func safeContentAttachmentSource(extractDir: URL, bundleFilename: String) -> URL? {
         let name = (FilePath(bundleFilename).lastComponent?.string ?? "")
         guard UUID(uuidString: name) != nil else { return nil }
         return extractDir.appendingPathComponent("content").appendingPathComponent(name)
@@ -222,7 +168,7 @@ extension CourseBundleRoutes {
     // Returns a tally from the closure to avoid captured-var mutation warnings
     // (errors in Swift 6 strict mode).
 
-    func performImportTransaction(
+    static func performImportTransaction(
         app: Application,
         db: any Database,
         manifest: CourseBundleManifest,
@@ -354,13 +300,6 @@ extension CourseBundleRoutes {
         }
     }
 
-    // ── 8. Render result page ─────────────────────────────────────────
-
-    private func renderImportResult(req: Request, tally: ImportTally) async throws -> Response {
-        try await HTMLResponse {
-            AdminImportResultPage(page: PageRequestContext(request: req), tally: tally)
-        }.encodeResponse(for: req)
-    }
 }
 
 // MARK: - Import data carriers
@@ -396,8 +335,9 @@ struct ImportTally: Sendable {
 
 // MARK: - Import phase helpers (6c–6h)
 //
-// These are fileprivate free functions rather than methods on `CourseBundleRoutes`
-// so the route struct stays under the swiftlint type_body_length limit.
+// These are fileprivate free functions rather than members of
+// `CourseBundleService`, so the type stays under the swiftlint
+// type_body_length limit.
 
 private func importBundledUsers(
     manifest: CourseBundleManifest, db: any Database, tally: inout ImportTally

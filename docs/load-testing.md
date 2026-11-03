@@ -85,4 +85,4 @@ route.
    60 s, and repeat each run.
 
 SQLite and Postgres behave differently under concurrent claims
-(`atomicallyClaimSubmission`). Measure on the database that production uses.
+(`WorkerJobClaim.claimSubmission`). Measure on the database that production uses.

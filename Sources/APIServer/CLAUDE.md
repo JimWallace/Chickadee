@@ -203,8 +203,8 @@ build a fresh dict: it drops `languageDeclared`.
 the runner. See `docs/personalization-eval-runtime.md`.
 
 Instructor validation is a `kind == .validation` submission, graded by the
-**native worker** (`WorkerJobRoutes.collectClaimCandidates`). It never runs a
-kernel. There is no `assignment-validate.js`.
+**native worker** (`collectClaimCandidates` in `WorkerClaimEvaluation.swift`).
+It never runs a kernel. There is no `assignment-validate.js`.
 Each validation also queues a **starter run**, a `kind == .starterValidation`
 submission that grades the assignment notebook with the same seed
 (`StarterValidationRun`, NB8). A runner claims it after every solution run. It
