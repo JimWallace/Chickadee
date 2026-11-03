@@ -1114,6 +1114,25 @@ because line numbers go out of date.
   student's login reaches the organization only in the repository name
   (`docs/github-submissions.md`, "What reaches GitHub").
 
+### The shared outbound HTTP client: `app.http.client.configuration`
+
+- **Owner:** `OutboundHTTPClientSetup.apply`, called once from `configure`
+  before the first `app.client` use (#2765). It sets a 30 s connect timeout,
+  a 60 s read timeout and the optional outbound proxy.
+- **Readers:** every `app.client` and `req.client` call, and
+  `app.http.client.shared`. These include the SSO token exchange, OIDC
+  discovery and JWKS, the LTI key set and AGS calls, BrightSpace,
+  `GitHubTransport`, the GitHub tarball download, the alert webhook and the UW
+  dates feed.
+- **Rules:**
+  - A new outbound call uses the shared client and gets the timeout. A call
+    that needs a shorter limit sets `ClientRequest.timeout` itself.
+  - A source that builds its own `HTTPClient` sets its own read timeout and
+    is named in `OutboundHTTPClientSetupTests`.
+  - A longer read timeout cannot be set per call. The read timeout equals the
+    GitHub tarball download's 60 s budget, so that download cannot hit it
+    first.
+
 ### Course archival: `isArchived`
 
 - **Readers:**
@@ -1188,6 +1207,7 @@ not repeat them. But a change that makes one of them weaker is a finding.
 | Rows that course deletion does not remove | `DeleteCourseCoverageTests` |
 | A reorder with its own role floor or rules | `SortOrderRenumberingTests`, `ReorderSurfaceRulesTests`, `SectionItemFullListTests` |
 | A notebook worker that is not in the isolation list | `IsolatedWorkerScriptDriftTests` |
+| An outbound HTTP call that bypasses the shared client timeout | `OutboundHTTPClientSetupTests` |
 
 ---
 
