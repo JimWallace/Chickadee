@@ -1,0 +1,75 @@
+name: Swift package currency
+
+# Asks whether `swift package update` would move any pin in the two Swift
+# package graphs, `/` and `/wasm`.
+#
+# WHY A WORKFLOW WHEN DEPENDABOT IS CONFIGURED. Dependabot's Swift toolchain is
+# older than ours. Since the manifests moved to swift-tools-version 6.4, every
+# Dependabot Swift run has failed before it compares anything ("package 'repo'
+# is using Swift tools version 6.4.0 but the installed version is 6.3.1"), and
+# no Swift update PR opened from June to November 2026. The header of
+# scripts/check-swift-currency.py has the details. Keep the Dependabot entries:
+# when its toolchain catches up they start working again, and this job then
+# only confirms what its PRs already say.
+#
+# It runs in the CI image, so the resolve uses the same toolchain as the build.
+# It resolves only: nothing is built and nothing is committed. When it goes red,
+# update the named directory, build, test and open a PR. JavaScriptKit (/wasm)
+# and the SwiftLint plugin land as their own PRs; .github/dependabot.yml says
+# why.
+#
+# Red here is a notification, not a broken build: this job is off the pull
+# request path, so an upstream release can never block a merge.
+
+on:
+  schedule:
+    # Mondays, beside the kernel currency check and Dependabot's own weekly
+    # run, so the week's dependency news arrives together.
+    - cron: "15 7 * * 1"
+  workflow_dispatch:
+
+concurrency:
+  group: swift-currency
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  packages: read
+
+jobs:
+  currency:
+    runs-on: ubuntu-latest
+    # Two resolves against GitHub remotes, a few minutes each when cold. The
+    # ceiling sits above 2 x the script's own 900 s per-directory timeout, so a
+    # stalled resolve fails with the script's explanation.
+    timeout-minutes: 40
+    container:
+      image: ghcr.io/jimwallace/chickadee/swift-ci:6.4-resolute
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v7
+
+      # First, and before any network: prove the comparator still reports a
+      # difference. A currency check that has quietly become a no-op reports
+      # "current" forever. See scripts/check-guards.sh for the house rule.
+      - name: Prove the check can fail
+        run: scripts/check-swift-currency.py --self-test
+
+      - name: Are the Swift pins current?
+        id: currency
+        run: |
+          set -o pipefail
+          scripts/check-swift-currency.py 2>&1 | tee /tmp/swift-currency.txt
+
+      - name: Summarise
+        if: always()
+        run: |
+          {
+            echo "### Swift package currency"
+            echo ""
+            echo '```'
+            cat /tmp/swift-currency.txt 2>/dev/null || echo "the check produced no output"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
