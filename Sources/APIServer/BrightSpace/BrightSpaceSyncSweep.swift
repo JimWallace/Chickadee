@@ -284,7 +284,7 @@ extension GradeSyncSweep {
                 status: status,
                 detail: detail
             )
-            try? await entry.save(on: db)
+            await saveSyncLog(entry, db: db, logger: application.logger)
         }
 
         // Flags every sync row terminally (cleared + error recorded) and logs a
@@ -380,7 +380,15 @@ extension GradeSyncSweep {
             user.brightspaceUserID != nil
         else { return }
         user.brightspaceUserID = nil
-        try? await user.save(on: db)
+        do {
+            try await user.save(on: db)
+        } catch {
+            // The stale id stays cached, and the next push replays it (#2776).
+            application.logger.error(
+                "BrightSpace grade push 404 for \(context) — could not clear the cached D2L user id: \(error)",
+                metadata: ["user_id": .string(user.id?.uuidString ?? "<nil>")])
+            return
+        }
         // User id in metadata only — message text reaches the admin query_logs
         // buffer unredacted (compliance audit F-1).
         application.logger.warning(
