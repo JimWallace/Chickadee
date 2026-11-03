@@ -7,8 +7,9 @@
 // description and "updated" label, a published flag, and belongs to at most one
 // course section via its nullable `sectionID`.
 //
-// These mirror the web instructor handlers (`CourseAdminRoutes+ContentItems.swift`)
-// and sit beside the course-section tools (`CourseSectionTools.swift`). Content
+// These share their field rules and writes with the web instructor handlers
+// (`CourseAdminRoutes+ContentItems.swift`) through `CourseContentService`
+// (#2769), and sit beside the course-section tools (`CourseSectionTools.swift`). Content
 // authoring is TA+ (matching script / notebook editing), so the write tools use
 // `resolveCourseForWrite(atLeast: CourseRoleFloor.manageContentItems)`.
 // Content items own no test setup, so editing them never closes an
@@ -48,12 +49,6 @@ struct ContentItemDTO: Encodable, Sendable {
     let updatedLabel: String?
     let isPublished: Bool
     let sortOrder: Int
-}
-
-/// One `{label, url}` link as accepted on input.
-struct ContentLinkInput: Decodable, Sendable {
-    let label: String?
-    let url: String
 }
 
 /// One attachment to fetch by URL and host, as accepted on input.
@@ -126,31 +121,9 @@ func fetchAndStoreContentAttachments(
     try await item.save(on: context.db)
 }
 
-/// http(s) or site-relative only — the URLs render as `href`s, so `javascript:`
-/// / `data:` are refused.
-private func isSafeContentLinkURL(_ url: String) -> Bool {
-    let lower = url.lowercased()
-    return lower.hasPrefix("http://") || lower.hasPrefix("https://") || url.hasPrefix("/")
-}
-
-/// Validates + maps input links to `[ContentLink]`, dropping fully-blank rows,
-/// defaulting a blank label to the URL, and rejecting unsafe schemes.
-func contentLinksFromInput(_ links: [ContentLinkInput]) throws -> [ContentLink] {
-    var out: [ContentLink] = []
-    for link in links {
-        let label = (link.label ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-        let url = link.url.trimmingCharacters(in: .whitespacesAndNewlines)
-        if label.isEmpty, url.isEmpty { continue }
-        guard !url.isEmpty else {
-            throw MCPToolError.invalidArguments(detail: "A link labelled \"\(label)\" is missing a url.")
-        }
-        guard isSafeContentLinkURL(url) else {
-            throw MCPToolError.invalidArguments(
-                detail: "Link url \"\(url)\" must be an http(s) or site-relative (/…) URL.")
-        }
-        out.append(ContentLink(label: label.isEmpty ? url : label, url: url))
-    }
-    return out
+/// The tool error for a refused content item.
+func mcpToolError(_ error: CourseContentError) -> MCPToolError {
+    .invalidArguments(detail: error.description)
 }
 
 /// Resolves a content item by id and authorizes the acting account for a write
@@ -421,33 +394,24 @@ struct CreateContentItemTool: ContentTool {
     static let requiredScopes: Set<ContentScope> = [.write]
 
     func execute(_ input: Input, _ context: ToolContext) async throws -> Output {
-        let title = input.title.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !title.isEmpty else {
-            throw MCPToolError.invalidArguments(detail: "title must not be empty.")
+        // An absent kind is a link; an unknown one is refused, as update does,
+        // rather than stored as a link without a word (#2337).
+        let draft: ContentItemDraft
+        do {
+            draft = try ContentItemDraft(
+                title: input.title, kind: input.kind, links: input.links ?? [],
+                description: input.description, updatedLabel: input.updatedLabel,
+                isPublished: input.isPublished ?? true)
+        } catch {
+            throw mcpToolError(error)
         }
         let course = try await resolveCourseForWrite(
             code: input.courseCode, context: context, atLeast: CourseRoleFloor.manageContentItems)
         let courseID = try course.requireID()
-        // An absent kind is a link; an unknown one is refused, as update does,
-        // rather than stored as a link without a word (#2337).
-        let kind = try MCPEnumProse<ContentItemKind>.parseOptional(input.kind, field: "kind") ?? .link
-        let links = try contentLinksFromInput(input.links ?? [])
         let sectionID = try await resolveContentItemSectionID(
             input.courseSectionID, courseID: courseID, context: context)
-        let sortOrder = try await nextSectionItemSortOrder(
-            courseID: courseID, sectionID: sectionID, db: context.db)
-
-        let item = APICourseContentItem(
-            courseID: courseID,
-            sectionID: sectionID,
-            sortOrder: sortOrder,
-            title: title,
-            kind: kind,
-            itemDescription: normalizedContentField(input.description),
-            links: links,
-            updatedLabel: normalizedContentField(input.updatedLabel),
-            isPublished: input.isPublished ?? true)
-        try await item.save(on: context.db)
+        let item = try await CourseContentService.create(
+            draft, courseID: courseID, sectionID: sectionID, on: context.db)
         try await fetchAndStoreContentAttachments(
             input.attachments ?? [], for: item, context: context)
         return contentItemDTO(from: item)
@@ -545,48 +509,26 @@ struct UpdateContentItemTool: ContentTool {
     static let requiredScopes: Set<ContentScope> = [.write]
 
     func execute(_ input: Input, _ context: ToolContext) async throws -> Output {
-        guard
-            input.title != nil || input.kind != nil || input.links != nil
-                || input.attachments != nil || input.description != nil || input.updatedLabel != nil
-                || input.isPublished != nil || input.courseSectionID != nil
-        else {
+        let edit = ContentItemEdit(
+            title: input.title, kind: input.kind, links: input.links, description: input.description,
+            updatedLabel: input.updatedLabel, isPublished: input.isPublished)
+        guard !edit.isEmpty || input.attachments != nil || input.courseSectionID != nil else {
             throw MCPToolError.invalidArguments(detail: "Provide at least one field to change.")
         }
         let item = try await resolveContentItemForWrite(
             contentItemID: input.contentItemID, context: context)
 
-        if let title = input.title {
-            let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !trimmed.isEmpty else {
-                throw MCPToolError.invalidArguments(detail: "title must not be empty.")
-            }
-            item.title = trimmed
-        }
-        if let kind = input.kind {
-            item.kind = try MCPEnumProse<ContentItemKind>.parse(kind, field: "kind")
-        }
-        if let links = input.links {
-            item.links = try contentLinksFromInput(links)
-        }
-        if let description = input.description {
-            item.itemDescription = normalizedContentField(description)
-        }
-        if let updatedLabel = input.updatedLabel {
-            item.updatedLabel = normalizedContentField(updatedLabel)
-        }
-        if let isPublished = input.isPublished {
-            item.isPublished = isPublished
-        }
+        // An outer nil leaves the section unchanged; an inner nil ungroups.
+        var newSectionID: UUID??
         if let rawSection = input.courseSectionID {
-            let newSectionID = try await resolveContentItemSectionID(
-                rawSection, courseID: item.courseID, context: context)
-            if newSectionID != item.sectionID {
-                item.sectionID = newSectionID
-                item.sortOrder = try await nextSectionItemSortOrder(
-                    courseID: item.courseID, sectionID: newSectionID, db: context.db)
-            }
+            newSectionID = .some(
+                try await resolveContentItemSectionID(rawSection, courseID: item.courseID, context: context))
         }
-        try await item.save(on: context.db)
+        do {
+            try await CourseContentService.update(item, with: edit, movingTo: newSectionID, on: context.db)
+        } catch let error as CourseContentError {
+            throw mcpToolError(error)
+        }
         try await fetchAndStoreContentAttachments(
             input.attachments ?? [], for: item, context: context)
         return contentItemDTO(from: item)
@@ -649,10 +591,7 @@ struct DeleteContentItemTool: ContentTool {
             return Output(contentItemID: raw, removed: false)
         }
         try await context.authorizeCourseWriteAccess(item.courseID, atLeast: CourseRoleFloor.manageContentItems)
-        if let itemID = item.id {
-            ContentAttachmentStore.removeDirectory(context.request.application, itemID: itemID)
-        }
-        try await item.delete(on: context.db)
+        try await CourseContentService.delete(item, application: context.request.application, on: context.db)
         return Output(contentItemID: raw, removed: true)
     }
 }
@@ -728,13 +667,4 @@ struct ReorderContentItemsTool: ContentTool {
             courseCode: course.code, courseKey: course.urlKey, courseTerm: course.term?.displayName,
             contentItems: ordered)
     }
-}
-
-// MARK: - Shared
-
-/// Trims and maps an empty string to nil for optional content text fields.
-func normalizedContentField(_ raw: String?) -> String? {
-    guard let trimmed = raw?.trimmingCharacters(in: .whitespacesAndNewlines), !trimmed.isEmpty
-    else { return nil }
-    return trimmed
 }

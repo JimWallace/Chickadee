@@ -24,6 +24,10 @@
 // The reorder is the one exception (#2713): reordering is display
 // organization, so every reorder kind, web and MCP, floors at `.ta`
 // (`SortOrderRenumbering.roleFloor`).
+//
+// The field rules and the writes are in `CourseSectionService`, which the MCP
+// tools share (#2769). These handlers authorize, decode the form, and map a
+// `CourseSectionError` to `AppError`.
 
 import Core
 import Fluent
@@ -44,22 +48,13 @@ extension CourseAdminRoutes {
             user, atLeast: CourseRoleFloor.manageSections, action: "managing sections"
         ).requireID()
         let body = try await req.decodeContent(CreateSectionBody.self)
-        let name = body.name.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !name.isEmpty else {
-            throw AppError.invalidParameter(name: "name", reason: "Section name must not be empty.")
+        let draft: CourseSectionDraft
+        do {
+            draft = try CourseSectionDraft(name: body.name, defaultGradingMode: body.defaultGradingMode)
+        } catch {
+            throw Self.webError(error)
         }
-        let mode = body.defaultGradingMode
-        guard mode == "browser" || mode == "worker" else {
-            throw AppError.invalidParameter(
-                name: "defaultGradingMode", reason: "defaultGradingMode must be 'browser' or 'worker'.")
-        }
-        let maxOrder =
-            try await APICourseSection.query(on: req.db)
-            .filter(\.$courseID == courseID)
-            .max(\.$sortOrder) ?? 0
-        let section = APICourseSection(
-            name: name, defaultGradingMode: mode, sortOrder: maxOrder + 1, courseID: courseID)
-        try await section.save(on: req.db)
+        _ = try await CourseSectionService.create(draft, courseID: courseID, on: req.db)
         return req.redirect(to: "/instructor")
     }
 
@@ -101,18 +96,13 @@ extension CourseAdminRoutes {
         let section = try await loadCourseSectionForWrite(
             req, caller: user, inCourse: courseID, atLeast: CourseRoleFloor.manageSections)
         let body = try await req.decodeContent(RenameSectionBody.self)
-        let name = body.name.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !name.isEmpty else {
-            throw AppError.invalidParameter(name: "name", reason: "Section name must not be empty.")
+        let edit: CourseSectionEdit
+        do {
+            edit = try CourseSectionEdit(name: body.name, defaultGradingMode: body.defaultGradingMode)
+        } catch {
+            throw Self.webError(error)
         }
-        let mode = body.defaultGradingMode
-        guard mode == "browser" || mode == "worker" else {
-            throw AppError.invalidParameter(
-                name: "defaultGradingMode", reason: "defaultGradingMode must be 'browser' or 'worker'.")
-        }
-        section.name = name
-        section.defaultGradingMode = mode
-        try await section.save(on: req.db)
+        try await CourseSectionService.update(section, with: edit, on: req.db)
         return req.redirect(to: "/instructor")
     }
 
@@ -125,7 +115,7 @@ extension CourseAdminRoutes {
         let section = try await loadCourseSectionForWrite(
             req, caller: user, inCourse: courseID, atLeast: CourseRoleFloor.manageSections)
         // FK SET NULL: assignments in this section will have section_id → NULL (ungrouped).
-        try await section.delete(on: req.db)
+        try await CourseSectionService.delete(section, on: req.db)
         return req.redirect(to: "/instructor")
     }
 
@@ -149,24 +139,16 @@ extension CourseAdminRoutes {
             caller: user, courseID: assignment.courseID, atLeast: CourseRoleFloor.manageSections, db: req.db)
         let body = (try? await req.decodeContent(MoveBody.self))
         let newSectionID: UUID? = try await resolveSectionID(body?.sectionID, courseID: courseID, db: req.db)
-        assignment.sectionID = newSectionID
-        // Append to the destination lane's shared (assignment + content) order so
-        // the moved assignment doesn't collide with an existing sort_order; the
-        // DnD client follows with a reorder to place it exactly.
-        assignment.sortOrder = try await nextSectionItemSortOrder(
-            courseID: courseID, sectionID: newSectionID, db: req.db)
-        try await assignment.save(on: req.db)
-
-        // Moving into a named section adopts that section's default grading
-        // mode, unless that would break a manifest rule. Moving to
-        // "ungrouped" (nil section) leaves the grading mode unchanged.
-        if let sectionUUID = newSectionID,
-            let section = try await APICourseSection.find(sectionUUID, on: req.db),
-            let setup = try await APITestSetup.find(assignment.testSetupID, on: req.db)
-        {
-            try await adoptSectionGradingMode(section, setup: setup, on: req.db)
-        }
-
+        // Appends to the destination lane (the DnD client follows with a
+        // reorder to place it exactly) and adopts a named section's default
+        // grading mode where the manifest allows it. Ungrouping leaves the
+        // grading mode unchanged.
+        try await CourseSectionService.moveAssignment(assignment, toSection: newSectionID, on: req.db)
         return .ok
+    }
+
+    /// The form error for a refused course section.
+    private static func webError(_ error: CourseSectionError) -> AppError {
+        .invalidParameter(name: error.field, reason: error.description)
     }
 }
