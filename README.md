@@ -73,18 +73,31 @@ Install Swift via [`swiftly`](https://swift.org/install/linux), build release bi
 
 Requires Swift 6.4 ([swift.org](https://swift.org/download)). On macOS, it requires macOS 26.2 or later.
 
+Chickadee stores everything in PostgreSQL, and so do its tests. The test suite
+connects to `localhost:5432` as user `postgres` with password `postgres`, and
+uses the database `chickadee_test`. Any PostgreSQL 16 install works, such as
+Postgres.app or Homebrew. With Docker, these commands start one:
+
 ```bash
+docker run -d --name chickadee-postgres -p 5432:5432 -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=chickadee_test postgres:16
 swift build
 swift test
 ```
 
-Run the server:
+To use another server, set `TEST_DATABASE_HOST`, `TEST_DATABASE_PORT`,
+`TEST_DATABASE_NAME`, `TEST_DATABASE_USER` or `TEST_DATABASE_PASSWORD`. Each
+one overrides only its own part. Claude Code cloud sessions start a test
+database in their session hook.
+
+Run the server against its own database. The server needs all five
+`DATABASE_*` variables, and it refuses to start without them:
 
 ```bash
-# AUTH_MODE defaults to SSO; override for local dev:
-AUTH_MODE=local ENABLE_NON_SSO_AUTH_MODES=true \
-  swift run chickadee-server serve --port 8080 --worker-secret dev-secret
+docker exec chickadee-postgres createdb -U postgres chickadee
+AUTH_MODE=local ENABLE_NON_SSO_AUTH_MODES=true DATABASE_HOST=localhost DATABASE_PORT=5432 DATABASE_NAME=chickadee DATABASE_USER=postgres DATABASE_PASSWORD=postgres swift run chickadee-server serve --port 8080 --worker-secret dev-secret
 ```
+
+`AUTH_MODE` defaults to SSO, so local development sets it to `local`.
 
 Run the runner against the local server:
 

@@ -63,8 +63,7 @@ enum StorageUsage {
         async let testSetupsBytes = dirSize(testSetupsDir)
         async let resultsBytes = dirSize(resultsDir)
         async let publicBytes = dirSize(publicDir)
-        async let dbBytes = databaseSizeBytes(
-            on: app.db, settings: app.appConfig.database)
+        async let dbBytes = databaseSizeBytes(on: app.db)
 
         // Mapping rows for the per-assignment breakdown.  The (id → setup)
         // projection is the minimal query byte attribution needs: sizes live
@@ -138,7 +137,7 @@ enum StorageUsage {
         return AdminStorageContext(
             rows: rows,
             totalFormatted: humanReadableBytes(total),
-            dbBackend: app.appConfig.database.backend.rawValue,
+            dbBackend: "postgres",
             assignments: assignmentRows,
             totalBytes: total,
             // The course key, not the bare code: a clone for a new term has

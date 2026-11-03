@@ -367,10 +367,9 @@ private struct PassthroughResponder: AsyncResponder {
     // MARK: - POST /admin/users/:userID/delete — FK cleanup (#562)
 
     /// Deleting a user must CASCADE-delete the `class_achievements` rows
-    /// that reference them.  The DB-level FK constraint added by
-    /// `AddUserFKConstraints` covers Postgres; the admin handler enforces
-    /// the same semantics in application code so SQLite (which can't add
-    /// FK constraints to existing columns) behaves identically.
+    /// that reference them.  The FK constraint added by
+    /// `AddUserFKConstraints` covers it, and the admin handler enforces the
+    /// same semantics in application code.
     @Test func deleteUserCascadesClassAchievements() async throws {
         try await withApp(app) { _ in
             let cookie = try await loginAsAdmin("admin_routes", on: app)
@@ -961,8 +960,7 @@ private struct PassthroughResponder: AsyncResponder {
     }
 
     // Validates the DB-side GROUP BY in assignmentCountsByCourse (incl. UUID
-    // decode) on whichever backend the suite runs against — SQLite locally and
-    // in the `api-tests` CI job, Postgres in `api-tests-postgres`.
+    // decode).
     @Test func assignmentCountsByCourseGroupsPerCourse() async throws {
         try await withApp(app) { _ in
             let courseA = try await makeCourse(code: "GRPA", name: "Group A")

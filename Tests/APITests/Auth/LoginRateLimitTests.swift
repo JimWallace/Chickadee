@@ -113,7 +113,7 @@ import VaporTesting
 
 // MARK: - Cross-instance sharing (#1154 acceptance)
 
-/// Two Application instances backed by ONE SQLite file — the multi-process
+/// Two Application instances backed by ONE database — the multi-process
 /// deployment shape. Failure counts and rate windows recorded through one
 /// instance must be visible to the other.
 @Suite(.serialized) struct LoginRateLimitCrossInstanceTests {
@@ -161,46 +161,35 @@ import VaporTesting
 
 // MARK: - Shared-database two-app helper
 
-/// Builds two bare Applications over one SQLite file (migrations run once)
-/// and guarantees both are shut down. Used by the #1154 cross-instance
-/// tests; lives here because this file hosts the first of them.
+/// Builds two bare Applications over one Postgres schema (migrated once, the
+/// first app's test database) and guarantees both are torn down. Used by the
+/// #1154 cross-instance tests; lives here because this file hosts the first
+/// of them.
 func withTwoAppsOnSharedDatabase(
     _ body: (Application, Application) async throws -> Void
 ) async throws {
-    let dbPath = FileManager.default.temporaryDirectory
-        .appendingPathComponent("chickadee-shared-\(UUID().uuidString).sqlite").path
-
-    func makeApp(migrate: Bool) async throws -> Application {
-        try await makeTestingApplication { app in
-            try configureDatabase(app, settings: .sqlite(path: dbPath))
-            registerMigrations(on: app)
-            if migrate {
-                let priorLogLevel = app.logger.logLevel
-                app.logger.logLevel = .warning
-                try await app.autoMigrate()
-                app.logger.logLevel = priorLogLevel
-            }
-        }
+    let appA = try await makeTestingApplication { app in
+        try await configureTestDatabase(app)
     }
-
-    let appA = try await makeApp(migrate: true)
     let appB: Application
     do {
-        appB = try await makeApp(migrate: false)
+        let settings = try await withAsyncEnvLock { try testDatabaseSettingsFromEnvironment() }
+        let schema = try #require(
+            appA.storage[PooledPostgresSchemaKey.self]?.schemaName
+                ?? appA.storage[TestPostgresSchemaKey.self],
+            "the first app must have a test schema for the second to share")
+        appB = try await makeTestingApplication { app in
+            configureDatabase(app, settings: postgresSettings(settings, searchPath: [schema]))
+        }
     } catch {
-        try? await appA.asyncShutdown()
+        try? await appA.tearDownTestApp()
         throw error
     }
 
-    do {
-        try await body(appA, appB)
-    } catch {
-        try? await appA.asyncShutdown()
-        try? await appB.asyncShutdown()
-        try? FileManager.default.removeItem(atPath: dbPath)
-        throw error
-    }
-    try await appA.asyncShutdown()
-    try await appB.asyncShutdown()
-    try? FileManager.default.removeItem(atPath: dbPath)
+    var failure: (any Error)?
+    do { try await body(appA, appB) } catch { failure = error }
+    // B first: A's teardown hands the shared schema back to the pool.
+    do { try await appB.asyncShutdown() } catch { failure = failure ?? error }
+    do { try await appA.tearDownTestApp() } catch { failure = failure ?? error }
+    if let failure { throw failure }
 }

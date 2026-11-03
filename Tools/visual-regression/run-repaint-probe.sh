@@ -31,21 +31,26 @@ if [ ! -x "$BIN" ]; then
   fi
 fi
 
+# shellcheck source=../../scripts/lib/scratch-database.sh
+. "$REPO_ROOT/scripts/lib/scratch-database.sh"
+
 cleanup() {
   if [ -n "${SRV_PID:-}" ] && kill -0 "$SRV_PID" 2>/dev/null; then
     kill "$SRV_PID" 2>/dev/null || true
     wait "$SRV_PID" 2>/dev/null || true
   fi
+  chickadee_scratch_db_drop
   rm -rf "$WORKDIR"
 }
 trap cleanup EXIT
+
+# A fresh Postgres database for this boot, dropped by cleanup.
+chickadee_scratch_db_create probe || exit 2
 
 (
   cd "$REPO_ROOT"
   ENABLE_NON_SSO_AUTH_MODES=true \
   AUTH_MODE=local \
-  DATABASE_BACKEND=sqlite \
-  SQLITE_PATH="$WORKDIR/probe.sqlite" \
   MCP_MODE=off \
   LOG_LEVEL=error \
     exec "$BIN" serve --hostname 127.0.0.1 --port "$PORT"

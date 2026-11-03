@@ -1,12 +1,10 @@
 // Tests/APITests/BrightSpace/CourseWideResultQueryBindLimitTests.swift
 //
 // #2764: the course-wide result queries must not bind one parameter per
-// submission. A driver refuses a statement past its bind limit: 65,535 on
-// PostgreSQL (the wire protocol counts parameters in 16 bits), and 250,000 on
-// the SQLite that sqlite-nio compiles. These tests seed more student
-// submissions than the PostgreSQL limit and drive the LEARN tab summary and the
-// "Sync now" re-queue over them. On the PostgreSQL lane the unchunked queries
-// fail; on SQLite the tests guard the query shape.
+// submission. PostgreSQL refuses a statement past 65,535 binds (the wire
+// protocol counts parameters in 16 bits). These tests seed more student
+// submissions than that and drive the LEARN tab summary and the "Sync now"
+// re-queue over them, so an unchunked query fails.
 
 import Fluent
 import Foundation

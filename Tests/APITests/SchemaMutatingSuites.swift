@@ -8,7 +8,7 @@ import Testing
 /// Suites that change their database's SHAPE, and therefore must not be given
 /// a recycled schema.
 ///
-/// Five suites, one consequence:
+/// Four suites, one consequence:
 ///
 ///   * `LegacyMigrationNamespaceGuardTests` rewrites the Fluent migration
 ///     log: it renames a history row into a legacy namespace to prove the
@@ -20,21 +20,18 @@ import Testing
 ///     reports the primary run when the variant batch cannot be read.
 ///   * `ResultCollectionBackfillMigrationTests` builds a legacy-shaped schema
 ///     with raw DDL.
-///   * `WriteLockedTransactionTests` creates a table in a SQLite file of its
-///     own.
 ///
 /// Each is exactly right against a schema it owns, and each would leave a
 /// pooled schema different from a freshly migrated one — a corruption that
 /// surfaces as unrelated tests failing on a missing table, several files away
 /// from the cause.
 ///
-/// (Two of the five are declared and inert.
-/// `ResultCollectionBackfillMigrationTests` configures its own bare
-/// `.sqliteInMemory()` application and never calls `configureTestDatabase`,
-/// and `WriteLockedTransactionTests` opens a SQLite file of its own, so neither
-/// asks the pool for anything. They are listed because the scan below flags
-/// what they DO, and a list that disagreed with the scan would be a list
-/// somebody edits the scan to silence.)
+/// (One of the four is declared and inert.
+/// `ResultCollectionBackfillMigrationTests` builds a bare application on an
+/// empty private schema (`configureEmptyPostgresTestSchema`) and never calls
+/// `configureTestDatabase`, so it asks the pool for nothing. It is listed
+/// because the scan below flags what it DOES, and a list that disagreed with
+/// the scan would be a list somebody edits the scan to silence.)
 ///
 /// **Naming a suite is the brittle half of this design, and
 /// docs/ci-flakiness.md already records why**: "a guard pointed at a
@@ -63,7 +60,6 @@ enum SchemaMutatingSuites {
         "MCPAuditFailClosedTests",
         "ResultCollectionBackfillMigrationTests",
         "GetValidationResultVariantFallbackTests",
-        "WriteLockedTransactionTests",
     ]
 
     /// True when the test currently running belongs to one of those suites.

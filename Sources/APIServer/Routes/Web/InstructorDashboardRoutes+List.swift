@@ -337,15 +337,15 @@ extension InstructorDashboardRoutes {
                 .from("submissions")
                 .where("test_setup_id", .in, allSetupIDs)
                 .where("kind", .equal, APISubmission.Kind.student)
-                // Bind UUIDs (not strings) so the Postgres uuid column and the
-                // SQLite text storage both compare correctly.
+                // Bind UUIDs (not strings) so the uuid column compares
+                // correctly.
                 .where("user_id", .in, Array(enrolledStudentIDs))
                 .groupBy("test_setup_id")
                 .all(decoding: SubmitterCountRow.self)
             return Dictionary(uniqueKeysWithValues: rows.map { ($0.testSetupID, $0.submitters) })
         }
 
-        // Non-SQL fallback (not hit by the sqlite/postgres drivers in use).
+        // Non-SQL fallback (not hit by the Postgres driver in use).
         let studentSubmissions = try await APISubmission.query(on: req.db)
             .filter(\.$testSetupID ~~ allSetupIDs)
             .filter(\.$kind == APISubmission.Kind.student)

@@ -227,7 +227,7 @@ func bestGradePercentByStudent(
 
 // MARK: - Non-SQL fallbacks
 //
-// Not hit by the sqlite/postgres drivers in use; they load the rows and run
+// Not hit by the Postgres driver in use. They load the rows and run
 // the identical folds in Swift.
 
 private func studentSubmissionSummaryBySetupViaFluent(

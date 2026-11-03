@@ -11,18 +11,10 @@
 // while removing nothing. A full suite run leaked ~1.4 GB across ~6,900
 // entries; a working session filled a 252 GB disk. See issue #1298.
 //
-// The two smaller leaks the same issue kept open are pinned here too:
-//   - suites route teardown through `withApp`, which used to only shut the
-//     app down — the directory tree survived (~45 MB / ~1,400 entries);
-//   - sqlite-kit backs every `.memory` database with a real file in the
-//     system temp directory and never deletes it (~973 MB / ~1,566 entries).
-//
-// The sqlite lane's test databases are now copies of a once-migrated template
-// rather than `.memory` files, so the discovery these assert on runs through
-// `sqliteDatabaseFilesOnDisk()`, which covers BOTH mechanisms. That indirection
-// is the lesson from introducing the template: pointing the guard at one
-// mechanism by name meant changing the mechanism emptied its input, and an
-// emptied input is a guard that passes while watching nothing.
+// A smaller leak the same issue kept open is pinned here too: suites route
+// teardown through `withApp`, which used to only shut the app down — the
+// directory tree survived (~45 MB / ~1,400 entries). (A third, sqlite-kit's
+// fake in-memory database files, left with SQLite support.)
 //
 // These assert the OUTCOME (nothing survives) rather than that cleanup ran,
 // because "cleanup ran" is exactly what was true the whole time it was broken.
@@ -109,67 +101,11 @@ import VaporTesting
         let prefix = "chickadee-tmptest-\(UUID().uuidString)"
         let app = try await makeTestApp(prefix: prefix)
 
-        // In the sqlite lane the app's database is a real file on disk, whether
-        // it is the migrated-template copy or sqlite-kit's fake-memory file;
-        // require the discovery so a silent break fails here instead of
-        // quietly re-leaking.
-        let backend = try await withAsyncEnvLock {
-            try testDatabaseSettingsFromEnvironment().backend
-        }
-        var sqliteFiles: [String] = []
-        if backend == .sqlite {
-            sqliteFiles = await app.sqliteDatabaseFilesOnDisk()
-            try #require(
-                !sqliteFiles.isEmpty,
-                """
-                could not locate the file backing this app's database. If the harness changed \
-                how a test database is materialized, teach `sqliteDatabaseFilesOnDisk()` about \
-                the new mechanism — until then every test app leaks that file again.
-                """)
-            for file in sqliteFiles {
-                #expect(FileManager.default.fileExists(atPath: file))
-            }
-        }
-
         try await withApp(app) { _ in }
 
         #expect(
             entries(matching: prefix).isEmpty,
             "\(entries(matching: prefix)) survived withApp — it must tear down, not just shut down")
-        for file in sqliteFiles {
-            #expect(
-                !FileManager.default.fileExists(atPath: file),
-                "the file backing the app's database survived withApp: \(file)")
-        }
     }
 
-    /// Apps built without `makeTestApp` (bare `Application.make` plus a direct
-    /// `configureDatabase(.sqliteInMemory())`) materialize the same hidden
-    /// file; `tearDownTestApp` must find and remove it for them too. Runs in
-    /// both database lanes — the settings here are explicit, not env-derived.
-    @Test func tearDownRemovesTheFakeMemoryDatabaseFileOfABareApp() async throws {
-        let app = try await makeTestingApplication { app in
-            try configureDatabase(app, settings: .sqliteInMemory())
-        }
-
-        // Discovery opens the pool's first connection, which is also what
-        // materializes the file — asserting existence right after is
-        // deterministic.
-        let sqliteFiles = await app.sqliteFakeMemoryDatabaseFiles()
-        try #require(
-            !sqliteFiles.isEmpty,
-            "could not locate the file backing the fake in-memory database (see withAppLeavesNothingBehind)"
-        )
-        for file in sqliteFiles {
-            #expect(FileManager.default.fileExists(atPath: file))
-        }
-
-        try await app.tearDownTestApp()
-
-        for file in sqliteFiles {
-            #expect(
-                !FileManager.default.fileExists(atPath: file),
-                "the sqlite-kit fake-memory database file survived tearDownTestApp: \(file)")
-        }
-    }
 }
