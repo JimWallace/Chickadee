@@ -18,11 +18,29 @@ name: Re-vendor xeus kernels
 # grade time. `scripts/check-env-vendored-sync.sh` now fails a PR in that state
 # and points here; this workflow is what resolves it.
 #
-# WHAT IT DOES NOT DO. It never runs automatically on `push` or on a schedule.
-# The output is ~100 MB of regenerated binary assets whose filenames are content
-# hashed, so an unattended rebuild would produce large, noisy, hard-to-review
-# commits on unrelated work. It runs when someone asks for it, or when a PR
-# actually changes what the environments contain.
+# WHAT IT DOES NOT DO. It never runs on `push` or on a schedule of its own, and
+# it never commits onto unrelated work. The output is ~100 MB of regenerated
+# binary assets whose filenames are content hashed. It runs when someone asks
+# for it, when a PR changes what the environments contain, or when the weekly
+# kernel currency check (kernel-currency.yml) finds the kernels behind their
+# channels.
+#
+# PUBLISH MODE (`publish: true`). This is how kernels ship without a person.
+# kernel-currency.yml dispatches it only when the channels have moved, because
+# a diff cannot decide that: xpython.wasm differs by 16 bytes on every build
+# (see below). It rebuilds from `main`, verifies, puts the rebuild and a
+# changelog fragment on a new `kernels/revendor-<run id>` branch, opens a pull
+# request and enables auto-merge. The pull request's CI, the browser grading
+# and editor smoke included, tests the new kernels before they merge, and
+# auto-release then deploys them like any other merge. If a re-vendor pull
+# request is already open, it does nothing.
+#
+# WHOSE TOKEN. Both pushing modes push with the RELEASE_TOKEN secret, the one
+# auto-release.yml uses. GITHUB_TOKEN cannot do either job: the branch ruleset
+# rejects its push (GH013, "Required status check editor-smoke-gate is
+# expected"), and a pull request opened with it starts no CI, so auto-merge
+# would merge untested kernels or wait forever. Publish mode refuses to run
+# without RELEASE_TOKEN.
 #
 # ONLY `workflow_dispatch` commits. A pull_request run rebuilds and verifies but
 # never pushes, and that is not caution — it is required for termination.
@@ -47,6 +65,10 @@ on:
         description: "Commit the rebuilt bundle back to this branch"
         type: boolean
         default: true
+      publish:
+        description: "Instead: rebuild from main and open an auto-merging pull request"
+        type: boolean
+        default: false
   pull_request:
     paths:
       - "Tools/jupyterlite/environment-*.yml"
@@ -62,11 +84,14 @@ on:
       - "scripts/install-micromamba.sh"
 
 concurrency:
-  group: revendor-kernels-${{ github.ref }}
+  # A publish run has its own group, so another dispatch on main cannot cancel
+  # it halfway through the build.
+  group: revendor-kernels-${{ (github.event_name == 'workflow_dispatch' && inputs.publish && 'publish') || github.ref }}
   cancel-in-progress: true
 
 permissions:
   contents: write
+  pull-requests: write
 
 jobs:
   revendor:
@@ -75,14 +100,50 @@ jobs:
     # measured at roughly 15 minutes cold for two envs, less with a warm empack
     # cache. chickadee-lua adds ~10 MB of packages and little time.
     timeout-minutes: 60
+    env:
+      PUBLISH: ${{ github.event_name == 'workflow_dispatch' && inputs.publish }}
+      HAS_RELEASE_TOKEN: ${{ secrets.RELEASE_TOKEN != '' }}
     steps:
+      # Publish mode needs RELEASE_TOKEN for both its push and its pull request
+      # (see WHOSE TOKEN above), and an open re-vendor pull request already
+      # carries the update. Decide both before a quarter-hour build.
+      - name: Decide whether to publish
+        id: gate
+        if: env.PUBLISH == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if [ "$HAS_RELEASE_TOKEN" != "true" ]; then
+            echo "::error::Publish mode needs the RELEASE_TOKEN secret. A GITHUB_TOKEN push is refused by the branch ruleset, and a GITHUB_TOKEN pull request starts no CI."
+            exit 1
+          fi
+          open="$(gh pr list --repo "$GITHUB_REPOSITORY" --state open --json headRefName,url \
+            --jq '[.[] | select(.headRefName | startswith("kernels/revendor-")) | .url] | join(" ")')"
+          if [ -n "$open" ]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            # A warning, not only a summary line: an open re-vendor pull request
+            # that is red, or whose auto-merge failed, holds every later
+            # publish, and nothing else would say so.
+            echo "::warning::A re-vendor pull request is still open, so no new one is published: $open"
+            echo "A re-vendor pull request is still open, so this run publishes nothing: $open" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - uses: actions/checkout@v7
+        if: steps.gate.outputs.skip != 'true'
         with:
-          # Needed to push the rebuild back; harmless otherwise.
-          ref: ${{ github.event.pull_request.head.ref || github.ref_name }}
-          persist-credentials: true
+          # Publish mode builds from main. Otherwise this is the branch the
+          # rebuild is pushed back to.
+          ref: ${{ (env.PUBLISH == 'true' && 'main') || github.event.pull_request.head.ref || github.ref_name }}
+          # No credential stays in .git/config while the build installs and runs
+          # third-party packages. The two push steps below set RELEASE_TOKEN on
+          # the remote themselves, after the build.
+          persist-credentials: false
 
       - uses: actions/setup-python@v7
+        if: steps.gate.outputs.skip != 'true'
         with:
           # Must match the kernel's own Python (currently 3.13). The derived
           # module index takes its C-extension stdlib names from the building
@@ -92,9 +153,11 @@ jobs:
           python-version: "3.13"
 
       - name: Install micromamba
+        if: steps.gate.outputs.skip != 'true'
         run: scripts/install-micromamba.sh
 
       - name: Report the toolchain
+        if: steps.gate.outputs.skip != 'true'
         run: |
           micromamba --version
           rsync --version | head -1
@@ -102,6 +165,7 @@ jobs:
       # Solving and downloading the environments is the slow half. Keyed on the
       # env files so a rebuild triggered by anything else reuses the packages.
       - name: Cache the empack package downloads
+        if: steps.gate.outputs.skip != 'true'
         uses: actions/cache@v6
         with:
           path: ~/.cache/empack
@@ -109,9 +173,11 @@ jobs:
           restore-keys: empack-
 
       - name: Build the JupyterLite toolchain
+        if: steps.gate.outputs.skip != 'true'
         run: scripts/setup-jupyterlite.sh
 
       - name: Rebuild the bundle and both xeus kernels
+        if: steps.gate.outputs.skip != 'true'
         env:
           MAMBA_ROOT_PREFIX: ${{ runner.temp }}/mamba
         run: scripts/build-jupyterlite.sh
@@ -120,12 +186,14 @@ jobs:
       # environment files asked for, and is internally coherent. A build that
       # "succeeds" while silently resolving a package away must not be committed.
       - name: Verify the rebuilt kernels
+        if: steps.gate.outputs.skip != 'true'
         run: |
           scripts/check-env-vendored-sync.sh
           scripts/check-xeus-vendored.sh
           scripts/verify-jupyterlite.sh
 
       - name: Summarise what changed
+        if: steps.gate.outputs.skip != 'true'
         id: diff
         run: |
           set -euo pipefail
@@ -154,9 +222,16 @@ jobs:
         if: >-
           steps.diff.outputs.changed == 'true'
           && github.event_name == 'workflow_dispatch'
+          && env.PUBLISH != 'true'
           && inputs.commit
+        env:
+          PUSH_TOKEN: ${{ secrets.RELEASE_TOKEN || github.token }}
         run: |
           set -euo pipefail
+          if [ "$HAS_RELEASE_TOKEN" != "true" ]; then
+            echo "::warning::RELEASE_TOKEN is not set. The branch ruleset refuses a GITHUB_TOKEN push (GH013), so this push is expected to fail."
+          fi
+          git remote set-url origin "https://x-access-token:${PUSH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add Public/jupyterlite
@@ -173,6 +248,55 @@ jobs:
           done
           echo "could not push the rebuild" >&2
           exit 1
+
+      # Publish mode: the rebuild goes onto its own branch from main, with the
+      # changelog fragment every merge to main needs, and reaches main only
+      # through a pull request whose CI tests the new kernels.
+      - name: Open the re-vendor pull request
+        if: steps.diff.outputs.changed == 'true' && env.PUBLISH == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_TOKEN }}
+          BRANCH: kernels/revendor-${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          git remote set-url origin "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git switch -c "$BRANCH"
+          cat > "changelog.d/revendor-kernels-${GITHUB_RUN_ID}.md" <<'EOF'
+          ### Changed
+
+          - **The xeus kernels are re-vendored to their channels' current builds.**
+            The weekly kernel currency check found the vendored kernels behind
+            `emscripten-forge-4x`. `.github/workflows/revendor-kernels.yml` rebuilt
+            `Public/jupyterlite/` from the unchanged `Tools/jupyterlite/environment-*.yml`
+            files and verified it before this pull request was opened.
+          EOF
+          git add Public/jupyterlite "changelog.d/revendor-kernels-${GITHUB_RUN_ID}.md"
+          git commit -m "chore(jupyterlite): re-vendor the xeus kernels
+
+          Rebuilt by .github/workflows/revendor-kernels.yml (publish mode) from
+          Tools/jupyterlite/environment-*.yml. Regenerated bytes and a changelog
+          fragment only."
+          git push origin "HEAD:refs/heads/$BRANCH"
+          {
+            echo "The weekly kernel currency check found the vendored kernels behind their channels, so this workflow rebuilt them from \`main\` and verified them with \`check-env-vendored-sync.sh\`, \`check-xeus-vendored.sh\` and \`verify-jupyterlite.sh\`."
+            echo ""
+            echo "This pull request's CI, the browser grading and editor smoke included, tests the new kernels. Auto-merge is on; a red check holds it."
+            echo ""
+            echo "Workflow run: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+            echo ""
+            echo '```'
+            git diff --stat HEAD~1 -- Public/jupyterlite | tail -25
+            echo '```'
+          } > /tmp/pr-body.md
+          url="$(gh pr create --base main --head "$BRANCH" \
+            --title "Re-vendor the xeus kernels" --body-file /tmp/pr-body.md)"
+          if ! gh pr merge --auto --merge "$url"; then
+            echo "::error::Opened $url but could not enable auto-merge. It holds every later publish until it is merged or closed."
+            exit 1
+          fi
+          echo "Opened $url with auto-merge on." >> "$GITHUB_STEP_SUMMARY"
 
       - name: Report a verify-only run
         if: steps.diff.outputs.changed != 'false' && github.event_name == 'pull_request'

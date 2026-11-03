@@ -9,9 +9,11 @@ name: Weekly digest
 #     and the open CodeQL alerts. Only findings that are new since last week,
 #     or that .zap/rules.tsv does not already accept, are called out.
 #   * Kernel currency: when kernel-currency.yml (Mondays 07:00) is red, which
-#     kernels moved, and what their upstream release notes on github.com say,
-#     so that a person can decide whether to dispatch revendor-kernels.yml.
-#     The digest never dispatches it.
+#     kernels moved, and what their upstream release notes on github.com say.
+#     kernel-currency.yml itself dispatches revendor-kernels.yml in publish
+#     mode, which opens an auto-merging pull request; the digest flags anything
+#     that looks breaking so a person can hold that pull request. The digest
+#     never dispatches anything.
 #   * Flake telemetry: the week's tally (flake-telemetry.yml, 06:41), against
 #     last week's.
 #   * Dependabot: the open Dependabot PRs, with the risk line from each one's
@@ -212,8 +214,9 @@ jobs:
                its version change. For each one, you may fetch its release
                notes on github.com (for example the jupyter-xeus or
                emscripten-forge repositories) and say in one line whether
-               anything looks breaking. End with: "Dispatch
-               revendor-kernels.yml when this is acceptable." When the run
+               anything looks breaking. End with: "The update is
+               published as an auto-merging pull request; hold it if any of
+               this looks breaking." When the run
                passed, say that the kernels are current.
             4. **Flakes**: the tally and the change from the previous one.
             5. **Dependabot**: one line per open PR: number, package, risk.
