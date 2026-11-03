@@ -9,6 +9,68 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.806] - 2026-11-03
+
+### Removed
+
+- **Two unused members.** `LTILaunchClaims.claimPrefix` had no reader, since the coding keys spell each claim URI as a literal. `MCPActivityProse.opponentSourceTokens` was named only inside two doc comments, where the interpolation never runs; those comments now name `ActivityOpponentSource`. Behaviour does not change.
+
+### Changed
+
+- **The browser runner is rebuilt on JavaScriptKit 0.62.0** (from 0.59.0).
+  `wasm/Package.resolved` moves, and the vendored `Public/runner-wasm/`
+  artifact is rebuilt in the same change, so the browser runner tests in this
+  change exercise the new module rather than the old one. The generated
+  `runner-core.d.ts` contract is unchanged. The module is 141,501 bytes
+  gzipped, 2,276 bytes over the previous baseline and within budget.
+
+### Changed
+
+- **Kernel updates publish themselves.** When the weekly kernel currency check
+  finds the vendored xeus kernels behind their channels, it now dispatches
+  `revendor-kernels.yml` in a new publish mode. That rebuilds from `main`,
+  verifies, and opens the update as a pull request with auto-merge on, so the
+  browser grading and editor smoke test the new kernels before they reach
+  `main`. It does nothing while a re-vendor pull request is already open.
+- **The re-vendor workflow pushes with `RELEASE_TOKEN`.** The branch ruleset
+  refused its `GITHUB_TOKEN` push (GH013, required `editor-smoke-gate`), so a
+  manual re-vendor could rebuild and verify but never commit.
+
+### Security
+
+- **Swift dependencies brought current.** Dependabot has not opened a Swift
+  PR since the move to `swift-tools-version:6.4`, because its Swift toolchain
+  is 6.3.1 and refuses the manifest. This updates the root graph by hand:
+  Vapor 4.122.3, swift-nio 2.105.0, swift-nio-ssl 2.37.6, swift-certificates
+  1.21.1, jwt 5.2.0, jwt-kit 5.8.0, async-http-client 1.37.0, postgres-nio
+  1.33.2 and eleven other patch or minor releases.
+
+### Fixed
+
+- **Dependabot pip updates run again.** `Tools/jupyterlite/requirements.txt`
+  named the Chickadee extension by a local path, and every weekly pip run
+  aborted with `path_dependencies_not_reachable`. `scripts/setup-jupyterlite.sh`
+  now installs the extension itself, after the requirements file.
+
+### Changed
+
+- **The xeus kernels are re-vendored to their channels' current builds.**
+  The weekly kernel currency check found the vendored kernels behind
+  `emscripten-forge-4x`. `.github/workflows/revendor-kernels.yml` rebuilt
+  `Public/jupyterlite/` from the unchanged `Tools/jupyterlite/environment-*.yml`
+  files and verified it before this pull request was opened.
+
+### Added
+
+- **A weekly Swift package currency check.** Dependabot's Swift toolchain
+  refuses the swift-tools-version 6.4 manifests, so no Swift update PR has
+  opened since June. `.github/workflows/swift-currency.yml` runs
+  `scripts/check-swift-currency.py` in the CI image every Monday: it resolves
+  `/` and `/wasm` with `swift package update --dry-run` and goes red, naming
+  each pin and its newer version, when one is behind. It is off the pull
+  request path, so it never blocks a merge.
+
+
 ## [0.5.805] - 2026-11-03
 
 ### Changed
