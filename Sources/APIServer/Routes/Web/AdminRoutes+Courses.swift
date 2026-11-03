@@ -127,13 +127,7 @@ extension AdminRoutes {
             var identifier: String?
             var role: String?
         }
-        guard
-            let idString = req.parameters.get("courseID"),
-            let courseID = UUID(uuidString: idString),
-            let course = try await APICourse.find(courseID, on: req.db)
-        else {
-            throw AppError.notFound(resource: "Course")
-        }
+        let (course, courseID, idString) = try await loadCourse(req)
         // An archived course takes no new people (the roster hides the form).
         guard !course.isArchived else {
             throw AppError.conflict(reason: "This course is archived and takes no new people.")
@@ -162,13 +156,7 @@ extension AdminRoutes {
 
     @Sendable
     func toggleCourseArchive(req: Request) async throws -> Response {
-        guard
-            let idString = req.parameters.get("courseID"),
-            let courseID = UUID(uuidString: idString),
-            let course = try await APICourse.find(courseID, on: req.db)
-        else {
-            throw AppError.notFound(resource: "Course")
-        }
+        let (course, courseID, idString) = try await loadCourse(req)
         // Un-archiving re-enters the unique index over active courses. An
         // archived course may share a code and term with an active one (a
         // bundle import creates one beside it by design), so check the rule
@@ -205,13 +193,7 @@ extension AdminRoutes {
     @Sendable
     func setEnrollmentMode(req: Request) async throws -> Response {
         struct Body: Content { var enrollmentMode: String? }
-        guard
-            let idString = req.parameters.get("courseID"),
-            let courseID = UUID(uuidString: idString),
-            let course = try await APICourse.find(courseID, on: req.db)
-        else {
-            throw AppError.notFound(resource: "Course")
-        }
+        let (course, _, idString) = try await loadCourse(req)
         let body = try? await req.decodeContent(Body.self)
         course.enrollmentMode = CourseEnrollmentMode(rawValue: body?.enrollmentMode ?? "") ?? .open
         try await course.save(on: req.db)
@@ -228,13 +210,7 @@ extension AdminRoutes {
     @Sendable
     func setCourseAIFeedback(req: Request) async throws -> Response {
         struct Body: Content { var enabled: String? }
-        guard
-            let idString = req.parameters.get("courseID"),
-            let courseID = UUID(uuidString: idString),
-            let course = try await APICourse.find(courseID, on: req.db)
-        else {
-            throw AppError.notFound(resource: "Course")
-        }
+        let (course, _, idString) = try await loadCourse(req)
         let enabled = (try? await req.decodeContent(Body.self))?.enabled == "on"
         course.aiFeedbackEnabled = enabled
         try await course.save(on: req.db)
@@ -255,13 +231,7 @@ extension AdminRoutes {
     /// run `CourseCloneService`.
     @Sendable
     func copyCourse(req: Request) async throws -> Response {
-        guard
-            let idString = req.parameters.get("courseID"),
-            let courseID = UUID(uuidString: idString),
-            let source = try await APICourse.find(courseID, on: req.db)
-        else {
-            throw AppError.notFound(resource: "Course")
-        }
+        let (source, _, _) = try await loadCourse(req)
         let newCode = try await uniqueCopyCode(
             base: source.code, term: source.term, reserved: req.application.reservedCourseKeys, db: req.db)
         let result = try await cloneCourse(
@@ -282,13 +252,7 @@ extension AdminRoutes {
             var termYear: String?
             var termSeason: String?
         }
-        guard
-            let idString = req.parameters.get("courseID"),
-            let courseID = UUID(uuidString: idString),
-            let source = try await APICourse.find(courseID, on: req.db)
-        else {
-            throw AppError.notFound(resource: "Course")
-        }
+        let (source, _, idString) = try await loadCourse(req)
         let body = try await req.decodeContent(CloneBody.self)
         let code = body.code.trimmingCharacters(in: .whitespacesAndNewlines)
         let name = body.name.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -339,11 +303,7 @@ extension AdminRoutes {
 
     @Sendable
     func deleteCourse(req: Request) async throws -> Response {
-        guard
-            let idString = req.parameters.get("courseID"),
-            let courseID = UUID(uuidString: idString),
-            let course = try await APICourse.find(courseID, on: req.db)
-        else { throw AppError.notFound(resource: "Course") }
+        let (course, _, idString) = try await loadCourse(req)
 
         // Deletion is gated on the same retention window as Purge: a course
         // can only be deleted from the Retention tab once it has been archived
@@ -417,13 +377,7 @@ extension AdminRoutes {
             var termSeason: String?
         }
 
-        guard
-            let idString = req.parameters.get("courseID"),
-            let courseID = UUID(uuidString: idString),
-            let course = try await APICourse.find(courseID, on: req.db)
-        else {
-            throw AppError.notFound(resource: "Course")
-        }
+        let (course, courseID, idString) = try await loadCourse(req)
 
         let body = try await req.decodeContent(EditCourseBody.self)
         let rawCode = body.code.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -574,13 +528,7 @@ extension AdminRoutes {
 
     @Sendable
     func courseDetail(req: Request) async throws -> HTMLResponse<AdminCoursePage> {
-        guard
-            let idString = req.parameters.get("courseID"),
-            let courseID = UUID(uuidString: idString),
-            let course = try await APICourse.find(courseID, on: req.db)
-        else {
-            throw AppError.notFound(resource: "Course")
-        }
+        let (course, courseID, idString) = try await loadCourse(req)
 
         let courseRow = try await Self.courseDetailRow(
             for: course, id: idString, courseID: courseID,

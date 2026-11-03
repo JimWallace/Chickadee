@@ -98,18 +98,8 @@ extension CourseAdminRoutes {
         }
         let user = try req.auth.require(APIUser.self)
         let courseID = try await req.requireActiveCourseID(for: user, action: "managing sections")
-        guard let sectionIDStr = req.parameters.get("sectionID"),
-            let sectionUUID = UUID(uuidString: sectionIDStr)
-        else {
-            throw AppError.notFound(resource: "Section")
-        }
-        guard let section = try await APICourseSection.find(sectionUUID, on: req.db),
-            section.courseID == courseID
-        else {
-            throw AppError.notFound(resource: "Section")
-        }
-        try await requireCourseWriteAccess(
-            caller: user, courseID: section.courseID, atLeast: CourseRoleFloor.manageSections, db: req.db)
+        let section = try await loadCourseSectionForWrite(
+            req, caller: user, inCourse: courseID, atLeast: CourseRoleFloor.manageSections)
         let body = try await req.decodeContent(RenameSectionBody.self)
         let name = body.name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !name.isEmpty else {
@@ -132,18 +122,8 @@ extension CourseAdminRoutes {
     func deleteSection(req: Request) async throws -> Response {
         let user = try req.auth.require(APIUser.self)
         let courseID = try await req.requireActiveCourseID(for: user, action: "managing sections")
-        guard let sectionIDStr = req.parameters.get("sectionID"),
-            let sectionUUID = UUID(uuidString: sectionIDStr)
-        else {
-            throw AppError.notFound(resource: "Section")
-        }
-        guard let section = try await APICourseSection.find(sectionUUID, on: req.db),
-            section.courseID == courseID
-        else {
-            throw AppError.notFound(resource: "Section")
-        }
-        try await requireCourseWriteAccess(
-            caller: user, courseID: section.courseID, atLeast: CourseRoleFloor.manageSections, db: req.db)
+        let section = try await loadCourseSectionForWrite(
+            req, caller: user, inCourse: courseID, atLeast: CourseRoleFloor.manageSections)
         // FK SET NULL: assignments in this section will have section_id → NULL (ungrouped).
         try await section.delete(on: req.db)
         return req.redirect(to: "/instructor")

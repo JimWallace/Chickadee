@@ -48,10 +48,7 @@ struct CourseBundleRoutes: RouteCollection {
         let caller = try req.auth.require(APIUser.self)
         guard caller.isAdmin else { throw AppError.forbidden(action: "export a course") }
 
-        guard let courseIDStr = req.parameters.get("courseID"),
-            let courseUUID = UUID(uuidString: courseIDStr),
-            let course = try await APICourse.find(courseUUID, on: req.db)
-        else { throw AppError.notFound(resource: "Course") }
+        let (course, courseUUID, courseIDStr) = try await loadCourse(req)
 
         let data = try await loadExportData(courseUUID: courseUUID, on: req.db, logger: req.logger)
         let bundleIDs = assignExportBundleIDs(data: data)
