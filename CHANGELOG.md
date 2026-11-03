@@ -9,6 +9,35 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.803] - 2026-11-03
+
+### Fixed
+
+- **CI: the Swift scope check fetches only what it compares.** The `changes` job in `swift-tests.yml` checked out the full history of every branch and tag, and since 2026-11-03 17:30 UTC that fetch has run into the job's 5-minute limit on every run. The gate fails closed, so every pull request was red. A pull request now fetches depth 2, the merge commit and both parents. A push fetches its before commit by itself. Any failure still runs the full suite.
+- **CI: the changed-paths action fetches only the base commit.** The editor smoke, the browser grading smoke and the CodeQL JavaScript job checked out the full history for the same path check, and the editor smoke's `changes` job hit its 10-minute limit. Those three now check out depth 1, and the action fetches the base commit by itself.
+
+### Removed
+
+- **SQLite support.** PostgreSQL is now the server's only database. The server
+  needs `DATABASE_HOST`, `DATABASE_PORT`, `DATABASE_NAME`, `DATABASE_USER` and
+  `DATABASE_PASSWORD`, and refuses to start without them. `DATABASE_BACKEND` and
+  `SQLITE_PATH` are no longer read. Nothing moves an existing SQLite database
+  into Postgres. Production already ran on Postgres, so it needs no change.
+- **The SQLite-only workarounds.** The write-locked transaction, the
+  "database is locked" retry, the in-process job-claim queue and the SQLite
+  branches of about a dozen queries and migrations are gone. Postgres takes the
+  same paths it took before.
+
+### Changed
+
+- **Tests run on Postgres.** `swift test` needs a local Postgres. It defaults to
+  `localhost:5432`, database `chickadee_test`, user and password `postgres`, and
+  each `TEST_DATABASE_*` variable overrides one part. CI runs one API test lane
+  instead of two. The browser harnesses give each server boot its own database.
+- **The compose `db` service is required.** `docker-compose.yml` now starts
+  Postgres and points the server at it by default.
+
+
 ## [0.5.802] - 2026-11-03
 
 ### Changed
