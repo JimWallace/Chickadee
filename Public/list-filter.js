@@ -1,3 +1,4 @@
+// @ts-check
 // Shared live filtering for list tables (UI audit S1; re-engineered 2026-08).
 //
 // A page declares one thing — the table this input filters:
@@ -67,7 +68,7 @@
 // `hidden` is written only when it changes, and a narrowing keystroke (the new
 // query extends the last one over the same rows) skips the string work for rows
 // already hidden, since no such row can come back.
-(function (global) {
+(function (/** @type {any} */ global) {
     'use strict';
 
     var COMBINING_MARKS = /[\u0300-\u036f]/g;

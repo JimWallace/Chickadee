@@ -159,6 +159,11 @@ jobs:
       - name: Block defaulted language parameters
         run: scripts/no-language-defaults.sh
 
+      # Every first-party Public/*.js opts in to tsc, except the shrink-only
+      # list in scripts/ts-check-pending.txt (#2782).
+      - name: Frontend JS opts in to type checking
+        run: scripts/check-ts-check-optin.sh
+
       - name: Keep Vapor 5 removals out of Sources
         run: scripts/check-vapor5-readiness.sh
 
@@ -502,6 +507,12 @@ jobs:
 
       - name: Lint first-party frontend JS
         run: scripts/eslint.sh
+
+      # tsc with noEmit over the files that opt in with // @ts-check (#2782).
+      # No build step: Public/*.js is still served as-is. The opt-in ratchet
+      # itself is check-ts-check-optin.sh in format-lint, which needs no node.
+      - name: Type-check first-party frontend JS
+        run: scripts/typecheck-js.sh
 
       # The Lua and Octave auto-compute snippets are EXECUTED, not just
       # shape-checked (*-eval-execution.test.mjs). Those suites skip silently

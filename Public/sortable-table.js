@@ -1,3 +1,4 @@
+// @ts-check
 // Shared client-side column sorting for any <table class="sortable-table">.
 //
 // Markup contract:
@@ -35,7 +36,7 @@
 // value rules, tie-breaks and keyboard handling; the union of what they did
 // lives here, and `apply()` is the piece none of them could share — a page
 // that repaints its tbody from a poll calls it to restore the user's sort.
-(function (global) {
+(function (/** @type {any} */ global) {
     'use strict';
 
     var collator = new Intl.Collator(undefined, { sensitivity: 'base', numeric: true });

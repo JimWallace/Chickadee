@@ -1,3 +1,4 @@
+// @ts-check
 // Public/surface-swap.js
 //
 // Re-rendering half of the merged assignment workbench in place, without
@@ -39,7 +40,7 @@
 // one section — and landing back at the top of a long assignment each time
 // is its own kind of lost work.
 
-(function (global) {
+(function (/** @type {any} */ global) {
     'use strict';
 
     var EDIT_HALF_SELECTOR = '.wb-pane-edit';
