@@ -9,6 +9,10 @@
 // additionally scopes the write to the resource's own course via
 // `requireCourseWriteAccess(atLeast: .ta)` — content authoring is TA+, matching
 // script / notebook editing (course-section structure stays instructor-level).
+//
+// The field rules and the writes are in `CourseContentService`, which the MCP
+// tools share (#2769). These handlers authorize, decode the form, and map a
+// `CourseContentError` to `WebAssignmentError`.
 
 import Core
 import Fluent
@@ -45,28 +49,21 @@ extension CourseAdminRoutes {
         ).requireID()
 
         let body = try await req.decodeContent(ContentItemFormBody.self)
-        let title = body.title.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !title.isEmpty else {
-            throw WebAssignmentError.invalidParameter(name: "title", reason: "Title must not be empty.")
+        // An absent kind is a link. An unknown one is refused, as MCP does,
+        // rather than stored as a link without a word (#2769).
+        let draft: ContentItemDraft
+        do {
+            draft = try ContentItemDraft(
+                title: body.title, kind: body.kind,
+                links: Self.contentLinkInputs(labels: body.linkLabels ?? [], urls: body.linkURLs ?? []),
+                description: body.description, updatedLabel: body.updatedLabel,
+                isPublished: body.isPublished != "false")
+        } catch {
+            throw Self.webError(error)
         }
-        let kind = ContentItemKind(rawValue: body.kind ?? "") ?? .link
-        let links = try buildContentLinks(labels: body.linkLabels ?? [], urls: body.linkURLs ?? [])
         let sectionID = try await resolveSectionID(body.sectionID, courseID: courseID, db: req.db)
-        let sortOrder = try await nextSectionItemSortOrder(
-            courseID: courseID, sectionID: sectionID, db: req.db)
-
-        let item = APICourseContentItem(
-            courseID: courseID,
-            sectionID: sectionID,
-            sortOrder: sortOrder,
-            title: title,
-            kind: kind,
-            itemDescription: normalizedOptional(body.description),
-            links: links,
-            updatedLabel: normalizedOptional(body.updatedLabel),
-            isPublished: body.isPublished != "false"
-        )
-        try await item.save(on: req.db)
+        let item = try await CourseContentService.create(
+            draft, courseID: courseID, sectionID: sectionID, on: req.db)
         try await storeUploadedAttachments(body.attachmentFiles, for: item, req: req)
         return req.redirect(to: "/instructor")
     }
@@ -77,17 +74,18 @@ extension CourseAdminRoutes {
     func updateContentItem(req: Request) async throws -> Response {
         let item = try await loadContentItemForWrite(req)
         let body = try await req.decodeContent(ContentItemFormBody.self)
-        let title = body.title.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !title.isEmpty else {
-            throw WebAssignmentError.invalidParameter(name: "title", reason: "Title must not be empty.")
+        // The form posts every field, so every field is replaced. An absent
+        // kind is a link, as on create; an unknown one is refused (#2769).
+        let edit = ContentItemEdit(
+            title: body.title, kind: body.kind ?? ContentItemKind.link.rawValue,
+            links: Self.contentLinkInputs(labels: body.linkLabels ?? [], urls: body.linkURLs ?? []),
+            description: body.description ?? "", updatedLabel: body.updatedLabel ?? "",
+            isPublished: body.isPublished != "false")
+        do {
+            try await CourseContentService.update(item, with: edit, on: req.db)
+        } catch let error as CourseContentError {
+            throw Self.webError(error)
         }
-        item.title = title
-        item.kind = ContentItemKind(rawValue: body.kind ?? "") ?? .link
-        item.links = try buildContentLinks(labels: body.linkLabels ?? [], urls: body.linkURLs ?? [])
-        item.itemDescription = normalizedOptional(body.description)
-        item.updatedLabel = normalizedOptional(body.updatedLabel)
-        item.isPublished = body.isPublished != "false"
-        try await item.save(on: req.db)
         try await storeUploadedAttachments(body.attachmentFiles, for: item, req: req)
         return req.redirect(to: "/instructor")
     }
@@ -120,10 +118,7 @@ extension CourseAdminRoutes {
     @Sendable
     func deleteContentItem(req: Request) async throws -> Response {
         let item = try await loadContentItemForWrite(req)
-        if let itemID = item.id {
-            ContentAttachmentStore.removeDirectory(req.application, itemID: itemID)
-        }
-        try await item.delete(on: req.db)
+        try await CourseContentService.delete(item, application: req.application, on: req.db)
         return req.redirect(to: "/instructor")
     }
 
@@ -187,12 +182,9 @@ extension CourseAdminRoutes {
         let body = try? await req.decodeContent(MoveBody.self)
         let newSectionID = try await resolveSectionID(
             body?.sectionID, courseID: item.courseID, db: req.db)
-        item.sectionID = newSectionID
-        // Append to the destination lane so it doesn't collide with an existing
+        // Appends to the destination lane so it doesn't collide with an existing
         // sortOrder; the client may follow with a reorder to place it exactly.
-        item.sortOrder = try await nextSectionItemSortOrder(
-            courseID: item.courseID, sectionID: newSectionID, db: req.db)
-        try await item.save(on: req.db)
+        try await CourseContentService.place(item, inSection: newSectionID, on: req.db)
         return .ok
     }
 
@@ -248,42 +240,18 @@ extension CourseAdminRoutes {
         try await item.save(on: req.db)
     }
 
-    /// Builds `[ContentLink]` from parallel form arrays, dropping fully-blank
-    /// rows, defaulting a blank label to the URL, and rejecting unsafe schemes
-    /// (only http(s) and site-relative `/…` links are allowed — the values are
-    /// rendered as `href`s, so `javascript:` / `data:` are refused).
-    private func buildContentLinks(labels: [String], urls: [String]) throws -> [ContentLink] {
-        var links: [ContentLink] = []
-        let count = Swift.max(labels.count, urls.count)
-        for i in 0..<count {
-            let label =
-                (i < labels.count ? labels[i] : "").trimmingCharacters(in: .whitespacesAndNewlines)
-            let url =
-                (i < urls.count ? urls[i] : "").trimmingCharacters(in: .whitespacesAndNewlines)
-            if label.isEmpty, url.isEmpty { continue }
-            guard !url.isEmpty else {
-                throw WebAssignmentError.invalidParameter(
-                    name: "links", reason: "The link labelled \"\(label)\" is missing a URL.")
-            }
-            guard isSafeLinkURL(url) else {
-                throw WebAssignmentError.invalidParameter(
-                    name: "links",
-                    reason: "Link URL \"\(url)\" must be an http(s) or site-relative (/…) URL.")
-            }
-            links.append(ContentLink(label: label.isEmpty ? url : label, url: url))
+    /// Pairs the parallel `linkLabels[]` / `linkURLs[]` form arrays into link
+    /// inputs. A missing entry on either side is blank; the service drops a
+    /// row that is blank on both sides and holds every other rule.
+    private static func contentLinkInputs(labels: [String], urls: [String]) -> [ContentLinkInput] {
+        (0..<Swift.max(labels.count, urls.count)).map { i in
+            ContentLinkInput(
+                label: i < labels.count ? labels[i] : "", url: i < urls.count ? urls[i] : "")
         }
-        return links
     }
 
-    private func isSafeLinkURL(_ url: String) -> Bool {
-        let lower = url.lowercased()
-        return lower.hasPrefix("http://") || lower.hasPrefix("https://") || url.hasPrefix("/")
-    }
-
-    /// Trims and maps an empty string to nil for optional text fields.
-    private func normalizedOptional(_ raw: String?) -> String? {
-        guard let trimmed = raw?.trimmingCharacters(in: .whitespacesAndNewlines), !trimmed.isEmpty
-        else { return nil }
-        return trimmed
+    /// The form error for a refused content item.
+    private static func webError(_ error: CourseContentError) -> WebAssignmentError {
+        .invalidParameter(name: error.field, reason: error.description)
     }
 }

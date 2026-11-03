@@ -1138,7 +1138,10 @@ because line numbers go out of date.
     (`reorder_course_sections`, `reorder_section_items`,
     `reorder_assignments`, `reorder_content_items`).
   - A move into a section and a new item append after the last item
-    (`nextSectionItemSortOrder` in `Services/SectionPlacement.swift`).
+    (`nextSectionItemSortOrder` in `Services/SectionPlacement.swift`). The
+    web routes and the MCP tools create, edit, move and delete content items
+    and course sections through `Services/CourseContentService.swift` and
+    `Services/CourseSectionService.swift` (#2769), which call it.
   - Course clone and bundle import copy it.
 - **Readers:** the display comparators in
   `Routes/Web/AssignmentListDisplayHelpers.swift` (the instructor list, the
