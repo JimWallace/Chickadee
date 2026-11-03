@@ -78,14 +78,12 @@ import VaporTesting
             #expect(declared.count >= 40, "parsed only \(declared.count) index names")
 
             let sql = try #require(app.db as? any SQLDatabase)
-            // On Postgres, only this app's schema: the lane runs suites in
-            // parallel, each in its own schema, and a schema another suite is
-            // still migrating holds indexes a later migration drops.
-            let query: SQLQueryString =
-                sql.dialect.name == "postgresql"
-                ? "SELECT indexname AS name FROM pg_indexes WHERE schemaname = current_schema()"
-                : "SELECT name FROM sqlite_master WHERE type = 'index'"
-            let rows = try await sql.raw(query).all()
+            // Only this app's schema: the suite runs in parallel, each test in
+            // its own schema, and a schema another suite is still migrating
+            // holds indexes a later migration drops.
+            let rows = try await sql.raw(
+                "SELECT indexname AS name FROM pg_indexes WHERE schemaname = current_schema()"
+            ).all()
             let present = Set(try rows.map { try $0.decode(column: "name", as: String.self) })
                 .filter { $0.hasPrefix("idx_") }
             #expect(

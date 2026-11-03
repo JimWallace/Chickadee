@@ -12,8 +12,7 @@
 #   - skips if the newest snapshot was already restored (no nightly DB churn)
 #
 # Pairs with scripts/snapshot.sh (producer) and scripts/restore.sh (engine).
-# Requires the docker-compose stack (incl. the db service) to be running and
-# DATABASE_BACKEND=postgres.
+# Requires the docker-compose stack (incl. the db service) to be running.
 
 set -euo pipefail
 

@@ -32,8 +32,7 @@ Each runner profile records:
 - `is_active`
 
 `language_versions` and `capabilities` are stored as JSON-backed structured
-fields so SQLite stays simple now and a future PostgreSQL migration remains
-straightforward.
+fields.
 
 Example profile shape:
 
@@ -372,7 +371,7 @@ languages, capabilities), stored as one row in `assignment_requirements` for
 the assignment. A clone and a course bundle copy the row with the assignment
 (#2167). The row can also be written by hand.
 
-Example SQLite session for a Python assignment:
+Example `psql` session for a Python assignment:
 
 ```sql
 INSERT INTO assignment_requirements (

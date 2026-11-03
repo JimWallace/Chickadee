@@ -17,7 +17,7 @@ import Testing
     }
 
     private static func makeContext(total: String) -> AdminStorageContext {
-        AdminStorageContext(rows: [], totalFormatted: total, dbBackend: "sqlite", assignments: [])
+        AdminStorageContext(rows: [], totalFormatted: total, dbBackend: "postgres", assignments: [])
     }
 
     @Test func servesCachedContextWithinTTLAndRecomputesAfter() async throws {

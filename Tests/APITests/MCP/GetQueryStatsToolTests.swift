@@ -5,9 +5,8 @@ import VaporTesting
 
 @testable import APIServer
 
-/// The tool on the test database. The SQLite lane and the Postgres lane run
-/// the same tests: each test checks the answer that its database must give,
-/// so neither lane skips one.
+/// The tool on the test database. Each test checks the answer the database
+/// must give whether or not it loaded pg_stat_statements, so none skips.
 @Suite(.serialized) final class GetQueryStatsToolTests {
     let app: Application
 
@@ -22,18 +21,12 @@ import VaporTesting
             grantedScopes: [.read])
     }
 
-    private var isPostgres: Bool {
-        (app.db as? any SQLDatabase)?.dialect.name == "postgresql"
-    }
-
-    @Test func availabilityMatchesTheDatabase() async throws {
+    @Test func availabilityAnswersOnTheTestDatabase() async throws {
         try await withApp(app) { app in
             let availability = try await QueryStatistics.availability(on: app.db)
-            if isPostgres {
-                #expect(availability != .notPostgres)
-            } else {
-                #expect(availability == .notPostgres)
-            }
+            #expect(
+                [.notPreloaded, .extensionMissing, .ready].contains(availability),
+                "\(availability)")
         }
     }
 
@@ -97,7 +90,7 @@ import VaporTesting
             switch before {
             case .extensionMissing, .ready:
                 #expect(after == .ready)
-            case .notPostgres, .notPreloaded:
+            case .notPreloaded:
                 #expect(after == before)
             }
         }

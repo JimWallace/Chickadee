@@ -12,7 +12,7 @@ import Fluent
 import Vapor
 
 func bootstrapAppServices(_ app: Application, appConfig: AppConfig) async throws {
-    try configureDatabase(app, settings: appConfig.database)
+    configureDatabase(app, settings: appConfig.database)
     registerMigrations(on: app)
 
     // Stop on a database restored from v0.4.200 or earlier: this build cannot

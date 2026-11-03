@@ -22,14 +22,14 @@ import Vapor
         let withRole = DatabaseSettings.postgres(
             host: "h", port: 5432, database: "d", username: "u", password: "p",
             mcpUsername: "chickadee_mcp", mcpPassword: "secret")
-        #expect(withRole.postgresMCPUsername == "chickadee_mcp")
-        #expect(withRole.postgresMCPPassword == "secret")
+        #expect(withRole.mcpUsername == "chickadee_mcp")
+        #expect(withRole.mcpPassword == "secret")
 
-        // The default factories carry no MCP role (opt-in only).
+        // The default factory carries no MCP role (opt-in only).
         #expect(
             DatabaseSettings.postgres(
                 host: "h", port: 5432, database: "d", username: "u", password: "p"
-            ).postgresMCPUsername == nil)
-        #expect(DatabaseSettings.sqliteInMemory().postgresMCPUsername == nil)
+            ).mcpUsername == nil)
+        #expect(DatabaseSettings.localTest.mcpUsername == nil)
     }
 }

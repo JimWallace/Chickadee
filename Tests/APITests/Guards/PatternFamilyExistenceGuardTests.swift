@@ -117,9 +117,8 @@ import Vapor
 
     // These apply-path assertions read the call's own return value
     // (`result.manifestAfter` / `.writtenFiles`) rather than re-reading
-    // `fixture.setup.manifest`, so they're immune to the shared in-memory
-    // SQLite identity-map contamination that can cross-pollinate the setup
-    // object under heavy parallel local runs (CI uses per-schema Postgres).
+    // `fixture.setup.manifest`, so they're immune to any contamination of the
+    // setup object under heavy parallel runs.
 
     @Test func apply_variableEqualityFamilyHasNoGuardEntry() async throws {
         try await withPatternFamilyFixture { fixture in

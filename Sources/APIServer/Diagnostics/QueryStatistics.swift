@@ -22,8 +22,6 @@ import Vapor
 
 enum QueryStatistics {
     enum Availability: String, Sendable, Equatable {
-        /// The database is not Postgres (SQLite has no equivalent).
-        case notPostgres
         /// Postgres did not load the library at startup.
         case notPreloaded
         /// The library is loaded, but the extension object does not exist.
@@ -33,8 +31,6 @@ enum QueryStatistics {
         /// What the operator must do, or nil when the statistics are ready.
         var note: String? {
             switch self {
-            case .notPostgres:
-                return "Statement timing needs Postgres. This server uses SQLite."
             case .notPreloaded:
                 return
                     "Postgres did not load pg_stat_statements. Add "
@@ -65,7 +61,9 @@ enum QueryStatistics {
     static let maximumQueryLength = 500
 
     static func availability(on db: any Database) async throws -> Availability {
-        guard let sql = db as? (any SQLDatabase), sql.dialect.name == "postgresql" else { return .notPostgres }
+        // Every database the server configures is Postgres, so a driver
+        // without SQL cannot have loaded the library either.
+        guard let sql = db as? (any SQLDatabase) else { return .notPreloaded }
         guard try await isPreloaded(sql) else { return .notPreloaded }
         return try await extensionSchema(on: sql) == nil ? .extensionMissing : .ready
     }

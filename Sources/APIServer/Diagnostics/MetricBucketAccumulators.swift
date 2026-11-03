@@ -56,8 +56,8 @@ struct RunnerBucketAccumulator: Sendable, Equatable {
 }
 
 /// Per-bucket runner summary used to build the time-series response.  Decouples
-/// the wire response from *how* the runner stats were aggregated: the SQLite /
-/// test path summarizes raw `RunnerBucketAccumulator`s in Swift, while Postgres
+/// the wire response from *how* the runner stats were aggregated: a driver
+/// without SQL summarizes raw `RunnerBucketAccumulator`s in Swift, while SQL
 /// computes these three values directly in the database (see
 /// `runnerTimeseriesSummaries`).  Both paths must produce identical summaries.
 struct RunnerBucketSummary: Sendable, Equatable {
@@ -157,8 +157,8 @@ enum MetricBucketAccumulators {
     }
 
     /// Collapse raw per-bucket accumulators into the lighter per-bucket
-    /// summaries the response is built from.  Used by the SQLite / test path;
-    /// the Postgres path computes equivalent summaries directly in SQL.
+    /// summaries the response is built from.  Used by the non-SQL path and the
+    /// tests; the SQL path computes equivalent summaries in the database.
     static func summarizeRunnerBuckets(
         _ accumulators: [RunnerBucketAccumulator]
     ) -> [RunnerBucketSummary] {
