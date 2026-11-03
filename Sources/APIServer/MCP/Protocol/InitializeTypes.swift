@@ -342,6 +342,9 @@ enum MCPServerInstructions {
         you can see which check failed and why before fixing the suite or solution. It is \
         validation-only: it resolves the instructor's own reference-solution run and never exposes a \
         student submission, identity, or grade. \
+        To review an assignment, call check_assignment first: it runs the rule-based authoring checks \
+        over the stored content and returns findings (checkID, severity, location, message, \
+        suggestedFix), so a review need not repeat them. It starts no run and changes nothing. \
         Metadata-only edits (update_assignment, set_grading_mode, set_submission_mode, \
         set_assignment_language, set_assignment_concept, set_time_limit, set_dataset, \
         set_minimum_runner_version, set_activity, update_achievements, the section-organization \
