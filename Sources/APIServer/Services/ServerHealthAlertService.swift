@@ -64,6 +64,7 @@ func evaluateHealthRules(
         now: now
     )
     results[.unclaimableJobs] = (try? await evaluateUnclaimableJobs(on: application, now: now)) ?? .ok
+    results[.courseKeyShadowed] = (try? await evaluateCourseKeyShadowed(on: application)) ?? .ok
     results[.queueBackedUp] = evaluateQueueBackedUp(
         pending: pendingState,
         depthThreshold: configuration.queueDepthThreshold,

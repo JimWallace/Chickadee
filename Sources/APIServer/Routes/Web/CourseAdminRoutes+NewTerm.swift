@@ -85,8 +85,10 @@ extension CourseAdminRoutes {
         guard case .term(let term) = CourseTermInput(year: form.termYear, season: form.termSeason) else {
             return req.redirect(to: "/instructor/new-term?error=\(CourseCloneFormError.term.rawValue)")
         }
-        if try await activeCourseCodeIsTaken(code, term: term, excluding: nil, on: req.db) {
-            return req.redirect(to: "/instructor/new-term?error=\(CourseCloneFormError.codeTaken.rawValue)")
+        if let conflict = try await courseCodeConflict(
+            code, term: term, excluding: nil, reserved: req.application.reservedCourseKeys, on: req.db)
+        {
+            return req.redirect(to: "/instructor/new-term?error=\(CourseCloneFormError(conflict).rawValue)")
         }
 
         let userID = try user.requireID()
