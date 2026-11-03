@@ -1,3 +1,4 @@
+// @ts-check
 // Shared background refresh for a server-rendered table or region (UI audit S3).
 //
 //   <table class="results-table sortable-table" id="…"
@@ -44,7 +45,7 @@
 // it back, so an unchanged table answers 304 and nothing below runs at all.
 // Before that, an idle roster replaced its own <tbody> twelve times a minute
 // and rebuilt every derived behaviour from identical input.
-(function (global) {
+(function (/** @type {any} */ global) {
     'use strict';
 
     var DEFAULT_INTERVAL_MS = 5000;

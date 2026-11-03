@@ -1,3 +1,4 @@
+// @ts-check
 // Chickadee — Notebook-check body renderer for the unified Test Editor modal.
 //
 // Registers `window.ChickadeeTestRenderers.check`. The shell

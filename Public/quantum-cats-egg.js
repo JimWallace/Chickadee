@@ -1,3 +1,4 @@
+// @ts-check
 // Public/quantum-cats-egg.js
 //
 // The hidden way into Quantum Cats (Public/games/README.md) and its ring

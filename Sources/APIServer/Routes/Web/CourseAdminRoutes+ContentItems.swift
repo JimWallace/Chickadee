@@ -3,16 +3,17 @@
 // Course content-item CRUD — ungraded reference material (links, notebooks,
 // slides, outlines) shown inside a course section alongside assignments.
 // Mirrors the course-section handlers in `CourseAdminRoutes+Sections.swift`:
-// same active-course resolution, `WebAssignmentError` vocabulary, and
+// same active-course resolution, `AppError` vocabulary, and
 // redirect-to-`/instructor` convention. All routes sit under the `/instructor`
 // group (staff-gated by `ActiveCourseStaffMiddleware`); each mutating handler
 // additionally scopes the write to the resource's own course via
-// `requireCourseWriteAccess(atLeast: .ta)` — content authoring is TA+, matching
+// `requireCourseWriteAccess(atLeast: CourseRoleFloor.manageContentItems)`
+// (TA) — content authoring is TA+, matching
 // script / notebook editing (course-section structure stays instructor-level).
 //
 // The field rules and the writes are in `CourseContentService`, which the MCP
 // tools share (#2769). These handlers authorize, decode the form, and map a
-// `CourseContentError` to `WebAssignmentError`.
+// `CourseContentError` to `AppError`.
 
 import Core
 import Fluent
@@ -45,7 +46,7 @@ extension CourseAdminRoutes {
     func createContentItem(req: Request) async throws -> Response {
         let user = try req.auth.require(APIUser.self)
         let courseID = try await req.requireActiveCourseForWrite(
-            user, atLeast: .ta, action: "managing content items"
+            user, atLeast: CourseRoleFloor.manageContentItems, action: "managing content items"
         ).requireID()
 
         let body = try await req.decodeContent(ContentItemFormBody.self)
@@ -105,7 +106,7 @@ extension CourseAdminRoutes {
         let item = try await loadContentItemForWrite(req)
         let body = try await req.decodeContent(ContentItemVisibilityBody.self)
         guard body.isPublished == "true" || body.isPublished == "false" else {
-            throw WebAssignmentError.invalidParameter(
+            throw AppError.invalidParameter(
                 name: "isPublished", reason: "Must be true or false.")
         }
         item.isPublished = body.isPublished == "true"
@@ -131,7 +132,7 @@ extension CourseAdminRoutes {
         guard let attachmentRaw = req.parameters.get("attachmentID"),
             let attachmentID = UUID(uuidString: attachmentRaw)
         else {
-            throw WebAssignmentError.notFound(resource: "Attachment")
+            throw AppError.notFound(resource: "Attachment")
         }
         item.attachments = item.attachments.filter { $0.id != attachmentID }
         try await item.save(on: req.db)
@@ -163,7 +164,7 @@ extension CourseAdminRoutes {
             // Scoped to the active course, so a reorder can't touch another course's items.
             _ = try await SortOrderRenumbering.renumberSectionItems(items, inCourse: courseID, on: req.db)
         } catch let error as ReorderError {
-            throw WebAssignmentError.invalidParameter(name: "itemIDs", reason: error.reason)
+            throw AppError.invalidParameter(name: "itemIDs", reason: error.reason)
         }
         return .ok
     }
@@ -195,14 +196,14 @@ extension CourseAdminRoutes {
     /// resource's course rather than the caller's active course.
     private func loadContentItemForWrite(_ req: Request) async throws -> APICourseContentItem {
         guard let idStr = req.parameters.get("id"), let uuid = UUID(uuidString: idStr) else {
-            throw WebAssignmentError.notFound(resource: "Content item")
+            throw AppError.notFound(resource: "Content item")
         }
         guard let item = try await APICourseContentItem.find(uuid, on: req.db) else {
-            throw WebAssignmentError.notFound(resource: "Content item")
+            throw AppError.notFound(resource: "Content item")
         }
         let caller = try req.auth.require(APIUser.self)
         try await requireCourseWriteAccess(
-            caller: caller, courseID: item.courseID, atLeast: .ta, db: req.db)
+            caller: caller, courseID: item.courseID, atLeast: CourseRoleFloor.manageContentItems, db: req.db)
         return item
     }
 
@@ -225,7 +226,7 @@ extension CourseAdminRoutes {
                 try ContentAttachmentStore.validate(bytes: candidate.bytes, originalName: candidate.name)
             }
         } catch let error as ContentAttachmentStore.StoreError {
-            throw WebAssignmentError.invalidParameter(name: "attachmentFiles", reason: error.reason)
+            throw AppError.invalidParameter(name: "attachmentFiles", reason: error.reason)
         }
         var attachments = item.attachments
         var nextOrder = (attachments.map(\.sortOrder).max() ?? 0) + 1
@@ -251,7 +252,7 @@ extension CourseAdminRoutes {
     }
 
     /// The form error for a refused content item.
-    private static func webError(_ error: CourseContentError) -> WebAssignmentError {
+    private static func webError(_ error: CourseContentError) -> AppError {
         .invalidParameter(name: error.field, reason: error.description)
     }
 }

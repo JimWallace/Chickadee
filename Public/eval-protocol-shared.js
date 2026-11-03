@@ -1,3 +1,4 @@
+// @ts-check
 // Public/eval-protocol-shared.js
 //
 // How an auto-compute snippet reports its result back out of a xeus kernel,

@@ -105,7 +105,8 @@ struct CreateDatasetTool: ContentTool {
     static let requiredScopes: Set<ContentScope> = [.write]
 
     func execute(_ input: Input, _ context: ToolContext) async throws -> Output {
-        let course = try await resolveCourseForWrite(code: input.courseCode, context: context, atLeast: .ta)
+        let course = try await resolveCourseForWrite(
+            code: input.courseCode, context: context, atLeast: CourseRoleFloor.manageCourseDatasets)
         let courseID = try course.requireID()
         let testSetupsDirectory = context.request.application.testSetupsDirectory
         let new = CourseDatasetService.NewDataset(
@@ -218,7 +219,8 @@ struct UpdateDatasetTool: ContentTool {
     static let requiredScopes: Set<ContentScope> = [.write]
 
     func execute(_ input: Input, _ context: ToolContext) async throws -> Output {
-        let course = try await resolveCourseForWrite(code: input.courseCode, context: context, atLeast: .ta)
+        let course = try await resolveCourseForWrite(
+            code: input.courseCode, context: context, atLeast: CourseRoleFloor.manageCourseDatasets)
         let dataset = try await requireCourseDataset(
             slug: input.slug, courseID: try course.requireID(), context: context)
         // One transaction, so a refused step leaves the dataset as it was.
@@ -326,7 +328,8 @@ struct AddDatasetVersionTool: ContentTool {
     static let requiredScopes: Set<ContentScope> = [.write]
 
     func execute(_ input: Input, _ context: ToolContext) async throws -> Output {
-        let course = try await resolveCourseForWrite(code: input.courseCode, context: context, atLeast: .ta)
+        let course = try await resolveCourseForWrite(
+            code: input.courseCode, context: context, atLeast: CourseRoleFloor.manageCourseDatasets)
         let dataset = try await requireCourseDataset(
             slug: input.slug, courseID: try course.requireID(), context: context)
         let bytes = try await fetch(input.sourceUrl, context.request)

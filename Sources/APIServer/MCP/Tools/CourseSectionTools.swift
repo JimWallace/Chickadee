@@ -174,7 +174,8 @@ struct CreateCourseSectionTool: ContentTool {
         } catch {
             throw mcpToolError(error)
         }
-        let course = try await resolveCourseForWrite(code: input.courseCode, context: context, atLeast: .instructor)
+        let course = try await resolveCourseForWrite(
+            code: input.courseCode, context: context, atLeast: CourseRoleFloor.manageSections)
         let section = try await CourseSectionService.create(draft, courseID: try course.requireID(), on: context.db)
 
         return Output(
@@ -242,7 +243,7 @@ struct SetAssignmentCourseSectionTool: ContentTool {
     func execute(_ input: Input, _ context: ToolContext) async throws -> Output {
         // Placing an assignment into a course section is instructor-level (#417).
         let assignment = try await context.authorizedAssignmentForWrite(
-            publicID: input.assignmentPublicID, atLeast: .instructor)
+            publicID: input.assignmentPublicID, atLeast: CourseRoleFloor.manageSections)
 
         // Resolve + validate the target section against this assignment's course.
         // A non-empty id that doesn't resolve is rejected rather than silently
@@ -333,7 +334,7 @@ struct RenameCourseSectionTool: ContentTool {
             throw MCPToolError.invalidArguments(detail: "Provide at least one of: name, defaultGradingMode.")
         }
         let section = try await resolveCourseSectionForEdit(
-            sectionID: input.courseSectionID, context: context, atLeast: .instructor)
+            sectionID: input.courseSectionID, context: context, atLeast: CourseRoleFloor.manageSections)
         let edit: CourseSectionEdit
         do {
             edit = try CourseSectionEdit(name: newName, defaultGradingMode: newMode)
@@ -414,7 +415,7 @@ struct DeleteCourseSectionTool: ContentTool {
         }
         // Deleting a course section is instructor-level structure (#417); archived blocked too.
         try await context.authorizeCourseWriteAccess(
-            section.courseID, atLeast: .instructor)
+            section.courseID, atLeast: CourseRoleFloor.manageSections)
         // FK SET NULL: assignments in this section have section_id → NULL.
         let ungrouped = try await CourseSectionService.delete(section, on: context.db)
         return Output(sectionID: raw, removed: true, ungroupedAssignmentCount: ungrouped)

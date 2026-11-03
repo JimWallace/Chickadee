@@ -7,8 +7,8 @@
 //
 // Course-section structure is **instructor-level** (#417): it is course
 // LIFECYCLE, not assignment content, so every handler here except the reorder
-// calls `requireCourseWriteAccess(atLeast: .instructor)` on top of the `/instructor`
-// group's `ActiveCourseStaffMiddleware` (which only proves TA+ in the caller's
+// calls `requireCourseWriteAccess(atLeast: CourseRoleFloor.manageSections)`
+// on top of the `/instructor` group's `ActiveCourseStaffMiddleware` (which only proves TA+ in the caller's
 // *active* course).  The floor is stated in three other places — the
 // convention comment on `evaluateCourseWrite`, the header of
 // `CourseAdminRoutes+ContentItems.swift` ("course-section structure stays
@@ -27,7 +27,7 @@
 //
 // The field rules and the writes are in `CourseSectionService`, which the MCP
 // tools share (#2769). These handlers authorize, decode the form, and map a
-// `CourseSectionError` to `WebAssignmentError`.
+// `CourseSectionError` to `AppError`.
 
 import Core
 import Fluent
@@ -45,7 +45,7 @@ extension CourseAdminRoutes {
         }
         let user = try req.auth.require(APIUser.self)
         let courseID = try await req.requireActiveCourseForWrite(
-            user, atLeast: DashboardRoleFloor.manageSections, action: "managing sections"
+            user, atLeast: CourseRoleFloor.manageSections, action: "managing sections"
         ).requireID()
         let body = try await req.decodeContent(CreateSectionBody.self)
         let draft: CourseSectionDraft
@@ -78,7 +78,7 @@ extension CourseAdminRoutes {
             let ids = try body.sectionIDs.map(SortOrderRenumbering.sectionID)
             _ = try await SortOrderRenumbering.renumberSections(ids, inCourse: courseID, on: req.db)
         } catch let error as ReorderError {
-            throw WebAssignmentError.invalidParameter(name: "sectionIDs", reason: error.reason)
+            throw AppError.invalidParameter(name: "sectionIDs", reason: error.reason)
         }
         return .ok
     }
@@ -96,15 +96,15 @@ extension CourseAdminRoutes {
         guard let sectionIDStr = req.parameters.get("sectionID"),
             let sectionUUID = UUID(uuidString: sectionIDStr)
         else {
-            throw WebAssignmentError.notFound(resource: "Section")
+            throw AppError.notFound(resource: "Section")
         }
         guard let section = try await APICourseSection.find(sectionUUID, on: req.db),
             section.courseID == courseID
         else {
-            throw WebAssignmentError.notFound(resource: "Section")
+            throw AppError.notFound(resource: "Section")
         }
         try await requireCourseWriteAccess(
-            caller: user, courseID: section.courseID, atLeast: DashboardRoleFloor.manageSections, db: req.db)
+            caller: user, courseID: section.courseID, atLeast: CourseRoleFloor.manageSections, db: req.db)
         let body = try await req.decodeContent(RenameSectionBody.self)
         let edit: CourseSectionEdit
         do {
@@ -125,15 +125,15 @@ extension CourseAdminRoutes {
         guard let sectionIDStr = req.parameters.get("sectionID"),
             let sectionUUID = UUID(uuidString: sectionIDStr)
         else {
-            throw WebAssignmentError.notFound(resource: "Section")
+            throw AppError.notFound(resource: "Section")
         }
         guard let section = try await APICourseSection.find(sectionUUID, on: req.db),
             section.courseID == courseID
         else {
-            throw WebAssignmentError.notFound(resource: "Section")
+            throw AppError.notFound(resource: "Section")
         }
         try await requireCourseWriteAccess(
-            caller: user, courseID: section.courseID, atLeast: DashboardRoleFloor.manageSections, db: req.db)
+            caller: user, courseID: section.courseID, atLeast: CourseRoleFloor.manageSections, db: req.db)
         // FK SET NULL: assignments in this section will have section_id → NULL (ungrouped).
         try await CourseSectionService.delete(section, on: req.db)
         return req.redirect(to: "/instructor")
@@ -150,13 +150,13 @@ extension CourseAdminRoutes {
         let courseID = try await req.requireActiveCourseID(for: user, action: "managing sections")
         let assignment = try await loadAssignment(req)
         guard assignment.courseID == courseID else {
-            throw WebAssignmentError.notFound(resource: "Assignment '\(assignment.publicID)'")
+            throw AppError.notFound(resource: "Assignment '\(assignment.publicID)'")
         }
         // `loadAssignment` is the deliberately unauthorized loader, so this is
         // the only role check on the path. Which section an assignment sits in
         // is course structure, so the floor matches `set_assignment_course_section`.
         try await requireCourseWriteAccess(
-            caller: user, courseID: assignment.courseID, atLeast: DashboardRoleFloor.manageSections, db: req.db)
+            caller: user, courseID: assignment.courseID, atLeast: CourseRoleFloor.manageSections, db: req.db)
         let body = (try? await req.decodeContent(MoveBody.self))
         let newSectionID: UUID? = try await resolveSectionID(body?.sectionID, courseID: courseID, db: req.db)
         // Appends to the destination lane (the DnD client follows with a
@@ -168,7 +168,7 @@ extension CourseAdminRoutes {
     }
 
     /// The form error for a refused course section.
-    private static func webError(_ error: CourseSectionError) -> WebAssignmentError {
+    private static func webError(_ error: CourseSectionError) -> AppError {
         .invalidParameter(name: error.field, reason: error.description)
     }
 }

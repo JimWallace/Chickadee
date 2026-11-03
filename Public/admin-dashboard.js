@@ -1,3 +1,4 @@
+// @ts-check
 // Page wiring for the admin dashboard (AdminPage): the runner-table load
 // summary, the diagnostic cards (headline + sparkline, click cycles the
 // 24h/7d/30d window), the Active Users card, and the import-course picker.
@@ -213,7 +214,7 @@
 
         if (activityCard) {
             activityCard.addEventListener('click', cycleActivityWindow);
-            activityCard.addEventListener('keydown', function (event) {
+            activityCard.addEventListener('keydown', function (/** @type {KeyboardEvent} */ event) {
                 if (event.key === 'Enter' || event.key === ' ') {
                     event.preventDefault();
                     cycleActivityWindow();
@@ -228,8 +229,8 @@
     }
 
     // ── Import course ────────────────────────────────────────────────
-    var importFile = document.getElementById('importCourseFile');
-    var importForm = document.getElementById('importCourseForm');
+    var importFile = /** @type {HTMLInputElement} */ (document.getElementById('importCourseFile'));
+    var importForm = /** @type {HTMLFormElement} */ (document.getElementById('importCourseForm'));
     document.getElementById('importCourseBtn').addEventListener('click', function () {
         importFile.click();
     });

@@ -19,7 +19,7 @@ extension InstructorDashboardRoutes {
     /// policy only — no manifest change, no regrade, no close.
     @Sendable
     func saveSecretRevealSetting(req: Request) async throws -> Response {
-        let assignment = try await loadAssignmentForWrite(req, atLeast: .instructor)
+        let assignment = try await loadAssignmentForWrite(req, atLeast: CourseRoleFloor.studentOptions)
         struct ToggleBody: Content {
             // Checkbox: "on" when checked, absent from the body when not —
             // decode as optional and treat absence as false, so unchecking

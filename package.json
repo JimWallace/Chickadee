@@ -1,9 +1,10 @@
 {
   "name": "chickadee-frontend-tooling",
   "private": true,
-  "description": "Dev tooling for Chickadee's first-party frontend JS (ESLint). The app itself has no npm build step; Public/*.js is served as-is.",
+  "description": "Dev tooling for Chickadee's first-party frontend JS (ESLint, tsc --noEmit). The app itself has no npm build step; Public/*.js is served as-is.",
   "devDependencies": {
     "@eslint/js": "^10.0.1",
-    "eslint": "^10.10.0"
+    "eslint": "^10.10.0",
+    "typescript": "^5.9.3"
   }
 }

@@ -51,10 +51,14 @@ extension WorkerDaemon {
         var disk = JobDiskReadings(freeMBAtStart: freeSpaceMB(at: tempRoot))
         try ensureSufficientDiskSpace(tempRoot: tempRoot, freeDiskMBAtStart: disk.freeMBAtStart, job: job)
 
-        let paths = try setupJobWorkspace(tempRoot: tempRoot, job: job, stageTimings: &stageTimings)
+        // The workspace file-system work runs off this actor (#2779): a
+        // large teardown in one job slot must not stall the heartbeats,
+        // polls and reports of the other slots. Each step is still awaited
+        // in place, so the order and the cleanup guarantees do not change.
+        let paths = try await setupJobWorkspaceOffActor(tempRoot: tempRoot, job: job, stageTimings: &stageTimings)
 
         defer {
-            finalizeJobWorkspace(
+            await finalizeJobWorkspaceOffActor(
                 job: job,
                 paths: paths,
                 tempRoot: tempRoot,
@@ -69,7 +73,7 @@ extension WorkerDaemon {
             paths: paths,
             stageTimings: &stageTimings
         )
-        defer { removeWorkspaceItem(at: prepared.testSetupDir, label: "test_setup_dir", job: job) }
+        defer { await removeWorkspaceItemOffActor(at: prepared.testSetupDir, label: "test_setup_dir", job: job) }
 
         let testExecutionStartedAt = Date()
         let (outcomes, matches) = await executeTestSuites(
@@ -85,8 +89,7 @@ extension WorkerDaemon {
         // Sample disk usage at end-of-execution, before the report is sent,
         // so the persisted diagnostics reflect this job's actual footprint.
         // The defer will re-use these readings instead of walking again.
-        disk.workdirPeakBytes = directorySizeBytes(at: paths.workDir)
-        disk.freeMBAtEnd = freeSpaceMB(at: tempRoot)
+        await sampleEndOfExecutionDiskOffActor(workDir: paths.workDir, tempRoot: tempRoot, disk: &disk)
 
         let collection = makeCollection(
             outcomes: outcomes,

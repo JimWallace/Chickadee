@@ -1,7 +1,7 @@
 // APIServer/Services/CourseContentError.swift
 //
 // Why `CourseContentService` refused a content item (#2769). The web routes map
-// it to `WebAssignmentError.invalidParameter(name: field, reason: description)`
+// it to `AppError.invalidParameter(name: field, reason: description)`
 // and the MCP tools to `MCPToolError.invalidArguments(detail: description)`, so
 // both surfaces give the same reason.
 
