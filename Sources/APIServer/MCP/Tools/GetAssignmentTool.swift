@@ -97,7 +97,7 @@ struct GetAssignmentTool: ContentTool {
         let leaderboardPath: String
         /// How the class's results combine: the kind's aggregation axis.
         let aggregation: String
-        /// The kind's opponent source (\(MCPActivityProse.opponentSourceTokens)).
+        /// The kind's opponent source (an `ActivityOpponentSource` raw value).
         let opponentSource: String
         /// The support file staged as the opponent; nil when the kind has no
         /// opponent or none is chosen yet.

@@ -53,7 +53,7 @@ struct SetActivityTool: ContentTool {
         /// manifest (`ActivityAuthoring.hasSeededRecord`). False for a union
         /// kind, which seeds none.
         let recordAchievementSeeded: Bool
-        /// The kind's opponent source (\(MCPActivityProse.opponentSourceTokens)),
+        /// The kind's opponent source (an `ActivityOpponentSource` raw value),
         /// null for an ordinary assignment.
         var opponentSource: String?
         /// The support file staged as the opponent; null when the kind has no
