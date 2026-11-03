@@ -20,7 +20,7 @@
 // `ActiveCourseStaffMiddleware` admits a TA to this tab. Every action that
 // changes the course (connect, use-my-identity, bind-org-unit, auto-map,
 // sync-now, reconcile-now) is a "BrightSpace binding" action, so it passes
-// `activeCourseForWrite(atLeast: .instructor)` before it reads its form
+// `activeCourseForWrite(atLeast: CourseRoleFloor.brightSpaceBinding)` before it reads its form
 // (#2710). `disconnect` acts on the caller's own account and `test` only
 // reads, so a TA keeps both.
 
@@ -95,7 +95,7 @@ extension InstructorLMSRoutes {
     func brightspaceConnectAccount(req: Request) async throws -> Response {
         let user = try req.auth.require(APIUser.self)
         // Connecting can make the caller the course's sync identity.
-        guard let course = try await req.activeCourseForWrite(user, atLeast: .instructor) else {
+        guard let course = try await req.activeCourseForWrite(user, atLeast: CourseRoleFloor.brightSpaceBinding) else {
             return brightspaceRedirect(req, error: "No active course.")
         }
         struct ConnectForm: Content {
@@ -154,7 +154,7 @@ extension InstructorLMSRoutes {
         guard let userUUID = user.id else {
             return brightspaceRedirect(req, error: "Could not resolve your account.")
         }
-        guard let course = try await req.activeCourseForWrite(user, atLeast: .instructor),
+        guard let course = try await req.activeCourseForWrite(user, atLeast: CourseRoleFloor.brightSpaceBinding),
             let courseUUID = course.id
         else {
             return brightspaceRedirect(req, error: "No active course.")
@@ -211,7 +211,7 @@ extension InstructorLMSRoutes {
         guard let userUUID = user.id else {
             return brightspaceRedirect(req, error: "Could not resolve your account.")
         }
-        guard let course = try await req.activeCourseForWrite(user, atLeast: .instructor),
+        guard let course = try await req.activeCourseForWrite(user, atLeast: CourseRoleFloor.brightSpaceBinding),
             let courseUUID = course.id
         else {
             return brightspaceRedirect(req, error: "No active course.")
@@ -301,7 +301,7 @@ extension InstructorLMSRoutes {
     @Sendable
     func brightspaceAutoMap(req: Request) async throws -> Response {
         let user = try req.auth.require(APIUser.self)
-        guard let course = try await req.activeCourseForWrite(user, atLeast: .instructor),
+        guard let course = try await req.activeCourseForWrite(user, atLeast: CourseRoleFloor.brightSpaceBinding),
             let courseUUID = course.id,
             let orgUnitID = course.brightspaceOrgUnitID, !orgUnitID.isEmpty,
             let client = try await req.application.brightSpaceClient(forCourse: course)
@@ -344,7 +344,7 @@ extension InstructorLMSRoutes {
     @Sendable
     func brightspaceSyncNow(req: Request) async throws -> Response {
         let user = try req.auth.require(APIUser.self)
-        guard let course = try await req.activeCourseForWrite(user, atLeast: .instructor),
+        guard let course = try await req.activeCourseForWrite(user, atLeast: CourseRoleFloor.brightSpaceBinding),
             let courseUUID = course.id
         else {
             return brightspaceRedirect(req, error: "No active course.")
@@ -374,7 +374,7 @@ extension InstructorLMSRoutes {
     @Sendable
     func brightspaceReconcileNow(req: Request) async throws -> Response {
         let user = try req.auth.require(APIUser.self)
-        guard let course = try await req.activeCourseForWrite(user, atLeast: .instructor) else {
+        guard let course = try await req.activeCourseForWrite(user, atLeast: CourseRoleFloor.brightSpaceBinding) else {
             return brightspaceRedirect(req, error: "No active course.")
         }
         guard let orgUnitID = course.brightspaceOrgUnitID, !orgUnitID.isEmpty else {
@@ -408,7 +408,7 @@ extension InstructorLMSRoutes {
         // :assignmentID, so it's drivable cross-course / against an archived
         // course by URL — scope the grade-push backfill to the assignment's own
         // course (#417 Slice D).
-        let assignment = try await loadAssignmentForWrite(req, atLeast: .instructor)
+        let assignment = try await loadAssignmentForWrite(req, atLeast: CourseRoleFloor.brightSpaceBinding)
         let submissionIDs = try await APISubmission.query(on: req.db)
             .filter(\.$testSetupID == assignment.testSetupID)
             .filter(\.$kind == APISubmission.Kind.student)

@@ -1,3 +1,4 @@
+// @ts-check
 // Shared frontend utilities for Chickadee pages (June 2026 audit).
 //
 // This module replaces the drifted per-file copies of `escapeHtml` /
@@ -43,8 +44,8 @@
     // Returns the CSRF token from the <meta name="csrf-token"> tag in <head>.
     // Used by JS fetch calls to satisfy the CSRF middleware on POST endpoints.
     function getCsrfToken() {
-        return document.querySelector('meta[name="csrf-token"]')?.content
-            ?? document.querySelector('input[name="_csrf"]')?.value
+        return /** @type {HTMLMetaElement | null} */ (document.querySelector('meta[name="csrf-token"]'))?.content
+            ?? /** @type {HTMLInputElement | null} */ (document.querySelector('input[name="_csrf"]'))?.value
             ?? '';
     }
 
@@ -91,7 +92,7 @@
             return Promise.resolve(true);
         }
         return new Promise(function (resolve) {
-            var previouslyFocused = document.activeElement;
+            var previouslyFocused = /** @type {HTMLElement | null} */ (document.activeElement);
             var overlay = document.createElement('div');
             overlay.className = 'modal-overlay';
 
@@ -245,6 +246,7 @@
     // call site whose users already read a message of another shape.
     function fetchJSON(url, opts) {
         opts = opts || {};
+        /** @type {Record<string, string>} */
         var headers = {};
         Object.keys(opts.headers || {}).forEach(function (k) { headers[k] = opts.headers[k]; });
         if (opts.body !== undefined) headers['Content-Type'] = 'application/json';

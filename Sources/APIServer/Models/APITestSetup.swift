@@ -118,7 +118,7 @@ func manifestTextAsV1(_ stored: String) -> String {
 
 private func manifestString(_ data: Data) throws -> String {
     guard let json = String(bytes: data, encoding: .utf8) else {
-        throw WebAssignmentError.internalFailure(reason: "Failed to encode manifest.")
+        throw AppError.internalFailure(reason: "Failed to encode manifest.")
     }
     return json
 }

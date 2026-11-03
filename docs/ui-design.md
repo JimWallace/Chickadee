@@ -1380,12 +1380,21 @@ the JS gate (CI runs it in the `browser-runner-tests` job):
 
 ```bash
 scripts/eslint.sh
+scripts/typecheck-js.sh
 node --test Tests/BrowserRunnerJSTests/*.mjs
 ```
 
 ESLint is a correctness gate (`eslint:recommended`, zero warnings), not a
 formatter; scope and shared globals live in `eslint.config.mjs`.  New
 cross-file API should hang off `ChickadeeUI` rather than adding a global.
+
+`scripts/typecheck-js.sh` runs `tsc --noEmit` over `jsconfig.json` (#2782).
+There is no build step: types go in JSDoc comments only, and the files are
+still served as-is. A file is checked when its first line is `// @ts-check`.
+Every new `Public/*.js` file opts in. `scripts/ts-check-pending.txt` lists the
+files that do not yet, and `scripts/check-ts-check-optin.sh` makes that list
+shrink-only. A new cross-file global needs a line in
+`types/chickadee-globals.d.ts`, or tsc reports the name as unknown.
 
 For changes that add or restructure markup (not just CSS values), also run
 the render tests for the affected routes, e.g.:

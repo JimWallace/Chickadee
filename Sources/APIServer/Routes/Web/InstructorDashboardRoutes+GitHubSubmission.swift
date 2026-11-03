@@ -15,7 +15,7 @@ import Vapor
 extension InstructorDashboardRoutes {
     @Sendable
     func saveGitHubSubmissionSetting(req: Request) async throws -> Response {
-        let assignment = try await loadAssignmentForWrite(req, atLeast: .instructor)
+        let assignment = try await loadAssignmentForWrite(req, atLeast: CourseRoleFloor.studentOptions)
         guard let setup = try await APITestSetup.find(assignment.testSetupID, on: req.db) else {
             throw AppError.notFound(resource: "Test setup")
         }

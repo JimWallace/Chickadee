@@ -1,3 +1,4 @@
+// @ts-check
 // Live preview for the account page's bird picker
 // (docs/student-wardrobe.md, docs/avatar-species.md).
 //

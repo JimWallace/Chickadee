@@ -216,12 +216,12 @@ struct InstructorDashboardRoutes: RouteCollection {
 
     @Sendable
     func openAssignment(req: Request) async throws -> Response {
-        let assignment = try await loadAssignmentForWrite(req, atLeast: DashboardRoleFloor.assignmentLifecycle)
+        let assignment = try await loadAssignmentForWrite(req, atLeast: CourseRoleFloor.assignmentLifecycle)
         do {
             try await AssignmentAuthoringService.setOpenState(
                 assignment, open: true, audit: .web(req), on: req.db)
         } catch AssignmentAuthoringError.validationNotPassed {
-            throw WebAssignmentError.validationRequired(
+            throw AppError.validationRequired(
                 reason: "Assignment cannot be opened until runner validation passes."
             )
         }
@@ -280,7 +280,7 @@ struct InstructorDashboardRoutes: RouteCollection {
         do {
             return try parse()
         } catch {
-            throw WebAssignmentError.invalidParameter(name: name, reason: error.reason)
+            throw AppError.invalidParameter(name: name, reason: error.reason)
         }
     }
 
@@ -299,15 +299,15 @@ struct InstructorDashboardRoutes: RouteCollection {
                 caller: caller, courseID: courseID, atLeast: SortOrderRenumbering.roleFloor, db: req.db)
         }
         guard let courseID = courses.first else {
-            throw WebAssignmentError.invalidParameter(name: name, reason: ReorderError.unknownItem.reason)
+            throw AppError.invalidParameter(name: name, reason: ReorderError.unknownItem.reason)
         }
         guard courses.count == 1 else {
-            throw WebAssignmentError.invalidParameter(name: name, reason: ReorderError.mixedSections.reason)
+            throw AppError.invalidParameter(name: name, reason: ReorderError.mixedSections.reason)
         }
         do {
             _ = try await SortOrderRenumbering.renumberSectionItems(items, inCourse: courseID, on: req.db)
         } catch let error as ReorderError {
-            throw WebAssignmentError.invalidParameter(name: name, reason: error.reason)
+            throw AppError.invalidParameter(name: name, reason: error.reason)
         }
     }
 
@@ -319,11 +319,11 @@ struct InstructorDashboardRoutes: RouteCollection {
             var status: String
         }
 
-        let assignment = try await loadAssignmentForWrite(req, atLeast: DashboardRoleFloor.assignmentLifecycle)
+        let assignment = try await loadAssignmentForWrite(req, atLeast: CourseRoleFloor.assignmentLifecycle)
 
         let body = try await req.decodeContent(StatusBody.self)
         guard let visibility = AssignmentVisibility(rawValue: body.status) else {
-            throw WebAssignmentError.invalidParameter(
+            throw AppError.invalidParameter(
                 name: "status",
                 reason: "unsupported status '\(body.status)'"
             )
@@ -332,7 +332,7 @@ struct InstructorDashboardRoutes: RouteCollection {
             try await AssignmentAuthoringService.setVisibility(
                 assignment, visibility, audit: .web(req), on: req.db)
         } catch AssignmentAuthoringError.validationNotPassed {
-            throw WebAssignmentError.validationRequired(
+            throw AppError.validationRequired(
                 reason: "Assignment cannot be opened until runner validation passes."
             )
         }
@@ -343,7 +343,7 @@ struct InstructorDashboardRoutes: RouteCollection {
 
     @Sendable
     func closeAssignment(req: Request) async throws -> Response {
-        let assignment = try await loadAssignmentForWrite(req, atLeast: DashboardRoleFloor.assignmentLifecycle)
+        let assignment = try await loadAssignmentForWrite(req, atLeast: CourseRoleFloor.assignmentLifecycle)
         try await AssignmentAuthoringService.setOpenState(
             assignment, open: false, audit: .web(req), on: req.db)
         return req.redirect(to: "/instructor")
@@ -367,7 +367,7 @@ struct InstructorDashboardRoutes: RouteCollection {
         // Cloning creates a *new* assignment (course structure), so it's
         // instructor-only — unlike the content edits this loader defaults to .ta.
         let (source, sourceSetup) = try await loadAssignmentAndSetupForWrite(
-            req, atLeast: DashboardRoleFloor.createAssignment)
+            req, atLeast: CourseRoleFloor.createAssignment)
         let cloned = try await AssignmentAuthoringService.cloneAssignment(
             source: source,
             sourceSetup: sourceSetup,
@@ -389,7 +389,7 @@ struct InstructorDashboardRoutes: RouteCollection {
 
     @Sendable
     func saveBrightSpaceGradeObjectID(req: Request) async throws -> Response {
-        let assignment = try await loadAssignmentForWrite(req, atLeast: .instructor)
+        let assignment = try await loadAssignmentForWrite(req, atLeast: CourseRoleFloor.brightSpaceBinding)
         struct BSBody: Content {
             var gradeObjectID: String?
             /// "brightspace" → return to the BrightSpace tab (mapping table);
@@ -429,51 +429,30 @@ struct InstructorDashboardRoutes: RouteCollection {
 
     @Sendable
     func deleteAssignment(req: Request) async throws -> Response {
-        let assignment = try await loadAssignmentForWrite(req, atLeast: DashboardRoleFloor.assignmentLifecycle)
-        let setupID = assignment.testSetupID
-
-        // Delete related submissions and their result rows for this setup.
-        let submissions = try await APISubmission.query(on: req.db)
-            .filter(\.$testSetupID == setupID)
-            .all()
-        let submissionIDs = submissions.compactMap(\.id)
-        if !submissionIDs.isEmpty {
-            try await APIResult.query(on: req.db)
-                .filter(\.$submissionID ~~ submissionIDs)
-                .delete()
-            // Variant rows must go before their submissions: the FK is
-            // `.setNull`, so deleting the submissions first would leave the
-            // batch as unlinked rows for a setup that no longer exists.
-            try await ValidationVariant.query(on: req.db)
-                .filter(\.$testSetupID == setupID)
-                .delete()
-            try await APISubmission.query(on: req.db)
-                .filter(\.$id ~~ submissionIDs)
-                .delete()
+        let assignment = try await loadAssignmentForWrite(req, atLeast: CourseRoleFloor.assignmentLifecycle)
+        // Every row goes in one transaction, and the files go only after it
+        // commits (#2766). A failure midway rolls back every row, and the
+        // rows still name files that are still on disk.
+        let removed = try await req.db.transaction { db in
+            try await AssignmentDeletion.deleteRows(of: assignment, on: db)
         }
-        // The awards this assignment's work earned go with that work.
-        try await AchievementAwardStore.deleteAwards(forTestSetups: [setupID], on: req.db)
-
-        // Delete setup artifacts and setup row so it disappears from the assignments list.
-        if let setup = try await APITestSetup.find(setupID, on: req.db) {
-            try? FileManager.default.removeItem(atPath: setup.zipPath)
-            if let notebookPath = setup.notebookPath, !notebookPath.isEmpty {
-                try? FileManager.default.removeItem(atPath: notebookPath)
-            }
-            removeMaterializedNotebookFiles(req: req, setupID: setupID)
-            try await setup.delete(on: req.db)
+        for path in removed.filePaths {
+            try? FileManager.default.removeItem(atPath: path)
+        }
+        if removed.setupDeleted {
+            removeMaterializedNotebookFiles(req: req, setupID: assignment.testSetupID)
         }
 
-        // Recorded BEFORE the row goes: after the delete there is no assignment
-        // to attribute the event to, and no version row survives either — this
-        // is the only trace that the assignment ever existed.
+        // Recorded after the commit, so a delete that rolled back leaves no
+        // false trace. The in-memory model still carries the title and the
+        // course, and no version row survives the delete: this is the only
+        // trace that the assignment ever existed.
         await AuditLogger.recordAssignmentLifecycle(
             .assignmentDeleted, assignment: assignment,
             metadata: [
                 "title": assignment.title,
-                "submissions_deleted": String(submissionIDs.count),
+                "submissions_deleted": String(removed.submissionCount),
             ], on: req)
-        try await assignment.delete(on: req.db)
         return req.redirect(to: "/instructor")
     }
 
@@ -484,20 +463,20 @@ struct InstructorDashboardRoutes: RouteCollection {
         let caller = try req.auth.require(APIUser.self)
         let setupID = req.parameters.get("setupID") ?? ""
         guard let setup = try await APITestSetup.find(setupID, on: req.db) else {
-            throw WebAssignmentError.notFound(resource: "Test setup '\(setupID)'")
+            throw AppError.notFound(resource: "Test setup '\(setupID)'")
         }
         // Scope the delete to the setup's own course (the :setupID param-taking
         // route is otherwise drivable cross-course / against an archived course;
         // the active-course group gate can't see the setup's course) (#417 Slice D).
         try await requireCourseWriteAccess(
-            caller: caller, courseID: setup.courseID, atLeast: DashboardRoleFloor.assignmentLifecycle, db: req.db)
+            caller: caller, courseID: setup.courseID, atLeast: CourseRoleFloor.assignmentLifecycle, db: req.db)
         // Only allow deleting setups that have no associated assignment.
         let hasAssignment =
             try await APIAssignment.query(on: req.db)
             .filter(\.$testSetupID == setupID)
             .count() > 0
         guard !hasAssignment else {
-            throw WebAssignmentError.conflict(
+            throw AppError.conflict(
                 reason: "Test setup '\(setupID)' has a published assignment and cannot be deleted from this endpoint."
             )
         }

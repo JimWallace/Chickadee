@@ -1,3 +1,4 @@
+// @ts-check
 // Public/sparkline.js
 //
 // The one sparkline renderer: a row of bars, one per series entry, for the
@@ -27,7 +28,7 @@
 // custom property a template or a renderer may set (scripts/check-styles.sh
 // 4c): it varies per DATUM — it comes from the row being drawn — rather than
 // being a per-page dial for a design decision.
-(function (global) {
+(function (/** @type {any} */ global) {
     'use strict';
 
     // The escape lives HERE rather than being borrowed from ChickadeeUI, for

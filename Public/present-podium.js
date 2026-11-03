@@ -1,3 +1,4 @@
+// @ts-check
 // The Present-mode podium bounces when the board first shows and when the top
 // three change, not on every refresh (#2591).
 //

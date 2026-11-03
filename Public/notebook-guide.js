@@ -1,3 +1,4 @@
+// @ts-check
 // Public/notebook-guide.js
 //
 // The student guide on the notebook page (notebook views NB4, frame 18a).
@@ -19,7 +20,7 @@
 // `window.ChickadeeNotebookGuide.refresh()` fetches the guide again, and
 // `inEditor()` says whether the extension draws it (notebook-graded.js, NB5).
 
-(function (global) {
+(function (/** @type {any} */ global) {
     'use strict';
 
     var GLYPHS = { pass: '✓', fail: '✗', starter: '!', fresh: '○', written: '✓', empty: '○' };

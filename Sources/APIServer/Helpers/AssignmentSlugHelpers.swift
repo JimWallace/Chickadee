@@ -11,10 +11,8 @@ import Foundation
 import Vapor
 
 /// The URL slug for an assignment title: lowercase ASCII letters and digits,
-/// every other run of characters collapsed to one hyphen. `VanityURLRoutes`
-/// keeps `slugify` as its name for this rule, because the vanity routes own
-/// the URL shape; the body lives here so the slug allocator below the routes
-/// needs no upward call (#2143).
+/// every other run of characters collapsed to one hyphen. The body lives here,
+/// below the routes, so the slug allocator needs no upward call (#2143).
 func assignmentSlug(fromTitle title: String) -> String {
     let parts = title.lowercased().split { !$0.isASCII || (!$0.isLetter && !$0.isNumber) }
     return parts.joined(separator: "-")
@@ -57,7 +55,7 @@ func uniqueAssignmentSlug(
         let exists = try await query.count() > 0
         if !exists { return candidate }
     }
-    throw WebAssignmentError.internalFailure(reason: "Unable to allocate assignment URL slug")
+    throw AppError.internalFailure(reason: "Unable to allocate assignment URL slug")
 }
 
 func isValidAssignmentPublicID(_ value: String) -> Bool {
@@ -67,7 +65,7 @@ func isValidAssignmentPublicID(_ value: String) -> Bool {
 
 func assignmentPublicIDParameter(from req: Request) throws -> String {
     guard let raw = req.parameters.get("assignmentID"), isValidAssignmentPublicID(raw) else {
-        throw WebAssignmentError.notFound(resource: "Assignment")
+        throw AppError.notFound(resource: "Assignment")
     }
     return raw
 }
@@ -126,5 +124,5 @@ func createAssignmentWithUniquePublicID(
         return assignment
     }
 
-    throw WebAssignmentError.internalFailure(reason: "Unable to allocate assignment URL id")
+    throw AppError.internalFailure(reason: "Unable to allocate assignment URL id")
 }
