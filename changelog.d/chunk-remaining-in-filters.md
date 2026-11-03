@@ -1,0 +1,3 @@
+### Changed
+
+- **The remaining submission-ID `IN` lists are chunked (follow-up to #2764).** The per-assignment "Re-push all grades" button on the LEARN tab, the assignment delete, the per-student best-grade lookups and the data export's latest-result lookup now query results in chunks of 5,000 submission IDs, as the course-wide queries already did. These lists are scoped to one assignment or one student, so no current course reaches the limit; nothing changes for users. `chunkedForInFilter` moved to its own file under `Utilities/`, its doc comment no longer calls it a grade-sync helper, and the grade loaders reuse it. A doc comment that gave SQLite a 32k parameter limit now gives 250,000, the limit in the SQLite that sqlite-nio compiles.

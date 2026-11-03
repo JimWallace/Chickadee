@@ -527,10 +527,6 @@ struct GradeSyncBatchContext {
     let usersByID: [UUID: APIUser]
 }
 
-/// `~~` (SQL IN) filters take one chunk at a time so a very large pending
-/// backlog can't exceed the driver's bind-parameter limit.
-private let gradeSyncInFilterChunkSize = 5000
-
 extension GradeSyncSweep {
     /// Batch-loads, once per sweep, every row the per-result pushes used to look
     /// up individually: the pending results' submissions, then the distinct
@@ -607,17 +603,6 @@ extension GradeSyncSweep {
             coursesByID: coursesByID,
             usersByID: usersByID
         )
-    }
-}
-
-/// Splits an `~~` (SQL IN) filter's operand into driver-safe chunks. Shared with
-/// the class-goal freeze re-push, which builds the same shape of query.
-func chunkedForInFilter<T>(_ items: [T]) -> [[T]] {
-    guard items.count > gradeSyncInFilterChunkSize else {
-        return items.isEmpty ? [] : [items]
-    }
-    return stride(from: 0, to: items.count, by: gradeSyncInFilterChunkSize).map {
-        Array(items[$0..<min($0 + gradeSyncInFilterChunkSize, items.count)])
     }
 }
 

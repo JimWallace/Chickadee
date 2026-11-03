@@ -36,18 +36,22 @@ enum AssignmentDeletion {
             .all()
             .compactMap(\.id)
         if !submissionIDs.isEmpty {
-            try await APIResult.query(on: db)
-                .filter(\.$submissionID ~~ submissionIDs)
-                .delete()
+            for chunk in chunkedForInFilter(submissionIDs) {
+                try await APIResult.query(on: db)
+                    .filter(\.$submissionID ~~ chunk)
+                    .delete()
+            }
             // Variant rows must go before their submissions: the FK is
             // `.setNull`, so deleting the submissions first would leave the
             // batch as unlinked rows for a setup that no longer exists.
             try await ValidationVariant.query(on: db)
                 .filter(\.$testSetupID == setupID)
                 .delete()
-            try await APISubmission.query(on: db)
-                .filter(\.$id ~~ submissionIDs)
-                .delete()
+            for chunk in chunkedForInFilter(submissionIDs) {
+                try await APISubmission.query(on: db)
+                    .filter(\.$id ~~ chunk)
+                    .delete()
+            }
         }
         // The awards this assignment's work earned go with that work.
         try await AchievementAwardStore.deleteAwards(forTestSetups: [setupID], on: db)

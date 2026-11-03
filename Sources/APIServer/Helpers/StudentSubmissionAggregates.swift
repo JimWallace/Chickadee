@@ -300,9 +300,12 @@ private func bestGradePercentByStudentViaFluent(
         studentBySubmissionID[id] = userID
     }
     guard !studentBySubmissionID.isEmpty else { return [:] }
-    let results = try await APIResult.query(on: db)
-        .filter(\.$submissionID ~~ Array(studentBySubmissionID.keys))
-        .all()
+    var results: [APIResult] = []
+    for chunk in chunkedForInFilter(Array(studentBySubmissionID.keys)) {
+        results += try await APIResult.query(on: db)
+            .filter(\.$submissionID ~~ chunk)
+            .all()
+    }
     var best: [UUID: Int] = [:]
     for row in results {
         guard let userID = studentBySubmissionID[row.submissionID],
@@ -329,9 +332,12 @@ private func studentBestGradePercentBySetupViaFluent(
         setupBySubmissionID[id] = submission.testSetupID
     }
     guard !setupBySubmissionID.isEmpty else { return [:] }
-    let results = try await APIResult.query(on: db)
-        .filter(\.$submissionID ~~ Array(setupBySubmissionID.keys))
-        .all()
+    var results: [APIResult] = []
+    for chunk in chunkedForInFilter(Array(setupBySubmissionID.keys)) {
+        results += try await APIResult.query(on: db)
+            .filter(\.$submissionID ~~ chunk)
+            .all()
+    }
     var best: [String: Int] = [:]
     for row in results {
         guard let setupID = setupBySubmissionID[row.submissionID],

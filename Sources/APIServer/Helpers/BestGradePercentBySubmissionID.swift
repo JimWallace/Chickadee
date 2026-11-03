@@ -109,32 +109,26 @@ func bestGradeResultBySubmissionID(_ rows: [APIResult]) -> [String: APIResult] {
 
 /// Loads every `APIResult` for the given submission IDs, grouped by
 /// submission ID. Keeps ALL sources (browser + worker) so callers can apply
-/// the highest-grade fold across them. Chunked to stay under bind-parameter
-/// limits (SQLite 32k, Postgres 65,535).
+/// the highest-grade fold across them. Chunked with `chunkedForInFilter`, so
+/// no query binds more than `inFilterChunkSize` IDs (PostgreSQL allows 65,535
+/// parameters; the SQLite that sqlite-nio compiles allows 250,000).
 func allResultsBySubmissionID(
     for submissionIDs: some Collection<String>,
     on db: any Database
 ) async throws -> [String: [APIResult]] {
     guard !submissionIDs.isEmpty else { return [:] }
-    let chunkSize = 5_000
-    let ids = Array(submissionIDs)
     var grouped: [String: [APIResult]] = [:]
-    var index = ids.startIndex
-    while index < ids.endIndex {
-        let end =
-            ids.index(index, offsetBy: chunkSize, limitedBy: ids.endIndex)
-            ?? ids.endIndex
+    for chunk in chunkedForInFilter(Array(submissionIDs)) {
         // Newest-first within each submission: the highest-grade fold is
         // order-independent, but `bestGradeResultBySubmissionID` falls back to
         // the first row for a submission with no graded result.
         let page = try await APIResult.query(on: db)
-            .filter(\.$submissionID ~~ Array(ids[index..<end]))
+            .filter(\.$submissionID ~~ chunk)
             .sort(\.$receivedAt, .descending)
             .all()
         for result in page {
             grouped[result.submissionID, default: []].append(result)
         }
-        index = end
     }
     return grouped
 }
@@ -155,18 +149,12 @@ func gradeSummariesBySubmissionID(
     on db: any Database
 ) async throws -> [String: [GradeResultSummary]] {
     guard !submissionIDs.isEmpty else { return [:] }
-    let chunkSize = 5_000
-    let ids = Array(submissionIDs)
     var grouped: [String: [GradeResultSummary]] = [:]
     var legacyRows: [APIResult] = []
 
-    var index = ids.startIndex
-    while index < ids.endIndex {
-        let end =
-            ids.index(index, offsetBy: chunkSize, limitedBy: ids.endIndex)
-            ?? ids.endIndex
+    for chunk in chunkedForInFilter(Array(submissionIDs)) {
         let page = try await APIResult.query(on: db)
-            .filter(\.$submissionID ~~ Array(ids[index..<end]))
+            .filter(\.$submissionID ~~ chunk)
             .field(\.$id)
             .field(\.$submissionID)
             .field(\.$source)
@@ -197,7 +185,6 @@ func gradeSummariesBySubmissionID(
                     totalTests: row.totalTests
                 ))
         }
-        index = end
     }
 
     // Rare path: hydrate column-less rows from the blob (side table, #1173)

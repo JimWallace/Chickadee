@@ -514,9 +514,12 @@ private func latestResultBySubmissionID(
     submissionIDs: [String], on db: any Database
 ) async throws -> [String: APIResult] {
     guard !submissionIDs.isEmpty else { return [:] }
-    let results = try await APIResult.query(on: db)
-        .filter(\.$submissionID ~~ submissionIDs)
-        .all()
+    var results: [APIResult] = []
+    for chunk in chunkedForInFilter(submissionIDs) {
+        results += try await APIResult.query(on: db)
+            .filter(\.$submissionID ~~ chunk)
+            .all()
+    }
     var latest: [String: APIResult] = [:]
     for result in results {
         if let existing = latest[result.submissionID],
