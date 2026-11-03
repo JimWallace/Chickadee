@@ -389,7 +389,7 @@ extension PublishedAssignmentRoutes {
         }
 
         guard let body = try? await req.decodeContent(SaveBody.self) else {
-            throw WebAssignmentError.invalidParameter(name: "request body", reason: "Invalid assignment upload payload")
+            throw AppError.invalidParameter(name: "request body", reason: "Invalid assignment upload payload")
         }
 
         // The multipartTextField fallbacks cover Safari's mixed-encoding

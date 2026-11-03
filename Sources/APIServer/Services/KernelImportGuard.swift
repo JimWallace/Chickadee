@@ -183,7 +183,7 @@ enum KernelImportGuard {
             in: content, environment: environment, localModules: localModules)
         guard !missing.isEmpty else { return }
 
-        throw WebAssignmentError.invalidParameter(
+        throw AppError.invalidParameter(
             name: "content",
             reason: message(for: missing, filename: filename, language: language))
     }

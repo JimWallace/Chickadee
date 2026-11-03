@@ -49,11 +49,11 @@ extension PublishedAssignmentRoutes {
     @Sendable
     func scanNotebook(req: Request) async throws -> Response {
         guard let buffer = req.body.data else {
-            throw WebAssignmentError.invalidParameter(name: "request body", reason: "Request body is empty")
+            throw AppError.invalidParameter(name: "request body", reason: "Request body is empty")
         }
         let notebookData = Data(buffer.readableBytesView)
         guard !notebookData.isEmpty else {
-            throw WebAssignmentError.invalidParameter(name: "request body", reason: "Notebook data is empty")
+            throw AppError.invalidParameter(name: "request body", reason: "Notebook data is empty")
         }
 
         // v0.4.111: switched from `scanNotebookForFunctions` to the
@@ -163,7 +163,7 @@ extension PublishedAssignmentRoutes {
     func createSolutionFromAssignment(req: Request) async throws -> Response {
         let user = try req.auth.require(APIUser.self)
         guard let userID = user.id else {
-            throw WebAssignmentError.internalFailure(reason: "Authenticated user has no ID")
+            throw AppError.internalFailure(reason: "Authenticated user has no ID")
         }
 
         let (assignment, setup) = try await loadAssignmentAndSetupForWrite(req, atLeast: .ta)
@@ -180,7 +180,7 @@ extension PublishedAssignmentRoutes {
             let sourceData = await (try? notebookData(for: setup))
                 ?? defaultNotebookData(title: "\(assignment.title) Solution", language: language)
         else {
-            throw WebAssignmentError.unprocessable(reason: uploadOnlyNotebookScaffoldMessage)
+            throw AppError.unprocessable(reason: uploadOnlyNotebookScaffoldMessage)
         }
         let normalized = normalizeNotebookForJupyterLite(sourceData)
 

@@ -30,7 +30,7 @@ enum ContentAttachmentStore {
         case disallowedType(String)
         case tooLarge(name: String)
 
-        /// Human-readable reason for a web `WebAssignmentError.invalidParameter`
+        /// Human-readable reason for a web `AppError.invalidParameter`
         /// or an MCP `invalidArguments` detail.
         var reason: String {
             switch self {

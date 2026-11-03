@@ -38,7 +38,7 @@ func closeOpenAssignmentForContentEdit(
     return true
 }
 
-/// Runs `applySuiteEdit` and maps web-layer failures (`WebAssignmentError`,
+/// Runs `applySuiteEdit` and maps web-layer failures (`AppError`,
 /// `AbortError`) to `MCPToolError` so the agent sees a structured, actionable
 /// error rather than an opaque protocol-level internal error.
 func applySuiteEditMapped(

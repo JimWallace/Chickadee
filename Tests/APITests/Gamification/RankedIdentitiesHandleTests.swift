@@ -1,7 +1,7 @@
 // Tests/APITests/Gamification/RankedIdentitiesHandleTests.swift
 //
 // A leaderboard's first view draws a handle for every ranked student who has
-// none. `RankedIdentities.load` draws them all from one read of the course's
+// none. `AvatarIdentity.load` draws them all from one read of the course's
 // taken handles (#2257), so the handles must still be distinct, and a handle
 // already stored must stay.
 
@@ -35,7 +35,7 @@ import VaporTesting
             named.avatarHandle = "Quiet Cedar"
             try await named.save(on: app.db)
 
-            _ = try await RankedIdentities.load(userIDs: userIDs, courseID: courseID, on: app.db)
+            _ = try await AvatarIdentity.load(userIDs: userIDs, courseID: courseID, on: app.db)
 
             let handles = try await APIUser.query(on: app.db)
                 .filter(\.$id ~~ userIDs).all()
