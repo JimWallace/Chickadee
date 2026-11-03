@@ -31,7 +31,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
-          fetch-depth: 0
+          fetch-depth: 1
 
       # Skip the analysis on PRs that touch no JS/TS at all (pure-Swift or
       # docs-only PRs) — the job still runs and reports success, so it stays
