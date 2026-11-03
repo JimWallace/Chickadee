@@ -9,6 +9,36 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.780] - 2026-11-03
+
+### Fixed
+
+- **Scripts launch on a macOS runner.** The capture pipes' write ends were
+  close-on-exec, and on Darwin a `createSession` launch goes through
+  Subprocess's fork-then-`posix_spawn(SETEXEC)` path, which cannot dup2 such a
+  descriptor: every script failed with EBADF. On Darwin the write ends now stay
+  inheritable; `POSIX_SPAWN_CLOEXEC_DEFAULT` already keeps them out of other
+  children. Linux is unchanged.
+- **The sandbox no longer opens the whole work root to a variable that names
+  it.** An environment value equal to the work root (macOS's `TMPDIR` when the
+  runner works in the temporary directory) passed the "under the root" check
+  and made every job visible. Only directories strictly below the root count.
+- **Assignment version snapshots capture files on macOS.** The walk trimmed
+  `workDir`'s path off each entry, which matched nothing when the enumerator
+  reported `/private/var/…` for a `workDir` under `/var`.
+
+### Changed
+
+- **The test suite passes on macOS.** Linux-only tests (private `/tmp` and
+  discarded writes in the sandbox, `/proc` censuses) are compiled on Linux only;
+  fixtures account for bsdtar, APFS case-insensitivity, `/usr/bin/true`, and
+  the macOS Java stub.
+
+### Changed
+
+- **The Vapor 5 migration notes are current.** `docs/vapor-5-migration.md` now records the upstream state on 2026-11-02 (Vapor 5 is still at beta.4; Fluent 5, JWT and response compression are not ready), refreshed counts of what is left, all four async lifecycle handlers, the full list of test stand-ins that return futures, and the macOS 27.0 floor. Behaviour does not change.
+
+
 ## [0.5.779] - 2026-11-02
 
 ### Fixed
