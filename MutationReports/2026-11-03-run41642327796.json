@@ -1,0 +1,71 @@
+{
+  "commit": null,
+  "config": {
+    "configHash": "938610a82d4e",
+    "muterRef": "7f1f258",
+    "patchHash": "72eca9bb4465",
+    "swift": "Swift version 6.4.2 (swift-6.4.2-RELEASE)"
+  },
+  "date": "2026-11-03",
+  "killed": 704,
+  "phantomsFiltered": 231,
+  "shardsExpected": 12,
+  "shardsReported": 11,
+  "survived": 3,
+  "survivors": [
+    {
+      "file": "Sources/Core/TestProperties.swift",
+      "line": 410,
+      "mutations": [
+        {
+          "column": 49,
+          "mutated": "$0.scope == .course || $0.source != nil",
+          "offset": 22402,
+          "original": "$0.scope == .course && $0.source != nil"
+        }
+      ],
+      "operator": "ChangeLogicalConnector",
+      "source": "datasets.contains { $0.scope == .course && $0.source != nil }"
+    },
+    {
+      "file": "Sources/Core/TestProperties.swift",
+      "line": 410,
+      "mutations": [
+        {
+          "column": 38,
+          "mutated": "$0.scope != .course && $0.source != nil",
+          "offset": 22391,
+          "original": "$0.scope == .course && $0.source != nil"
+        },
+        {
+          "column": 62,
+          "mutated": "$0.scope == .course && $0.source == nil",
+          "offset": 22415,
+          "original": "$0.scope == .course && $0.source != nil"
+        }
+      ],
+      "operator": "RelationalOperatorReplacement",
+      "source": "datasets.contains { $0.scope == .course && $0.source != nil }"
+    },
+    {
+      "file": "Sources/Core/TestProperties.swift",
+      "line": 410,
+      "mutations": [
+        {
+          "column": 38,
+          "mutated": "$0.scope != .course && $0.source != nil",
+          "offset": 22391,
+          "original": "$0.scope == .course && $0.source != nil"
+        },
+        {
+          "column": 62,
+          "mutated": "$0.scope == .course && $0.source == nil",
+          "offset": 22415,
+          "original": "$0.scope == .course && $0.source != nil"
+        }
+      ],
+      "operator": "RelationalOperatorReplacement",
+      "source": "datasets.contains { $0.scope == .course && $0.source != nil }"
+    }
+  ]
+}
