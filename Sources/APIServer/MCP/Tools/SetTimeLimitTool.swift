@@ -74,6 +74,6 @@ struct SetTimeLimitTool: ContentTool {
     }
 }
 
-// `setManifestTimeLimitSeconds` moved to Helpers/ManifestFieldEdits.swift
+// `setManifestTimeLimitSeconds` moved to Services/ManifestFieldEdits.swift
 // (#1121), expressed as a `mutateManifest` closure alongside its three
 // single-field siblings.

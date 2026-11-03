@@ -101,9 +101,9 @@ The labextension is built and committed, so `pip install` needs no Node.js:
    `Tools/jupyterlite/overrides.json` into `settingsOverrides`. These are the
    same changes that `jupyter lite build` makes.
 
-`scripts/build-jupyterlite.sh` installs the extension from
-`Tools/jupyterlite/requirements.txt` and copies `overrides.json`, so a full
-rebuild (`revendor-kernels.yml`) gives the same result. CI runs
+`scripts/setup-jupyterlite.sh` installs the extension from
+`Tools/jupyterlite/chickadee-extension`, and `scripts/build-jupyterlite.sh`
+federates it and copies `overrides.json`, so a full rebuild (`revendor-kernels.yml`) gives the same result. CI runs
 `scripts/vendor-chickadee-extension.sh --check` and
 `scripts/verify-jupyterlite.sh`. Both fail if the bundle does not carry the
 built extension and its overrides.

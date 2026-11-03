@@ -142,17 +142,16 @@ extension OperationalDiagnosticsService {
         )
         let window = resolved.window
 
-        // Runner snapshots are pre-aggregated per bucket (in SQL on Postgres).
+        // Runner snapshots are pre-aggregated per bucket in SQL.
         let runners = try await runnerTimeseriesSummaries(window: window, on: req.db)
 
         // Request / job metrics stay a Swift fold over raw rows, but only the
         // columns the accumulators read are hydrated (the window is clamped
         // to 72h, so the row count is bounded).  The per-bucket p95 is why
-        // the fold cannot move into SQL: SQLite has no percentile aggregate,
-        // and Postgres `percentile_disc` picks rank ceil(n·p) (1-based) where
-        // `MetricBucketAccumulators.percentile` picks floor((n−1)·p)
-        // (0-based) — they disagree at e.g. n = 10, so a SQL path would
-        // silently change reported percentiles per backend.  Unordered on
+        // the fold stays in Swift: Postgres `percentile_disc` picks rank
+        // ceil(n·p) (1-based) where `MetricBucketAccumulators.percentile`
+        // picks floor((n−1)·p) (0-based) — they disagree at e.g. n = 10, so a
+        // SQL path would silently change reported percentiles.  Unordered on
         // purpose: the accumulators bucket by index and sort within
         // `percentile95`, so a DB sort here is wasted work.
         let requestMetrics = try await APIRequestMetric.query(on: req.db)

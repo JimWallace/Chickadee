@@ -231,7 +231,7 @@ because line numbers go out of date.
 
 - **Callers:**
   - `ResultIngestEffects`.
-  - `GradeOverrideHelpers`.
+  - `GradeOverrides`.
   - The class-goal freeze in `AchievementEvaluationService`.
 - **Rules:**
   - A new trigger calls `requestGradePush` one time. The function sends to
@@ -676,7 +676,8 @@ because line numbers go out of date.
   endpoints (`browser-result`, `runner-submit`, `browser-failover`).
 - **Readers:** the attempt-number readers (First-Try-Perfect, the
   prior-attempt delta), Pathfinder (`awardFirstToSubmitRecords`), the
-  operational diagnostics and job metrics, and the runner claim queue.
+  operational diagnostics and job metrics, and the runner job claim
+  (`WorkerJobClaim`).
 - **Rules:**
   - `SubmissionIntake.accept` is the one intake chokepoint (#2768). Each door
     keeps its own checks (enrollment, `requireOpenStudentAssignment`, the
@@ -921,7 +922,10 @@ because line numbers go out of date.
     enrollment: login, enrollment, CSV, staff provisioning, bundle import, a
     new term, the MCP account, auto-enrollment in `.auto` courses, and LTI
     launch.
-  - The role-change routes.
+  - `CourseEnrollmentService`: unenroll, set role and staff invite, for the
+    instructor roster and the admin pages alike (#2770). The caller is the
+    admin bypass of the last-instructor guard. The staff invite makes a
+    placeholder account only when `staffPlaceholderAllowed` is true.
 - **Readers.** All of them go through `courseRole(of:inCourse:db:)`:
   - `requireCourseRole` and `requireCourseEnrollment`.
   - `isCourseStaff` and `isStaffAnywhere`.

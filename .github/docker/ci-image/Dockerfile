@@ -38,6 +38,10 @@ FROM ${BASE_IMAGE}
 #             — the did-not-skip probes below now fail in CI if it regresses
 # python3-pandas / python3-matplotlib — NotebookCheckRuntimeState tests that
 #             exercise dataframe/plot check kinds against a real interpreter
+# postgresql-client — psql, which scripts/lib/scratch-database.sh uses to give
+#             each browser-harness server boot (editor smoke, probes, visual)
+#             its own database in the job's postgres service. Postgres is the
+#             server's only backend, so a boot needs a database of its own.
 # ca-certificates — needed by curl for the Node fetch below and by npm.
 #             Node itself is NOT apt's: see the NODE_VERSION block after this
 #             layer. The browser probe jobs (editor smoke, exec-hang,
@@ -52,7 +56,7 @@ RUN apt-get update -qq \
     && apt-get install -y --no-install-recommends file python3 zip unzip curl make \
         r-base python3-pandas python3-matplotlib lua5.4 octave \
         gnuplot-nox fonts-freefont-otf g++ racket default-jdk \
-        ca-certificates \
+        postgresql-client ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
 # Node from nodejs.org, NOT from apt.

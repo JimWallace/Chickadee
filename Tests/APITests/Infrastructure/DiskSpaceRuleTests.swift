@@ -120,7 +120,7 @@ import Vapor
     }
 
     @Test func aStorageContextWithoutADiskSaysSo() throws {
-        let context = AdminStorageContext(rows: [], totalFormatted: "1.0 GB", dbBackend: "sqlite", assignments: [])
+        let context = AdminStorageContext(rows: [], totalFormatted: "1.0 GB", dbBackend: "postgres", assignments: [])
         let json = try encoded(context)
         #expect(json["disk"] == nil)
         #expect(json["diskText"] as? String == "unknown")

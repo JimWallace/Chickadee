@@ -9,7 +9,7 @@
 //   POST /instructor/slip-days/adjust    → ±1 a student's budget (TA+)        → flash redirect
 //   POST /instructor/slip-days/refund    → refund one spend (TA+)             → flash redirect
 //
-// Role floors follow the convention in CourseAccessHelpers: the course-wide
+// Role floors follow the convention in CourseAccess: the course-wide
 // policy is course configuration (`.instructor`, like the MCP guide), while
 // an adjustment or refund is an individual accommodation, sibling to the
 // extension grant (`.ta`).  A refund recomputes or deletes the extension row

@@ -97,15 +97,11 @@ struct CreateCourses: ChickadeeMigration {
         // in COALESCE because SQL treats two NULLs as distinct: without it, two
         // courses that record no term could share a code.
         if let sql = database as? (any SQLDatabase) {
-            let activePredicate =
-                sql.dialect.name == "postgresql"
-                ? "is_archived = FALSE"
-                : "is_archived = 0"
             try await sql.raw(
                 """
                 CREATE UNIQUE INDEX IF NOT EXISTS idx_courses_code_term_active
                 ON courses(code, COALESCE(term_year, 0), COALESCE(term_season, ''))
-                WHERE \(unsafeRaw: activePredicate)
+                WHERE is_archived = FALSE
                 """
             ).run()
         }

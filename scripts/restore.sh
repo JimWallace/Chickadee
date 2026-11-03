@@ -143,11 +143,6 @@ if [[ $DB_VARS_FROM_CONTAINER -eq 0 && -f "$REPO_ROOT/.env" ]]; then
   set +a
 fi
 
-DATABASE_BACKEND="${DATABASE_BACKEND:-sqlite}"
-if [[ "$DATABASE_BACKEND" != "postgres" ]]; then
-  echo "ERROR: restore.sh only supports DATABASE_BACKEND=postgres (got: $DATABASE_BACKEND)." >&2
-  exit 1
-fi
 : "${DATABASE_USER:?DATABASE_USER must be set (in server container env or .env)}"
 : "${DATABASE_NAME:?DATABASE_NAME must be set (in server container env or .env)}"
 

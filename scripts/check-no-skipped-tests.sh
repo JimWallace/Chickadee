@@ -18,8 +18,8 @@ set -euo pipefail
 # With no argument it reads the sample report under scripts/guard-fixtures/,
 # which is how check-guards.sh proves the guard can fail.
 #
-# A lane that must exclude a test for its own reason (a Postgres-only suite on
-# the SQLite lane) excludes it with `swift test --skip`, not with a trait:
+# A lane that must exclude a test for its own reason excludes it with
+# `swift test --skip`, not with a trait:
 # the trait is for a condition the host may not meet, and CI meets all of them.
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"

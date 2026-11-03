@@ -22,7 +22,7 @@ import Testing
     }
 
     @Test func everyUnavailableStateTellsTheOperatorWhatToDo() {
-        for state in [QueryStatistics.Availability.notPostgres, .notPreloaded, .extensionMissing] {
+        for state in [QueryStatistics.Availability.notPreloaded, .extensionMissing] {
             #expect(state.note?.isEmpty == false)
         }
         #expect(QueryStatistics.Availability.ready.note == nil)

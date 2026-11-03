@@ -1,6 +1,6 @@
 # CI flakiness — known families
 
-**Open: Families 2, 3, 4 and 7.** These can still make a check red, and the
+**Open: Families 2, 3, 4, 7 and 8.** These can still make a check red, and the
 cause is not fixed in this repository. **Mitigated: Family 5.** It is closed
 for monitoring since 2026-09-28, but nobody found its cause. **Fixed: Families
 1 and 6.**
@@ -23,9 +23,10 @@ section. Keep one `## Family N` heading for each family.
 | 2 | webkit grading hang, `grading-probe (webkit)` `hangs=N/12` | open (contained by a tolerance) | `hangs=1/12` on webkit; a `::warning` "AMBIENT FLAKE TOLERATED" on a PR run. The breadcrumb trail stops before `suite_done`. | A tolerated warning is not your diff. Read the breadcrumbs before you decide. |
 | 3 | webkit editor smoke, post-idle execute, `smoke (webkit)` | open (contained by a retry) | `post-idle execute passed? 0 (want 1)`; a `::warning` "FLAKE RETRY". | Not your diff when one retry passes. One retry is automatic, and a second failure fails the gate. Then check the tells before you re-run. |
 | 4 | `worker-tests` SIGABRT from the wedge watchdog (URLSession cancel deadlock, upstream) | open (mitigated first-party) | `worker-tests` fails (not `cancelled`) after about 5 minutes with `exited with unexpected signal code 6`. The dump has `WedgeWatchdog.abortWedgedProcess` and a `CancelState.cancel` / `withStatusRecordLock` pair. | Not your diff. One `/rerun-failed`. For a mutation shard, re-run that shard. |
-| 5 | `api-tests` killed at its ceiling during a throughput collapse | mitigated (closed for monitoring) | `api-tests` reads `cancelled` at its 25-minute ceiling. Tests still complete at the tail of the log. `api-tests-postgres` passed on the same commit. | Not your diff if the tells match. One `/rerun-failed`. Read the `[ci-pressure]` lines. |
+| 5 | `api-tests` killed at its ceiling during a throughput collapse | mitigated (closed for monitoring) | `api-tests` reads `cancelled` at its 25-minute ceiling. Tests still complete at the tail of the log. `api-tests` passed on `main` at the same base, or on a re-run. | Not your diff if the tells match. One `/rerun-failed`. Read the `[ci-pressure]` lines. |
 | 6 | `worker-tests` cancelled at its ceiling after the move to resolute | fixed | `worker-tests` reads `cancelled`. `[ci-pressure]` shows `scopes=0.0/min` with `self cpu=0.0%`. Some `WorkerDaemonTests` record "Time limit was exceeded". | It should not recur. If it does, read the printed wedge dump. |
 | 7 | `build` exits 139 as Swift Build starts planning (libdispatch, upstream) | open (upstream bug; in-job retry) | Step `Build all targets and tests` red within about 90 s. Exit 139. The last build line is `[Planning 1 / N]`. `DispatchWorker` crashed in `_dispatch_event_loop_drain`. A `::warning` "Family 7 retry" on a green job is one absorbed hit. | Not your diff: nothing compiled. One `/rerun-failed`. Never read the diff for it. |
+| 8 | A test lane misses the shared `.build` cache that `build` saved (cache eviction, inferred) | open (fails fast since the guard) | A `::error` "Family 8" in the `Swift test setup` step of a test lane, after "Cache not found for input keys". Before the guard: `[N / M]` compile lines inside a `Run …Tests` step, a timeout with no `Test run with` line, and "No wedge dump was written." Other lanes on the same run passed. | Not your diff. Do not use `/rerun-failed`: the cache is gone, so it misses again. Re-run all jobs, so `build` saves again. |
 
 ## Before you chase a red check
 
@@ -43,8 +44,9 @@ Do these steps in this order.
 4. **For a `cancelled` job, examine the tail of the log.**
    - Were tests still *completing* at the tail? A wedge stops. A collapse
      (Family 5) continues to finish tests slowly.
-   - Did `api-tests-postgres` pass on the same commit? It runs the same
-     target.
+   - Did `api-tests` pass on `main` at the same base, or on a re-run of
+     this commit? (Until SQLite support was removed, a second lane ran the
+     same target on the same commit.)
    - What do the `[ci-pressure]` lines say? `scopes=0.0/min` with
      `self cpu=0.0%` is a stop (Family 6). A HINT line names its own cause.
    - On `main`, make sure that the `Run APITests` step ran to the budget.
@@ -62,6 +64,9 @@ Do these steps in this order.
    7, an upstream SwiftPM crash. Answer it with one `/rerun-failed`. A crash
    in `swift-frontend` after `Compiling` lines is a compiler crash. That one
    is the PR's to find.
+   A test lane that fails in `Swift test setup` with a `::error` that names
+   Family 8 missed the build cache. That one needs "Re-run all jobs", not
+   `/rerun-failed`.
 7. **Re-run with `/rerun-failed`** on the PR, or with `rerun-failed-jobs` on
    the run. **Never push an empty commit.** An empty commit runs every flaky
    job again and makes the shared build cache key not valid.
@@ -110,9 +115,9 @@ after a healthy grade. Read the breadcrumb trail first:
 - If the trail stops **before** `suite_done`, it is this family.
 - If the trail reaches `suite_done` and then `submit_failed` with a 500, it is
   a server-side failure of the result POST. That is not this family. Two such
-  causes are fixed (side effects after the result save run best-effort, and
-  `withWriteLockedTransaction` opens the attempt-number transaction with
-  `BEGIN IMMEDIATE`, #1919). A new one is a new bug. `run-smoke.sh` prints
+  causes are fixed: side effects after the result save run best-effort, and
+  the attempt-number write-lock failure (#1919) went away with SQLite
+  support. A new one is a new bug. `run-smoke.sh` prints
   the error-level lines of the whole server log before the tail. Read them.
 
 **Chromium is rarer, not immune.** One chromium hang (2026-08-04) did not
@@ -185,12 +190,13 @@ Swift Testing and are true of every run.
 **What changed.** Two changes halved the cost of the lane, and the collapse
 did not occur in 88 `main` runs after them:
 
-- The `api-tests` and `api-tests-postgres` containers mount `/tmp` as a tmpfs
-  (`--tmpfs /tmp:rw,exec,size=2g`). `exec` is necessary: the suite writes
+- The `api-tests` container mounts `/tmp` as a tmpfs
+  (`--tmpfs /tmp:rw,exec,size=2g`), as both lanes did while there was a
+  SQLite lane. `exec` is necessary: the suite writes
   scripts there and runs them.
-- Test applications no longer run all migrations each time. The sqlite lane
-  copies a migrated template file. The postgres lane recycles migrated schemas
-  from `MigratedPostgresSchemaPool`.
+- Test applications no longer run all migrations each time. They recycle
+  migrated schemas from `MigratedPostgresSchemaPool`. (The SQLite lane, since
+  removed, copied a migrated template file.)
 
 The cause of the collapse is not known. It stopped after the cost went down.
 The open leads are fsync latency variance, something inside the test process,
@@ -250,11 +256,13 @@ finishes. It is the opposite of Family 5: Family 6 stops completely.
    now launches through swift-subprocess, and `stop()` does not wait.
 2. glibc 2.41 and later holds an abort lock during `posix_spawn`. A
    swift-subprocess child made by `clone3` could inherit that lock held and
-   block before exec. `Package.swift` pins swift-subprocess to the fork
-   `JimWallace/swift-subprocess`, branch `chickadee/abort-lock-fix`. Return to
-   upstream when a release has an equal fix. The upstream report is
-   [swiftlang/swift-subprocess#375](https://github.com/swiftlang/swift-subprocess/issues/375),
-   and #1597 has the steps to move back. `SubprocessSpawnRaceTests` pins it.
+   block before exec. Upstream 1.0.1 (swiftlang/swift-subprocess#365) avoids
+   it: on glibc 2.34 or later the Linux child comes from `posix_spawn`, not a
+   raw `clone3`, for every configuration Chickadee uses, and Chickadee depends
+   on 1.0.2. The raw path survives only for setuid, setgid or setgroups, and
+   for `createSession` together with `processGroupID`; do not add either
+   without rereading [swiftlang/swift-subprocess#375](https://github.com/swiftlang/swift-subprocess/issues/375).
+   `SubprocessSpawnRaceTests` pins it.
 
 **Handling if it reappears.** The watchdog writes its thread table to
 `/tmp/chickadee-wedge-dump-<pid>.txt`. The `worker-tests` lane prints that
@@ -312,6 +320,75 @@ the job stays green. Two hits in one attempt fail the job.
 **Not a stall and not a test.** The job is red in under two minutes, with a
 backtrace. No test binary exists yet. The `[ci-pressure]` lines and the wedge
 watchdog never run.
+
+## Family 8 — a test lane misses the `.build` cache that `build` just saved (cache eviction, inferred) — OPEN, FAILS FAST
+
+**Tells.** One Swift test lane of `swift-tests.yml` fails, and the other
+lanes on the same run pass. In the `Swift test setup` step, the restore of the
+shared `.build` cache prints "Cache not found for input keys", although the
+`build` job of the same run printed "Cache saved with key:" for that exact
+key. The guard in `swift-test-setup` then prints a `::error` that names
+Family 8 and fails the step within seconds.
+
+Before the guard, the lane compiled cold instead. The test step showed compile
+progress lines (`[N / M] ...`), hit its `timeout-minutes` before any
+`Test run with` line, and the `worker-tests` wedge-dump step printed "No wedge
+dump was written." That reads like a wedge, but nothing was tested.
+
+**First seen (2026-11-03).** PRs #2787 and #2788 both changed
+`Package.resolved` and ran CI at the same time. The `build` job saved the
+exact-match cache (about 1.37 GB, key `Linux-build-v4-<toolchain>-<tree>`) at
+02:30:00. 19 minutes later, `worker-tests` restored that key and missed.
+`CACHE_HIT` was empty, so `scripts/ci-swift-test-lane.sh` built cold inside
+`Run WorkerTests`. The step reached its 15-minute limit at about
+`[2870 / 2914] APITests-product`. `api-tests` and `api-tests-postgres` on the
+same run restored the cache and passed, so the miss is per job and depends on
+timing.
+
+**Cause (inferred, not confirmed by GitHub).** GitHub evicts Actions caches
+when a repository goes over its cache size limit. Each tree saves a new
+1.37 GB `.build` cache, so two PRs with new trees in flight at once can push
+the cache of one of them out before all of its lanes restore it. A rarer
+cause gives the same tells: two runs build the same tree at once, the save of
+one warns "Unable to reserve cache" (the build job stays green), and a lane
+restores before the other run finishes the upload. Before the guard, that lane
+built cold and could pass. The guard makes it red, and the handling is the
+same.
+
+**The guard.** The three test lanes of `swift-tests.yml` set `build-cache: require`
+on `swift-test-setup`. That mode restores like `restore`, and then fails the
+step with the `::error` when the restore was not an exact hit. Each lane
+`needs: build`, so a miss there is never a cold tree: the cache existed and is
+gone. A cold build in a lane only spent the step budget and hid the cause.
+`repeat-test.yml` and `build-probe-server` keep `restore`, because they can
+run on a tree that `build` has not saved, and a cold build is their honest
+cost.
+
+**Handling.**
+
+1. The failure is not the diff. Do not read the diff for it.
+2. Do not use `/rerun-failed` or `rerun-failed-jobs`. Those re-run only the
+   lane, and the lane restores the same key that is gone, so it misses again.
+3. Re-run all jobs of the workflow run ("Re-run all jobs"), or push a commit
+   that you need anyway. The `build` job then saves the cache again. An empty
+   commit is still wrong (checklist step 7).
+4. If the misses become frequent, measure the cache use of the repository
+   (`gh cache list`, or `gh api repos/JimWallace/Chickadee/actions/cache/usage`)
+   before you change anything. The levers are fewer saved trees or a smaller
+   `.build`. Do not add `restore-keys`; the `swift-test-setup` action explains
+   why.
+
+**Cache budget (measured 2026-11-03).** The repository held 10.54 GB of cache
+in 41 entries, over the 10 GB limit. A PR that changed Swift saved about
+2.8 GB: the `-build-` cache (1.27 GB), the probes' `-probebuild-` cache
+(0.84 GB) and, on a Docker-relevant PR, the `-release-` cache (0.66 GB) and
+BuildKit layers. A cache saved on a PR ref is readable only by that PR, so
+those saves serve only that PR. `docker-build.yml` now restores the release
+cache and the BuildKit cache on a PR without saving them. The cost is that a
+re-run of a Docker-relevant PR rebuilds the release binaries cold. The `-build-` save
+stays, because the PR's own test lanes read it. The `-probebuild-` save stays
+for now: without it, every probe build that loses the race with `build` is
+cold, and so is every probe re-run.
 
 ## Structural problems → current state
 

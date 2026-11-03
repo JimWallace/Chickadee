@@ -19,13 +19,9 @@
 //     derived row keyed on the student; when the student is deleted
 //     the derived row should go too. CASCADE.
 //
-// SQLite limitation: SQLite does NOT support `ALTER TABLE … ADD
-// CONSTRAINT FOREIGN KEY` on an existing column. Recreating the table
-// would require copying every row (submissions can be millions); the
-// payoff is not worth that risk on dev/test SQLite installs. So this
-// migration runs on Postgres only. On SQLite the same semantics are
-// enforced by application code in `AdminRoutes.deleteUser`, which
-// explicitly cleans these rows up before the user row is deleted.
+// `AdminRoutes.deleteUser` also cleans these rows up before it deletes the
+// user row. That code dates from SQLite, which could not add these
+// constraints to existing columns, and it agrees with them.
 
 import Fluent
 import SQLKit
@@ -33,12 +29,6 @@ import SQLKit
 struct AddUserFKConstraints: ChickadeeMigration {
     func prepare(on database: any Database) async throws {
         guard let sql = database as? (any SQLDatabase) else { return }
-        guard sql.dialect.name == "postgresql" else {
-            database.logger.info(
-                "AddUserFKConstraints: skipping on \(sql.dialect.name) — SQLite cannot add FK constraints to existing columns; AdminRoutes.deleteUser enforces the same semantics in application code."
-            )
-            return
-        }
 
         try await sql.raw(
             """
@@ -59,7 +49,6 @@ struct AddUserFKConstraints: ChickadeeMigration {
 
     func revert(on database: any Database) async throws {
         guard let sql = database as? (any SQLDatabase) else { return }
-        guard sql.dialect.name == "postgresql" else { return }
 
         try? await sql.raw(
             "ALTER TABLE submissions DROP CONSTRAINT IF EXISTS fk_submissions_retested_by_user_id"

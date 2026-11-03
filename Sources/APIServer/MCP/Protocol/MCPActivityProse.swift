@@ -70,9 +70,6 @@ enum MCPActivityProse {
         }
     }
 
-    /// `"none or supportFile"` — the opponent-source tokens a payload reports.
-    static var opponentSourceTokens: String { MCPEnumProse<ActivityOpponentSource>.orList }
-
     /// `"bracket or swiss"` — the tournament schedules `run_tournament` takes.
     static var scheduleTokens: String { MCPEnumProse<TournamentSchedule>.orList }
 

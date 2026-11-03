@@ -41,7 +41,7 @@ instructor-authored beats global flags).
    without touching grades.
 5. **The predicate is the shared best-grade fold == 100.** Reuse
    `bestGradePercent` / `bestGradePercentBySubmissionID`
-   (`Sources/APIServer/Helpers/BestGradePercentBySubmissionID.swift`) — the
+   (`Sources/APIServer/Services/BestGradePercentBySubmissionID.swift`) — the
    same definition the dashboard, the built-in Ace achievement
    (`grade ≥ 100`), BrightSpace push, and the grades CSV use. That grade is
    points-weighted over the full all-tier collection and **rounded**

@@ -140,18 +140,21 @@ type declared only under `Routes/`. `LTI/` is not scanned, because it holds its
 own routes. The rule is absolute: the shrink-only list of older uses reached
 zero in #2143 and is gone (#1726).
 
-Each of those directories has one job, so a file goes where its imports say:
+Each of those directories has one job, so a file goes where its code says:
 
 - `Utilities/` holds pure code: no request and no database.
   `scripts/check-utilities-imports.sh` fails when a file there imports Vapor or
   a database module (#1730). The authoring validators throw
   `AuthoringValidationError`, so no file there imports Vapor (#1929).
-- `Helpers/` holds code that works with a `Request` or a database driver type.
-  The same script fails when a file there imports none of Vapor and Fluent
-  and names no model, because such a file is pure (#2144).
-- `Services/` holds code over models, a database and the application.
+- `Helpers/` holds the HTTP edge: code that names `Request`, `Response`,
+  `ClientResponse`, `Content`, a multipart `File` or `AbortError`. The same
+  script fails when a file there names none of them (#2144, #2775).
+- `Services/` holds database and domain logic, called with a database or a
+  `ServiceContext`. The same script fails when a file there names `Request`
+  or has a `*Helpers` file name (#2775).
 - `Bootstrap/` holds app setup: the database configuration and the migration
-  registry, the session driver, and the legacy migration-namespace guard.
+  registry, the `Application` storage accessors, the session driver, and the
+  legacy migration-namespace guard.
 
 ---
 
@@ -170,7 +173,7 @@ SubmissionRoutes
 WorkerJobRoutes  ←────── runner polls POST /worker/request ──────────────┐
   • SELECT pending submission                                              │
   • Compatibility check (RunnerCapabilityProfile vs AssignmentRequirements)│
-  • WorkerClaimQueue actor serialises concurrent claims                   │
+  • Row lock (FOR UPDATE SKIP LOCKED) settles concurrent claims          │
   • UPDATE status = "assigned", workerID = <runner>                       │
   • Return Job to runner ────────────────────────────────────────────────►│
                                                                           │
@@ -278,7 +281,7 @@ Roles are two-level (#417): a deployment role plus a per-course role.
   deadlines, archival, or staff.
 
 Enforcement chokepoints: `requireCourseRole(atLeast:)` / `evaluateCourseWrite`
-in `Sources/APIServer/Helpers/CourseAccessHelpers.swift` (the web UI and the
+in `Sources/APIServer/Services/CourseAccess.swift` (the web UI and the
 MCP tools share this policy); the `/instructor` area gate is
 `ActiveCourseStaffMiddleware` (staff in the *active* course), with
 per-resource gates on every parameterized route. `RoleMiddleware` survives
@@ -324,13 +327,15 @@ from reverse proxies.
 
 ## Job Lifecycle & Concurrency
 
-### WorkerClaimQueue actor
+### Job claims
 
 Concurrent runner instances poll `/worker/request` simultaneously. To prevent
-two runners from claiming the same job, all claims are serialised through
-`WorkerClaimQueue` — a Swift actor (in `Services/WorkerClaimQueue.swift`) eagerly
-initialised at server startup. The actor executes claim transactions one at a
-time; each transaction atomically finds a pending job and marks it assigned.
+two runners from claiming the same job, `WorkerJobClaim.claimSubmission`
+(`Services/WorkerJobClaim.swift`) claims in a short transaction that locks the
+pending row with `SELECT … FOR UPDATE SKIP LOCKED` (#1172). A row another
+claimer holds is skipped rather than waited on, so the loser moves to its next
+candidate. This holds across any number of server processes, with no
+in-process serialisation.
 
 ### WorkerDaemon concurrency
 
@@ -563,13 +568,12 @@ a three-word EFF diceware passphrase on first startup and persisted to
 ## Database & Migrations
 
 `DatabaseConfiguration` (`Sources/APIServer/Bootstrap/DatabaseConfiguration.swift`)
-selects the backend from `DATABASE_BACKEND` (`DatabaseSettings.fromEnvironment`):
-- `postgres` → Fluent PostgreSQL driver, connected from `DATABASE_HOST`,
-  `DATABASE_NAME`, `DATABASE_USER`, `DATABASE_PASSWORD` and `DATABASE_PORT`
-- absent / `sqlite` → Fluent SQLite driver (default for development), at
-  `SQLITE_PATH` or the default file under the working directory
-
-SQLite deployments enable WAL journaling and foreign key enforcement at startup.
+connects the Fluent PostgreSQL driver from `DATABASE_HOST`, `DATABASE_PORT`,
+`DATABASE_NAME`, `DATABASE_USER` and `DATABASE_PASSWORD`
+(`DatabaseSettings.fromEnvironment`). All five are required. PostgreSQL is the
+only backend: SQLite support was removed in 0.5. The test suite uses a local
+Postgres (`DatabaseSettings.localTest`, overridden by `TEST_DATABASE_*`), with
+one pooled, pre-migrated schema per test application.
 
 Migrations are registered in order by `registerMigrations(on:)` in the same
 file. The steady-state convention:

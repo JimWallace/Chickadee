@@ -6,8 +6,7 @@
 // client can cycle windows instantly without extra round-trips.
 //
 // Mirrors the design of UserActivityChartService: fixed-duration buckets rolling
-// back from `now`, aggregated in Swift so SQLite (dev) and Postgres (prod)
-// behave identically, labels formatted in America/Toronto.
+// back from `now`, aggregated in Swift, labels formatted in America/Toronto.
 
 import Foundation
 import Vapor

@@ -1,7 +1,7 @@
 // Tests/APITests/Infrastructure/CreateCompletedAtAndCourseIndexesTests.swift
 //
 // The three indexes of #2778 exist after migration, on the named table and
-// column, on SQLite and on Postgres.
+// column.
 
 import Fluent
 import SQLKit
@@ -38,27 +38,19 @@ import VaporTesting
     private static func indexedColumns(
         of name: String, on table: String, sql: any SQLDatabase
     ) async throws -> [String] {
-        if sql.dialect.name == "postgresql" {
-            let rows = try await sql.raw(
-                """
-                SELECT a.attname AS name
-                FROM pg_index i
-                JOIN pg_class c ON c.oid = i.indexrelid
-                JOIN pg_class t ON t.oid = i.indrelid
-                JOIN pg_namespace n ON n.oid = c.relnamespace
-                JOIN pg_attribute a ON a.attrelid = t.oid AND a.attnum = ANY(i.indkey)
-                WHERE c.relname = \(bind: name) AND t.relname = \(bind: table)
-                  AND n.nspname = current_schema()
-                ORDER BY a.attnum
-                """
-            ).all()
-            return try rows.map { try $0.decode(column: "name", as: String.self) }
-        }
-        let owner = try await sql.raw(
-            "SELECT tbl_name FROM sqlite_master WHERE type = 'index' AND name = \(bind: name)"
-        ).first()
-        guard try owner?.decode(column: "tbl_name", as: String.self) == table else { return [] }
-        let rows = try await sql.raw("SELECT name FROM pragma_index_info(\(bind: name)) ORDER BY seqno").all()
+        let rows = try await sql.raw(
+            """
+            SELECT a.attname AS name
+            FROM pg_index i
+            JOIN pg_class c ON c.oid = i.indexrelid
+            JOIN pg_class t ON t.oid = i.indrelid
+            JOIN pg_namespace n ON n.oid = c.relnamespace
+            JOIN pg_attribute a ON a.attrelid = t.oid AND a.attnum = ANY(i.indkey)
+            WHERE c.relname = \(bind: name) AND t.relname = \(bind: table)
+              AND n.nspname = current_schema()
+            ORDER BY a.attnum
+            """
+        ).all()
         return try rows.map { try $0.decode(column: "name", as: String.self) }
     }
 }

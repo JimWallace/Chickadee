@@ -47,15 +47,13 @@ import Vapor
             "LOGIN_LOCKOUT_THRESHOLD": "8",
             "JOB_METRIC_RETENTION_DAYS": "7",
             "UW_IMPORTANT_DATES_ENABLED": "false",
-            // Clear DB-backend overrides so the assertion-of-default branch
-            // (`.sqlite`) isn't accidentally redirected to postgres by an
-            // earlier test's leaked env.
-            "DATABASE_BACKEND": nil,
-            "DATABASE_HOST": nil,
-            "DATABASE_NAME": nil,
-            "DATABASE_USER": nil,
-            "DATABASE_PASSWORD": nil,
-            "DATABASE_PORT": nil,
+            // Postgres is the only backend, and loading the config requires
+            // all five connection variables.
+            "DATABASE_HOST": "db",
+            "DATABASE_NAME": "chickadee",
+            "DATABASE_USER": "chickadee",
+            "DATABASE_PASSWORD": "secret",
+            "DATABASE_PORT": "5432",
         ]) {
             let cfg = try AppConfig.fromEnvironment(workDir: "/tmp/")
             #expect(cfg.auth.mode == .local)
@@ -71,6 +69,8 @@ import Vapor
             #expect(cfg.lockout.lockoutThreshold == 8)
             #expect(cfg.diagnostics.jobMetricRetentionDays == 7)
             #expect(cfg.uwDates.enabled == false)
+            #expect(cfg.database.host == "db")
+            #expect(cfg.database.port == 5432)
         }
     }
 
@@ -164,7 +164,7 @@ import Vapor
             ),
             security: .default,
             scanMode: .default,
-            database: .sqliteInMemory(),
+            database: .localTest,
             lockout: .default,
             workers: WorkerConfig(
                 sharedSecret: "rsec-12345",

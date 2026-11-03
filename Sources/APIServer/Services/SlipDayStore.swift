@@ -13,14 +13,12 @@
 //
 // Concurrency: stacking means there is no per-assignment UNIQUE constraint to
 // absorb a lost race, so `spend` must be genuinely atomic.  Both `spend` and
-// `refund` run one transaction that (on Postgres) first takes a `FOR UPDATE`
+// `refund` run one transaction that first takes a `FOR UPDATE`
 // row lock on the (user, course) enrollment row, serializing all balance
 // mutations for that student in that course — the same idiom as the worker
 // job claim (#1172).  The budget invariant is then asserted *after* the
 // insert inside the same transaction, so an over-spend rolls back rather than
-// committing.  On SQLite the row lock is a no-op and the single-writer lock
-// provides the serialization: an interleaved second writer fails with BUSY /
-// BUSY_SNAPSHOT (fails closed) instead of double-spending.
+// committing.
 //
 // - Important: Do NOT call `spend` / `refund` inside an enclosing
 //   `db.transaction { … }` — they open their own transaction, and nested
@@ -135,8 +133,7 @@ enum SlipDayStore {
 
         return try await db.transaction { tx in
             // Serialize every balance mutation for this (user, course) on the
-            // enrollment row (Postgres row lock; SQLite relies on its
-            // single-writer lock — see the header comment).
+            // enrollment row (a row lock — see the header comment).
             let adjustment = try await lockEnrollmentAndReadAdjustment(
                 userID: userID, courseID: courseID, on: tx)
 
@@ -256,13 +253,13 @@ enum SlipDayStore {
 
     // MARK: - Internals
 
-    /// Locks the (user, course) enrollment row (Postgres `FOR UPDATE`; no-op
-    /// lock on SQLite) and returns the row's slip-day adjustment.  Throws
+    /// Locks the (user, course) enrollment row (`FOR UPDATE`) and returns the
+    /// row's slip-day adjustment.  Throws
     /// `notEnrolled` when no enrollment exists.
     private static func lockEnrollmentAndReadAdjustment(
         userID: UUID, courseID: UUID, on tx: any Database
     ) async throws -> Int {
-        if let sql = tx as? (any SQLDatabase), sql.dialect.name == "postgresql" {
+        if let sql = tx as? (any SQLDatabase) {
             let locked = try await sql.raw(
                 """
                 SELECT id FROM course_enrollments

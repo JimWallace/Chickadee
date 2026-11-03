@@ -7,6 +7,12 @@ version: 2
 updates:
   # Swift package graph (Package.swift + Package.resolved).
   #
+  # Dependabot's Swift toolchain (6.3.1 as of November 2026) refuses our
+  # swift-tools-version 6.4 manifests, so both Swift entries fail before they
+  # compare anything. .github/workflows/swift-currency.yml asks the CI
+  # toolchain instead, every Monday. Keep these entries: they work again once
+  # Dependabot catches up.
+  #
   # Grouped so a quiet period does not produce one PR per transitive pin. The
   # SwiftLint plugin is deliberately NOT in that group: scripts/swiftlint.sh
   # runs `--strict`, so a new rule in a patch release fails format-lint, and

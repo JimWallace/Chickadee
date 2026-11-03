@@ -6,7 +6,6 @@
 import ChickadeeTestSupport
 import Fluent
 import Foundation
-import SQLKit
 import VaporTesting
 
 @testable import APIServer
@@ -15,8 +14,7 @@ import VaporTesting
 
 /// Runs an async test body with a Vapor application and always tears it down:
 /// shutdown plus removal of any temp state the harness created for it (the
-/// `makeTestApp` directory tree, the file sqlite-kit secretly backs an
-/// "in-memory" database with, the per-test Postgres schema). Safe for bare
+/// `makeTestApp` directory tree, the per-test Postgres schema). Safe for bare
 /// apps too — each cleanup step is a no-op when there is nothing to clean.
 ///
 /// It is also where APITests arms `WedgeWatchdog`. This is the target's one
@@ -74,9 +72,8 @@ func makeTestingApplication(
         try await setup(app)
         return app
     } catch {
-        // Full teardown, not just shutdown: `setup` may have configured a
-        // database (and thereby materialized sqlite-kit's fake-memory temp
-        // file) before throwing.
+        // Full teardown, not just shutdown: `setup` may have borrowed a
+        // pooled schema or made temp directories before throwing.
         try? await app.tearDownTestApp()
         throw error
     }
@@ -99,78 +96,15 @@ extension Application {
         set { storage[TestDataDirectoryKey.self] = newValue }
     }
 
-    /// The on-disk files secretly backing this app's "in-memory" SQLite
-    /// databases. Usually zero (postgres lane, no database) or one; a test
-    /// that registers a second in-memory pool (e.g. a stand-in `.mcp` pool)
-    /// has two.
-    ///
-    /// sqlite-kit fakes `.memory` storage with a real file in the system temp
-    /// directory — SQLiteNIO is built with `SQLITE_OMIT_SHARED_CACHE`, so it
-    /// cannot offer genuinely shared in-memory databases — and acknowledges in
-    /// a comment that the file outlives the last connection. Nothing upstream
-    /// ever deletes it, so each per-test Application leaks one ~600 KB file
-    /// (#1298: ~973 MB per full suite run). We ask SQLite itself for the path
-    /// (`PRAGMA database_list`) rather than mirroring sqlite-kit's private
-    /// filename scheme, then accept only files that scheme plainly produced —
-    /// so a real `.file(path:)` database can never be swept up, even one that
-    /// happens to live in the temp directory.
-    func sqliteFakeMemoryDatabaseFiles() async -> [String] {
-        struct DatabaseListRow: Decodable {
-            let name: String
-            let file: String
-        }
-        let systemTempDir = FileManager.default.temporaryDirectory
-            .resolvingSymlinksInPath().path
-        var files: [String] = []
-        for id in databases.ids() {
-            // Dialect metadata is static — checking it opens no connection, so
-            // a registered-but-unreachable Postgres pool costs nothing here.
-            guard let sql = db(id) as? any SQLDatabase, sql.dialect.name == "sqlite" else { continue }
-            guard
-                let rows = try? await sql.raw("PRAGMA database_list")
-                    .all(decoding: DatabaseListRow.self)
-            else { continue }
-            for row in rows where row.name == "main" {
-                let file = URL(fileURLWithPath: row.file).resolvingSymlinksInPath()
-                guard
-                    file.lastPathComponent.hasPrefix("sqlite-kit_memorydb-"),
-                    file.path.hasPrefix(systemTempDir)
-                else { continue }
-                files.append(file.path)
-            }
-        }
-        return files
-    }
-
-    /// Every real file backing this app's SQLite databases, whichever mechanism
-    /// put it there: the migrated-template copy that `configureTestDatabase`
-    /// hands out, or sqlite-kit's fake-memory file for an app configured with
-    /// `.sqliteInMemory()` directly.
-    ///
-    /// The leak guards assert against THIS rather than against either
-    /// mechanism, so that changing how a test database is materialized moves
-    /// one function instead of silently emptying the guard's input — which is
-    /// exactly what introducing the template did to it the first time.
-    func sqliteDatabaseFilesOnDisk() async -> [String] {
-        var files = await sqliteFakeMemoryDatabaseFiles()
-        if let templateCopy = storage[TestSQLiteDatabaseFileKey.self] {
-            files.append(templateCopy)
-        }
-        return files
-    }
-
     /// Tears the app down completely: drops the per-test Postgres schema (if
     /// any), shuts the app down, and removes every piece of temp state created
-    /// on its behalf — the `makeTestApp` directory tree, sqlite-kit's
-    /// fake-memory database files. Every step is a
+    /// on its behalf — the `makeTestApp` directory tree. Every step is a
     /// no-op when there is nothing to clean, so this is safe for any test app
     /// however it was built. `withApp` calls this; use it directly only for
     /// apps whose lifecycle `withApp` doesn't own.
     func tearDownTestApp() async throws {
         // Collect everything that needs a live app before shutting down.
         let dir = storage[TestDataDirectoryKey.self]
-        let sqliteFiles = await sqliteFakeMemoryDatabaseFiles()
-        let templateCopy = storage[TestSQLiteDatabaseFileKey.self]
         let pooledSchema = storage[PooledPostgresSchemaKey.self]
         try? await dropPostgresTestSchema(self)
 
@@ -197,23 +131,8 @@ extension Application {
                 firstError = firstError ?? error
             }
         }
-        if let templateCopy {
-            // Same sidecar sweep as below: a crash mid-test can strand a
-            // journal even though the default rollback journal is transient.
-            for path in [templateCopy, templateCopy + "-journal", templateCopy + "-wal", templateCopy + "-shm"] {
-                try? FileManager.default.removeItem(atPath: path)
-            }
-        }
         if let dir {
             try? FileManager.default.removeItem(atPath: dir)
-        }
-        for file in sqliteFiles {
-            // The fake-memory databases run the default rollback journal, so
-            // the sidecars exist only transiently — but removal is cheap and a
-            // crash can strand them.
-            for path in [file, file + "-journal", file + "-wal", file + "-shm"] {
-                try? FileManager.default.removeItem(atPath: path)
-            }
         }
         if let firstError { throw firstError }
     }

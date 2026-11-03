@@ -31,7 +31,7 @@ r-base and every R boot pull numpy/pandas/matplotlib (slow enough to time out
 the editor probes). `check-xeus-vendored.sh` asserts they stay distinct. Python moved
 off the Pyodide kernel in the 0.5 series, so the editor runs one kernel
 technology for every language. Notebook metadata is normalized to those names by
-`normalizeNotebookForJupyterLite` (`NotebookContentHelpers.swift`) — for every
+`normalizeNotebookForJupyterLite` (`NotebookContent.swift`) — for every
 vendored kernel. A Lua notebook resolves to `xlua` and extracts through the
 same marker-emitting RunnerCore extractor R uses — vendoring a kernel puts it
 in the editor's picker, so a language that can be authored must be one that
@@ -117,9 +117,13 @@ repo.prefix.dev**. This was long documented as something *CI cannot do*, and
 that was simply **wrong** — a hosted runner has unrestricted network and
 micromamba is a single ~7 MB download. Re-vendoring is now a workflow:
 `.github/workflows/revendor-kernels.yml`, on demand or when a PR changes an
-environment file. It does not run unattended, because the output is ~100 MB of
-content-hashed binary assets and an automatic rebuild would bury unrelated work
-in unreviewable diffs.
+environment file. It never commits onto unrelated work, because the output is
+~100 MB of content-hashed binary assets. When the weekly
+`kernel-currency.yml` finds the kernels behind their channels, it dispatches
+the workflow in publish mode: a rebuild from `main` on its own
+`kernels/revendor-*` branch, opened as an auto-merging pull request whose CI
+tests the new kernels. Publishing needs the `RELEASE_TOKEN` secret; the header
+of the workflow says why.
 
 That false belief had a cost worth remembering. Adding a name to
 `environment-*.yml` changes nothing until the kernel is rebuilt, so

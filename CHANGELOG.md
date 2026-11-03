@@ -9,6 +9,135 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.806] - 2026-11-03
+
+### Removed
+
+- **Two unused members.** `LTILaunchClaims.claimPrefix` had no reader, since the coding keys spell each claim URI as a literal. `MCPActivityProse.opponentSourceTokens` was named only inside two doc comments, where the interpolation never runs; those comments now name `ActivityOpponentSource`. Behaviour does not change.
+
+### Changed
+
+- **The browser runner is rebuilt on JavaScriptKit 0.62.0** (from 0.59.0).
+  `wasm/Package.resolved` moves, and the vendored `Public/runner-wasm/`
+  artifact is rebuilt in the same change, so the browser runner tests in this
+  change exercise the new module rather than the old one. The generated
+  `runner-core.d.ts` contract is unchanged. The module is 141,501 bytes
+  gzipped, 2,276 bytes over the previous baseline and within budget.
+
+### Changed
+
+- **Kernel updates publish themselves.** When the weekly kernel currency check
+  finds the vendored xeus kernels behind their channels, it now dispatches
+  `revendor-kernels.yml` in a new publish mode. That rebuilds from `main`,
+  verifies, and opens the update as a pull request with auto-merge on, so the
+  browser grading and editor smoke test the new kernels before they reach
+  `main`. It does nothing while a re-vendor pull request is already open.
+- **The re-vendor workflow pushes with `RELEASE_TOKEN`.** The branch ruleset
+  refused its `GITHUB_TOKEN` push (GH013, required `editor-smoke-gate`), so a
+  manual re-vendor could rebuild and verify but never commit.
+
+### Security
+
+- **Swift dependencies brought current.** Dependabot has not opened a Swift
+  PR since the move to `swift-tools-version:6.4`, because its Swift toolchain
+  is 6.3.1 and refuses the manifest. This updates the root graph by hand:
+  Vapor 4.122.3, swift-nio 2.105.0, swift-nio-ssl 2.37.6, swift-certificates
+  1.21.1, jwt 5.2.0, jwt-kit 5.8.0, async-http-client 1.37.0, postgres-nio
+  1.33.2 and eleven other patch or minor releases.
+
+### Fixed
+
+- **Dependabot pip updates run again.** `Tools/jupyterlite/requirements.txt`
+  named the Chickadee extension by a local path, and every weekly pip run
+  aborted with `path_dependencies_not_reachable`. `scripts/setup-jupyterlite.sh`
+  now installs the extension itself, after the requirements file.
+
+### Changed
+
+- **The xeus kernels are re-vendored to their channels' current builds.**
+  The weekly kernel currency check found the vendored kernels behind
+  `emscripten-forge-4x`. `.github/workflows/revendor-kernels.yml` rebuilt
+  `Public/jupyterlite/` from the unchanged `Tools/jupyterlite/environment-*.yml`
+  files and verified it before this pull request was opened.
+
+### Added
+
+- **A weekly Swift package currency check.** Dependabot's Swift toolchain
+  refuses the swift-tools-version 6.4 manifests, so no Swift update PR has
+  opened since June. `.github/workflows/swift-currency.yml` runs
+  `scripts/check-swift-currency.py` in the CI image every Monday: it resolves
+  `/` and `/wasm` with `swift package update --dry-run` and goes red, naming
+  each pin and its newer version, when one is behind. It is off the pull
+  request path, so it never blocks a merge.
+
+
+## [0.5.805] - 2026-11-03
+
+### Changed
+
+- **A Swift test lane that misses the build cache fails fast (CI flakiness Family 8).** On 2026-11-03, `worker-tests` could not restore the `.build` cache that the `build` job of the same run had saved, most likely because the cache was evicted. It compiled cold and hit its 15-minute step limit before any test ran, which looked like a wedge. The Swift test lanes of `swift-tests.yml` now use `build-cache: require` on `swift-test-setup`, which fails the setup step with an error that names the family and says to re-run all jobs. `docs/ci-flakiness.md` documents the family.
+- **Pull requests no longer save the release or BuildKit caches.** The repository's Actions cache was over its 10 GB limit, and a cache saved on a pull request is readable only by that pull request. `docker-build.yml` now restores both caches on a pull request and saves them only on pushes to `main` and on tags. A re-run of a pull request now rebuilds the release binaries cold.
+- **The Swift Tests `build` job may run for 40 minutes, up from 25.** A cold build (package fetch plus compile) now takes about 25 minutes, so two runs on 2026-11-03, one of them on `main`, were cancelled while they saved the build cache.
+- **A cold Swift Tests build restores SwiftPM's package mirrors.** The `build` job spent about 4.5 minutes cloning 41 packages on a cache miss. It now restores `.build/repositories` from one cache entry that pushes to `main` save, so a pull request fetches only what changed.
+
+
+## [0.5.804] - 2026-11-03
+
+### Fixed
+
+- **The 2026-11-03 mutation sweep survivors are answered.** The three survivors were all in `TestProperties.hasCourseScopedDatasets`, which no Core test read directly. New tests pin that only a library attachment with the course scope counts: the course scope without a source, or a source with the assignment scope, does not.
+
+### Changed
+
+- **swift-subprocess is back on the upstream release (1.0.2).** Since 1.0.1
+  its Linux child comes from `posix_spawn` rather than a raw `clone3` for
+  every configuration Chickadee uses, which removes the glibc 2.41 launch
+  hang; the temporary fork is no longer used.
+
+
+## [0.5.803] - 2026-11-03
+
+### Fixed
+
+- **CI: the Swift scope check fetches only what it compares.** The `changes` job in `swift-tests.yml` checked out the full history of every branch and tag, and since 2026-11-03 17:30 UTC that fetch has run into the job's 5-minute limit on every run. The gate fails closed, so every pull request was red. A pull request now fetches depth 2, the merge commit and both parents. A push fetches its before commit by itself. Any failure still runs the full suite.
+- **CI: the changed-paths action fetches only the base commit.** The editor smoke, the browser grading smoke and the CodeQL JavaScript job checked out the full history for the same path check, and the editor smoke's `changes` job hit its 10-minute limit. Those three now check out depth 1, and the action fetches the base commit by itself.
+
+### Removed
+
+- **SQLite support.** PostgreSQL is now the server's only database. The server
+  needs `DATABASE_HOST`, `DATABASE_PORT`, `DATABASE_NAME`, `DATABASE_USER` and
+  `DATABASE_PASSWORD`, and refuses to start without them. `DATABASE_BACKEND` and
+  `SQLITE_PATH` are no longer read. Nothing moves an existing SQLite database
+  into Postgres. Production already ran on Postgres, so it needs no change.
+- **The SQLite-only workarounds.** The write-locked transaction, the
+  "database is locked" retry, the in-process job-claim queue and the SQLite
+  branches of about a dozen queries and migrations are gone. Postgres takes the
+  same paths it took before.
+
+### Changed
+
+- **Tests run on Postgres.** `swift test` needs a local Postgres. It defaults to
+  `localhost:5432`, database `chickadee_test`, user and password `postgres`, and
+  each `TEST_DATABASE_*` variable overrides one part. CI runs one API test lane
+  instead of two. The browser harnesses give each server boot its own database.
+- **The compose `db` service is required.** `docker-compose.yml` now starts
+  Postgres and points the server at it by default.
+
+
+## [0.5.802] - 2026-11-03
+
+### Changed
+
+- **`Helpers/` and `Services/` each hold one kind of code, and a guard keeps it that way (#2775).** `Helpers/` holds the HTTP edge: code that names `Request`, `Response`, `ClientResponse`, `Content`, a multipart `File` or `AbortError`. `Services/` holds database and domain logic and never names `Request`. Nineteen Helpers files that took no request move to `Services/`, `Bootstrap/` or `Utilities/`. The three `Services/*Helpers` files and three moved files lose the `Helpers` name (for example `CourseAccessHelpers` is now `Services/CourseAccess.swift`). The `Request` code in `ServiceContext`, `VisibilityAudit` and `CourseAccess` moves to `Helpers/`, and so does `RunnerFleetRows`. `scripts/check-utilities-imports.sh` enforces the rules, with fixtures, and `scripts/check-guards.sh` can now run a fixture that adds a file. No behaviour change.
+
+
+## [0.5.801] - 2026-11-03
+
+### Fixed
+
+- **The instructor staff invite follows the placeholder rule.** Under local sign-in only, the instructor roster's "Add staff member" form made a placeholder account that no login could adopt. It now refuses an unknown username, as the admin forms do. The admin and instructor unenroll, set-role and staff-invite handlers share one `CourseEnrollmentService` (#2770).
+
+
 ## [0.5.800] - 2026-11-03
 
 ### Security

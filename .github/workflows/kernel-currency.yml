@@ -18,8 +18,14 @@ name: Kernel currency
 # It does NOT rebuild anything. It runs the same solver `jupyter lite build`
 # uses, in dry-run, and compares the answer to the tarballs actually vendored.
 # That takes minutes rather than the re-vendor's quarter of an hour, and it
-# produces no bytes to review. When it goes red, dispatch
-# .github/workflows/revendor-kernels.yml and commit what that produces.
+# produces no bytes to review.
+#
+# When the scheduled run finds the kernels behind, it dispatches
+# revendor-kernels.yml in publish mode, which rebuilds from main and opens an
+# auto-merging pull request whose CI tests the new kernels. It dispatches only
+# on the script's "behind their channels" verdict. The script exits 1 for a
+# failed solve too, and a broken check must never start a publish. A manual
+# run reports and does not publish.
 #
 # Red here is a notification, not a broken build: this job is off the pull
 # request path entirely, so an upstream release can never block a merge.
@@ -37,6 +43,8 @@ concurrency:
 
 permissions:
   contents: read
+  # To dispatch revendor-kernels.yml. A dispatch is allowed under GITHUB_TOKEN.
+  actions: write
 
 jobs:
   currency:
@@ -70,6 +78,24 @@ jobs:
           set -o pipefail
           scripts/check-kernel-currency.py 2>&1 | tee /tmp/currency.txt
 
+      - name: Publish the update
+        id: publish
+        if: >-
+          failure()
+          && steps.currency.outcome == 'failure'
+          && github.event_name == 'schedule'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if ! grep -q "the vendored kernels are behind their channels" /tmp/currency.txt; then
+            echo "The check failed without a behind verdict, so nothing is published." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          gh workflow run revendor-kernels.yml --repo "$GITHUB_REPOSITORY" --ref main \
+            -f publish=true -f commit=false
+          echo "dispatched=true" >> "$GITHUB_OUTPUT"
+
       - name: Summarise
         if: always()
         run: |
@@ -79,9 +105,13 @@ jobs:
             echo '```'
             cat /tmp/currency.txt 2>/dev/null || echo "the check produced no output"
             echo '```'
-            if [ "${{ steps.currency.outcome }}" != "success" ]; then
+            if [ "${{ steps.publish.outputs.dispatched }}" = "true" ]; then
               echo ""
-              echo "Run the **Re-vendor xeus kernels** workflow on \`main\` and"
-              echo "commit what it produces."
+              echo "Dispatched **Re-vendor xeus kernels** in publish mode. It opens"
+              echo "an auto-merging pull request unless one is already open."
+            elif [ "${{ steps.currency.outcome }}" != "success" ]; then
+              echo ""
+              echo "Run **Re-vendor xeus kernels** with \`publish\` checked to open"
+              echo "the update as a pull request."
             fi
           } >> "$GITHUB_STEP_SUMMARY"

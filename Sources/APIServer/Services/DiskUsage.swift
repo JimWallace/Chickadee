@@ -37,7 +37,7 @@ func directorySizeBytes(at path: String) -> Int {
     return total
 }
 
-/// Size of a single file (e.g. a SQLite database), 0 if absent.
+/// Size of a single file, 0 if absent.
 func fileSizeBytes(at path: String) -> Int {
     ((try? FileManager.default.attributesOfItem(atPath: path))?[.size] as? Int) ?? 0
 }
@@ -80,23 +80,14 @@ func testSetupSizesByID(testSetupsDirectory dir: String) -> [String: Int] {
     return result
 }
 
-/// Best-effort database footprint.
-/// - Postgres: `pg_database_size(current_database())` (logical size).
-/// - SQLite: the db file plus its `-wal` / `-shm` sidecars.
-/// Returns nil when the size can't be determined.
-func databaseSizeBytes(on db: any Database, settings: DatabaseSettings) async -> Int? {
-    switch settings.backend {
-    case .postgres:
-        guard let sql = db as? (any SQLDatabase) else { return nil }
-        struct SizeRow: Decodable { let size: Int }
-        let row = try? await sql.raw("SELECT pg_database_size(current_database()) AS size")
-            .first(decoding: SizeRow.self)
-        return row?.size
-    case .sqlite:
-        guard let path = settings.sqlitePath else { return nil }
-        let main = fileSizeBytes(at: path)
-        return main + fileSizeBytes(at: path + "-wal") + fileSizeBytes(at: path + "-shm")
-    }
+/// Best-effort database footprint: `pg_database_size(current_database())`, the
+/// logical size. Returns nil when the size can't be determined.
+func databaseSizeBytes(on db: any Database) async -> Int? {
+    guard let sql = db as? (any SQLDatabase) else { return nil }
+    struct SizeRow: Decodable { let size: Int }
+    let row = try? await sql.raw("SELECT pg_database_size(current_database()) AS size")
+        .first(decoding: SizeRow.self)
+    return row?.size
 }
 
 /// Human-readable byte count (e.g. "0 B", "12.4 MB", "1.3 GB").

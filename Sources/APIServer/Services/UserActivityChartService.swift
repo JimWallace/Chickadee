@@ -7,8 +7,7 @@
 // Buckets are fixed-duration slots rolling back from `now` (not calendar
 // aligned), which keeps the math DST-safe and the query a single trailing
 // range scan.  Aggregation is done in Swift over the fetched rows rather than
-// in SQL so it works identically on SQLite (dev/tests) and Postgres (prod)
-// without dialect-specific date functions.
+// in SQL, without dialect-specific date functions.
 
 import Core
 import Fluent

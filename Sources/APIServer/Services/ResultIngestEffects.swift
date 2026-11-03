@@ -94,8 +94,7 @@ struct ResultIngestEffects {
 
     // MARK: - After the result save: best effort
 
-    /// Runs one side effect, retrying the transient database race and logging
-    /// anything that survives the retries.
+    /// Runs one side effect and logs anything it throws.
     ///
     /// None of these may fail the request. The grade is already stored when
     /// they run, so a throw turns a submission that graded perfectly into a
@@ -104,19 +103,11 @@ struct ResultIngestEffects {
     /// docs/ci-flakiness.md), and a runner retries a report the server already
     /// holds.
     ///
-    /// Why they throw at all, when SQLite is meant to wait: sqlite-nio's busy
-    /// handler retries forever, so ordinary contention never surfaces. What it
-    /// cannot cover is `SQLITE_BUSY_SNAPSHOT`, a WAL read snapshot gone stale
-    /// because another connection committed in between, which SQLite returns
-    /// at once because waiting cannot help. Only starting again can, which is
-    /// what `withTransientDatabaseLockRetry` does. Every effect here is
-    /// read-then-write, the exact shape that hits it.
-    ///
     /// A class badge is worth an ordinary amount; a student's grade is not
     /// worth losing for one.
     func bestEffort(_ what: String, submissionID: String, _ work: () async throws -> Void) async {
         do {
-            try await withTransientDatabaseLockRetry(on: db) { try await work() }
+            try await work()
         } catch {
             logger.warning("result_side_effect_failed \(what) for \(submissionID): \(error)")
         }

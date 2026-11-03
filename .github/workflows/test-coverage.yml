@@ -35,7 +35,28 @@ jobs:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
       options: --privileged
+    # Postgres for APITests: the server's only backend.
+    services:
+      postgres:
+        image: ghcr.io/jimwallace/chickadee/postgres:16
+        credentials:
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+        env:
+          POSTGRES_DB: chickadee_test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        options: >-
+          --health-cmd "pg_isready -U postgres -d chickadee_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
     env:
+      TEST_DATABASE_HOST: postgres
+      TEST_DATABASE_PORT: "5432"
+      TEST_DATABASE_NAME: chickadee_test
+      TEST_DATABASE_USER: postgres
+      TEST_DATABASE_PASSWORD: postgres
       # The floor sits a few points under the measured line coverage (87.3 %
       # on 2026-09-20) so a real regression fails the nightly, where the old
       # 60 % floor would have let a twenty-point drop pass unnoticed.

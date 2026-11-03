@@ -30,7 +30,7 @@ import VaporTesting
     /// Inserts an activity event for `userID` and back-dates `created_at` to
     /// `secondsAgo` before `now`.  `@Timestamp(on: .create)` only fires on the
     /// first insert, so a second save with an explicit `createdAt` preserves
-    /// the override (portable across SQLite and Postgres) — same trick as the
+    /// the override — same trick as the
     /// audit-log reaper tests.
     @discardableResult
     private func seedEvent(

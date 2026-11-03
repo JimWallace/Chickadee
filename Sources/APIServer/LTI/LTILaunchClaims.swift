@@ -9,8 +9,6 @@ import Foundation
 import JWT
 
 struct LTILaunchClaims: JWTPayload, Equatable {
-    static let claimPrefix = "https://purl.imsglobal.org/spec/lti/claim/"
-
     /// A launch older than this is refused even when `exp` says otherwise,
     /// and `exp`/`iat` are checked with this much clock skew either way.
     static let clockSkewSeconds: TimeInterval = 60
