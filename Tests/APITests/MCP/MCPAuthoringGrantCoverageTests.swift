@@ -40,8 +40,8 @@ import Testing
     private static let scannedHelpers = [
         "Sources/APIServer/Services/SectionPlacement.swift",
         "Sources/APIServer/Services/AssignmentAuthoringService.swift",
-        "Sources/APIServer/Helpers/ManifestFieldEdits.swift",
-        "Sources/APIServer/Helpers/CourseAccessHelpers.swift",
+        "Sources/APIServer/Services/ManifestFieldEdits.swift",
+        "Sources/APIServer/Services/CourseAccess.swift",
     ]
 
     private struct Allowance {

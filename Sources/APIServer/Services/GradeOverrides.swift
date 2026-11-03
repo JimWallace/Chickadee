@@ -1,4 +1,4 @@
-// APIServer/Services/GradeOverrideHelpers.swift
+// APIServer/Services/GradeOverrides.swift
 //
 // Shared lookups for the per-student grade override (`APIGradeOverride`,
 // keyed on (test_setup, user)).  An override is the student's effective

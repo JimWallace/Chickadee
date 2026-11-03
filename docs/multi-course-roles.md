@@ -102,7 +102,7 @@ model is single-course-shaped** in two ways:
    [course-terms.md](course-terms.md).)
 
 The recent fix leaned on a principle already stated in
-`Sources/APIServer/Helpers/CourseAccessHelpers.swift`:
+`Sources/APIServer/Services/CourseAccess.swift`:
 
 > Everyone — instructors included — must be enrolled in the specific course
 > that owns the resource. … admins see — and their agents may act on — exactly
@@ -125,7 +125,7 @@ same way it is already *visibility*-scoped to a course.
 |---|---|---|
 | Global role | `Sources/APIServer/Models/APIUser.swift` — `UserRole` enum, `role` field, `isInstructor`/`isAdmin` | One string column on the user. `isInstructor == (role == .instructor \|\| role == .admin)`. |
 | Enrollment | `Sources/APIServer/Models/APICourseEnrollment.swift` | Join row `(user_id, course_id)`. As of Phase 1 it also carries a per-course `role` (`CourseRole`), seeded behaviour-preservingly from the global role and **not yet read** — the global role still governs capability until Phases 2–4 wire this in. |
-| Access policy | `Sources/APIServer/Helpers/CourseAccessHelpers.swift` — `requireCourseEnrollment`, `userIsEnrolled`, `enrolledCourses` | The single chokepoint both the web routes and MCP tools resolve course access through. Admin is the one bypass. |
+| Access policy | `Sources/APIServer/Services/CourseAccess.swift` — `requireCourseEnrollment`, `userIsEnrolled`, `enrolledCourses` | The single chokepoint both the web routes and MCP tools resolve course access through. Admin is the one bypass. |
 | Active-course resolution | `APIUser.swift` — `resolveActiveCourse`, `CourseContext`, `ResolvedCourseState` | Picks the active course from session/DB, auto-enrolls `.auto` courses, returns the enrolled set. |
 | View context | `APIUser.swift` — `CurrentUserContext` | Carries `isAdmin`, `isInstructor`, `activeCourse`, `enrolledCourses` into the views. The nav (`Sources/APIServer/Views/SiteNav.swift`, inside `BaseLayout`) reads these. |
 | Route gating | `Sources/APIServer/Middleware/RoleMiddleware.swift`; groups in `Sources/APIServer/routes.swift` (`.authenticated` / `.instructor` / `.admin`) | Coarse, **global**-role gates at the group level. |
@@ -133,7 +133,7 @@ same way it is already *visibility*-scoped to a course.
 
 The good news: visibility is *already* funnelled through one resolver
 (`enrolledCourses` / `resolveActiveCourse`) and access through one helper
-(`CourseAccessHelpers`). Those are the seams Theme 1 threads a role through —
+(`CourseAccess`). Those are the seams Theme 1 threads a role through —
 there is no scattered role logic to chase down.
 
 ---
@@ -201,7 +201,7 @@ representable and creatable.
 
 ### 3.4 Auth path (permissions) — **chokepoint implemented**
 
-- `CourseAccessHelpers` is the chokepoint: `requireCourseRole(caller:courseID:
+- `CourseAccess` is the chokepoint: `requireCourseRole(caller:courseID:
   atLeast: CourseRole, db:)` is in, and `requireCourseEnrollment` is now its
   `.student` case (a one-call delegation, so every existing caller is
   unchanged). Authority is **purely per-course** — admin bypass only, no global
@@ -223,7 +223,7 @@ representable and creatable.
 - **Write-policy core + role-floor convention (#1113).** The write policy
   (admin bypass → per-course role floor → archived block) lives once, in
   `evaluateCourseWrite(user:courseID:atLeast:db:) -> CourseWriteDenial?`
-  (`CourseAccessHelpers.swift`); the web (`requireCourseWriteAccess` → `Abort`)
+  (`CourseAccess.swift`); the web (`requireCourseWriteAccess` → `Abort`)
   and MCP (`ToolContext.authorizeCourseWriteAccess` → `MCPToolError`) wrappers
   only map the denial, so the two surfaces cannot drift. There are **no
   default `atLeast` values** — every call site states its floor explicitly:

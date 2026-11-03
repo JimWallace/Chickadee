@@ -1,4 +1,4 @@
-// APIServer/Helpers/TransientDatabaseLockRetry.swift
+// APIServer/Services/TransientDatabaseLockRetry.swift
 //
 // The one retry for a transient SQLite lock (#1926), beside
 // `withWriteLockedTransaction`, which removes most of the locks it retries.

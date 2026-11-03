@@ -1,4 +1,4 @@
-// APIServer/Helpers/WriteLockedTransaction.swift
+// APIServer/Services/WriteLockedTransaction.swift
 //
 // A transaction that holds the write lock from its first statement (#1919).
 //

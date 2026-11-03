@@ -1,8 +1,8 @@
-// APIServer/Helpers/CourseRoster.swift
+// APIServer/Services/CourseRoster.swift
 //
 // The one query for "the students in course X" and for one user's
 // enrollment row in a course (#2720). It sits beside the access policy in
-// `CourseAccessHelpers.swift`: `courseRole(of:inCourse:db:)` and
+// `CourseAccess.swift`: `courseRole(of:inCourse:db:)` and
 // `userIsEnrolled` read `enrollment(of:in:on:)`, so a role check and a
 // roster read cannot disagree about which row is the user's.
 

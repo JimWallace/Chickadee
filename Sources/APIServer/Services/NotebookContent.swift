@@ -1,4 +1,4 @@
-// APIServer/Helpers/NotebookContentHelpers.swift
+// APIServer/Services/NotebookContent.swift
 //
 // Pure notebook-JSON and zip-inspection helpers (Data → Data / Data → Bool),
 // used across the route layer, services, and the MCP tools: hidden-tier cell

@@ -1,4 +1,4 @@
-// APIServer/Helpers/SubmissionAttemptNumber.swift
+// APIServer/Services/SubmissionAttemptNumber.swift
 //
 // Race-free attempt-number assignment (June 2026 audit, P0.3). The previous
 // count-then-insert pattern let two concurrent submits observe the same prior

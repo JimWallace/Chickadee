@@ -31,7 +31,7 @@ r-base and every R boot pull numpy/pandas/matplotlib (slow enough to time out
 the editor probes). `check-xeus-vendored.sh` asserts they stay distinct. Python moved
 off the Pyodide kernel in the 0.5 series, so the editor runs one kernel
 technology for every language. Notebook metadata is normalized to those names by
-`normalizeNotebookForJupyterLite` (`NotebookContentHelpers.swift`) — for every
+`normalizeNotebookForJupyterLite` (`NotebookContent.swift`) — for every
 vendored kernel. A Lua notebook resolves to `xlua` and extracts through the
 same marker-emitting RunnerCore extractor R uses — vendoring a kernel puts it
 in the editor's picker, so a language that can be authored must be one that

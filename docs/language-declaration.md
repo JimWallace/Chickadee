@@ -81,7 +81,7 @@ Both call `changeDeclaredLanguage(setup:to:on:)`, so they apply one rule
 language rewrites every generated filename.
 
 All of them go through `applyLanguageDeclaration(_:to:)`
-(`Helpers/ManifestFieldEdits.swift`), which is the only writer. It sets
+(`Services/ManifestFieldEdits.swift`), which is the only writer. It sets
 `languageDeclared`, writes or removes `language`, and — for an `.uploadOnly`
 language — moves `submissionMode` and `gradingMode` with it, so creation cannot
 produce the incoherent `uploadOnly` + `browser` pair.

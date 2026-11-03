@@ -1,4 +1,4 @@
-// APIServer/Helpers/CourseSectionLookup.swift
+// APIServer/Services/CourseSectionLookup.swift
 //
 // Section lookups shared by the course-admin routes, the new-assignment
 // route and `NewAssignmentDraftService`: validate a posted section ID
