@@ -9,6 +9,34 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.787] - 2026-11-03
+
+### Fixed
+
+- **One submission intake for every door.** All seven doors that create a
+  student submission now call `SubmissionIntake`. It writes the file, saves
+  the row with its attempt number, and runs every effect of the save. The
+  `runner-submit` and `browser-failover` doors now record the "accepted" and
+  "enqueued" diagnostics, as the upload form always did. The notebook merge
+  runs on the thread pool at every door. When the instructor notebook cannot
+  be read, the staff-only `POST /api/v1/submissions/file` now merges the
+  notebook with itself, as the notebook doors always did, instead of storing
+  it unchanged (#2768).
+
+### Removed
+
+- **Dead code, test-only wrappers and legacy aliases (#2783).** The unused
+  `JSONRPCError.missingRequiredClientCapability` factory is gone; its error
+  code stays, because the transport maps it to HTTP 400. The test-only
+  wrappers `crownFirstChampion`, `currentChampion`,
+  `gradePercentFromCollectionJSON` and `VanityURLRoutes.slugify` are gone, and
+  the tests call `Hill`, `CollectionGradeFields` and `assignmentSlug(fromTitle:)`
+  directly. The aliases `RankedIdentities`, `ConditionInput`,
+  `AchievementInput` and `WebAssignmentError` are gone; code uses
+  `AvatarIdentity`, `ConditionRow`, `AchievementRow` and `AppError`. No
+  behaviour changes.
+
+
 ## [0.5.786] - 2026-11-03
 
 ### Fixed
