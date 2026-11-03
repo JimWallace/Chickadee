@@ -113,10 +113,11 @@ import Testing
         let classes = Set(
             sprite[start.upperBound..<end.lowerBound].components(separatedBy: "class=\"").dropFirst()
                 .map { String($0.prefix { $0 != "\"" }) })
-        #expect(classes == [
-            "av-quantumcats-band", "av-quantumcats-orbit", "av-quantumcats-orbit-line",
-            "av-quantumcats-cat", "av-quantumcats-eye",
-        ])
+        #expect(
+            classes == [
+                "av-quantumcats-band", "av-quantumcats-orbit", "av-quantumcats-orbit-line",
+                "av-quantumcats-cat", "av-quantumcats-eye",
+            ])
         for name in classes {
             #expect(css.contains(".\(name) {"), "\(name) has no rule")
         }

@@ -8,7 +8,8 @@
 //   - an earned item and an unknown value are refused, and store nothing
 //   - a post without the CSRF token is refused
 //   - a student's signed-in page carries the script and the hidden Earned
-//     toast for the ring; course staff, who wear the staff ring, get no toast
+//     toast for the ring; course staff, who wear the staff ring, get no toast;
+//     the account page, which is the ring picker, gets the script only
 
 import Core
 import Fluent
@@ -95,7 +96,9 @@ import VaporTesting
     @Test func aStudentPageCarriesTheScriptAndTheHiddenToast() async throws {
         try await withWebRoutesApp { app in
             let cookie = try await wrLoginAsStudent(on: app)
-            let html = try await getHTML("/account", cookie: cookie, on: app)
+            // The account page draws the bird, so it is stored from here on.
+            _ = try await getHTML("/account", cookie: cookie, on: app)
+            let html = try await getHTML("/", cookie: cookie, on: app)
             #expect(html.contains("/quantum-cats-egg.js"))
             // The toast's opening tag carries the id and starts hidden.
             let start = try #require(html.range(of: #"id="quantum-cats-found""#))
@@ -117,6 +120,16 @@ import VaporTesting
             let instructor = try #require(
                 try await APIUser.query(on: app.db).filter(\.$username == "instructor1").first())
             try await wrEnrollUser(instructor, on: app)
+            _ = try await getHTML("/account", cookie: cookie, on: app)
+            let html = try await getHTML("/", cookie: cookie, on: app)
+            #expect(html.contains("/quantum-cats-egg.js"))
+            #expect(!html.contains("quantum-cats-found"))
+        }
+    }
+
+    @Test func theAccountPageHasTheScriptButNoToast() async throws {
+        try await withWebRoutesApp { app in
+            let cookie = try await wrLoginAsStudent(on: app)
             let html = try await getHTML("/account", cookie: cookie, on: app)
             #expect(html.contains("/quantum-cats-egg.js"))
             #expect(!html.contains("quantum-cats-found"))

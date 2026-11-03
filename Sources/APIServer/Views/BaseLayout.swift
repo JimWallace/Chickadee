@@ -30,6 +30,10 @@ struct BaseLayout<Content: HTML>: HTML {
     let embedded: Bool
     /// Form POSTs re-render in place instead of navigating.
     let inPlaceForms: Bool
+    /// Renders the hidden found-ring toast (docs/student-wardrobe.md, 6c).
+    /// The account page turns it off: it is the ring picker itself, and the
+    /// toast's ring field would read as a second ring choice there.
+    let foundRingToast: Bool
     // Not `content`: Elementary's `HTML` protocol still declares a deprecated
     // `content` requirement, and a stored property of that name satisfies it
     // and silently replaces the builder `body`.
@@ -42,6 +46,7 @@ struct BaseLayout<Content: HTML>: HTML {
         fullBleed: Bool = false,
         embedded: Bool = false,
         inPlaceForms: Bool = false,
+        foundRingToast: Bool = true,
         @HTMLBuilder content: () -> Content
     ) {
         self.title = title
@@ -50,6 +55,7 @@ struct BaseLayout<Content: HTML>: HTML {
         self.fullBleed = fullBleed
         self.embedded = embedded
         self.inPlaceForms = inPlaceForms
+        self.foundRingToast = foundRingToast
         self.pageContent = content()
     }
 
@@ -81,7 +87,7 @@ struct BaseLayout<Content: HTML>: HTML {
                     pageContent
                 }
                 .attributes(.class("main-fullbleed"), when: fullBleed)
-                if !embedded, let found = page.currentUser?.foundRingToast {
+                if !embedded, foundRingToast, let found = page.currentUser?.foundRingToast {
                     EarnedToast(page: page, earned: found, id: "quantum-cats-found")
                 }
                 footerScripts

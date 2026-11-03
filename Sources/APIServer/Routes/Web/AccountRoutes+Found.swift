@@ -14,6 +14,7 @@
 // accepted; the CSRF token still keeps another site from granting it.
 
 import Core
+import Fluent
 import Vapor
 
 extension AccountRoutes {

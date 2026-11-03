@@ -23,7 +23,7 @@ struct EarnedToast: HTML {
     /// "earned-toast" on the result page, which earned-toast.js shows.
     /// "quantum-cats-found" in the layout, which quantum-cats-egg.js shows
     /// (docs/student-wardrobe.md, "Found items").
-    let id: String
+    var id = "earned-toast"
 
     /// Written as a custom attribute because SwiftLint bans the style
     /// modifier in views. It holds only a custom property, which the
