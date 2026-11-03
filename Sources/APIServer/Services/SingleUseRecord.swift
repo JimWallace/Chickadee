@@ -1,4 +1,4 @@
-// APIServer/Helpers/SingleUseRecord.swift
+// APIServer/Services/SingleUseRecord.swift
 //
 // The one single-use primitive behind every "consume this row exactly once"
 // rule: OAuth authorization codes and consent tokens, LTI login states and

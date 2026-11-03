@@ -1,4 +1,4 @@
-// APIServer/Helpers/ClassGoalBonusTable.swift
+// APIServer/Services/ClassGoalBonusTable.swift
 //
 // Every student's class-goal bonus on one assignment, for the grades CSV,
 // which reads the whole roster at once. It reads the snapshots and, for an

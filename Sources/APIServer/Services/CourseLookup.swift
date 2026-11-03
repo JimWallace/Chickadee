@@ -1,4 +1,4 @@
-// APIServer/Services/CourseLookupHelpers.swift
+// APIServer/Services/CourseLookup.swift
 //
 // Shared course-by-code resolution for routes that accept a course code in
 // the URL path (vanity URLs, instructor student-history links), and the

@@ -321,7 +321,7 @@ The server does not *prevent* a student adding cells. It *ignores* the cells
 they added. This needs no UI enforcement and an offline edit of the file cannot
 bypass it.
 
-`mergeNotebook` (`Helpers/NotebookContentHelpers.swift`, called from
+`mergeNotebook` (`Services/NotebookContent.swift`, called from
 `SubmissionRoutes` and all three `BrowserResultRoutes` paths) reassembles the
 submitted notebook server-side on every submission path. It keeps the student's
 non-test cells, re-imposes **all** of the instructor's `# TEST:` cells, and

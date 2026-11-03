@@ -1,4 +1,4 @@
-// APIServer/Helpers/BestGradePercentBySubmissionID.swift
+// APIServer/Services/BestGradePercentBySubmissionID.swift
 //
 // The ONE place the "highest grade wins" policy lives (#1085, #1111). All
 // grade-displaying surfaces — student dashboard, instructor roster, the

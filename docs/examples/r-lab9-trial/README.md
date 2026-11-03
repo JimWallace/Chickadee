@@ -31,7 +31,7 @@ trial is the first end-to-end assignment that uses it. The moving parts:
 - **Kernel survives the round-trip.** `normalizeNotebookForJupyterLite` maps an
   R kernelspec to the vendored `xr` (xeus-r) kernel and sets `language_info.name
   = "r"`, so the starter and solution notebooks stay R through save + validate
-  (`Sources/APIServer/Helpers/NotebookContentHelpers.swift`).
+  (`Sources/APIServer/Services/NotebookContent.swift`).
 - **Base R only.** The grading image installs `r-base` with no extra CRAN
   packages (`Dockerfile`), so everything here is base / `stats` / `utils` /
   `grDevices` — `glm()` does the logistic regression, no `tidyverse`.
