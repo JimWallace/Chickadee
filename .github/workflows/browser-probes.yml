@@ -61,9 +61,9 @@ jobs:
       probes: ${{ steps.decide.outputs.probes }}
       any: ${{ steps.decide.outputs.any }}
     steps:
+      # The default depth-1 checkout: changed-paths fetches the base commit
+      # itself. A full-history fetch timed out at the job limit.
       - uses: actions/checkout@v7
-        with:
-          fetch-depth: 0
       - id: smoke
         uses: ./.github/actions/changed-paths
         with:

@@ -47,9 +47,9 @@ jobs:
     outputs:
       run_smoke: ${{ steps.decide.outputs.relevant }}
     steps:
+      # The default depth-1 checkout: changed-paths fetches the base commit
+      # itself. A full-history fetch timed out at the job limit.
       - uses: actions/checkout@v7
-        with:
-          fetch-depth: 0
 
       # The per-language prefixes are a PATTERN, not a list. The list they
       # replaced had already gone stale — it named r/python/lua grading and

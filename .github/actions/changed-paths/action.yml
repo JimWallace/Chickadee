@@ -4,8 +4,11 @@ description: >
   expensive job can skip when nothing it tests changed while its gate still
   reports a status. Fails safe: a non-PR event, a missing base commit and an
   empty diff all answer relevant=true, because a skipped smoke on a change it
-  should have tested is a falsely green gate. Callers run actions/checkout
-  with fetch-depth 0 first.
+  should have tested is a falsely green gate. Callers run actions/checkout at
+  its default depth of 1. The action fetches the base commit itself, also at
+  depth 1: a diff of two trees needs no history between them. A full-history
+  checkout (fetch-depth 0) of this repository took past the 10-minute job
+  limit and cancelled the gates that depend on it.
 
   This was three copies of one bash block (editor-smoke, codeql-js,
   browser-grading-smoke), and the third had drifted: it did not fetch the base
@@ -48,7 +51,11 @@ runs:
           echo "::notice::non-PR event ($EVENT) — running $LABEL."
           exit 0
         fi
-        git fetch --no-tags --quiet origin "$BASE_REF" || true
+        # The base commit alone, by SHA: a depth-1 fetch shares its objects
+        # with the checkout and takes about a second. The branch tip is the
+        # fallback, for a server that refuses a fetch by SHA.
+        git fetch --no-tags --quiet --depth=1 origin "$BASE_SHA" 2>/dev/null \
+          || git fetch --no-tags --quiet --depth=1 origin "$BASE_REF" || true
         if ! git cat-file -e "${BASE_SHA}^{commit}" 2>/dev/null; then
           echo "relevant=true" >> "$GITHUB_OUTPUT"
           echo "::notice::base sha unavailable — running $LABEL (fail-safe)."
