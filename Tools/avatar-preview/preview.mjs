@@ -149,8 +149,8 @@ const sections = [
   ['Patterned rings — rainbow is a starter; two-tone and stitched are earned; spectrum is special; snowflake, blossom and maple are seasonal; the six concept rings are earned',
     rings.filter(r => !['none', 'solid', 'staff'].includes(r)).map(border =>
       label(border, bird(88, { ...base, border, accent: 'lagoon', back: 'straw' })))],
-  ['Concept rings at 96px and 36px, all three tilts — the life ring, green light and ouroboros reach in to r 25.4; none may touch the eyes or beak',
-    ['lifering', 'greenlight', 'ouroboros', 'function', 'binary', 'pulse'].flatMap(border =>
+  ['Concept rings and the found Quantum Cats ring at 96px and 36px, all three tilts — the life ring, green light and ouroboros reach in to r 25.4; none may touch the eyes or beak',
+    ['lifering', 'greenlight', 'ouroboros', 'function', 'binary', 'pulse', 'quantumcats'].flatMap(border =>
       [96, 36].flatMap(s => tilts.map(([name, tilt]) =>
         label(`${border} ${name} ${s}`, bird(s, { ...base, border, tilt, tuft: 'crest', back: 'sky' })))))],
   ['Staff ring — drawn from a course role, never chosen; on each backdrop', backs.map(back =>

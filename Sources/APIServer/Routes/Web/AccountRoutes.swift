@@ -8,6 +8,7 @@
 //   POST /account/avatar               → AccountRoutes+Avatar.swift
 //   POST /account/avatar/hatch         → AccountRoutes+Avatar.swift
 //   POST /account/avatar/restore       → AccountRoutes+Avatar.swift
+//   POST /account/wardrobe/found       → AccountRoutes+Found.swift
 
 import Core
 import Elementary
@@ -22,6 +23,7 @@ struct AccountRoutes: RouteCollection {
         routes.post("account", "avatar", use: saveAvatar)
         routes.post("account", "avatar", "hatch", use: hatchAvatar)
         routes.post("account", "avatar", "restore", use: restoreAvatar)
+        routes.post("account", "wardrobe", "found", use: grantFoundItem)
     }
 
     // MARK: - GET /account

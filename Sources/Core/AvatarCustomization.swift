@@ -68,7 +68,7 @@ public enum AvatarCustomization {
             switch border.availability {
             case .starter: return true
             case .seasonal: return border.season == season
-            case .earned, .special: return false
+            case .earned, .special, .found: return false
             }
         }
     }

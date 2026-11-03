@@ -260,6 +260,11 @@ import Testing
             "--avatar-lifering-white", "--avatar-lifering-red", "--avatar-lifering-rim",
             "--avatar-lifering-rope",
         ])
+        // The Quantum Cats ring colours itself by class too.
+        expected.formUnion([
+            "--avatar-quantumcats-band", "--avatar-quantumcats-orbit", "--avatar-quantumcats-cat",
+            "--avatar-quantumcats-eye",
+        ])
         for cap in AvatarCap.allCases {
             for accent in AvatarAccent.allCases {
                 for backdrop in AvatarBackdrop.allCases {

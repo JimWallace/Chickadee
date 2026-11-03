@@ -236,6 +236,55 @@ instructor setup: the concept tag on an assignment.
 - Spectrum has no rule yet and stays locked until the achievement link
   exists (E7).
 
+### 6c. Found items
+
+A found item is opened by finding something hidden in Chickadee, not by
+graded work. Its ring's availability is `found`, and `WardrobeItem.isFound` is
+true for it. `WardrobeItem.earned(by:)` never returns one, and the pages say
+"Found", not "Earned" (`WardrobeItem.obtainedVerb`).
+
+| Item | Found by |
+|---|---|
+| Quantum Cats ring | the Konami code on any signed-in page, which also opens the game |
+
+- **The game.** Quantum Cats is a CC0 game from the Institute for Quantum
+  Computing's outreach team, vendored at `Public/games/quantum-cats/`. The
+  provenance and the update steps are in `Public/games/README.md`. It opens in
+  a new tab, so the page the student was on, and any unsaved work on it, is
+  left alone. A long game can outlast the idle timeout, and the first tab then
+  signs out as it would for any other idle tab.
+- **The trigger.** `Public/quantum-cats-egg.js` listens on every signed-in
+  page with site chrome. Keys typed into a field, a select or an editor do not
+  count, and nor do keys held with a modifier. The notebook editor runs in a
+  frame, so keys typed there never reach the page.
+- **The grant.** The script posts `POST /account/wardrobe/found` with the
+  item, under the CSRF token. `WardrobeUnlockStore.grantFound` stores it in
+  `wardrobe_unlocks`, like an earned item, and refuses an earned item. The
+  route answers `granted: true` only for the request that stored it.
+- **The toast.** A found item is announced in the Earned toast's shape (E2,
+  `EarnedToast`), not in a shape of its own. The layout renders it hidden as
+  `#quantum-cats-found`, with the student's own bird in the new ring, and the
+  script shows it when `granted` is true. Wear it is the toast's form to the
+  account page's save route. The earned path never shows a found item
+  (`grantNew` leaves them out).
+- **Course staff** wear the staff ring and cannot choose one, so the layout
+  renders them no toast. The route still stores the ring for them: it is
+  harmless, and it is theirs if they stop teaching.
+- **Trust.** Nothing checks that a student really typed the code: anyone who
+  reads the script can post the form. The harm is one cosmetic ring, the same
+  judgement as for browser results above.
+- **Hidden until found**, like an earned item (E1). The course Achievements
+  tab lists it under "Built in" ("Found by entering the Konami code"), so
+  staff know it exists and can drop hints.
+- **The art.** A purple band with a blue orbit and three electrons, and the
+  game's cat, inside its own orbit, in a purple badge at the lower right. The
+  colours are from the game's icon. The band is lifted to hold the
+  concept-ring contrast floors (`AvatarQuantumCatsRingTests`), and the cat's
+  dark is purple, clear of the staff ring's colour.
+- Other ways to find it, such as a hint given in lecture, are open. A new
+  trigger posts the same route; a new found item adds a `WardrobeItem` case
+  with `isFound` true.
+
 ### 7. Seasonal rings
 
 There is one seasonal ring for each Waterloo term: snowflake (Winter, January
