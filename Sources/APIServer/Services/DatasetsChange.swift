@@ -103,3 +103,17 @@ func applyDatasetsEdit(
         props.datasets = change.applied(to: props.datasets)
     }
 }
+
+/// The web door to `applyDatasetsEdit`: a whole-array replace, since the page
+/// sends the complete desired state. A refusal is `.badRequest`. It lives here,
+/// not under Routes/Web, because it shares its name with the function MCP
+/// calls, and `MCPRouteLayerDependencyTests` matches names.
+func applyDatasetsEdit(
+    setup: APITestSetup, datasets: [DatasetSpec], on db: any Database
+) async throws {
+    do {
+        try await applyDatasetsEdit(setup: setup, change: .replaceAll(datasets), on: db)
+    } catch let refusal as DatasetsEditError {
+        throw AppError.badRequest(reason: refusal.description)
+    }
+}

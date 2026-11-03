@@ -201,16 +201,3 @@ func datasetsPanelResponse(req: Request, setup: APITestSetup) async throws -> Da
     let diagnostics = await datasetDiagnosticsReports(zipPath: zipPath, datasets: specs)
     return DatasetsResponse(datasets: specs, diagnostics: diagnostics)
 }
-
-/// The web door to `applyDatasetsEdit` (`Services/DatasetsChange.swift`):
-/// a whole-array replace, since the page sends the complete desired state.
-/// A refusal is `.badRequest`.
-func applyDatasetsEdit(
-    setup: APITestSetup, datasets: [DatasetSpec], on db: any Database
-) async throws {
-    do {
-        try await applyDatasetsEdit(setup: setup, change: .replaceAll(datasets), on: db)
-    } catch let refusal as DatasetsEditError {
-        throw AppError.badRequest(reason: refusal.description)
-    }
-}
