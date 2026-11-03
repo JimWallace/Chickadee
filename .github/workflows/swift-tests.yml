@@ -10,15 +10,87 @@ on:
   # docs/release-process.md.
   merge_group:
 
-# Cancel superseded runs when new commits land on a PR branch (one branch
-# racked up four full CI runs in 70 minutes during the #890 audit).  Pushes
-# to main and merge-queue runs are never cancelled — their group key is the
-# unique ref/SHA and cancel-in-progress is false outside pull_request.
+# What GitHub does with a concurrency group: it holds at most one RUNNING and
+# one PENDING run. A new run in the group always cancels the pending one,
+# whatever `cancel-in-progress` says. `cancel-in-progress: true` also cancels
+# the running one.
+#
+# Pull requests: the key is the PR ref, and a new push cancels the old run (one
+# branch racked up four full CI runs in 70 minutes during the #890 audit).
+#
+# Pushes to main: the key is the commit SHA, so each push has a group of its
+# own and nothing cancels it. The key was `github.ref` until #2781, which put
+# every main push in ONE group. A merge commit then sat pending behind the run
+# before it and was cancelled when its own release commit queued: b171bfa and
+# e148fc5 were both cancelled that way on 2026-11-03, and most merge commits
+# before them were too.
+#
+# Merge queue: the ref is unique to each queue entry already.
 concurrency:
-  group: swift-tests-${{ github.event_name }}-${{ github.ref }}
+  group: swift-tests-${{ github.event_name }}-${{ github.event_name == 'push' && github.sha || github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  # Decides how much of the Swift suite this change needs: `full`, `build`
+  # (the build job alone, for the release commit) or `skip`.
+  # scripts/ci-swift-suite-scope.sh names the paths that cannot affect the
+  # suite and tells why each answer is safe. Any doubt answers `full`.
+  #
+  # The trigger is NOT path-filtered: a skipped workflow leaves the required
+  # `swift-tests-gate` check pending forever. The gate below always reports.
+  #
+  # Only the build job and the four Swift test lanes read the answer. The
+  # format-lint, guard, script and browser-runner jobs are cheap, and some of
+  # them read documents too, so they run on every change.
+  changes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      scope: ${{ steps.decide.outputs.scope }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      # pull_request checks out the merge commit, so its first parent is the
+      # base that the PR merges into. A push compares with the commit that
+      # main was at before it. Every failure to get a list answers `full`.
+      # `--no-renames` lists both sides of a rename.
+      - name: Decide the scope of the Swift suite
+        id: decide
+        env:
+          EVENT: ${{ github.event_name }}
+          BEFORE: ${{ github.event.before }}
+        run: |
+          set -uo pipefail
+          changed=""
+          ok=false
+          case "$EVENT" in
+            pull_request)
+              if git rev-parse -q --verify 'HEAD^2' > /dev/null; then
+                changed="$(git diff --no-renames --name-only 'HEAD^1' HEAD)" && ok=true
+              fi
+              ;;
+            push)
+              if [ -n "$BEFORE" ] && git cat-file -e "${BEFORE}^{commit}" 2> /dev/null; then
+                changed="$(git diff --no-renames --name-only "$BEFORE" HEAD)" && ok=true
+              fi
+              ;;
+          esac
+          if [ "$ok" = true ]; then
+            scope="$(scripts/ci-swift-suite-scope.sh "$EVENT" <<< "$changed")"
+          else
+            scope=full
+          fi
+          case "$scope" in
+            full | build | skip) ;;
+            *) scope=full ;;
+          esac
+          echo "Changed paths:"
+          printf '%s\n' "$changed"
+          echo "::notice title=Swift suite scope::$scope ($EVENT)"
+          echo "scope=$scope" >> "$GITHUB_OUTPUT"
+
   # Every guard must be SEEN to fail. Its own job rather than a step inside
   # format-lint: each fixture re-runs a whole guard, so the suite costs
   # minutes, and paying that in wall-clock beside format-lint is free while
@@ -200,6 +272,9 @@ jobs:
       - name: Build-retry helper self-tests
         run: scripts/ci-build-retry.sh --self-test
 
+      - name: Swift suite scope self-tests
+        run: scripts/ci-swift-suite-scope.sh --self-test
+
       - name: Agent text cleanup self-tests
         run: scripts/ci-agent-sanitize.sh --self-test
 
@@ -224,6 +299,8 @@ jobs:
   # the mtime walk) and is gone.  `docker-build.yml` dropped it for the same
   # reason when its release cache moved to an exact match (#2712).
   build:
+    needs: changes
+    if: needs.changes.outputs.scope != 'skip'
     runs-on: ubuntu-latest
     timeout-minutes: 25
     container:
@@ -259,7 +336,8 @@ jobs:
 
   core-tests:
     runs-on: ubuntu-latest
-    needs: build
+    needs: [changes, build]
+    if: needs.changes.outputs.scope == 'full'
     timeout-minutes: 20
     container:
       # swift-ci, not the plain toolchain mirror: CoreTests' zip subprocess
@@ -299,7 +377,8 @@ jobs:
 
   api-tests:
     runs-on: ubuntu-latest
-    needs: build
+    needs: [changes, build]
+    if: needs.changes.outputs.scope == 'full'
     # 25, matching api-tests-postgres, which runs the SAME target. This lane
     # had the tighter ceiling despite the wider run-to-run spread (2.2x vs
     # 1.4x over 18 main runs) — an inversion, not a decision. Note the budget
@@ -384,7 +463,8 @@ jobs:
 
   api-tests-postgres:
     runs-on: ubuntu-latest
-    needs: build
+    needs: [changes, build]
+    if: needs.changes.outputs.scope == 'full'
     timeout-minutes: 25
     container:
       # swift-ci: see the api-tests job note.
@@ -529,7 +609,8 @@ jobs:
 
   worker-tests:
     runs-on: ubuntu-latest
-    needs: build
+    needs: [changes, build]
+    if: needs.changes.outputs.scope == 'full'
     timeout-minutes: 20
     # Sequential to avoid MockURLProtocol global-state races between
     # ReporterTests + JobPollerTests (both use the same process-wide
@@ -596,9 +677,17 @@ jobs:
 
   # Single aggregate status for branch protection (the editor-smoke-gate
   # pattern): require THIS job instead of the individual jobs, so a job
-  # rename or matrix change can't silently detach a required check. Every
-  # job above always runs (no internal skips), so anything short of
-  # `success` fails the gate.
+  # rename or matrix change can't silently detach a required check. Anything
+  # short of `success` fails the gate, except a skip that the scope from
+  # `changes` allows:
+  #
+  #   full   no job may skip.
+  #   build  the four Swift test lanes may skip.
+  #   skip   the build job and the four lanes may skip.
+  #
+  # The gate fails closed. `changes` is not in any allowed list, so a failed
+  # `changes` job fails the gate, and an empty scope allows no skip. The gate
+  # runs on every pull request, so the required check always reports.
   #
   # `!cancelled()` is run-scoped: when this whole run is superseded
   # (concurrency cancel — e.g. a newer push, or a rerun of an older head
@@ -609,6 +698,7 @@ jobs:
   # (2026-07-02: it caught the WorkerDaemonTests 20-minute wedge).
   swift-tests-gate:
     needs:
+      - changes
       - format-lint
       - guard-self-tests
       - script-self-tests
@@ -628,3 +718,7 @@ jobs:
       - uses: ./.github/actions/gate
         with:
           needs: ${{ toJSON(needs) }}
+          allowed-skipped: >-
+            ${{ needs.changes.outputs.scope == 'skip' && 'build core-tests api-tests api-tests-postgres worker-tests'
+             || needs.changes.outputs.scope == 'build' && 'core-tests api-tests api-tests-postgres worker-tests'
+             || '' }}
