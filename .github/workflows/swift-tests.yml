@@ -315,7 +315,12 @@ jobs:
     needs: changes
     if: needs.changes.outputs.scope != 'skip'
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    # A cold build no longer fits in 25 minutes. On 2026-11-03 two runs (one
+    # on main) took about 2 min of setup, 4.5 min of package fetch and 18 min
+    # of compile, and were cancelled while saving the cache, so the time was
+    # lost and every lane was skipped. 40 leaves room for that and for one
+    # Family 7 retry.
+    timeout-minutes: 40
     container:
       image: ghcr.io/jimwallace/chickadee/swift:6.4-resolute
       credentials:
