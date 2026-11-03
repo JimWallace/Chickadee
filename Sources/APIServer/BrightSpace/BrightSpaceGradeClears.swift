@@ -110,7 +110,7 @@ extension GradeSyncSweep {
             username: target.user?.username ?? clearRow.userID.uuidString,
             orgUnitID: orgUnitID, gradeObjectID: gradeObjectID, points: nil,
             status: .success, detail: "Grade cleared in BrightSpace")
-        try? await entry.save(on: db)
+        await saveSyncLog(entry, db: db, logger: application.logger)
         try await clearRow.delete(on: db)
         application.logger.info(
             "BrightSpace grade cleared: user \(clearRow.userID) assignment '\(assignment.title)'")

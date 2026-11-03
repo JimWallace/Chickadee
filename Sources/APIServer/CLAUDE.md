@@ -125,7 +125,9 @@ Do not add a new variable (root `CLAUDE.md`, "What Not To Do").
 
 **Worker secret is auto-generated.** If no secret is provided at startup, a
 random three-word diceware passphrase is generated from the EFF wordlist and
-persisted to `.worker-secret`. The runner reads it from `RUNNER_SHARED_SECRET`.
+persisted to `.worker-secret`. Startup fails when the wordlist has fewer than
+2048 words or the generated secret cannot be saved (#2776); a saved secret is
+read first, so it still starts. The runner reads it from `RUNNER_SHARED_SECRET`.
 All runner↔server requests are HMAC-signed (`WorkerHMACAuthMiddleware`).
 
 **Local runner autostart.** The server can spawn a `chickadee-runner` subprocess

@@ -150,14 +150,16 @@ func openMatch(
         existing.round = round
         try await existing.update(on: db)
     } else {
-        // Ignore the conflict: two claims of one submission at once, first
-        // insert wins — the same shape as `awardImmutableBadge`.
+        // Ignore the conflict only: two claims of one submission at once,
+        // first insert wins — the same shape as `awardImmutableBadge`. Any
+        // other failure is thrown, so a lost connection no longer drops the
+        // match row in silence (#2776).
         let row = APIMatchResult(
             testSetupID: testSetupID, submissionID: submissionID,
             opponentSubmissionID: opponent.champion?.id, opponentIdentity: opponent.identity,
             seed: seed, createdAt: Date())
         row.round = round
-        try? await row.save(on: db)
+        try await row.createIgnoringConflict(on: db)
     }
 }
 

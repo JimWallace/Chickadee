@@ -89,7 +89,16 @@ func recordSweepFailure(
         row.brightspaceSyncPending = retryable
         row.brightspaceSyncedAt = nil
         row.brightspaceSyncError = error.localizedDescription
-        try? await row.save(on: db)
+        do {
+            try await row.save(on: db)
+        } catch let saveError {
+            // A lost save leaves the row's old flags: a terminal failure keeps
+            // its pending flag and retries on every sweep (#2776). Row id in
+            // metadata only (compliance audit F-1).
+            logger.error(
+                "BrightSpace sync failure not recorded: \(saveError)",
+                metadata: ["row_id": .string(row.brightspaceSyncRowID)])
+        }
     }
     // Row ids are result/override rows keyed to a student — metadata only, so
     // the admin query_logs buffer drops them at capture (compliance audit F-1).
@@ -97,6 +106,20 @@ func recordSweepFailure(
     logger.warning(
         "BrightSpace grade sync \(retryable ? "transient" : "terminal") failure for \(rows.count) row(s): \(error)",
         metadata: ["row_ids": .string(ids)])
+}
+
+/// Saves one sync log row, and logs a failed save. The grade push or clear
+/// has already happened, so only the log row is lost; a `try?` here used to
+/// lose it with no trace (#2776).
+func saveSyncLog(_ entry: APIBrightSpaceSyncLog, db: any Database, logger: Logger) async {
+    do {
+        try await entry.save(on: db)
+    } catch {
+        // User id in metadata only (compliance audit F-1).
+        logger.warning(
+            "BrightSpace sync log row (\(entry.status)) not saved: \(error)",
+            metadata: ["user_id": .string(entry.userID?.uuidString ?? "<nil>")])
+    }
 }
 
 /// Flags a freshly-built (not yet saved) result row for BrightSpace grade sync
