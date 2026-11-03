@@ -1,3 +1,4 @@
+// @ts-check
 // Public/global-inputs-editor.js
 //
 // Slice 1 + Slice 2 of issue #461 — wires the "Global Inputs" panel at the

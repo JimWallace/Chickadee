@@ -69,6 +69,7 @@ enum CourseFormError: String, CaseIterable {
     case fields = "course_fields_required"
     case term = "course_term_required"
     case codeTaken = "code_taken"
+    case codeReserved = "code_reserved"
     /// The new-course form's optional instructor was refused
     /// (`StaffProvisioningError`); no course was created.
     case instructorInvalid = "instructor_invalid"
@@ -80,6 +81,7 @@ enum CourseFormError: String, CaseIterable {
         case .fields: "Course code and name are required."
         case .term: "Enter a four-digit year and a term."
         case .codeTaken: "Another course already uses this code."
+        case .codeReserved: CourseCodeConflict.reservedMessage
         case .instructorInvalid: "Enter a valid username for the instructor."
         case .instructorEmail: StaffProvisioningError.emailWithoutAccountMessage
         case .instructorUnknown: StaffProvisioningError.unknownUserMessage
@@ -99,17 +101,39 @@ enum CourseCloneFormError: String, CaseIterable {
     case fields = "clone_fields_required"
     case term = "clone_term_required"
     case codeTaken = "clone_code_taken"
+    case codeReserved = "clone_code_reserved"
 
     var message: String {
         switch self {
         case .fields: "Enter a code and a name for the new course."
         case .term: "Enter a four-digit year and a term for the new course."
         case .codeTaken: "An active course already uses this code in that term."
+        case .codeReserved: CourseCodeConflict.reservedMessage
         }
     }
 
     /// The message for an `error` query value, or nil for any other value.
     static func message(forQuery value: String?) -> String? {
         value.flatMap(Self.init(rawValue:))?.message
+    }
+}
+
+extension CourseFormError {
+    /// The course form's error for a refused code.
+    init(_ conflict: CourseCodeConflict) {
+        switch conflict {
+        case .reserved: self = .codeReserved
+        case .taken: self = .codeTaken
+        }
+    }
+}
+
+extension CourseCloneFormError {
+    /// The clone form's error for a refused code.
+    init(_ conflict: CourseCodeConflict) {
+        switch conflict {
+        case .reserved: self = .codeReserved
+        case .taken: self = .codeTaken
+        }
     }
 }

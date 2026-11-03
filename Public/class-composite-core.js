@@ -1,3 +1,4 @@
+// @ts-check
 // Public/class-composite-core.js
 //
 // The decisions behind the class-composite view (class-composite.js,

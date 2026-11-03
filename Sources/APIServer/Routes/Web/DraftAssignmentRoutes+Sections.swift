@@ -49,7 +49,7 @@ extension DraftAssignmentRoutes {
 
         let setup = try await loadDraftSetupForWrite(req)
         guard let sectionID = req.parameters.get("sectionID"), !sectionID.isEmpty else {
-            throw WebAssignmentError.notFound(resource: "Section")
+            throw AppError.notFound(resource: "Section")
         }
         let body = try await req.decodeContent(Body.self)
         try await renameSuiteSectionCore(setup: setup, sectionID: sectionID, name: body.name, on: req.db)
@@ -62,7 +62,7 @@ extension DraftAssignmentRoutes {
     func deleteDraftSuiteSection(req: Request) async throws -> Response {
         let setup = try await loadDraftSetupForWrite(req)
         guard let sectionID = req.parameters.get("sectionID"), !sectionID.isEmpty else {
-            throw WebAssignmentError.notFound(resource: "Section")
+            throw AppError.notFound(resource: "Section")
         }
         try await deleteSuiteSectionCore(setup: setup, sectionID: sectionID, on: req.db)
         return redirectToDraft(req: req, setup: setup)
@@ -91,7 +91,7 @@ extension DraftAssignmentRoutes {
 
         let setup = try await loadDraftSetupForWrite(req)
         guard let sectionID = req.parameters.get("sectionID"), !sectionID.isEmpty else {
-            throw WebAssignmentError.notFound(resource: "Section")
+            throw AppError.notFound(resource: "Section")
         }
         let body = try await req.decodeContent(Body.self)
         let actingUserID = (try? req.auth.require(APIUser.self))?.id

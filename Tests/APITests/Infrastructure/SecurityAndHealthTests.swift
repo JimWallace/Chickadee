@@ -401,7 +401,7 @@ import VaporTesting
     }
 
     @Test func friendlyReasonPreservesExplicitContextualReason() {
-        // Typed errors like `WebAssignmentError.notFound(resource: "Assignment 'foo'")`
+        // Typed errors like `AppError.notFound(resource: "Assignment 'foo'")`
         // produce a contextual reason ("Assignment 'foo' not found").  The
         // middleware must NOT replace those with the generic default.
         #expect(friendlyReason(status: .notFound, reason: "Assignment 'foo' not found") == "Assignment 'foo' not found")

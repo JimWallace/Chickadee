@@ -1,3 +1,4 @@
+// @ts-check
 // Public/achievements-editor-core.js
 //
 // The decisions behind the composable Achievements editor

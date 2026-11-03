@@ -51,10 +51,10 @@ private func loadDraftSetup(_ req: Request) async throws -> APITestSetup {
     guard let draftID = try? req.query.get(String.self, at: "draftID"),
         !draftID.isEmpty
     else {
-        throw WebAssignmentError.invalidParameter(name: "draftID", reason: "Missing `draftID` query parameter")
+        throw AppError.invalidParameter(name: "draftID", reason: "Missing `draftID` query parameter")
     }
     guard let setup = try await APITestSetup.find(draftID, on: req.db) else {
-        throw WebAssignmentError.notFound(resource: "Draft '\(draftID)'")
+        throw AppError.notFound(resource: "Draft '\(draftID)'")
     }
     return setup
 }
@@ -78,7 +78,8 @@ func loadDraftSetupForRead(_ req: Request) async throws -> APITestSetup {
 func loadDraftSetupForWrite(_ req: Request) async throws -> APITestSetup {
     let setup = try await loadDraftSetup(req)
     let caller = try req.auth.require(APIUser.self)
-    try await requireCourseWriteAccess(caller: caller, courseID: setup.courseID, atLeast: .instructor, db: req.db)
+    try await requireCourseWriteAccess(
+        caller: caller, courseID: setup.courseID, atLeast: CourseRoleFloor.createAssignment, db: req.db)
     return setup
 }
 
@@ -98,7 +99,7 @@ func loadDraftSetupForWrite(_ req: Request) async throws -> APITestSetup {
 func createSuiteSectionCore(setup: APITestSetup, name: String, on db: any Database) async throws {
     let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !trimmed.isEmpty else {
-        throw WebAssignmentError.invalidParameter(name: "name", reason: "Section name must not be empty.")
+        throw AppError.invalidParameter(name: "name", reason: "Section name must not be empty.")
     }
     try await mutateManifest(setup: setup, on: db) { props in
         props.sections.append(TestSuiteSection(id: UUID().uuidString, name: trimmed))
@@ -111,11 +112,11 @@ func renameSuiteSectionCore(
 ) async throws {
     let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !trimmed.isEmpty else {
-        throw WebAssignmentError.invalidParameter(name: "name", reason: "Section name must not be empty.")
+        throw AppError.invalidParameter(name: "name", reason: "Section name must not be empty.")
     }
     try await mutateManifest(setup: setup, on: db) { props in
         guard let idx = props.sections.firstIndex(where: { $0.id == sectionID }) else {
-            throw WebAssignmentError.notFound(resource: "Section '\(sectionID)'")
+            throw AppError.notFound(resource: "Section '\(sectionID)'")
         }
         props.sections[idx].name = trimmed
     }
@@ -141,7 +142,7 @@ func reorderSuiteSectionsCore(
     try await mutateManifest(setup: setup, on: db) { props in
         let byID = Dictionary(props.sections.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
         guard Set(sectionIDs) == Set(byID.keys), sectionIDs.count == props.sections.count else {
-            throw WebAssignmentError.invalidParameter(
+            throw AppError.invalidParameter(
                 name: "sectionIDs", reason: "Section set mismatch in reorder payload.")
         }
         props.sections = sectionIDs.compactMap { byID[$0] }

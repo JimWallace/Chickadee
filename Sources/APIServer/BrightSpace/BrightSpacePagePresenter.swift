@@ -125,7 +125,9 @@ enum BrightSpacePagePresenter {
         // A TA reaches this tab, but the course-level actions are `.instructor`
         // (#2710). Hide what the handlers refuse; disconnect stays.
         let canManage =
-            try await evaluateCourseWrite(user: user, courseID: courseUUID, atLeast: .instructor, db: db).denial == nil
+            try await evaluateCourseWrite(
+                user: user, courseID: courseUUID, atLeast: CourseRoleFloor.brightSpaceBinding, db: db
+            ).denial == nil
         let facts = learnPageFacts(
             LearnFactsInput(
                 usesServiceAccount: application.brightSpaceUsesServiceAccount,
@@ -384,7 +386,7 @@ enum BrightSpacePagePresenter {
         // Each student result row, joined to its submission so the row resolves
         // to the student whose grade it carries. The join scopes the query by
         // the course's few setup IDs, never by a list of every submission ID,
-        // which late in term exceeds the SQLite bind limit (#2764).
+        // which passes the driver bind limit for a large course (#2764).
         let results =
             setupIDs.isEmpty
             ? []

@@ -108,8 +108,12 @@ struct CourseBundleRoutes: RouteCollection {
         let dateStr = iso8601String(Date()).prefix(10)
         let safeCourseCode = course.code.replacingOccurrences(of: "/", with: "-")
         let bundleName = "chickadee-bundle-\(safeCourseCode)-\(dateStr).zip"
+        // A UUID prefix keeps two same-day exports of one course apart.
+        // `zip -r` adds to an existing archive, so a shared path would merge
+        // them, and one stream's cleanup would delete the other's file
+        // (#2767). The download name stays `bundleName`.
         let bundleZipPath = FileManager.default.temporaryDirectory
-            .appendingPathComponent(bundleName).path
+            .appendingPathComponent("\(UUID().uuidString)-\(bundleName)").path
 
         // No defer here: the response body streams AFTER this handler
         // returns, so the temp zip must outlive the handler. streamTemporaryZip
@@ -212,8 +216,8 @@ struct CourseBundleRoutes: RouteCollection {
             .sorted { ($0.username) < ($1.username) }
 
         let subIDs = submissions.compactMap(\.id)
-        // Chunked: one IN list of every submission in a course exceeds the
-        // SQLite bind limit late in term (#2764).
+        // Chunked: one IN list of every submission in a course passes the
+        // driver bind limit for a large course (#2764).
         var results: [APIResult] = []
         for chunk in chunkedForInFilter(subIDs) {
             results += try await APIResult.query(on: db)

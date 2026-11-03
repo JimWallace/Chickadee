@@ -170,8 +170,8 @@ func clearPendingFlag(_ rows: [any BrightSpaceSyncFlaggable], on db: any Databas
 func requeueErroredGradePushes(courseUUID: UUID, on db: any Database) async throws {
     let setupIDs = try await courseSetupIDs(courseUUID: courseUUID, on: db)
     // The join scopes the query by the course's few setup IDs, not by a list of
-    // every submission ID, which late in term exceeds the SQLite bind limit
-    // (#2764). SQL drops the rows with no error; the Swift check also drops
+    // every submission ID, which passes the driver bind limit for a large
+    // course (#2764). SQL drops the rows with no error; the Swift check also drops
     // an empty error string, as before.
     let results =
         setupIDs.isEmpty

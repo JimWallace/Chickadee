@@ -68,8 +68,10 @@ extension AdminRoutes {
         guard case .term(let term) = CourseTermInput(year: body.termYear, season: body.termSeason) else {
             return req.redirect(to: "/admin/courses/new?error=\(CourseFormError.term.rawValue)")
         }
-        if try await activeCourseCodeIsTaken(code, term: term, excluding: nil, on: req.db) {
-            return req.redirect(to: "/admin/courses/new?error=\(CourseFormError.codeTaken.rawValue)")
+        if let conflict = try await courseCodeConflict(
+            code, term: term, excluding: nil, reserved: req.application.reservedCourseKeys, on: req.db)
+        {
+            return req.redirect(to: "/admin/courses/new?error=\(CourseFormError(conflict).rawValue)")
         }
         // The course and its instructor are one transaction: a refused
         // instructor leaves no course without one.
@@ -172,10 +174,14 @@ extension AdminRoutes {
         // bundle import creates one beside it by design), so check the rule
         // the index enforces and report a duplicate instead of failing on it
         // (#1777), exactly as the edit route does.
+        // An archived course with a reserved code (#2666) is renamed first:
+        // the edit form accepts a new code while the course is archived.
         if course.isArchived,
-            try await activeCourseCodeIsTaken(course.code, term: course.term, excluding: courseID, on: req.db)
+            let conflict = try await courseCodeConflict(
+                course.code, term: course.term, excluding: courseID,
+                reserved: req.application.reservedCourseKeys, on: req.db)
         {
-            return req.redirect(to: "/admin/courses/\(idString)?error=\(CourseFormError.codeTaken.rawValue)")
+            return req.redirect(to: "/admin/courses/\(idString)?error=\(CourseFormError(conflict).rawValue)")
         }
         course.isArchived.toggle()
         // Archiving is Chickadee's "end of term" signal: stamp the moment so
@@ -256,7 +262,8 @@ extension AdminRoutes {
         else {
             throw AppError.notFound(resource: "Course")
         }
-        let newCode = try await uniqueCopyCode(base: source.code, term: source.term, db: req.db)
+        let newCode = try await uniqueCopyCode(
+            base: source.code, term: source.term, reserved: req.application.reservedCourseKeys, db: req.db)
         let result = try await cloneCourse(
             source, code: newCode, name: "\(source.name) (Copy)", term: source.term, req: req)
         return req.redirect(to: "/admin/courses/\(try result.course.requireID().uuidString)")
@@ -292,8 +299,10 @@ extension AdminRoutes {
         guard case .term(let term) = CourseTermInput(year: body.termYear, season: body.termSeason) else {
             return req.redirect(to: "\(back)?error=\(CourseCloneFormError.term.rawValue)#clone-course")
         }
-        if try await activeCourseCodeIsTaken(code, term: term, excluding: nil, on: req.db) {
-            return req.redirect(to: "\(back)?error=\(CourseCloneFormError.codeTaken.rawValue)#clone-course")
+        if let conflict = try await courseCodeConflict(
+            code, term: term, excluding: nil, reserved: req.application.reservedCourseKeys, on: req.db)
+        {
+            return req.redirect(to: "\(back)?error=\(CourseCloneFormError(conflict).rawValue)#clone-course")
         }
         let result = try await cloneCourse(source, code: code, name: name, term: term, req: req)
         return req.redirect(to: "/admin/courses/\(try result.course.requireID().uuidString)")
@@ -355,97 +364,16 @@ extension AdminRoutes {
 
         let setupsDir = req.application.testSetupsDirectory
 
-        let purgedSubmissions = try await req.db.transaction { db -> Int in
-            // 1. Test setups for this course.
-            let setups = try await APITestSetup.query(on: db)
-                .filter(\.$courseID == courseID).all()
-            let setupIDs = setups.compactMap(\.id)
-
-            // 2. Submissions → results → delete.
-            let submissions = try await APISubmission.query(on: db)
-                .filter(\.$testSetupID ~~ setupIDs).all()
-            let subIDs = submissions.compactMap(\.id)
-            // Chunked: one IN list of every submission in a course exceeds
-            // the SQLite bind limit late in term (#2764).
-            for chunk in chunkedForInFilter(subIDs) {
-                try await APIResult.query(on: db)
-                    .filter(\.$submissionID ~~ chunk).delete()
-            }
-
-            // 3. Delete submission zip files then submission records (variant
-            // batches first — their FK is `.setNull`, so the other order
-            // leaves unlinked rows for setups that no longer exist).
-            for sub in submissions {
-                try? FileManager.default.removeItem(atPath: sub.zipPath)
-            }
-            if !setupIDs.isEmpty {
-                try await ValidationVariant.query(on: db)
-                    .filter(\.$testSetupID ~~ setupIDs).delete()
-                // The corpus runs go with the submissions they name. They are
-                // the one class-level table holding WHO contributed rather than
-                // only what was graded, which is why deletion reaches them
-                // explicitly (docs/collaborative-class-assignments.md, Phase 4).
-                try await APIClassCoverageRun.query(on: db)
-                    .filter(\.$testSetupID ~~ setupIDs).delete()
-                // The per-item coverage union records who covered each item
-                // first. Keyed by setup with no foreign key, so nothing else
-                // removes it.
-                try await APIClassItemCoverage.query(on: db)
-                    .filter(\.$testSetupID ~~ setupIDs).delete()
-                // The award ledger names the student and the work that earned
-                // the award, keyed by setup with no foreign key.
-                try await AchievementAwardStore.deleteAwards(forTestSetups: setupIDs, on: db)
-                // A class goal's snapshots, the class's and each lab's, and
-                // each lab's item coverage. Keyed by setup with no foreign key,
-                // so nothing else removes them.
-                try await LabGoalGroups.deleteClassGoalData(forTestSetups: setupIDs, on: db)
-                try await APISubmission.query(on: db)
-                    .filter(\.$testSetupID ~~ setupIDs).delete()
-            }
-            // The course's own awards name the student, keyed by the course
-            // with no foreign key (docs/achievement-rewards.md, S3).
-            try await AchievementAwardStore.deleteCourseAwards(forCourse: courseID, on: db)
-
-            // 4. Assignments. A class composite's slots and contributions map
-            // students to their work, so they go explicitly, not only by the
-            // cascade. Its reference renders and spares go with them, and so
-            // do the deal numbers that map students to partition datasets.
-            let assignmentIDs = try await APIAssignment.query(on: db)
-                .filter(\.$courseID == courseID).all().compactMap(\.id)
-            if !assignmentIDs.isEmpty {
-                try await APICompositeContribution.query(on: db)
-                    .filter(\.$assignmentID ~~ assignmentIDs).delete()
-                try await APICompositeSlot.query(on: db)
-                    .filter(\.$assignmentID ~~ assignmentIDs).delete()
-                try await APIGroupCompositeSlot.query(on: db)
-                    .filter(\.$assignmentID ~~ assignmentIDs).delete()
-                try await APICompositeReference.query(on: db)
-                    .filter(\.$assignmentID ~~ assignmentIDs).delete()
-                try await APICompositeSpare.query(on: db)
-                    .filter(\.$assignmentID ~~ assignmentIDs).delete()
-                try await APIGroupCompositeSpare.query(on: db)
-                    .filter(\.$assignmentID ~~ assignmentIDs).delete()
-                try await APIDatasetDeal.query(on: db)
-                    .filter(\.$assignmentID ~~ assignmentIDs).delete()
-            }
-            try await APIAssignment.query(on: db)
-                .filter(\.$courseID == courseID).delete()
-
-            // 5. Test setup files then setup records.
-            for setup in setups {
-                guard let sid = setup.id else { continue }
-                try? FileManager.default.removeItem(atPath: setupsDir + "\(sid).zip")
-                try? FileManager.default.removeItem(atPath: setupsDir + "\(sid).ipynb")
-            }
-            try await APITestSetup.query(on: db)
-                .filter(\.$courseID == courseID).delete()
-
-            // 6. Enrollments then course record.
-            try await APICourseEnrollment.query(on: db)
-                .filter(\.$course.$id == courseID).delete()
-            try await course.delete(on: db)
-            return submissions.count
+        // Every row goes in one transaction, and the files go only after it
+        // commits (#2766). A step that throws rolls every row back, and the
+        // rows still name files that are still on disk.
+        let purged = try await req.db.transaction { db in
+            try await CoursePurge.deleteRows(of: course, setupsDirectory: setupsDir, on: db)
         }
+        for path in purged.filePaths {
+            try? FileManager.default.removeItem(atPath: path)
+        }
+        let purgedSubmissions = purged.submissionCount
 
         // The course's version rows cascaded away with it, so their blobs now
         // have nothing pointing at them. This is the only moment version
@@ -517,10 +445,17 @@ extension AdminRoutes {
         // Reject a duplicate of another active course in the same term — the
         // rule of the unique index (docs/course-terms.md). An archived course
         // is outside the index, so it may share a code.
+        //
+        // A reserved code (#2666) is refused only when the edit changes the
+        // code, so a course that already holds one can still be edited; the
+        // `courseKeyShadowed` health rule reports it until it is renamed.
+        let codeChanged = code.lowercased() != course.code.lowercased()
         if !course.isArchived,
-            try await activeCourseCodeIsTaken(code, term: term, excluding: courseID, on: req.db)
+            let conflict = try await courseCodeConflict(
+                code, term: term, excluding: courseID,
+                reserved: codeChanged ? req.application.reservedCourseKeys : .none, on: req.db)
         {
-            return req.redirect(to: "/admin/courses/\(idString)?error=\(CourseFormError.codeTaken.rawValue)")
+            return req.redirect(to: "/admin/courses/\(idString)?error=\(CourseFormError(conflict).rawValue)")
         }
 
         course.term = term
@@ -796,13 +731,17 @@ extension AdminRoutes {
 // MARK: - Private helpers
 
 /// The first free `-COPY` code for a copy of `base` in `term`. "Free" is the
-/// rule every other door applies (`activeCourseCodeIsTaken`): case-folded
-/// and per term, so the copy cannot answer the key of an active course (#2229).
-private func uniqueCopyCode(base: String, term: AcademicTerm?, db: any Database) async throws -> String {
+/// rule every other door applies (`courseCodeConflict`): not reserved (#2666),
+/// and case-folded and per term, so the copy cannot answer the key of an
+/// active course (#2229).
+private func uniqueCopyCode(
+    base: String, term: AcademicTerm?, reserved: ReservedCourseKeys, db: any Database
+) async throws -> String {
     let candidates = ["\(base)-COPY"] + (2...10).map { "\(base)-COPY-\($0)" }
     for candidate in candidates {
-        let taken = try await activeCourseCodeIsTaken(candidate, term: term, excluding: nil, on: db)
-        if !taken { return candidate }
+        let conflict = try await courseCodeConflict(
+            candidate, term: term, excluding: nil, reserved: reserved, on: db)
+        if conflict == nil { return candidate }
     }
     throw AppError.conflict(reason: "Could not generate a unique course code. Rename an existing copy first.")
 }

@@ -1,3 +1,4 @@
+// @ts-check
 // Public/notebook-preflight-core.js
 //
 // The decisions behind the student submit page's capability preflight and

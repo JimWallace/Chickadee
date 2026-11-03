@@ -1,3 +1,4 @@
+// @ts-check
 // Public/workbench-rail.js
 //
 // The workbench rail's test suite (notebook views NB6, frame 18c). It fetches
@@ -24,7 +25,7 @@
 // solution, and tests worth points that pass on the starter. With issues, the
 // pill is a button, and each click selects the next issue.
 
-(function (global) {
+(function (/** @type {any} */ global) {
     'use strict';
 
     var WORDS = {
@@ -324,7 +325,7 @@
             clickIn(block, '.js-section-edit-toggle');
             if (action === 'delete') clickIn(block, '.js-section-delete-btn');
             else {
-                var input = block.querySelector('.section-name-input');
+                var input = /** @type {HTMLInputElement | null} */ (block.querySelector('.section-name-input'));
                 if (input) input.focus();
             }
         };
