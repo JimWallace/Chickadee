@@ -48,18 +48,13 @@ jobs:
     outputs:
       scope: ${{ steps.decide.outputs.scope }}
     steps:
-      # Depth 2 is the checked-out commit and its parents, both parents of a
-      # merge commit included. That is all a pull_request compares. A full
-      # history fetch of every branch and tag came to the job's 5-minute
-      # limit and timed out (#2812).
       - uses: actions/checkout@v7
         with:
-          fetch-depth: 2
+          fetch-depth: 0
 
       # pull_request checks out the merge commit, so its first parent is the
       # base that the PR merges into. A push compares with the commit that
-      # main was at before it, fetched by itself: a two-tree diff needs no
-      # history between them. Every failure to get a list answers `full`.
+      # main was at before it. Every failure to get a list answers `full`.
       # `--no-renames` lists both sides of a rename.
       - name: Decide the scope of the Swift suite
         id: decide
@@ -77,9 +72,6 @@ jobs:
               fi
               ;;
             push)
-              if [ -n "$BEFORE" ]; then
-                git fetch -q --no-tags --depth=1 origin "$BEFORE" 2> /dev/null || true
-              fi
               if [ -n "$BEFORE" ] && git cat-file -e "${BEFORE}^{commit}" 2> /dev/null; then
                 changed="$(git diff --no-renames --name-only "$BEFORE" HEAD)" && ok=true
               fi
