@@ -150,7 +150,7 @@ enum PostgresSessionBounds {
 
     /// The exact parameter list appended to both pools' startup options.
     /// Postgres rejects an unknown parameter name at connection time, so a
-    /// typo here fails the whole `api-tests-postgres` lane loudly rather
+    /// typo here fails the whole `api-tests` lane loudly rather
     /// than silently binding nothing.
     static var startupParameters: [(String, String)] {
         [

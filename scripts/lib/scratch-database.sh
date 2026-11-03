@@ -34,7 +34,7 @@ chickadee_scratch_db_create() {
     CHICKADEE_SCRATCH_DB_PORT="${TEST_DATABASE_PORT:-5432}"
     CHICKADEE_SCRATCH_DB_USER="${TEST_DATABASE_USER:-postgres}"
     CHICKADEE_SCRATCH_DB_PASSWORD="${TEST_DATABASE_PASSWORD:-postgres}"
-    CHICKADEE_SCRATCH_DB_NAME="chickadee_${1}_$$_$(date +%s)"
+    CHICKADEE_SCRATCH_DB_NAME="chickadee_${1}_$$_$(date +%s)_${RANDOM}"
     if ! chickadee_scratch_db_psql -c "CREATE DATABASE \"$CHICKADEE_SCRATCH_DB_NAME\""; then
         echo "scratch-database: could not create $CHICKADEE_SCRATCH_DB_NAME on" \
             "$CHICKADEE_SCRATCH_DB_HOST:$CHICKADEE_SCRATCH_DB_PORT" >&2
