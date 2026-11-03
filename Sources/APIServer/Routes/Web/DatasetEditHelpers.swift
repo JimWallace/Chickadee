@@ -3,9 +3,10 @@
 // Shared core for the datasets handlers — both the assignment-scoped pair
 // (`/instructor/:assignmentID/datasets`) and the draft-scoped pair the create
 // page uses (`/instructor/new/draft/datasets?draftID=<id>`).  Same split as
-// `SuiteEditHelpers.swift`: the handlers own auth + setup resolution, this file
-// owns validation and the manifest write, so the create page cannot drift into
-// accepting a spec the edit page rejects.
+// `SuiteEditHelpers.swift`: the handlers own auth + setup resolution, and the
+// validation and the manifest write are `applyDatasetsEdit` in
+// `Services/DatasetsChange.swift`, which MCP `set_dataset` calls too (#2771).
+// So no door can drift into accepting a spec another door rejects.
 //
 // See docs/datasets.md (Phase 1) for what a spec means at delivery time.
 
@@ -201,52 +202,15 @@ func datasetsPanelResponse(req: Request, setup: APITestSetup) async throws -> Da
     return DatasetsResponse(datasets: specs, diagnostics: diagnostics)
 }
 
-/// Validates `datasets` against the setup's bundled files and writes the
-/// resulting array into the manifest, replacing whatever was there.
-///
-/// This is a whole-array replace, not a patch — callers send the complete
-/// desired state.
-///
-/// Each spec must pass `datasetSpecRefusal`, the check MCP `set_dataset` runs
-/// too (#2487), and must keep the library fields the manifest already holds
-/// for its file (`DatasetSpecValidation.libraryFieldIssue`). The array must
-/// also not name one file twice: two specs for one file would disagree about
-/// how many rows a student gets, and which one wins is a detail of whichever
-/// consumer happens to fold the array. A refusal is `.badRequest`.
+/// The web door to `applyDatasetsEdit` (`Services/DatasetsChange.swift`):
+/// a whole-array replace, since the page sends the complete desired state.
+/// A refusal is `.badRequest`.
 func applyDatasetsEdit(
     setup: APITestSetup, datasets: [DatasetSpec], on db: any Database
 ) async throws {
-    let bundledFiles = await bundledFileNames(zipPath: setup.zipPath)
-    let stored = setup.decodedManifest()?.datasetSpecsByFile ?? [:]
-    var seenFiles: Set<String> = []
-    for spec in datasets {
-        if let refusal = await datasetSpecRefusal(spec, setup: setup, bundledFiles: bundledFiles) {
-            throw AppError.badRequest(reason: refusal)
-        }
-        // The library fields are written by the library attach path only; this
-        // door carries them through (docs/datasets-course-library.md).
-        if let refusal = DatasetSpecValidation.libraryFieldIssue(proposed: spec, stored: stored[spec.file]) {
-            throw AppError.badRequest(reason: refusal)
-        }
-        guard seenFiles.insert(spec.file).inserted else {
-            throw AppError.badRequest(reason: "Dataset file '\(spec.file)' is listed more than once.")
-        }
-    }
-
-    // An attached spec may be edited here but not dropped: dropping it would
-    // end the attachment and give every student the whole file. Detach does
-    // that deliberately and keeps the sample.
-    for (file, spec) in stored where spec.source != nil && !seenFiles.contains(file) {
-        throw AppError.badRequest(
-            reason: "'\(file)' is attached from the course library. Detach it to remove its dataset settings.")
-    }
-
-    // An activity that ranks or matches students refuses personal data.
-    if let violation = ManifestCoherence.violation(introducedBy: { $0.datasets = datasets }, in: setup.manifest) {
-        throw AppError.badRequest(reason: violation)
-    }
-
-    try await mutateManifest(setup: setup, on: db) { props in
-        props.datasets = datasets
+    do {
+        try await applyDatasetsEdit(setup: setup, change: .replaceAll(datasets), on: db)
+    } catch let refusal as DatasetsEditError {
+        throw AppError.badRequest(reason: refusal.description)
     }
 }

@@ -170,18 +170,8 @@ extension PublishedAssignmentRoutes {
         // create-script path).  Idempotent and cheap; the shared dir
         // is just a flat extraction of every non-test, non-notebook
         // entry in the zip, so a deleted file vanishes from there too.
-        let activeTestSuiteScripts: Set<String> = {
-            guard let props = setup.decodedManifest()
-
-            else { return [] }
-            return Set(props.testSuites.map(\.script))
-        }()
         await extractSupportFilesToSharedDirectory(
-            zipPath: setup.zipPath,
-            setupID: assignment.testSetupID,
-            testSuiteScripts: activeTestSuiteScripts,
-            testSetupsDirectory: req.application.testSetupsDirectory
-        )
+            for: setup, testSetupsDirectory: req.application.testSetupsDirectory)
         // Re-grade and re-validate on the server; the page no longer has to
         // send a follow-up suite request (#2259).
         await applyContentEditEffects(

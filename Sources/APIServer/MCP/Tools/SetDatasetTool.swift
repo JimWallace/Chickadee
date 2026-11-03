@@ -190,14 +190,6 @@ struct SetDatasetTool: ContentTool {
             throw MCPToolError.invalidArguments(detail: "filename must be a bare filename with no path components.")
         }
 
-        // An attached file's spec is ended by a detach, which keeps the sample;
-        // a plain remove would give every student the whole file.
-        if remove, setup.decodedManifest()?.libraryAttachment(for: cleaned) != nil {
-            throw MCPToolError.invalidArguments(
-                detail: "\"\(cleaned)\" is attached from the course library. Detach it instead of removing its "
-                    + "dataset mark.")
-        }
-
         // Built once, from the stored spec plus this call's changes, and used
         // for both the validation and the manifest entry — so the thing that is
         // checked is the thing that is stored.
@@ -205,29 +197,18 @@ struct SetDatasetTool: ContentTool {
             from: input, filename: cleaned,
             existing: setup.decodedManifest()?.datasetSpecsByFile[cleaned])
 
-        // The check the web `PUT /datasets` routes run too (#2487), on the
-        // spec that is stored.
-        if !remove,
-            let refusal = await datasetSpecRefusal(
-                written, setup: setup, bundledFiles: bundledFileNames(zipPath: setup.zipPath))
-        {
-            throw MCPToolError.invalidArguments(detail: refusal)
+        // The one dataset edit, which the web `PUT /datasets` routes run too
+        // (#2771). It refuses a spec that `datasetSpecRefusal` refuses, and a
+        // remove of a file attached from the course library: that spec is
+        // ended by a detach, which keeps the sample, while a plain remove
+        // would give every student the whole file. Replaced, never appended,
+        // so one file never has two specs.
+        do {
+            try await applyDatasetsEdit(
+                setup: setup, change: .replace(file: cleaned, with: remove ? nil : written), on: context.db)
+        } catch let refusal as DatasetsEditError {
+            throw MCPToolError.invalidArguments(detail: refusal.description)
         }
-
-        // Replaced, never appended — two specs for one file would disagree
-        // about how many rows a student gets, and both PUT endpoints reject
-        // such a pair outright.
-        let change: (inout TestProperties) -> Void = { props in
-            props.datasets.removeAll { $0.file == cleaned }
-            if !remove {
-                props.datasets.append(written)
-            }
-        }
-        // An activity that ranks or matches students refuses personal data.
-        if let violation = ManifestCoherence.violation(introducedBy: change, in: setup.manifest) {
-            throw MCPToolError.invalidArguments(detail: violation)
-        }
-        try await mutateManifest(setup: setup, on: context.db, change)
 
         let datasets = (setup.decodedManifest()?.datasets ?? []).map {
             DatasetEntry(
