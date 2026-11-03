@@ -1,4 +1,4 @@
-// APIServer/Helpers/ClassGoalBonus.swift
+// APIServer/Services/ClassGoalBonus.swift
 //
 // The positive grade bonus a class goal awards.  Class goals are a class-wide
 // reward: when (at least the configured share of) the class reaches the

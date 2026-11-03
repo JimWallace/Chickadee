@@ -2,7 +2,7 @@
 //
 // Phase 2: test-setup management endpoints.
 // Phase 9: notebook download endpoint (the pure notebook-JSON helpers live
-// in Helpers/NotebookContentHelpers.swift as of #1119).
+// in Services/NotebookContent.swift as of #1119).
 //
 // POST /api/v1/testsetups           [instructor only]
 //   Multipart: field "manifest" (JSON text) + field "files" (zip binary).

@@ -5,7 +5,8 @@
 // `Request`, so nothing without a request (a sweep, a background job) could
 // call them. They now take one of these protocols. A `Request` conforms, so a
 // route passes `req` as before, and a caller with no request can conform a
-// type of its own.
+// type of its own. The `Request` conformance is the HTTP edge, so it is in
+// `Helpers/Request+AuditContext.swift` (#2775).
 
 import Fluent
 import Foundation
@@ -29,28 +30,4 @@ protocol AuditContext: ServiceContext {
     /// The client address, under the deployment's proxy trust rules.
     var auditRemoteAddress: String? { get }
     var auditUserAgent: String? { get }
-}
-
-extension Request: AuditContext {
-    var actingUserID: UUID? { auth.get(APIUser.self)?.id }
-    var auditActor: APIUser? { auth.get(APIUser.self) }
-    var auditRemoteAddress: String? {
-        clientIPAddress(from: self, trustForwardedFor: application.securityConfiguration.trustForwardedProto)
-    }
-    var auditUserAgent: String? { headers.first(name: "User-Agent") }
-
-    /// The network part of the client's address (`ClientNetwork.prefix`), nil
-    /// when unknown. Read from the LAST `X-Forwarded-For` entry, the address
-    /// the deployment's own proxy saw: nginx appends it
-    /// (`$proxy_add_x_forwarded_for`) after whatever the client sent, so the
-    /// first entry is the client's to choose, and a student could name the
-    /// room's network.
-    var clientNetwork: String? {
-        let forwarded = headers.first(name: "X-Forwarded-For")?.split(separator: ",").last
-            .map { $0.trimmingCharacters(in: .whitespaces) }
-        let address =
-            application.securityConfiguration.trustForwardedProto
-            ? (forwarded ?? remoteAddress?.ipAddress) : remoteAddress?.ipAddress
-        return address.flatMap(ClientNetwork.prefix(of:))
-    }
 }

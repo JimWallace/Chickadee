@@ -1,4 +1,4 @@
-// APIServer/Helpers/CurrentUserContext.swift
+// APIServer/Utilities/CurrentUserContext.swift
 //
 // The authenticated user as a view context.
 

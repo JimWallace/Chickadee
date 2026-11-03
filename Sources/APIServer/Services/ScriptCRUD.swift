@@ -1,4 +1,4 @@
-// APIServer/Services/ScriptCRUDHelpers.swift
+// APIServer/Services/ScriptCRUD.swift
 //
 // Shared cores for creating and deleting individual test/support scripts inside
 // a test setup's zip + manifest. Used by both the published
