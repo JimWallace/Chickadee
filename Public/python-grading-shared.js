@@ -1,3 +1,4 @@
+// @ts-check
 // Public/python-grading-shared.js
 //
 // Grading semantics for the xeus-python browser grader — the Python analogue of

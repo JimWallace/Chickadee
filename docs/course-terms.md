@@ -131,6 +131,15 @@ The Core type, the migration, the model accessor, and tests
   code (an exact code wins over a key, so the termed course's links would
   reach the other one), and two years with one short label (2026 and 2126 are
   both "26"). Two offerings of one code in different terms do not collide.
+- **Reserved keys (#2666).** Every door that creates, renames, imports or
+  un-archives a course calls `courseCodeConflict`, which refuses a code before
+  it checks for a duplicate when the code or the URL key is the first segment of
+  a fixed route (`ReservedCourseKeys`, read from `app.routes.all`). Vapor's
+  router tries a constant segment before a parameter and never backtracks, so a
+  course coded `data` or `lab` would lose every `/:courseCode/...` link. Edit
+  refuses only a change of code, so a course that already holds a reserved code
+  can still be edited; the `courseKeyShadowed` health rule reports it
+  (`docs/operational-diagnostics.md`).
 - **The URL key.** `APICourse.urlKey` is the code for a course with no term,
   and "CS135-F26" for a course with one (`AcademicTerm.shortLabel`). A key is
   matched against `urlKey` by string equality and never parsed back. Every link

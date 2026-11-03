@@ -61,7 +61,7 @@ import Vapor
             _ = try await fixture(on: app)
             let setup = try #require(try await APITestSetup.find("setup_dep", on: app.db))
 
-            await #expect(throws: WebAssignmentError.self) {
+            await #expect(throws: AppError.self) {
                 try await deleteScriptFromSetup(setup: setup, filename: "helpers.py", on: app.db)
             }
             await #expect(entries(app).contains("helpers.py"), "the file must survive")

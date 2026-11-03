@@ -293,7 +293,7 @@ struct SetActivityTool: ContentTool {
         }
         // A lifecycle setting — instructor-level, like set_submission_mode.
         let (assignment, setup) = try await context.authorizedAssignmentAndSetupForWrite(
-            publicID: input.assignmentPublicID, atLeast: .instructor)
+            publicID: input.assignmentPublicID, atLeast: CourseRoleFloor.classActivity)
         let current = currentManifestActivity(setup.manifest)
         let requested = activity.map { block in
             block

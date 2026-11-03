@@ -1,3 +1,4 @@
+// @ts-check
 // Public/section-inputs-editor.js
 //
 // Slice 4 of issue #461 — per-section inputs panels on the assignment edit

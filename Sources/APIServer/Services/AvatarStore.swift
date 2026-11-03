@@ -191,12 +191,30 @@ enum AvatarStore {
     /// a past term is a student now, and gets their own ring back (#1756).
     static func courseStaff(among userIDs: [UUID], on db: any Database) async throws -> Set<UUID> {
         guard !userIDs.isEmpty else { return [] }
-        let enrollments = try await APICourseEnrollment.query(on: db)
+        let enrollments = try await currentEnrollments(on: db)
             .filter(\.$userID ~~ userIDs)
-            .join(APICourse.self, on: \APICourseEnrollment.$course.$id == \APICourse.$id)
-            .filter(APICourse.self, \.$isArchived == false)
             .all()
         return Set(enrollments.filter { $0.role >= .ta }.map(\.userID))
+    }
+
+    /// Every user who is course staff in at least one course that is not
+    /// archived: `courseStaff(among:)` for a page that lists every user, the
+    /// admin Users list. It sends no user ID list, so the query does not grow
+    /// with the user table (#2777). The role filter runs in SQL; the typed
+    /// `role` check after it keeps the result equal to `courseStaff(among:)`.
+    static func allCourseStaff(on db: any Database) async throws -> Set<UUID> {
+        let staffRoles = CourseRole.allCases.filter { $0 >= .ta }.map(\.rawValue)
+        let enrollments = try await currentEnrollments(on: db)
+            .filter(\.$roleRaw ~~ staffRoles)
+            .all()
+        return Set(enrollments.filter { $0.role >= .ta }.map(\.userID))
+    }
+
+    /// Enrollments in a course that is not archived.
+    private static func currentEnrollments(on db: any Database) -> QueryBuilder<APICourseEnrollment> {
+        APICourseEnrollment.query(on: db)
+            .join(APICourse.self, on: \APICourseEnrollment.$course.$id == \APICourse.$id)
+            .filter(APICourse.self, \.$isArchived == false)
     }
 
     // MARK: - Coding

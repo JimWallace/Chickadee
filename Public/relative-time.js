@@ -1,3 +1,4 @@
+// @ts-check
 // Shared relative-time rendering for `.js-relative-time[data-iso]` nodes.
 //
 // Replaces six copy-pasted (and drifted) per-template implementations
@@ -23,7 +24,7 @@
 //
 // Text is written only when it changes, so a quiet page costs a formatter call
 // per node and no DOM mutation at all.
-(function (global) {
+(function (/** @type {any} */ global) {
     'use strict';
 
     var relativeFormatter = new Intl.RelativeTimeFormat(undefined, { numeric: 'auto' });

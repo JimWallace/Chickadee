@@ -1,3 +1,4 @@
+// @ts-check
 // Public/notebook-toolbar.js
 //
 // The notebook editor's one toolbar (notebook views NB2, design frame 18a).
@@ -17,7 +18,7 @@
 // Messages are accepted from this origin only, with a `ck` field this script
 // knows, as notebook.js accepts the kernel diagnostics.
 
-(function (global) {
+(function (/** @type {any} */ global) {
     'use strict';
 
     var KERNEL_WORDS = { starting: 'starting', idle: 'idle', busy: 'busy', dead: 'stopped' };
@@ -100,7 +101,7 @@
 
         document.addEventListener('click', function (e) {
             // ⋯ → Upload .ipynb: open the hidden file input it names.
-            var upload = e.target && e.target.closest ? e.target.closest('[data-nb-upload]') : null;
+            var upload = e.target && /** @type {Element} */ (e.target).closest ? /** @type {Element} */ (e.target).closest('[data-nb-upload]') : null;
             if (upload && upload.closest('.notebook-header')) {
                 var menuOfUpload = upload.closest('details');
                 if (menuOfUpload) menuOfUpload.removeAttribute('open');
@@ -108,7 +109,7 @@
                 if (input) input.click();
                 return;
             }
-            var target = e.target && e.target.closest ? e.target.closest('[data-nb-commands]') : null;
+            var target = e.target && /** @type {Element} */ (e.target).closest ? /** @type {Element} */ (e.target).closest('[data-nb-commands]') : null;
             if (!target || !target.closest('.notebook-header')) return;
             var menu = target.closest('details');
             if (menu) menu.removeAttribute('open');

@@ -1,3 +1,4 @@
+// @ts-check
 // Public/accordion-row.js
 //
 // The one inline detail-row accordion: an editor that expands in a `<tr>`
@@ -47,7 +48,7 @@
 //   * every animated path carries a TIMEOUT fallback, because `transitionend`
 //     does not fire in a backgrounded tab or under a `display: none` ancestor.
 //     Without it, `close` would leave the detail row in the table forever.
-(function (global) {
+(function (/** @type {any} */ global) {
     'use strict';
 
     var CARET_HTML = '<span class="accordion-caret" aria-hidden="true">'

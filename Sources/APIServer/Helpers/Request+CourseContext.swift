@@ -61,12 +61,12 @@ extension Request {
 
     private static let activeCourseSessionKey = "activeCourseID"
 
-    /// The active course's id, or `WebAssignmentError.noActiveCourse` naming
+    /// The active course's id, or `AppError.noActiveCourse` naming
     /// `action` when the viewer has none selected. The guard every
     /// course-scoped instructor write starts with.
     func requireActiveCourseID(for user: APIUser, action: String) async throws -> UUID {
         guard let courseID = try await resolveActiveCourse(for: user).activeCourseUUID else {
-            throw WebAssignmentError.noActiveCourse(action: action)
+            throw AppError.noActiveCourse(action: action)
         }
         return courseID
     }
@@ -94,14 +94,14 @@ extension Request {
         return try await APICourse.find(courseID, on: db)
     }
 
-    /// `activeCourseForWrite`, or `WebAssignmentError.noActiveCourse` naming
+    /// `activeCourseForWrite`, or `AppError.noActiveCourse` naming
     /// `action` when the viewer has no active course. The preamble of every
     /// instructor write to the active course.
     func requireActiveCourseForWrite(
         _ user: APIUser, atLeast minimum: CourseRole, action: String
     ) async throws -> APICourse {
         guard let course = try await activeCourseForWrite(user, atLeast: minimum) else {
-            throw WebAssignmentError.noActiveCourse(action: action)
+            throw AppError.noActiveCourse(action: action)
         }
         return course
     }

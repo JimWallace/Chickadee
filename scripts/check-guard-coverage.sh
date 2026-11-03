@@ -41,11 +41,14 @@ scripts/swiftlint.sh|Runs SwiftLint. The rules belong to the tool, which has its
 scripts/check-runner-wasm-size.sh|Reads the vendored wasm. Its filename carries a content hash, so a fixture that names it breaks at each re-vendor.
 scripts/deployment-target-tests.sh|A self-test suite. Its cases are its assertions.
 scripts/ci-build-retry.sh --self-test|A self-test of the build-retry gate. Its cases are its assertions.
+scripts/ci-swift-suite-scope.sh --self-test|A self-test of the Swift suite scope decision. Its cases are its assertions.
+scripts/ci-swift-suite-scope.sh|Not a check. It decides which Swift jobs run; a wrong answer is caught by its self-test.
 scripts/ci-agent-sanitize.sh --self-test|A self-test of the agent text cleanup. Its cases are its assertions.
 scripts/check-guards.sh|The fixture runner. The fixtures are its cases, and it fails on an empty set.
 scripts/ci-build-retry.sh|Not a check. It runs the build and retries a known compiler crash.
 scripts/ci-swift-test-lane.sh|Not a check. It runs one swift test lane; the skipped-test guard that it runs has its own fixture.
 scripts/eslint.sh|Runs ESLint. The rules belong to the tool, which has its own tests.
+scripts/typecheck-js.sh|Runs tsc. The rules belong to the tool, which has its own tests. The opt-in guard beside it has fixtures.
 scripts/test-chickadee-deployer.sh|A behaviour test suite. Its cases are its assertions.
 scripts/test-chickadee-runner-update.sh|A behaviour test suite. Its cases are its assertions.
 scripts/test-snapshot-retention.sh|A behaviour test suite. Its cases are its assertions.

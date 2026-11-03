@@ -42,12 +42,12 @@ func createScriptInSetup(
 ) async throws -> CreatedScript {
     let cleaned = sanitizeSuiteFilename(body.filename)
     guard !cleaned.isEmpty, cleaned == body.filename else {
-        throw WebAssignmentError.invalidParameter(name: "filename", reason: "Invalid filename '\(body.filename)'")
+        throw AppError.invalidParameter(name: "filename", reason: "Invalid filename '\(body.filename)'")
     }
 
     // Reject duplicate filenames.
     if await listZipEntries(zipPath: setup.zipPath).contains(cleaned) {
-        throw WebAssignmentError.conflict(reason: "A file named '\(cleaned)' already exists in this setup")
+        throw AppError.conflict(reason: "A file named '\(cleaned)' already exists in this setup")
     }
 
     // Slice 1: prepend assignment-scope variables before write so the saved
@@ -101,20 +101,20 @@ func deleteScriptFromSetup(setup: APITestSetup, filename: String, on db: any Dat
     do {
         try await deleteFileFromSetup(setup: setup, filename: filename, on: db)
     } catch SetupFileDeletionError.notInSetup(let file) {
-        throw WebAssignmentError.notFound(resource: "File '\(file)' in setup zip")
+        throw AppError.notFound(resource: "File '\(file)' in setup zip")
     } catch SetupFileDeletionError.generatedByFamily(let file, let familyID) {
-        throw WebAssignmentError.conflict(
+        throw AppError.conflict(
             reason:
                 "'\(file)' is generated from pattern family '\(familyID)'. Remove it via the family editor (delete the case, or delete the whole family)."
         )
     } catch SetupFileDeletionError.libraryAttached(let refusal) {
-        throw WebAssignmentError.conflict(reason: refusal)
+        throw AppError.conflict(reason: refusal)
     } catch SetupFileDeletionError.hasDependents(let file, let dependents) {
-        throw WebAssignmentError.conflict(
+        throw AppError.conflict(
             reason:
                 "Cannot delete '\(file)': the following scripts depend on it: \(dependents.joined(separator: ", "))"
         )
     } catch SetupFileDeletionError.zipUpdateFailed {
-        throw WebAssignmentError.internalFailure(reason: "Failed to update setup zip")
+        throw AppError.internalFailure(reason: "Failed to update setup zip")
     }
 }
