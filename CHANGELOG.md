@@ -9,6 +9,13 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.791] - 2026-11-03
+
+### Changed
+
+- **One table names the role floor of each operation (#2772).** `CourseRoleFloor` replaces `DashboardRoleFloor` and adds content items, the course dataset library, Student Options, the class activity and the BrightSpace binding. The web routes, their MCP twins and the views read the same constant, so a floor change on one surface reaches the others. `CourseRoleFloorGuardTests` refuses a new literal floor in a file that implements a named operation. No floor changes value.
+
+
 ## [0.5.790] - 2026-11-03
 
 ### Fixed
