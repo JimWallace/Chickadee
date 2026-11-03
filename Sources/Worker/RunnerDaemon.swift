@@ -524,14 +524,14 @@ actor WorkerDaemon {
     /// classified until they run, so the runner does not know which language it
     /// is about to need, and an unused helper costs one small file write.
     /// Filenames are sorted so the writes are deterministic.
-    func writeRuntimeHelpers(in directory: URL) throws {
+    nonisolated func writeRuntimeHelpers(in directory: URL) throws {
         for (name, source) in allRuntimeHelperFiles().sorted(by: { $0.key < $1.key }) {
             try source.write(
                 to: directory.appendingPathComponent(name), atomically: true, encoding: .utf8)
         }
     }
 
-    func writeStudentModuleHint(in directory: URL, preferredFilename: String?) throws {
+    nonisolated func writeStudentModuleHint(in directory: URL, preferredFilename: String?) throws {
         let hintURL = directory.appendingPathComponent(".chickadee_student_module")
         try? FileManager.default.removeItem(at: hintURL)
 
