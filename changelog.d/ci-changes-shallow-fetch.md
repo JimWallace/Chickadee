@@ -1,3 +1,4 @@
 ### Fixed
 
 - **CI: the Swift scope check fetches only what it compares.** The `changes` job in `swift-tests.yml` checked out the full history of every branch and tag, and since 2026-11-03 17:30 UTC that fetch has run into the job's 5-minute limit on every run. The gate fails closed, so every pull request was red. A pull request now fetches depth 2, the merge commit and both parents. A push fetches its before commit by itself. Any failure still runs the full suite.
+- **CI: the changed-paths action fetches only the base commit.** The editor smoke, the browser grading smoke and the CodeQL JavaScript job checked out the full history for the same path check, and the editor smoke's `changes` job hit its 10-minute limit. Those three now check out depth 1, and the action fetches the base commit by itself.
