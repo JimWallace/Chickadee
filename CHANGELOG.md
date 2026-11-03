@@ -9,6 +9,13 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.782] - 2026-11-03
+
+### Added
+
+- **A found ring.** A new wardrobe ring opens to a student who finds something hidden in Chickadee. It is not earned by graded work and is not shown until found (docs/student-wardrobe.md, "Found items").
+
+
 ## [0.5.781] - 2026-11-03
 
 ### Fixed
