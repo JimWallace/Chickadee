@@ -102,7 +102,7 @@ a change now would be done again at the move.
   `Helpers/SuiteConfigBuilding.swift`,
   `Routes/Web/DraftAssignmentRoutes+NewAssignment.swift`. Vapor 5 keeps
   `ByteBuffer` in multipart.
-- The uploaded-bundle body: `Routes/Web/CourseBundleRoutes+Import.swift`.
+- The uploaded-bundle body: `Routes/Web/CourseBundleRoutes.swift`.
 - Vapor client requests: `LTI/LTIServiceClient.swift`,
   `BrightSpace/BrightSpaceAPIClient.swift`.
 - AsyncHTTPClient bodies and timeouts (`NIOCore`): `GitHub/GitHubRepoClient.swift`,

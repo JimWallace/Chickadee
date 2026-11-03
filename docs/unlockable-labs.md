@@ -201,7 +201,7 @@ A pure, unit-testable evaluator plus a store:
   (`Sources/Core/CourseBundleManifest.swift`) gains a nullable list of
   prerequisite assignment bundle-IDs (+ thresholds); old bundles decode nil
   and `schemaVersion` stays 1. Import becomes two-pass
-  (`CourseBundleRoutes+Import.swift`): create all assignments, build the
+  (`CourseBundleService+Import.swift`): create all assignments, build the
   assignment bundle-ID → UUID map (the analogue of the existing
   `sectionIDMap`), then write edges.
 - **Admin copy-course** (the `AssignmentAuthoringService.cloneAssignment`

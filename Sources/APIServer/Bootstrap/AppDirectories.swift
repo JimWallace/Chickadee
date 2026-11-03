@@ -41,7 +41,7 @@ func bootstrapAppDirectories(_ app: Application, workDir: String, cliWorkerSecre
     app.storage[LocalRunnerAutoStartFilePathKey.self] = localRunnerAutoStartFile
     app.storage[ServerHealthAlertWebhookURLFilePathKey.self] = alertWebhookURLFile
 
-    let startupWorkerSecret = resolveStartupWorkerSecret(
+    let startupWorkerSecret = try resolveStartupWorkerSecret(
         cliWorkerSecret: cliWorkerSecret,
         workerSecretFilePath: workerSecretFile,
         workerSecretWordlistPath: workerSecretWordlistFile

@@ -23,8 +23,11 @@ import VaporTesting
             dealOrder: order)
     }
 
-    private func compositeManifest(_ spec: CompositeSpec, language: AssignmentLanguage? = .python) throws -> String {
+    private func compositeManifest(
+        _ spec: CompositeSpec, language: AssignmentLanguage? = .python, gradingMode: GradingMode = .worker
+    ) throws -> String {
         let props = TestProperties(
+            gradingMode: gradingMode,
             testSuites: [TestSuiteEntry(tier: .pub, script: "tile.py")],
             language: language,
             activity: ClassActivity(kind: .classComposite, composite: spec))
@@ -304,7 +307,9 @@ import VaporTesting
             let studentCookie = try await wrLoginAsStudent(on: app)
             let student = try await wrStudentUser(on: app)
             try await wrEnrollUser(student, on: app)
-            try await wrInsertSetup(id: "setup_seed", manifest: try compositeManifest(spec()), on: app)
+            // Browser-graded: a student reads the seed only on such a setup (#2763).
+            try await wrInsertSetup(
+                id: "setup_seed", manifest: try compositeManifest(spec(), gradingMode: .browser), on: app)
             try await wrInsertAssignment(testSetupID: "setup_seed", title: "Class GPU", isOpen: true, on: app)
 
             try await app.asyncTest(

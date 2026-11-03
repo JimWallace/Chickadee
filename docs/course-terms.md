@@ -282,7 +282,7 @@ code-only lookup.** Use `findActiveCourse(byKey:viewer:on:)` on the web or
 | MCP `list_assignments`, `clone_assignment` | `MCP/Tools/ListAssignmentsTool.swift`, `CloneAssignmentTool.swift` |
 | MCP resource `chickadee://course/<code>/authoring-guidance` | `MCP/Resources/MCPResourceProvider.swift` |
 | Admin MCP `get_instructor_card_series` | `MCP/Admin/Tools/GetInstructorCardSeriesTool.swift` |
-| Bundle import conflict check (active courses only, inside the import transaction) | `Routes/Web/CourseBundleRoutes+Import.swift` |
+| Bundle import conflict check (active courses only, inside the import transaction) | `Services/CourseBundleService+Import.swift` |
 
 ---
 

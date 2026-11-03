@@ -67,7 +67,7 @@ struct BrowserRunnerRoutes: RouteCollection {
         // browser runner fetches this zip only on a browser-graded page, but
         // the zip of a worker-graded setup also holds its release and secret
         // scripts. Staff keep access: they can read the setup anyway.
-        let manifest = try await browserDownloadManifest(setup: setup, caller: caller, req: req)
+        let manifest = try await requireBrowserRunnerAccess(setup: setup, caller: caller, req: req)
 
         // Grader-only files (answer keys, reserved holdout sets) must never reach
         // a browser-graded student — the whole stored zip is streamed into the
@@ -84,12 +84,20 @@ struct BrowserRunnerRoutes: RouteCollection {
         return try await streamFilteredSetupZip(zipPath: setup.zipPath, removing: graderOnly, req: req)
     }
 
-    /// The decoded manifest of a setup that `caller` may download through the
-    /// browser runner. Throws for a non-staff caller when the setup is not
-    /// browser-graded, and when its manifest does not decode: with no manifest
-    /// there is no grading mode and no grader-only list, so the download fails
-    /// closed. Staff get the manifest, or nil when it does not decode.
-    private func browserDownloadManifest(
+    /// The decoded manifest of a setup that `caller` may read through the
+    /// browser runner: the zip, the manifest and the seed (#2763). Throws for a
+    /// non-staff caller when the setup is not browser-graded, and when its
+    /// manifest does not decode: with no manifest there is no grading mode and
+    /// no grader-only list, so the request fails closed. Staff get the
+    /// manifest, or nil when it does not decode.
+    ///
+    /// Only `browser-runner.js` calls these endpoints, and only on a
+    /// browser-graded page. For a worker-graded setup the zip holds the release
+    /// and secret scripts, the manifest names every test, and the seed carries
+    /// resolved inputs that can encode expected answers. The worker receives
+    /// these in its job; a student never needs them.
+    @discardableResult
+    private func requireBrowserRunnerAccess(
         setup: APITestSetup, caller: APIUser, req: Request
     ) async throws -> TestProperties? {
         let manifest = setup.decodedManifest()
@@ -98,9 +106,9 @@ struct BrowserRunnerRoutes: RouteCollection {
         }
         guard let manifest else {
             req.logger.warning(
-                "browser-runner download refused: the manifest does not decode",
+                "browser-runner request refused: the manifest does not decode",
                 metadata: ["testSetupID": .string(setup.id ?? "")])
-            throw AppError.forbiddenReason(reason: "This test setup cannot be downloaded.")
+            throw AppError.forbiddenReason(reason: "This test setup cannot be read.")
         }
         guard manifest.effectiveGradingMode == .browser else {
             throw AppError.forbiddenReason(reason: "This assignment is not graded in the browser.")
@@ -167,6 +175,8 @@ struct BrowserRunnerRoutes: RouteCollection {
         {
             try await requireCourseEnrollment(caller: caller, courseID: setup.courseID, db: req.db)
         }
+        // Browser-graded only for a student, as for the zip (#2763).
+        try await requireBrowserRunnerAccess(setup: setup, caller: caller, req: req)
 
         // Serve the runner contract only. The stored manifest also holds
         // authoring data that must not reach a student's browser: `=`
@@ -226,6 +236,9 @@ struct BrowserRunnerRoutes: RouteCollection {
             return BrowserRunnerSeedResponse(
                 seed: nil, personalizedInputs: nil, personalizedFiles: nil, language: nil, opponent: nil)
         }
+        // Browser-graded only for a student, as for the zip (#2763). The empty
+        // seed above carries nothing, so only this branch is gated.
+        try await requireBrowserRunnerAccess(setup: setup, caller: caller, req: req)
         guard let userID = caller.id, let assignmentID = assignment.id else {
             return BrowserRunnerSeedResponse(
                 seed: nil, personalizedInputs: nil, personalizedFiles: nil, language: nil, opponent: nil)

@@ -95,8 +95,9 @@ enum WardrobeUnlockStore {
 
     /// Stores every item `userID` has earned and not yet stored, and returns
     /// what is stored afterwards, so the page offers exactly what the save
-    /// route accepts. A failed write keeps the page: the next load grants
-    /// again, and the unique index stores an item once when two requests race.
+    /// route accepts. A failed write keeps the page, with a warning in the
+    /// log: the next load grants again. The unique index stores an item once
+    /// when two requests race, and that conflict is not logged (#2776).
     static func grantEarned(for userID: UUID, on db: any Database) async throws -> Set<WardrobeItem> {
         let stored = try await unlocked(for: userID, on: db)
         // A found item is never earned, so a student who has earned every
@@ -105,7 +106,14 @@ enum WardrobeUnlockStore {
         let missing = WardrobeItem.earned(by: try await progress(for: userID, on: db)).subtracting(stored)
         guard !missing.isEmpty else { return stored }
         for item in WardrobeItem.allCases where missing.contains(item) {
-            try? await APIWardrobeUnlock(userID: userID, item: item).save(on: db)
+            do {
+                try await APIWardrobeUnlock(userID: userID, item: item).createIgnoringConflict(on: db)
+            } catch {
+                // The user id goes in metadata only (compliance audit F-1).
+                db.logger.warning(
+                    "Wardrobe unlock of \(item.rawValue) not stored: \(error)",
+                    metadata: ["user_id": .string(userID.uuidString)])
+            }
         }
         return try await unlocked(for: userID, on: db)
     }

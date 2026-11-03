@@ -9,6 +9,21 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.800] - 2026-11-03
+
+### Security
+
+- **The browser-runner manifest and seed endpoints serve a student only a browser-graded setup (#2763 follow-up).** Before this change, a student enrolled in the course could read `/api/v1/browser-runner/testsetups/:id/manifest` and `/seed` for an open worker-graded assignment. The manifest names every test, with its tier. The seed answer carries the student's resolved personalization inputs, which can encode expected answers. Now a caller who is not course staff gets 403 on both unless the effective grading mode is `browser`, as for the zip download. A manifest that does not decode also refuses a student. Staff keep access. The seed of a setup with no assignment is still an empty answer.
+
+### Changed
+
+- **Bundle and claim logic moved out of the route files (#2774).** `CourseBundleService` now owns course bundle export and import. `WorkerJobClaim` owns the worker claim step, including the Postgres row lock. `JobOpponentSelection` owns the choice of opponents for a class activity. The routes only check the caller, parse the request and send the response. There is no change in behaviour.
+
+### Fixed
+
+- **Failed writes no longer leave wrong state behind in silence (#2776).** A server with no runner secret now fails at startup when the wordlist is missing or the generated secret cannot be saved; a saved secret still starts as before. A failed dataset write is no longer cached as current, so the next visit retries it. BrightSpace sync bookkeeping, sync log rows and the cached-id clear now log a failed save. A match row or a wardrobe unlock ignores only the unique-constraint conflict: a match row now throws on any other failure, and a wardrobe unlock logs it.
+
+
 ## [0.5.799] - 2026-11-03
 
 ### Fixed

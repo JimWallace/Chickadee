@@ -193,7 +193,7 @@ struct APIServerAppTests {
             to: URL(fileURLWithPath: wordlistPath), atomically: true, encoding: .utf8
         )
 
-        let resolved = resolveStartupWorkerSecret(
+        let resolved = try resolveStartupWorkerSecret(
             cliWorkerSecret: " cli-secret ",
             workerSecretFilePath: secretPath,
             workerSecretWordlistPath: wordlistPath
@@ -216,7 +216,7 @@ struct APIServerAppTests {
         try await withTestEnvironment([
             "RUNNER_SHARED_SECRET": "env-secret"
         ]) {
-            let resolved = resolveStartupWorkerSecret(
+            let resolved = try resolveStartupWorkerSecret(
                 cliWorkerSecret: nil,
                 workerSecretFilePath: secretPath,
                 workerSecretWordlistPath: wordlistPath
@@ -240,7 +240,7 @@ struct APIServerAppTests {
         try await withTestEnvironment([
             "RUNNER_SHARED_SECRET": nil
         ]) {
-            let resolved = resolveStartupWorkerSecret(
+            let resolved = try resolveStartupWorkerSecret(
                 cliWorkerSecret: nil,
                 workerSecretFilePath: secretPath,
                 workerSecretWordlistPath: wordlistPath
@@ -261,7 +261,7 @@ struct APIServerAppTests {
         try await withTestEnvironment([
             "RUNNER_SHARED_SECRET": nil
         ]) {
-            let resolved = resolveStartupWorkerSecret(
+            let resolved = try resolveStartupWorkerSecret(
                 cliWorkerSecret: nil,
                 workerSecretFilePath: secretPath,
                 workerSecretWordlistPath: wordlistPath
@@ -347,7 +347,7 @@ struct APIServerAppTests {
         try await withTestEnvironment([
             "RUNNER_SHARED_SECRET": "cli-arg-secret"
         ]) {
-            let resolved = resolveStartupWorkerSecret(
+            let resolved = try resolveStartupWorkerSecret(
                 cliWorkerSecret: "cli-arg-secret",
                 workerSecretFilePath: secretPath,
                 workerSecretWordlistPath: wordlistPath

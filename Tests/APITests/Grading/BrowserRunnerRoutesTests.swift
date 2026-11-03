@@ -411,7 +411,7 @@ import VaporTesting
     @Test func seedResponseIncludesPersonalizedInputs() async throws {
         try await withApp(app) { _ in
             let manifest = """
-                {"schemaVersion":1,"testSuites":[],"timeLimitSeconds":10,\
+                {"schemaVersion":1,"gradingMode":"browser","testSuites":[],"timeLimitSeconds":10,\
                 "globalExpressions":[{"name":"answer","expression":"7 * 6"}]}
                 """
             let setupID = try await insertSetup(manifest: manifest)
@@ -477,7 +477,7 @@ import VaporTesting
     /// nothing.
     @Test func seedResponseHasNoOpponentWithoutABot() async throws {
         try await withApp(app) { _ in
-            let manifest = TestManifests.emptySuite
+            let manifest = simpleManifest()
             let setupID = try await insertSetup(manifest: manifest)
             _ = try await insertAssignment(testSetupID: setupID, isOpen: true)
             let cookie = try await loginAsStudent("student1", on: app)
@@ -485,6 +485,7 @@ import VaporTesting
                 .GET, "/api/v1/browser-runner/testsetups/\(setupID)/seed",
                 beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
                 afterResponse: { res in
+                    #expect(res.status == .ok)
                     let json =
                         try JSONSerialization.jsonObject(
                             with: Data(res.body.readableBytesView)) as? [String: Any]
