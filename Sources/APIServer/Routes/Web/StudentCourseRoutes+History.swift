@@ -27,7 +27,7 @@ extension StudentCourseRoutes {
         let viewer = try req.auth.require(APIUser.self)
         let (course, student) = try await resolveCourseAndStudent(req: req)
         guard let courseID = course.id else {
-            throw WebAssignmentError.notFound(resource: "Course")
+            throw AppError.notFound(resource: "Course")
         }
         // Per-course staff (TA+) may view a student's submissions — replaces the
         // old global `isInstructor` guard, which would reject a per-course TA
@@ -391,7 +391,7 @@ extension StudentCourseRoutes {
         let (actor, student, assignment) = (action.actor, action.student, action.assignment)
         let assignmentIDRaw = assignment.publicID
         guard let setup = try await APITestSetup.find(assignment.testSetupID, on: req.db) else {
-            throw WebAssignmentError.notFound(resource: "Test setup")
+            throw AppError.notFound(resource: "Test setup")
         }
 
         let starter: Data
@@ -399,7 +399,7 @@ extension StudentCourseRoutes {
             starter = try await req.application.notebookBytesCache.notebookData(
                 for: NotebookSourceRef(setup))
         } catch {
-            throw WebAssignmentError.invalidParameter(
+            throw AppError.invalidParameter(
                 name: "setup",
                 reason: "Test setup has no starter notebook to reset to."
             )
@@ -434,7 +434,7 @@ extension StudentCourseRoutes {
         let assignmentIDRaw = action.assignment.publicID
         let studentUUID = action.studentID
         guard let assignmentUUID = action.assignment.id else {
-            throw WebAssignmentError.notFound(resource: "Assignment '\(assignmentIDRaw)'")
+            throw AppError.notFound(resource: "Assignment '\(assignmentIDRaw)'")
         }
 
         let body = try await req.decodeContent(ExtensionBody.self)
@@ -442,7 +442,7 @@ extension StudentCourseRoutes {
         guard !rawDate.isEmpty,
             let newDueAt = parseDueDate(rawDate)
         else {
-            throw WebAssignmentError.invalidParameter(
+            throw AppError.invalidParameter(
                 name: "extendedDueAt",
                 reason: "Provide a valid date and time in the form's input."
             )
@@ -496,7 +496,7 @@ extension StudentCourseRoutes {
         let assignmentIDRaw = action.assignment.publicID
         let studentUUID = action.studentID
         guard let assignmentUUID = action.assignment.id else {
-            throw WebAssignmentError.notFound(resource: "Assignment '\(assignmentIDRaw)'")
+            throw AppError.notFound(resource: "Assignment '\(assignmentIDRaw)'")
         }
 
         let existing = try await APIAssignmentExtension.query(on: req.db)
@@ -538,7 +538,7 @@ extension StudentCourseRoutes {
 
         let body = try await req.decodeContent(OverrideBody.self)
         guard let percent = body.overridePercent, (0...100).contains(percent) else {
-            throw WebAssignmentError.invalidParameter(
+            throw AppError.invalidParameter(
                 name: "overridePercent",
                 reason: "Provide a whole-number percent between 0 and 100."
             )
@@ -604,7 +604,7 @@ extension StudentCourseRoutes {
 
 extension StudentCourseRoutes {
     /// Resolves `(course, student)` from `:courseCode` + `:urlToken`.
-    /// Throws `WebAssignmentError.notFound` if either side is missing OR if
+    /// Throws `AppError.notFound` if either side is missing OR if
     /// the student is not currently enrolled in the course (matches the
     /// instructor dashboard's clickability rule).  Enrollment, not role,
     /// gates this — an instructor enrolled for testing should be reachable
@@ -617,12 +617,12 @@ extension StudentCourseRoutes {
         guard let courseCodeRaw = req.parameters.get("courseCode"),
             let urlTokenRaw = req.parameters.get("urlToken")
         else {
-            throw WebAssignmentError.notFound(resource: "Course or student")
+            throw AppError.notFound(resource: "Course or student")
         }
         let course = try await findActiveCourse(
             byKey: courseCodeRaw, viewer: req.auth.get(APIUser.self)?.id, on: req.db)
         guard let course, let courseUUID = course.id else {
-            throw WebAssignmentError.notFound(resource: "Course '\(courseCodeRaw)'")
+            throw AppError.notFound(resource: "Course '\(courseCodeRaw)'")
         }
         guard
             let student = try await APIUser.query(on: req.db)
@@ -630,7 +630,7 @@ extension StudentCourseRoutes {
                 .first(),
             let studentID = student.id
         else {
-            throw WebAssignmentError.notFound(resource: "Student")
+            throw AppError.notFound(resource: "Student")
         }
         let isEnrolled =
             try await APICourseEnrollment.query(on: req.db)
@@ -638,7 +638,7 @@ extension StudentCourseRoutes {
             .filter(\.$userID == studentID)
             .count() > 0
         guard isEnrolled else {
-            throw WebAssignmentError.notFound(resource: "Enrolled student")
+            throw AppError.notFound(resource: "Enrolled student")
         }
         return (course, student)
     }
@@ -692,7 +692,7 @@ extension StudentCourseRoutes {
         let (course, student) = try await resolveCourseAndStudent(req: req)
         let assignment = try await loadAssignment(req)
         guard assignment.courseID == course.id, let studentID = student.id else {
-            throw WebAssignmentError.notFound(resource: "Assignment '\(assignment.publicID)'")
+            throw AppError.notFound(resource: "Assignment '\(assignment.publicID)'")
         }
         // Per-course staff gate (TA+ in THIS course; admin bypass).
         try await requireCourseRole(

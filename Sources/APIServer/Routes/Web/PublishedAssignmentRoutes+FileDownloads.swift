@@ -42,11 +42,11 @@ extension PublishedAssignmentRoutes {
         let q = try req.query.decode(FileQuery.self)
         let fileName = (FilePath(q.name).lastComponent?.string ?? "")
         guard !fileName.isEmpty, fileName == q.name else {
-            throw WebAssignmentError.invalidParameter(name: "name", reason: "Invalid file name")
+            throw AppError.invalidParameter(name: "name", reason: "Invalid file name")
         }
 
         guard let data = await extractZipEntry(zipPath: setup.zipPath, entryName: fileName) else {
-            throw WebAssignmentError.notFound(resource: "File '\(fileName)' in setup")
+            throw AppError.notFound(resource: "File '\(fileName)' in setup")
         }
         return buildFileResponse(data: data, filename: fileName)
     }
@@ -110,7 +110,7 @@ func solutionFileDownloadResponse(
         return buildFileResponse(data: data, filename: entryName)
     }
 
-    throw WebAssignmentError.notFound(resource: "Solution notebook for this assignment")
+    throw AppError.notFound(resource: "Solution notebook for this assignment")
 }
 
 /// Streams a file-backed download with the shared content-type/disposition

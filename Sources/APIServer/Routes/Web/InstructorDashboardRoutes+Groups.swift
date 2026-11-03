@@ -227,12 +227,12 @@ extension InstructorDashboardRoutes {
         let form = try await req.decodeContent(MembershipForm.self)
         let set = try await requireWritableSet(form.setID, user: user, on: req)
         guard let userID = form.userID.flatMap(UUID.init(uuidString:)) else {
-            throw WebAssignmentError.invalidParameter(name: "userID", reason: "Invalid user id.")
+            throw AppError.invalidParameter(name: "userID", reason: "Invalid user id.")
         }
         let raw = form.groupID ?? ""
         let groupID = raw.isEmpty ? nil : UUID(uuidString: raw)
         guard raw.isEmpty || groupID != nil else {
-            throw WebAssignmentError.invalidParameter(name: "groupID", reason: "Invalid group id.")
+            throw AppError.invalidParameter(name: "groupID", reason: "Invalid group id.")
         }
         do {
             try await CourseGroupStore.setMembership(userID: userID, groupID: groupID, in: set, on: req.db)

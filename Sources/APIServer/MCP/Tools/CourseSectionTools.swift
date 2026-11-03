@@ -172,7 +172,8 @@ struct CreateCourseSectionTool: ContentTool {
         }
         let mode = input.defaultGradingMode ?? "browser"
         _ = try MCPEnumProse<GradingMode>.parse(mode, field: "defaultGradingMode")
-        let course = try await resolveCourseForWrite(code: input.courseCode, context: context, atLeast: .instructor)
+        let course = try await resolveCourseForWrite(
+            code: input.courseCode, context: context, atLeast: CourseRoleFloor.manageSections)
         let courseID = try course.requireID()
 
         let maxOrder =
@@ -248,7 +249,7 @@ struct SetAssignmentCourseSectionTool: ContentTool {
     func execute(_ input: Input, _ context: ToolContext) async throws -> Output {
         // Placing an assignment into a course section is instructor-level (#417).
         let assignment = try await context.authorizedAssignmentForWrite(
-            publicID: input.assignmentPublicID, atLeast: .instructor)
+            publicID: input.assignmentPublicID, atLeast: CourseRoleFloor.manageSections)
 
         // Resolve + validate the target section against this assignment's course.
         // A non-empty id that doesn't resolve is rejected rather than silently
@@ -357,7 +358,7 @@ struct RenameCourseSectionTool: ContentTool {
             throw MCPToolError.invalidArguments(detail: "Provide at least one of: name, defaultGradingMode.")
         }
         let section = try await resolveCourseSectionForEdit(
-            sectionID: input.courseSectionID, context: context, atLeast: .instructor)
+            sectionID: input.courseSectionID, context: context, atLeast: CourseRoleFloor.manageSections)
         if let newName {
             guard !newName.isEmpty else {
                 throw MCPToolError.invalidArguments(detail: "name must not be empty.")
@@ -442,7 +443,7 @@ struct DeleteCourseSectionTool: ContentTool {
         }
         // Deleting a course section is instructor-level structure (#417); archived blocked too.
         try await context.authorizeCourseWriteAccess(
-            section.courseID, atLeast: .instructor)
+            section.courseID, atLeast: CourseRoleFloor.manageSections)
         let ungrouped = try await APIAssignment.query(on: context.db)
             .filter(\.$sectionID == uuid)
             .count()

@@ -1,3 +1,4 @@
+// @ts-check
 // Public/generated-starter-tests-core.js
 //
 // The decisions behind the "Generate Starter Tests" panel

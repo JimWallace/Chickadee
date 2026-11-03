@@ -385,25 +385,25 @@ import VaporTesting
     }
 }
 
-/// `VanityURLRoutes.slugify` is a pure function, so these tests need no app.
+/// `assignmentSlug(fromTitle:)` is a pure function, so these tests need no app.
 @Suite struct VanityURLSlugifyTests {
     @Test func slugify_stripsSpaces() {
-        #expect(VanityURLRoutes.slugify("Lab 1") == "lab-1")
+        #expect(assignmentSlug(fromTitle: "Lab 1") == "lab-1")
     }
 
     @Test func slugify_stripsSpecialChars() {
-        #expect(VanityURLRoutes.slugify("Lab 1: Intro") == "lab-1-intro")
+        #expect(assignmentSlug(fromTitle: "Lab 1: Intro") == "lab-1-intro")
     }
 
     @Test func slugify_lowercases() {
-        #expect(VanityURLRoutes.slugify("Assignment2") == "assignment2")
+        #expect(assignmentSlug(fromTitle: "Assignment2") == "assignment2")
     }
 
     @Test func slugify_handlesHyphensAndSlashes() {
-        #expect(VanityURLRoutes.slugify("A2 - Sorting/Searching") == "a2-sorting-searching")
+        #expect(assignmentSlug(fromTitle: "A2 - Sorting/Searching") == "a2-sorting-searching")
     }
 
     @Test func slugify_emptyString() {
-        #expect(VanityURLRoutes.slugify("").isEmpty)
+        #expect(assignmentSlug(fromTitle: "").isEmpty)
     }
 }

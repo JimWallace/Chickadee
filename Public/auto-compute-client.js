@@ -1,3 +1,4 @@
+// @ts-check
 // Public/auto-compute-client.js
 //
 // Auto-compute for the pattern-family editor: run the solution on a case's
@@ -97,7 +98,7 @@
 
         function getWorker() {
             if (_worker) return _worker;
-            var version = (document.querySelector('meta[name="app-version"]') || {}).content || '';
+            var version = (/** @type {HTMLMetaElement | null} */ (document.querySelector('meta[name="app-version"]')) || /** @type {{ content?: string }} */ ({})).content || '';
             // WHICH worker comes from the language seed, not from this file.
             // It was hardcoded to the Python one, which is why auto-compute
             // could only ever be in-page for Python.

@@ -1,3 +1,4 @@
+// @ts-check
 // Public/grading-executors.js
 //
 // The browser runner's executors: the ScriptExecutor faces that RunnerCore's
@@ -85,7 +86,7 @@
         if (typeof override === 'function') return () => override(scriptPath);
         if (typeof Worker !== 'undefined') {
             return () => {
-                const meta = document.querySelector('meta[name="app-version"]');
+                const meta = /** @type {HTMLMetaElement | null} */ (document.querySelector('meta[name="app-version"]'));
                 const v = meta && meta.content ? '?v=' + encodeURIComponent(meta.content) : '';
                 return new Worker(scriptPath + v);
             };
