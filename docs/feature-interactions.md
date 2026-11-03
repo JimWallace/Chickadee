@@ -706,6 +706,9 @@ because line numbers go out of date.
     `.validation`. A `.starterValidation` run never sets `validationStatus`
     (`Sources/APIServer/CLAUDE.md`).
 - **Trap:** the web support-file delete did not validate or retest (#2472).
+- **Trap:** MCP `delete_support_file` ran the delete steps by hand and
+  skipped the `dependsOn` check that the web delete ran (#2771). Both doors
+  now call `deleteFileFromSetup` (`Services/SetupFileDeletion.swift`).
 
 ### The ranking metric and class activities
 
@@ -769,7 +772,9 @@ because line numbers go out of date.
     accepts only shared data (`DatasetSpec.isShared`). The rule is in
     `ManifestCoherence`. A new door that writes an activity or a dataset spec
     must call `ManifestCoherence.violation(introducedBy:in:)`
-    (`docs/datasets-course-library.md` §4.11). The bundle import, the
+    (`docs/datasets-course-library.md` §4.11). The web `PUT /datasets`
+    routes and MCP `set_dataset` call it through `applyDatasetsEdit`
+    (`Services/DatasetsChange.swift`), the one dataset-spec edit (#2771). The bundle import, the
     version restore, the clone and the draft publish copy a whole manifest
     and run no coherence rule, so an existing pair passes through them.
 
