@@ -108,8 +108,12 @@ struct CourseBundleRoutes: RouteCollection {
         let dateStr = iso8601String(Date()).prefix(10)
         let safeCourseCode = course.code.replacingOccurrences(of: "/", with: "-")
         let bundleName = "chickadee-bundle-\(safeCourseCode)-\(dateStr).zip"
+        // A UUID prefix keeps two same-day exports of one course apart.
+        // `zip -r` adds to an existing archive, so a shared path would merge
+        // them, and one stream's cleanup would delete the other's file
+        // (#2767). The download name stays `bundleName`.
         let bundleZipPath = FileManager.default.temporaryDirectory
-            .appendingPathComponent(bundleName).path
+            .appendingPathComponent("\(UUID().uuidString)-\(bundleName)").path
 
         // No defer here: the response body streams AFTER this handler
         // returns, so the temp zip must outlive the handler. streamTemporaryZip

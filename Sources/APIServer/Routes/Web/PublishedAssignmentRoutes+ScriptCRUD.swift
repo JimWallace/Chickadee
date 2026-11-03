@@ -28,7 +28,7 @@ extension PublishedAssignmentRoutes {
         let filename = try safeScriptFilename(from: req)
 
         guard let content = await readScriptFromZip(zipPath: setup.zipPath, filename: filename) else {
-            throw WebAssignmentError.notFound(resource: "File '\(filename)' in setup zip")
+            throw AppError.notFound(resource: "File '\(filename)' in setup zip")
         }
         var headers = HTTPHeaders()
         headers.contentType = .plainText
@@ -50,15 +50,15 @@ extension PublishedAssignmentRoutes {
 
         // Verify the file exists before writing.
         guard await listZipEntries(zipPath: setup.zipPath).contains(filename) else {
-            throw WebAssignmentError.notFound(resource: "File '\(filename)' in setup zip")
+            throw AppError.notFound(resource: "File '\(filename)' in setup zip")
         }
 
         if let refusal = libraryAttachmentRefusal(manifest: setup.decodedManifest(), filename: filename) {
-            throw WebAssignmentError.conflict(reason: refusal)
+            throw AppError.conflict(reason: refusal)
         }
 
         if let familyID = generatedByFamilyID(manifestJSON: setup.manifest, filename: filename) {
-            throw WebAssignmentError.conflict(
+            throw AppError.conflict(
                 reason:
                     "'\(filename)' is generated from pattern family '\(familyID)'. Edit the family rather than the generated script."
             )
@@ -86,7 +86,7 @@ extension PublishedAssignmentRoutes {
         do {
             try await updateScriptInZip(zipPath: setup.zipPath, filename: filename, content: inlinedContent)
         } catch ScriptZipError.zipFailed, ScriptZipError.extractFailed {
-            throw WebAssignmentError.internalFailure(reason: "Failed to update setup zip")
+            throw AppError.internalFailure(reason: "Failed to update setup zip")
         }
         // Re-grade and re-validate on the server; the page no longer has to
         // send a follow-up suite request (#2259).
@@ -200,10 +200,10 @@ extension PublishedAssignmentRoutes {
 /// the same sanitisation for its draft-scoped `delete` handler.
 func safeScriptFilename(from req: Request) throws -> String {
     guard let raw = req.parameters.get("filename"), !raw.isEmpty else {
-        throw WebAssignmentError.invalidParameter(name: "filename", reason: "Missing filename parameter")
+        throw AppError.invalidParameter(name: "filename", reason: "Missing filename parameter")
     }
     guard let cleaned = FilenameSafety.bareFilename(raw) else {
-        throw WebAssignmentError.invalidParameter(name: "filename", reason: "Invalid filename '\(raw)'")
+        throw AppError.invalidParameter(name: "filename", reason: "Invalid filename '\(raw)'")
     }
     return cleaned
 }

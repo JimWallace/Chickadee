@@ -89,6 +89,3 @@ private func staffFacingName(_ user: APIUser) -> String {
     let display = user.displayName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
     return display.isEmpty ? user.username : display
 }
-
-/// The name the type had before #2720. `RankedIdentitiesHandleTests` uses it.
-typealias RankedIdentities = AvatarIdentity

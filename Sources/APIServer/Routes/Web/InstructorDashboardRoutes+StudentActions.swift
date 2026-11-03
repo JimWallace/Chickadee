@@ -27,7 +27,7 @@ extension InstructorDashboardRoutes {
             // hold a `.student` enrollment in this assignment's course.
             try await courseRole(of: studentID, inCourse: assignment.courseID, db: req.db) == .student
         else {
-            throw WebAssignmentError.notFound(resource: "Assignment or student")
+            throw AppError.notFound(resource: "Assignment or student")
         }
 
         let submissions = try await APISubmission.query(on: req.db)
@@ -81,14 +81,14 @@ extension InstructorDashboardRoutes {
             let submissionID = req.parameters.get("submissionID"),
             let submission = try await APISubmission.find(submissionID, on: req.db)
         else {
-            throw WebAssignmentError.notFound(resource: "Submission")
+            throw AppError.notFound(resource: "Submission")
         }
 
         guard submission.testSetupID == assignment.testSetupID else {
-            throw WebAssignmentError.notFound(resource: "Submission")
+            throw AppError.notFound(resource: "Submission")
         }
         guard submission.kind == APISubmission.Kind.student else {
-            throw WebAssignmentError.invalidParameter(
+            throw AppError.invalidParameter(
                 name: "submissionID", reason: "Only student submissions can be re-tested.")
         }
 
@@ -171,10 +171,10 @@ extension InstructorDashboardRoutes {
         guard let studentIDRaw = req.parameters.get("studentID"),
             let studentID = UUID(uuidString: studentIDRaw)
         else {
-            throw WebAssignmentError.notFound(resource: "Student")
+            throw AppError.notFound(resource: "Student")
         }
         guard let setup = try await APITestSetup.find(assignment.testSetupID, on: req.db) else {
-            throw WebAssignmentError.notFound(resource: "Test setup")
+            throw AppError.notFound(resource: "Test setup")
         }
 
         let isEnrolled =
@@ -183,14 +183,14 @@ extension InstructorDashboardRoutes {
             .filter(\.$userID == studentID)
             .count() > 0
         guard isEnrolled else {
-            throw WebAssignmentError.notFound(resource: "Enrolled student '\(studentIDRaw)'")
+            throw AppError.notFound(resource: "Enrolled student '\(studentIDRaw)'")
         }
 
         let starter: Data
         do {
             starter = try await notebookData(for: setup)
         } catch {
-            throw WebAssignmentError.invalidParameter(
+            throw AppError.invalidParameter(
                 name: "setup",
                 reason: "Test setup has no starter notebook to reset to."
             )
@@ -233,12 +233,12 @@ extension InstructorDashboardRoutes {
         let assignmentIDRaw = assignment.publicID
         let student = try await resolveEnrolledStudent(req: req, assignment: assignment)
         guard let studentUUID = student.id else {
-            throw WebAssignmentError.notFound(resource: "Student")
+            throw AppError.notFound(resource: "Student")
         }
 
         let body = try await req.decodeContent(OverrideBody.self)
         guard let percent = body.overridePercent, (0...100).contains(percent) else {
-            throw WebAssignmentError.invalidParameter(
+            throw AppError.invalidParameter(
                 name: "overridePercent",
                 reason: "Provide a whole-number percent between 0 and 100."
             )
@@ -279,7 +279,7 @@ extension InstructorDashboardRoutes {
         let assignmentIDRaw = assignment.publicID
         let student = try await resolveEnrolledStudent(req: req, assignment: assignment)
         guard let studentUUID = student.id else {
-            throw WebAssignmentError.notFound(resource: "Student")
+            throw AppError.notFound(resource: "Student")
         }
 
         if try await clearGradeOverride(
@@ -313,7 +313,7 @@ extension InstructorDashboardRoutes {
         let assignmentIDRaw = assignment.publicID
         let student = try await resolveEnrolledStudent(req: req, assignment: assignment)
         guard let studentUUID = student.id else {
-            throw WebAssignmentError.notFound(resource: "Student")
+            throw AppError.notFound(resource: "Student")
         }
 
         if try await SecretRevealStore.regrantToken(
@@ -346,7 +346,7 @@ extension InstructorDashboardRoutes {
             let studentID = UUID(uuidString: studentIDRaw),
             let student = try await APIUser.find(studentID, on: req.db)
         else {
-            throw WebAssignmentError.notFound(resource: "Student")
+            throw AppError.notFound(resource: "Student")
         }
         // Student-ness is per-course now (#417 Slice G2): require a `.student`
         // enrollment in the assignment's course. This subsumes the old
@@ -355,7 +355,7 @@ extension InstructorDashboardRoutes {
         guard
             try await courseRole(of: studentID, inCourse: assignment.courseID, db: req.db) == .student
         else {
-            throw WebAssignmentError.notFound(resource: "Enrolled student")
+            throw AppError.notFound(resource: "Enrolled student")
         }
         return student
     }

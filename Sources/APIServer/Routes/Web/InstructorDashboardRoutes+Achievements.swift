@@ -68,7 +68,7 @@ extension InstructorDashboardRoutes {
     func getCourseAchievements(req: Request) async throws -> PublishedAssignmentRoutes.AchievementsResponse {
         let user = try req.auth.require(APIUser.self)
         guard let course = try await activeCourse(req: req, user: user) else {
-            throw WebAssignmentError.noActiveCourse(action: "reading course achievements")
+            throw AppError.noActiveCourse(action: "reading course achievements")
         }
         return .init(achievements: AchievementsEditing.rows(fromCourse: course))
     }

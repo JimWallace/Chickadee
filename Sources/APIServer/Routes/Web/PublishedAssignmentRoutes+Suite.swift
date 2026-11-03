@@ -45,7 +45,7 @@ extension PublishedAssignmentRoutes {
 
         let body: SuitePayload
         do { body = try await req.decodeContent(SuitePayload.self) } catch {
-            throw WebAssignmentError.invalidParameter(
+            throw AppError.invalidParameter(
                 name: "request body",
                 reason: "Invalid suite payload: \(error.localizedDescription)")
         }
@@ -81,12 +81,12 @@ extension PublishedAssignmentRoutes {
 
         let body: TimeLimitPayload
         do { body = try await req.decodeContent(TimeLimitPayload.self) } catch {
-            throw WebAssignmentError.invalidParameter(
+            throw AppError.invalidParameter(
                 name: "request body",
                 reason: "Invalid time-limit payload: \(error.localizedDescription)")
         }
         guard mcpTimeLimitRange.contains(body.seconds) else {
-            throw WebAssignmentError.invalidParameter(
+            throw AppError.invalidParameter(
                 name: "seconds",
                 reason:
                     "seconds must be an integer between \(mcpTimeLimitRange.lowerBound) and "

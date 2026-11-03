@@ -116,8 +116,9 @@ struct GitHubSubmissionRoutes: RouteCollection {
             let access = try await Self.access(userID: userID, setup: setup, state: &ignored, req: req)
             let repository = try await access.submittableRepository(id: body.repositoryID, req: req)
             let tarball = try await access.tarball(of: repository, sha: sha, req: req)
-            let subID = freshShortID(prefix: "sub")
-            let zipPath = req.application.submissionsDirectory + "\(subID).zip"
+            let intake = SubmissionIntake(req: req)
+            let subID = intake.submissionID
+            let zipPath = intake.path(fileExtension: "zip")
             do {
                 try await GitHubTarball.writeZip(fromGzippedTar: tarball, to: zipPath)
             } catch {
@@ -128,14 +129,15 @@ struct GitHubSubmissionRoutes: RouteCollection {
                 }
                 throw error
             }
-            let submission = APISubmission(
-                id: subID, testSetupID: setupID, zipPath: zipPath, attemptNumber: 0,
-                userID: userID, kind: APISubmission.Kind.student)
-            submission.sourceKind = SubmissionSource.github.rawValue
-            submission.sourceRepoID = repository.id
-            submission.sourceRepoName = repository.fullName
-            submission.sourceCommit = sha
-            try await recordStudentSubmission(submission, setup: setup, user: user, req: req)
+            try await intake.accept(
+                setup: setup, owner: user, artifact: .stored(path: zipPath),
+                filename: nil, status: .pending
+            ) { submission in
+                submission.sourceKind = SubmissionSource.github.rawValue
+                submission.sourceRepoID = repository.id
+                submission.sourceRepoName = repository.fullName
+                submission.sourceCommit = sha
+            }
             req.logger.info(
                 "GitHub submission saved",
                 metadata: ["submission": "\(subID)", "repository_id": "\(repository.id)", "commit": "\(sha)"])

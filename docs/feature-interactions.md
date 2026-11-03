@@ -659,6 +659,31 @@ because line numbers go out of date.
     (`docs/grading-integrity.md`). A feature that trusts a value in a result
     has the same risk.
 
+### A new student submission: `SubmissionIntake`
+
+- **Writers:** seven doors. The upload form, a GitHub commit, the two REST
+  endpoints (`SubmissionRoutes`, course staff only), and the three notebook
+  endpoints (`browser-result`, `runner-submit`, `browser-failover`).
+- **Readers:** the attempt-number readers (First-Try-Perfect, the
+  prior-attempt delta), Pathfinder (`awardFirstToSubmitRecords`), the
+  operational diagnostics and job metrics, and the runner claim queue.
+- **Rules:**
+  - `SubmissionIntake.accept` is the one intake chokepoint (#2768). Each door
+    keeps its own checks (enrollment, `requireOpenStudentAssignment`, the
+    grading mode). A new student door must run `requireOpenStudentAssignment`
+    with `.submission` itself; nothing forces it. The intake owns the file write, the row, the attempt number
+    and every effect of a saved row. Put a new effect of a new submission
+    there, not in one door.
+  - A `pending` row records the "accepted" and "enqueued" diagnostics and
+    wakes the local runner. A `complete` row (a browser result) does neither,
+    because no runner grades it.
+  - Pathfinder goes to the owner of a `pending` row. A `complete` row's door
+    (`browser-result`) awards it after it stores the result
+    (`BrowserResultSideEffectOrderTests`). The REST doors save no owner, so
+    they award nothing and count attempts per setup.
+  - Every door that takes a notebook merges it with
+    `mergedWithInstructorNotebook`, on the NIO thread pool.
+
 ### Content versions and restore
 
 - **Rules:**
@@ -830,8 +855,9 @@ because line numbers go out of date.
     of the flag must do the same, or turning it on again brings back an
     earlier lab's code.
   - A clone and a bundle import clear the flag (see Cloning).
-- **Gap:** `POST /api/v1/submissions` checks enrollment only, so it skips
-  this gate, as it skips the window.
+- `POST /api/v1/submissions` checks enrollment only, so it skips this gate,
+  as it skips the window. That route is course staff only, and staff are
+  never gated.
 
 ### The client address: `clientIPAddress` and `Request.clientNetwork`
 
@@ -946,14 +972,20 @@ because line numbers go out of date.
 - **Resolvers:**
   - The web: `findActiveCourse(byKey:viewer:on:)`.
   - MCP: `resolveMCPCourse`.
-  - Uniqueness: `activeCourseCodeIsTaken` and `courseKeysCollide`. Create,
-    edit, import and un-archive call them.
+  - Uniqueness: `courseCodeConflict`, which checks `ReservedCourseKeys` and
+    then `activeCourseCodeIsTaken` (with `courseKeysCollide`). Create, edit,
+    clone, new term, import, un-archive and the `-COPY` generator call it. A
+    new door calls it too, never one check alone.
 - **Rules** (`docs/course-terms.md`):
   - Do not add a lookup by code only.
   - On the web, the viewer's own course wins. Then the newest term wins.
   - MCP refuses a write through a code that names more than one course.
   - Every MCP result names `courseKey` and `courseTerm`.
-- **Traps:** key collisions (#2227). Un-archive and the unique index (#1777).
+- **Traps:** key collisions (#2227). Un-archive and the unique index (#1777). A code equal to the first
+  segment of any fixed route (#2666): the router prefers a constant segment and
+  never backtracks, so the course loses its vanity links. The reserved set is
+  read from `app.routes.all`, and the `courseKeyShadowed` health rule reports
+  an active course that holds one.
 
 ### Cloning: `CourseCloneService.clone` and `cloneAssignment`
 
@@ -1108,6 +1140,25 @@ because line numbers go out of date.
   student's login reaches the organization only in the repository name
   (`docs/github-submissions.md`, "What reaches GitHub").
 
+### The shared outbound HTTP client: `app.http.client.configuration`
+
+- **Owner:** `OutboundHTTPClientSetup.apply`, called once from `configure`
+  before the first `app.client` use (#2765). It sets a 30 s connect timeout,
+  a 60 s read timeout and the optional outbound proxy.
+- **Readers:** every `app.client` and `req.client` call, and
+  `app.http.client.shared`. These include the SSO token exchange, OIDC
+  discovery and JWKS, the LTI key set and AGS calls, BrightSpace,
+  `GitHubTransport`, the GitHub tarball download, the alert webhook and the UW
+  dates feed.
+- **Rules:**
+  - A new outbound call uses the shared client and gets the timeout. A call
+    that needs a shorter limit sets `ClientRequest.timeout` itself.
+  - A source that builds its own `HTTPClient` sets its own read timeout and
+    is named in `OutboundHTTPClientSetupTests`.
+  - A longer read timeout cannot be set per call. The read timeout equals the
+    GitHub tarball download's 60 s budget, so that download cannot hit it
+    first.
+
 ### Course archival: `isArchived`
 
 - **Readers:**
@@ -1182,6 +1233,7 @@ not repeat them. But a change that makes one of them weaker is a finding.
 | Rows that course deletion does not remove | `DeleteCourseCoverageTests` |
 | A reorder with its own role floor or rules | `SortOrderRenumberingTests`, `ReorderSurfaceRulesTests`, `SectionItemFullListTests` |
 | A notebook worker that is not in the isolation list | `IsolatedWorkerScriptDriftTests` |
+| An outbound HTTP call that bypasses the shared client timeout | `OutboundHTTPClientSetupTests` |
 
 ---
 
@@ -1192,14 +1244,7 @@ rules above. They are listed here so that the review agent does not report
 them on every pull request. Each one has an issue that holds its decision.
 When an issue is closed, remove its item and correct the section above.
 
-1. **Fixed routes and vanity URLs (#2666).** The vanity routes
-   (`VanityURLRoutes.swift`, `/:courseCode/:assignmentSlug`) are registered
-   last, so a fixed route with two segments wins. `/data/:courseKey` and
-   `/submissions/:submissionID` have that shape. `StudentDataRoutes.swift`
-   chose its path so that an assignment slug `data` still works. But a course
-   with the code `data` or `submissions` loses its vanity URLs. No list of
-   reserved course codes exists.
-2. **Course achievements in a clone, a bundle and after a deletion
+1. **Course achievements in a clone, a bundle and after a deletion
    (`docs/achievement-rewards.md`, S8).** `CourseCloneService.clone` and the
    course bundle do not carry `courses.achievements` yet, so a new term
    starts with none. A course achievement names course sections and
