@@ -9,6 +9,33 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.784] - 2026-11-03
+
+### Changed
+
+- **CI skips the Swift suite for changes that cannot affect it (#2781).** A new `changes` job in `swift-tests.yml` runs `scripts/ci-swift-suite-scope.sh`. A pull request that changes only Markdown that no Swift file names (`docs/`, `changelog.d/`, the root changelogs) skips the build and the four Swift test lanes. The release commit runs the build job alone, to save the build cache for the new tree. `swift-tests-gate` still reports on every pull request, and it fails closed: a skip passes only when the scope allows it. Each push to `main` now has its own concurrency group, so a release commit no longer cancels the run of its merge commit, and the concurrency comment now says what GitHub does.
+
+
+## [0.5.783] - 2026-11-03
+
+### Fixed
+
+- **A course code that matches a server path is refused (#2666).** The router
+  tries a fixed path segment before a parameter and never backtracks, so a
+  course coded `data`, `lab`, `login` or any other first segment of a fixed
+  route lost every vanity link to a 404 or the wrong page. Course create, edit,
+  clone, new term, bundle import and un-archive now refuse such a code. The
+  reserved set is read from the registered routes, so a new route reserves its
+  own segment. A new health rule, `courseKeyShadowed`, reports any active
+  course that already holds one, or that a new route comes to shadow.
+
+### Changed
+
+- **The vanity routes are one table.** The five copied redirect handlers in
+  `VanityURLRoutes` are one loop over the suffixes, and the enrollment check
+  uses the shared `userIsEnrolled`.
+
+
 ## [0.5.782] - 2026-11-03
 
 ### Added
