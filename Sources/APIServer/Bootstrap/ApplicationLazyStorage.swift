@@ -1,4 +1,4 @@
-// APIServer/Helpers/ApplicationLazyStorage.swift
+// APIServer/Bootstrap/ApplicationLazyStorage.swift
 //
 // The lazily-created process-wide singleton every store, cache and sweep
 // keeps on `Application.storage`. Each accessor used to spell the same

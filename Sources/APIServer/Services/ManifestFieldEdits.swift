@@ -1,4 +1,4 @@
-// APIServer/Helpers/ManifestFieldEdits.swift
+// APIServer/Services/ManifestFieldEdits.swift
 //
 // Single-field manifest edits shared across surfaces (#1121): the MCP tools
 // (`set_grading_mode`, `set_time_limit`, `author_script`,

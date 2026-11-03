@@ -1,0 +1,10 @@
+# Services/ holds database and domain logic (#2775). A Services file that
+# names the Request type is the HTTP edge, belongs in Helpers/, and must fail
+# the guard.
+guard="scripts/check-utilities-imports.sh"
+files="Sources/APIServer/Services/DiskUsage.swift"
+description="a Services file that extends Request"
+expect="names the Request type"
+apply() {
+    printf '\nextension Request {}\n' >> Sources/APIServer/Services/DiskUsage.swift
+}

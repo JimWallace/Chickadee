@@ -7,7 +7,7 @@
 //   - AssignmentDraftHelpers.swift (now in Helpers/, #2142)
 //   - AssignmentRequirementHelpers.swift
 //   - AssignmentSlugHelpers.swift (now in Helpers/, #2143)
-//   - ManifestFileHelpers.swift (now in Helpers/, #1726)
+//   - ManifestJSON.swift (now in Services/, #1726, #2775)
 //   - MultipartHelpers.swift
 //   - NotebookScaffoldHelpers.swift (now in Helpers/, #2142)
 //   - RunnerValidationHelpers.swift (now Services/RunnerValidationService.swift, #2140)

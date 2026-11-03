@@ -1,4 +1,4 @@
-// APIServer/Helpers/BuiltInAchievements.swift
+// APIServer/Services/BuiltInAchievements.swift
 //
 // The canonical definition of Chickadee's built-in awards, expressed in the
 // composable `Achievement` model.  These used to live as hardcoded

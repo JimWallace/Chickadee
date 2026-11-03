@@ -231,7 +231,7 @@ because line numbers go out of date.
 
 - **Callers:**
   - `ResultIngestEffects`.
-  - `GradeOverrideHelpers`.
+  - `GradeOverrides`.
   - The class-goal freeze in `AchievementEvaluationService`.
 - **Rules:**
   - A new trigger calls `requestGradePush` one time. The function sends to

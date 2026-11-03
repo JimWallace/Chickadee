@@ -1,4 +1,4 @@
-// APIServer/Helpers/ManifestFileHelpers.swift
+// APIServer/Services/ManifestJSON.swift
 //
 // Read, mutate, and serialize `TestProperties` manifest JSON: dependent
 // lookups, generated-by checks, add/remove script entries, the worker-

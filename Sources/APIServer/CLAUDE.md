@@ -6,6 +6,27 @@ views have their own files: `MCP/CLAUDE.md` and `Views/CLAUDE.md`.
 
 ---
 
+## Where Shared Code Goes
+
+`Helpers/`, `Services/` and `Utilities/` sit below `Routes/`
+(`scripts/check-layering.sh`). Each holds one kind of code
+(#1730, #2144, #2775):
+
+- **`Helpers/` holds the HTTP edge.** Its code takes, extends or builds a
+  Vapor request-layer type: `Request`, `Response`, `ClientResponse`, an HTTP
+  body (`Content`, a multipart `File`) or an `AbortError`.
+- **`Services/` holds database and domain logic.** It takes a database or a
+  `ServiceContext`, never a `Request`. No file there has a `*Helpers` name.
+- **`Utilities/` holds pure code.** No file there imports Vapor or a database
+  module.
+- **`Bootstrap/`** holds app setup and `Application` storage.
+
+When one file mixes the two, split it: the lookup goes to `Services/`, and
+the `Request` wrapper goes to `Helpers/` (for example
+`Services/CourseAccess.swift` and `Helpers/Request+CourseRoleMemo.swift`).
+`scripts/check-utilities-imports.sh` enforces all three rules in
+`format-lint`, with fixtures in `scripts/check-guards.sh`.
+
 ## REST API
 
 Base path: `/api/v1`
@@ -80,7 +101,7 @@ Per-course roles on the enrollment row: `student` < `ta` < `instructor`
   acting for them stay enrollment-scoped)
 
 Enforcement chokepoints: `requireCourseRole(atLeast:)` / `evaluateCourseWrite`
-in `CourseAccessHelpers.swift` (web + MCP share the policy); the `/instructor`
+in `CourseAccess.swift` (web + MCP share the policy); the `/instructor`
 area gate is `ActiveCourseStaffMiddleware` (staff in the *active* course), with
 per-resource gates on every parameterized route. See `docs/multi-course-roles.md`.
 

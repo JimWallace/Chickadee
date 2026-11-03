@@ -26,10 +26,6 @@ struct VisibilityAudit {
     /// (a Save or a content edit closes an open assignment).
     var reason: String?
 
-    static func web(_ req: Request, reason: String? = nil) -> VisibilityAudit {
-        VisibilityAudit(context: req, origin: .web, reason: reason)
-    }
-
     static func mcp(_ context: ToolContext, reason: String? = nil) -> VisibilityAudit {
         VisibilityAudit(context: context.request, origin: .mcp, reason: reason)
     }

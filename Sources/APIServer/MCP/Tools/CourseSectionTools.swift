@@ -566,7 +566,7 @@ func resolveCourseSectionForEdit(
 }
 
 // `currentManifestGradingMode` / `setManifestGradingMode` /
-// `setManifestGraderOnly` moved to Helpers/ManifestFieldEdits.swift (#1121):
+// `setManifestGraderOnly` moved to Services/ManifestFieldEdits.swift (#1121):
 // they are cross-surface utilities (also used by AuthorScriptTool,
 // SetGradingModeTool, and the web CourseAdminRoutes+Sections), not
 // course-section concerns.

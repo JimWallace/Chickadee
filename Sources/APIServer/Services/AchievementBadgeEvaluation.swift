@@ -1,4 +1,4 @@
-// APIServer/Helpers/AchievementBadgeEvaluation.swift
+// APIServer/Services/AchievementBadgeEvaluation.swift
 //
 // Per-student evaluation of the instructor-authorable individual badges — the
 // ones decided purely by grade and/or a test passing (`isAuthorableIndividual

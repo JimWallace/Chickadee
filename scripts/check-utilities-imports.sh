@@ -8,11 +8,13 @@ set -euo pipefail
 # PostgresKit). Code that needs one lives in `Bootstrap/` (app setup),
 # `Helpers/` (request-aware helpers) or `Services/` (models and a database).
 #
-# The boundary is checked from both sides (#2144). A file under `Helpers/`
-# is there because it works with a request, a database driver type or a
-# model, so it must import Vapor or Fluent, or name a model type
-# (`API...`). A Helpers file that does neither is pure and belongs in
-# `Utilities/`. Seven such files sat in Helpers/ before this check existed.
+# The boundary is checked from both sides (#2144, #2775). A file under
+# `Helpers/` is there because it is the HTTP edge, so its code must name a
+# request-layer type (the list is below). A Helpers file that names none is
+# database or domain code (it goes to `Services/`) or pure (`Utilities/`).
+# A file under `Services/` may not name `Request` and may not have a Helpers
+# file name: before #2775, 22 Helpers files never took a request, and three
+# Services files were named `*Helpers`.
 # Before this guard the boundary leaked both ways: the migration registry and
 # a session driver sat in Utilities/, and pure scanners sat in Services/.
 # The authoring validators used to be allowed Vapor for `Abort`; they throw
@@ -43,37 +45,95 @@ if [ -n "$violations" ]; then
   exit 1
 fi
 
-helpers_dir="Sources/APIServer/Helpers"
-
-# An import of a framework module, with the same attribute and declaration
-# kind allowances as above.
-framework='^[[:space:]]*(@[A-Za-z_]+[[:space:]]+)*import[[:space:]]+((struct|class|enum|protocol|func|var|let|typealias)[[:space:]]+)?(Vapor|Fluent[A-Za-z]*)([^A-Za-z0-9_]|$)'
-# A Fluent model type name: `APIUser`, `APITestSetup`, ... The module's own
-# `APIServer` (in every file header) and `APIServerApp` are not models.
-model='\bAPI[A-Z][A-Za-z0-9]*\b'
-
-names_a_model() {
-  grep -oE "$model" "$1" | grep -vE '^APIServer' | grep -q .
+# Code text with comments and string literals removed, including the
+# multi-line literals that hold generated Python and R, so prose about a type
+# never counts as a use of it.
+code_text() {
+  awk '
+    FNR == 1 { in_multiline = 0 }
+    {
+      line = $0
+      quotes = gsub(/"""/, "&", line)
+      if (in_multiline) {
+        if (quotes % 2 == 1) in_multiline = 0
+        next
+      }
+      if (quotes % 2 == 1) {
+        in_multiline = 1
+        line = substr(line, 1, index(line, "\"\"\"") - 1)
+      }
+      gsub(/"([^"\\]|\\.)*"/, "\"\"", line)
+      sub(/\/\/.*$/, "", line)
+      print line
+    }
+  ' "$1"
 }
 
-pure=()
+helpers_dir="Sources/APIServer/Helpers"
+services_dir="Sources/APIServer/Services"
+
+# The HTTP edge (#2775). A file belongs in Helpers/ when its code names one of
+# these Vapor types: it reads a `Request`, builds a `Response`, reads a
+# `ClientResponse`, decodes an HTTP body (`Content`, a multipart `File`) or
+# maps an error to an HTTP status (`AbortError`). Database and domain logic
+# that needs none of them goes to Services/; pure code goes to Utilities/.
+http_edge='(^|[^A-Za-z0-9_.])(Request|Response|ClientResponse|Content|File|AbortError)([^A-Za-z0-9_]|$)'
+# The request type alone: Services/ may not take or extend one.
+request_type='(^|[^A-Za-z0-9_.])Request([^A-Za-z0-9_]|$)'
+
+not_edge=()
 # Recursive, as above (#2495).
 while IFS= read -r file; do
-  if grep -qE "$framework" "$file"; then continue; fi
-  if names_a_model "$file"; then continue; fi
-  pure+=("$file")
+  # Not `grep -q`: it closes the pipe early, and under pipefail the
+  # SIGPIPE to awk would read as no match.
+  if code_text "$file" | grep -E "$http_edge" >/dev/null; then continue; fi
+  not_edge+=("$file")
 done < <(find "$helpers_dir" -name '*.swift' | sort)
 
-if [ "${#pure[@]}" -gt 0 ]; then
-  echo "ERROR: a file under $helpers_dir imports neither Vapor nor Fluent and names no model."
+if [ "${#not_edge[@]}" -gt 0 ]; then
+  echo "ERROR: a file under $helpers_dir names no request-layer type."
   echo
-  for file in "${pure[@]}"; do
+  for file in "${not_edge[@]}"; do
     echo "  $file"
   done
   echo
-  echo "Helpers/ holds code that works with a request, a database driver type"
-  echo "or a model. A file that uses none of them is pure: move it to Utilities/."
+  echo "Helpers/ holds the HTTP edge: code that names Request, Response,"
+  echo "ClientResponse, Content, File or AbortError. Move database and domain"
+  echo "code to Services/, and pure code to Utilities/."
   exit 1
 fi
 
-echo "check-utilities-imports: OK (no Vapor or database import under $dir; every Helpers/ file needs Vapor, Fluent or a model)"
+takes_request=()
+named_helpers=()
+while IFS= read -r file; do
+  case "$file" in
+    *Helpers.swift) named_helpers+=("$file") ;;
+  esac
+  if code_text "$file" | grep -E "$request_type" >/dev/null; then takes_request+=("$file"); fi
+done < <(find "$services_dir" -name '*.swift' | sort)
+
+if [ "${#takes_request[@]}" -gt 0 ]; then
+  echo "ERROR: a file under $services_dir names the Request type."
+  echo
+  for file in "${takes_request[@]}"; do
+    echo "  $file"
+  done
+  echo
+  echo "Services/ holds database and domain logic, called with a database or a"
+  echo "ServiceContext. Code that reads a Request belongs in Helpers/."
+  exit 1
+fi
+
+if [ "${#named_helpers[@]}" -gt 0 ]; then
+  echo "ERROR: a file under $services_dir has a Helpers name."
+  echo
+  for file in "${named_helpers[@]}"; do
+    echo "  $file"
+  done
+  echo
+  echo "A Helpers file name says the file belongs in Helpers/. Name the file"
+  echo "for what it holds."
+  exit 1
+fi
+
+echo "check-utilities-imports: OK (Utilities/ imports no Vapor or database module; every Helpers/ file names a request-layer type; no Services/ file names Request or has a Helpers name)"

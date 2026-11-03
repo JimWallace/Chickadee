@@ -140,18 +140,21 @@ type declared only under `Routes/`. `LTI/` is not scanned, because it holds its
 own routes. The rule is absolute: the shrink-only list of older uses reached
 zero in #2143 and is gone (#1726).
 
-Each of those directories has one job, so a file goes where its imports say:
+Each of those directories has one job, so a file goes where its code says:
 
 - `Utilities/` holds pure code: no request and no database.
   `scripts/check-utilities-imports.sh` fails when a file there imports Vapor or
   a database module (#1730). The authoring validators throw
   `AuthoringValidationError`, so no file there imports Vapor (#1929).
-- `Helpers/` holds code that works with a `Request` or a database driver type.
-  The same script fails when a file there imports none of Vapor and Fluent
-  and names no model, because such a file is pure (#2144).
-- `Services/` holds code over models, a database and the application.
+- `Helpers/` holds the HTTP edge: code that names `Request`, `Response`,
+  `ClientResponse`, `Content`, a multipart `File` or `AbortError`. The same
+  script fails when a file there names none of them (#2144, #2775).
+- `Services/` holds database and domain logic, called with a database or a
+  `ServiceContext`. The same script fails when a file there names `Request`
+  or has a `*Helpers` file name (#2775).
 - `Bootstrap/` holds app setup: the database configuration and the migration
-  registry, the session driver, and the legacy migration-namespace guard.
+  registry, the `Application` storage accessors, the session driver, and the
+  legacy migration-namespace guard.
 
 ---
 
@@ -278,7 +281,7 @@ Roles are two-level (#417): a deployment role plus a per-course role.
   deadlines, archival, or staff.
 
 Enforcement chokepoints: `requireCourseRole(atLeast:)` / `evaluateCourseWrite`
-in `Sources/APIServer/Helpers/CourseAccessHelpers.swift` (the web UI and the
+in `Sources/APIServer/Services/CourseAccess.swift` (the web UI and the
 MCP tools share this policy); the `/instructor` area gate is
 `ActiveCourseStaffMiddleware` (staff in the *active* course), with
 per-resource gates on every parameterized route. `RoleMiddleware` survives
