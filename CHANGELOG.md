@@ -9,6 +9,13 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.798] - 2026-11-03
+
+### Fixed
+
+- **Course content items and sections share one service (#2769).** The web routes and the MCP tools now call `CourseContentService` and `CourseSectionService` for the field rules and the writes, with typed errors. The web content-item form now refuses an unknown kind, as MCP does. Before, the web stored it as a link with no error. The web checks the section grading mode against `GradingMode`, not against string literals.
+
+
 ## [0.5.797] - 2026-11-03
 
 ### Changed
