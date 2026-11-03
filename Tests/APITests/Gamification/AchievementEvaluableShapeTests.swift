@@ -32,11 +32,11 @@ import Testing
 
     @Test func aRecordWithoutADimensionIsRefused() {
         let row = AchievementRow(name: "Fastest", scope: "record")
-        #expect(throws: WebAssignmentError.self) {
+        #expect(throws: AppError.self) {
             try AchievementsEditing.achievement(from: row)
         }
         let blank = AchievementRow(name: "Fastest", scope: "record", recordDimension: "")
-        #expect(throws: WebAssignmentError.self) {
+        #expect(throws: AppError.self) {
             try AchievementsEditing.achievement(from: blank)
         }
     }
@@ -56,7 +56,7 @@ import Testing
         (.classWide, .title),
     ])
     func anUnevaluatedScopeAndRewardPairIsRefused(scope: AchievementScope, reward: RewardType) {
-        #expect(throws: WebAssignmentError.self) {
+        #expect(throws: AppError.self) {
             try AchievementsEditing.validate([achievement(scope: scope, reward: reward)], againstManifest: manifest)
         }
     }
@@ -76,7 +76,7 @@ import Testing
         let scoped = AchievementCondition(
             signal: .grade, comparator: .atLeast, value: 50,
             target: AchievementTarget(kind: .section, ref: "s1"))
-        #expect(throws: WebAssignmentError.self) {
+        #expect(throws: AppError.self) {
             try AchievementsEditing.validate(
                 [achievement(scope: .individual, reward: .badge, conditions: [scoped])],
                 againstManifest: manifest)
@@ -101,7 +101,7 @@ import Testing
     /// The shape check does not need a decodable manifest: a hand-authored
     /// manifest is exactly where these shapes come from.
     @Test func theShapeCheckRunsWithoutADecodableManifest() {
-        #expect(throws: WebAssignmentError.self) {
+        #expect(throws: AppError.self) {
             try AchievementsEditing.validate(
                 [achievement(scope: .classWide, reward: .badge)], againstManifest: "not json")
         }
@@ -127,7 +127,7 @@ import Testing
             name: "Goal", scope: "classWide",
             conditions: [ConditionRow(signal: "attempts", comparator: "atMost", value: 3)],
             classPercent: 80, points: 1)
-        #expect(throws: WebAssignmentError.self) {
+        #expect(throws: AppError.self) {
             _ = try AchievementsEditing.achievement(from: row)
         }
         let multi = AchievementRow(
@@ -137,14 +137,14 @@ import Testing
                 ConditionRow(signal: "grade", comparator: "atLeast", value: 90),
             ],
             classPercent: 80, points: 1)
-        #expect(throws: WebAssignmentError.self) {
+        #expect(throws: AppError.self) {
             _ = try AchievementsEditing.achievement(from: multi)
         }
         let atMost = AchievementRow(
             name: "Goal", scope: "classWide",
             conditions: [ConditionRow(signal: "grade", comparator: "atMost", value: 80)],
             classPercent: 80, points: 1)
-        #expect(throws: WebAssignmentError.self) {
+        #expect(throws: AppError.self) {
             _ = try AchievementsEditing.achievement(from: atMost)
         }
         // The supported shapes still author fine.
@@ -176,11 +176,11 @@ import Testing
                 } ?? [],
                 reward: AchievementReward(type: .badge, label: id))
         }
-        #expect(throws: WebAssignmentError.self) {
+        #expect(throws: AppError.self) {
             try AchievementsEditing.validate(
                 [badge("dup"), badge("dup")], againstManifest: manifest)
         }
-        #expect(throws: WebAssignmentError.self) {
+        #expect(throws: AppError.self) {
             try AchievementsEditing.validate(
                 [badge("b", ref: "no_such_test.py")], againstManifest: manifest)
         }

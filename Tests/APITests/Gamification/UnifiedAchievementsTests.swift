@@ -16,15 +16,15 @@ import VaporTesting
 
     private func cond(
         _ signal: String, _ comparator: String, _ value: Double, testRef: String? = nil
-    ) -> PublishedAssignmentRoutes.ConditionInput {
+    ) -> ConditionRow {
         .init(signal: signal, comparator: comparator, value: value, testRef: testRef)
     }
 
     private func row(
         _ name: String, scope: String, match: String = "all",
-        conditions: [PublishedAssignmentRoutes.ConditionInput] = [],
+        conditions: [ConditionRow] = [],
         classPercent: Double? = nil, points: Int? = nil, recordDimension: String? = nil
-    ) -> PublishedAssignmentRoutes.AchievementInput {
+    ) -> AchievementRow {
         .init(
             id: nil, name: name, detail: nil, scope: scope, match: match,
             conditions: conditions, classPercent: classPercent, points: points,

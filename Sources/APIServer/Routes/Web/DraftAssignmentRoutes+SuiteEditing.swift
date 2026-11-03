@@ -53,7 +53,7 @@ extension DraftAssignmentRoutes {
 
         let body: SuitePayload
         do { body = try await req.decodeContent(SuitePayload.self) } catch {
-            throw WebAssignmentError.invalidParameter(
+            throw AppError.invalidParameter(
                 name: "request body",
                 reason: "Invalid suite payload: \(error.localizedDescription)")
         }
@@ -149,11 +149,11 @@ extension DraftAssignmentRoutes {
         let q = try req.query.decode(FileQuery.self)
         let fileName = (FilePath(q.name).lastComponent?.string ?? "")
         guard !fileName.isEmpty, fileName == q.name else {
-            throw WebAssignmentError.invalidParameter(name: "name", reason: "Invalid file name")
+            throw AppError.invalidParameter(name: "name", reason: "Invalid file name")
         }
 
         guard let data = await extractZipEntry(zipPath: setup.zipPath, entryName: fileName) else {
-            throw WebAssignmentError.notFound(resource: "File '\(fileName)' in setup")
+            throw AppError.notFound(resource: "File '\(fileName)' in setup")
         }
         return buildFileResponse(data: data, filename: fileName)
     }
@@ -170,13 +170,13 @@ extension DraftAssignmentRoutes {
     func draftSolutionNotebook(req: Request) async throws -> Response {
         let user = try req.auth.require(APIUser.self)
         guard let userID = user.id else {
-            throw WebAssignmentError.internalFailure(reason: "Authenticated user has no ID")
+            throw AppError.internalFailure(reason: "Authenticated user has no ID")
         }
 
         // A missing `draftID` is "no such draft" here (404), not the 400 of
         // `loadDraftSetupForRead`.
         guard let draftID = try? req.query.get(String.self, at: "draftID"), !draftID.isEmpty else {
-            throw WebAssignmentError.notFound(resource: "Draft assignment")
+            throw AppError.notFound(resource: "Draft assignment")
         }
         // The solution is the most private file of a draft, so the caller must
         // be staff in the draft's own course (#2742).
@@ -187,7 +187,7 @@ extension DraftAssignmentRoutes {
             let data = draftNotebookData(
                 req: req, setupID: draftID, userID: userID,
                 fileKind: .solution, fallbackPath: fallbackPath)
-        else { throw WebAssignmentError.notFound(resource: "Draft solution notebook") }
+        else { throw AppError.notFound(resource: "Draft solution notebook") }
 
         return Response(
             status: .ok,

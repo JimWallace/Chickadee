@@ -376,6 +376,15 @@ when a full disk has stopped Postgres. `get_storage_usage` and `/admin/storage`
 show the same free space. The deploy daemon has its own check: see
 [zero-downtime-deploy.md](zero-downtime-deploy.md), state `disk_low`.
 
+`courseKeyShadowed` ("Course links shadowed by a page address") fires when an
+active course's code or URL key is the first segment of a fixed route, such as
+`data`, `lab` or `login` (#2666). The router tries a fixed segment before a
+parameter and never backtracks, so every vanity link of that course is a 404 or
+the wrong page. Every door that creates or renames a course refuses such a
+code, so the rule fires only for a course that held the code before that check,
+or when a new fixed route takes an existing course's code. Rename the course on
+its admin page. See [course-terms.md](course-terms.md).
+
 ## Deployment Examples
 
 Docker Compose:

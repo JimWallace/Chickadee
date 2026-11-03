@@ -277,14 +277,6 @@ func recordActivityMatch(
     }
 }
 
-/// Inserts the first champion row of a setup's course-wide hill
-/// (`Hill.crownFirst`).
-func crownFirstChampion(
-    testSetupID: String, userID: UUID, submissionID: String, on db: any Database
-) async throws -> Bool {
-    try await Hill.course(testSetupID: testSetupID).crownFirst(userID: userID, submissionID: submissionID, on: db)
-}
-
 // MARK: - Round robin
 
 /// Completes a matrix job's open rows from the worker's per-match reports —
@@ -539,10 +531,4 @@ func standingSignals(
         testSetupID: testSetupID, courseID: setup.courseID, groupID: isPerGroup ? own.groupID : nil, on: db)
     guard let row = ranked.first(where: { $0.standing.userID == userID }) else { return nil }
     return (row.rank, row.standing.wins)
-}
-
-/// The course-wide hill's current holder; nil when the bot or nobody holds
-/// it. A lab group's hill is read through `Hill.group`.
-func currentChampion(testSetupID: String, on db: any Database) async throws -> APIActivityChampion? {
-    try await Hill.course(testSetupID: testSetupID).holder(on: db) as? APIActivityChampion
 }

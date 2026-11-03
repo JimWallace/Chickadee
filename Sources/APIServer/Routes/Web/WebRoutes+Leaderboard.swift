@@ -18,6 +18,7 @@ import Core
 import Elementary
 import Fluent
 import Foundation
+import SQLKit
 import Vapor
 
 extension WebRoutes {
@@ -594,16 +595,41 @@ func leaderboardWindowItems<Row: Encodable & Sendable>(
 }
 
 /// How many times each student has submitted to `setupID`, for the staff row.
-private func leaderboardSubmissionCounts(setupID: String, on db: any Database) async throws -> [UUID: Int] {
-    let submissions = try await APISubmission.query(on: db)
-        .filter(\.$testSetupID == setupID)
-        .filter(\.$kind == APISubmission.Kind.student)
-        .all()
-    var counts: [UUID: Int] = [:]
-    for submission in submissions {
-        if let userID = submission.userID { counts[userID, default: 0] += 1 }
+/// One `GROUP BY user_id` in the database, as `StudentSubmissionAggregates`
+/// does: the poll reads one count per student, not every submission row
+/// with its stored materialization (#2777).
+func leaderboardSubmissionCounts(setupID: String, on db: any Database) async throws -> [UUID: Int] {
+    guard let sql = db as? (any SQLDatabase) else {
+        let submissions = try await APISubmission.query(on: db)
+            .filter(\.$testSetupID == setupID)
+            .filter(\.$kind == APISubmission.Kind.student)
+            .field(\.$id)
+            .field(\.$userID)
+            .all()
+        var counts: [UUID: Int] = [:]
+        for submission in submissions {
+            if let userID = submission.userID { counts[userID, default: 0] += 1 }
+        }
+        return counts
     }
-    return counts
+    struct CountRow: Decodable {
+        let userID: UUID
+        let total: Int
+        enum CodingKeys: String, CodingKey {
+            case userID = "user_id"
+            case total
+        }
+    }
+    let rows = try await sql.select()
+        .column("user_id")
+        .column(SQLFunction("COUNT", args: SQLLiteral.all), as: "total")
+        .from(APISubmission.schema)
+        .where("test_setup_id", .equal, setupID)
+        .where("kind", .equal, APISubmission.Kind.student)
+        .where("user_id", .isNot, SQLLiteral.null)
+        .groupBy("user_id")
+        .all(decoding: CountRow.self)
+    return rows.reduce(into: [:]) { $0[$1.userID] = $1.total }
 }
 
 /// Enrolled students with no row on the board; with `groupID`, the group's

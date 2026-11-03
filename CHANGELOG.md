@@ -9,6 +9,169 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.799] - 2026-11-03
+
+### Fixed
+
+- **MCP `delete_support_file` refuses a file that a test depends on.** The web
+  delete and MCP `delete_support_file` now call one service,
+  `deleteFileFromSetup`. Before, the MCP path ran the steps by hand and did not
+  check `dependsOn`, so an agent could delete a support file that a suite entry
+  still needed. The dataset edit moved into `Services/` in the same way: the
+  web `PUT /datasets` routes and MCP `set_dataset` both call
+  `applyDatasetsEdit` (#2771).
+
+
+## [0.5.798] - 2026-11-03
+
+### Fixed
+
+- **Course content items and sections share one service (#2769).** The web routes and the MCP tools now call `CourseContentService` and `CourseSectionService` for the field rules and the writes, with typed errors. The web content-item form now refuses an unknown kind, as MCP does. Before, the web stored it as a link with no error. The web checks the section grading mode against `GradingMode`, not against string literals.
+
+
+## [0.5.797] - 2026-11-03
+
+### Changed
+
+- **Course and section loaders (#2773).** `loadCourse`, `loadCourseForWrite` and `loadCourseSectionForWrite` now sit beside the assignment loaders. Eleven course handlers and two section handlers call them in place of a hand-written guard. Status codes and error messages do not change.
+
+
+## [0.5.796] - 2026-11-03
+
+### Changed
+
+- **Two test comments name `CourseRoleFloor` (#2772).** They named `DashboardRoleFloor`, which #2792 renamed. Comments only.
+
+
+## [0.5.795] - 2026-11-03
+
+### Fixed
+
+- **Course-wide result queries no longer bind one parameter per submission (#2764).** The LEARN tab summary and "Sync now" now join results to submissions and filter by the course's test setups. "Sync now" also filters the errored rows in SQL. Course export and the retention purge split their submission-ID lists into chunks. Before, a course with more than 65,535 submissions made these four actions fail on PostgreSQL. The SQLite that sqlite-nio compiles allows 250,000 parameters, so it failed only at that size.
+
+
+## [0.5.794] - 2026-11-03
+
+### Security
+
+- **The browser-runner setup download serves a student only a browser-graded setup (#2763).** Before this change, a student enrolled in the course could download the setup zip of an open worker-graded assignment through `/api/v1/browser-runner/testsetups/:id/download`. That zip holds the release and secret test scripts. Now a caller who is not course staff gets 403 unless the effective grading mode is `browser`. A manifest that does not decode also refuses the download for a student, and the server logs it. Staff keep access. The grader-only filter now copies the zip off the cooperative pool and streams the copy from disk.
+
+
+## [0.5.793] - 2026-11-03
+
+### Fixed
+
+- **Index the job metrics and course child tables.** A new migration adds an index on `job_execution_metrics(completed_at)`, which the health rule, the diagnostics cards and the nightly prune filter on. It also indexes `course_id` on `course_sections` and `course_content_items`, which every course page filters on. Before, each of these queries scanned the table (#2778).
+
+
+## [0.5.792] - 2026-11-03
+
+### Added
+
+- **Type-check first-party frontend JavaScript (#2782).** `scripts/typecheck-js.sh` runs `tsc --noEmit` over `jsconfig.json` in the browser-runner CI job. There is no build step: types live in JSDoc comments, and `Public/*.js` is still served as-is. 51 of the 80 hand-written `Public/*.js` files opt in (the generated `runner-support-sources.js` is exempt) with `// @ts-check`. `types/chickadee-globals.d.ts` names each cross-file global, so a misspelt global is now a type error. `scripts/check-ts-check-optin.sh` makes every new file opt in, and the 29 files in `scripts/ts-check-pending.txt` form a shrink-only list.
+
+
+## [0.5.791] - 2026-11-03
+
+### Changed
+
+- **One table names the role floor of each operation (#2772).** `CourseRoleFloor` replaces `DashboardRoleFloor` and adds content items, the course dataset library, Student Options, the class activity and the BrightSpace binding. The web routes, their MCP twins and the views read the same constant, so a floor change on one surface reaches the others. `CourseRoleFloorGuardTests` refuses a new literal floor in a file that implements a named operation. No floor changes value.
+
+
+## [0.5.790] - 2026-11-03
+
+### Fixed
+
+- **Every outbound HTTP call has a read timeout.** The server now sets a 60-second read timeout on the shared outbound client, and states its 30-second connect timeout explicitly. A stalled identity provider, LMS, alert webhook or dates feed can no longer hold an SSO login or a shutdown drain open with no limit (#2765).
+
+
+## [0.5.789] - 2026-11-03
+
+### Security
+
+- **The MCP support-file URL fetch connects to the address it checked (#2780).** The fetcher resolved the host and checked every address, but AsyncHTTPClient resolved the host again when it connected, so a zero-TTL record could pass the check and then send the connection to a private address. The fetcher now resolves once and pins the connection to a checked address with `dnsOverride`. IPv4 comes first when the answer has one. TLS still validates the certificate against the original hostname.
+
+
+## [0.5.788] - 2026-11-03
+
+### Fixed
+
+- **Course export uses a unique temp zip path.** Two same-day exports of one course used the same temp file. `zip -r` adds to an existing archive, so the two bundles could merge, and the first stream's cleanup could delete the second's file. The temp path now has a UUID prefix; the download name does not change. `createZipArchive` now refuses an output path that already exists, so no other caller can merge archives this way (#2767).
+
+
+## [0.5.787] - 2026-11-03
+
+### Fixed
+
+- **One submission intake for every door.** All seven doors that create a
+  student submission now call `SubmissionIntake`. It writes the file, saves
+  the row with its attempt number, and runs every effect of the save. The
+  `runner-submit` and `browser-failover` doors now record the "accepted" and
+  "enqueued" diagnostics, as the upload form always did. The notebook merge
+  runs on the thread pool at every door. When the instructor notebook cannot
+  be read, the staff-only `POST /api/v1/submissions/file` now merges the
+  notebook with itself, as the notebook doors always did, instead of storing
+  it unchanged (#2768).
+
+### Removed
+
+- **Dead code, test-only wrappers and legacy aliases (#2783).** The unused
+  `JSONRPCError.missingRequiredClientCapability` factory is gone; its error
+  code stays, because the transport maps it to HTTP 400. The test-only
+  wrappers `crownFirstChampion`, `currentChampion`,
+  `gradePercentFromCollectionJSON` and `VanityURLRoutes.slugify` are gone, and
+  the tests call `Hill`, `CollectionGradeFields` and `assignmentSlug(fromTitle:)`
+  directly. The aliases `RankedIdentities`, `ConditionInput`,
+  `AchievementInput` and `WebAssignmentError` are gone; code uses
+  `AvatarIdentity`, `ConditionRow`, `AchievementRow` and `AppError`. No
+  behaviour changes.
+
+
+## [0.5.786] - 2026-11-03
+
+### Fixed
+
+- **Three five-second polls no longer load whole tables (#2777).** The admin Users list reads the staff ring with one query, not an IN list of every user ID. The admin runners count reads only the known runners and the three counted statuses. The staff leaderboard counts submissions per student with one `GROUP BY`. The pages show the same output.
+
+### Fixed
+
+- **Runner job slots no longer stall each other on workspace I/O (#2779).** The workspace setup, the submission staging and normalization, the disk-usage walk and the recursive teardown now run off the runner's daemon actor. With `--max-jobs` above 1, a large teardown in one slot no longer holds up the heartbeats, polls and reports of the other slots. The order of the steps and the cleanup guarantees do not change.
+
+
+## [0.5.785] - 2026-11-03
+
+### Fixed
+
+- **Assignment delete and course purge are atomic (#2766).** Deleting an assignment now removes all its rows in one transaction. A database error midway no longer leaves a live assignment whose submissions have no results. Both the assignment delete and the course purge now remove files only after the transaction commits, so a rollback no longer leaves rows that name deleted files. The assignment delete audit entry is now written after the commit, so a rolled-back delete leaves no false entry.
+
+
+## [0.5.784] - 2026-11-03
+
+### Changed
+
+- **CI skips the Swift suite for changes that cannot affect it (#2781).** A new `changes` job in `swift-tests.yml` runs `scripts/ci-swift-suite-scope.sh`. A pull request that changes only Markdown that no Swift file names (`docs/`, `changelog.d/`, the root changelogs) skips the build and the four Swift test lanes. The release commit runs the build job alone, to save the build cache for the new tree. `swift-tests-gate` still reports on every pull request, and it fails closed: a skip passes only when the scope allows it. Each push to `main` now has its own concurrency group, so a release commit no longer cancels the run of its merge commit, and the concurrency comment now says what GitHub does.
+
+
+## [0.5.783] - 2026-11-03
+
+### Fixed
+
+- **A course code that matches a server path is refused (#2666).** The router
+  tries a fixed path segment before a parameter and never backtracks, so a
+  course coded `data`, `lab`, `login` or any other first segment of a fixed
+  route lost every vanity link to a 404 or the wrong page. Course create, edit,
+  clone, new term, bundle import and un-archive now refuse such a code. The
+  reserved set is read from the registered routes, so a new route reserves its
+  own segment. A new health rule, `courseKeyShadowed`, reports any active
+  course that already holds one, or that a new route comes to shadow.
+
+### Changed
+
+- **The vanity routes are one table.** The five copied redirect handlers in
+  `VanityURLRoutes` are one loop over the suffixes, and the enrollment check
+  uses the shared `userIsEnrolled`.
+
+
 ## [0.5.782] - 2026-11-03
 
 ### Added

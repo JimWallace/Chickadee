@@ -286,7 +286,9 @@ extension InstructorDashboardRoutes {
 
     /// The active course, after the TA floor and the archive check.
     private func requireDatasetWrite(req: Request, user: APIUser) async throws -> UUID {
-        try await req.requireActiveCourseForWrite(user, atLeast: .ta, action: "managing datasets").requireID()
+        try await req.requireActiveCourseForWrite(
+            user, atLeast: CourseRoleFloor.manageCourseDatasets, action: "managing datasets"
+        ).requireID()
     }
 
     /// The dataset with `slug` in `courseID`, the active course. A slug of

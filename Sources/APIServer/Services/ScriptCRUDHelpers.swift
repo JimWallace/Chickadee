@@ -42,12 +42,12 @@ func createScriptInSetup(
 ) async throws -> CreatedScript {
     let cleaned = sanitizeSuiteFilename(body.filename)
     guard !cleaned.isEmpty, cleaned == body.filename else {
-        throw WebAssignmentError.invalidParameter(name: "filename", reason: "Invalid filename '\(body.filename)'")
+        throw AppError.invalidParameter(name: "filename", reason: "Invalid filename '\(body.filename)'")
     }
 
     // Reject duplicate filenames.
     if await listZipEntries(zipPath: setup.zipPath).contains(cleaned) {
-        throw WebAssignmentError.conflict(reason: "A file named '\(cleaned)' already exists in this setup")
+        throw AppError.conflict(reason: "A file named '\(cleaned)' already exists in this setup")
     }
 
     // Slice 1: prepend assignment-scope variables before write so the saved
@@ -94,43 +94,27 @@ func createScriptInSetup(
     return CreatedScript(filename: cleaned, tier: tier, points: points, isTest: shouldTest)
 }
 
-/// Guards that the file exists and is neither pattern-family-generated nor a
-/// prerequisite of another script, then removes it from the setup zip and drops
-/// its manifest entry and its marks (`clearFileMarks`).
+/// The web door to `deleteFileFromSetup` (`SetupFileDeletion.swift`), which
+/// MCP `delete_support_file` calls too (#2771). It words each refusal as the
+/// web routes always have.
 func deleteScriptFromSetup(setup: APITestSetup, filename: String, on db: any Database) async throws {
-    guard await listZipEntries(zipPath: setup.zipPath).contains(filename) else {
-        throw WebAssignmentError.notFound(resource: "File '\(filename)' in setup zip")
-    }
-
-    if let familyID = generatedByFamilyID(manifestJSON: setup.manifest, filename: filename) {
-        throw WebAssignmentError.conflict(
-            reason:
-                "'\(filename)' is generated from pattern family '\(familyID)'. Remove it via the family editor (delete the case, or delete the whole family)."
-        )
-    }
-
-    if let refusal = libraryAttachmentRefusal(manifest: setup.decodedManifest(), filename: filename) {
-        throw WebAssignmentError.conflict(reason: refusal)
-    }
-
-    let dependents = manifestDependents(manifestJSON: setup.manifest, filename: filename)
-    guard dependents.isEmpty else {
-        throw WebAssignmentError.conflict(
-            reason:
-                "Cannot delete '\(filename)': the following scripts depend on it: \(dependents.joined(separator: ", "))"
-        )
-    }
-
     do {
-        try await removeScriptFromZip(zipPath: setup.zipPath, filename: filename)
-    } catch ScriptZipError.zipFailed, ScriptZipError.extractFailed {
-        throw WebAssignmentError.internalFailure(reason: "Failed to update setup zip")
+        try await deleteFileFromSetup(setup: setup, filename: filename, on: db)
+    } catch SetupFileDeletionError.notInSetup(let file) {
+        throw AppError.notFound(resource: "File '\(file)' in setup zip")
+    } catch SetupFileDeletionError.generatedByFamily(let file, let familyID) {
+        throw AppError.conflict(
+            reason:
+                "'\(file)' is generated from pattern family '\(familyID)'. Remove it via the family editor (delete the case, or delete the whole family)."
+        )
+    } catch SetupFileDeletionError.libraryAttached(let refusal) {
+        throw AppError.conflict(reason: refusal)
+    } catch SetupFileDeletionError.hasDependents(let file, let dependents) {
+        throw AppError.conflict(
+            reason:
+                "Cannot delete '\(file)': the following scripts depend on it: \(dependents.joined(separator: ", "))"
+        )
+    } catch SetupFileDeletionError.zipUpdateFailed {
+        throw AppError.internalFailure(reason: "Failed to update setup zip")
     }
-
-    // Conditional, and applied again to a newer manifest if another edit
-    // saved first, so that edit is kept (#2485).
-    try await mutateManifestJSON(setup: setup, on: db) {
-        updateManifestRemovingScript(manifestJSON: $0, filename: filename)
-    }
-    try await mutateManifest(setup: setup, on: db) { clearFileMarks(filename, in: &$0) }
 }

@@ -27,7 +27,7 @@ extension CourseAdminRoutes {
             let course = try await APICourse.find(courseID, on: req.db),
             !course.isArchived
         else {
-            throw WebAssignmentError.noActiveCourse(action: "managing enrollments")
+            throw AppError.noActiveCourse(action: "managing enrollments")
         }
         // Enrollment is an instructor action. A TA passes the area gate, so the
         // form states the floor of the POST it feeds (#2743).
@@ -49,15 +49,7 @@ extension CourseAdminRoutes {
     @Sendable
     func setCourseEnrollmentMode(req: Request) async throws -> Response {
         struct Body: Content { var enrollmentMode: String? }
-        guard
-            let idString = req.parameters.get("courseID"),
-            let courseID = UUID(uuidString: idString),
-            let course = try await APICourse.find(courseID, on: req.db)
-        else {
-            throw WebAssignmentError.notFound(resource: "Course")
-        }
-        let caller = try req.auth.require(APIUser.self)
-        try await requireCourseWriteAccess(caller: caller, courseID: courseID, atLeast: .instructor, db: req.db)
+        let (course, _, _) = try await loadCourseForWrite(req, atLeast: .instructor)
         let body = try? await req.decodeContent(Body.self)
         course.enrollmentMode = CourseEnrollmentMode(rawValue: body?.enrollmentMode ?? "") ?? .open
         try await course.save(on: req.db)
@@ -81,7 +73,7 @@ extension CourseAdminRoutes {
             let courseID = UUID(uuidString: idString),
             let course = try await APICourse.find(courseID, on: req.db)
         else {
-            throw WebAssignmentError.invalidParameter(name: "courseID", reason: "Invalid course.")
+            throw AppError.invalidParameter(name: "courseID", reason: "Invalid course.")
         }
 
         // The archived-course block lives inside requireCourseWriteAccess —
@@ -139,7 +131,7 @@ extension CourseAdminRoutes {
             let userIDString = req.parameters.get("userID"),
             let userID = UUID(uuidString: userIDString)
         else {
-            throw WebAssignmentError.invalidParameter(
+            throw AppError.invalidParameter(
                 name: "courseID/userID", reason: "Invalid courseID or userID parameter")
         }
 
@@ -186,7 +178,7 @@ extension CourseAdminRoutes {
             let userIDString = req.parameters.get("userID"),
             let userID = UUID(uuidString: userIDString)
         else {
-            throw WebAssignmentError.invalidParameter(
+            throw AppError.invalidParameter(
                 name: "courseID/userID", reason: "Invalid courseID or userID parameter")
         }
 
@@ -239,7 +231,7 @@ extension CourseAdminRoutes {
             let preIDString = req.parameters.get("preEnrollmentID"),
             let preID = UUID(uuidString: preIDString)
         else {
-            throw WebAssignmentError.invalidParameter(
+            throw AppError.invalidParameter(
                 name: "courseID/preEnrollmentID", reason: "Invalid courseID or preEnrollmentID parameter")
         }
 
@@ -284,7 +276,7 @@ extension CourseAdminRoutes {
             let preIDString = req.parameters.get("preEnrollmentID"),
             let preID = UUID(uuidString: preIDString)
         else {
-            throw WebAssignmentError.invalidParameter(
+            throw AppError.invalidParameter(
                 name: "courseID/preEnrollmentID", reason: "Invalid courseID or preEnrollmentID parameter")
         }
 
@@ -297,7 +289,7 @@ extension CourseAdminRoutes {
                 .filter(\.$course.$id == courseID)
                 .first()
         else {
-            throw WebAssignmentError.notFound(resource: "Pre-enrollment")
+            throw AppError.notFound(resource: "Pre-enrollment")
         }
 
         let body = try? await req.decodeContent(Body.self)
@@ -373,7 +365,7 @@ extension CourseAdminRoutes {
             let courseIDString = req.parameters.get("courseID"),
             let courseID = UUID(uuidString: courseIDString)
         else {
-            throw WebAssignmentError.invalidParameter(name: "courseID", reason: "Invalid courseID parameter")
+            throw AppError.invalidParameter(name: "courseID", reason: "Invalid courseID parameter")
         }
 
         let caller = try req.auth.require(APIUser.self)
@@ -416,7 +408,7 @@ extension CourseAdminRoutes {
             let userIDString = req.parameters.get("userID"),
             let userID = UUID(uuidString: userIDString)
         else {
-            throw WebAssignmentError.invalidParameter(
+            throw AppError.invalidParameter(
                 name: "courseID/userID", reason: "Invalid courseID or userID parameter")
         }
         try await requireCourseWriteAccess(caller: caller, courseID: courseID, atLeast: .instructor, db: req.db)
@@ -424,7 +416,7 @@ extension CourseAdminRoutes {
         struct Body: Content { var role: String? }
         let body = try? await req.decodeContent(Body.self)
         guard let newRole = CourseRole(rawValue: body?.role ?? "") else {
-            throw WebAssignmentError.invalidParameter(name: "role", reason: "Unknown per-course role.")
+            throw AppError.invalidParameter(name: "role", reason: "Unknown per-course role.")
         }
 
         guard
@@ -433,7 +425,7 @@ extension CourseAdminRoutes {
                 .filter(\.$userID == userID)
                 .first()
         else {
-            throw WebAssignmentError.notFound(resource: "Enrollment")
+            throw AppError.notFound(resource: "Enrollment")
         }
         // Don't let a non-admin demote the course's last instructor (#417 Slice B).
         if enrollment.role == .instructor, newRole != .instructor {

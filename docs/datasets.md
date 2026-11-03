@@ -849,8 +849,9 @@ picker for the two to disagree about.
   page reload. The create page writes through a draft-scoped
   `GET`/`PUT /instructor/new/draft/datasets`, the edit page through the
   published `GET`/`PUT /instructor/:id/datasets`; both pairs share one
-  validation + manifest-write core (`DatasetEditHelpers.swift`), so a spec one
-  page accepts is one the other accepts. The behaviour lives once, in
+  validation + manifest-write core (`applyDatasetsEdit` in
+  `Services/DatasetsChange.swift`, which `set_dataset` calls too), so a spec
+  one door accepts is one the others accept. The behaviour lives once, in
   `Public/support-files.js`, which both pages already load — the two templates
   carry the same markup and differ only in the endpoint their page file passes
   in.

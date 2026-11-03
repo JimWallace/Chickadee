@@ -220,3 +220,75 @@ extension WorkerDaemon {
         writeStructuredRunnerLog(event: "job_disk_usage", fields: diskFields)
     }
 }
+
+// The entry points `process(_:)` uses (#2779). Each one runs a synchronous
+// helper above through `runOffActor`, so a large workspace walk or removal
+// does not hold the daemon actor while other job slots wait on it. Each one
+// is awaited in place, so the order of the steps does not change. The
+// `inout` values are copied in and written back on the actor, because a
+// `@Sendable` closure cannot capture an `inout` parameter.
+extension WorkerDaemon {
+
+    func setupJobWorkspaceOffActor(
+        tempRoot: URL,
+        job: Job,
+        stageTimings: inout JobStageTimings
+    ) async throws -> JobWorkspacePaths {
+        // On a throw the copied timings are not written back. Nothing reads
+        // them then: the teardown `defer` that logs them is registered only
+        // after setup succeeds.
+        let timingsIn = stageTimings
+        let (paths, timingsOut) = try await runOffActor { () throws -> (JobWorkspacePaths, JobStageTimings) in
+            var timings = timingsIn
+            let paths = try self.setupJobWorkspace(tempRoot: tempRoot, job: job, stageTimings: &timings)
+            return (paths, timings)
+        }
+        stageTimings = timingsOut
+        return paths
+    }
+
+    func finalizeJobWorkspaceOffActor(
+        job: Job,
+        paths: JobWorkspacePaths,
+        tempRoot: URL,
+        jobStartedAt: Date,
+        stageTimings: inout JobStageTimings,
+        disk: inout JobDiskReadings
+    ) async {
+        let timingsIn = stageTimings
+        let diskIn = disk
+        let (timingsOut, diskOut) = await runOffActor { () -> (JobStageTimings, JobDiskReadings) in
+            var timings = timingsIn
+            var readings = diskIn
+            self.finalizeJobWorkspace(
+                job: job,
+                paths: paths,
+                tempRoot: tempRoot,
+                jobStartedAt: jobStartedAt,
+                stageTimings: &timings,
+                disk: &readings
+            )
+            return (timings, readings)
+        }
+        stageTimings = timingsOut
+        disk = diskOut
+    }
+
+    func removeWorkspaceItemOffActor(at url: URL, label: String, job: Job) async {
+        await runOffActor { self.removeWorkspaceItem(at: url, label: label, job: job) }
+    }
+
+    /// The end-of-execution disk sample: the workdir size, which walks the
+    /// whole tree, and the free space on the work root.
+    func sampleEndOfExecutionDiskOffActor(
+        workDir: URL,
+        tempRoot: URL,
+        disk: inout JobDiskReadings
+    ) async {
+        let (peakBytes, freeMB) = await runOffActor { () -> (Int?, Int?) in
+            (directorySizeBytes(at: workDir), freeSpaceMB(at: tempRoot))
+        }
+        disk.workdirPeakBytes = peakBytes
+        disk.freeMBAtEnd = freeMB
+    }
+}

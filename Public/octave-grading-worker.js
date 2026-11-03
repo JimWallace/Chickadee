@@ -1,3 +1,4 @@
+// @ts-check
 // Public/octave-grading-worker.js
 //
 // The Octave browser-grading substrate: boots the vendored xeus-octave kernel

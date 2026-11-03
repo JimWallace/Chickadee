@@ -125,7 +125,9 @@ enum BrightSpacePagePresenter {
         // A TA reaches this tab, but the course-level actions are `.instructor`
         // (#2710). Hide what the handlers refuse; disconnect stays.
         let canManage =
-            try await evaluateCourseWrite(user: user, courseID: courseUUID, atLeast: .instructor, db: db).denial == nil
+            try await evaluateCourseWrite(
+                user: user, courseID: courseUUID, atLeast: CourseRoleFloor.brightSpaceBinding, db: db
+            ).denial == nil
         let facts = learnPageFacts(
             LearnFactsInput(
                 usesServiceAccount: application.brightSpaceUsesServiceAccount,
@@ -381,30 +383,28 @@ enum BrightSpacePagePresenter {
         }
         var latestByStudent: [StudentKey: LatestSyncState] = [:]
 
-        // Map each student submission to its (setup, student) so a result row
-        // resolves to the student whose grade it carries.
-        let submissions =
+        // Each student result row, joined to its submission so the row resolves
+        // to the student whose grade it carries. The join scopes the query by
+        // the course's few setup IDs, never by a list of every submission ID,
+        // which passes the driver bind limit for a large course (#2764).
+        let results =
             setupIDs.isEmpty
             ? []
-            : try await APISubmission.query(on: db)
-                .filter(\.$testSetupID ~~ setupIDs)
-                .filter(\.$kind == APISubmission.Kind.student)
+            : try await APIResult.query(on: db)
+                .join(APISubmission.self, on: \APIResult.$submissionID == \APISubmission.$id)
+                .filter(APISubmission.self, \.$testSetupID ~~ setupIDs)
+                .filter(APISubmission.self, \.$kind == APISubmission.Kind.student)
                 .all()
         var keyBySubmissionID: [String: StudentKey] = [:]
-        for submission in submissions {
-            if let id = submission.id, let userID = submission.userID {
-                keyBySubmissionID[id] = StudentKey(setupID: submission.testSetupID, userID: userID)
+        for result in results {
+            let submission = try result.joined(APISubmission.self)
+            if let userID = submission.userID {
+                keyBySubmissionID[result.submissionID] = StudentKey(
+                    setupID: submission.testSetupID, userID: userID)
             }
         }
 
         // Keep each student's latest result row (highest `receivedAt`).
-        let submissionIDs = Array(keyBySubmissionID.keys)
-        let results =
-            submissionIDs.isEmpty
-            ? []
-            : try await APIResult.query(on: db)
-                .filter(\.$submissionID ~~ submissionIDs)
-                .all()
         for result in results {
             guard let key = keyBySubmissionID[result.submissionID] else { continue }
             let received = result.receivedAt ?? Date.distantPast

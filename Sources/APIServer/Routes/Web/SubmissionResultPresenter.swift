@@ -229,7 +229,7 @@ extension WebRoutes {
             processed.secretOutcomes = collection.outcomes.filter { $0.tier == .secret }
         }
 
-        // Grade spans every tier (matches `gradePercentFromCollectionJSON` on
+        // Grade spans every tier (matches `CollectionGradeFields.gradePercent` on
         // the dashboard); only the itemized rows are tier-filtered.
         processed.buildFailed = collection.buildStatus == .failed
         processed.compilerOutput = collection.compilerOutput

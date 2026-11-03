@@ -7,11 +7,12 @@
 // grading mode; an assignment belongs to at most one via its nullable
 // `sectionID`.  content:read for the listing, content:write for the rest.
 //
-// These mirror the web instructor dashboard handlers
-// (`CourseAdminRoutes+Sections.swift`): create_course_section ~ createSection,
-// set_assignment_course_section ~ moveToSection (including the grading-mode sync when
-// moving into a named section).  This is assignment-organization metadata, not
-// student/enrollment data.
+// These share their field rules and writes with the web instructor dashboard
+// handlers (`CourseAdminRoutes+Sections.swift`) through `CourseSectionService`
+// (#2769): create_course_section ~ createSection, set_assignment_course_section
+// ~ moveToSection (including the grading-mode sync when moving into a named
+// section).  This is assignment-organization metadata, not student/enrollment
+// data.
 
 import Core
 import Fluent
@@ -166,28 +167,22 @@ struct CreateCourseSectionTool: ContentTool {
     static let requiredScopes: Set<ContentScope> = [.write]
 
     func execute(_ input: Input, _ context: ToolContext) async throws -> Output {
-        let name = input.name.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !name.isEmpty else {
-            throw MCPToolError.invalidArguments(detail: "Section name must not be empty.")
+        let draft: CourseSectionDraft
+        do {
+            draft = try CourseSectionDraft(
+                name: input.name, defaultGradingMode: input.defaultGradingMode ?? GradingMode.browser.rawValue)
+        } catch {
+            throw mcpToolError(error)
         }
-        let mode = input.defaultGradingMode ?? "browser"
-        _ = try MCPEnumProse<GradingMode>.parse(mode, field: "defaultGradingMode")
-        let course = try await resolveCourseForWrite(code: input.courseCode, context: context, atLeast: .instructor)
-        let courseID = try course.requireID()
-
-        let maxOrder =
-            try await APICourseSection.query(on: context.db)
-            .filter(\.$courseID == courseID)
-            .max(\.$sortOrder) ?? 0
-        let section = APICourseSection(
-            name: name, defaultGradingMode: mode, sortOrder: maxOrder + 1, courseID: courseID)
-        try await section.save(on: context.db)
+        let course = try await resolveCourseForWrite(
+            code: input.courseCode, context: context, atLeast: CourseRoleFloor.manageSections)
+        let section = try await CourseSectionService.create(draft, courseID: try course.requireID(), on: context.db)
 
         return Output(
             courseCode: course.code, courseKey: course.urlKey, courseTerm: course.term?.displayName,
             sectionID: try section.requireID().uuidString,
-            name: name,
-            defaultGradingMode: mode,
+            name: section.name,
+            defaultGradingMode: section.defaultGradingMode,
             sortOrder: section.sortOrder)
     }
 }
@@ -248,7 +243,7 @@ struct SetAssignmentCourseSectionTool: ContentTool {
     func execute(_ input: Input, _ context: ToolContext) async throws -> Output {
         // Placing an assignment into a course section is instructor-level (#417).
         let assignment = try await context.authorizedAssignmentForWrite(
-            publicID: input.assignmentPublicID, atLeast: .instructor)
+            publicID: input.assignmentPublicID, atLeast: CourseRoleFloor.manageSections)
 
         // Resolve + validate the target section against this assignment's course.
         // A non-empty id that doesn't resolve is rejected rather than silently
@@ -256,34 +251,16 @@ struct SetAssignmentCourseSectionTool: ContentTool {
         let resolvedSectionID = try await resolveCourseSectionID(
             input.courseSectionID, inCourse: assignment.courseID, owner: "assignment", context: context)
 
-        assignment.sectionID = resolvedSectionID
-        // Append to the destination lane's shared (assignment + content) order so
-        // the moved assignment doesn't collide with an existing sort_order
-        // (mirrors the web moveToSection under the unified-interleave model).
-        assignment.sortOrder = try await nextSectionItemSortOrder(
-            courseID: assignment.courseID, sectionID: resolvedSectionID, db: context.db)
-        try await assignment.save(on: context.db)
-
-        // Moving into a named section adopts that section's default grading
-        // mode (mirrors the web moveToSection); ungrouping leaves it unchanged.
-        var sectionName: String?
-        var gradingMode: String?
-        if let sectionUUID = resolvedSectionID,
-            let section = try await APICourseSection.find(sectionUUID, on: context.db)
-        {
-            sectionName = section.name
-            if let setup = try await APITestSetup.find(assignment.testSetupID, on: context.db) {
-                gradingMode = try await adoptSectionGradingMode(section, setup: setup, on: context.db)
-            }
-        } else if let setup = try await APITestSetup.find(assignment.testSetupID, on: context.db) {
-            gradingMode = currentManifestGradingMode(setup.manifest)
-        }
+        // Appends to the destination lane and adopts a named section's default
+        // grading mode, as the web moveToSection does; ungrouping leaves it unchanged.
+        let moved = try await CourseSectionService.moveAssignment(
+            assignment, toSection: resolvedSectionID, on: context.db)
 
         return Output(
             assignmentPublicID: assignment.publicID,
             sectionID: resolvedSectionID?.uuidString ?? "",
-            sectionName: sectionName,
-            gradingMode: gradingMode)
+            sectionName: moved.section?.name,
+            gradingMode: moved.gradingMode)
     }
 
 }
@@ -357,18 +334,14 @@ struct RenameCourseSectionTool: ContentTool {
             throw MCPToolError.invalidArguments(detail: "Provide at least one of: name, defaultGradingMode.")
         }
         let section = try await resolveCourseSectionForEdit(
-            sectionID: input.courseSectionID, context: context, atLeast: .instructor)
-        if let newName {
-            guard !newName.isEmpty else {
-                throw MCPToolError.invalidArguments(detail: "name must not be empty.")
-            }
-            section.name = newName
+            sectionID: input.courseSectionID, context: context, atLeast: CourseRoleFloor.manageSections)
+        let edit: CourseSectionEdit
+        do {
+            edit = try CourseSectionEdit(name: newName, defaultGradingMode: newMode)
+        } catch {
+            throw mcpToolError(error)
         }
-        if let newMode {
-            _ = try MCPEnumProse<GradingMode>.parse(newMode, field: "defaultGradingMode")
-            section.defaultGradingMode = newMode
-        }
-        try await section.save(on: context.db)
+        try await CourseSectionService.update(section, with: edit, on: context.db)
         return Output(
             sectionID: try section.requireID().uuidString,
             name: section.name,
@@ -442,12 +415,9 @@ struct DeleteCourseSectionTool: ContentTool {
         }
         // Deleting a course section is instructor-level structure (#417); archived blocked too.
         try await context.authorizeCourseWriteAccess(
-            section.courseID, atLeast: .instructor)
-        let ungrouped = try await APIAssignment.query(on: context.db)
-            .filter(\.$sectionID == uuid)
-            .count()
+            section.courseID, atLeast: CourseRoleFloor.manageSections)
         // FK SET NULL: assignments in this section have section_id → NULL.
-        try await section.delete(on: context.db)
+        let ungrouped = try await CourseSectionService.delete(section, on: context.db)
         return Output(sectionID: raw, removed: true, ungroupedAssignmentCount: ungrouped)
     }
 }
@@ -563,6 +533,11 @@ func resolveCourseSectionForEdit(
     // Course-section structure is instructor-level (#417), matching the web.
     try await context.authorizeCourseWriteAccess(section.courseID, atLeast: minimum)
     return section
+}
+
+/// The tool error for a refused course section.
+func mcpToolError(_ error: CourseSectionError) -> MCPToolError {
+    .invalidArguments(detail: error.description)
 }
 
 // `currentManifestGradingMode` / `setManifestGradingMode` /

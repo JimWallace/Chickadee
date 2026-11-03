@@ -1,3 +1,4 @@
+// @ts-check
 // Page wiring for the admin runner-detail page (AdminRunnerPage): keeps the
 // offline badge honest as the page ages, and polls the runners endpoint every
 // 5 seconds to refresh the header's live-status fields (version, hostname,

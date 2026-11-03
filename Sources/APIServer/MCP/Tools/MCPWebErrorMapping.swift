@@ -1,7 +1,7 @@
 // APIServer/MCP/Tools/MCPWebErrorMapping.swift
 //
 // Several write tools reuse the server-authoritative web edit paths, which
-// raise `WebAssignmentError` (an HTTP-shaped error) or a Vapor `Abort`. Over
+// raise `AppError` (an HTTP-shaped error) or a Vapor `Abort`. Over
 // MCP those need to become `MCPToolError` so the dispatcher surfaces a clean
 // JSON-RPC error to the agent rather than an opaque internal failure.
 // A permission refusal (401 or 403) maps to `notAuthorized`, the error the
@@ -24,9 +24,9 @@ extension MCPToolError {
     /// anything else is a genuine server-side failure. Callers map only a client refusal
     /// (`isClientRefusal`) and let a server fault propagate.
     ///
-    /// `WebAssignmentError` is an `AbortError` too, and every one of its cases
+    /// `AppError` is an `AbortError` too, and every one of its cases
     /// but `internalFailure` is a 4xx, so this one function maps it exactly as
-    /// the `WebAssignmentError` overload it replaced did.
+    /// the `AppError` overload it replaced did.
     static func from(_ error: any AbortError) -> MCPToolError {
         if error.status == .unauthorized || error.status == .forbidden {
             return .notAuthorized(detail: error.reason)

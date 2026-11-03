@@ -50,7 +50,8 @@ struct DeleteSupportFileTool: ContentTool {
         + "longer necessary. Support files only: a graded test, a pattern-family case, or a notebook "
         + "check is refused (use delete_suite_item, or edit the family/check), and so are the "
         + "reserved setup members test.properties.json / assignment.ipynb / solution.ipynb. Any "
-        + "graderOnly or per-student dataset mark naming the file is cleared with it. Saving "
+        + "graderOnly or per-student dataset mark naming the file is cleared with it. A file that a "
+        + "test lists in its dependsOn is refused, as in the web editor. Saving "
         + "re-packs the setup zip, re-syncs the shared support directory (student symlinks to the "
         + "file disappear), closes the assignment if it was open (reported as `assignmentClosed`; "
         + "re-open with update_assignment once validation passes), and re-runs validation — which "
@@ -112,51 +113,31 @@ struct DeleteSupportFileTool: ContentTool {
             publicID: input.assignmentPublicID, atLeast: .ta)
 
         // A graded row is owned by the suite tools; point at the right one
-        // rather than tearing the file out from under its manifest entry.
-        if let familyID = generatedByFamilyID(manifestJSON: setup.manifest, filename: cleaned) {
-            throw MCPToolError.invalidArguments(
-                detail: "\"\(cleaned)\" is generated from pattern family \"\(familyID)\"; "
-                    + "remove the family with delete_suite_item(familyID: \"\(familyID)\") instead.")
-        }
-        let manifest = setup.decodedManifest()
-        if let refusal = libraryAttachmentRefusal(manifest: manifest, filename: cleaned) {
-            throw MCPToolError.invalidArguments(detail: refusal)
-        }
-        if manifest?.testSuites.contains(where: { $0.script == cleaned }) == true {
+        // rather than tearing the file out from under its manifest entry. A
+        // generated row is refused by `deleteFileFromSetup`, with a pointer
+        // at its family.
+        if setup.decodedManifest()?.testSuites.contains(where: { $0.script == cleaned && $0.generatedBy == nil })
+            == true
+        {
             throw MCPToolError.invalidArguments(
                 detail: "\"\(cleaned)\" is a graded test, not a support file. Remove it with "
                     + "delete_suite_item(script: \"\(cleaned)\").")
         }
 
-        guard await listZipEntries(zipPath: setup.zipPath).contains(cleaned) else {
-            throw MCPToolError.invalidArguments(
-                detail: "No support file \"\(cleaned)\" in this test setup (see get_support_files).")
-        }
-
+        // The one file delete, which the web DELETE route runs too (#2771).
+        // It also drops any manifest marks that named the file, so a future
+        // file reusing the name doesn't inherit them.
+        let clearedMarks: Bool
         do {
-            try await removeScriptFromZip(zipPath: setup.zipPath, filename: cleaned)
-        } catch {
-            throw MCPToolError.executionFailed(detail: "Failed to remove \"\(cleaned)\" from the setup zip.")
-        }
-
-        // Drop any manifest marks that named the file, so a future file reusing
-        // the name doesn't inherit them.
-        var clearedMarks = false
-        try await mutateManifest(setup: setup, on: context.db) { props in
-            clearedMarks = clearFileMarks(cleaned, in: &props)
+            clearedMarks = try await deleteFileFromSetup(setup: setup, filename: cleaned, on: context.db)
+        } catch let refusal as SetupFileDeletionError {
+            throw Self.toolError(for: refusal, filename: cleaned)
         }
 
         // Re-sync the shared support directory: it is wiped and re-extracted
         // from the zip, so the removed file (and student symlinks to it) go too.
-        let testSuiteScripts: Set<String> = {
-            guard let props = setup.decodedManifest() else { return [] }
-            return Set(props.testSuites.map(\.script))
-        }()
         await extractSupportFilesToSharedDirectory(
-            zipPath: setup.zipPath,
-            setupID: assignment.testSetupID,
-            testSuiteScripts: testSuiteScripts,
-            testSetupsDirectory: context.request.application.testSetupsDirectory)
+            for: setup, testSetupsDirectory: context.request.application.testSetupsDirectory)
 
         // Close, re-grade, and re-validate (matching the web Save button). A
         // test that still sources the deleted file surfaces here as a failed
@@ -166,6 +147,7 @@ struct DeleteSupportFileTool: ContentTool {
 
         // Count with get_support_files' own predicate so the number a caller
         // gets back matches the list they'd read next.
+        let testSuiteScripts = Set((setup.decodedManifest()?.testSuites ?? []).map(\.script))
         let remaining = await listZipEntries(zipPath: setup.zipPath).filter {
             !testSuiteScripts.contains($0) && !GetSupportFilesTool.reservedNames.contains($0)
         }
@@ -177,5 +159,27 @@ struct DeleteSupportFileTool: ContentTool {
             clearedManifestMarks: clearedMarks,
             validationStatus: assignment.validationStatus,
             assignmentClosed: finalized.assignmentClosed)
+    }
+
+    /// Words a `deleteFileFromSetup` refusal for an agent, with a pointer at
+    /// the tool that owns the file.
+    static func toolError(for refusal: SetupFileDeletionError, filename: String) -> MCPToolError {
+        switch refusal {
+        case .notInSetup(let file):
+            return .invalidArguments(
+                detail: "No support file \"\(file)\" in this test setup (see get_support_files).")
+        case .generatedByFamily(let file, let familyID):
+            return .invalidArguments(
+                detail: "\"\(file)\" is generated from pattern family \"\(familyID)\"; "
+                    + "remove the family with delete_suite_item(familyID: \"\(familyID)\") instead.")
+        case .libraryAttached(let reason):
+            return .invalidArguments(detail: reason)
+        case .hasDependents(let file, let dependents):
+            return .invalidArguments(
+                detail: "\"\(file)\" cannot be deleted: these tests depend on it: "
+                    + "\(dependents.joined(separator: ", ")). Remove it from their dependsOn first (get_suite).")
+        case .zipUpdateFailed:
+            return .executionFailed(detail: "Failed to remove \"\(filename)\" from the setup zip.")
+        }
     }
 }
