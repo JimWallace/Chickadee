@@ -64,6 +64,10 @@ npm ci
 ./run-visual.sh
 ```
 
+The server runs on a throwaway Postgres database, the same way as the editor
+smoke harness (`Tools/editor-smoke-test/README.md`), so a local Postgres must
+be running.
+
 Exit 1 on drift, with `*.diff.png` / `*.actual.png` evidence. In CI
 (`visual-regression.yml`, path-filtered, not a required check) the evidence
 uploads as the `visual-diffs` artifact.

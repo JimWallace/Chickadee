@@ -170,7 +170,7 @@ SubmissionRoutes
 WorkerJobRoutes  ←────── runner polls POST /worker/request ──────────────┐
   • SELECT pending submission                                              │
   • Compatibility check (RunnerCapabilityProfile vs AssignmentRequirements)│
-  • WorkerClaimQueue actor serialises concurrent claims                   │
+  • Row lock (FOR UPDATE SKIP LOCKED) settles concurrent claims          │
   • UPDATE status = "assigned", workerID = <runner>                       │
   • Return Job to runner ────────────────────────────────────────────────►│
                                                                           │
@@ -324,13 +324,15 @@ from reverse proxies.
 
 ## Job Lifecycle & Concurrency
 
-### WorkerClaimQueue actor
+### Job claims
 
 Concurrent runner instances poll `/worker/request` simultaneously. To prevent
-two runners from claiming the same job, all claims are serialised through
-`WorkerClaimQueue` — a Swift actor (in `Services/WorkerClaimQueue.swift`) eagerly
-initialised at server startup. The actor executes claim transactions one at a
-time; each transaction atomically finds a pending job and marks it assigned.
+two runners from claiming the same job, `WorkerJobClaim.claimSubmission`
+(`Services/WorkerJobClaim.swift`) claims in a short transaction that locks the
+pending row with `SELECT … FOR UPDATE SKIP LOCKED` (#1172). A row another
+claimer holds is skipped rather than waited on, so the loser moves to its next
+candidate. This holds across any number of server processes, with no
+in-process serialisation.
 
 ### WorkerDaemon concurrency
 
@@ -563,13 +565,12 @@ a three-word EFF diceware passphrase on first startup and persisted to
 ## Database & Migrations
 
 `DatabaseConfiguration` (`Sources/APIServer/Bootstrap/DatabaseConfiguration.swift`)
-selects the backend from `DATABASE_BACKEND` (`DatabaseSettings.fromEnvironment`):
-- `postgres` → Fluent PostgreSQL driver, connected from `DATABASE_HOST`,
-  `DATABASE_NAME`, `DATABASE_USER`, `DATABASE_PASSWORD` and `DATABASE_PORT`
-- absent / `sqlite` → Fluent SQLite driver (default for development), at
-  `SQLITE_PATH` or the default file under the working directory
-
-SQLite deployments enable WAL journaling and foreign key enforcement at startup.
+connects the Fluent PostgreSQL driver from `DATABASE_HOST`, `DATABASE_PORT`,
+`DATABASE_NAME`, `DATABASE_USER` and `DATABASE_PASSWORD`
+(`DatabaseSettings.fromEnvironment`). All five are required. PostgreSQL is the
+only backend: SQLite support was removed in 0.5. The test suite uses a local
+Postgres (`DatabaseSettings.localTest`, overridden by `TEST_DATABASE_*`), with
+one pooled, pre-migrated schema per test application.
 
 Migrations are registered in order by `registerMigrations(on:)` in the same
 file. The steady-state convention:

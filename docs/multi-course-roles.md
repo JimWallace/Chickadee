@@ -169,7 +169,8 @@ representable and creatable.
 
 - `AddCourseEnrollmentRole` adds `role` as a **nullable** column and backfills
   it. It deliberately does not add a DB-level NOT NULL/default: Fluent +
-  SQLite can't add a NOT NULL column to an existing table post-hoc, so — like
+  SQLite, still supported then, could not add a NOT NULL column to an
+  existing table post-hoc, so — like
   `AddUrlTokenToUsers` — the column stays nullable and the "every row has a
   role" invariant is held by the model-side `init` default plus the typed
   accessor (which falls back to `.student` for a missing value).

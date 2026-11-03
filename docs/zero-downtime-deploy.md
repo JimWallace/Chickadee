@@ -26,8 +26,9 @@ and one made overlap impossible:
 3. Migrations (and, with SSO, OIDC discovery) run before `/health` goes green.
 
 The fundamental enabler for a real fix is **PostgreSQL**: two app versions can
-hold connections to the same database at once (MVCC), which is unsafe on a single
-SQLite file. Prod runs Postgres as a compose `db` service, so blue-green is viable.
+hold connections to the same database at once (MVCC), which was unsafe on a
+single SQLite file. Prod runs Postgres as a compose `db` service, so blue-green
+is viable. SQLite support was removed in 0.5, so every deployment can do this.
 
 ---
 
