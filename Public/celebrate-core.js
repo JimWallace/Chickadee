@@ -1,3 +1,4 @@
+// @ts-check
 // Public/celebrate-core.js
 //
 // The timing and the particle motion of the result-page celebration

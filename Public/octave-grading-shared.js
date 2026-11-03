@@ -1,3 +1,4 @@
+// @ts-check
 // Public/octave-grading-shared.js
 //
 // Grading semantics for the Octave browser grader — the Octave sibling of
