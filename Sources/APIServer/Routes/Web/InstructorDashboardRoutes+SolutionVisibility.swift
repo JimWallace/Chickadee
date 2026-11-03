@@ -24,7 +24,7 @@ extension InstructorDashboardRoutes {
     /// page that 404s.
     @Sendable
     func saveSolutionVisibilitySetting(req: Request) async throws -> Response {
-        let assignment = try await loadAssignmentForWrite(req, atLeast: .instructor)
+        let assignment = try await loadAssignmentForWrite(req, atLeast: CourseRoleFloor.studentOptions)
         struct ToggleBody: Content {
             // Checkbox: "on" when checked, absent from the body when not —
             // decode as optional and treat absence as false, so unchecking

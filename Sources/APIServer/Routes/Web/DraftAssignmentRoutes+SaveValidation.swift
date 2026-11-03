@@ -153,7 +153,7 @@ extension DraftAssignmentRoutes {
         if let draftSetup {
             let caller = try req.auth.require(APIUser.self)
             try await requireCourseWriteAccess(
-                caller: caller, courseID: draftSetup.courseID, atLeast: .instructor, db: req.db)
+                caller: caller, courseID: draftSetup.courseID, atLeast: CourseRoleFloor.createAssignment, db: req.db)
         }
         let draftState =
             draftSetup == nil

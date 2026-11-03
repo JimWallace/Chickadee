@@ -7,7 +7,7 @@
 // redirect-to-`/instructor` convention. All routes sit under the `/instructor`
 // group (staff-gated by `ActiveCourseStaffMiddleware`); each mutating handler
 // additionally scopes the write to the resource's own course via
-// `requireCourseWriteAccess(atLeast: .ta)` — content authoring is TA+, matching
+// `requireCourseWriteAccess(atLeast: CourseRoleFloor.manageContentItems)` (TA) — content authoring is TA+, matching
 // script / notebook editing (course-section structure stays instructor-level).
 
 import Core
@@ -41,7 +41,7 @@ extension CourseAdminRoutes {
     func createContentItem(req: Request) async throws -> Response {
         let user = try req.auth.require(APIUser.self)
         let courseID = try await req.requireActiveCourseForWrite(
-            user, atLeast: .ta, action: "managing content items"
+            user, atLeast: CourseRoleFloor.manageContentItems, action: "managing content items"
         ).requireID()
 
         let body = try await req.decodeContent(ContentItemFormBody.self)
@@ -210,7 +210,7 @@ extension CourseAdminRoutes {
         }
         let caller = try req.auth.require(APIUser.self)
         try await requireCourseWriteAccess(
-            caller: caller, courseID: item.courseID, atLeast: .ta, db: req.db)
+            caller: caller, courseID: item.courseID, atLeast: CourseRoleFloor.manageContentItems, db: req.db)
         return item
     }
 
