@@ -35,7 +35,8 @@ Work through the notebook from the top, as if you had to complete it.
   what the result should look like.
 - A term, function or library the notebook uses without introducing it,
   that the list of prior material does not cover either.
-- A file, column or variable the notebook refers to that you cannot find.
+- A column or variable the notebook refers to that you cannot find. (A
+  missing data file is a `check_assignment` check, `files.missing`.)
 - A jump in difficulty: a task much harder than the one before it, with no
   bridge.
 - A cell that must run before another, where the order is not clear.

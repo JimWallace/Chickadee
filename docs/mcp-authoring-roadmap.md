@@ -45,7 +45,7 @@ The catalog:
 | `get_global_inputs` | `content:read` | Assignment personalization: global variables + per-student expressions |
 | `get_achievements` | `content:read` | The assignment's composable awards (badges / class goals / records), built-in defaults merged in until first curated |
 | `preview_personalization` | `content:read` | Resolve a seed's `name → value` map + a starter-notebook `{{placeholder}}` audit |
-| `check_assignment` | `content:read` | Run the rule-based authoring checks over the stored manifest, starter notebook and latest validation runs (solution, variants, starter), evaluating the per-student expressions for the variant seeds; findings (checkID, severity, location, message, suggestedFix) most severe first. Starts no run ([#2747](https://github.com/JimWallace/Chickadee/issues/2747)) |
+| `check_assignment` | `content:read` | Run the rule-based authoring checks over the stored manifest, starter notebook, support-file list and latest validation runs (solution, variants, starter), evaluating the per-student expressions for the variant seeds; findings (checkID, severity, location, message, suggestedFix) most severe first. Starts no run ([#2747](https://github.com/JimWallace/Chickadee/issues/2747)) |
 | `validate_assignment` | `content:read` | Watch validation to completion; live SSE progress |
 | `run_validation` | `content:write` | Re-run validation with no edit, optionally on one runner (5-minute fallback to any runner) |
 | `get_validation_result` | `content:read` | Per-test outcomes of the reference solution's latest validation run (status + shortResult/longResult, all tiers); validation-only, never student data |

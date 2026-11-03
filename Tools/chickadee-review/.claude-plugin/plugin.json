@@ -1,6 +1,6 @@
 {
   "name": "chickadee-review",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Read-only reviewers for Chickadee assignment content. A coordinator runs check_assignment, then the reviewers the assignment needs, and gives one report. Nothing is changed without the instructor's approval.",
   "author": { "name": "Jim Wallace" },
   "repository": "https://github.com/JimWallace/Chickadee",

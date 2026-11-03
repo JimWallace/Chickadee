@@ -760,6 +760,22 @@ because line numbers go out of date.
     A new kind of input goes into both, or it reads as undeclared.
   - `timing.margin` takes a test's limit as `entry.timeLimitSeconds ??
     manifest.timeLimitSeconds`, the limit that the runner applies per script.
+  - `achievements.neverAwarded` skips an award listed in
+    `disabledBuiltInAwardIDs`, as every evaluator does, and reads Core's own rules
+    (`allTestRefNames`, `isSweepEvaluableClassGoal`,
+    `coveredItemsRequirement`, `coveredItemNames(inScopeOf:)`). It catches
+    what `AchievementsEditing.validate` refuses at save, after a later suite
+    edit or a hand-authored manifest. A new achievement rule goes into Core
+    so that both read it.
+  - What a student's working copy holds is `StudentWorkspaceFiles`: the
+    support files it links, minus suite scripts, reserved notebooks,
+    grader-only files and datasets, plus the datasets, which are written
+    whatever their grader-only mark. `createSupportFileSymlinks` and
+    `files.missing` both call it. The browser runner's zip filter and the
+    support-file download route compute their own lists; a change to what a
+    student receives must reach all of them.
+  - `files.missing` does not guess: when the setup zip cannot be found, it
+    reports nothing and the loader adds a warning.
   - A part the loader cannot read becomes an entry in `warnings`, not a
     failed call. An empty `findings` list is a pass only when `warnings` is
     empty too.

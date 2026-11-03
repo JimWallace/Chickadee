@@ -41,6 +41,12 @@ struct AuthoringSnapshot: Sendable {
     /// Every per-student input name the content refers to: `{{name}}` in the
     /// starter notebook and `$name` refs in pattern-family cases.
     var placeholderNames: Set<String> = []
+    /// The source of each starter-notebook cell, in order: the code cell's
+    /// source, or nil for any other kind, so an index is the cell's own.
+    var notebookCodeCells: [String?] = []
+    /// The setup zip's entries, or nil when they could not be listed. The
+    /// checks derive what a student receives with `StudentWorkspaceFiles`.
+    var setupZipEntries: [String]?
     /// One evaluation per validation-variant seed. Empty when the manifest
     /// declares no expressions.
     var seedEvaluations: [SeedEvaluation] = []
