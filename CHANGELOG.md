@@ -9,6 +9,13 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.796] - 2026-11-03
+
+### Changed
+
+- **Two test comments name `CourseRoleFloor` (#2772).** They named `DashboardRoleFloor`, which #2792 renamed. Comments only.
+
+
 ## [0.5.795] - 2026-11-03
 
 ### Fixed
