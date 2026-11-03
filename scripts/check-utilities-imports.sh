@@ -6,7 +6,7 @@ set -euo pipefail
 # A file under `Sources/APIServer/Utilities/` may not import Vapor or a
 # database module (Fluent, FluentKit, a Fluent driver, SQLKit, SQLiteKit,
 # PostgresKit). Code that needs one lives in `Bootstrap/` (app setup),
-# `Helpers/` (request-aware helpers) or `Services/` (models and a database).
+# `Helpers/` (the HTTP edge) or `Services/` (database and domain logic).
 #
 # The boundary is checked from both sides (#2144, #2775). A file under
 # `Helpers/` is there because it is the HTTP edge, so its code must name a
@@ -77,9 +77,11 @@ services_dir="Sources/APIServer/Services"
 # `ClientResponse`, decodes an HTTP body (`Content`, a multipart `File`) or
 # maps an error to an HTTP status (`AbortError`). Database and domain logic
 # that needs none of them goes to Services/; pure code goes to Utilities/.
-http_edge='(^|[^A-Za-z0-9_.])(Request|Response|ClientResponse|Content|File|AbortError)([^A-Za-z0-9_]|$)'
+# The check reads names, not imports: a qualified `Vapor.Request` counts, and
+# another module's `Foo.Request` does not.
+http_edge='(^|[^A-Za-z0-9_.]|Vapor\.)(Request|Response|ClientResponse|Content|File|AbortError)([^A-Za-z0-9_]|$)'
 # The request type alone: Services/ may not take or extend one.
-request_type='(^|[^A-Za-z0-9_.])Request([^A-Za-z0-9_]|$)'
+request_type='(^|[^A-Za-z0-9_.]|Vapor\.)Request([^A-Za-z0-9_]|$)'
 
 not_edge=()
 # Recursive, as above (#2495).
