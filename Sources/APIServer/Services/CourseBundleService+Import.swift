@@ -176,18 +176,29 @@ extension CourseBundleService {
     ) async throws -> ImportTally {
         let extractDir = dirs.extractDir
         let subsDir = dirs.subsDir
+        let reserved = app.reservedCourseKeys
         return try await db.transaction { db -> ImportTally in
             // 6a. Check for course code conflicts (moved inside transaction)
             // Asks for an ACTIVE match: a first-match query could return an
             // archived duplicate, pass, and then fail on the unique index.
-            if try await activeCourseCodeIsTaken(
-                manifest.course.code, term: bundledCourseTerm(manifest.course), excluding: nil, on: db)
+            switch try await courseCodeConflict(
+                manifest.course.code, term: bundledCourseTerm(manifest.course), excluding: nil,
+                reserved: reserved, on: db)
             {
+            case .reserved:
+                throw AppError.conflict(
+                    reason: """
+                        The course code "\(manifest.course.code)" is a page address on this server. \
+                        Change the code in the bundle, then re-import.
+                        """)
+            case .taken:
                 throw AppError.conflict(
                     reason: """
                         A course with code "\(manifest.course.code)" already exists and is active. \
                         Archive it first, then re-import.
                         """)
+            case nil:
+                break
             }
 
             var t = ImportTally(

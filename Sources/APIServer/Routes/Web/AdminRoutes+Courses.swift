@@ -68,8 +68,10 @@ extension AdminRoutes {
         guard case .term(let term) = CourseTermInput(year: body.termYear, season: body.termSeason) else {
             return req.redirect(to: "/admin/courses/new?error=\(CourseFormError.term.rawValue)")
         }
-        if try await activeCourseCodeIsTaken(code, term: term, excluding: nil, on: req.db) {
-            return req.redirect(to: "/admin/courses/new?error=\(CourseFormError.codeTaken.rawValue)")
+        if let conflict = try await courseCodeConflict(
+            code, term: term, excluding: nil, reserved: req.application.reservedCourseKeys, on: req.db)
+        {
+            return req.redirect(to: "/admin/courses/new?error=\(CourseFormError(conflict).rawValue)")
         }
         // The course and its instructor are one transaction: a refused
         // instructor leaves no course without one.
@@ -172,10 +174,14 @@ extension AdminRoutes {
         // bundle import creates one beside it by design), so check the rule
         // the index enforces and report a duplicate instead of failing on it
         // (#1777), exactly as the edit route does.
+        // An archived course with a reserved code (#2666) is renamed first:
+        // the edit form accepts a new code while the course is archived.
         if course.isArchived,
-            try await activeCourseCodeIsTaken(course.code, term: course.term, excluding: courseID, on: req.db)
+            let conflict = try await courseCodeConflict(
+                course.code, term: course.term, excluding: courseID,
+                reserved: req.application.reservedCourseKeys, on: req.db)
         {
-            return req.redirect(to: "/admin/courses/\(idString)?error=\(CourseFormError.codeTaken.rawValue)")
+            return req.redirect(to: "/admin/courses/\(idString)?error=\(CourseFormError(conflict).rawValue)")
         }
         course.isArchived.toggle()
         // Archiving is Chickadee's "end of term" signal: stamp the moment so
@@ -256,7 +262,8 @@ extension AdminRoutes {
         else {
             throw AppError.notFound(resource: "Course")
         }
-        let newCode = try await uniqueCopyCode(base: source.code, term: source.term, db: req.db)
+        let newCode = try await uniqueCopyCode(
+            base: source.code, term: source.term, reserved: req.application.reservedCourseKeys, db: req.db)
         let result = try await cloneCourse(
             source, code: newCode, name: "\(source.name) (Copy)", term: source.term, req: req)
         return req.redirect(to: "/admin/courses/\(try result.course.requireID().uuidString)")
@@ -292,8 +299,10 @@ extension AdminRoutes {
         guard case .term(let term) = CourseTermInput(year: body.termYear, season: body.termSeason) else {
             return req.redirect(to: "\(back)?error=\(CourseCloneFormError.term.rawValue)#clone-course")
         }
-        if try await activeCourseCodeIsTaken(code, term: term, excluding: nil, on: req.db) {
-            return req.redirect(to: "\(back)?error=\(CourseCloneFormError.codeTaken.rawValue)#clone-course")
+        if let conflict = try await courseCodeConflict(
+            code, term: term, excluding: nil, reserved: req.application.reservedCourseKeys, on: req.db)
+        {
+            return req.redirect(to: "\(back)?error=\(CourseCloneFormError(conflict).rawValue)#clone-course")
         }
         let result = try await cloneCourse(source, code: code, name: name, term: term, req: req)
         return req.redirect(to: "/admin/courses/\(try result.course.requireID().uuidString)")
@@ -515,10 +524,17 @@ extension AdminRoutes {
         // Reject a duplicate of another active course in the same term — the
         // rule of the unique index (docs/course-terms.md). An archived course
         // is outside the index, so it may share a code.
+        //
+        // A reserved code (#2666) is refused only when the edit changes the
+        // code, so a course that already holds one can still be edited; the
+        // `courseKeyShadowed` health rule reports it until it is renamed.
+        let codeChanged = code.lowercased() != course.code.lowercased()
         if !course.isArchived,
-            try await activeCourseCodeIsTaken(code, term: term, excluding: courseID, on: req.db)
+            let conflict = try await courseCodeConflict(
+                code, term: term, excluding: courseID,
+                reserved: codeChanged ? req.application.reservedCourseKeys : .none, on: req.db)
         {
-            return req.redirect(to: "/admin/courses/\(idString)?error=\(CourseFormError.codeTaken.rawValue)")
+            return req.redirect(to: "/admin/courses/\(idString)?error=\(CourseFormError(conflict).rawValue)")
         }
 
         course.term = term
@@ -794,13 +810,17 @@ extension AdminRoutes {
 // MARK: - Private helpers
 
 /// The first free `-COPY` code for a copy of `base` in `term`. "Free" is the
-/// rule every other door applies (`activeCourseCodeIsTaken`): case-folded
-/// and per term, so the copy cannot answer the key of an active course (#2229).
-private func uniqueCopyCode(base: String, term: AcademicTerm?, db: any Database) async throws -> String {
+/// rule every other door applies (`courseCodeConflict`): not reserved (#2666),
+/// and case-folded and per term, so the copy cannot answer the key of an
+/// active course (#2229).
+private func uniqueCopyCode(
+    base: String, term: AcademicTerm?, reserved: ReservedCourseKeys, db: any Database
+) async throws -> String {
     let candidates = ["\(base)-COPY"] + (2...10).map { "\(base)-COPY-\($0)" }
     for candidate in candidates {
-        let taken = try await activeCourseCodeIsTaken(candidate, term: term, excluding: nil, on: db)
-        if !taken { return candidate }
+        let conflict = try await courseCodeConflict(
+            candidate, term: term, excluding: nil, reserved: reserved, on: db)
+        if conflict == nil { return candidate }
     }
     throw AppError.conflict(reason: "Could not generate a unique course code. Rename an existing copy first.")
 }
