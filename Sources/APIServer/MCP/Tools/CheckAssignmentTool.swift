@@ -4,9 +4,12 @@
 // over an assignment's stored content and returns their findings, by public
 // ID. content:read, course-scoped (#2747).
 //
-// The checks read stored content only. This tool enqueues no run and writes
-// nothing. A model reviewer calls it first, so that it reviews only what a
-// rule cannot find, and reports in the same `AuthoringFinding` format.
+// The checks read the stored manifest, notebook and validation runs
+// (`AuthoringSnapshot+Loading.swift`), and the per-student expressions are
+// evaluated for the validation-variant seeds, in the same sandboxed subprocess
+// `preview_personalization` uses. This tool enqueues no run and writes nothing.
+// A model reviewer calls it first, so that it reviews only what a rule cannot
+// find, and reports in the same `AuthoringFinding` format.
 
 import Core
 import Fluent
@@ -24,6 +27,9 @@ struct CheckAssignmentTool: ContentTool {
         let checksRun: [String]
         /// Most severe first.
         let findings: [AuthoringFinding]
+        /// One entry per part of the content that could not be read. The
+        /// checks that need that part found nothing.
+        let warnings: [String]
     }
 
     /// The finding for a stored manifest that does not decode. No other check
@@ -37,8 +43,11 @@ struct CheckAssignmentTool: ContentTool {
         + MCPEnumProse<AuthoringFinding.Severity>.slashAlternatives + "), a location ("
         + MCPEnumProse<AuthoringFinding.Location.Kind>.slashAlternatives + ", with a reference such as "
         + "the script filename), a message and an optional suggestedFix. checksRun lists every check "
-        + "that ran, so an empty findings list means none of them found a problem. Read-only: the "
-        + "checks read the stored content, start no runner job and change nothing. Call it before "
+        + "that ran, so an empty findings list means none of them found a problem, unless warnings "
+        + "names a part that could not be read. The checks read the stored manifest, starter notebook "
+        + "and latest validation runs (the solution, its per-student variants and the starter), and "
+        + "evaluate the per-student expressions for the variant seeds. Read-only: it starts no runner "
+        + "job and changes nothing, so run validation first for current results. Call it before "
         + "reviewing an assignment, and do not repeat its findings. A reviewer that reports its own "
         + "findings uses the same format with source \"reviewer\"."
     static let inputSchema: JSONValue = MCPSchema.assignmentPublicIDOnlyInput
@@ -54,8 +63,14 @@ struct CheckAssignmentTool: ContentTool {
                 "type": .string("array"),
                 "items": findingSchema,
             ]),
+            "warnings": .object([
+                "type": .string("array"),
+                "items": MCPSchema.string,
+            ]),
         ]),
-        "required": .array([.string("assignmentPublicID"), .string("checksRun"), .string("findings")]),
+        "required": .array([
+            .string("assignmentPublicID"), .string("checksRun"), .string("findings"), .string("warnings"),
+        ]),
     ])
     static let requiredScopes: Set<ContentScope> = [.read]
 
@@ -71,13 +86,16 @@ struct CheckAssignmentTool: ContentTool {
                         checkID: Self.undecodableManifestID, source: .check, severity: .error,
                         location: .assignment,
                         message: "The stored test.properties.json does not decode, so no other check could run.")
-                ])
+                ],
+                warnings: [])
         }
-        let snapshot = AuthoringSnapshot(manifest: manifest)
+        let (snapshot, warnings) = await AuthoringSnapshot.load(
+            assignment: assignment, setup: setup, manifest: manifest, context: context)
         return Output(
             assignmentPublicID: assignment.publicID,
             checksRun: AuthoringCheckCatalog.ids,
-            findings: AuthoringCheckCatalog.findings(in: snapshot))
+            findings: AuthoringCheckCatalog.findings(in: snapshot),
+            warnings: warnings)
     }
 
     /// The JSON Schema for one `AuthoringFinding`.

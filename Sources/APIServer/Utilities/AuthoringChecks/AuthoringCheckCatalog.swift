@@ -8,7 +8,13 @@ import Core
 enum AuthoringCheckCatalog {
     static let all: [any AuthoringCheck] = [
         ManifestCoherenceCheck(),
+        VariantFailureCheck(),
+        UnresolvedPlaceholderCheck(),
+        ExpressionErrorCheck(),
         NoPublicTestCheck(),
+        StarterPassesCheck(),
+        TimingMarginCheck(),
+        MissingMetricCheck(),
         ZeroPointsCheck(),
     ]
 
