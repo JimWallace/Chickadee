@@ -9,6 +9,20 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.804] - 2026-11-03
+
+### Fixed
+
+- **The 2026-11-03 mutation sweep survivors are answered.** The three survivors were all in `TestProperties.hasCourseScopedDatasets`, which no Core test read directly. New tests pin that only a library attachment with the course scope counts: the course scope without a source, or a source with the assignment scope, does not.
+
+### Changed
+
+- **swift-subprocess is back on the upstream release (1.0.2).** Since 1.0.1
+  its Linux child comes from `posix_spawn` rather than a raw `clone3` for
+  every configuration Chickadee uses, which removes the glibc 2.41 launch
+  hang; the temporary fork is no longer used.
+
+
 ## [0.5.803] - 2026-11-03
 
 ### Fixed
