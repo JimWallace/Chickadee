@@ -659,6 +659,31 @@ because line numbers go out of date.
     (`docs/grading-integrity.md`). A feature that trusts a value in a result
     has the same risk.
 
+### A new student submission: `SubmissionIntake`
+
+- **Writers:** seven doors. The upload form, a GitHub commit, the two REST
+  endpoints (`SubmissionRoutes`, course staff only), and the three notebook
+  endpoints (`browser-result`, `runner-submit`, `browser-failover`).
+- **Readers:** the attempt-number readers (First-Try-Perfect, the
+  prior-attempt delta), Pathfinder (`awardFirstToSubmitRecords`), the
+  operational diagnostics and job metrics, and the runner claim queue.
+- **Rules:**
+  - `SubmissionIntake.accept` is the one intake chokepoint (#2768). Each door
+    keeps its own checks (enrollment, `requireOpenStudentAssignment`, the
+    grading mode). A new student door must run `requireOpenStudentAssignment`
+    with `.submission` itself; nothing forces it. The intake owns the file write, the row, the attempt number
+    and every effect of a saved row. Put a new effect of a new submission
+    there, not in one door.
+  - A `pending` row records the "accepted" and "enqueued" diagnostics and
+    wakes the local runner. A `complete` row (a browser result) does neither,
+    because no runner grades it.
+  - Pathfinder goes to the owner of a `pending` row. A `complete` row's door
+    (`browser-result`) awards it after it stores the result
+    (`BrowserResultSideEffectOrderTests`). The REST doors save no owner, so
+    they award nothing and count attempts per setup.
+  - Every door that takes a notebook merges it with
+    `mergedWithInstructorNotebook`, on the NIO thread pool.
+
 ### Content versions and restore
 
 - **Rules:**
@@ -830,8 +855,9 @@ because line numbers go out of date.
     of the flag must do the same, or turning it on again brings back an
     earlier lab's code.
   - A clone and a bundle import clear the flag (see Cloning).
-- **Gap:** `POST /api/v1/submissions` checks enrollment only, so it skips
-  this gate, as it skips the window.
+- `POST /api/v1/submissions` checks enrollment only, so it skips this gate,
+  as it skips the window. That route is course staff only, and staff are
+  never gated.
 
 ### The client address: `clientIPAddress` and `Request.clientNetwork`
 
