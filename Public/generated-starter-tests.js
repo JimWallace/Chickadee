@@ -1,3 +1,4 @@
+// @ts-check
 // Chickadee — "Generate Starter Tests" panel on the new-assignment page.
 //
 // Scans the draft's solution notebook for function definitions, lists them as
@@ -40,11 +41,11 @@
         var cfg = config || {};
         var csrfToken = global.ChickadeeUI.getCsrfToken();
 
-        var scanBtn        = document.getElementById('scan-solution-btn');
+        var scanBtn        = /** @type {HTMLButtonElement} */ (document.getElementById('scan-solution-btn'));
         var scanStatus     = document.getElementById('scan-status');
         var scanResults    = document.getElementById('scan-results');
         var fnChecklist    = document.getElementById('fn-checklist');
-        var genTplSelect   = document.getElementById('gen-template-select');
+        var genTplSelect   = /** @type {HTMLSelectElement} */ (document.getElementById('gen-template-select'));
         var addGenTestsBtn = document.getElementById('add-gen-tests-btn');
         var genPanel       = document.getElementById('gen-tests-panel');
 
@@ -90,7 +91,7 @@
 
         if (scanBtn) {
             scanBtn.addEventListener('click', function () {
-                var solInput = document.getElementById('solution-notebook-file-input');
+                var solInput = /** @type {HTMLInputElement} */ (document.getElementById('solution-notebook-file-input'));
                 var hasUpload = !!(solInput && solInput.files.length > 0);
                 var source = Core.scanSource({ hasUpload: hasUpload, solutionNotebookURL: cfg.solutionNotebookURL });
                 if (source === 'saved') {

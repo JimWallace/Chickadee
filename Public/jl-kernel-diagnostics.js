@@ -1,3 +1,4 @@
+// @ts-check
 // Public/jl-kernel-diagnostics.js
 //
 // Passive kernel-boot diagnostics, injected into the JupyterLite editor
@@ -107,7 +108,7 @@
         // wheel) don't bubble to a non-capturing listener.
         window.addEventListener('error', function (e) {
             try {
-                var target = e && e.target;
+                var target = /** @type {(EventTarget & { src?: string, href?: string }) | null} */ (e && e.target);
                 if (target && target !== window && (target.src || target.href)) {
                     reportError('resource_error',
                         'failed to load ' + String(target.src || target.href).slice(0, 200));
