@@ -9,6 +9,13 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.830] - 2026-11-04
+
+### Fixed
+
+- **Dependabot can open pull requests again.** The `Default` branch ruleset excluded `refs/heads/dependabot/**`, which matches one path level only, so every real Dependabot branch was still refused. The exclusion is now `refs/heads/dependabot/**/*`, and the comment at the top of `.github/dependabot.yml` names that pattern and says how to check a branch name.
+
+
 ## [0.5.829] - 2026-11-04
 
 ### Fixed
