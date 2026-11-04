@@ -1,3 +1,4 @@
+// @ts-check
 // Chickadee — Suite Table editor
 //
 // Client side of the assignment suite editor.  Owns ROW-level behaviour
@@ -155,7 +156,7 @@
                 + 'uploadScript, reorderSections functions');
         }
 
-        var filesInput  = document.getElementById('suite-files-input');
+        var filesInput  = /** @type {HTMLInputElement | null} */ (document.getElementById('suite-files-input'));
         var container   = document.getElementById('suite-sections');
         var form        = document.querySelector(formSelector);
         if (!container) return noopAPI();
@@ -465,7 +466,7 @@
         /// Section-name inputs don't need this any more — they live in
         /// server-rendered forms that don't get touched by `PUT /suite`.
         function captureFocus() {
-            var el = document.activeElement;
+            var el = /** @type {HTMLInputElement | null} */ (document.activeElement);
             if (!el || !container.contains(el)) return null;
             var row = el.closest && el.closest('tr[data-id]');
             if (!row) return null;
@@ -482,7 +483,7 @@
             if (!snap) return;
             var row = container.querySelector('tr[data-id="' + cssAttrEscape(snap.dataID) + '"]');
             if (!row) return;
-            var el = row.querySelector('.' + snap.cls);
+            var el = /** @type {HTMLInputElement | null} */ (row.querySelector('.' + snap.cls));
             if (!el) return;
             el.focus();
             if (snap.start != null && snap.end != null) {
@@ -803,7 +804,7 @@
         /// Snapshot a row display-name input's live value so a debounced
         /// `PUT /suite` response doesn't wipe mid-typing text.
         function captureLiveEdit() {
-            var el = document.activeElement;
+            var el = /** @type {HTMLInputElement | null} */ (document.activeElement);
             if (!el || !container.contains(el) || !el.classList) return null;
             if (el.classList.contains('js-suite-display-name')) {
                 var row = el.closest('tr[data-kind="script"]');
@@ -931,7 +932,7 @@
         }
 
         container.addEventListener('dragstart', function (e) {
-            var t = e.target;
+            var t = /** @type {Element} */ (e.target);
             if (!t || !t.closest) { e.preventDefault(); return; }
             var rowHandle = t.closest('.suite-drag-handle');
             if (rowHandle) {
@@ -983,7 +984,7 @@
             if (dragSectionID) {
                 e.preventDefault();
                 // Same decide-then-write discipline as the row drag below.
-                var overBlock = e.target.closest && e.target.closest('.section-block[data-section-id]');
+                var overBlock = /** @type {Element} */ (e.target).closest && /** @type {Element} */ (e.target).closest('.section-block[data-section-id]');
                 var overSid = overBlock ? overBlock.getAttribute('data-section-id') : null;
                 var blockKey = null;
                 var blockClass = null;
@@ -1012,14 +1013,14 @@
             var overEl = null;      // the element to mark
             var overClass = null;   // the class to mark it with
 
-            var rootZone = e.target.closest && e.target.closest('.suite-root-drop');
+            var rootZone = /** @type {Element} */ (e.target).closest && /** @type {Element} */ (e.target).closest('.suite-root-drop');
             if (rootZone) {
                 var rootBody = rootZone.closest('tbody[data-section-id]');
                 overEl = rootZone;
                 overClass = 'drop-hover';
                 overKey = 'root:' + (rootBody ? (rootBody.getAttribute('data-section-id') || '') : '');
             } else {
-                var target = e.target.closest && e.target.closest('tr[data-id]');
+                var target = /** @type {Element} */ (e.target).closest && /** @type {Element} */ (e.target).closest('tr[data-id]');
                 var tid = target ? target.getAttribute('data-id') : null;
                 // A null key means "nothing is a target here" — off any row, or
                 // over the row being dragged — which still has to clear a stale
@@ -1058,9 +1059,9 @@
         });
 
         container.addEventListener('dragleave', function (e) {
-            var row = e.target.closest && e.target.closest('tr');
+            var row = /** @type {Element} */ (e.target).closest && /** @type {Element} */ (e.target).closest('tr');
             if (row) row.classList.remove('drop-before','drop-after','drop-adopt','drop-hover');
-            var block = e.target.closest && e.target.closest('.section-block');
+            var block = /** @type {Element} */ (e.target).closest && /** @type {Element} */ (e.target).closest('.section-block');
             if (block) block.classList.remove('section-drop-before','section-drop-after');
         });
 
@@ -1072,7 +1073,7 @@
             // persist via a POST to /suite-sections/reorder.  No reload —
             // the dashboard pattern doesn't reload on reorder either.
             if (dragSectionID) {
-                var overBlock = e.target.closest && e.target.closest('.section-block[data-section-id]');
+                var overBlock = /** @type {Element} */ (e.target).closest && /** @type {Element} */ (e.target).closest('.section-block[data-section-id]');
                 if (!overBlock) return;
                 var overSid = overBlock.getAttribute('data-section-id');
                 if (!overSid || overSid === dragSectionID) return;
@@ -1088,7 +1089,7 @@
             var dragItem = findByID(dragID);
             if (!dragItem) return;
 
-            var rootZone = e.target.closest && e.target.closest('.suite-root-drop');
+            var rootZone = /** @type {Element} */ (e.target).closest && /** @type {Element} */ (e.target).closest('.suite-root-drop');
             if (rootZone) {
                 var tbody = rootZone.closest('tbody[data-section-id]');
                 var newSid = tbody ? (tbody.getAttribute('data-section-id') || null) : null;
@@ -1123,7 +1124,7 @@
                 renderTree(); schedulePush(); return;
             }
 
-            var target = e.target.closest && e.target.closest('tr[data-id]');
+            var target = /** @type {Element} */ (e.target).closest && /** @type {Element} */ (e.target).closest('tr[data-id]');
             if (!target) return;
             var tid = target.getAttribute('data-id');
             if (!tid || tid === dragID) return;
@@ -1190,23 +1191,23 @@
         // ── Inline row edits ──
 
         container.addEventListener('change', function (e) {
-            var scriptRow = e.target.closest && e.target.closest('tr[data-kind="script"]');
+            var scriptRow = /** @type {Element} */ (e.target).closest && /** @type {Element} */ (e.target).closest('tr[data-kind="script"]');
             if (scriptRow) {
                 var item = findByID(scriptRow.getAttribute('data-id'));
                 if (!item) return;
-                var tierEl = scriptRow.querySelector('.js-suite-tier');
-                var ptsEl  = scriptRow.querySelector('.js-suite-points');
+                var tierEl = /** @type {HTMLSelectElement | null} */ (scriptRow.querySelector('.js-suite-tier'));
+                var ptsEl  = /** @type {HTMLInputElement | null} */ (scriptRow.querySelector('.js-suite-points'));
                 if (tierEl) item.tier = tierEl.value;
                 if (ptsEl)  item.points = Math.max(0, parseInt(ptsEl.value) || 0);
                 schedulePush();
                 return;
             }
-            var familyRow = e.target.closest && e.target.closest('tr[data-kind="family"]');
+            var familyRow = /** @type {Element} */ (e.target).closest && /** @type {Element} */ (e.target).closest('tr[data-kind="family"]');
             if (familyRow) {
                 var fitem = findByID(familyRow.getAttribute('data-id'));
                 if (!fitem || !fitem.family) return;
-                var tierElF = familyRow.querySelector('.js-suite-family-tier');
-                var ptsElF  = familyRow.querySelector('.js-suite-family-points');
+                var tierElF = /** @type {HTMLSelectElement | null} */ (familyRow.querySelector('.js-suite-family-tier'));
+                var ptsElF  = /** @type {HTMLInputElement | null} */ (familyRow.querySelector('.js-suite-family-points'));
                 var nextDefaults = Object.assign({}, fitem.family.defaults || {});
                 if (tierElF) nextDefaults.tier = tierElF.value;
                 if (ptsElF)  nextDefaults.points = Math.max(0, parseInt(ptsElF.value) || 0);
@@ -1214,12 +1215,12 @@
                 schedulePush();
                 return;
             }
-            var checkRow = e.target.closest && e.target.closest('tr[data-kind="check"]');
+            var checkRow = /** @type {Element} */ (e.target).closest && /** @type {Element} */ (e.target).closest('tr[data-kind="check"]');
             if (checkRow) {
                 var citem = findByID(checkRow.getAttribute('data-id'));
                 if (!citem || !citem.check) return;
-                var tierElC = checkRow.querySelector('.js-suite-check-tier');
-                var ptsElC  = checkRow.querySelector('.js-suite-check-points');
+                var tierElC = /** @type {HTMLSelectElement | null} */ (checkRow.querySelector('.js-suite-check-tier'));
+                var ptsElC  = /** @type {HTMLInputElement | null} */ (checkRow.querySelector('.js-suite-check-points'));
                 var nextCheck = Object.assign({}, citem.check);
                 if (tierElC) nextCheck.tier = tierElC.value;
                 if (ptsElC)  nextCheck.points = Math.max(0, parseInt(ptsElC.value) || 0);
@@ -1229,7 +1230,7 @@
         });
 
         container.addEventListener('input', function (e) {
-            var target = e.target;
+            var target = /** @type {HTMLInputElement} */ (e.target);
             if (!target || !target.classList || !target.classList.contains('js-suite-display-name')) return;
             var row = target.closest('tr[data-kind="script"]');
             if (!row) return;
@@ -1240,7 +1241,7 @@
         });
 
         container.addEventListener('change', function (e) {
-            var target = e.target;
+            var target = /** @type {HTMLInputElement} */ (e.target);
             if (!target || !target.classList || !target.classList.contains('js-suite-display-name')) return;
             schedulePush();
         });
@@ -1250,7 +1251,7 @@
         // pre-populated; Delete drops the check and re-saves the list via the
         // single PUT /suite write path.
         container.addEventListener('click', async function (e) {
-            var editBtn = e.target.closest && e.target.closest('.js-check-edit-btn');
+            var editBtn = /** @type {Element} */ (e.target).closest && /** @type {Element} */ (e.target).closest('.js-check-edit-btn');
             if (editBtn) {
                 let row = editBtn.closest('tr[data-kind="check"]');
                 if (!row) return;
@@ -1265,7 +1266,7 @@
                 });
                 return;
             }
-            var delBtn = e.target.closest && e.target.closest('.js-check-delete-btn');
+            var delBtn = /** @type {Element} */ (e.target).closest && /** @type {Element} */ (e.target).closest('.js-check-delete-btn');
             if (delBtn) {
                 var row2 = delBtn.closest('tr[data-kind="check"]');
                 if (!row2) return;
@@ -1284,7 +1285,7 @@
                 return;
             }
 
-            var btn = e.target.closest && e.target.closest('.js-suite-delete-btn');
+            var btn = /** @type {Element} */ (e.target).closest && /** @type {Element} */ (e.target).closest('.js-suite-delete-btn');
             if (!btn) return;
             var row = btn.closest('tr[data-kind="script"]');
             if (!row) return;
@@ -1312,31 +1313,31 @@
         // ── Section-header inline edit (rename toggle + delete) ──
 
         container.addEventListener('click', async function (e) {
-            var toggle = e.target.closest && e.target.closest('.js-section-edit-toggle');
+            var toggle = /** @type {Element} */ (e.target).closest && /** @type {Element} */ (e.target).closest('.js-section-edit-toggle');
             if (toggle) {
                 var header = toggle.closest('.section-header');
                 if (!header) return;
-                var view = header.querySelector('.section-view');
-                var edit = header.querySelector('.section-edit');
+                var view = /** @type {HTMLElement | null} */ (header.querySelector('.section-view'));
+                var edit = /** @type {HTMLElement | null} */ (header.querySelector('.section-edit'));
                 if (view) view.style.display = 'none';
                 if (edit) {
                     edit.style.display = 'flex';
-                    var inp = edit.querySelector('.section-name-input');
+                    var inp = /** @type {HTMLInputElement | null} */ (edit.querySelector('.section-name-input'));
                     if (inp) { inp.focus(); inp.select(); }
                 }
                 return;
             }
-            var cancel = e.target.closest && e.target.closest('.js-section-edit-cancel');
+            var cancel = /** @type {Element} */ (e.target).closest && /** @type {Element} */ (e.target).closest('.js-section-edit-cancel');
             if (cancel) {
                 var header2 = cancel.closest('.section-header');
                 if (!header2) return;
-                var view2 = header2.querySelector('.section-view');
-                var edit2 = header2.querySelector('.section-edit');
+                var view2 = /** @type {HTMLElement | null} */ (header2.querySelector('.section-view'));
+                var edit2 = /** @type {HTMLElement | null} */ (header2.querySelector('.section-edit'));
                 if (view2) view2.style.display = 'flex';
                 if (edit2) edit2.style.display = 'none';
                 return;
             }
-            var del = e.target.closest && e.target.closest('.js-section-delete-btn');
+            var del = /** @type {Element} */ (e.target).closest && /** @type {Element} */ (e.target).closest('.js-section-delete-btn');
             if (del) {
                 var action = del.getAttribute('data-action');
                 var name = del.getAttribute('data-name') || 'this section';
@@ -1703,7 +1704,7 @@
         (function wireDefaultTimeLimit() {
             var assignmentID = config.assignmentID;
             if (!assignmentID) return;
-            var input  = document.getElementById('suite-default-time-limit');
+            var input  = /** @type {HTMLInputElement | null} */ (document.getElementById('suite-default-time-limit'));
             var status = document.getElementById('suite-default-limit-status');
             if (!input) return;
             var putTimeLimitURL =
