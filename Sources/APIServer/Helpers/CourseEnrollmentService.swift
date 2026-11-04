@@ -1,4 +1,4 @@
-// APIServer/Routes/Web/CourseEnrollmentService.swift
+// APIServer/Helpers/CourseEnrollmentService.swift
 //
 // The roster changes that the instructor roster (`CourseAdminRoutes`) and the
 // admin pages (`AdminRoutes`) share: remove an enrollment, set a per-course

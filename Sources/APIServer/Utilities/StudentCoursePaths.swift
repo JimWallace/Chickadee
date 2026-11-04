@@ -1,4 +1,4 @@
-// APIServer/Routes/Web/StudentCoursePaths.swift
+// APIServer/Utilities/StudentCoursePaths.swift
 //
 // One-stop builder for the `/:courseCode/students/:urlToken/...` URL
 // family used by the instructor "per-student grouped submissions" view

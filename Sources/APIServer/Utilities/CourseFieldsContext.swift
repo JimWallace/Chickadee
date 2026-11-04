@@ -1,4 +1,4 @@
-// APIServer/Routes/Web/CourseFieldsContext.swift
+// APIServer/Utilities/CourseFieldsContext.swift
 //
 // The values of one course form, rendered by `CourseFields`. Four forms
 // share the view: the admin new-course form, the settings and clone forms

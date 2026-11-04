@@ -1,4 +1,4 @@
-// APIServer/Routes/Web/CourseLoaders.swift
+// APIServer/Helpers/CourseLoaders.swift
 //
 // Course and section loaders, beside the assignment loaders in
 // `AssignmentHelpers.swift` (#2773). Before these existed, each handler

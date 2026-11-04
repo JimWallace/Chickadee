@@ -1,4 +1,4 @@
-// APIServer/Routes/Web/CourseTermForm.swift
+// APIServer/Utilities/CourseTermForm.swift
 //
 // The year and term fields of the course forms (docs/course-terms.md): the
 // options the term select renders, and the parse of what a form posted.
