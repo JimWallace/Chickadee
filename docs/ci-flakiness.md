@@ -11,9 +11,9 @@ and workflows cite "Family 5" and "Family 7". The investigation history, with
 the evidence for each statement here, is in
 [archive/ci-flakiness-history.md](archive/ci-flakiness-history.md).
 
-`ci-triage.yml` and `nightly-failure-notes.yml` give this file to a model.
-The model reads this introduction and the heading of each `## Family`
-section. Keep one `## Family N` heading for each family.
+A Claude Code session that diagnoses a red check reads this introduction
+and the heading of each `## Family` section first. Keep one `## Family N`
+heading for each family.
 
 ## The families
 
@@ -32,16 +32,13 @@ section. Keep one `## Family N` heading for each family.
 
 Do these steps in this order.
 
-1. **Read the `ci-triage.yml` comment, but do not trust it alone.** It is a
-   first reading, not evidence. Check the tells of the family that it names
-   before you spend the one re-run.
-2. **Ask if the diff can reach the failing job.** For `api-tests`, does the
+1. **Ask if the diff can reach the failing job.** For `api-tests`, does the
    diff touch `Sources/APIServer/` or `Tests/APITests/`?
-3. **Find the shape of the failure.** A job that reads `cancelled` at its
+2. **Find the shape of the failure.** A job that reads `cancelled` at its
    ceiling is Family 5 or Family 6. A job that fails after about 5 minutes
    with signal 6 is Family 4. A `build` step that exits 139 is Family 7 only
    if the full signature matches.
-4. **For a `cancelled` job, examine the tail of the log.**
+3. **For a `cancelled` job, examine the tail of the log.**
    - Were tests still *completing* at the tail? A wedge stops. A collapse
      (Family 5) continues to finish tests slowly.
    - Did `api-tests` pass on `main` at the same base, or on a re-run of
@@ -53,12 +50,12 @@ Do these steps in this order.
      With `cancel-in-progress: false`, GitHub cancels older pending runs. A
      run that GitHub cancelled before any job started is bookkeeping, not a
      ceiling kill.
-5. **Do not use per-test or per-suite durations from a Swift Testing log.**
+4. **Do not use per-test or per-suite durations from a Swift Testing log.**
    Swift Testing starts the clock of a test when it *schedules* the test, not
    when the test gets a parallelization slot. A healthy `api-tests` run has a
    median test duration of about 80 s. Every suite ends at about the total
    time of the run. A "slow test" in that log is an artifact.
-6. **For a `build` job that exits 139**, look for all three parts of the
+5. **For a `build` job that exits 139**, look for all three parts of the
    signature: red within about 90 s, `[Planning 1 / N]` as the last build
    line, and `DispatchWorker` in `_dispatch_event_loop_drain`. That is Family
    7, an upstream SwiftPM crash. Answer it with one `/rerun-failed`. A crash
@@ -67,13 +64,11 @@ Do these steps in this order.
    A test lane that fails in `Swift test setup` with a `::error` that names
    Family 8 missed the build cache. That one needs "Re-run all jobs", not
    `/rerun-failed`.
-7. **Re-run with `/rerun-failed`** on the PR, or with `rerun-failed-jobs` on
+6. **Re-run with `/rerun-failed`** on the PR, or with `rerun-failed-jobs` on
    the run. **Never push an empty commit.** An empty commit runs every flaky
    job again and makes the shared build cache key not valid.
-8. **If no family matches, the failure is real or it is a new family.** To
-   add a family, add a row and a `## Family N` section here. `ci-triage.yml`
-   reads this file from `main` on each run, so it learns the new family at
-   once.
+7. **If no family matches, the failure is real or it is a new family.** To
+   add a family, add a row and a `## Family N` section here.
 
 ## Family 1 — `WorkerTests.stdoutIsCaptured()` stall (issue #1139) — ROOT-CAUSED & FIXED
 
@@ -182,7 +177,7 @@ crash in `TaskRegistry`. Open the decision again if one of these occurs:
 **Tells.** `api-tests` reads `cancelled` at its 25-minute ceiling, and
 `swift-tests-gate` fails with `jobs not successful: api-tests`. It looks like
 a wedge, but it is not one. The job still finishes tests when GitHub kills
-it. Use steps 2 to 5 of the checklist above. Of the three tells that the
+it. Use steps 1 to 4 of the checklist above. Of the three tells that the
 original entry used, only "tests still complete at the tail" is evidence. The
 other two (similar suite totals, large per-test durations) are artifacts of
 Swift Testing and are true of every run.
@@ -371,7 +366,7 @@ cost.
    lane, and the lane restores the same key that is gone, so it misses again.
 3. Re-run all jobs of the workflow run ("Re-run all jobs"), or push a commit
    that you need anyway. The `build` job then saves the cache again. An empty
-   commit is still wrong (checklist step 7).
+   commit is still wrong (checklist step 6).
 4. If the misses become frequent, measure the cache use of the repository
    (`gh cache list`, or `gh api repos/JimWallace/Chickadee/actions/cache/usage`)
    before you change anything. The levers are fewer saved trees or a smaller
@@ -394,10 +389,10 @@ cold, and so is every probe re-run.
 
 The CI tools that exist because of these families:
 
-- **Automatic triage.** When a CI workflow fails, `ci-triage.yml` gives the
-  failed log and this file to a small model. It posts one comment: a known
-  family (with the tell that matched), a real failure (with its first error),
-  an infrastructure death, or "unclear". It never re-runs a job.
+- **Triage is by hand.** `ci-triage.yml` gave each failed log and this file
+  to a small model, which posted a comment naming the family. It was removed
+  in 2026-11 because it needed an API key. Read the log against the steps in
+  "Before you chase a red check".
 
 1. **A bot's only re-kick was a new SHA.** Fixed. Comment `/rerun-failed` on
    a PR (`rerun-failed.yml`, OWNER, MEMBER and COLLABORATOR only). It re-runs

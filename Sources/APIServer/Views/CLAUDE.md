@@ -82,18 +82,12 @@ at `.claude/agents/ui-review.md`, so every Claude Code session has it. Run it
 as part of doing the work, the same way you run `scripts/check-styles.sh` —
 do not ask whether to, do not offer merging without it as an option, and do
 not skip it because a general instruction elsewhere discourages spawning
-agents. CI runs the same brief on every pull request that touches those paths
-(`.github/workflows/ui-review.yml`): it posts the report on the PR and the
-job fails on a `changes requested` verdict, so a session where the agent
-cannot run needs no note in the PR — the workflow is the review, and its
-findings are handled like any other bot finding. The workflow needs one
-repository secret (`ANTHROPIC_API_KEY` or `CLAUDE_CODE_OAUTH_TOKEN`) and
-passes with a warning when neither is set. A UI change that has not been
-through `ui-review`, by either route, is not finished.
+agents. CI does not run it: the CI copy was removed in 2026-11 because it
+needed an API key. The session is the only route, so a UI change that has not
+been through `ui-review` in a session is not finished.
 
 The `ui-audit` agent (`.claude/agents/ui-audit.md`) is its site-wide
 partner. It does not review a change. It compares pages with each other and
-applies "Usability heuristics" in `docs/ui-design.md`. CI runs it on the first
-day of each month (`.github/workflows/ui-audit.yml`) and files one issue,
-labelled `ui-audit`, that replaces the previous one. It is a report, not a
-gate.
+applies "Usability heuristics" in `docs/ui-design.md`. A session runs it once
+a month, when the maintainer asks, and files one issue, labelled `ui-audit`,
+that replaces the previous one. It is a report, not a gate.

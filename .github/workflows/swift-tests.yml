@@ -162,6 +162,11 @@ jobs:
         if: ${{ !cancelled() }}
         run: scripts/test-snapshot-retention.sh
 
+      # Needs jq, which the plain Swift image of format-lint does not have.
+      - name: Weekly digest renderer self-tests
+        if: ${{ !cancelled() }}
+        run: scripts/weekly-digest-render.sh --self-test
+
       # The class-handle word lists (Sources/Core/AvatarHandle.swift) against
       # the review data in Tools/handle-review/data. Exits non-zero on any red
       # flag. AvatarHandleTests reads the same data; this step keeps the tool
@@ -288,11 +293,8 @@ jobs:
       - name: Swift suite scope self-tests
         run: scripts/ci-swift-suite-scope.sh --self-test
 
-      - name: Agent text cleanup self-tests
-        run: scripts/ci-agent-sanitize.sh --self-test
-
-      - name: Agent workflows share one setup and one cleanup
-        run: scripts/check-agent-workflows.sh
+      - name: Post text cleanup self-tests
+        run: scripts/ci-post-sanitize.sh --self-test
 
   # Single shared compile of the whole package + all test targets.  The
   # resulting `.build/` tree is cached and reused by every test job below

@@ -74,11 +74,11 @@ uploads as the `visual-diffs` artifact.
 
 ## When the check fails on a PR
 
-`.github/workflows/visual-diff-explainer.yml` then comments on the PR with
-one row per changed page: what changed, and whether the PR's UI diff explains
-it (`intended`), does not (`regression`) or cannot be told (`unclear`). It
-reads the `visual-diffs` artifact and the PR's own baselines. It is a report:
-the baselines still change only when a person regenerates them.
+Download the `visual-diffs` artifact and compare each `*.diff.png` with the
+PR's UI diff: is each change intended, a regression, or unclear? A model
+workflow used to post that comparison; it was removed in 2026-11 because it
+needed an API key. The baselines still change only when a person regenerates
+them.
 
 ## Captures for the UI audit
 
@@ -87,9 +87,8 @@ the baselines still change only when a person regenerates them.
 ```
 
 captures the pages in `pages.mjs` into `visual-captures/` at the repository root and does
-not compare. The `ui-audit` agent (`.claude/agents/ui-audit.md`) reads these
-screenshots; the monthly `ui-audit.yml` workflow runs this mode and passes
-the result to the agent.
+not compare. The `ui-audit` agent (`.claude/agents/ui-audit.md`) runs this
+mode in a session and reads the screenshots.
 
 ## Intentional UI change?
 

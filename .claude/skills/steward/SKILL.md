@@ -85,23 +85,21 @@ they cannot see a component that duplicates the vocabulary under a new name,
 an idiom heavier than the situation needs, or copy that runs past house
 length. Every style regression so far has been mechanically legal.
 
-The agent is checked in at `.claude/agents/ui-review.md`, and CI runs the same
-brief on every pull request that touches those paths
-(`.github/workflows/ui-review.yml`). The workflow posts its report on the PR
-and fails on a `changes requested` verdict; its findings are bot findings, so
-verify each one and push the fix. If the agent cannot run in your session, the
-workflow is the review; no note in the PR is needed.
+The agent is checked in at `.claude/agents/ui-review.md`. CI does not run
+it: the CI copy was removed in 2026-11 because it needed an API key. Run it in
+your session before you push, verify each finding, and fix the ones that are
+real. If the agent cannot run in your session, say so in the PR, because
+nothing else will review the change.
 
 ## The interaction review is advisory
 
-CI runs the **`interaction-review` agent** (`.claude/agents/interaction-review.md`)
-on every pull request that changes `Sources/` or a `Public/*.js` file
-(`.github/workflows/interaction-review.yml`). It looks for a side effect on a
-feature that the change does not mention, with the map in
-`docs/feature-interactions.md`. Its job stays green on every verdict for now.
-Its findings are still bot findings: verify each failure path in the code, and
-fix the ones that are real. When a finding says the map needs a row, add the
-row in the same PR.
+Run the **`interaction-review` agent** (`.claude/agents/interaction-review.md`)
+in your session on every change to `Sources/` or a `Public/*.js` file. CI does
+not run it. It looks for a side effect on a feature that the change does not
+mention, with the map in `docs/feature-interactions.md`. Its verdict is
+advisory for now. Its findings are still bot findings: verify each failure
+path in the code, and fix the ones that are real. When a finding says the map
+needs a row, add the row in the same PR.
 
 ## Do not add an environment variable
 

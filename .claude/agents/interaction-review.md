@@ -4,9 +4,8 @@ description: >
   Reviews a change for side effects on other features: a shared object that
   the change writes or reads, and a second feature that depends on it. It
   uses the map in docs/feature-interactions.md. Use it before a commit on any
-  change under Sources/ or to a page-wiring Public/*.js file. CI runs it on
-  every pull request that touches those paths
-  (.github/workflows/interaction-review.yml).
+  change under Sources/ or to a page-wiring Public/*.js file. CI does not
+  run it, so the session that makes the change does.
   Read-only: it reports, it does not edit.
 model: sonnet
 tools: Read, Grep, Glob, Bash

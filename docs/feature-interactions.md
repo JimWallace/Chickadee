@@ -7,10 +7,9 @@ document is the map of those objects. For each object, it gives the features
 that write it, the features that read it, and the rules that must stay true.
 
 The `interaction-review` agent (`.claude/agents/interaction-review.md`) uses
-this map as its checklist. CI runs the agent on every pull request that
-changes `Sources/` or a `Public/*.js` file
-(`.github/workflows/interaction-review.yml`). Human reviewers can use the map
-in the same way.
+this map as its checklist. A Claude Code session runs the agent before it
+commits a change to `Sources/` or a `Public/*.js` file; CI does not run it.
+Human reviewers can use the map in the same way.
 
 ## How to use this map
 
