@@ -1,3 +1,4 @@
+// @ts-check
 // Public/achievements-editor.js
 //
 // The composable Achievements editor.  Every achievement — individual badges,
@@ -27,7 +28,7 @@
     function dimLabel(value) {
         if (!DIM_LABEL) {
             DIM_LABEL = {};
-            var tpl = document.getElementById('achievement-editor-template');
+            var tpl = /** @type {HTMLTemplateElement | null} */ (document.getElementById('achievement-editor-template'));
             var root = tpl && tpl.content ? tpl.content : document;
             var opts = root.querySelectorAll('#am-recordDimension option');
             Array.prototype.forEach.call(opts, function (o) {
@@ -65,7 +66,7 @@
     function targetLabel(cond) {
         if (!TARGET_LABEL) {
             TARGET_LABEL = {};
-            var tpl = document.getElementById('achievement-condition-template');
+            var tpl = /** @type {HTMLTemplateElement | null} */ (document.getElementById('achievement-condition-template'));
             var root = tpl && tpl.content ? tpl.content : document;
             Array.prototype.forEach.call(root.querySelectorAll('.js-am-cond-target option'), function (o) {
                 TARGET_LABEL[o.value] = o.textContent.trim();
@@ -80,7 +81,7 @@
     function achievementName(id) {
         if (!ACHIEVEMENT_NAME) {
             ACHIEVEMENT_NAME = {};
-            var tpl = document.getElementById('achievement-condition-template');
+            var tpl = /** @type {HTMLTemplateElement | null} */ (document.getElementById('achievement-condition-template'));
             var root = tpl && tpl.content ? tpl.content : document;
             Array.prototype.forEach.call(root.querySelectorAll('.js-am-cond-achref option'), function (o) {
                 if (o.value) ACHIEVEMENT_NAME[o.value] = o.textContent.trim();
@@ -147,8 +148,8 @@
         // from the assignment.
         var url = block.getAttribute('data-url')
             || (assignmentID ? '/instructor/' + encodeURIComponent(assignmentID) + '/achievements' : '');
-        var template = document.getElementById('achievement-editor-template');
-        var condTemplate = document.getElementById('achievement-condition-template');
+        var template = /** @type {HTMLTemplateElement} */ (document.getElementById('achievement-editor-template'));
+        var condTemplate = /** @type {HTMLTemplateElement} */ (document.getElementById('achievement-condition-template'));
         if (!tbody || !url || !template || !condTemplate) return;
         if (!ChickadeeUI.wireOnce(block, 'achievements')) return;
         var status = document.getElementById('achievements-status');
@@ -183,7 +184,8 @@
             tbody.innerHTML = '';
             state.forEach(function (row, i) {
                 var tr = document.createElement('tr');
-                tr.setAttribute('data-i', i);
+                // setAttribute stringifies the index.
+                tr.setAttribute('data-i', /** @type {any} */ (i));
                 tr.innerHTML =
                     '<td><strong>' + esc(row.name) + '</strong></td>'
                     + '<td>' + esc(Core.SCOPE_LABEL[row.scope] || row.scope) + '</td>'
@@ -472,9 +474,9 @@
         if (addBtn) addBtn.addEventListener('click', function () { expand(-1); });
 
         block.addEventListener('click', function (e) {
-            var edit = e.target.closest && e.target.closest('.js-ach-edit');
+            var edit = /** @type {Element} */ (e.target).closest && /** @type {Element} */ (e.target).closest('.js-ach-edit');
             if (edit) { expand(Number(edit.getAttribute('data-i'))); return; }
-            var rm = e.target.closest && e.target.closest('.js-ach-remove');
+            var rm = /** @type {Element} */ (e.target).closest && /** @type {Element} */ (e.target).closest('.js-ach-remove');
             if (rm) {
                 var ri = Number(rm.getAttribute('data-i'));
                 var snapshot = state.slice();

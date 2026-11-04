@@ -1,3 +1,4 @@
+// @ts-check
 // Public/notebook-graded.js
 //
 // The graded toast on the notebook page (notebook views NB5, frame 18f).
@@ -19,7 +20,7 @@
 // `ck-celebrated:<submissionID>`. Without the editor extension notebook.js
 // keeps its inline results panel and its old flow, and this does nothing.
 
-(function (global) {
+(function (/** @type {any} */ global) {
     'use strict';
 
     var FIRST_DELAY_MS = 1000;
@@ -111,7 +112,7 @@
             toast.classList.toggle('is-perfect', text.perfect);
             ['caption', 'grade', 'summary'].forEach(function (name) { part(name).textContent = ''; });
             toast.hidden = false;
-            var link = byId('nb-graded-results');
+            var link = /** @type {HTMLAnchorElement | null} */ (byId('nb-graded-results'));
             if (link) link.href = text.url;
             later(function () {
                 part('caption').textContent = text.caption;
@@ -195,7 +196,7 @@
         }
 
         // A page opened while its latest attempt grades: watch it quietly.
-        window.addEventListener('chickadee:guide', function (e) {
+        window.addEventListener('chickadee:guide', function (/** @type {CustomEvent} */ e) {
             var guide = e && e.detail;
             if (!firstGuide || !guide) return;
             firstGuide = false;

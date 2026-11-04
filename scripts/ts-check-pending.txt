@@ -7,32 +7,11 @@
 #
 # To see what a file needs, add `// @ts-check` as its first line and run
 # scripts/typecheck-js.sh.
-Public/achievements-editor.js
 Public/app.js
-Public/assignment-edit-page.js
-Public/assignment-new-page.js
-Public/assignments.js
 Public/browser-runner.js
-Public/celebrate.js
-Public/earned-toast.js
-Public/generated-starter-tests.js
-Public/idle-logout.js
-Public/inplace-forms.js
-Public/inputs-editor-core.js
-Public/instructor-brightspace.js
 Public/jl-cell-perf-patch.js
 Public/jl-kernel-diagnostics.js
-Public/multipart-forms.js
-Public/notebook-graded.js
-Public/notebook-preflight.js
 Public/notebook.js
 Public/pattern-family-editor.js
-Public/section-items-dnd.js
 Public/suite-table.js
 Public/support-files.js
-Public/sw-preflight.js
-Public/test-editor-modal.js
-Public/test-renderer-script.js
-Public/tournament-arena.js
-Public/workbench.js
-Public/xeus-kernel-shared.js
