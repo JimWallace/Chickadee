@@ -10,7 +10,9 @@
     "skipLibCheck": true,
     "types": [],
     "paths": {
-      "/vendor/codemirror.js": ["./types/vendor-codemirror.d.ts"]
+      "/vendor/codemirror.js": ["./types/vendor-codemirror.d.ts"],
+      "/vendor/iframe-commands-host.js": ["./types/vendor-iframe-commands-host.d.ts"],
+      "/runner-wasm/runner-core.js": ["./types/runner-core-loader.d.ts"]
     }
   },
   "include": ["Public/*.js", "types/*.d.ts"]
