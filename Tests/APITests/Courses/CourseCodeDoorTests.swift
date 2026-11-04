@@ -227,7 +227,7 @@ import VaporTesting
 
     @Test(arguments: [("data", "clone_code_reserved"), ("CS#135", "clone_code_unsafe")])
     func newTermRefusesTheCode(code: String, error: String) async throws {
-        try await withApp(app) { app in
+        try await withApp(app) { _ in
             let cookie = try await instructor("ccd_instructor")
             let result = try await post(
                 "/instructor/new-term",
