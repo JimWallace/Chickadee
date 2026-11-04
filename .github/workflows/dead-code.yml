@@ -11,10 +11,15 @@ name: Dead Code Scan
 # unused (for example `sandboxOwnProcessCount`). This scan builds what
 # production runs.
 #
-# WHY A SEPARATE BUILD. Periphery reads the compiler's index store, and a build
-# writes one only when it is asked to. The shared `.build` cache has no index
-# store, and a cache hit does not recompile, so this job builds from source
-# with `-index-store-path`. Each scan then reads that index, with no new build.
+# WHY A SEPARATE BUILD. Periphery reads the compiler's index store. The shared
+# `.build` cache has no index store, and a cache hit does not recompile, so
+# this job builds from source with `--enable-index-store`. Each scan then reads
+# that index, with no new build.
+#
+# DO NOT pass `-Xswiftc -index-store-path` to move the index. On Linux, SwiftPM
+# test discovery reads the index at its own default path, under the bin path.
+# A moved index fails the build at discovery ("Failed opening .../index/store/
+# v5/units/..."), which is how this job's first two runs failed.
 #
 # The token: PERIPHERY_TOKEN is a repository secret. Only the `Scan` step sees
 # it. A pull request from a fork gets no secrets, so the job does not run for
@@ -56,7 +61,6 @@ jobs:
       # https://github.com/periphery-pro/cli-releases/releases
       PERIPHERY_VERSION: 1.0.0.beta.9
       PERIPHERY_SHA256: 1024ed5e0c97eef58ad924027f84d53cab4f08a8e45f28133ec6fba433503ae1
-      INDEX_STORE: .build/periphery-index
       REPORT_DIR: dead-code-report
 
     steps:
@@ -95,9 +99,13 @@ jobs:
         # engine is also why this step needs no scripts/ci-build-retry.sh: the
         # crash that script retries is in the default Swift Build engine
         # (docs/ci-flakiness.md, Family 7).
+        # The index stays at SwiftPM's default path (see the header), and the
+        # scan step reads it from there.
         run: |
-          swift build --build-tests --build-system native \
-            -Xswiftc -index-store-path -Xswiftc "$PWD/$INDEX_STORE"
+          swift build --build-tests --build-system native --enable-index-store
+          bin="$(swift build --build-system native --show-bin-path)"
+          test -d "$bin/index/store" || { echo "::error::No index store at $bin/index/store"; exit 1; }
+          echo "INDEX_STORE=$bin/index/store" >> "$GITHUB_ENV"
 
       - name: Scan
         env:
@@ -112,6 +120,11 @@ jobs:
           scan --format agent-prompt > "$REPORT_DIR/agent-prompt.md"
           scan --format json > "$REPORT_DIR/results.json"
           scan --format github-markdown > "$REPORT_DIR/results.md"
+          # The same scan with the test targets left out. A result here that
+          # is not in results.json is used only by tests. The
+          # monthly-audit-rotation scheduled task reads the difference
+          # (docs/dead-code-scan.md, "Code that only tests use").
+          scan --format json --exclude-tests > "$REPORT_DIR/results-without-tests.json"
           {
             echo "## Dead code scan"
             echo
