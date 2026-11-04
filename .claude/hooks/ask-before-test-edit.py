@@ -16,6 +16,12 @@ call:
   command that moves, removes, copies over, truncates, patches, restores or
   reformats a named path.
 
+A `cd` or `pushd` earlier in the command, and `git -C <dir>`, move the
+directory that a relative path resolves against.
+
+The hook can only return "ask". A permission mode that answers prompts
+without a person (auto mode) also answers this one (#2827).
+
 The Bash check reads the named paths only. A command that changes tests
 without naming them (`git reset --hard`, `git stash`, `git checkout .`)
 gets no prompt.
@@ -86,24 +92,52 @@ def split_words(segment: str) -> list[str]:
 
 
 def bash_test_targets(command: str, base: str, tests_dir: str) -> list[str]:
-    """Returns the existing paths under Tests/ that the command can change."""
+    """Returns the existing paths under Tests/ that the command can change.
+
+    A `cd` or `pushd` may move the directory that later relative paths
+    resolve against (#2827). The hook cannot know whether a `cd` ran, failed
+    or was undone (a subshell, `cd -`, `||`), so it adds each literal target
+    to a set of possible bases and never removes one. A path that is an
+    existing test from any base asks."""
     found: list[str] = []
+    bases = [base]
 
-    for match in REDIRECT_TARGET.finditer(command):
-        hit = existing_test_path(match.group(1).strip("\"'"), base, tests_dir)
-        if hit:
-            found.append(hit)
+    def check(candidate: str, from_bases: list[str]) -> None:
+        for each in from_bases:
+            hit = existing_test_path(candidate, each, tests_dir)
+            if hit:
+                found.append(hit)
 
-    for segment in SEGMENT_SPLIT.split(command):
-        words = split_words(segment.strip())
+    def moved(from_bases: list[str], target: str) -> list[str]:
+        """Adds the bases that a change to `target` can reach. A target that
+        the hook cannot resolve (`-`, a shell expansion) adds nothing."""
+        if not target or target == "-" or any(c in target for c in "$`"):
+            return from_bases
+        added = [os.path.join(each, os.path.expanduser(target)) for each in from_bases]
+        return from_bases + [path for path in added if path not in from_bases]
+
+    for raw_segment in SEGMENT_SPLIT.split(command):
+        stripped = raw_segment.strip()
+        for match in REDIRECT_TARGET.finditer(stripped):
+            check(match.group(1).strip("\"'"), bases)
+
+        segment = stripped.lstrip("({").rstrip(")}").strip()
+        words = split_words(segment)
         # Drop leading environment assignments and `sudo`.
         while words and (re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*=.*", words[0]) or words[0] == "sudo"):
             words = words[1:]
         if not words:
             continue
         name = os.path.basename(words[0])
+
+        if name in ("cd", "pushd"):
+            target = next((w for w in words[1:] if w == "-" or not w.startswith("-")), "")
+            bases = moved(bases, target)
+            continue
+
         args = [w for w in words[1:] if not w.startswith("-")]
         candidates: list[str] = []
+        candidate_bases = bases
 
         if name in ("sed", "perl"):
             in_place = any(
@@ -117,17 +151,22 @@ def bash_test_targets(command: str, base: str, tests_dir: str) -> list[str]:
         elif name in WRITING_COMMANDS:
             candidates = args[-1:] if WRITING_COMMANDS[name] == "last" else args
         elif name == "git" and len(words) > 1:
-            sub = next((w for w in words[1:] if not w.startswith("-")), "")
+            rest = words[1:]
+            # Global options come before the subcommand. `-C <dir>` runs the
+            # subcommand in <dir>; `-c <key=value>` takes a value.
+            while len(rest) > 1 and rest[0] in ("-C", "-c"):
+                if rest[0] == "-C":
+                    candidate_bases = moved(candidate_bases, rest[1])
+                rest = rest[2:]
+            sub = next((w for w in rest if not w.startswith("-")), "")
             if sub in WRITING_GIT_SUBCOMMANDS:
-                candidates = args[1:]
+                candidates = [w for w in rest if not w.startswith("-")][1:]
         elif name in ("swift-format", "swift") and "format" in words[1:]:
             if "lint" not in words[1:]:
                 candidates = [a for a in args if a != "format"]
 
         for candidate in candidates:
-            hit = existing_test_path(candidate, base, tests_dir)
-            if hit:
-                found.append(hit)
+            check(candidate, candidate_bases)
 
     return sorted(set(found))
 
