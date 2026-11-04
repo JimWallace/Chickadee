@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "chickadee": {
+      "type": "http",
+      "url": "${user_config.chickadee_url}"
+    }
+  }
+}

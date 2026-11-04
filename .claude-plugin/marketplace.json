@@ -1,0 +1,12 @@
+{
+  "name": "chickadee",
+  "description": "Claude Code plugins for Chickadee course authors.",
+  "owner": { "name": "Jim Wallace", "url": "https://github.com/JimWallace/Chickadee" },
+  "plugins": [
+    {
+      "name": "chickadee-review",
+      "source": "./Tools/chickadee-review",
+      "description": "Read-only reviewers for assignment content, coordinated by the review-assignment skill (#2747)."
+    }
+  ]
+}

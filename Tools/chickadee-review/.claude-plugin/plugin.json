@@ -1,0 +1,15 @@
+{
+  "name": "chickadee-review",
+  "version": "0.1.0",
+  "description": "Read-only reviewers for Chickadee assignment content. A coordinator runs check_assignment, then the reviewers the assignment needs, and gives one report. Nothing is changed without the instructor's approval.",
+  "author": { "name": "Jim Wallace" },
+  "repository": "https://github.com/JimWallace/Chickadee",
+  "userConfig": {
+    "chickadee_url": {
+      "type": "string",
+      "title": "Chickadee MCP URL",
+      "description": "The MCP endpoint of your Chickadee server: its address followed by /mcp.",
+      "required": true
+    }
+  }
+}
