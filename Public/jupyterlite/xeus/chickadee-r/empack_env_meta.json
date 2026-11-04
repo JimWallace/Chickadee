@@ -2,86 +2,82 @@
   "prefix": "/",
   "packages": [
     {
-      "name": "r-digest",
-      "version": "0.6.39",
-      "build": "r45h202ccb8_7",
-      "filename_stem": "r-digest-0.6.39-r45h202ccb8_7",
-      "filename": "r-digest-0.6.39-r45h202ccb8_7.tar.gz",
-      "channel": "https://repo.prefix.dev/emscripten-forge-4x",
-      "depends": [
-        "emscripten-abi >=4,<5.0a0",
-        "r-base >=4.5.3,<4.6.0a0"
-      ],
-      "subdir": "emscripten-wasm32"
-    },
-    {
-      "name": "font-ttf-dejavu-sans-mono",
-      "version": "2.37",
-      "build": "hab24e00_0",
-      "filename_stem": "font-ttf-dejavu-sans-mono-2.37-hab24e00_0",
-      "filename": "font-ttf-dejavu-sans-mono-2.37-hab24e00_0.tar.gz",
+      "name": "r-r6",
+      "version": "2.6.1",
+      "build": "r45hc72bb7e_1",
+      "filename_stem": "r-r6-2.6.1-r45hc72bb7e_1",
+      "filename": "r-r6-2.6.1-r45hc72bb7e_1.tar.gz",
       "channel": "https://repo.prefix.dev/conda-forge",
-      "depends": [],
+      "depends": [
+        "r-base >=4.5,<4.6.0a0"
+      ],
       "subdir": "noarch"
     },
     {
-      "name": "r-forcats",
-      "version": "1.0.1",
+      "name": "r-lifecycle",
+      "version": "1.0.5",
       "build": "r45hc72bb7e_0",
-      "filename_stem": "r-forcats-1.0.1-r45hc72bb7e_0",
-      "filename": "r-forcats-1.0.1-r45hc72bb7e_0.tar.gz",
+      "filename_stem": "r-lifecycle-1.0.5-r45hc72bb7e_0",
+      "filename": "r-lifecycle-1.0.5-r45hc72bb7e_0.tar.gz",
       "channel": "https://repo.prefix.dev/conda-forge",
       "depends": [
         "r-base >=4.5,<4.6.0a0",
+        "r-cli >=3.4.0",
+        "r-glue",
+        "r-rlang >=1.0.6"
+      ],
+      "subdir": "noarch"
+    },
+    {
+      "name": "r-prettyunits",
+      "version": "1.2.0",
+      "build": "r45hc72bb7e_2",
+      "filename_stem": "r-prettyunits-1.2.0-r45hc72bb7e_2",
+      "filename": "r-prettyunits-1.2.0-r45hc72bb7e_2.tar.gz",
+      "channel": "https://repo.prefix.dev/conda-forge",
+      "depends": [
+        "r-assertthat",
+        "r-base >=4.5,<4.6.0a0",
+        "r-magrittr"
+      ],
+      "subdir": "noarch"
+    },
+    {
+      "name": "r-clipr",
+      "version": "0.8.1",
+      "build": "r45hc72bb7e_0",
+      "filename_stem": "r-clipr-0.8.1-r45hc72bb7e_0",
+      "filename": "r-clipr-0.8.1-r45hc72bb7e_0.tar.gz",
+      "channel": "https://repo.prefix.dev/conda-forge",
+      "depends": [
+        "r-base >=4.5,<4.6.0a0"
+      ],
+      "subdir": "noarch"
+    },
+    {
+      "name": "r-tidyr",
+      "version": "1.3.2",
+      "build": "r45h6b09a92_4",
+      "filename_stem": "r-tidyr-1.3.2-r45h6b09a92_4",
+      "filename": "r-tidyr-1.3.2-r45h6b09a92_4.tar.gz",
+      "channel": "https://repo.prefix.dev/emscripten-forge-4x",
+      "depends": [
         "r-cli",
-        "r-ellipsis",
+        "r-dplyr",
         "r-glue",
         "r-lifecycle",
         "r-magrittr",
-        "r-rlang >=1.0.0",
+        "r-purrr",
+        "r-rlang",
+        "r-stringr",
         "r-tibble",
-        "r-withr"
-      ],
-      "subdir": "noarch"
-    },
-    {
-      "name": "r-utf8",
-      "version": "1.2.6",
-      "build": "r45h6b09a92_7",
-      "filename_stem": "r-utf8-1.2.6-r45h6b09a92_7",
-      "filename": "r-utf8-1.2.6-r45h6b09a92_7.tar.gz",
-      "channel": "https://repo.prefix.dev/emscripten-forge-4x",
-      "depends": [
+        "r-tidyselect",
+        "r-vctrs",
+        "r-cpp11",
         "emscripten-abi >=4,<5.0a0",
         "r-base >=4.5.3,<4.6.0a0"
       ],
       "subdir": "emscripten-wasm32"
-    },
-    {
-      "name": "font-ttf-dejavu",
-      "version": "2.37",
-      "build": "hd8ed1ab_1",
-      "filename_stem": "font-ttf-dejavu-2.37-hd8ed1ab_1",
-      "filename": "font-ttf-dejavu-2.37-hd8ed1ab_1.tar.gz",
-      "channel": "https://repo.prefix.dev/conda-forge",
-      "depends": [],
-      "subdir": "noarch"
-    },
-    {
-      "name": "r-repr",
-      "version": "1.1.7",
-      "build": "r45h785f33e_2",
-      "filename_stem": "r-repr-1.1.7-r45h785f33e_2",
-      "filename": "r-repr-1.1.7-r45h785f33e_2.tar.gz",
-      "channel": "https://repo.prefix.dev/conda-forge",
-      "depends": [
-        "r-base >=4.5,<4.6.0a0",
-        "r-base64enc",
-        "r-htmltools",
-        "r-jsonlite",
-        "r-pillar >=1.4.0"
-      ],
-      "subdir": "noarch"
     },
     {
       "name": "r-bit",
@@ -97,54 +93,11 @@
       "subdir": "emscripten-wasm32"
     },
     {
-      "name": "r-irdisplay",
-      "version": "1.1",
-      "build": "r45hd8ed1ab_4",
-      "filename_stem": "r-irdisplay-1.1-r45hd8ed1ab_4",
-      "filename": "r-irdisplay-1.1-r45hd8ed1ab_4.tar.gz",
-      "channel": "https://repo.prefix.dev/conda-forge",
-      "depends": [
-        "r-base >=4.5,<4.6.0a0",
-        "r-repr"
-      ],
-      "subdir": "noarch"
-    },
-    {
-      "name": "r-cpp11",
-      "version": "0.5.5",
-      "build": "r45h785f33e_0",
-      "filename_stem": "r-cpp11-0.5.5-r45h785f33e_0",
-      "filename": "r-cpp11-0.5.5-r45h785f33e_0.tar.gz",
-      "channel": "https://repo.prefix.dev/conda-forge",
-      "depends": [
-        "r-base >=4.5,<4.6.0a0"
-      ],
-      "subdir": "noarch"
-    },
-    {
-      "name": "r-purrr",
-      "version": "1.2.2",
-      "build": "r45h6b09a92_2",
-      "filename_stem": "r-purrr-1.2.2-r45h6b09a92_2",
-      "filename": "r-purrr-1.2.2-r45h6b09a92_2.tar.gz",
-      "channel": "https://repo.prefix.dev/emscripten-forge-4x",
-      "depends": [
-        "r-cli >=3.6.3",
-        "r-lifecycle >=1.0.4",
-        "r-magrittr",
-        "r-rlang",
-        "r-vctrs",
-        "emscripten-abi >=4,<5.0a0",
-        "r-base >=4.5.3,<4.6.0a0"
-      ],
-      "subdir": "emscripten-wasm32"
-    },
-    {
       "name": "xeus-r",
       "version": "0.11.2",
       "build": "r45h01c9e3f_2",
       "filename_stem": "xeus-r-0.11.2-r45h01c9e3f_2",
-      "filename": "xeus-r-0.11.2-r45h01c9e3f_2.chickadee.b7f6ccabb61a.tar.gz",
+      "filename": "xeus-r-0.11.2-r45h01c9e3f_2.chickadee.08ef72d5e76e.tar.gz",
       "channel": "https://repo.prefix.dev/emscripten-forge-4x",
       "depends": [
         "r-main-module-abi * vanilla*",
@@ -177,116 +130,6 @@
       "subdir": "noarch"
     },
     {
-      "name": "r-glue",
-      "version": "1.8.1",
-      "build": "r45h6b09a92_2",
-      "filename_stem": "r-glue-1.8.1-r45h6b09a92_2",
-      "filename": "r-glue-1.8.1-r45h6b09a92_2.tar.gz",
-      "channel": "https://repo.prefix.dev/emscripten-forge-4x",
-      "depends": [
-        "emscripten-abi >=4,<5.0a0",
-        "r-base >=4.5.3,<4.6.0a0"
-      ],
-      "subdir": "emscripten-wasm32"
-    },
-    {
-      "name": "r-stringr",
-      "version": "1.6.0",
-      "build": "r45h785f33e_0",
-      "filename_stem": "r-stringr-1.6.0-r45h785f33e_0",
-      "filename": "r-stringr-1.6.0-r45h785f33e_0.tar.gz",
-      "channel": "https://repo.prefix.dev/conda-forge",
-      "depends": [
-        "r-base >=4.5,<4.6.0a0",
-        "r-cli",
-        "r-glue >=1.6.1",
-        "r-lifecycle >=1.0.3",
-        "r-magrittr",
-        "r-rlang >=1.0.0",
-        "r-stringi >=1.5.3",
-        "r-vctrs"
-      ],
-      "subdir": "noarch"
-    },
-    {
-      "name": "r-hms",
-      "version": "1.1.4",
-      "build": "r45hc72bb7e_0",
-      "filename_stem": "r-hms-1.1.4-r45hc72bb7e_0",
-      "filename": "r-hms-1.1.4-r45hc72bb7e_0.tar.gz",
-      "channel": "https://repo.prefix.dev/conda-forge",
-      "depends": [
-        "r-base >=4.5,<4.6.0a0",
-        "r-ellipsis",
-        "r-lifecycle",
-        "r-pkgconfig",
-        "r-rlang",
-        "r-vctrs >=0.2.1"
-      ],
-      "subdir": "noarch"
-    },
-    {
-      "name": "r-generics",
-      "version": "0.1.4",
-      "build": "r45hc72bb7e_1",
-      "filename_stem": "r-generics-0.1.4-r45hc72bb7e_1",
-      "filename": "r-generics-0.1.4-r45hc72bb7e_1.tar.gz",
-      "channel": "https://repo.prefix.dev/conda-forge",
-      "depends": [
-        "r-base >=4.5,<4.6.0a0"
-      ],
-      "subdir": "noarch"
-    },
-    {
-      "name": "r-crayon",
-      "version": "1.5.3",
-      "build": "r45hc72bb7e_2",
-      "filename_stem": "r-crayon-1.5.3-r45hc72bb7e_2",
-      "filename": "r-crayon-1.5.3-r45hc72bb7e_2.tar.gz",
-      "channel": "https://repo.prefix.dev/conda-forge",
-      "depends": [
-        "r-base >=4.5,<4.6.0a0"
-      ],
-      "subdir": "noarch"
-    },
-    {
-      "name": "r-fastmap",
-      "version": "1.2.0",
-      "build": "r45h202ccb8_7",
-      "filename_stem": "r-fastmap-1.2.0-r45h202ccb8_7",
-      "filename": "r-fastmap-1.2.0-r45h202ccb8_7.tar.gz",
-      "channel": "https://repo.prefix.dev/emscripten-forge-4x",
-      "depends": [
-        "emscripten-abi >=4,<5.0a0",
-        "r-base >=4.5.3,<4.6.0a0"
-      ],
-      "subdir": "emscripten-wasm32"
-    },
-    {
-      "name": "r-r6",
-      "version": "2.6.1",
-      "build": "r45hc72bb7e_1",
-      "filename_stem": "r-r6-2.6.1-r45hc72bb7e_1",
-      "filename": "r-r6-2.6.1-r45hc72bb7e_1.tar.gz",
-      "channel": "https://repo.prefix.dev/conda-forge",
-      "depends": [
-        "r-base >=4.5,<4.6.0a0"
-      ],
-      "subdir": "noarch"
-    },
-    {
-      "name": "r-pkgconfig",
-      "version": "2.0.3",
-      "build": "r45hc72bb7e_5",
-      "filename_stem": "r-pkgconfig-2.0.3-r45hc72bb7e_5",
-      "filename": "r-pkgconfig-2.0.3-r45hc72bb7e_5.tar.gz",
-      "channel": "https://repo.prefix.dev/conda-forge",
-      "depends": [
-        "r-base >=4.5,<4.6.0a0"
-      ],
-      "subdir": "noarch"
-    },
-    {
       "name": "r-magrittr",
       "version": "2.0.5",
       "build": "r45h6b09a92_3",
@@ -300,89 +143,44 @@
       "subdir": "emscripten-wasm32"
     },
     {
-      "name": "r-vctrs",
-      "version": "0.7.3",
-      "build": "r45h6b09a92_2",
-      "filename_stem": "r-vctrs-0.7.3-r45h6b09a92_2",
-      "filename": "r-vctrs-0.7.3-r45h6b09a92_2.tar.gz",
-      "channel": "https://repo.prefix.dev/emscripten-forge-4x",
-      "depends": [
-        "r-cli >=3.6.3",
-        "r-glue",
-        "r-rlang",
-        "r-lifecycle >=1.0.4",
-        "emscripten-abi >=4,<5.0a0",
-        "r-base >=4.5.3,<4.6.0a0"
-      ],
-      "subdir": "emscripten-wasm32"
-    },
-    {
-      "name": "r-fansi",
-      "version": "1.0.7",
-      "build": "r45h6b09a92_7",
-      "filename_stem": "r-fansi-1.0.7-r45h6b09a92_7",
-      "filename": "r-fansi-1.0.7-r45h6b09a92_7.tar.gz",
-      "channel": "https://repo.prefix.dev/emscripten-forge-4x",
-      "depends": [
-        "emscripten-abi >=4,<5.0a0",
-        "r-base >=4.5.3,<4.6.0a0"
-      ],
-      "subdir": "emscripten-wasm32"
-    },
-    {
-      "name": "r-tidyr",
-      "version": "1.3.2",
+      "name": "r-tibble",
+      "version": "3.3.1",
       "build": "r45h6b09a92_4",
-      "filename_stem": "r-tidyr-1.3.2-r45h6b09a92_4",
-      "filename": "r-tidyr-1.3.2-r45h6b09a92_4.tar.gz",
+      "filename_stem": "r-tibble-3.3.1-r45h6b09a92_4",
+      "filename": "r-tibble-3.3.1-r45h6b09a92_4.tar.gz",
       "channel": "https://repo.prefix.dev/emscripten-forge-4x",
       "depends": [
-        "r-cli",
-        "r-dplyr",
-        "r-glue",
+        "r-fansi",
         "r-lifecycle",
         "r-magrittr",
-        "r-purrr",
+        "r-pillar",
+        "r-pkgconfig",
         "r-rlang",
-        "r-stringr",
-        "r-tibble",
-        "r-tidyselect",
         "r-vctrs",
-        "r-cpp11",
         "emscripten-abi >=4,<5.0a0",
         "r-base >=4.5.3,<4.6.0a0"
       ],
       "subdir": "emscripten-wasm32"
     },
     {
-      "name": "r-rlang",
-      "version": "1.3.0",
-      "build": "r45h6b09a92_0",
-      "filename_stem": "r-rlang-1.3.0-r45h6b09a92_0",
-      "filename": "r-rlang-1.3.0-r45h6b09a92_0.tar.gz",
-      "channel": "https://repo.prefix.dev/emscripten-forge-4x",
-      "depends": [
-        "emscripten-abi >=4,<5.0a0",
-        "r-base >=4.5.3,<4.6.0a0"
-      ],
-      "subdir": "emscripten-wasm32"
+      "name": "font-ttf-dejavu-sans-mono",
+      "version": "2.37",
+      "build": "hab24e00_0",
+      "filename_stem": "font-ttf-dejavu-sans-mono-2.37-hab24e00_0",
+      "filename": "font-ttf-dejavu-sans-mono-2.37-hab24e00_0.tar.gz",
+      "channel": "https://repo.prefix.dev/conda-forge",
+      "depends": [],
+      "subdir": "noarch"
     },
     {
-      "name": "r-htmltools",
-      "version": "0.5.9",
-      "build": "r45h6b09a92_5",
-      "filename_stem": "r-htmltools-0.5.9-r45h6b09a92_5",
-      "filename": "r-htmltools-0.5.9-r45h6b09a92_5.tar.gz",
-      "channel": "https://repo.prefix.dev/emscripten-forge-4x",
-      "depends": [
-        "r-base64enc",
-        "r-digest",
-        "r-fastmap",
-        "r-rlang",
-        "emscripten-abi >=4,<5.0a0",
-        "r-base >=4.5.3,<4.6.0a0"
-      ],
-      "subdir": "emscripten-wasm32"
+      "name": "font-ttf-dejavu",
+      "version": "2.37",
+      "build": "hd8ed1ab_1",
+      "filename_stem": "font-ttf-dejavu-2.37-hd8ed1ab_1",
+      "filename": "font-ttf-dejavu-2.37-hd8ed1ab_1.tar.gz",
+      "channel": "https://repo.prefix.dev/conda-forge",
+      "depends": [],
+      "subdir": "noarch"
     },
     {
       "name": "r-vroom",
@@ -412,160 +210,17 @@
       "subdir": "emscripten-wasm32"
     },
     {
-      "name": "r-jsonlite",
-      "version": "2.0.0",
-      "build": "r45h202ccb8_7",
-      "filename_stem": "r-jsonlite-2.0.0-r45h202ccb8_7",
-      "filename": "r-jsonlite-2.0.0-r45h202ccb8_7.tar.gz",
+      "name": "r-htmltools",
+      "version": "0.5.9",
+      "build": "r45h6b09a92_5",
+      "filename_stem": "r-htmltools-0.5.9-r45h6b09a92_5",
+      "filename": "r-htmltools-0.5.9-r45h6b09a92_5.tar.gz",
       "channel": "https://repo.prefix.dev/emscripten-forge-4x",
       "depends": [
-        "emscripten-abi >=4,<5.0a0",
-        "r-base >=4.5.3,<4.6.0a0"
-      ],
-      "subdir": "emscripten-wasm32"
-    },
-    {
-      "name": "r-tzdb",
-      "version": "0.5.0",
-      "build": "r45h1ab2525_7",
-      "filename_stem": "r-tzdb-0.5.0-r45h1ab2525_7",
-      "filename": "r-tzdb-0.5.0-r45h1ab2525_7.tar.gz",
-      "channel": "https://repo.prefix.dev/emscripten-forge-4x",
-      "depends": [
-        "r-cpp11",
-        "emscripten-abi >=4,<5.0a0",
-        "r-base >=4.5.3,<4.6.0a0"
-      ],
-      "subdir": "emscripten-wasm32"
-    },
-    {
-      "name": "r-ellipsis",
-      "version": "0.3.3",
-      "build": "r45h0e10311_3",
-      "filename_stem": "r-ellipsis-0.3.3-r45h0e10311_3",
-      "filename": "r-ellipsis-0.3.3-r45h0e10311_3.tar.gz",
-      "channel": "https://repo.prefix.dev/emscripten-forge-4x",
-      "depends": [
-        "r-rlang"
-      ],
-      "subdir": "noarch"
-    },
-    {
-      "name": "r-main-module-abi",
-      "version": "0.1.0",
-      "build": "vanilla_ha99ebfa_0",
-      "filename_stem": "r-main-module-abi-0.1.0-vanilla_ha99ebfa_0",
-      "filename": "r-main-module-abi-0.1.0-vanilla_ha99ebfa_0.tar.gz",
-      "channel": "https://repo.prefix.dev/emscripten-forge-4x",
-      "depends": [],
-      "subdir": "emscripten-wasm32"
-    },
-    {
-      "name": "r-base",
-      "version": "4.5.3",
-      "build": "h1590c74_9",
-      "filename_stem": "r-base-4.5.3-h1590c74_9",
-      "filename": "r-base-4.5.3-h1590c74_9.chickadee.b40046d1d1f5.tar.gz",
-      "channel": "https://repo.prefix.dev/emscripten-forge-4x",
-      "depends": [
-        "font-ttf-dejavu >=2.37",
-        "font-ttf-dejavu-sans-mono >=2.37",
-        "emscripten-abi >=4,<5.0a0"
-      ],
-      "subdir": "emscripten-wasm32"
-    },
-    {
-      "name": "r-lifecycle",
-      "version": "1.0.5",
-      "build": "r45hc72bb7e_0",
-      "filename_stem": "r-lifecycle-1.0.5-r45hc72bb7e_0",
-      "filename": "r-lifecycle-1.0.5-r45hc72bb7e_0.tar.gz",
-      "channel": "https://repo.prefix.dev/conda-forge",
-      "depends": [
-        "r-base >=4.5,<4.6.0a0",
-        "r-cli >=3.4.0",
-        "r-glue",
-        "r-rlang >=1.0.6"
-      ],
-      "subdir": "noarch"
-    },
-    {
-      "name": "r-tibble",
-      "version": "3.3.1",
-      "build": "r45h6b09a92_4",
-      "filename_stem": "r-tibble-3.3.1-r45h6b09a92_4",
-      "filename": "r-tibble-3.3.1-r45h6b09a92_4.tar.gz",
-      "channel": "https://repo.prefix.dev/emscripten-forge-4x",
-      "depends": [
-        "r-fansi",
-        "r-lifecycle",
-        "r-magrittr",
-        "r-pillar",
-        "r-pkgconfig",
+        "r-base64enc",
+        "r-digest",
+        "r-fastmap",
         "r-rlang",
-        "r-vctrs",
-        "emscripten-abi >=4,<5.0a0",
-        "r-base >=4.5.3,<4.6.0a0"
-      ],
-      "subdir": "emscripten-wasm32"
-    },
-    {
-      "name": "nlohmann_json-abi",
-      "version": "3.12.0",
-      "build": "h0f90c79_2",
-      "filename_stem": "nlohmann_json-abi-3.12.0-h0f90c79_2",
-      "filename": "nlohmann_json-abi-3.12.0-h0f90c79_2.tar.gz",
-      "channel": "https://repo.prefix.dev/conda-forge",
-      "depends": [],
-      "subdir": "noarch"
-    },
-    {
-      "name": "r-bit64",
-      "version": "4.8.6",
-      "build": "r45h6b09a92_0",
-      "filename_stem": "r-bit64-4.8.6-r45h6b09a92_0",
-      "filename": "r-bit64-4.8.6-r45h6b09a92_0.tar.gz",
-      "channel": "https://repo.prefix.dev/emscripten-forge-4x",
-      "depends": [
-        "r-bit",
-        "emscripten-abi >=4,<5.0a0",
-        "r-base >=4.5.3,<4.6.0a0"
-      ],
-      "subdir": "emscripten-wasm32"
-    },
-    {
-      "name": "r-assertthat",
-      "version": "0.2.1",
-      "build": "r45hc72bb7e_6",
-      "filename_stem": "r-assertthat-0.2.1-r45hc72bb7e_6",
-      "filename": "r-assertthat-0.2.1-r45hc72bb7e_6.tar.gz",
-      "channel": "https://repo.prefix.dev/conda-forge",
-      "depends": [
-        "r-base >=4.5,<4.6.0a0"
-      ],
-      "subdir": "noarch"
-    },
-    {
-      "name": "r-stringi",
-      "version": "1.8.9",
-      "build": "r45h1ab2525_0",
-      "filename_stem": "r-stringi-1.8.9-r45h1ab2525_0",
-      "filename": "r-stringi-1.8.9-r45h1ab2525_0.tar.gz",
-      "channel": "https://repo.prefix.dev/emscripten-forge-4x",
-      "depends": [
-        "emscripten-abi >=4,<5.0a0",
-        "r-base >=4.5.3,<4.6.0a0"
-      ],
-      "subdir": "emscripten-wasm32"
-    },
-    {
-      "name": "r-cli",
-      "version": "3.6.6",
-      "build": "r45h6b09a92_2",
-      "filename_stem": "r-cli-3.6.6-r45h6b09a92_2",
-      "filename": "r-cli-3.6.6-r45h6b09a92_2.tar.gz",
-      "channel": "https://repo.prefix.dev/emscripten-forge-4x",
-      "depends": [
         "emscripten-abi >=4,<5.0a0",
         "r-base >=4.5.3,<4.6.0a0"
       ],
@@ -592,95 +247,19 @@
       "subdir": "noarch"
     },
     {
-      "name": "r-progress",
-      "version": "1.2.3",
-      "build": "r45hc72bb7e_2",
-      "filename_stem": "r-progress-1.2.3-r45hc72bb7e_2",
-      "filename": "r-progress-1.2.3-r45hc72bb7e_2.tar.gz",
-      "channel": "https://repo.prefix.dev/conda-forge",
-      "depends": [
-        "r-base >=4.5,<4.6.0a0",
-        "r-crayon",
-        "r-hms",
-        "r-prettyunits",
-        "r-r6"
-      ],
-      "subdir": "noarch"
-    },
-    {
-      "name": "zlib",
-      "version": "1.3.2",
-      "build": "h8b79025_0",
-      "filename_stem": "zlib-1.3.2-h8b79025_0",
-      "filename": "zlib-1.3.2-h8b79025_0.chickadee.b08f46ec8b85.tar.gz",
+      "name": "r-vctrs",
+      "version": "0.7.3",
+      "build": "r45h6b09a92_2",
+      "filename_stem": "r-vctrs-0.7.3-r45h6b09a92_2",
+      "filename": "r-vctrs-0.7.3-r45h6b09a92_2.tar.gz",
       "channel": "https://repo.prefix.dev/emscripten-forge-4x",
       "depends": [
-        "emscripten-abi >=4,<5.0a0"
-      ],
-      "subdir": "emscripten-wasm32"
-    },
-    {
-      "name": "r-readr",
-      "version": "2.2.0",
-      "build": "r45h202ccb8_4",
-      "filename_stem": "r-readr-2.2.0-r45h202ccb8_4",
-      "filename": "r-readr-2.2.0-r45h202ccb8_4.tar.gz",
-      "channel": "https://repo.prefix.dev/emscripten-forge-4x",
-      "depends": [
-        "r-cli",
-        "r-clipr",
-        "r-crayon",
-        "r-hms",
-        "r-lifecycle",
-        "r-r6",
+        "r-cli >=3.6.3",
+        "r-glue",
         "r-rlang",
-        "r-tibble",
-        "r-vroom",
-        "r-cpp11",
-        "r-tzdb",
+        "r-lifecycle >=1.0.4",
         "emscripten-abi >=4,<5.0a0",
         "r-base >=4.5.3,<4.6.0a0"
-      ],
-      "subdir": "emscripten-wasm32"
-    },
-    {
-      "name": "r-tidyselect",
-      "version": "1.2.1",
-      "build": "r45hc72bb7e_2",
-      "filename_stem": "r-tidyselect-1.2.1-r45hc72bb7e_2",
-      "filename": "r-tidyselect-1.2.1-r45hc72bb7e_2.tar.gz",
-      "channel": "https://repo.prefix.dev/conda-forge",
-      "depends": [
-        "r-base >=4.5,<4.6.0a0",
-        "r-cli >=3.3.0",
-        "r-glue >=1.3.0",
-        "r-lifecycle >=1.0.3",
-        "r-rlang >=1.0.4",
-        "r-vctrs >=0.5.2",
-        "r-withr"
-      ],
-      "subdir": "noarch"
-    },
-    {
-      "name": "emscripten-abi",
-      "version": "4.0.9",
-      "build": "h267e887_9",
-      "filename_stem": "emscripten-abi-4.0.9-h267e887_9",
-      "filename": "emscripten-abi-4.0.9-h267e887_9.tar.gz",
-      "channel": "https://repo.prefix.dev/emscripten-forge-4x",
-      "depends": [],
-      "subdir": "noarch"
-    },
-    {
-      "name": "xeus",
-      "version": "6.0.6",
-      "build": "hc780342_0",
-      "filename_stem": "xeus-6.0.6-hc780342_0",
-      "filename": "xeus-6.0.6-hc780342_0.chickadee.d13b76340d81.tar.gz",
-      "channel": "https://repo.prefix.dev/emscripten-forge-4x",
-      "depends": [
-        "emscripten-abi >=4,<5.0a0",
-        "nlohmann_json-abi 3.12.0"
       ],
       "subdir": "emscripten-wasm32"
     },
@@ -710,16 +289,116 @@
       "subdir": "emscripten-wasm32"
     },
     {
-      "name": "r-clipr",
-      "version": "0.8.1",
-      "build": "r45hc72bb7e_0",
-      "filename_stem": "r-clipr-0.8.1-r45hc72bb7e_0",
-      "filename": "r-clipr-0.8.1-r45hc72bb7e_0.tar.gz",
+      "name": "r-assertthat",
+      "version": "0.2.1",
+      "build": "r45hc72bb7e_6",
+      "filename_stem": "r-assertthat-0.2.1-r45hc72bb7e_6",
+      "filename": "r-assertthat-0.2.1-r45hc72bb7e_6.tar.gz",
       "channel": "https://repo.prefix.dev/conda-forge",
       "depends": [
         "r-base >=4.5,<4.6.0a0"
       ],
       "subdir": "noarch"
+    },
+    {
+      "name": "r-cli",
+      "version": "3.6.6",
+      "build": "r45h6b09a92_2",
+      "filename_stem": "r-cli-3.6.6-r45h6b09a92_2",
+      "filename": "r-cli-3.6.6-r45h6b09a92_2.tar.gz",
+      "channel": "https://repo.prefix.dev/emscripten-forge-4x",
+      "depends": [
+        "emscripten-abi >=4,<5.0a0",
+        "r-base >=4.5.3,<4.6.0a0"
+      ],
+      "subdir": "emscripten-wasm32"
+    },
+    {
+      "name": "r-rlang",
+      "version": "1.3.0",
+      "build": "r45h6b09a92_0",
+      "filename_stem": "r-rlang-1.3.0-r45h6b09a92_0",
+      "filename": "r-rlang-1.3.0-r45h6b09a92_0.tar.gz",
+      "channel": "https://repo.prefix.dev/emscripten-forge-4x",
+      "depends": [
+        "emscripten-abi >=4,<5.0a0",
+        "r-base >=4.5.3,<4.6.0a0"
+      ],
+      "subdir": "emscripten-wasm32"
+    },
+    {
+      "name": "r-tidyselect",
+      "version": "1.2.1",
+      "build": "r45hc72bb7e_2",
+      "filename_stem": "r-tidyselect-1.2.1-r45hc72bb7e_2",
+      "filename": "r-tidyselect-1.2.1-r45hc72bb7e_2.tar.gz",
+      "channel": "https://repo.prefix.dev/conda-forge",
+      "depends": [
+        "r-base >=4.5,<4.6.0a0",
+        "r-cli >=3.3.0",
+        "r-glue >=1.3.0",
+        "r-lifecycle >=1.0.3",
+        "r-rlang >=1.0.4",
+        "r-vctrs >=0.5.2",
+        "r-withr"
+      ],
+      "subdir": "noarch"
+    },
+    {
+      "name": "r-stringi",
+      "version": "1.8.9",
+      "build": "r45h1ab2525_0",
+      "filename_stem": "r-stringi-1.8.9-r45h1ab2525_0",
+      "filename": "r-stringi-1.8.9-r45h1ab2525_0.tar.gz",
+      "channel": "https://repo.prefix.dev/emscripten-forge-4x",
+      "depends": [
+        "emscripten-abi >=4,<5.0a0",
+        "r-base >=4.5.3,<4.6.0a0"
+      ],
+      "subdir": "emscripten-wasm32"
+    },
+    {
+      "name": "r-crayon",
+      "version": "1.5.3",
+      "build": "r45hc72bb7e_2",
+      "filename_stem": "r-crayon-1.5.3-r45hc72bb7e_2",
+      "filename": "r-crayon-1.5.3-r45hc72bb7e_2.tar.gz",
+      "channel": "https://repo.prefix.dev/conda-forge",
+      "depends": [
+        "r-base >=4.5,<4.6.0a0"
+      ],
+      "subdir": "noarch"
+    },
+    {
+      "name": "r-digest",
+      "version": "0.6.39",
+      "build": "r45h202ccb8_7",
+      "filename_stem": "r-digest-0.6.39-r45h202ccb8_7",
+      "filename": "r-digest-0.6.39-r45h202ccb8_7.tar.gz",
+      "channel": "https://repo.prefix.dev/emscripten-forge-4x",
+      "depends": [
+        "emscripten-abi >=4,<5.0a0",
+        "r-base >=4.5.3,<4.6.0a0"
+      ],
+      "subdir": "emscripten-wasm32"
+    },
+    {
+      "name": "r-purrr",
+      "version": "1.2.2",
+      "build": "r45h6b09a92_2",
+      "filename_stem": "r-purrr-1.2.2-r45h6b09a92_2",
+      "filename": "r-purrr-1.2.2-r45h6b09a92_2.tar.gz",
+      "channel": "https://repo.prefix.dev/emscripten-forge-4x",
+      "depends": [
+        "r-cli >=3.6.3",
+        "r-lifecycle >=1.0.4",
+        "r-magrittr",
+        "r-rlang",
+        "r-vctrs",
+        "emscripten-abi >=4,<5.0a0",
+        "r-base >=4.5.3,<4.6.0a0"
+      ],
+      "subdir": "emscripten-wasm32"
     },
     {
       "name": "r-dplyr",
@@ -746,16 +425,337 @@
       "subdir": "emscripten-wasm32"
     },
     {
-      "name": "r-prettyunits",
-      "version": "1.2.0",
-      "build": "r45hc72bb7e_2",
-      "filename_stem": "r-prettyunits-1.2.0-r45hc72bb7e_2",
-      "filename": "r-prettyunits-1.2.0-r45hc72bb7e_2.tar.gz",
+      "name": "r-main-module-abi",
+      "version": "0.1.0",
+      "build": "vanilla_ha99ebfa_0",
+      "filename_stem": "r-main-module-abi-0.1.0-vanilla_ha99ebfa_0",
+      "filename": "r-main-module-abi-0.1.0-vanilla_ha99ebfa_0.tar.gz",
+      "channel": "https://repo.prefix.dev/emscripten-forge-4x",
+      "depends": [],
+      "subdir": "emscripten-wasm32"
+    },
+    {
+      "name": "r-cpp11",
+      "version": "0.5.5",
+      "build": "r45h785f33e_0",
+      "filename_stem": "r-cpp11-0.5.5-r45h785f33e_0",
+      "filename": "r-cpp11-0.5.5-r45h785f33e_0.tar.gz",
       "channel": "https://repo.prefix.dev/conda-forge",
       "depends": [
-        "r-assertthat",
+        "r-base >=4.5,<4.6.0a0"
+      ],
+      "subdir": "noarch"
+    },
+    {
+      "name": "r-ellipsis",
+      "version": "0.3.3",
+      "build": "r45h0e10311_3",
+      "filename_stem": "r-ellipsis-0.3.3-r45h0e10311_3",
+      "filename": "r-ellipsis-0.3.3-r45h0e10311_3.tar.gz",
+      "channel": "https://repo.prefix.dev/emscripten-forge-4x",
+      "depends": [
+        "r-rlang"
+      ],
+      "subdir": "noarch"
+    },
+    {
+      "name": "r-generics",
+      "version": "0.1.4",
+      "build": "r45hc72bb7e_1",
+      "filename_stem": "r-generics-0.1.4-r45hc72bb7e_1",
+      "filename": "r-generics-0.1.4-r45hc72bb7e_1.tar.gz",
+      "channel": "https://repo.prefix.dev/conda-forge",
+      "depends": [
+        "r-base >=4.5,<4.6.0a0"
+      ],
+      "subdir": "noarch"
+    },
+    {
+      "name": "r-irdisplay",
+      "version": "1.1",
+      "build": "r45hd8ed1ab_4",
+      "filename_stem": "r-irdisplay-1.1-r45hd8ed1ab_4",
+      "filename": "r-irdisplay-1.1-r45hd8ed1ab_4.tar.gz",
+      "channel": "https://repo.prefix.dev/conda-forge",
+      "depends": [
         "r-base >=4.5,<4.6.0a0",
-        "r-magrittr"
+        "r-repr"
+      ],
+      "subdir": "noarch"
+    },
+    {
+      "name": "r-progress",
+      "version": "1.2.3",
+      "build": "r45hc72bb7e_2",
+      "filename_stem": "r-progress-1.2.3-r45hc72bb7e_2",
+      "filename": "r-progress-1.2.3-r45hc72bb7e_2.tar.gz",
+      "channel": "https://repo.prefix.dev/conda-forge",
+      "depends": [
+        "r-base >=4.5,<4.6.0a0",
+        "r-crayon",
+        "r-hms",
+        "r-prettyunits",
+        "r-r6"
+      ],
+      "subdir": "noarch"
+    },
+    {
+      "name": "r-repr",
+      "version": "1.1.7",
+      "build": "r45h785f33e_2",
+      "filename_stem": "r-repr-1.1.7-r45h785f33e_2",
+      "filename": "r-repr-1.1.7-r45h785f33e_2.tar.gz",
+      "channel": "https://repo.prefix.dev/conda-forge",
+      "depends": [
+        "r-base >=4.5,<4.6.0a0",
+        "r-base64enc",
+        "r-htmltools",
+        "r-jsonlite",
+        "r-pillar >=1.4.0"
+      ],
+      "subdir": "noarch"
+    },
+    {
+      "name": "r-utf8",
+      "version": "1.2.6",
+      "build": "r45h6b09a92_7",
+      "filename_stem": "r-utf8-1.2.6-r45h6b09a92_7",
+      "filename": "r-utf8-1.2.6-r45h6b09a92_7.tar.gz",
+      "channel": "https://repo.prefix.dev/emscripten-forge-4x",
+      "depends": [
+        "emscripten-abi >=4,<5.0a0",
+        "r-base >=4.5.3,<4.6.0a0"
+      ],
+      "subdir": "emscripten-wasm32"
+    },
+    {
+      "name": "r-readr",
+      "version": "2.2.0",
+      "build": "r45h202ccb8_4",
+      "filename_stem": "r-readr-2.2.0-r45h202ccb8_4",
+      "filename": "r-readr-2.2.0-r45h202ccb8_4.tar.gz",
+      "channel": "https://repo.prefix.dev/emscripten-forge-4x",
+      "depends": [
+        "r-cli",
+        "r-clipr",
+        "r-crayon",
+        "r-hms",
+        "r-lifecycle",
+        "r-r6",
+        "r-rlang",
+        "r-tibble",
+        "r-vroom",
+        "r-cpp11",
+        "r-tzdb",
+        "emscripten-abi >=4,<5.0a0",
+        "r-base >=4.5.3,<4.6.0a0"
+      ],
+      "subdir": "emscripten-wasm32"
+    },
+    {
+      "name": "r-fansi",
+      "version": "1.0.7",
+      "build": "r45h6b09a92_7",
+      "filename_stem": "r-fansi-1.0.7-r45h6b09a92_7",
+      "filename": "r-fansi-1.0.7-r45h6b09a92_7.tar.gz",
+      "channel": "https://repo.prefix.dev/emscripten-forge-4x",
+      "depends": [
+        "emscripten-abi >=4,<5.0a0",
+        "r-base >=4.5.3,<4.6.0a0"
+      ],
+      "subdir": "emscripten-wasm32"
+    },
+    {
+      "name": "zlib",
+      "version": "1.3.2",
+      "build": "h8b79025_0",
+      "filename_stem": "zlib-1.3.2-h8b79025_0",
+      "filename": "zlib-1.3.2-h8b79025_0.chickadee.ed50296b9362.tar.gz",
+      "channel": "https://repo.prefix.dev/emscripten-forge-4x",
+      "depends": [
+        "emscripten-abi >=4,<5.0a0"
+      ],
+      "subdir": "emscripten-wasm32"
+    },
+    {
+      "name": "r-tzdb",
+      "version": "0.5.0",
+      "build": "r45h1ab2525_7",
+      "filename_stem": "r-tzdb-0.5.0-r45h1ab2525_7",
+      "filename": "r-tzdb-0.5.0-r45h1ab2525_7.tar.gz",
+      "channel": "https://repo.prefix.dev/emscripten-forge-4x",
+      "depends": [
+        "r-cpp11",
+        "emscripten-abi >=4,<5.0a0",
+        "r-base >=4.5.3,<4.6.0a0"
+      ],
+      "subdir": "emscripten-wasm32"
+    },
+    {
+      "name": "r-pkgconfig",
+      "version": "2.0.3",
+      "build": "r45hc72bb7e_5",
+      "filename_stem": "r-pkgconfig-2.0.3-r45hc72bb7e_5",
+      "filename": "r-pkgconfig-2.0.3-r45hc72bb7e_5.tar.gz",
+      "channel": "https://repo.prefix.dev/conda-forge",
+      "depends": [
+        "r-base >=4.5,<4.6.0a0"
+      ],
+      "subdir": "noarch"
+    },
+    {
+      "name": "emscripten-abi",
+      "version": "4.0.9",
+      "build": "h267e887_9",
+      "filename_stem": "emscripten-abi-4.0.9-h267e887_9",
+      "filename": "emscripten-abi-4.0.9-h267e887_9.tar.gz",
+      "channel": "https://repo.prefix.dev/emscripten-forge-4x",
+      "depends": [],
+      "subdir": "noarch"
+    },
+    {
+      "name": "r-forcats",
+      "version": "1.0.1",
+      "build": "r45hc72bb7e_0",
+      "filename_stem": "r-forcats-1.0.1-r45hc72bb7e_0",
+      "filename": "r-forcats-1.0.1-r45hc72bb7e_0.tar.gz",
+      "channel": "https://repo.prefix.dev/conda-forge",
+      "depends": [
+        "r-base >=4.5,<4.6.0a0",
+        "r-cli",
+        "r-ellipsis",
+        "r-glue",
+        "r-lifecycle",
+        "r-magrittr",
+        "r-rlang >=1.0.0",
+        "r-tibble",
+        "r-withr"
+      ],
+      "subdir": "noarch"
+    },
+    {
+      "name": "xeus",
+      "version": "6.0.6",
+      "build": "hc780342_0",
+      "filename_stem": "xeus-6.0.6-hc780342_0",
+      "filename": "xeus-6.0.6-hc780342_0.chickadee.e4b693a0a924.tar.gz",
+      "channel": "https://repo.prefix.dev/emscripten-forge-4x",
+      "depends": [
+        "emscripten-abi >=4,<5.0a0",
+        "nlohmann_json-abi 3.12.0"
+      ],
+      "subdir": "emscripten-wasm32"
+    },
+    {
+      "name": "r-fastmap",
+      "version": "1.2.0",
+      "build": "r45h202ccb8_7",
+      "filename_stem": "r-fastmap-1.2.0-r45h202ccb8_7",
+      "filename": "r-fastmap-1.2.0-r45h202ccb8_7.tar.gz",
+      "channel": "https://repo.prefix.dev/emscripten-forge-4x",
+      "depends": [
+        "emscripten-abi >=4,<5.0a0",
+        "r-base >=4.5.3,<4.6.0a0"
+      ],
+      "subdir": "emscripten-wasm32"
+    },
+    {
+      "name": "r-bit64",
+      "version": "4.8.6",
+      "build": "r45h6b09a92_0",
+      "filename_stem": "r-bit64-4.8.6-r45h6b09a92_0",
+      "filename": "r-bit64-4.8.6-r45h6b09a92_0.tar.gz",
+      "channel": "https://repo.prefix.dev/emscripten-forge-4x",
+      "depends": [
+        "r-bit",
+        "emscripten-abi >=4,<5.0a0",
+        "r-base >=4.5.3,<4.6.0a0"
+      ],
+      "subdir": "emscripten-wasm32"
+    },
+    {
+      "name": "r-base",
+      "version": "4.5.3",
+      "build": "h1590c74_9",
+      "filename_stem": "r-base-4.5.3-h1590c74_9",
+      "filename": "r-base-4.5.3-h1590c74_9.chickadee.f7ed543d00b6.tar.gz",
+      "channel": "https://repo.prefix.dev/emscripten-forge-4x",
+      "depends": [
+        "font-ttf-dejavu >=2.37",
+        "font-ttf-dejavu-sans-mono >=2.37",
+        "emscripten-abi >=4,<5.0a0"
+      ],
+      "subdir": "emscripten-wasm32"
+    },
+    {
+      "name": "r-jsonlite",
+      "version": "2.0.0",
+      "build": "r45h202ccb8_7",
+      "filename_stem": "r-jsonlite-2.0.0-r45h202ccb8_7",
+      "filename": "r-jsonlite-2.0.0-r45h202ccb8_7.tar.gz",
+      "channel": "https://repo.prefix.dev/emscripten-forge-4x",
+      "depends": [
+        "emscripten-abi >=4,<5.0a0",
+        "r-base >=4.5.3,<4.6.0a0"
+      ],
+      "subdir": "emscripten-wasm32"
+    },
+    {
+      "name": "nlohmann_json-abi",
+      "version": "3.12.0",
+      "build": "h0f90c79_2",
+      "filename_stem": "nlohmann_json-abi-3.12.0-h0f90c79_2",
+      "filename": "nlohmann_json-abi-3.12.0-h0f90c79_2.tar.gz",
+      "channel": "https://repo.prefix.dev/conda-forge",
+      "depends": [],
+      "subdir": "noarch"
+    },
+    {
+      "name": "r-stringr",
+      "version": "1.6.0",
+      "build": "r45h785f33e_0",
+      "filename_stem": "r-stringr-1.6.0-r45h785f33e_0",
+      "filename": "r-stringr-1.6.0-r45h785f33e_0.tar.gz",
+      "channel": "https://repo.prefix.dev/conda-forge",
+      "depends": [
+        "r-base >=4.5,<4.6.0a0",
+        "r-cli",
+        "r-glue >=1.6.1",
+        "r-lifecycle >=1.0.3",
+        "r-magrittr",
+        "r-rlang >=1.0.0",
+        "r-stringi >=1.5.3",
+        "r-vctrs"
+      ],
+      "subdir": "noarch"
+    },
+    {
+      "name": "r-glue",
+      "version": "1.8.1",
+      "build": "r45h6b09a92_2",
+      "filename_stem": "r-glue-1.8.1-r45h6b09a92_2",
+      "filename": "r-glue-1.8.1-r45h6b09a92_2.tar.gz",
+      "channel": "https://repo.prefix.dev/emscripten-forge-4x",
+      "depends": [
+        "emscripten-abi >=4,<5.0a0",
+        "r-base >=4.5.3,<4.6.0a0"
+      ],
+      "subdir": "emscripten-wasm32"
+    },
+    {
+      "name": "r-hms",
+      "version": "1.1.4",
+      "build": "r45hc72bb7e_0",
+      "filename_stem": "r-hms-1.1.4-r45hc72bb7e_0",
+      "filename": "r-hms-1.1.4-r45hc72bb7e_0.tar.gz",
+      "channel": "https://repo.prefix.dev/conda-forge",
+      "depends": [
+        "r-base >=4.5,<4.6.0a0",
+        "r-ellipsis",
+        "r-lifecycle",
+        "r-pkgconfig",
+        "r-rlang",
+        "r-vctrs >=0.2.1"
       ],
       "subdir": "noarch"
     }
