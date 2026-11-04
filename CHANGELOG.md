@@ -9,6 +9,20 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.816] - 2026-11-04
+
+### Changed
+
+- **Twelve handler-less files leave `Routes/Web`.** The shared select cells, the admin and GitHub view contexts and the response builders move to `Utilities/` or `Helpers/`, as the placement rule says. These are pure moves with no change in behaviour (#2836).
+
+
+## [0.5.815] - 2026-11-04
+
+### Changed
+
+- **The last two large frontend scripts are type-checked.** `suite-table.js` and `pattern-family-editor.js` opt in with `// @ts-check`, and only the two editor-iframe scripts stay on `scripts/ts-check-pending.txt`. The fixes are JSDoc annotations and casts only, so no served file changes behaviour (#2835).
+
+
 ## [0.5.814] - 2026-11-04
 
 ### Changed
