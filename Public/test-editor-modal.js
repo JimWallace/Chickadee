@@ -1,3 +1,4 @@
+// @ts-check
 // Chickadee — Test Editor Modal (shell)
 //
 // One shared modal shell behind the "+ Add Test" button. It owns the chrome
@@ -213,13 +214,13 @@
         overlay.appendChild(card);
         document.body.appendChild(overlay);
 
-        var typeSelect = document.getElementById('test-editor-type');
+        var typeSelect = /** @type {HTMLSelectElement} */ (document.getElementById('test-editor-type'));
         var typeRow    = document.getElementById('test-editor-type-row');
         var descEl     = document.getElementById('test-editor-desc');
         var titleEl    = document.getElementById('test-editor-title');
         var bodyEl     = document.getElementById('test-editor-body');
         var statusEl   = document.getElementById('test-editor-status');
-        var saveBtn    = document.getElementById('test-editor-save');
+        var saveBtn    = /** @type {HTMLButtonElement} */ (document.getElementById('test-editor-save'));
         var cancelBtn  = document.getElementById('test-editor-cancel');
         var closeBtn   = document.getElementById('test-editor-close');
 
@@ -456,7 +457,7 @@
 
         // Menu item → open the modal in the chosen type, for the menu's section.
         document.body.addEventListener('click', function (e) {
-            var item = e.target && e.target.closest && e.target.closest('.add-test-item');
+            var item = /** @type {HTMLButtonElement | null} */ (e.target && /** @type {Element} */ (e.target).closest && /** @type {Element} */ (e.target).closest('.add-test-item'));
             if (!item) return;
             // A disabled button does not dispatch click in any current browser,
             // so this is the belt to that suspenders — cheap, and the cost of
@@ -482,9 +483,9 @@
 
         // Dismiss an open "+ Add Test" dropdown on an outside click.
         document.addEventListener('click', function (e) {
-            var openMenus = document.querySelectorAll('.add-test-details[open]');
+            var openMenus = /** @type {NodeListOf<HTMLDetailsElement>} */ (document.querySelectorAll('.add-test-details[open]'));
             for (var i = 0; i < openMenus.length; i++) {
-                if (!openMenus[i].contains(e.target)) openMenus[i].open = false;
+                if (!openMenus[i].contains(/** @type {Node} */ (e.target))) openMenus[i].open = false;
             }
         });
 
@@ -494,7 +495,7 @@
         // of this delegation in their inline wiring; the shell owns it so the
         // two cannot fork.
         document.body.addEventListener('click', function (e) {
-            var el = e.target && e.target.closest && e.target.closest('[data-edit-check-id]');
+            var el = e.target && /** @type {Element} */ (e.target).closest && /** @type {Element} */ (e.target).closest('[data-edit-check-id]');
             if (!el) return;
             e.preventDefault();
             var id = el.getAttribute('data-edit-check-id');

@@ -1,3 +1,4 @@
+// @ts-check
 // Public/xeus-kernel-shared.js
 //
 // Booting a vendored xeus kernel in a plain Web Worker, driving one cell
@@ -452,6 +453,7 @@
     // and reads the last stdout line for the shortResult, byte-for-byte as it
     // does for the native subprocess.
     async function gradeScript(config, workDir, scriptName) {
+        /** @type {{ exitCode: number, stdout: string, stderr?: string } | null} */
         var parsed = null;
         var reply = await api.runInstallingMissingPackages(
             async function () {

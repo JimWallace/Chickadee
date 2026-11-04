@@ -1,3 +1,4 @@
+// @ts-check
 // Multipart form interceptor.
 //
 // All multipart/form-data uploads bypass the hidden _csrf body field because
@@ -39,14 +40,14 @@
     }
 
     document.addEventListener('submit', function (e) {
-        var form = e.target;
+        var form = /** @type {HTMLFormElement} */ (e.target);
         if (!form || form.enctype !== 'multipart/form-data') return;
         if (e.defaultPrevented) return;
         e.preventDefault();
         clearUploadError(form);
         form.dispatchEvent(new CustomEvent('chickadee:before-multipart-submit', { bubbles: false }));
         var csrfToken = ChickadeeUI.getCsrfToken();
-        var btn = e.submitter || form.querySelector('[type="submit"]');
+        var btn = /** @type {HTMLButtonElement | HTMLInputElement | null} */ (e.submitter || form.querySelector('[type="submit"]'));
         if (btn) btn.disabled = true;
         // Respect formaction on the activating submit button (e.g. hidden draft-action buttons).
         var actionURL = (e.submitter && e.submitter.getAttribute('formaction')) || form.action;

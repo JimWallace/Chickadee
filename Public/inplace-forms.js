@@ -1,3 +1,4 @@
+// @ts-check
 // Public/inplace-forms.js
 //
 // Keeps the workbench's left pane on the left pane.
@@ -70,7 +71,8 @@
             return { body: fd, headers: {} };
         }
         return {
-            body: new URLSearchParams(fd),
+            // URLSearchParams accepts FormData at run time; the DOM lib types reject File entries.
+            body: new URLSearchParams(/** @type {any} */ (fd)),
             headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
         };
     }
@@ -136,7 +138,7 @@
     // `e.defaultPrevented`, so preventing here is all it takes to keep the two
     // from both firing.
     document.addEventListener('submit', function (e) {
-        var form = e.target;
+        var form = /** @type {HTMLFormElement} */ (e.target);
         if (!form || typeof form.matches !== 'function') return;
         if (!form.matches('[data-ck-inplace]')) return;
         if (e.defaultPrevented) return;

@@ -1,3 +1,4 @@
+// @ts-check
 // Page wiring for the Create Assignment page (AssignmentNewPage).
 // Extracted from the page's inline script blocks so every URL builder and
 // event hook is linted and testable; the template carries data only — the
@@ -82,12 +83,12 @@
     // and reloads the page on the same draft.
     function wireNotebookUpload(btnID, inputID, draftActionValue) {
         var btn       = document.getElementById(btnID);
-        var fileInput = document.getElementById(inputID);
+        var fileInput = /** @type {HTMLInputElement} */ (document.getElementById(inputID));
         if (!btn || !fileInput) return;
         btn.addEventListener('click', function () { fileInput.value = ''; fileInput.click(); });
         fileInput.addEventListener('change', function () {
             if (fileInput.files.length === 0) return;
-            var form = document.getElementById('new-assignment-form');
+            var form = /** @type {HTMLFormElement} */ (document.getElementById('new-assignment-form'));
             var inp = document.createElement('input');
             inp.type = 'hidden';
             inp.name = 'draftAction';
@@ -132,7 +133,7 @@
 
     // ── UWaterloo important-date proximity warning ──────────────────────────
     (function () {
-        var dueAtInput = document.getElementById('dueAt');
+        var dueAtInput = /** @type {HTMLInputElement} */ (document.getElementById('dueAt'));
         var warning    = document.getElementById('uw-date-warning');
         if (!dueAtInput || !warning) return;
         dueAtInput.addEventListener('change', function () { ChickadeeUI.checkUWDates(dueAtInput.value, warning); });
@@ -140,7 +141,7 @@
 
     // ── Grading mode hint ───────────────────────────────────────────────────
     (function () {
-        var sectionSelect = document.getElementById('sectionID');
+        var sectionSelect = /** @type {HTMLSelectElement} */ (document.getElementById('sectionID'));
         var hint = document.getElementById('grading-mode-hint');
         if (!sectionSelect || !hint) return;
         function updateHint() {
