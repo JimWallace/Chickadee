@@ -1,3 +1,4 @@
+// @ts-check
 // Public/notebook-preflight.js
 //
 // Capability preflight + failure-handling glue for the student submit page.
@@ -85,7 +86,9 @@
         // on Chromium only (Safari/Firefox omit it for fingerprinting privacy), so
         // this catches low-RAM Chromebooks/Android but can't see iOS — the runtime
         // `wasm_crash` recovery covers the WebKit case where this signal is absent.
-        var dm = (navigator && typeof navigator.deviceMemory === 'number') ? navigator.deviceMemory : null;
+        // deviceMemory is Chromium-only, so the DOM lib types omit it.
+        /** @typedef {Navigator & { deviceMemory?: number }} ChromiumNavigator */
+        var dm = (navigator && typeof /** @type {ChromiumNavigator} */ (navigator).deviceMemory === 'number') ? /** @type {ChromiumNavigator} */ (navigator).deviceMemory : null;
         return Core.preflightResult(failed, dm);
     }
 
@@ -117,7 +120,7 @@
      * failed AND the unmounted iframe later "timed out") only renders
      * once and only posts the first kind.
      *
-     * @param {{kind: string, failedChecks?: string[]}} info
+     * @param {{kind: string, failedChecks?: string[], variant?: string}} info
      */
     function showFailure(info) {
         if (_failureShown) return;
@@ -158,7 +161,7 @@
         // after clearing site data the student lands on the same page (which now
         // boots a clean kernel) instead of the dashboard.  The static href in the
         // template ("/reset-editor") is the no-JS fallback.
-        const resetLink = document.getElementById('nb-reset-editor-link');
+        const resetLink = /** @type {HTMLAnchorElement | null} */ (document.getElementById('nb-reset-editor-link'));
         if (resetLink) {
             try {
                 resetLink.href = Core.resetEditorHref(location.pathname, location.search);
@@ -180,7 +183,7 @@
     // value flags a stale browser tab still on the pre-deploy bundle. '' absent.
     function readAppVersion() {
         try {
-            const meta = document.querySelector('meta[name="app-version"]');
+            const meta = /** @type {HTMLMetaElement | null} */ (document.querySelector('meta[name="app-version"]'));
             return Core.appVersionFrom(meta && meta.content);
         } catch (_) { return ''; }
     }

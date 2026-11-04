@@ -1,3 +1,4 @@
+// @ts-check
 // Support-file upload + delete, shared by the two assignment authoring pages.
 //
 // One implementation of the flow both pages need: pick files, read each as
@@ -320,23 +321,23 @@
         }
 
         document.body.addEventListener('change', function (ev) {
-            var target = ev.target;
+            var target = /** @type {HTMLInputElement} */ (ev.target);
             if (!target || !target.closest) return;
             var row = target.closest('tr[data-support-file]');
             if (!row) return;
             var filename = row.getAttribute('data-support-file');
             if (!filename) return;
-            var size = row.querySelector('.js-dataset-size');
-            var field = row.querySelector('.js-dataset-size-field');
-            var stratumField = row.querySelector('.js-dataset-stratum-field');
-            var blankField = row.querySelector('.js-dataset-blank-field');
+            var size = /** @type {HTMLInputElement | null} */ (row.querySelector('.js-dataset-size'));
+            var field = /** @type {HTMLElement | null} */ (row.querySelector('.js-dataset-size-field'));
+            var stratumField = /** @type {HTMLElement | null} */ (row.querySelector('.js-dataset-stratum-field'));
+            var blankField = /** @type {HTMLElement | null} */ (row.querySelector('.js-dataset-blank-field'));
 
             if (target.classList.contains('js-dataset-toggle')) {
                 if (!target.checked) {
                     if (field) field.hidden = true;
                     if (stratumField) stratumField.hidden = true;
                     if (blankField) blankField.hidden = true;
-                    var estimates = row.querySelector('.js-dataset-estimates');
+                    var estimates = /** @type {HTMLElement | null} */ (row.querySelector('.js-dataset-estimates'));
                     if (estimates) estimates.hidden = true;
                     commit(filename, null, row);
                     return;
@@ -357,7 +358,7 @@
                 || target.classList.contains('js-dataset-stratum')
                 || target.classList.contains('js-dataset-blank-columns')
                 || target.classList.contains('js-dataset-blank-percent')) {
-                var toggle = row.querySelector('.js-dataset-toggle');
+                var toggle = /** @type {HTMLInputElement | null} */ (row.querySelector('.js-dataset-toggle'));
                 if (toggle && !toggle.checked) return;
                 var entered = sampleSizeIn(row);
                 if (entered === null) {
@@ -401,7 +402,7 @@
         if (!target || !target.classList) return null;
         var file = target.getAttribute && target.getAttribute('data-filename');
         if (target.classList.contains('js-library-attach')) {
-            var select = document.querySelector('.js-library-attach-select');
+            var select = /** @type {HTMLSelectElement | null} */ (document.querySelector('.js-library-attach-select'));
             if (!select || !select.value) return null;
             return { op: 'attach', body: { slug: select.value } };
         }
@@ -456,20 +457,20 @@
         }
 
         document.body.addEventListener('click', function (ev) {
-            var target = ev.target && ev.target.closest
-                && ev.target.closest('.js-library-attach, .js-library-update, .js-library-detach, '
+            var target = ev.target && /** @type {Element} */ (ev.target).closest
+                && /** @type {Element} */ (ev.target).closest('.js-library-attach, .js-library-update, .js-library-detach, '
                     + '.js-library-remove, .js-library-promote');
             if (target) send(target);
         });
         document.body.addEventListener('change', function (ev) {
-            var target = ev.target;
+            var target = /** @type {Element} */ (ev.target);
             if (target && target.classList && target.classList.contains('js-library-scope')) send(target);
         });
     }
 
     window.initSupportFiles = function (config) {
         var addBtn = document.getElementById('add-support-file-btn');
-        var input  = document.getElementById('support-file-upload-input');
+        var input  = /** @type {HTMLInputElement | null} */ (document.getElementById('support-file-upload-input'));
         var status = document.getElementById('support-file-upload-status');
 
         function setStatus(msg, isError) {
@@ -524,7 +525,7 @@
         if (boundDeleteClicks) return;
         boundDeleteClicks = true;
         document.body.addEventListener('click', async function (ev) {
-            var btn = ev.target.closest && ev.target.closest('.js-support-file-delete-btn');
+            var btn = /** @type {Element} */ (ev.target).closest && /** @type {Element} */ (ev.target).closest('.js-support-file-delete-btn');
             if (!btn) return;
             var filename = btn.getAttribute('data-filename');
             if (!filename) return;
