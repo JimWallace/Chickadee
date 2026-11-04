@@ -91,7 +91,10 @@ struct DeletionAtomicityTests {
 
             #expect(removed.submissionCount == 1)
             #expect(removed.setupDeleted)
-            #expect(Set(removed.filePaths) == Set([seed.setup.zipPath, seed.setup.notebookPath].compactMap(\.self)))
+            // The submission file is returned too since #2809.
+            #expect(
+                Set(removed.filePaths)
+                    == Set([seed.setup.zipPath, seed.setup.notebookPath, seed.submission.zipPath].compactMap(\.self)))
             // The rows are gone, but the helper itself touched no file.
             #expect(try await APIAssignment.find(seed.assignment.id, on: app.db) == nil)
             #expect(try await APITestSetup.find(seed.setup.id, on: app.db) == nil)
