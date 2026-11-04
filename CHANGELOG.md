@@ -9,6 +9,20 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.823] - 2026-11-04
+
+### Added
+
+- **`check_assignment` MCP tool and the authoring-check framework (#2747).** A
+  new `content:read` tool runs rule-based checks over an assignment's stored
+  content and returns findings in one format (`AuthoringFinding`: check id,
+  severity, location, message, suggested fix). The format already has a
+  `reviewer` source and location kinds that no check uses yet, because the
+  model reviewers planned in #2747 will report in it too. The first three checks report a manifest that breaks a coherence rule,
+  a suite with no public test, and a zero-point test. The tool reads stored
+  content only; it starts no run and changes nothing.
+
+
 ## [0.5.822] - 2026-11-04
 
 ### Changed
