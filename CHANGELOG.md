@@ -9,6 +9,13 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.815] - 2026-11-04
+
+### Changed
+
+- **The last two large frontend scripts are type-checked.** `suite-table.js` and `pattern-family-editor.js` opt in with `// @ts-check`, and only the two editor-iframe scripts stay on `scripts/ts-check-pending.txt`. The fixes are JSDoc annotations and casts only, so no served file changes behaviour (#2835).
+
+
 ## [0.5.814] - 2026-11-04
 
 ### Changed
