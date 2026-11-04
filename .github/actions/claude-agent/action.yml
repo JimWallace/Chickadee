@@ -2,9 +2,10 @@ name: Claude agent
 description: >
   Runs one Claude agent for a CI workflow, read-only. It checks for the API
   secret first: without one it writes a warning and the step summary, and
-  passes. Every agent workflow uses this action, and this is the only file
-  that names anthropics/claude-code-action (scripts/check-agent-workflows.sh
-  enforces it).
+  passes. When the agent fails, it prints why
+  (scripts/ci-agent-failure-reason.sh). Every agent workflow uses this action,
+  and this is the only file that names anthropics/claude-code-action
+  (scripts/check-agent-workflows.sh enforces it).
 
   Three rules hold for every caller (#2711):
 
@@ -120,3 +121,16 @@ runs:
           --allowedTools "${{ inputs.allowed-tools }}"
           --disallowedTools "Edit,Write,NotebookEdit,WebSearch,Read(//proc/**),Read(//sys/**),Read(//etc/**),Read(//tmp/**),Read(//github/**),Read(//root/**),Read(//home/runner/work/_temp/**),Read(~/.*/**),Read(./.git/**),${{ inputs.disallowed-tools }}"
           --json-schema '${{ inputs.json-schema }}'
+
+    # claude-code-action hides the agent's output, so a call that failed
+    # before the model ran left only "did not return structured_output" in
+    # the log. Every agent workflow failed that way for two weeks with green
+    # checks. The script prints the error only when no model ran, so never the
+    # model's text, and cleans it first (its header has the rules).
+    - name: Say why the agent failed
+      if: steps.agent.outcome == 'failure'
+      shell: bash
+      env:
+        NAME: ${{ inputs.name }}
+        EXECUTION_FILE: ${{ steps.agent.outputs.execution_file }}
+      run: scripts/ci-agent-failure-reason.sh "$NAME" "${EXECUTION_FILE:-$RUNNER_TEMP/claude-execution-output.json}"

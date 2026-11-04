@@ -37,6 +37,7 @@ on:
       - ".github/workflows/agent-pr-review.yml"
       - ".github/actions/claude-agent/**"
       - "scripts/ci-agent-sanitize.sh"
+      - "scripts/ci-agent-failure-reason.sh"
 
 permissions: {}
 

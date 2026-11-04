@@ -5,9 +5,10 @@ name: Weekly digest
 # person. The reports themselves do not change; this is the one place to read
 # them. It covers:
 #
-#   * Security scans: the ZAP baseline issue (zap-baseline.yml, Mondays 07:00)
-#     and the open CodeQL alerts. Only findings that are new since last week,
-#     or that .zap/rules.tsv does not already accept, are called out.
+#   * Security scans: the ZAP baseline issue and its newest run
+#     (zap-baseline.yml, Mondays 07:00) and the open CodeQL alerts. Only
+#     findings that are new since last week, or that .zap/rules.tsv does not
+#     already accept, are called out.
 #   * Kernel currency: when kernel-currency.yml (Mondays 07:00) is red, which
 #     kernels moved, and what their upstream release notes on github.com say.
 #     kernel-currency.yml itself dispatches revendor-kernels.yml in publish
@@ -103,6 +104,15 @@ jobs:
           head -c 40000 zap-full.md > digest/zap.md
           cp .zap/rules.tsv digest/zap-rules.tsv 2>/dev/null || echo "(no .zap/rules.tsv)" > digest/zap-rules.tsv
 
+          # Whether the scan ran comes from its runs, not from the issue. The
+          # action edits the issue only when the findings change, so an issue
+          # that is weeks old is the normal state of a clean week, and the
+          # 2026-10-19 digest read it as "no ZAP result this week".
+          if ! gh run list --repo "$R" --workflow zap-baseline.yml --limit 1 \
+              --json conclusion,status,createdAt,url > digest/zap-run.json; then
+            echo '{"error": "The ZAP baseline runs could not be listed, so whether the scan ran this week is unknown."}' > digest/zap-run.json
+          fi
+
           if ! gh api "repos/$R/code-scanning/alerts?state=open&per_page=100" \
               --jq '[.[] | {number, rule: .rule.id, severity: (.rule.security_severity_level // .rule.severity),
                      description: .rule.description, created_at,
@@ -189,6 +199,10 @@ jobs:
             - window.txt: the start of the week.
             - zap.md: the ZAP baseline scan issue. zap-rules.tsv: the rules
               the project already accepts or ignores, with reasons.
+            - zap-run.json: the newest ZAP baseline run. It, not the date of
+              the issue, says whether the scan ran: the issue changes only
+              when the findings change. An empty list means no run was
+              found, which is a gap.
             - codeql-alerts.json: the open CodeQL alerts, with created_at.
             - kernel-run.json: the newest kernel-currency run. kernel.log is
               there only when that run failed: it lists the packages a
@@ -209,7 +223,9 @@ jobs:
             2. **Security**: ZAP findings that zap-rules.tsv does not
                already cover, and CodeQL alerts created this week. Name the
                rule, the route or file, and the severity. Say how many are
-               unchanged from last week, without listing them.
+               unchanged from last week, without listing them. Say when the
+               newest ZAP run ran and how it ended. Flag it only when it
+               is older than the week, red, missing, or could not be read.
             3. **Kernels**: when kernel.log exists, name each package and
                its version change. For each one, you may fetch its release
                notes on github.com (for example the jupyter-xeus or
