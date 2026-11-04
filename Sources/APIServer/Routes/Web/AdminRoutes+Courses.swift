@@ -396,15 +396,23 @@ extension AdminRoutes {
         // rule of the unique index (docs/course-terms.md). An archived course
         // is outside the index, so it may share a code.
         //
-        // A reserved code (#2666) is refused only when the edit changes the
-        // code, so a course that already holds one can still be edited; the
-        // `courseKeyShadowed` health rule reports it until it is renamed.
+        // A refused or reserved code (#2666) is refused only when the edit
+        // changes the code, so a course that already holds one can still be
+        // edited; the health rules report it until it is renamed. A rename of
+        // an archived course gets the new-code rules too, so un-archive does
+        // not refuse a code that this form accepted.
         let codeChanged = code.lowercased() != course.code.lowercased()
-        if !course.isArchived,
-            let conflict = try await courseCodeConflict(
+        let conflict: CourseCodeConflict?
+        if course.isArchived {
+            conflict =
+                codeChanged
+                ? newCourseCodeConflict(code, term: term, reserved: req.application.reservedCourseKeys) : nil
+        } else {
+            conflict = try await courseCodeConflict(
                 code, term: term, excluding: courseID,
                 rules: codeChanged ? .newCode(req.application.reservedCourseKeys) : .keptCode, on: req.db)
-        {
+        }
+        if let conflict {
             return req.redirect(to: "/admin/courses/\(idString)?error=\(CourseFormError(conflict).rawValue)")
         }
 

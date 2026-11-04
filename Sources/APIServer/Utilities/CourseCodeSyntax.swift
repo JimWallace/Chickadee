@@ -14,15 +14,19 @@
 // - a code that is "." or ".." is removed from the path by the browser;
 // - a control character cannot be typed into a link at all.
 //
-// Every link to such a course is a 404 or the wrong page.
+// The links Chickadee writes encode the key (`VanityURLRoutes.vanityPath`), so
+// they work. A link typed by hand, or pasted into an LMS from the bare code, is
+// not encoded, and it is a 404 or the wrong page.
 
 /// The syntax rule for a course code.
 enum CourseCodeSyntax {
-    /// The characters a link cannot carry unencoded in a path segment.
+    /// The characters that change how a link is read: they split the path,
+    /// end it, or start an escape. A browser encodes a space, so it is not one.
     static let refusedCharacters: Set<Character> = ["/", "\\", "?", "#", "%"]
 
     /// True when a link can carry `code` as its first path segment: the code
     /// is not empty, not "." or "..", and has no refused or control character.
+    /// (A termed course's key adds "-F26", so only the bare code can be "..".)
     static func isURLSafe(_ code: String) -> Bool {
         guard !code.isEmpty, code != ".", code != ".." else { return false }
         return !code.contains { character in
@@ -33,5 +37,5 @@ enum CourseCodeSyntax {
 
     /// The words every door shows for a code that fails the rule.
     static let message =
-        "A course code cannot contain the characters / \\ ? # or %, and cannot be . or .. alone. Links to the course cannot carry them."
+        "A course code cannot contain / \\ ? # or %, and cannot be \".\" or \"..\"."
 }

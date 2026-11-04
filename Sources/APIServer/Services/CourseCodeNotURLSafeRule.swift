@@ -2,8 +2,9 @@
 //
 // The `courseCodeNotURLSafe` health rule: an active course whose code has a
 // character that a link cannot carry (`CourseCodeSyntax`), such as "/" or "?".
-// The link splits or ends at that character, so every link to such a course
-// is a 404. Every door refuses such a code for a new code
+// The links Chickadee writes encode the key (`VanityURLRoutes.vanityPath`), but
+// a link typed by hand or pasted into an LMS from the bare code splits or ends
+// at that character, so it is a 404. Every door refuses such a code for a new code
 // (`courseCodeConflict`); this rule reports a course that held one before
 // the rule shipped, until an admin renames it.
 
@@ -20,7 +21,7 @@ func decideCourseCodeNotURLSafe(courses: [APICourse]) -> RuleEvaluation {
     return RuleEvaluation(
         isFiring: true,
         summary:
-            "Links do not reach \(unsafe.count == 1 ? "course" : "courses") \(list): "
+            "Typed links do not reach \(unsafe.count == 1 ? "course" : "courses") \(list): "
             + "the code has a character a link cannot carry. Rename the course.",
         details: ["courses": list])
 }

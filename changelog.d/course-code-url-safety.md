@@ -1,9 +1,11 @@
 ### Fixed
 
-- **A course code must be usable in a link.** Nothing encodes a course key
-  when it writes a link, so a code with `/`, `\`, `?`, `#` or `%`, or a code
-  that is `.` or `..`, got a 404 for every link: the link splits or ends at
-  that character. Course create, edit, clone, new term, bundle import and
+- **A course code must be usable in a link.** A code with `/`, `\`, `?`, `#`
+  or `%`, or a code that is `.` or `..`, got a 404 for its links: the link
+  splits or ends at that character. The vanity links and the staff
+  student-history links now percent-encode the key (`urlEncode`), so the links
+  Chickadee writes work for any code, and a key with a space gives a valid
+  `Location` header. Course create, edit, clone, new term, bundle import and
   un-archive now refuse such a new code. A space or a non-ASCII letter still
   works, because the router decodes each parameter. A course that already holds
   a refused code can still be edited, and the new `courseCodeNotURLSafe` health

@@ -97,11 +97,21 @@ func courseCodeConflict(
     _ code: String, term: AcademicTerm?, excluding courseID: UUID?,
     rules: CourseCodeRules, on db: any Database
 ) async throws -> CourseCodeConflict? {
-    if case .newCode(let reserved) = rules {
-        if !CourseCodeSyntax.isURLSafe(code) { return .unsafeCharacters }
-        if reserved.reserves(code: code, term: term) { return .reserved }
+    if case .newCode(let reserved) = rules,
+        let conflict = newCourseCodeConflict(code, term: term, reserved: reserved)
+    {
+        return conflict
     }
     if try await activeCourseCodeIsTaken(code, term: term, excluding: courseID, on: db) { return .taken }
+    return nil
+}
+
+/// The rules for a new code that need no database: the syntax rule, then the
+/// reserved keys. `courseCodeConflict` applies them, and so does a rename of
+/// an archived course, which the duplicate rule does not cover.
+func newCourseCodeConflict(_ code: String, term: AcademicTerm?, reserved: ReservedCourseKeys) -> CourseCodeConflict? {
+    if !CourseCodeSyntax.isURLSafe(code) { return .unsafeCharacters }
+    if reserved.reserves(code: code, term: term) { return .reserved }
     return nil
 }
 

@@ -118,6 +118,28 @@ import VaporTesting
         }
     }
 
+    /// A link Chickadee writes encodes the key, so even a legacy course with
+    /// a "/" in its code is reached: "%2F" is not split, and RoutingKit
+    /// decodes it back.
+    @Test func anEncodedLinkReachesALegacyCourseWithASlash() async throws {
+        try await withApp(app) { app in
+            let cookie = try await loginAsAdmin("ccd_admin", on: app)
+            let course = try await makeTestCourse(on: app, code: "CS/135")
+            let courseID = try course.requireID()
+            try await makeTestSetup(on: app, id: "setup_ccd03", courseID: courseID)
+            let assignment = try await makeTestAssignment(
+                on: app, testSetupID: "setup_ccd03", courseID: courseID, title: "Lab 1")
+            let path = VanityURLRoutes.vanityPath(courseCode: course.urlKey, assignmentSlug: assignment.slug)
+            #expect(path == "/CS%2F135/\(assignment.slug)")
+            try await app.asyncTest(
+                .GET, path,
+                beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
+                afterResponse: { res in
+                    #expect(res.headers.first(name: .location) == "/testsetups/setup_ccd03/notebook")
+                })
+        }
+    }
+
     // MARK: - Admin doors
 
     @Test(arguments: ["CS/135", "CS\\135", "CS135?", "CS#1", "50%", ".."])
@@ -167,6 +189,25 @@ import VaporTesting
             let stored = try #require(try await APICourse.find(course.requireID(), on: app.db))
             #expect(stored.code == "CS/135")
             #expect(stored.name == "New name")
+        }
+    }
+
+    /// An archived course is outside the duplicate rule, but a rename still
+    /// gets the new-code rules, so un-archive cannot be the first to refuse it.
+    @Test func editOfAnArchivedCourseRefusesARenameToAnUnsafeCode() async throws {
+        try await withApp(app) { app in
+            let cookie = try await loginAsAdmin("ccd_admin", on: app)
+            let course = APICourse(
+                code: "CCD200", name: "Old", isArchived: true, term: AcademicTerm(year: 2025, season: .fall))
+            try await course.save(on: app.db)
+            let id = try course.requireID().uuidString
+            let result = try await post(
+                "/admin/courses/\(id)/edit",
+                form: ["code": "CCD/200", "name": "Old", "termYear": "2025", "termSeason": "fall"],
+                cookie: cookie, formPath: "/admin/courses/\(id)")
+            #expect(result.location == "/admin/courses/\(id)?error=code_unsafe")
+            let stored = try #require(try await APICourse.find(course.requireID(), on: app.db))
+            #expect(stored.code == "CCD200")
         }
     }
 

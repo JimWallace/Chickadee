@@ -146,7 +146,9 @@ The Core type, the migration, the model accessor, and tests
   Vapor splits the path on `/` while it is still percent-encoded, and RoutingKit
   then decodes each parameter. So a space or a non-ASCII letter works ("STAT
   230" arrives as `STAT%20230` and decodes), but `/` splits the key, `?` and `#`
-  end the path, and `%` starts an escape. A door that keeps a course's own code
+  end the path, and `%` starts an escape. The links Chickadee writes encode the
+  key (`vanityPath`, `StudentCoursePaths`, both through `urlEncode`), so the
+  rule protects the links people type or paste. A door that keeps a course's own code
   (`CourseCodeRules.keptCode`) skips the rule, and the `courseCodeNotURLSafe`
   health rule reports such a course.
 - **The URL key.** `APICourse.urlKey` is the code for a course with no term,
