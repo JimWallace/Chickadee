@@ -61,7 +61,7 @@ extension AuthoringSnapshot {
             let result = try await MCPStudentDataBoundary.latestResult(
                 forSubmissionID: submission.requireID(), on: db)
         else { return nil }
-        return try await decodedCollection(result, on: db)
+        return decodedCollection(try await result.loadCollectionJSON(on: db))
     }
 
     private static func variantRuns(setupID: String, on db: any Database) async throws -> [VariantRun] {
@@ -73,7 +73,7 @@ extension AuthoringSnapshot {
         for variant in batch {
             var run: TestOutcomeCollection?
             if let result = try await MCPStudentDataBoundary.variantResult(for: variant, on: db) {
-                run = try await decodedCollection(result, on: db)
+                run = decodedCollection(try await result.loadCollectionJSON(on: db))
             }
             runs.append(
                 VariantRun(
@@ -82,12 +82,11 @@ extension AuthoringSnapshot {
         return runs
     }
 
-    private static func decodedCollection(
-        _ result: APIResult, on db: any Database
-    ) async throws
-        -> TestOutcomeCollection?
-    {
-        guard let json = try await result.loadCollectionJSON(on: db) else { return nil }
+    /// A stored run's collection JSON, decoded. The caller reads the JSON from
+    /// a boundary result, so this file never names the result model
+    /// (`MCPStudentDataWallTests`).
+    private static func decodedCollection(_ json: String?) -> TestOutcomeCollection? {
+        guard let json else { return nil }
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
         return try? decoder.decode(TestOutcomeCollection.self, from: Data(json.utf8))
