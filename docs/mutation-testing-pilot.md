@@ -57,6 +57,12 @@ build, released or tagged, that works on a suite like ours.** A fork here is
 load-bearing infrastructure, not a patch we carry until upstream lands — there
 is no released version to fall back to.
 
+A second patch, `0002-read-environment-once.patch`, is about time rather than
+correctness. Without it, a mutated hot loop makes the whole suite too slow to
+finish, and every mutant in its shard times out. See "Why the guards read the
+environment once" below. `scripts/mutation-run.sh` applies every
+`Tools/mutation/*.patch` in name order.
+
 ## What was run
 
 ```
@@ -288,6 +294,81 @@ occur.** It is a list of questions, and some of the answers are "correctly, no".
   The shard's job log has the compiler error; the report says only
   `error: Build failed`. Shard membership moves with line counts, so the shard
   number that dies changes from week to week while the cause stays put.
+- **A shard whose every mutant ends at exactly `mutationTestTimeout` is not
+  slow. Its guards are.** See the next section. Muter prints a timeout as
+  `time out`, counts it as neither killed nor survived, and still divides its
+  score by it, so such a shard reports nothing true.
+- **To re-run one shard by hand**, dispatch `Mutation testing (weekly)` with
+  `only_shard` set. It runs that shard of the full plan and files no issue and
+  no trend record.
+
+## Why the guards read the environment once
+
+Shard 5 was cancelled at the 180-minute job limit on 2026-10-20, 10-27 and
+11-03 (#2810), and its files were never mutated. Run 41642327796 showed the
+shape: a 40-minute baseline where shard 1 took 14, then every mutant cut off at
+exactly 900 s, the `mutationTestTimeout` that `scripts/mutation-run.sh` writes.
+Mutants in files that no hot test touches timed out too, so the cause was the
+whole suite, not one mutant.
+
+**The cause is the guard Muter writes, not the mutants.** At the pinned ref,
+`MutationSwitch` guards every schema with
+`ProcessInfo.processInfo.environment["<id>"] != nil`. That property builds a new
+dictionary from `environ` on every access. A function with *k* schemata pays
+*k* dictionary builds on every call, whether any mutant is active or not. Shard 5
+holds `AvatarSpec.swift`, whose weighted `pick` checks a guard inside its loop
+and calls `drawWeight` (two more guards) per option, and the tests run it over
+20,000 seeds (`SpeciesTraitProfileTests`) and 4,000 more (`AvatarSpecTests`).
+Measured on 2026-11-04:
+
+| | stock guard | cached guard | no schemata |
+|---|---:|---:|---:|
+| one guard check, Linux sweep image (58 env vars) | 40 µs | 0.032 µs | — |
+| the hot suites, 25 tests, macOS | 38.5 s | 0.43 s | 0.31 s |
+| the hot suites, 25 tests, Linux sweep image | 41.4 s | 0.53 s | 0.40 s |
+| the sweep's whole test command (1,077 tests), Linux sweep image | **844 s** | 34 s | 34 s |
+
+The Linux rows come from run 41882538599, a throwaway workflow on the sweep's
+own `swift-ci:6.4-resolute` image. The mutated copies were generated from shard
+5's 13 files by Muter itself (49 guards in each, with identical mutant ids), so
+the only difference between the first two columns is the guard. 844 s is one
+run of the suite with no mutant active, 56 s under the 900 s ceiling. On the
+loaded sweep runner every mutant crossed it. With the cached guard the mutated
+suite costs the same as the pristine one.
+
+**The fix is `Tools/mutation/0002-read-environment-once.patch`.** Each guard
+reads `__muter_environment["<id>"]`, and Muter appends one declaration to the
+end of each mutated file:
+
+```swift
+private let __muter_environment: [String: String] = ProcessInfo.processInfo.environment
+```
+
+A global `let` initialises lazily, exactly once and thread-safely, and
+`[String: String]` is `Sendable`, so the line builds under Swift 6 strict
+concurrency and strict memory safety. It goes at the end so that no line of the
+original moves. One read per process is exact, because Muter sets a mutant's id
+in the test process's environment before launch and never changes it after. A
+`main.swift` keeps the stock guard, since its top-level code runs before a
+declaration at its end is initialised. No file in scope is one.
+`report.py`'s `SCHEMA_ID` matches both guard forms, and `report_test.py` pins
+that.
+
+**Verified, not assumed.** The `Mutation-testing probe` workflow now applies
+`Tools/mutation/*.patch` (it used to build unpatched Muter, so it never verified
+the tool the sweep runs) and builds the probe with the repository's strict
+settings. It passed (run 41883078493): 2 killed, 1 survivor (the mutant the weak test cannot see),
+no build errors, no timeouts, and all 3 guards cached. Shard 5 then ran by hand
+(run 41869522594). All 62 mutants finished in 35 minutes, about 34 s each, with
+**0 timeouts**: 48 killed by test failures, and 14 reported survivors that are 13
+phantoms and 1 recorded equivalent. One kill was reproduced by hand in the
+cached copy. With no mutant set, the 32 Wardrobe tests pass. With
+`WardrobeProgress_RelationalOperatorReplacement_72_51_3510=YES`, 19 fail on real
+assertions.
+
+**Do not answer this by raising `mutationTestTimeout` or by dropping files.**
+Either one hides the cost, and the next hot loop in a mutated file brings it
+back.
 
 ## Is it worth a monthly run?
 

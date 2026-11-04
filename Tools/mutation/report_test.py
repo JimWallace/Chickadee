@@ -108,6 +108,22 @@ class PublishedNumbersTests(unittest.TestCase):
         self.assertEqual(summary["reportedSurvived"], 2)
         self.assertEqual(len(summary["phantoms"]), 1)
 
+    def test_cached_environment_guards_read_exactly_like_uncached_ones(self):
+        # 0002-read-environment-once.patch rewrites every guard to read a
+        # file-private copy of the environment, declared at the end of the
+        # file. If SCHEMA_ID stopped matching that form, every real survivor
+        # would be filed as a phantom and the shard would read as perfect.
+        cached = MUTATED.replace(
+            "ProcessInfo.processInfo.environment[", "__muter_environment["
+        ) + (
+            "\n// Inserted by Muter: the process environment, read once rather than at\n"
+            "// every mutation guard. Not part of the original source.\n"
+            "private let __muter_environment: [String: String] = "
+            "ProcessInfo.processInfo.environment\n"
+        )
+        self.assertNotIn("processInfo.environment[", cached)
+        self.assertEqual(run(RAW, cached), run(RAW, MUTATED))
+
     def test_muters_own_claim_is_still_shown_for_reconciliation(self):
         _code, report, _summary = run(RAW, MUTATED)
         self.assertIn("33%", report, "Muter's raw score should remain visible in prose")

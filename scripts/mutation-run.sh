@@ -23,6 +23,21 @@ set -euo pipefail
 # load-bearing, which is why the pin is exact and why the `Mutation-testing probe
 # (macOS)` workflow exists to re-verify the tool after any bump.
 #
+# A SECOND PATCH IS ABOUT TIME, NOT CORRECTNESS, AND IS JUST AS LOAD-BEARING.
+# Muter guards every mutant with `ProcessInfo.processInfo.environment["<id>"]`,
+# and that call builds a whole new dictionary from `environ` each time. A mutated
+# function pays one build per schema in its chain on EVERY call, mutant active or
+# not, so a hot loop in a mutated file (AvatarSpec's weighted `pick`, run over
+# 20,000 seeds by SpeciesTraitProfileTests) makes the entire suite crawl. Shard 5
+# was cancelled at the 180-minute limit three weeks running (#2810): a 40-minute
+# baseline, then every mutant cut off at exactly `mutationTestTimeout`.
+# Tools/mutation/0002-read-environment-once.patch makes each mutated file read
+# the environment once, into a file-private `let`. The measurement is in
+# docs/mutation-testing-pilot.md, "Why the guards read the environment once".
+#
+# Every `Tools/mutation/*.patch` is applied, in name order. Adding one means
+# re-verifying with the probe, exactly as for a new MUTER_REF.
+#
 # AND ITS OUTPUT IS AUDITED, NOT TRUSTED. Muter also reports mutants it never
 # inserted, and they always read as "survived" -- the phantom-mutant mode of
 # muter#308. Measured: one of four RemoveSideEffects mutants in
@@ -66,7 +81,8 @@ repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$repo_root"
 
 config="Tools/mutation/config.json"
-patch_file="Tools/mutation/0001-restore-parse-tree-cache.patch"
+# Name order is application order: 0001 before 0002, and 0002 assumes 0001.
+patch_files=(Tools/mutation/[0-9][0-9][0-9][0-9]-*.patch)
 plan_only=0
 check_flags_only=0
 
@@ -270,9 +286,12 @@ if [ ! -x "$MUTER_SRC/.build/release/muter" ]; then
     git -C "$MUTER_SRC" checkout --quiet "$MUTER_REF"
     git -C "$MUTER_SRC" checkout --quiet -- .
     # `git apply` so a drifted patch fails loudly rather than yielding a Muter
-    # that silently inserts nothing.
-    git -C "$MUTER_SRC" apply "$repo_root/$patch_file"
-    echo "    applied $patch_file"
+    # that silently inserts nothing -- or, for 0002, one whose every mutant
+    # times out.
+    for patch_file in "${patch_files[@]}"; do
+        git -C "$MUTER_SRC" apply "$repo_root/$patch_file"
+        echo "    applied $patch_file"
+    done
     if [ "$(uname -s)" != "Darwin" ]; then
         cat > "$MUTER_SRC/Sources/muterCore/Extensions/AutoreleasepoolLinux.swift" <<'SHIM'
 #if !canImport(Darwin)
@@ -308,6 +327,11 @@ for a in cfg["testArgs"]:
     print(f"  - {a.replace('{repoRoot}', sys.argv[2])}")
 print("exclude:")
 print("  - .build")
+# 900s is a ceiling for a WEDGED mutant, not a budget: a mutant run is one suite
+# run, ~30s. A shard whose mutants all end at exactly 900s is not slow -- every
+# outcome is a timeout, which Muter prints as `time out`, counts as neither killed
+# nor survived, and still divides the score by. That was shard 5 before 0002:
+# look at the guards before raising this.
 print("mutationTestTimeout: 900")
 PY
 
@@ -325,11 +349,14 @@ raw="$OUT_DIR/muter-raw.txt"
 # against the configuration that produced it, so the trend marks any run whose
 # fingerprint differs rather than drawing a line between two measurements that
 # are not the same measurement. See Tools/mutation/trend.py.
-python3 - "$config" "$patch_file" "$MUTER_REF" > "$OUT_DIR/env.json" <<'FINGERPRINT'
+python3 - "$config" "$MUTER_REF" "${patch_files[@]}" > "$OUT_DIR/env.json" <<'FINGERPRINT'
 import hashlib, json, subprocess, sys
 
-def digest(path):
-    return hashlib.sha256(open(path, "rb").read()).hexdigest()[:12]
+def digest(*paths):
+    h = hashlib.sha256()
+    for path in paths:
+        h.update(open(path, "rb").read())
+    return h.hexdigest()[:12]
 
 def first_line(*cmd):
     try:
@@ -339,8 +366,9 @@ def first_line(*cmd):
     return out.splitlines()[0].strip() if out.strip() else None
 
 json.dump({
-    "muterRef": sys.argv[3],
-    "patchHash": digest(sys.argv[2]),
+    "muterRef": sys.argv[2],
+    # Every patch, in application order: a new patch is a new tool.
+    "patchHash": digest(*sys.argv[3:]),
     "configHash": digest(sys.argv[1]),
     "swift": first_line("swift", "--version"),
     "commit": first_line("git", "rev-parse", "HEAD"),

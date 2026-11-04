@@ -69,6 +69,10 @@ on:
         description: "Shard count override (default: shardCount in Tools/mutation/config.json)"
         required: false
         type: string
+      only_shard:
+        description: "Run just this shard (0-based) of the full plan, to re-check one by hand. Files no issue and records no trend point: one shard is not a sweep."
+        required: false
+        type: string
 
 permissions:
   contents: read
@@ -99,6 +103,7 @@ jobs:
       - id: plan
         env:
           OVERRIDE: ${{ inputs.shards }}
+          ONLY: ${{ inputs.only_shard }}
         run: |
           python3 - <<'PY' >> "$GITHUB_OUTPUT"
           import json, os
@@ -107,8 +112,16 @@ jobs:
               open("Tools/mutation/config.json"))["shardCount"]
           if count < 1:
               raise SystemExit(f"shard count must be >= 1, got {count}")
+          # `count` stays the WHOLE plan's, so shard N mutates exactly the
+          # files it would in a full sweep.
+          only = (os.environ.get("ONLY") or "").strip()
+          shards = list(range(count))
+          if only:
+              if not only.isdigit() or int(only) >= count:
+                  raise SystemExit(f"only_shard must be 0..{count - 1}, got {only!r}")
+              shards = [int(only)]
           print(f"count={count}")
-          print("shards=" + json.dumps(list(range(count))))
+          print("shards=" + json.dumps(shards))
           PY
           cat "$GITHUB_OUTPUT"
 
@@ -155,7 +168,7 @@ jobs:
           # so editing either rebuilds rather than silently reusing a Muter
           # that no longer carries the fix. Any other edit to the script also
           # rebuilds, which is the price of not copying the pin into this key.
-          key: muter-${{ runner.os }}-${{ hashFiles('scripts/mutation-run.sh', 'Tools/mutation/0001-restore-parse-tree-cache.patch') }}
+          key: muter-${{ runner.os }}-${{ hashFiles('scripts/mutation-run.sh', 'Tools/mutation/*.patch') }}
 
       - name: Run shard ${{ matrix.shard }}
         run: |
@@ -177,8 +190,10 @@ jobs:
     name: File one triage issue
     needs: [plan, mutate]
     # `always()` so a single wedged shard still yields a report for the other
-    # nine, rather than losing an hour of compute to one bad apple.
-    if: always()
+    # nine, rather than losing an hour of compute to one bad apple. Skipped for
+    # an `only_shard` dispatch: one shard is a spot check, and recording it
+    # would put a partial sweep into the trend as if it were a whole one.
+    if: always() && !inputs.only_shard
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:

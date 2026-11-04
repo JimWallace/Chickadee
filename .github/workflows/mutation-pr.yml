@@ -106,7 +106,7 @@ jobs:
         with:
           path: /tmp/muter-src
           # The script holds the Muter pin (MUTER_REF), so a pin bump rebuilds.
-          key: muter-${{ runner.os }}-${{ hashFiles('scripts/mutation-run.sh', 'Tools/mutation/0001-restore-parse-tree-cache.patch') }}
+          key: muter-${{ runner.os }}-${{ hashFiles('scripts/mutation-run.sh', 'Tools/mutation/*.patch') }}
 
       - name: Work out which mutable files this PR touches
         id: files
