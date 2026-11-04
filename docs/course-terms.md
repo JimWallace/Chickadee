@@ -288,7 +288,7 @@ code-only lookup.** Use `findActiveCourse(byKey:viewer:on:)` on the web or
 |---|---|
 | `findActiveCourse(byKey:viewer:on:)` | `Services/CourseLookup.swift` |
 | Vanity URLs `/:courseCode/:assignmentSlug` (and `/notebook`, `/submit`, `/history`, `/leaderboard`) | `Routes/Web/VanityURLRoutes.swift` |
-| Staff student paths `/:courseCode/students/...` | `Routes/Web/StudentCoursePaths.swift`, `StudentCourseRoutes+History.swift` |
+| Staff student paths `/:courseCode/students/...` | `Utilities/StudentCoursePaths.swift`, `StudentCourseRoutes+History.swift` |
 | MCP `resolveCourse` / `resolveCourseForWrite` (active courses are matched first; an archived course only when no active one matches, #1778) | `MCP/Tools/CourseSectionTools.swift` |
 | MCP `list_assignments`, `clone_assignment` | `MCP/Tools/ListAssignmentsTool.swift`, `CloneAssignmentTool.swift` |
 | MCP resource `chickadee://course/<code>/authoring-guidance` | `MCP/Resources/MCPResourceProvider.swift` |

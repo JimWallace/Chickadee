@@ -1,4 +1,4 @@
-// APIServer/Routes/Web/AdminEnrollError.swift
+// APIServer/Utilities/AdminEnrollError.swift
 //
 // Why the admin user page refused an enrollment. The handler redirects with
 // the raw value in `?error=`, and the page shows the fixed message for it, so

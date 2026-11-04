@@ -1,4 +1,4 @@
-// APIServer/Routes/Web/StaffProvisioning.swift
+// APIServer/Helpers/StaffProvisioning.swift
 //
 // Adds a person to a course at a staff role before they have ever logged in.
 // The instructor roster (`POST /courses/:courseID/staff`) and the admin course

@@ -1,4 +1,4 @@
-// APIServer/Routes/Web/StaffFieldsContext.swift
+// APIServer/Utilities/StaffFieldsContext.swift
 //
 // The values of `StaffFields`: the identifier and role fields of a staff form.
 // The instructor roster and the admin course page render the same view, as the

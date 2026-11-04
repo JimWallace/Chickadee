@@ -43,11 +43,11 @@ cite them by letter:
 ### Adding staff who have not logged in
 
 Three forms add a person to a course at a staff role before their first login.
-All three reach `provisionStaffEnrollment` (`Routes/Web/StaffProvisioning.swift`):
+All three reach `provisionStaffEnrollment` (`Helpers/StaffProvisioning.swift`):
 the new-course form calls it directly, inside its transaction. The two staff
 forms, and the unenroll and set-role actions on the instructor
 roster and the admin pages, go through `CourseEnrollmentService`
-(`Routes/Web/CourseEnrollmentService.swift`). The admin bypass of the
+(`Helpers/CourseEnrollmentService.swift`). The admin bypass of the
 last-instructor guard is the caller, not a second copy of the handler.
 
 | Form | Route | Who |

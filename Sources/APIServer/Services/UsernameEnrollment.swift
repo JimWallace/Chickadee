@@ -1,4 +1,4 @@
-// APIServer/Routes/Web/EnrollCSVHelper.swift
+// APIServer/Services/UsernameEnrollment.swift
 //
 // Shared utilities for CSV-based bulk enrollment, used by both AdminRoutes
 // and CourseAdminRoutes so the logic and the result page stay in sync.
