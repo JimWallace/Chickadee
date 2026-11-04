@@ -1,3 +1,4 @@
+// @ts-check
 // Page wiring for the assignment edit surface (AssignmentEditBody),
 // loaded on both of its hosts: the standalone edit page and the workbench's
 // edit pane.  Extracted from the partial's inline script blocks so every URL
@@ -56,8 +57,8 @@
         var headerEdit   = document.getElementById('assign-header-edit');
         var toggleBtn    = document.getElementById('assign-edit-toggle');
         var cancelBtn    = document.getElementById('assign-edit-cancel');
-        var nameInput    = document.getElementById('assignmentNameInput');
-        var dueInput     = document.getElementById('dueAt');
+        var nameInput    = /** @type {HTMLInputElement} */ (document.getElementById('assignmentNameInput'));
+        var dueInput     = /** @type {HTMLInputElement} */ (document.getElementById('dueAt'));
         var dueDisplay   = document.getElementById('assign-due-display');
 
         function formatDueDate(val) {
@@ -219,8 +220,8 @@
     // Fetch grade objects from D2L, populate the page's <datalist> with names,
     // and resolve the stored raw ID to a display name (and back on change).
     function wireBrightspacePicker() {
-        var nameInput = document.getElementById('edit-bs-grade-name');
-        var idInput = document.getElementById('edit-bs-grade-id');
+        var nameInput = /** @type {HTMLInputElement} */ (document.getElementById('edit-bs-grade-name'));
+        var idInput = /** @type {HTMLInputElement} */ (document.getElementById('edit-bs-grade-id'));
         var datalist = document.getElementById('edit-bs-grade-objects');
         if (!nameInput || !idInput || !datalist) return;
 
@@ -277,7 +278,7 @@
     init();
 
     document.body.addEventListener('click', function (ev) {
-        var t = ev.target;
+        var t = /** @type {Element} */ (ev.target);
         var se = t.closest && t.closest('.js-suite-edit-btn');
         if (!se || !modal) return;
         var name = se.getAttribute('data-filename');

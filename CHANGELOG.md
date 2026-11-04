@@ -9,6 +9,34 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.814] - 2026-11-04
+
+### Changed
+
+- **Four larger frontend scripts are type-checked.** `app.js`, `browser-runner.js`, `support-files.js` and `notebook.js` opt in with `// @ts-check`, and `tsc` reports no errors. The fixes are JSDoc annotations and casts only, so no served file changes behaviour. Two module declarations in `types/` type the dynamic imports of the iframe bridge and the runner-core loader (#2834).
+
+
+## [0.5.813] - 2026-11-04
+
+### Changed
+
+- **21 more frontend scripts are type-checked.** They opt in with `// @ts-check`, and `tsc` reports no errors. The fixes are JSDoc annotations and casts only, so no served file changes behaviour. A `paths` entry in `jsconfig.json` types the `/vendor/codemirror.js` import (#2831).
+
+
+## [0.5.812] - 2026-11-04
+
+### Security
+
+- **The test-edit hook denies an existing-test edit when no person answers prompts.** In `auto`, `dontAsk` and `bypassPermissions` mode a hook "ask" could be answered with nobody looking. The hook now returns "deny", with a reason that tells the agent to describe the edit to the maintainer and wait. Every other mode, and an event with no `permission_mode`, still asks (#2832).
+
+
+## [0.5.811] - 2026-11-04
+
+### Changed
+
+- **The admin People tab shows one page of 100 users.** The tab and its 5-second poll read every account on the deployment. Now the database sorts and limits each read, and Previous and Next links move between pages. Typing in the filter box filters the page shown; Enter searches every account by username, display name or role, and the links and the poll keep the search. The order keeps its meaning: most recently seen first, never seen last, then username, then join date. Usernames now compare as text, so `user10` sorts before `user2`. The header counts do not change. `/admin/users-data` with no `page` still returns every user as JSON; `?page=N` or `?q=` returns one page (#2829).
+
+
 ## [0.5.810] - 2026-11-04
 
 ### Fixed

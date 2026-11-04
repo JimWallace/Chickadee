@@ -1,3 +1,4 @@
+// @ts-check
 // Chickadee — Custom-script body renderer for the unified Test Editor modal.
 //
 // ES module (CodeMirror 6 imports) registering `window.ChickadeeTestRenderers
@@ -31,7 +32,7 @@ import {
     python, shell, r, lua, octave, scheme, java, cpp
 } from '/vendor/codemirror.js';
 
-(function (global) {
+(function (/** @type {any} */ global) {
     'use strict';
 
     var Core = global.ChickadeeScriptRendererCore;
@@ -95,6 +96,7 @@ import {
     var currentFilename = null;
     var uploadEditName = null;
     var templateCache = null;
+    /** @type {(message: string, kind?: string) => void} */
     var statusFn = function () {};
 
     function destroyView() { if (view) { try { view.destroy(); } catch (e) { /* ignore */ } view = null; } }
@@ -275,7 +277,7 @@ import {
             if (spec.uploadEdit) {
                 // Write the edited body back into the upload file <input>.
                 var inputID = cfg().uploadFilesInputID;
-                var input = inputID ? document.getElementById(inputID) : null;
+                var input = inputID ? /** @type {HTMLInputElement | null} */ (document.getElementById(inputID)) : null;
                 if (!input) return Promise.reject(new Error('Upload input not found.'));
                 try {
                     var updated = new File([spec.content], spec.name, { type: 'text/plain' });

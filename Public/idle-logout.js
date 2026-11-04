@@ -1,3 +1,4 @@
+// @ts-check
 // Public/idle-logout.js
 //
 // Client-side inactivity watchdog. Required by the institutional security
@@ -51,7 +52,7 @@
     var timeoutSeconds = metaInt('session-idle-timeout-seconds');
     if (!timeoutSeconds || timeoutSeconds <= 0) return;
 
-    var logoutForm = document.querySelector('form[action="/logout"]');
+    var logoutForm = /** @type {HTMLFormElement | null} */ (document.querySelector('form[action="/logout"]'));
     if (!logoutForm) return;
 
     var timeoutMs = timeoutSeconds * 1000;
@@ -129,6 +130,7 @@
 
     // --- warning modal ----------------------------------------------------
 
+    /** @type {(HTMLDivElement & { _stayBtn?: HTMLButtonElement }) | null} */
     var overlay = null;
     var countdownEl = null;
     var lastFocused = null;

@@ -1,3 +1,4 @@
+// @ts-check
 // Page wiring for the instructor BrightSpace page (InstructorBrightspacePage):
 // the connection test button and the grade-item pickers.  Extracted from the
 // template's inline script block so it is linted and testable; the reserved
@@ -55,8 +56,8 @@
     // resolve the chosen name back to an ID (or the do-not-sync token) on submit.
     function wireForms(byId, byName) {
         document.querySelectorAll('.bs-grade-form').forEach(function (form) {
-            var visibleInput = form.querySelector('.bs-grade-input');
-            var hiddenInput = form.querySelector('.js-bs-grade-id-hidden');
+            var visibleInput = /** @type {HTMLInputElement} */ (form.querySelector('.bs-grade-input'));
+            var hiddenInput = /** @type {HTMLInputElement} */ (form.querySelector('.js-bs-grade-id-hidden'));
             if (!visibleInput || !hiddenInput) return;
             var rawId = visibleInput.dataset.rawId || '';
             if (rawId && byId[rawId]) {

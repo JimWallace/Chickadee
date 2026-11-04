@@ -1,3 +1,4 @@
+// @ts-check
 // Page wiring for the instructor assignments dashboard (Views/Pages/AssignmentsPage.swift):
 // the diagnostic cards, section drag-reorder, section header edit mode,
 // section delete, per-row copy-student-link buttons, and the publish form's
@@ -119,7 +120,7 @@
         // row-drag handler, and row-drag events NEVER trigger section logic.
         sectionsContainer.querySelectorAll('.section-header').forEach(function (header) {
             header.setAttribute('draggable', 'true');
-            header.addEventListener('dragstart', function (event) {
+            header.addEventListener('dragstart', function (/** @type {DragEvent} */ event) {
                 if (!sectionDragHandleDown) { event.preventDefault(); return; }
                 event.stopPropagation(); // prevent reaching document.dragstart
                 var block = header.closest('.section-block[data-section-id]');
@@ -164,10 +165,10 @@
         btn.addEventListener('click', function () {
             var header = btn.closest('.section-header');
             if (!header) return;
-            header.querySelector('.section-view').style.display = 'none';
-            var editDiv = header.querySelector('.section-edit');
+            /** @type {HTMLElement} */ (header.querySelector('.section-view')).style.display = 'none';
+            var editDiv = /** @type {HTMLElement} */ (header.querySelector('.section-edit'));
             editDiv.style.display = 'flex';
-            var input = editDiv.querySelector('.section-name-input');
+            var input = /** @type {HTMLInputElement} */ (editDiv.querySelector('.section-name-input'));
             if (input) { input.focus(); input.select(); }
         });
     });
@@ -176,8 +177,8 @@
         btn.addEventListener('click', function () {
             var header = btn.closest('.section-header');
             if (!header) return;
-            header.querySelector('.section-view').style.display = 'flex';
-            header.querySelector('.section-edit').style.display = 'none';
+            /** @type {HTMLElement} */ (header.querySelector('.section-view')).style.display = 'flex';
+            /** @type {HTMLElement} */ (header.querySelector('.section-edit')).style.display = 'none';
         });
     });
 
@@ -210,7 +211,7 @@
     // ── UWaterloo important-date proximity warning ────────────────────────────
     // Shared implementation (Public/chickadee-ui.js, loaded by the layout).
     // The compact publish form keeps its shorter label.
-    document.querySelectorAll('.js-publish-due-date').forEach(function (input) {
+    document.querySelectorAll('.js-publish-due-date').forEach(function (/** @type {HTMLInputElement} */ input) {
         var warning = input.closest('form')?.querySelector('.publish-uw-warning');
         if (!warning) return;
         input.addEventListener('change', function () {

@@ -1,3 +1,4 @@
+// @ts-check
 // Public/celebrate.js
 //
 // The result-page celebration (docs/result-celebration.md, J1). The server
@@ -21,7 +22,7 @@
     'use strict';
 
     var Core = window.ChickadeeCelebrateCore;
-    var group = document.querySelector('.submission-bird[data-celebrate]');
+    var group = /** @type {HTMLElement} */ (document.querySelector('.submission-bird[data-celebrate]'));
     var root = document.getElementById('submission-root');
     if (!Core || !group || !root) { return; }
 
@@ -46,9 +47,9 @@
         return;
     }
 
-    var bird = group.querySelector('.avatar');
-    var grade = group.querySelector('.score-figure');
-    var chip = group.querySelector('.js-grade-gain');
+    var bird = /** @type {HTMLElement} */ (group.querySelector('.avatar'));
+    var grade = /** @type {HTMLElement} */ (group.querySelector('.score-figure'));
+    var chip = /** @type {HTMLElement} */ (group.querySelector('.js-grade-gain'));
     var live = document.querySelector('.js-celebrate-live');
     var marks = Array.prototype.slice.call(document.querySelectorAll('.results-table .result-mark'));
     var plan = Core.plan(state);
