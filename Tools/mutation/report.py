@@ -18,11 +18,13 @@ on it sends someone to write a test that already exists -- the "confident wrong
 answer" this whole exercise exists to catch.
 
 The fix: the MUTATED PROJECT COPY is the ground truth. Every genuinely inserted
-schema is guarded by `ProcessInfo.processInfo.environment["<id>"]`, where the id
-is `{fileStem}_{operator}_{line}_{column}_{utf8Offset}`. A reported survivor
-whose (file, operator, line) has no matching guard was never inserted. We list
-those separately as phantoms and keep them out of the survivor list, so nobody
-triages a mutant that does not exist.
+schema is guarded by `__muter_environment["<id>"]` (a file-private copy of the
+environment, Tools/mutation/0002-read-environment-once.patch; unpatched Muter
+writes `ProcessInfo.processInfo.environment["<id>"]`, and SCHEMA_ID matches
+both), where the id is `{fileStem}_{operator}_{line}_{column}_{utf8Offset}`.
+A reported survivor whose (file, operator, line) has no matching guard was
+never inserted. We list those separately as phantoms and keep them out of the
+survivor list, so nobody triages a mutant that does not exist.
 
 Note the positions themselves are accurate -- 86, 89 and 90 matched exactly.
 Only the phantom carries a bogus line.
