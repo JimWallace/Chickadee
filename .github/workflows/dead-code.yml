@@ -112,6 +112,11 @@ jobs:
           scan --format agent-prompt > "$REPORT_DIR/agent-prompt.md"
           scan --format json > "$REPORT_DIR/results.json"
           scan --format github-markdown > "$REPORT_DIR/results.md"
+          # The same scan with the test targets left out. A result here that
+          # is not in results.json is used only by tests. The
+          # monthly-audit-rotation scheduled task reads the difference
+          # (docs/dead-code-scan.md, "Code that only tests use").
+          scan --format json --exclude-tests > "$REPORT_DIR/results-without-tests.json"
           {
             echo "## Dead code scan"
             echo

@@ -14,9 +14,10 @@ scheduled task on the maintainer's machine. CI runs no model (root
    SHA-256.
 2. It builds the package and its tests from source with
    `-index-store-path`, under `--build-system native`.
-3. It scans that index three times, with no new build: `agent-prompt`, `json`
-   and `github-markdown`.
-4. It uploads the three files as the `dead-code-report` artifact, and puts the
+3. It scans that index four times, with no new build. The first three scans
+   write `agent-prompt`, `json` and `github-markdown`. The fourth writes
+   `json` again with `--exclude-tests` (`results-without-tests.json`).
+4. It uploads the four files as the `dead-code-report` artifact, and puts the
    Markdown table in the job summary.
 
 The scan runs on Linux because a few files have Linux-only code under
@@ -62,10 +63,15 @@ an unused `req`) are reported too. They are usually not worth a change.
 ## Code that only tests use
 
 Periphery counts a use from a test as a use, because the build includes the
-tests. To find code that only tests use, run a second scan with
-`--exclude-tests` and compare the two result lists. Removing such code means
-editing tests, which needs the maintainer's approval, so that list goes to the
-maintainer and not to an unattended review.
+tests. The job also writes `results-without-tests.json`, a scan with the test
+targets left out. A result in that file that is not in `results.json` is used
+only by tests.
+
+Removing such code means editing tests, which needs the maintainer's approval.
+So the weekly review does not touch it. The `monthly-audit-rotation` scheduled
+task does, on its third Saturday of the month. It sorts the list into test
+seams to keep and code to remove. Then it files the list as one issue labelled
+`dead-code` for the maintainer.
 
 ## Baselines
 
