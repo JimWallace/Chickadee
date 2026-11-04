@@ -1,4 +1,4 @@
-// APIServer/Routes/Web/AdminContextTypes.swift
+// APIServer/Helpers/AdminContextTypes.swift
 //
 // View-context types for the admin dashboard and its sub-pages.
 // Separated from AdminRoutes.swift to keep route handlers readable.

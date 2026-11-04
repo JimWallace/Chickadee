@@ -1,4 +1,4 @@
-// APIServer/Routes/Web/GitHubCourseContext.swift
+// APIServer/Utilities/GitHubCourseContext.swift
 //
 // The row types of the instructor's course GitHub page
 // (`InstructorGitHubPage`, docs/github-submissions.md slice 4).

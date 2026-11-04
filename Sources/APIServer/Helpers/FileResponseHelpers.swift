@@ -1,4 +1,4 @@
-// APIServer/Routes/Web/FileResponseHelpers.swift
+// APIServer/Helpers/FileResponseHelpers.swift
 //
 // The response a file download route sends: an attachment with a content
 // type read from the filename. Split from TestSetupZipHelpers.swift when that

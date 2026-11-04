@@ -1,4 +1,4 @@
-// Sources/APIServer/Routes/Web/RoleSelectCell.swift
+// Sources/APIServer/Utilities/RoleSelectCell.swift
 
 /// One person's course-role select on a roster row, rendered by
 /// `RoleSelect`. The instructor roster (students and staff) and the
