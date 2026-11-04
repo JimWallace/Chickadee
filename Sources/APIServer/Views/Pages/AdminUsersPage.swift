@@ -18,6 +18,7 @@ struct AdminUsersPage: HTML {
     var pager: AdminUsersPager?
 
     private var isPaged: Bool { pager?.isPaged ?? false }
+    private var search: String? { pager?.search }
 
     var body: some HTML {
         BaseLayout(title: "Users", page: page) {
@@ -29,17 +30,25 @@ struct AdminUsersPage: HTML {
                         span(.class("text-muted")) { "\(userCount) users · \(adminCount) admins" }
                     }
                 }
-                div(.class("toolbar toolbar--end section-gap")) {
+                // Typing filters the rows shown, live. Enter submits the form,
+                // and the server searches every account (#2829): the table
+                // holds one page, so a live filter alone could not find a
+                // user on another page.
+                form(.method(.get), .action("/admin/users"), .class("toolbar toolbar--end section-gap")) {
                     span(.class("filter-group")) {
                         label(.class("filter-label"), .for("users-filter")) { "Filter" }
                         input(
                             .id("users-filter"), .class("form-input filter-input"), .type(.search),
+                            .name("q"), .value(search ?? ""),
                             .placeholder("Filter by name, username or role…"),
                             .data("list-filter", value: "users-table"),
                             .data(
                                 "list-filter-empty",
                                 value: isPaged
                                     ? "No users on this page match this filter." : "No users match this filter."))
+                    }
+                    if search != nil {
+                        a(.class("btn action-btn"), .href("/admin/users")) { "Clear" }
                     }
                 }
                 if let pager { pager.summary }

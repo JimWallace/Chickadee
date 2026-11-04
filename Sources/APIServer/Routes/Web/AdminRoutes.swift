@@ -5,7 +5,7 @@
 // All routes here require admin role (enforced in routes.swift).
 //
 //   GET  /admin                              → AdminPage  (the admin Overview)
-//   GET  /admin/users?page=N                 → AdminUsersPage (one bounded page, #2829)
+//   GET  /admin/users?page=N&q=…             → AdminUsersPage (one bounded page, #2829)
 //   POST /admin/users/:id/role               → change a user's role
 //   POST /admin/courses/:courseID/copy       → duplicate course (setups + assignments, no enrolments)
 
@@ -145,7 +145,8 @@ struct AdminRoutes: RouteCollection {
     /// One bounded page of people (#2829): `?page=N`, 1-based.
     @Sendable
     func usersPage(req: Request) async throws -> HTMLResponse<AdminUsersPage> {
-        let directory = try await AdminUserDirectory.page(requestedUsersPage(req) ?? 1, on: req.db)
+        let directory = try await AdminUserDirectory.page(
+            requestedUsersPage(req) ?? 1, search: req.query[String.self, at: "q"], on: req.db)
         let userRows = try await pagedUserRows(directory, viewerID: req.auth.get(APIUser.self)?.id, on: req.db)
         return HTMLResponse {
             AdminUsersPage(
@@ -166,19 +167,20 @@ struct AdminRoutes: RouteCollection {
 
     /// Two representations: `?fragment=rows` renders `UserRows` — the SAME
     /// view the page renders, so the poll cannot drift from the page — for
-    /// one bounded page (`?page=N`, default 1, #2829). Anything else is the
-    /// JSON array. With no `page` it is every user, in the old order, as
-    /// before, for other consumers. With `?page=N` it is that one page (new
-    /// in #2829).
+    /// one bounded page (`?page=N`, default 1, and `?q=` to search, #2829).
+    /// Anything else is the JSON array. With no `page` and no `q` it is every
+    /// user, in the old order, as before, for other consumers. With either it
+    /// is that one page (new in #2829).
     @Sendable
     func usersData(req: Request) async throws -> Response {
         let viewerID = req.auth.get(APIUser.self)?.id
         let wantsRows = req.query[String.self, at: "fragment"] == "rows"
         let requestedPage = requestedUsersPage(req)
-        if !wantsRows && requestedPage == nil {
+        let search = AdminUserDirectory.normalizedSearch(req.query[String.self, at: "q"])
+        if !wantsRows && requestedPage == nil && search == nil {
             return try await fetchAllUserRows(on: req.db, viewerID: viewerID).encodeResponse(for: req)
         }
-        let directory = try await AdminUserDirectory.page(requestedPage ?? 1, on: req.db)
+        let directory = try await AdminUserDirectory.page(requestedPage ?? 1, search: search, on: req.db)
         let rows = try await pagedUserRows(directory, viewerID: viewerID, on: req.db)
         guard wantsRows else {
             return try await rows.encodeResponse(for: req)
