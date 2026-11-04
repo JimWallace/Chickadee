@@ -61,22 +61,27 @@ import Vapor
         // `StudentCourseRoutes`).  File paths below reflect the new
         // names.
         let inScope: [String] = [
-            "AssignmentHelpers.swift",
+            // Moved below the routes to `Helpers/` (#2847).
+            "../../Helpers/AssignmentHelpers.swift",
             // Moved below the routes to `Helpers/` (#2142).
             "../../Helpers/AssignmentDraftHelpers.swift",
-            "AssignmentRequirementHelpers.swift",
+            // Moved below the routes to `Utilities/` (#2847).
+            "../../Utilities/AssignmentRequirementHelpers.swift",
             // Moved below the routes to `Helpers/` (#2143).
             "../../Helpers/AssignmentSlugHelpers.swift",
             // Moved below the routes to `Helpers/` (#1726), then to
             // `Services/` as `ManifestJSON.swift` (#2775).
             "../../Services/ManifestJSON.swift",
-            "MultipartHelpers.swift",
+            // Moved below the routes to `Helpers/` (#2847).
+            "../../Helpers/MultipartHelpers.swift",
             "../../Helpers/NotebookScaffoldHelpers.swift",
             // Moved below the routes to `Services/` (#2140).
             "../../Services/RunnerValidationService.swift",
-            "SuiteRowHelpers.swift",
+            // Moved below the routes to `Utilities/` (#2847).
+            "../../Utilities/SuiteRowHelpers.swift",
             "../../Helpers/TestSetupZipHelpers.swift",
-            "SuiteEditHelpers.swift",
+            // Moved below the routes to `Helpers/` (#2847).
+            "../../Helpers/SuiteEditHelpers.swift",
             "InstructorDashboardRoutes.swift",
             "InstructorDashboardRoutes+List.swift",
             "InstructorDashboardRoutes+Submissions.swift",
