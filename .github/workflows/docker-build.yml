@@ -587,9 +587,35 @@ jobs:
           esac
           docker compose down
 
+      # Install Trivy from its GitHub release, not through trivy-action.
+      # The action restores Trivy from the Actions cache, and on a miss it runs
+      # Trivy's install script, which downloads through get.trivy.dev. That host
+      # stopped resolving on GitHub's runners (curl exit 6), and the action
+      # saves the cache only after a good install, so one eviction failed every
+      # build and nothing reached production (v0.5.811 to v0.5.818). The
+      # SHA-256 is pinned here, not read from the release's checksum file, so
+      # a replaced release asset fails the build. To upgrade, change both
+      # values; the hash is the Linux-64bit line of the release checksums.
+      - name: Install Trivy
+        env:
+          TRIVY_VERSION: "0.70.0"
+          TRIVY_SHA256: "8b4376d5d6befe5c24d503f10ff136d9e0c49f9127a4279fd110b727929a5aa9"
+        run: |
+          set -euo pipefail
+          tarball="trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz"
+          dir="$RUNNER_TEMP/trivy"
+          mkdir -p "$dir"
+          curl -fsSL --retry 4 --retry-all-errors -o "$dir/$tarball" \
+            "https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/${tarball}"
+          echo "${TRIVY_SHA256}  $dir/$tarball" | sha256sum -c -
+          tar -xzf "$dir/$tarball" -C "$dir" trivy
+          echo "$dir" >> "$GITHUB_PATH"
+          "$dir/trivy" --version
+
       - name: Scan image for vulnerabilities
         uses: aquasecurity/trivy-action@v0.36.0
         with:
+          skip-setup-trivy: true
           image-ref: ${{ fromJSON(steps.meta.outputs.json).tags[0] }}
           format: table
           exit-code: "1"
