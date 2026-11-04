@@ -9,6 +9,13 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.825] - 2026-11-04
+
+### Added
+
+- **Weekly dead-code scan.** `.github/workflows/dead-code.yml` runs Periphery Pro on Linux every Sunday and uploads a `dead-code-report` artifact that lists unused Swift declarations. It is a report, not a gate. `.periphery.yml` holds the scan options, and `docs/dead-code-scan.md` explains how to read the report and how to update the tool.
+
+
 ## [0.5.824] - 2026-11-04
 
 ### Added
