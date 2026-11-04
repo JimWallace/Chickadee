@@ -112,6 +112,25 @@ Each finding in the "a rule could have found" column is a candidate check for
 `AuthoringCheckCatalog` (#2747, step 5). Once a check covers it, remove that
 item from the reviewer's instructions in `Tools/chickadee-review/agents/`.
 
+### Deferred until the pilot shows a need
+
+Two execution checks from #2747 need a runner job of their own, and they wait
+for evidence from the pilot:
+
+- **Determinism**: run the solution twice with the same seed and compare.
+  No validation run records which content it graded, so past runs cannot be
+  compared safely. The cheaper design is one extra variant-style run pinned to
+  the solution run's seed. It needs no new submission kind, but it adds a
+  runner job to every validation.
+- **Syntax and compile** of each test script and helper file. A broken test
+  script already shows as an `error` outcome on the solution run, so
+  validation catches the common case. Only a helper that no test imports
+  escapes it.
+
+Record in the log any flaky test (a result that changes between runs with no
+edit) and any broken helper file the review missed. Either one is the case
+for building the matching check.
+
 ## Changing the plugin
 
 - A reviewer's tools are the plugin server's tools, named
