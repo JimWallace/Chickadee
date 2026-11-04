@@ -130,12 +130,22 @@ updates:
   # fails when the declared intent and the shipped bytes disagree. Treat a PR
   # from this ecosystem as a notification that a re-vendor is available, and
   # run that workflow on the branch before merging.
+  #
+  # jupyterlite is a metapackage that requires the jupyterlite-core of its own
+  # version, and requirements.txt pins both exactly. Bumped one at a time, each
+  # PR is unresolvable by pip (run 41916509055, PR #2863), so they are grouped
+  # and always move together.
   - package-ecosystem: "pip"
     directory: "/Tools/jupyterlite"
     schedule:
       interval: "weekly"
       day: "monday"
     open-pull-requests-limit: 2
+    groups:
+      jupyterlite:
+        patterns:
+          - "jupyterlite"
+          - "jupyterlite-core"
 
   # NOT HERE: the xeus kernel environments, and this is deliberate.
   #
