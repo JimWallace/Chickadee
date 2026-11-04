@@ -60,7 +60,7 @@ import Testing
         "Sources/APIServer/Routes/Web/InstructorDashboardRoutes+SolutionVisibility.swift": 0,
         "Sources/APIServer/Routes/Web/InstructorDashboardRoutes.swift": 0,
         "Sources/APIServer/Routes/Web/InstructorLMSRoutes+BrightSpace.swift": 0,
-        "Sources/APIServer/Routes/Web/SuiteEditHelpers.swift": 1,
+        "Sources/APIServer/Helpers/SuiteEditHelpers.swift": 1,
         "Sources/APIServer/Views/DashboardControls.swift": 0,
     ]
 

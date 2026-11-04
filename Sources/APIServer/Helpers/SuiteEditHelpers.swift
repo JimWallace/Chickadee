@@ -1,4 +1,4 @@
-// APIServer/Routes/Web/SuiteEditHelpers.swift
+// APIServer/Helpers/SuiteEditHelpers.swift
 //
 // The assignment loaders (`loadAssignment*ForStaffRead` and `*ForWrite`)
 // live in AssignmentHelpers.swift: most of their callers are not suite

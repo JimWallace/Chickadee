@@ -1,4 +1,4 @@
-// APIServer/Routes/Web/AssignmentHelpers.swift
+// APIServer/Helpers/AssignmentHelpers.swift
 //
 // Small free functions used by the instructor assignment routes that
 // don't belong to a more focused helper file.  The bulk of what used to

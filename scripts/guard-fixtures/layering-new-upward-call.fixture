@@ -1,9 +1,12 @@
 # Services/, Helpers/ and Utilities/ sit below Routes/ (#1726). A shared file
-# that calls a function declared only under Routes/ must fail the guard.
+# that calls a function declared only under Routes/ must fail the guard. The
+# function is formatLeaderboardMetric, declared in a handler file
+# (WebRoutes+Leaderboard.swift), so a move of a helper file cannot retire it
+# (#2847).
 guard="scripts/check-layering.sh"
 files="Sources/APIServer/Services/PeriodicSweepMonitor.swift"
 description="a service that calls a function declared only under Routes/"
 expect="defined only under Routes/"
 apply() {
-    printf '\n\nfunc guardFixtureLayering() -> String {\n    sanitizedAssignmentReturnPath(nil, assignmentIDRaw: "x", fallbackPath: "/")\n}\n' >> Sources/APIServer/Services/PeriodicSweepMonitor.swift
+    printf '\n\nfunc guardFixtureLayering() -> String {\n    formatLeaderboardMetric(1)\n}\n' >> Sources/APIServer/Services/PeriodicSweepMonitor.swift
 }

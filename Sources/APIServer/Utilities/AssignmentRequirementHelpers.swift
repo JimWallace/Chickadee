@@ -1,4 +1,4 @@
-// APIServer/Routes/Web/AssignmentRequirementHelpers.swift
+// APIServer/Utilities/AssignmentRequirementHelpers.swift
 //
 // Build, persist, and infer `AssignmentRequirementSpec` values from
 // instructor-supplied CSVs and from scanning the assignment + solution
@@ -6,9 +6,7 @@
 // (issue #442) — no behaviour changes.
 
 import Core
-import Fluent
 import Foundation
-import Vapor
 
 func parsedRequirementCSV(_ raw: String) -> [String] {
     raw

@@ -1,4 +1,4 @@
-// APIServer/Routes/Web/SuiteRowHelpers.swift
+// APIServer/Utilities/SuiteRowHelpers.swift
 //
 // The row builders that feed the editor view (`editableSuiteRowsForSetup`,
 // `familySuiteRowsForSetup`, `currentSetupFiles`) and the publish-time
@@ -9,7 +9,6 @@
 
 import Core
 import Foundation
-import Vapor
 
 // MARK: - Editor view row builders
 
