@@ -1,6 +1,10 @@
 # The comment above each entry says where the package is used here and which
 # checks to run before merging its update. People read these comments when
 # they review a Dependabot PR, so keep them true and specific.
+#
+# The `Default` branch ruleset requires `editor-smoke-gate` on every branch,
+# and Dependabot is not a bypass actor, so `refs/heads/dependabot/**` must be
+# in its excluded refs or no PR opens; the update jobs still log "created".
 version: 2
 updates:
   # Swift package graph (Package.swift + Package.resolved).
