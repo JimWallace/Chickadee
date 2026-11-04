@@ -5,6 +5,7 @@
 // All routes here require admin role (enforced in routes.swift).
 //
 //   GET  /admin                              → AdminPage  (the admin Overview)
+//   GET  /admin/users?page=N                 → AdminUsersPage (one bounded page, #2829)
 //   POST /admin/users/:id/role               → change a user's role
 //   POST /admin/courses/:courseID/copy       → duplicate course (setups + assignments, no enrolments)
 
@@ -141,34 +142,45 @@ struct AdminRoutes: RouteCollection {
 
     // MARK: - GET /admin/users
 
+    /// One bounded page of people (#2829): `?page=N`, 1-based.
     @Sendable
     func usersPage(req: Request) async throws -> HTMLResponse<AdminUsersPage> {
-        let userRows = try await fetchUserRows(on: req.db, viewerID: req.auth.get(APIUser.self)?.id)
+        let directory = try await AdminUserDirectory.page(requestedUsersPage(req) ?? 1, on: req.db)
+        let userRows = try await pagedUserRows(directory, viewerID: req.auth.get(APIUser.self)?.id, on: req.db)
         return HTMLResponse {
             AdminUsersPage(
                 page: PageRequestContext(request: req),
                 users: userRows,
-                userCount: userRows.count,
-                adminCount: userRows.count(where: { $0.role == UserRole.admin.rawValue })
+                userCount: directory.total,
+                adminCount: directory.adminCount,
+                pager: AdminUsersPager(directory)
             )
         }
     }
 
     // MARK: - GET /admin/users-data
     //
-    // JSON feed backing the Users tab's auto-refresh poll.  Returns the same
-    // rows `usersPage` renders so the client can repaint the table in place.
-    // Polls send the `X-Background-Refresh` header so they don't count as
-    // session activity (see UserActivityMiddleware).
+    // Feed backing the Users tab's auto-refresh poll. Polls send the
+    // `X-Background-Refresh` header so they don't count as session activity
+    // (see UserActivityMiddleware).
 
-    /// Two representations, one query: `?fragment=rows` renders `UserRows`
-    /// — the SAME view the page renders, so the poll cannot drift from the
-    /// page — and anything else keeps the JSON array unchanged for other
-    /// consumers.
+    /// Two representations: `?fragment=rows` renders `UserRows` — the SAME
+    /// view the page renders, so the poll cannot drift from the page — for
+    /// one bounded page (`?page=N`, default 1, #2829). Anything else is the
+    /// JSON array. With no `page` it is every user, in the old order, as
+    /// before, for other consumers. With `?page=N` it is that one page (new
+    /// in #2829).
     @Sendable
     func usersData(req: Request) async throws -> Response {
-        let rows = try await fetchUserRows(on: req.db, viewerID: req.auth.get(APIUser.self)?.id)
-        guard req.query[String.self, at: "fragment"] == "rows" else {
+        let viewerID = req.auth.get(APIUser.self)?.id
+        let wantsRows = req.query[String.self, at: "fragment"] == "rows"
+        let requestedPage = requestedUsersPage(req)
+        if !wantsRows && requestedPage == nil {
+            return try await fetchAllUserRows(on: req.db, viewerID: viewerID).encodeResponse(for: req)
+        }
+        let directory = try await AdminUserDirectory.page(requestedPage ?? 1, on: req.db)
+        let rows = try await pagedUserRows(directory, viewerID: viewerID, on: req.db)
+        guard wantsRows else {
             return try await rows.encodeResponse(for: req)
         }
         let csrfToken = PageRequestContext(request: req).csrfToken
@@ -176,10 +188,26 @@ struct AdminRoutes: RouteCollection {
         return Response.pollFragment(html: html, csrfToken: csrfToken, for: req)
     }
 
+    /// The `page` query value, or nil when the request names none or one that
+    /// is not a number.
+    private func requestedUsersPage(_ req: Request) -> Int? {
+        req.query[Int.self, at: "page"]
+    }
+
+    /// The rows for one bounded page. The staff set is read for this page's
+    /// users only, so its `IN` list is at most one page long.
+    private func pagedUserRows(
+        _ directory: AdminUserDirectoryPage, viewerID: UUID?, on db: any Database
+    ) async throws -> [AdminUserRow] {
+        let staff = try await AvatarStore.courseStaff(among: directory.users.compactMap(\.id), on: db)
+        return try await userRows(for: directory.users, staff: staff, viewerID: viewerID, on: db)
+    }
+
     /// Loads every user, ordered most-recently-seen first (NULL last_seen
     /// rows sink to the bottom, then username, then join date), and maps
-    /// them to the wire/template row shape.
-    private func fetchUserRows(on db: any Database, viewerID: UUID?) async throws -> [AdminUserRow] {
+    /// them to the wire/template row shape. Only the unpaged JSON feed reads
+    /// this; the page and its poll read `AdminUserDirectory.page`.
+    private func fetchAllUserRows(on db: any Database, viewerID: UUID?) async throws -> [AdminUserRow] {
         let users = try await APIUser.query(on: db)
             .all()
             .sorted { lhs, rhs in
@@ -203,11 +231,18 @@ struct AdminRoutes: RouteCollection {
                 return lhsCreated < rhsCreated
             }
 
-        // This list belongs to no one course, so the staff ring means "teaches
-        // somewhere", as on the account page (docs/student-wardrobe.md).
         // Every user is on this list, so the staff set is read whole rather
         // than through an IN list of every user ID (#2777).
         let staff = try await AvatarStore.allCourseStaff(on: db)
+        return try await userRows(for: users, staff: staff, viewerID: viewerID, on: db)
+    }
+
+    /// Maps users to the wire/template row shape, in the order given.
+    private func userRows(
+        for users: [APIUser], staff: Set<UUID>, viewerID: UUID?, on db: any Database
+    ) async throws -> [AdminUserRow] {
+        // This list belongs to no one course, so the staff ring means "teaches
+        // somewhere", as on the account page (docs/student-wardrobe.md).
         var rows: [AdminUserRow] = []
         for user in users {
             // Each person's own seeded bird, the one their account page shows.

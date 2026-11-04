@@ -1,0 +1,3 @@
+### Changed
+
+- **The admin People tab shows one page of 100 users.** The tab and its 5-second poll read every account on the deployment. Now the database sorts and limits each read, and Previous and Next links move between pages. A count line above the table says that sort and filter cover the page shown. The order keeps its meaning: most recently seen first, never seen last, then username, then join date. Usernames now compare as text, so `user10` sorts before `user2`. The header counts do not change. `/admin/users-data` with no `page` still returns every user as JSON; `?page=N` returns one page (#2829).

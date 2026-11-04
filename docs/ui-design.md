@@ -244,6 +244,12 @@ duplicate.
   wrapper, its lead-in paragraph, its italic aside.
 - **`.toolbar`** (+ `--end`), `.row-actions-tight` — horizontal control
   clusters; filter rows are `.toolbar .toolbar--end .section-gap`.
+- **`AdminUsersPager`** — paging for a table that the server bounds to one
+  page (#2829). A `.text-muted` count line above the table says which rows
+  show and that a client sort or filter covers only this page. Previous and
+  Next are `btn action-btn` links in a `nav.toolbar.toolbar--end.section-gap`
+  below it. It adds no class. Its links name the Users routes, so the next
+  paged list takes its base path as a parameter rather than a second pager.
 - **`.filter-group`** — the one list-filter control: a `.filter-label` +
   `.filter-input[type=search]` pair that wraps as a unit.  Every
   `.filter-input` sits in one, GET-form filters included, and every one is
