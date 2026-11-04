@@ -11,10 +11,13 @@ enum AuthoringCheckCatalog {
         VariantFailureCheck(),
         UnresolvedPlaceholderCheck(),
         ExpressionErrorCheck(),
+        AchievementReachabilityCheck(),
+        NoGradedTestCheck(),
         NoPublicTestCheck(),
         StarterPassesCheck(),
         TimingMarginCheck(),
         MissingMetricCheck(),
+        MissingDataFileCheck(),
         ZeroPointsCheck(),
     ]
 

@@ -61,6 +61,10 @@ public struct AuthoringFinding: Codable, Sendable, Equatable {
         public static func input(_ name: String) -> Location {
             Location(kind: .input, reference: name)
         }
+
+        public static func notebookCell(_ index: Int) -> Location {
+            Location(kind: .notebookCell, reference: String(index))
+        }
     }
 
     /// The stable id of the check or reviewer, for example

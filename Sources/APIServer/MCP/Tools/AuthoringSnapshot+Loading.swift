@@ -49,6 +49,26 @@ extension AuthoringSnapshot {
         var notebook: Data?
         await attempt("starter notebook") { notebook = try await notebookData(for: setup) }
         snapshot.placeholderNames = PersonalizationPlaceholders.used(notebookData: notebook, manifest: manifest)
+        if let notebook {
+            if let cells = NotebookCellSources.cells(from: notebook) {
+                snapshot.notebookCodeCells = cells.map { cell in
+                    cell["cell_type"]?.stringValue == "code" ? NotebookCellSources.cellSource(cell) : nil
+                }
+            } else {
+                warnings.append(
+                    "The starter notebook could not be parsed, so the checks that read its cells found nothing.")
+            }
+        }
+        // The same cached listing the working-copy pass reads. A missing zip
+        // would list as empty, which reads as "no files" and would report every
+        // file the notebook names, so it is a warning instead.
+        if FileManager.default.fileExists(atPath: setup.zipPath) {
+            snapshot.setupZipEntries = await context.request.application.zipEntryListCache.entries(
+                zipPath: setup.zipPath)
+        } else {
+            warnings.append(
+                "The test setup's zip could not be found, so the checks that need its file list found nothing.")
+        }
         snapshot.seedEvaluations = await seedEvaluations(
             manifest: manifest, setupID: assignment.testSetupID, context: context)
         return (snapshot, warnings)

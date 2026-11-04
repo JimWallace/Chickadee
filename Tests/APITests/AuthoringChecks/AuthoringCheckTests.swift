@@ -82,7 +82,10 @@ import Testing
             #"{"tier":"release","script":"a.py","points":0}"#,
             extra: #","gradingMode":"browser","submissionMode":"uploadOnly""#)
         let findings = AuthoringCheckCatalog.findings(in: try snapshot(manifest))
-        #expect(findings.map(\.checkID) == ["manifest.incoherent", "tiers.noPublicTest", "points.zeroPoints"])
+        #expect(
+            findings.map(\.checkID) == [
+                "manifest.incoherent", "points.noGradedTest", "tiers.noPublicTest", "points.zeroPoints",
+            ])
     }
 
     @Test func severityRankFollowsDeclarationOrder() {
