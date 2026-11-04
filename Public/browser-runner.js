@@ -1,3 +1,4 @@
+// @ts-check
 // Public/browser-runner.js
 //
 // Chickadee browser-side WASM runner for labs (gradingMode: "browser").
@@ -167,13 +168,6 @@
 
     window.BrowserRunner = { runAndSubmit, runScripts, groupBySection };
 
-    /**
-     * Run all test scripts against the student's notebook and submit results.
-     *
-     * @param {Uint8Array} notebookBytes  Raw bytes of the student's .ipynb file.
-     * @param {string}     setupID        The test setup ID for this assignment.
-     * @returns {{ outcomes: object[], response: object, sections: object[], sectionIDs: (?string)[] }}
-     */
     // Fire-and-forget submit-phase breadcrumb for diagnosing "the page froze
     // during submission". Sent with keepalive so the browser hands it to the
     // network layer immediately — a breadcrumb emitted *before* a phase reaches
@@ -197,7 +191,7 @@
             // Page-build version (the `app-version` meta), so submit breadcrumbs
             // are attributable to a build like the editor diagnostics. Best-effort.
             try {
-                const m = document.querySelector('meta[name="app-version"]');
+                const m = /** @type {HTMLMetaElement | null} */ (document.querySelector('meta[name="app-version"]'));
                 if (m && m.content) body.appVersion = String(m.content).slice(0, 32);
             } catch (_) { /* meta absent — fine */ }
             let csrf = '';
@@ -212,6 +206,13 @@
         } catch (_) { /* never let telemetry break grading */ }
     }
 
+    /**
+     * Run all test scripts against the student's notebook and submit results.
+     *
+     * @param {Uint8Array} notebookBytes  Raw bytes of the student's .ipynb file.
+     * @param {string}     setupID        The test setup ID for this assignment.
+     * @returns {Promise<{ outcomes: object[], response: object, sections: {id: string, name: string}[], sectionIDs: (?string)[] }>}
+     */
     async function runAndSubmit(notebookBytes, setupID) {
         window.__ckSubmitStartMs = Date.now();
         recordSubmitPhase('grading_start', setupID);
@@ -292,8 +293,8 @@
      *
      * @param {Uint8Array} submissionBytes Raw bytes of the submitted solution file.
      * @param {string}     setupID         The test setup ID for this assignment.
-     * @param {{filename?: string, opponentSubmission?: {bytes: Uint8Array, filename: string, seed: string}}} options
-     * @returns {{ outcomes: object[], collection: object }}
+     * @param {{filename?: string, opponentSubmission?: {bytes: Uint8Array, filename: string, seed: string}, reportPhase?: (phase: string, detail?: string) => void}} options
+     * @returns {Promise<{ outcomes: object[], collection: object, sections: {id: string, name: string}[], sectionIDs: (?string)[] }>}
      */
     async function runScripts(submissionBytes, setupID, options = {}) {
         let JSZip;

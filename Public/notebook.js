@@ -1,3 +1,4 @@
+// @ts-check
 // Public/notebook.js
 //
 // Chickadee notebook submission page.
@@ -27,18 +28,36 @@
         return ChickadeeNotebookCore;
     }
 
-    const frame      = document.getElementById('jl-frame');
+    // The JupyterLite editor iframe. It is same-origin, so the page reads the
+    // app off its window and marks its window and document with the flags
+    // below, so that each patch runs once per (re)load.
+    /**
+     * @typedef {Window & {
+     *   jupyterapp?: any,
+     *   _chickadeeOpenPatched?: boolean,
+     *   URL?: typeof URL
+     * }} JupyterLiteWindow
+     * `jupyterapp` is JupyterLab's application object (third-party, so `any`).
+     * `URL` is the iframe realm's own constructor.
+     */
+    /**
+     * @typedef {Document & {
+     *   _chickadeeActivityBound?: boolean,
+     *   __chickadeeReadOnlyKeyHandler?: (event: KeyboardEvent) => void
+     * }} JupyterLiteDocument
+     */
+    const frame      = /** @type {HTMLIFrameElement & { contentWindow: JupyterLiteWindow, contentDocument: JupyterLiteDocument }} */ (document.getElementById('jl-frame'));
     const statusEl   = document.getElementById('nb-status');
-    const submitBtn  = document.getElementById('nb-submit');
+    const submitBtn  = /** @type {HTMLButtonElement | null} */ (document.getElementById('nb-submit'));
     const resultsEl  = document.getElementById('nb-results');
     // The .ipynb upload inputs: the failure panel's, the slow-boot notice's
     // (#2028) and the toolbar ⋯ menu's. One handler serves all three
     // (section 3 below).
     const uploadFiles = ['nb-upload-file', 'nb-slow-upload-file', 'nb-menu-upload-file']
-        .map(function (id) { return document.getElementById(id); })
+        .map(function (id) { return /** @type {HTMLInputElement | null} */ (document.getElementById(id)); })
         .filter(Boolean);
     // Course-staff authoring control; absent for students (see NotebookBody).
-    const saveAssignmentBtn = document.getElementById('nb-save-assignment');
+    const saveAssignmentBtn = /** @type {HTMLButtonElement | null} */ (document.getElementById('nb-save-assignment'));
     // `let`, not `const`: the workbench can switch which notebook is open
     // without reloading the page, which re-reads these off the same iframe
     // element (see `readFrameConfig` / `chickadeeRemountNotebook` below).
@@ -97,7 +116,7 @@
             try { freezeCsrf = ChickadeeUI.getCsrfToken(); } catch (_) { /* no token */ }
             let freezeAppVersion = '';
             try {
-                const vm = document.querySelector('meta[name="app-version"]');
+                const vm = /** @type {HTMLMetaElement | null} */ (document.querySelector('meta[name="app-version"]'));
                 freezeAppVersion = (vm && vm.content) ? String(vm.content).slice(0, 32) : '';
             } catch (_) { /* no meta — fine */ }
             freezeWorker.postMessage({
@@ -1186,7 +1205,7 @@
     // and view it names. A capture at load saved a swapped-in solution
     // over the starter. A pane with no button (a preview) saves nothing.
     async function saveToAssignment() {
-        const saveAssignmentBtn = document.getElementById('nb-save-assignment');
+        const saveAssignmentBtn = /** @type {HTMLButtonElement | null} */ (document.getElementById('nb-save-assignment'));
         if (!saveAssignmentBtn) return true;
         const saveFileKind = saveAssignmentBtn.dataset.fileKind === 'solution' ? 'solution' : 'assignment';
         // Which working copy the editor is showing. The endpoint writes
@@ -1776,7 +1795,7 @@
                             const store = tx.objectStore(storeName);
                             const cursorReq = store.openCursor();
                             cursorReq.onsuccess = (e) => {
-                                const cursor = e.target.result;
+                                const cursor = /** @type {IDBRequest<IDBCursorWithValue | null>} */ (e.target).result;
                                 if (!cursor) return;
                                 if (matches(cursor.key)) {
                                     try { cursor.delete(); if (storeName === 'files') removedFile = true; } catch (_) { /* skip */ }
