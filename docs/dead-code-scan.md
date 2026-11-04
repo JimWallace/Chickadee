@@ -13,7 +13,10 @@ scheduled task on the maintainer's machine. CI runs no model (root
 1. It installs Periphery Pro from the pinned release zip and checks the zip's
    SHA-256.
 2. It builds the package and its tests from source with
-   `-index-store-path`, under `--build-system native`.
+   `--enable-index-store`, under `--build-system native`. The index stays at
+   SwiftPM's default path under the bin path. Do not move it with
+   `-index-store-path`: on Linux, SwiftPM test discovery reads the index at
+   that default path, and the build then fails.
 3. It scans that index four times, with no new build. The first three scans
    write `agent-prompt`, `json` and `github-markdown`. The fourth writes
    `json` again with `--exclude-tests` (`results-without-tests.json`).
