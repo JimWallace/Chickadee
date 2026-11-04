@@ -43,9 +43,8 @@ scripts/deployment-target-tests.sh|A self-test suite. Its cases are its assertio
 scripts/ci-build-retry.sh --self-test|A self-test of the build-retry gate. Its cases are its assertions.
 scripts/ci-swift-suite-scope.sh --self-test|A self-test of the Swift suite scope decision. Its cases are its assertions.
 scripts/ci-swift-suite-scope.sh|Not a check. It decides which Swift jobs run; a wrong answer is caught by its self-test.
-scripts/ci-agent-sanitize.sh --self-test|A self-test of the agent text cleanup. Its cases are its assertions.
-scripts/ci-agent-failure-reason.sh --self-test|A self-test of the agent failure report. Its cases are its assertions.
-scripts/ci-agent-failure-reason.sh|Not a check. It prints why an agent step failed, and its self-test covers it.
+scripts/ci-post-sanitize.sh --self-test|A self-test of the post text cleanup. Its cases are its assertions.
+scripts/weekly-digest-render.sh --self-test|A self-test of the weekly digest rules. Its cases are its assertions.
 scripts/check-guards.sh|The fixture runner. The fixtures are its cases, and it fails on an empty set.
 scripts/ci-build-retry.sh|Not a check. It runs the build and retries a known compiler crash.
 scripts/ci-swift-test-lane.sh|Not a check. It runs one swift test lane; the skipped-test guard that it runs has its own fixture.

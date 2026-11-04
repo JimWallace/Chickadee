@@ -401,19 +401,23 @@ before a push and the unconditional `ui-review` run.
 ## Subagents and Hooks
 
 The subagents are in `.claude/agents/`. Each one reports and does not edit.
+They run only in Claude Code sessions. CI runs no model: the agent
+workflows were removed in 2026-11 because they needed an API key, so a review
+or audit that a session does not run does not happen.
 - After a code change, run `test-runner` with a filter for the suites that the
   change affects. Run it with no filter once before a push.
 - After a change to an Elementary view, `Public/styles.css` or a `Public/*.js` file, run `lint-guard` and `test-runner` with the filter `ElementaryPageGuardTests`. Run `ui-review` too.
 - For the state of the whole UI, run `ui-audit`. It applies the usability
-  heuristics in `docs/ui-design.md` across all pages. CI runs it each month
-  (`.github/workflows/ui-audit.yml`) and files the report as an issue.
-- For drift between the docs and the code, run `docs-audit`. CI runs it each
-  month (`.github/workflows/docs-audit.yml`) and files the report as an issue.
+  heuristics in `docs/ui-design.md` across all pages. Run it once a month,
+  when the maintainer asks, and file the report as an issue labelled
+  `ui-audit`.
+- For drift between the docs and the code, run `docs-audit`. Run it once a
+  month, when the maintainer asks, and file the report as an issue labelled
+  `docs-audit`.
 - Before a commit, run `diff-reviewer` on the uncommitted diff.
 - Before a commit on a change under `Sources/` or to a `Public/*.js` file, run
   `interaction-review`. It checks the change for side effects on other
-  features, with the shared-object map in `docs/feature-interactions.md`. CI
-  runs it on each such PR (`.github/workflows/interaction-review.yml`). Its
+  features, with the shared-object map in `docs/feature-interactions.md`. Its
   verdict is advisory for now. When a change adds a shared object, add its
   row to the map.
 

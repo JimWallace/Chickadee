@@ -5,8 +5,8 @@ description: >
   area CLAUDE.md files and docs/. It finds claims that are no longer true
   (a path, a workflow, a script or an agent that does not exist, a count that
   changed, a process that no longer runs) and docs that the index in
-  docs/README.md does not name. Use it for a periodic sweep. CI runs it every month
-  (.github/workflows/docs-audit.yml).
+  docs/README.md does not name. Use it for a periodic sweep. A session runs it
+  once a month, when the maintainer asks; CI does not run it.
   Read-only: it reports, it does not edit.
 model: sonnet
 tools: Read, Grep, Glob, Bash
@@ -25,9 +25,8 @@ that says "every page" when the job covers one page per archetype.
 
 1. The rules that the documents must agree with: `CLAUDE.md`, and the area
    files it lists in "Where the Area Rules Live".
-2. The scope for this run. In CI the prompt gives it: the documents to audit
-   in full, and the files that changed in the last month. In a local session,
-   audit every `CLAUDE.md` file and the documents that mention a file changed
+2. The scope for this run, when the prompt gives one. Otherwise, audit every
+   `CLAUDE.md` file and the documents that mention a file changed
    in the last month (`git log --since=31.days --name-only --format=`), and
    the index `docs/README.md`.
 3. The previous audit, when the prompt gives one. Your report replaces it, so
