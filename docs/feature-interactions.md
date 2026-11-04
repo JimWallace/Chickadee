@@ -722,10 +722,16 @@ because line numbers go out of date.
 
 ### Authoring checks: `AuthoringCheckCatalog`, `AuthoringFinding`
 
-- **Writers:** none. A check reads the stored manifest through
-  `AuthoringSnapshot` and changes nothing.
+- **Writers:** none. A check reads `AuthoringSnapshot` and changes nothing.
+  The MCP loader fills it from the manifest, the starter notebook and the
+  latest solution, variant and starter runs, and it evaluates the
+  per-student expressions for the variant seeds.
 - **Readers:** MCP `check_assignment`. Later, the model reviewers of #2747,
-  which report in the same `AuthoringFinding` format.
+  which report in the same `AuthoringFinding` format. The loader in turn
+  reads the validation submission and result, the `ValidationVariant` batch
+  and `StarterValidationRun.latest`, so a change to how a variant batch is
+  replaced or how a variant's status is set changes what
+  `validation.variantFailed` reports.
 - **Rules:**
   - A check reports. It never refuses a save. A rule that must refuse belongs
     in `ManifestCoherence.violations`, and `ManifestCoherenceCheck` then
@@ -736,6 +742,27 @@ because line numbers go out of date.
     "may", not "does".
   - A new check is one line in `AuthoringCheckCatalog.all`, with an id that
     stays stable once agents have seen it.
+  - The loader reads every run through `MCPStudentDataBoundary`. The starter
+    run is read on the owner pool, as `get_suite` reads it, because the
+    least-privilege role sees only `validation` rows.
+  - `starter.passesGradedTest` uses the workbench's rule
+    (`InstructorSuiteOutlineBuilder`): starter and solution both pass, and
+    the test is worth points. Both join outcomes to entries with
+    `outcomesByScript(in:)`. Change the rule in both places together.
+  - Seed parity: `personalization.expressionError` evaluates each variant
+    seed with the course seed and deal number that the variant run uses
+    (`resolveAndCacheValidationMaterialization`): the seed as its own course
+    seed, and dealt number `index` for variant `index`. Change both together.
+  - `PersonalizationPlaceholders.used` is the one list of the names that
+    content refers to, for `preview_personalization` and the check.
+    `PersonalizationPlaceholders.declared` is a second list of the
+    manifest's inputs, beside the pool in `PersonalizationSubstitution.resolve`.
+    A new kind of input goes into both, or it reads as undeclared.
+  - `timing.margin` takes a test's limit as `entry.timeLimitSeconds ??
+    manifest.timeLimitSeconds`, the limit that the runner applies per script.
+  - A part the loader cannot read becomes an entry in `warnings`, not a
+    failed call. An empty `findings` list is a pass only when `warnings` is
+    empty too.
 
 ### The ranking metric and class activities
 
@@ -744,6 +771,8 @@ because line numbers go out of date.
   - `ActivityMatches` and `Tournaments`.
   - `Sources/Worker/MatrixAggregation.swift`.
   - The leaderboard routes.
+  - The `activity.noMetric` authoring check (MCP `check_assignment`), which
+    reads a leaderboard kind as `kind.aggregation == .leaderboard`.
 - **Rules** (`docs/class-activities.md`):
   - A higher metric is better.
   - The metric is never credit, and it is not gated on the grade.

@@ -82,7 +82,7 @@ import Vapor
 
     @Test func outputSchemaRequiresEveryOutputField() throws {
         let output = CheckAssignmentTool.Output(
-            assignmentPublicID: "a", checksRun: ["x.y"], findings: [finding])
+            assignmentPublicID: "a", checksRun: ["x.y"], findings: [finding], warnings: ["w"])
         let schema = try object(CheckAssignmentTool.outputSchema)
         #expect(required(schema) == (try encodedKeys(output)))
         #expect(Set(try object(schema["properties"]).keys) == (try encodedKeys(output)))

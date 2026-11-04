@@ -191,30 +191,14 @@ struct PreviewPersonalizationTool: ContentTool {
         manifest: TestProperties, setup: APITestSetup,
         resolution: PersonalizationSubstitution.Resolution
     ) async -> Output.Placeholders {
-        var used = Set<String>()
-
-        // 1. Notebook `{{name}}` placeholders. Read the notebook the student
-        // actually opens: `notebookData(for:)` prefers the standalone
-        // `notebookPath` blob — what `update_notebook`, the editor, and the
-        // student first-open path all use — and only falls back to the zip's
-        // starter entry. (Before #811 this read the zip and missed markers added
-        // via `update_notebook`, which writes `notebookPath`, not the zip entry.)
-        if let notebookData = try? await notebookData(for: setup) {
-            used.formUnion(NotebookSubstitution.placeholderNames(in: notebookData))
-        }
-
-        // 2. Test-script per-student refs: a pattern-family case may reference a
-        // per-student input via `$name` (argVarRefs) or `expectedVarRef`. Report
-        // those too so the audit covers grading, not just the notebook.
-        for family in manifest.patternFamilies {
-            for c in family.cases {
-                for ref in c.argVarRefs.compactMap(\.self) { used.insert(ref) }
-                if let expectedRef = c.expectedVarRef, !expectedRef.isEmpty {
-                    used.insert(expectedRef)
-                }
-            }
-        }
-
+        // Read the notebook the student actually opens: `notebookData(for:)`
+        // prefers the standalone `notebookPath` blob — what `update_notebook`,
+        // the editor, and the student first-open path all use — and only falls
+        // back to the zip's starter entry. (Before #811 this read the zip and
+        // missed markers added via `update_notebook`, which writes
+        // `notebookPath`, not the zip entry.)
+        let used = PersonalizationPlaceholders.used(
+            notebookData: try? await notebookData(for: setup), manifest: manifest)
         let resolved = Set(resolution.substitutions.keys)
         let unresolved = used.filter { !resolved.contains($0) }
         return Output.Placeholders(used: used.sorted(), unresolved: unresolved.sorted())

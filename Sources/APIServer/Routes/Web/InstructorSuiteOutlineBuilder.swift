@@ -140,16 +140,8 @@ struct InstructorSuiteOutlineBuilder {
         return .init(result: outcome.status.rawValue, detail: short.isEmpty ? nil : short)
     }
 
-    /// The run's outcomes, by script filename. The worker names an outcome by
-    /// the script's stem and the browser by its filename, so both are matched.
+    /// The run's outcomes, by script filename (`outcomesByScript(in:)`).
     private func outcomesByScript(_ run: TestOutcomeCollection?) -> [String: TestOutcome] {
-        guard let run else { return [:] }
-        let byName = Dictionary(
-            run.outcomes.map { ($0.testName, $0) }, uniquingKeysWith: { first, _ in first })
-        var result: [String: TestOutcome] = [:]
-        for entry in manifest.testSuites {
-            result[entry.script] = byName[entry.script] ?? byName[runnerScriptStem(entry.script)]
-        }
-        return result
+        run?.outcomesByScript(in: manifest) ?? [:]
     }
 }
