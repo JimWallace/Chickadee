@@ -36,7 +36,10 @@ name: Re-vendor xeus kernels
 # request is already open, it does nothing.
 #
 # WHOSE TOKEN. Both pushing modes push with the RELEASE_TOKEN secret, the one
-# auto-release.yml uses. GITHUB_TOKEN cannot do either job: the branch ruleset
+# auto-release.yml uses. A commit run on a Dependabot branch, which
+# dependabot-auto.yml dispatches for a jupyterlite pin bump, may instead see
+# only Dependabot secrets, so the commit step tries DEPENDABOT_MERGE_TOKEN
+# first. GITHUB_TOKEN cannot do either job: the branch ruleset
 # rejects its push (GH013, "Required status check editor-smoke-gate is
 # expected"), and a pull request opened with it starts no CI, so auto-merge
 # would merge untested kernels or wait forever. Publish mode refuses to run
@@ -75,6 +78,10 @@ on:
         description: "Instead: rebuild from main and open an auto-merging pull request"
         type: boolean
         default: false
+      branch:
+        description: "Rebuild and commit onto this branch instead of the one dispatched (dependabot-auto.yml sets it)"
+        type: string
+        default: ""
   pull_request:
     paths:
       - "Tools/jupyterlite/environment-*.yml"
@@ -142,7 +149,7 @@ jobs:
         with:
           # Publish mode builds from main. Otherwise this is the branch the
           # rebuild is pushed back to.
-          ref: ${{ (env.PUBLISH == 'true' && 'main') || github.event.pull_request.head.ref || github.ref_name }}
+          ref: ${{ (env.PUBLISH == 'true' && 'main') || inputs.branch || github.event.pull_request.head.ref || github.ref_name }}
           # No credential stays in .git/config while the build installs and runs
           # third-party packages. The two push steps below set RELEASE_TOKEN on
           # the remote themselves, after the build.
@@ -177,6 +184,30 @@ jobs:
           path: ~/.cache/empack
           key: empack-${{ hashFiles('Tools/jupyterlite/environment-*.yml') }}
           restore-keys: empack-
+
+      # The bundle's appVersion label must start with the jupyterlite pin
+      # (JupyterLiteConfigTests.bundleAppVersionMatchesRequirementsPin), and the
+      # build copies it from Tools/jupyterlite/jupyter-lite.json. A pin bump,
+      # such as a Dependabot one, leaves the label behind, so restart it at
+      # <pin>-chickadee.1 here. A label that already matches is left alone.
+      - name: Match the appVersion label to the jupyterlite pin
+        if: steps.gate.outputs.skip != 'true'
+        run: |
+          python3 - <<'PY'
+          import pathlib, re
+          pin = re.search(r"^jupyterlite==(\S+)$",
+                          pathlib.Path("Tools/jupyterlite/requirements.txt").read_text(),
+                          re.M).group(1)
+          path = pathlib.Path("Tools/jupyterlite/jupyter-lite.json")
+          text = path.read_text()
+          current = re.search(r'"appVersion": "([^"]*)"', text).group(1)
+          if not current.startswith(pin):
+              path.write_text(text.replace(f'"appVersion": "{current}"',
+                                           f'"appVersion": "{pin}-chickadee.1"', 1))
+              print(f"appVersion {current} -> {pin}-chickadee.1")
+          else:
+              print(f"appVersion {current} already matches {pin}")
+          PY
 
       - name: Build the JupyterLite toolchain
         if: steps.gate.outputs.skip != 'true'
@@ -231,29 +262,49 @@ jobs:
           && env.PUBLISH != 'true'
           && inputs.commit
         env:
-          PUSH_TOKEN: ${{ secrets.RELEASE_TOKEN || github.token }}
+          # DEPENDABOT_MERGE_TOKEN first: dependabot-auto.yml dispatches this
+          # run on a Dependabot branch, and if GitHub gives that run Dependabot's
+          # secrets, RELEASE_TOKEN is not among them. Either is a personal
+          # access token, so the push starts CI; a GITHUB_TOKEN push would not.
+          PUSH_TOKEN: ${{ secrets.DEPENDABOT_MERGE_TOKEN || secrets.RELEASE_TOKEN || github.token }}
+          HAS_PUSH_TOKEN: ${{ secrets.DEPENDABOT_MERGE_TOKEN != '' || secrets.RELEASE_TOKEN != '' }}
+          TARGET: ${{ inputs.branch || github.event.pull_request.head.ref || github.ref_name }}
         run: |
           set -euo pipefail
-          if [ "$HAS_RELEASE_TOKEN" != "true" ]; then
+          if [ "$HAS_PUSH_TOKEN" != "true" ]; then
             echo "::warning::RELEASE_TOKEN is not set. The branch ruleset refuses a GITHUB_TOKEN push (GH013), so this push is expected to fail."
           fi
           git remote set-url origin "https://x-access-token:${PUSH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add Public/jupyterlite
+          git add Public/jupyterlite Tools/jupyterlite/jupyter-lite.json
           git commit -m "chore(jupyterlite): re-vendor the xeus kernels
 
           Rebuilt by .github/workflows/revendor-kernels.yml from
           Tools/jupyterlite/environment-*.yml. Regenerated bytes only."
           for attempt in 1 2 3 4; do
-            if git push origin HEAD:"${{ github.event.pull_request.head.ref || github.ref_name }}"; then
+            if git push origin HEAD:"$TARGET"; then
               exit 0
             fi
             sleep $((2 ** attempt))
-            git pull --rebase origin "${{ github.event.pull_request.head.ref || github.ref_name }}"
+            git pull --rebase origin "$TARGET"
           done
           echo "could not push the rebuild" >&2
           exit 1
+
+      # A Dependabot branch whose rebuild reproduced the committed bytes gets no
+      # commit, so no run of dependabot-auto.yml follows to enable auto-merge.
+      # Enable it here instead; the required checks still decide.
+      - name: Enable auto-merge on an unchanged Dependabot branch
+        if: >-
+          steps.diff.outputs.changed == 'false'
+          && startsWith(inputs.branch, 'dependabot/')
+        env:
+          GH_TOKEN: ${{ secrets.DEPENDABOT_MERGE_TOKEN || secrets.RELEASE_TOKEN }}
+          BRANCH: ${{ inputs.branch }}
+        run: |
+          set -euo pipefail
+          gh pr merge "$BRANCH" --repo "$GITHUB_REPOSITORY" --auto --merge
 
       # Publish mode: the rebuild goes onto its own branch from main, with the
       # changelog fragment every merge to main needs, and reaches main only
@@ -278,7 +329,7 @@ jobs:
             `Public/jupyterlite/` from the unchanged `Tools/jupyterlite/environment-*.yml`
             files and verified it before this pull request was opened.
           EOF
-          git add Public/jupyterlite "changelog.d/revendor-kernels-${GITHUB_RUN_ID}.md"
+          git add Public/jupyterlite Tools/jupyterlite/jupyter-lite.json "changelog.d/revendor-kernels-${GITHUB_RUN_ID}.md"
           git commit -m "chore(jupyterlite): re-vendor the xeus kernels
 
           Rebuilt by .github/workflows/revendor-kernels.yml (publish mode) from

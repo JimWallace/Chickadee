@@ -1,0 +1,205 @@
+name: Dependency health
+
+# The weekly sweep for the dependency problems that no pull request reports.
+# Each one becomes an issue labelled `dependency-update-failed`
+# (scripts/dependency-issue.sh), and each issue closes itself here once its
+# problem is gone.
+#
+#   alert=N  A Dependabot security alert open for a week with no Dependabot PR.
+#            That is what a `security_update_not_possible` job looks like from
+#            outside: the fix exists, but a parent package's range excludes it,
+#            so Dependabot gives up and says so only in its own job log.
+#   pr=N     A Dependabot PR open for three days without auto-merge. The
+#            landing step in dependabot-auto.yml did not finish, for example a
+#            kernel re-vendor that produced no commit.
+#   token    RELEASE_TOKEN missing, broken, or within three weeks of expiry. An
+#            expired token stops releases and deploys silently.
+#
+# A `pr=N` issue from dependency-failure.yml closes here when its PR merges or
+# closes.
+#
+# On a pull request that changes this file, only the token check runs. It is
+# how a change here proves the token works before it merges.
+#
+# DEPENDABOT_MERGE_TOKEN, the Dependabot-secret copy, is checked where it is
+# readable: at the start of every dependabot-auto.yml run.
+
+on:
+  schedule:
+    # Mondays, after Dependabot's weekly run and kernel-currency.yml.
+    - cron: "0 15 * * 1"
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - ".github/workflows/dependency-health.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  token:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      problem: ${{ steps.check.outputs.problem }}
+    steps:
+      - name: Check RELEASE_TOKEN
+        id: check
+        env:
+          TOKEN: ${{ secrets.RELEASE_TOKEN }}
+          R: ${{ github.repository }}
+        run: |
+          set -uo pipefail
+          problem=""
+          probe() {
+            # $1 = what the call proves, $2 = the API path.
+            if GH_TOKEN="$TOKEN" gh api -i "$2" > out.txt 2>&1; then
+              echo "- ok: $1" >> "$GITHUB_STEP_SUMMARY"
+            else
+              echo "- FAILED: $1 ($(head -1 out.txt | tr -d '\r'))" >> "$GITHUB_STEP_SUMMARY"
+              problem="${problem}RELEASE_TOKEN cannot $1. "
+            fi
+          }
+          echo "### RELEASE_TOKEN" >> "$GITHUB_STEP_SUMMARY"
+          if [ -z "$TOKEN" ]; then
+            problem="RELEASE_TOKEN is not set. "
+          else
+            probe "read the repository (Contents)" "repos/$R"
+            probe "read pull requests (Pull requests)" "repos/$R/pulls?per_page=1"
+            probe "read Dependabot alerts (Dependabot alerts)" "repos/$R/dependabot/alerts?per_page=1"
+            GH_TOKEN="$TOKEN" gh api -i "repos/$R" 2>/dev/null | tr -d '\r' > head.txt || true
+            expiry="$(sed -n 's/^github-authentication-token-expiration: //Ip' head.txt | head -1)"
+            if [ -n "$expiry" ]; then
+              left=$(( ($(date -u -d "$expiry" +%s) - $(date -u +%s)) / 86400 ))
+              echo "- expires $expiry ($left days)" >> "$GITHUB_STEP_SUMMARY"
+              if [ "$left" -lt 21 ]; then
+                problem="${problem}RELEASE_TOKEN expires on $expiry, in $left days. "
+              fi
+            else
+              echo "- no expiry" >> "$GITHUB_STEP_SUMMARY"
+            fi
+          fi
+          echo "problem=$problem" >> "$GITHUB_OUTPUT"
+          if [ -n "$problem" ]; then
+            echo "::error::$problem"
+            exit 1
+          fi
+
+  sweep:
+    needs: token
+    # The sweep files issues, so it runs only on main's schedule or by hand.
+    # It runs when the token check failed too, so that failure is filed.
+    if: always() && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      issues: write
+      pull-requests: read
+    env:
+      GH_TOKEN: ${{ github.token }}
+      ALERT_TOKEN: ${{ secrets.RELEASE_TOKEN }}
+      R: ${{ github.repository }}
+      TOKEN_PROBLEM: ${{ needs.token.outputs.problem }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Token
+        run: |
+          set -euo pipefail
+          if [ -n "$TOKEN_PROBLEM" ]; then
+            {
+              echo "$TOKEN_PROBLEM"
+              echo ""
+              echo "RELEASE_TOKEN is a fine-grained personal access token on this repository with Contents, Pull requests and Workflows (read and write) and Dependabot alerts (read). Edit or regenerate it at https://github.com/settings/personal-access-tokens, then update the Actions secret RELEASE_TOKEN; if the value changed and the same token is the Dependabot secret DEPENDABOT_MERGE_TOKEN, update that too."
+            } > body.md
+            scripts/dependency-issue.sh open token "RELEASE_TOKEN needs attention" body.md
+          else
+            scripts/dependency-issue.sh close token "RELEASE_TOKEN passes its checks again."
+          fi
+
+      - name: Open Dependabot pull requests
+        run: |
+          set -euo pipefail
+          gh pr list --repo "$R" --author "app/dependabot" --state open --limit 100 \
+            --json number,title,url,createdAt,autoMergeRequest,headRefName > prs.json
+          cutoff="$(date -u -d '3 days ago' +%s)"
+          jq -c --argjson cutoff "$cutoff" \
+            '.[] | select(.autoMergeRequest == null and (.createdAt | fromdate) < $cutoff)' prs.json |
+          while read -r pr; do
+            number="$(jq -r .number <<<"$pr")"
+            {
+              echo "Dependabot pull request $(jq -r .url <<<"$pr") has been open since $(jq -r .createdAt <<<"$pr") without auto-merge, so it will not land on its own."
+              echo ""
+              echo "### Brief for an agent"
+              echo ""
+              echo "Find why \`.github/workflows/dependabot-auto.yml\` did not enable auto-merge on #$number (\`$(jq -r .headRefName <<<"$pr")\`): read its runs on that branch, and for a jupyterlite pin, the \`revendor-kernels.yml\` run it dispatched. Finish the landing (regenerate the committed bytes, or enable auto-merge) and fix the cause in the workflow if it is general."
+            } > body.md
+            scripts/dependency-issue.sh open "pr=$number" \
+              "Dependency update stalled: $(jq -r .title <<<"$pr") (#$number)" body.md
+          done
+
+      - name: Security alerts with no pull request
+        run: |
+          set -euo pipefail
+          if [ -z "$ALERT_TOKEN" ]; then
+            echo "No RELEASE_TOKEN, so alerts are not swept." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          GH_TOKEN="$ALERT_TOKEN" gh api --paginate \
+            "repos/$R/dependabot/alerts?state=open&per_page=100" > alerts.json
+          jq -s 'add // []' alerts.json > all-alerts.json
+          titles="$(jq -r '.[].title' prs.json)"
+          branches="$(jq -r '.[].headRefName' prs.json)"
+          cutoff="$(date -u -d '7 days ago' +%s)"
+          jq -c --argjson cutoff "$cutoff" \
+            '.[] | select((.created_at | fromdate) < $cutoff)' all-alerts.json |
+          while read -r alert; do
+            pkg="$(jq -r .dependency.package.name <<<"$alert")"
+            number="$(jq -r .number <<<"$alert")"
+            manifest="$(jq -r .dependency.manifest_path <<<"$alert")"
+            # A Dependabot PR that names the package is already carrying it,
+            # and so may a grouped PR ("Bump the jupyterlab group ...") for
+            # the same directory, whose branch name carries that directory.
+            dir="$(dirname "$manifest")"
+            if grep -Fq "$pkg" <<<"$titles" \
+              || { [ "$dir" != "." ] && grep -Fq "/$dir/" <<<"$branches"; }; then
+              continue
+            fi
+            {
+              echo "Dependabot security alert $(jq -r .html_url <<<"$alert") has been open since $(jq -r .created_at <<<"$alert"), and no Dependabot pull request carries a fix."
+              echo ""
+              echo "- Package: \`$pkg\` ($(jq -r .dependency.package.ecosystem <<<"$alert"), $(jq -r .dependency.scope <<<"$alert"))"
+              echo "- Manifest: \`$manifest\`"
+              echo "- Advisory: $(jq -r .security_advisory.summary <<<"$alert") ($(jq -r .security_advisory.severity <<<"$alert"))"
+              echo "- Fixed in: $(jq -r '.security_vulnerability.first_patched_version.identifier // "no fixed version yet"' <<<"$alert")"
+              echo ""
+              echo "### Brief for an agent"
+              echo ""
+              echo "Get \`$pkg\` in \`$manifest\` to a fixed version. Dependabot usually fails here with \`security_update_not_possible\`: a parent package's range excludes the fix (the \`Dependabot Updates\` job log names the parent). In order of preference: update the parent to a version whose range admits the fix; or, for a build-only package that ships nothing, force it with a yarn \`resolutions\` / npm \`overrides\` entry and show the build still passes. If no fixed version exists, or the fix cannot work here, dismiss the alert with the reason and say so on this issue."
+            } > body.md
+            scripts/dependency-issue.sh open "alert=$number" \
+              "Security fix not landing: $pkg ($manifest)" body.md
+          done
+
+      - name: Close what is resolved
+        run: |
+          set -euo pipefail
+          open_prs="$(jq -r '.[].number' prs.json)"
+          open_alerts="$(jq -r '.[].number' all-alerts.json 2>/dev/null || true)"
+          scripts/dependency-issue.sh keys | while read -r key; do
+            case "$key" in
+              pr=*)
+                if ! grep -qx "${key#pr=}" <<<"$open_prs"; then
+                  scripts/dependency-issue.sh close "$key" "The pull request has merged or closed."
+                fi
+                ;;
+              alert=*)
+                if [ -n "$ALERT_TOKEN" ] && ! grep -qx "${key#alert=}" <<<"$open_alerts"; then
+                  scripts/dependency-issue.sh close "$key" "The alert is no longer open."
+                fi
+                ;;
+            esac
+          done
