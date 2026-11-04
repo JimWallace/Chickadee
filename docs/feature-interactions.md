@@ -720,6 +720,23 @@ because line numbers go out of date.
   skipped the `dependsOn` check that the web delete ran (#2771). Both doors
   now call `deleteFileFromSetup` (`Services/SetupFileDeletion.swift`).
 
+### Authoring checks: `AuthoringCheckCatalog`, `AuthoringFinding`
+
+- **Writers:** none. A check reads the stored manifest through
+  `AuthoringSnapshot` and changes nothing.
+- **Readers:** MCP `check_assignment`. Later, the model reviewers of #2747,
+  which report in the same `AuthoringFinding` format.
+- **Rules:**
+  - A check reports. It never refuses a save. A rule that must refuse belongs
+    in `ManifestCoherence.violations`, and `ManifestCoherenceCheck` then
+    reports a manifest that still breaks it.
+  - A check whose message states a visibility or points rule must agree with
+    "Release and secret tiers" and "A manifest suite row". The course policy
+    (the release hold) is not in the snapshot, so a message about it says
+    "may", not "does".
+  - A new check is one line in `AuthoringCheckCatalog.all`, with an id that
+    stays stable once agents have seen it.
+
 ### The ranking metric and class activities
 
 - **Readers:**

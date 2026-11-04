@@ -47,6 +47,7 @@ source of truth; a census re-count is required whenever either changes
 | `get_global_inputs` | `GetGlobalInputsTool.swift:27` | `assignmentPublicID` | course-enrol (`:78`) | `APITestSetup` manifest (inputs) | global + section inputs |
 | `get_achievements` | `GetAchievementsTool.swift:25` | `assignmentPublicID` | course-enrol (`:61`) | `APITestSetup` manifest (achievements) | composable awards (built-in defaults until curated) |
 | `preview_personalization` | `PreviewPersonalizationTool.swift:53` | `assignmentPublicID` | course-enrol (`:116`) + eligible (`:161`) | manifest; runs `python3` eval subprocess | per-seed resolved values |
+| `check_assignment` | `CheckAssignmentTool.swift:33` | `assignmentPublicID` | course-enrol (`:63`) | `APITestSetup` manifest | authoring-check findings (script filenames, no script bodies) |
 | `validate_assignment` | `ValidateAssignmentTool.swift:36` | `assignmentPublicID` | course-enrol (`:82`) | enqueues validation run; reads `validationStatus` | passed/failed/no-runner |
 | `get_validation_result` | `GetValidationResultTool.swift:69` | `assignmentPublicID` | course-enrol (`:113`) | validation submission + its `APIResult` only | per-test outcomes (no student identity) |
 
