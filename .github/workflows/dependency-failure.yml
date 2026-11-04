@@ -1,0 +1,109 @@
+name: Dependency update failure
+
+# Turns a red check on a Dependabot pull request into an issue labelled
+# `dependency-update-failed` (scripts/dependency-issue.sh), one issue per PR.
+#
+# Dependabot PRs land on their own (dependabot-auto.yml). The only ones a
+# person hears about are the ones CI refuses, and this is how they hear: the
+# issue names the PR, the failed jobs and the end of their log, and carries a
+# brief that an agent can be pointed at. A later failure on the same PR is a
+# comment on the same issue. dependency-health.yml closes the issue when the PR
+# merges or closes.
+#
+# `workflow_run` runs the copy of this file on `main`, with a write token,
+# whoever started the run it watches. That is why it can file an issue for a
+# Dependabot run, whose own token is read-only. It reads only metadata and logs
+# from that run and never checks out or executes the PR's code.
+
+on:
+  workflow_run:
+    # The workflows that test a pull request, plus the two that land
+    # Dependabot's. Names, not file names: workflow_run matches on `name:`.
+    workflows:
+      - Swift Tests
+      - JupyterLite
+      - Browser probes
+      - Browser grading smoke test
+      - CodeQL (JS/TS)
+      - Re-vendor xeus kernels
+      - Dependabot auto-merge
+    types: [completed]
+
+permissions: {}
+
+jobs:
+  report:
+    if: >-
+      github.event.workflow_run.conclusion == 'failure'
+      && startsWith(github.event.workflow_run.head_branch, 'dependabot/')
+      && github.event.workflow_run.head_repository.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      actions: read
+      issues: write
+      pull-requests: read
+    env:
+      GH_TOKEN: ${{ github.token }}
+      R: ${{ github.repository }}
+      RUN_ID: ${{ github.event.workflow_run.id }}
+      RUN_URL: ${{ github.event.workflow_run.html_url }}
+      WORKFLOW: ${{ github.event.workflow_run.name }}
+      BRANCH: ${{ github.event.workflow_run.head_branch }}
+      SHA: ${{ github.event.workflow_run.head_sha }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # main, for scripts/dependency-issue.sh and the sanitizer.
+          persist-credentials: false
+
+      - name: File or update the issue
+        run: |
+          set -euo pipefail
+          pr="$(gh pr list --repo "$R" --head "$BRANCH" --state open \
+            --json number,title,url,headRefOid --jq '.[0] // empty')"
+          if [ -z "$pr" ]; then
+            echo "No open pull request for $BRANCH; nothing to report." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          number="$(jq -r .number <<<"$pr")"
+          title="$(jq -r .title <<<"$pr")"
+          url="$(jq -r .url <<<"$pr")"
+          head="$(jq -r .headRefOid <<<"$pr")"
+          # A failure on a commit the PR has moved past is already superseded.
+          if [ "$head" != "$SHA" ]; then
+            echo "The failed run tested ${SHA:0:7}, but #$number is now at ${head:0:7}; not reported." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          jobs="$(gh run view "$RUN_ID" --repo "$R" --json jobs \
+            --jq '.jobs[] | select(.conclusion == "failure") | "- [\(.name)](\(.url))"')"
+          # gh prints "job<TAB>step<TAB>line"; keep the line, and the end of it.
+          log="$(gh run view "$RUN_ID" --repo "$R" --log-failed 2>/dev/null \
+            | cut -f3- | sed 's/^[0-9T:.-]*Z //' | tail -n 80 || true)"
+          {
+            echo "Dependabot pull request $url failed **$WORKFLOW** on \`${SHA:0:7}\`, so it will not auto-merge."
+            echo ""
+            echo "Run: $RUN_URL"
+            echo ""
+            echo "### Failed jobs"
+            echo ""
+            echo "${jobs:-(none reported; see the run)}"
+            echo ""
+            echo "### End of the failed log"
+            echo ""
+            echo '```'
+            echo "${log:-(no log available)}"
+            echo '```'
+            echo ""
+            echo "### Brief for an agent"
+            echo ""
+            echo "Make Dependabot PR #$number ($title) mergeable. Find the root cause of the failure above from the run's log, and fix it on the PR's branch \`$BRANCH\` so that every required check passes; auto-merge is enabled, so a green head merges on its own."
+            echo ""
+            echo "- Do not skip, disable or quarantine a test, and do not loosen a check, to get green."
+            echo "- Prefer moving forward: adapt our code to the new version, or update a parent package so its range admits the fix. A yarn \`resolutions\` or npm \`overrides\` entry is right for a build-only package whose parent pins it back."
+            echo "- If the new version cannot work here, add an \`ignore\` entry with a comment that says why to \`.github/dependabot.yml\`, close the PR, and say so on this issue."
+            echo "- Committed output (\`Public/vendor\`, \`Public/jupyterlite\`, the extension's labextension) is regenerated by \`.github/workflows/dependabot-auto.yml\`; see its header before editing those files by hand."
+          } > body.md
+          scripts/dependency-issue.sh open "pr=$number" \
+            "Dependency update failed: $title (#$number)" body.md

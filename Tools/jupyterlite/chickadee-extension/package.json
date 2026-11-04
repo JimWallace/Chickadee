@@ -36,5 +36,9 @@
   "jupyterlab": {
     "extension": true,
     "outputDir": "chickadee_jupyterlite_extension/labextension"
+  },
+  "resolutions": {
+    "katex": ">=0.18.2",
+    "sanitize-html": ">=2.18.1"
   }
 }
