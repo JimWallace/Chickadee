@@ -101,6 +101,37 @@ def test_edit_hook() -> None:
         expect("cd out of Tests then sed -i passes", bash("cd Sources && sed -i 's/b/c/' Code.swift"), "none")
         expect("sed -n after cd into Tests passes", bash("cd Tests/CoreTests && sed -n 1p Existing.swift"), "none")
 
+        # In a mode where no person answers prompts, the hook denies (#2832).
+        def in_mode(mode: str | None, tool_input: dict, tool: str = "Edit") -> str:
+            event = {"tool_name": tool, "tool_input": tool_input}
+            if mode is not None:
+                event["permission_mode"] = mode
+            return run_hook(hook, event, project)
+
+        expect("Edit of a test in auto mode denies", in_mode("auto", {"file_path": existing}), "deny")
+        expect("Edit of a test in dontAsk mode denies", in_mode("dontAsk", {"file_path": existing}), "deny")
+        expect(
+            "Edit of a test in bypassPermissions mode denies",
+            in_mode("bypassPermissions", {"file_path": existing}),
+            "deny",
+        )
+        expect(
+            "sed -i on a test in auto mode denies",
+            in_mode("auto", {"command": f"sed -i 's/a/b/' {existing}"}, tool="Bash"),
+            "deny",
+        )
+        expect("Edit of a test in default mode asks", in_mode("default", {"file_path": existing}), "ask")
+        expect("Edit of a test in acceptEdits mode asks", in_mode("acceptEdits", {"file_path": existing}), "ask")
+        expect("Edit of a test with no mode field asks", in_mode(None, {"file_path": existing}), "ask")
+        expect("Edit of a test in plan mode asks", in_mode("plan", {"file_path": existing}), "ask")
+        expect("Edit of a test with an unknown mode asks", in_mode("future-mode", {"file_path": existing}), "ask")
+        expect("Edit of a source file in auto mode passes", in_mode("auto", {"file_path": "Sources/Code.swift"}), "none")
+        expect(
+            "Write of a new test file in auto mode passes",
+            in_mode("auto", {"file_path": "Tests/CoreTests/New.swift"}),
+            "none",
+        )
+
         expect("sed -n on a test passes", bash(f"sed -n 1p {existing}"), "none")
         expect("redirect from a test to /tmp passes", bash(f"cat {existing} > /tmp/out.txt"), "none")
         expect("2>&1 after a test read passes", bash(f"grep -n a {existing} 2>&1 | head"), "none")
