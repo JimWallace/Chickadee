@@ -771,7 +771,9 @@ because line numbers go out of date.
     support files it links, minus suite scripts, reserved notebooks,
     grader-only files and datasets, plus the datasets, which are written
     whatever their grader-only mark. `createSupportFileSymlinks` and
-    `files.missing` both call it. The browser runner's zip filter and the
+    `files.missing` both call it. `linkSupportFiles` makes the links, with
+    the parent folders of a file in a subfolder, so a nested entry that
+    `files.missing` counts as delivered is in the working copy. The browser runner's zip filter and the
     support-file download route compute their own lists; a change to what a
     student receives must reach all of them.
   - `files.missing` does not guess: when the setup zip cannot be found, it
