@@ -123,6 +123,10 @@ it afterwards.
 - **Never change an existing test without asking the maintainer first.** Adding
   tests is always fine; altering an assertion someone else wrote is a question,
   not a judgement call. This outranks any urge to get a red check green.
+  In auto mode (and `dontAsk` or `bypassPermissions`) the test-edit hook
+  denies such a change, because no person would see its prompt (#2832). Do
+  not work around the deny. Tell the maintainer the exact edit and why, and
+  wait; they approve by switching the session out of auto mode.
 - **No force unwraps**, in tests either. Use `try #require(value)`.
 - **A new guard needs a fixture.** `scripts/check-guards.sh` applies each
   fixture's defect and fails the build if the guard *passes*. The house rule is

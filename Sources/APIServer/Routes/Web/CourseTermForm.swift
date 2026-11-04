@@ -70,6 +70,7 @@ enum CourseFormError: String, CaseIterable {
     case term = "course_term_required"
     case codeTaken = "code_taken"
     case codeReserved = "code_reserved"
+    case codeUnsafe = "code_unsafe"
     /// The new-course form's optional instructor was refused
     /// (`StaffProvisioningError`); no course was created.
     case instructorInvalid = "instructor_invalid"
@@ -82,6 +83,7 @@ enum CourseFormError: String, CaseIterable {
         case .term: "Enter a four-digit year and a term."
         case .codeTaken: "Another course already uses this code."
         case .codeReserved: CourseCodeConflict.reservedMessage
+        case .codeUnsafe: CourseCodeSyntax.message
         case .instructorInvalid: "Enter a valid username for the instructor."
         case .instructorEmail: StaffProvisioningError.emailWithoutAccountMessage
         case .instructorUnknown: StaffProvisioningError.unknownUserMessage
@@ -102,6 +104,7 @@ enum CourseCloneFormError: String, CaseIterable {
     case term = "clone_term_required"
     case codeTaken = "clone_code_taken"
     case codeReserved = "clone_code_reserved"
+    case codeUnsafe = "clone_code_unsafe"
 
     var message: String {
         switch self {
@@ -109,6 +112,7 @@ enum CourseCloneFormError: String, CaseIterable {
         case .term: "Enter a four-digit year and a term for the new course."
         case .codeTaken: "An active course already uses this code in that term."
         case .codeReserved: CourseCodeConflict.reservedMessage
+        case .codeUnsafe: CourseCodeSyntax.message
         }
     }
 
@@ -122,6 +126,7 @@ extension CourseFormError {
     /// The course form's error for a refused code.
     init(_ conflict: CourseCodeConflict) {
         switch conflict {
+        case .unsafeCharacters: self = .codeUnsafe
         case .reserved: self = .codeReserved
         case .taken: self = .codeTaken
         }
@@ -132,6 +137,7 @@ extension CourseCloneFormError {
     /// The clone form's error for a refused code.
     init(_ conflict: CourseCodeConflict) {
         switch conflict {
+        case .unsafeCharacters: self = .codeUnsafe
         case .reserved: self = .codeReserved
         case .taken: self = .codeTaken
         }

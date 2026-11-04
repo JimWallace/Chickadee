@@ -86,7 +86,7 @@ extension CourseAdminRoutes {
             return req.redirect(to: "/instructor/new-term?error=\(CourseCloneFormError.term.rawValue)")
         }
         if let conflict = try await courseCodeConflict(
-            code, term: term, excluding: nil, reserved: req.application.reservedCourseKeys, on: req.db)
+            code, term: term, excluding: nil, rules: .newCode(req.application.reservedCourseKeys), on: req.db)
         {
             return req.redirect(to: "/instructor/new-term?error=\(CourseCloneFormError(conflict).rawValue)")
         }
