@@ -1,3 +1,4 @@
+// @ts-check
 // Public/jl-cell-perf-patch.js
 //
 // Coalesces Notebook 7's per-output forced reflows — the measured cause of the
@@ -99,7 +100,7 @@
     // check, which rides the same frame's single layout pass. Per-instance
     // flag, so concurrent cells coalesce independently.
     function coalesce(original, raf) {
-        var wrapped = function () {
+        var wrapped = /** @this {any} a JupyterLab cell widget */ function () {
             var self = this;
             if (self._ckOverlayIconQueued) return;
             self._ckOverlayIconQueued = true;
