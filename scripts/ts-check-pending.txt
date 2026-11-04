@@ -9,5 +9,3 @@
 # scripts/typecheck-js.sh.
 Public/jl-cell-perf-patch.js
 Public/jl-kernel-diagnostics.js
-Public/pattern-family-editor.js
-Public/suite-table.js
