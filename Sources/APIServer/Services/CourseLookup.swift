@@ -65,6 +65,8 @@ func preferredCourse(among candidates: [APICourse], viewer: UUID?, on db: any Da
 
 /// Why a course may not take a code and term.
 enum CourseCodeConflict: Equatable, Sendable {
+    /// The code has a character that a link cannot carry (`CourseCodeSyntax`).
+    case unsafeCharacters
     /// The code or URL key is the first segment of a fixed route, so the
     /// course's vanity links would not reach it (`ReservedCourseKeys`, #2666).
     case reserved
@@ -76,15 +78,40 @@ enum CourseCodeConflict: Equatable, Sendable {
         "This code is a page address on this server, so links to the course would not reach it. Choose another code."
 }
 
+/// Which rules a door applies to a code.
+enum CourseCodeRules: Sendable {
+    /// A code that the course does not have yet: the syntax rule, the
+    /// reserved keys and the duplicate rule.
+    case newCode(ReservedCourseKeys)
+    /// The course's own code, unchanged: the duplicate rule only. A course
+    /// that holds a code from before a rule is not trapped by it; the health
+    /// rules report it until it is renamed.
+    case keptCode
+}
+
 /// The check every door that creates, renames, imports or un-archives a
-/// course applies: the reserved keys first, then the active-course rule. One
-/// function so that no door can apply one rule without the other.
+/// course applies: the syntax rule and the reserved keys for a new code, then
+/// the active-course rule. One function so that no door can apply one rule
+/// without the others.
 func courseCodeConflict(
     _ code: String, term: AcademicTerm?, excluding courseID: UUID?,
-    reserved: ReservedCourseKeys, on db: any Database
+    rules: CourseCodeRules, on db: any Database
 ) async throws -> CourseCodeConflict? {
-    if reserved.reserves(code: code, term: term) { return .reserved }
+    if case .newCode(let reserved) = rules,
+        let conflict = newCourseCodeConflict(code, term: term, reserved: reserved)
+    {
+        return conflict
+    }
     if try await activeCourseCodeIsTaken(code, term: term, excluding: courseID, on: db) { return .taken }
+    return nil
+}
+
+/// The rules for a new code that need no database: the syntax rule, then the
+/// reserved keys. `courseCodeConflict` applies them, and so does a rename of
+/// an archived course, which the duplicate rule does not cover.
+func newCourseCodeConflict(_ code: String, term: AcademicTerm?, reserved: ReservedCourseKeys) -> CourseCodeConflict? {
+    if !CourseCodeSyntax.isURLSafe(code) { return .unsafeCharacters }
+    if reserved.reserves(code: code, term: term) { return .reserved }
     return nil
 }
 

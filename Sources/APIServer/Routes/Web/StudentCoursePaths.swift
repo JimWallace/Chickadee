@@ -115,7 +115,7 @@ enum StudentCoursePaths {
     }
 
     private static func encode(_ component: String) -> String {
-        component.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? component
+        urlEncode(component)
     }
 }
 

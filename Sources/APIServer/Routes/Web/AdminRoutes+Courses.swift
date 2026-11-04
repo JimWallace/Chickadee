@@ -69,7 +69,7 @@ extension AdminRoutes {
             return req.redirect(to: "/admin/courses/new?error=\(CourseFormError.term.rawValue)")
         }
         if let conflict = try await courseCodeConflict(
-            code, term: term, excluding: nil, reserved: req.application.reservedCourseKeys, on: req.db)
+            code, term: term, excluding: nil, rules: .newCode(req.application.reservedCourseKeys), on: req.db)
         {
             return req.redirect(to: "/admin/courses/new?error=\(CourseFormError(conflict).rawValue)")
         }
@@ -163,7 +163,7 @@ extension AdminRoutes {
         if course.isArchived,
             let conflict = try await courseCodeConflict(
                 course.code, term: course.term, excluding: courseID,
-                reserved: req.application.reservedCourseKeys, on: req.db)
+                rules: .newCode(req.application.reservedCourseKeys), on: req.db)
         {
             return req.redirect(to: "/admin/courses/\(idString)?error=\(CourseFormError(conflict).rawValue)")
         }
@@ -260,7 +260,7 @@ extension AdminRoutes {
             return req.redirect(to: "\(back)?error=\(CourseCloneFormError.term.rawValue)#clone-course")
         }
         if let conflict = try await courseCodeConflict(
-            code, term: term, excluding: nil, reserved: req.application.reservedCourseKeys, on: req.db)
+            code, term: term, excluding: nil, rules: .newCode(req.application.reservedCourseKeys), on: req.db)
         {
             return req.redirect(to: "\(back)?error=\(CourseCloneFormError(conflict).rawValue)#clone-course")
         }
@@ -396,15 +396,23 @@ extension AdminRoutes {
         // rule of the unique index (docs/course-terms.md). An archived course
         // is outside the index, so it may share a code.
         //
-        // A reserved code (#2666) is refused only when the edit changes the
-        // code, so a course that already holds one can still be edited; the
-        // `courseKeyShadowed` health rule reports it until it is renamed.
+        // A refused or reserved code (#2666) is refused only when the edit
+        // changes the code, so a course that already holds one can still be
+        // edited; the health rules report it until it is renamed. A rename of
+        // an archived course gets the new-code rules too, so un-archive does
+        // not refuse a code that this form accepted.
         let codeChanged = code.lowercased() != course.code.lowercased()
-        if !course.isArchived,
-            let conflict = try await courseCodeConflict(
+        let conflict: CourseCodeConflict?
+        if course.isArchived {
+            conflict =
+                codeChanged
+                ? newCourseCodeConflict(code, term: term, reserved: req.application.reservedCourseKeys) : nil
+        } else {
+            conflict = try await courseCodeConflict(
                 code, term: term, excluding: courseID,
-                reserved: codeChanged ? req.application.reservedCourseKeys : .none, on: req.db)
-        {
+                rules: codeChanged ? .newCode(req.application.reservedCourseKeys) : .keptCode, on: req.db)
+        }
+        if let conflict {
             return req.redirect(to: "/admin/courses/\(idString)?error=\(CourseFormError(conflict).rawValue)")
         }
 
@@ -644,14 +652,19 @@ extension AdminRoutes {
 /// The first free `-COPY` code for a copy of `base` in `term`. "Free" is the
 /// rule every other door applies (`courseCodeConflict`): not reserved (#2666),
 /// and case-folded and per term, so the copy cannot answer the key of an
-/// active course (#2229).
+/// active course (#2229). A base that breaks the syntax rule makes every
+/// candidate break it too, so that case says so instead of "no free code".
 private func uniqueCopyCode(
     base: String, term: AcademicTerm?, reserved: ReservedCourseKeys, db: any Database
 ) async throws -> String {
+    guard CourseCodeSyntax.isURLSafe(base) else {
+        throw AppError.conflict(
+            reason: "Rename this course before you copy it. \(CourseCodeSyntax.message)")
+    }
     let candidates = ["\(base)-COPY"] + (2...10).map { "\(base)-COPY-\($0)" }
     for candidate in candidates {
         let conflict = try await courseCodeConflict(
-            candidate, term: term, excluding: nil, reserved: reserved, on: db)
+            candidate, term: term, excluding: nil, rules: .newCode(reserved), on: db)
         if conflict == nil { return candidate }
     }
     throw AppError.conflict(reason: "Could not generate a unique course code. Rename an existing copy first.")
