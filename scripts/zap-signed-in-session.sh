@@ -32,6 +32,10 @@ set -euo pipefail
 # Every POST carries the session's CSRF token. One token serves them all: the
 # middleware checks a token against the session secret only (CSRFMiddleware).
 #
+# ZAP sends this one session ID for the whole crawl. That holds because Vapor
+# rotates the ID only on login, and the spider submits no forms. If a GET ever
+# rotates or ends the session, the crawl falls back to the login page.
+#
 # Each step checks the status and Location it expects and fails loudly
 # otherwise, so a change to a form is a red step here, not a scan that
 # silently falls back to the login page.
@@ -71,7 +75,7 @@ csrf_from() {
   result="$(request GET "$1")"
   [ "${result%% *}" = "200" ] || fail "GET $1 answered '$result', expected 200"
   token="$(grep -o '<input[^>]*name="_csrf"[^>]*>' "$work/body.html" \
-    | head -n 1 | sed -n 's/.*value="\([^"]*\)".*/\1/p')"
+    | head -n 1 | sed -n 's/.*value="\([^"]*\)".*/\1/p')" || token=""
   [ -n "$token" ] || fail "GET $1 rendered no _csrf field"
   printf '%s' "$token"
 }
