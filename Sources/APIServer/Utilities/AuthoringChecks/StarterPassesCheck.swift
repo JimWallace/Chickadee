@@ -13,16 +13,8 @@ struct StarterPassesCheck: AuthoringCheck {
     static let severity = AuthoringFinding.Severity.warning
 
     func findings(in snapshot: AuthoringSnapshot) -> [AuthoringFinding] {
-        guard let starterRun = snapshot.starterRun, StarterValidationRun.failure(of: starterRun) == nil else {
-            return []
-        }
-        let manifest = snapshot.manifest
-        let starter = starterRun.outcomesByScript(in: manifest)
-        let solution = snapshot.solutionRun?.outcomesByScript(in: manifest) ?? [:]
-        return manifest.testSuites.compactMap { entry in
-            guard entry.points > 0, starter[entry.script]?.status == .pass,
-                solution[entry.script]?.status == .pass
-            else { return nil }
+        snapshot.gradedEntriesOnStarter().compactMap { entry, starter in
+            guard starter?.status == .pass else { return nil }
             return finding(
                 at: .suiteItem(entry.script),
                 "\(entry.name ?? entry.script) passes on the unmodified starter notebook, "

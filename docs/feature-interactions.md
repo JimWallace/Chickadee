@@ -749,6 +749,9 @@ because line numbers go out of date.
     (`InstructorSuiteOutlineBuilder`): starter and solution both pass, and
     the test is worth points. Both join outcomes to entries with
     `outcomesByScript(in:)`. Change the rule in both places together.
+  - Whether the starter ran is `StarterValidationRun.failure(of:)`, which
+    the workbench shows as "Starter didn't run". `starter.didNotRun`
+    reports it, and while it is set the other starter checks find nothing.
   - Seed parity: `personalization.expressionError` evaluates each variant
     seed with the course seed and deal number that the variant run uses
     (`resolveAndCacheValidationMaterialization`): the seed as its own course
