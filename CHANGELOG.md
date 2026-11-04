@@ -9,6 +9,13 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.808] - 2026-11-04
+
+### Changed
+
+- **Test comment names the new home of `pairedJobOpponent`.** A doc comment in `ActivityBrowserStagingTests` still named `WorkerJobRoutes`. It now names `JobOpponentSelection` (#2824).
+
+
 ## [0.5.807] - 2026-11-04
 
 ### Fixed
