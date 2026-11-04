@@ -179,6 +179,30 @@ jobs:
           key: empack-${{ hashFiles('Tools/jupyterlite/environment-*.yml') }}
           restore-keys: empack-
 
+      # The bundle's appVersion label must start with the jupyterlite pin
+      # (JupyterLiteConfigTests.bundleAppVersionMatchesRequirementsPin), and the
+      # build copies it from Tools/jupyterlite/jupyter-lite.json. A pin bump,
+      # such as a Dependabot one, leaves the label behind, so restart it at
+      # <pin>-chickadee.1 here. A label that already matches is left alone.
+      - name: Match the appVersion label to the jupyterlite pin
+        if: steps.gate.outputs.skip != 'true'
+        run: |
+          python3 - <<'PY'
+          import pathlib, re
+          pin = re.search(r"^jupyterlite==(\S+)$",
+                          pathlib.Path("Tools/jupyterlite/requirements.txt").read_text(),
+                          re.M).group(1)
+          path = pathlib.Path("Tools/jupyterlite/jupyter-lite.json")
+          text = path.read_text()
+          current = re.search(r'"appVersion": "([^"]*)"', text).group(1)
+          if not current.startswith(pin):
+              path.write_text(text.replace(f'"appVersion": "{current}"',
+                                           f'"appVersion": "{pin}-chickadee.1"', 1))
+              print(f"appVersion {current} -> {pin}-chickadee.1")
+          else:
+              print(f"appVersion {current} already matches {pin}")
+          PY
+
       - name: Build the JupyterLite toolchain
         if: steps.gate.outputs.skip != 'true'
         run: scripts/setup-jupyterlite.sh
@@ -247,7 +271,7 @@ jobs:
           git remote set-url origin "https://x-access-token:${PUSH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add Public/jupyterlite
+          git add Public/jupyterlite Tools/jupyterlite/jupyter-lite.json
           git commit -m "chore(jupyterlite): re-vendor the xeus kernels
 
           Rebuilt by .github/workflows/revendor-kernels.yml from
@@ -299,7 +323,7 @@ jobs:
             `Public/jupyterlite/` from the unchanged `Tools/jupyterlite/environment-*.yml`
             files and verified it before this pull request was opened.
           EOF
-          git add Public/jupyterlite "changelog.d/revendor-kernels-${GITHUB_RUN_ID}.md"
+          git add Public/jupyterlite Tools/jupyterlite/jupyter-lite.json "changelog.d/revendor-kernels-${GITHUB_RUN_ID}.md"
           git commit -m "chore(jupyterlite): re-vendor the xeus kernels
 
           Rebuilt by .github/workflows/revendor-kernels.yml (publish mode) from

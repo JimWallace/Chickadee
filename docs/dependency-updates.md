@@ -15,7 +15,7 @@ update fails.
    |---|---|---|
    | `Tools/vendor/package*.json` | `Public/vendor/` | `scripts/setup-vendor.sh` |
    | `Tools/jupyterlite/chickadee-extension` | its labextension and `Public/jupyterlite/extensions/@chickadee/` | `jlpm build`, then `scripts/vendor-chickadee-extension.sh` |
-   | `Tools/jupyterlite/requirements.txt` | `Public/jupyterlite/` | `revendor-kernels.yml`, dispatched with `commit: true` |
+   | `Tools/jupyterlite/requirements.txt` | `Public/jupyterlite/`, and the `appVersion` label in `Tools/jupyterlite/jupyter-lite.json` | `revendor-kernels.yml`, dispatched with `commit: true` |
 
    It then enables auto-merge. The required checks on `main` decide the merge:
    a green PR merges, a red PR waits, and `auto-release.yml` deploys a merge as
