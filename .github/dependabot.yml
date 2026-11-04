@@ -3,8 +3,13 @@
 # they review a Dependabot PR, so keep them true and specific.
 #
 # The `Default` branch ruleset requires `editor-smoke-gate` on every branch,
-# and Dependabot is not a bypass actor, so `refs/heads/dependabot/**` must be
+# and Dependabot is not a bypass actor, so `refs/heads/dependabot/**/*` must be
 # in its excluded refs or no PR opens; the update jobs still log "created".
+# The `/*` is necessary: at the end of a ruleset pattern, `**` matches one
+# path level only, so `dependabot/**` excludes `dependabot/x` but not a real
+# branch such as `dependabot/npm_and_yarn/eslint-10.14.0`. To check a branch
+# name: gh api repos/JimWallace/Chickadee/rules/branches/BRANCH (an empty
+# list means no rule applies).
 version: 2
 updates:
   # Swift package graph (Package.swift + Package.resolved).
