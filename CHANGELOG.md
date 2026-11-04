@@ -9,6 +9,17 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.828] - 2026-11-04
+
+### Changed
+
+- **Why Dependabot went quiet.** `.github/dependabot.yml` now records that the
+  repository's `Default` branch ruleset, which has required `editor-smoke-gate`
+  on every branch since 21 June 2026, refuses Dependabot's branches, so no
+  Dependabot PR has opened since then. The ruleset needs
+  `refs/heads/dependabot/**` in its excluded refs. That is a repository setting.
+
+
 ## [0.5.827] - 2026-11-04
 
 ### Fixed
