@@ -80,8 +80,9 @@ struct VanityURLRoutes: RouteCollection {
     }
 
     /// Pass the course's `urlKey` ("CS135" or "CS135-F26") as `courseCode`,
-    /// not its bare code, so the link names one offering.
+    /// not its bare code, so the link names one offering. Each segment is
+    /// percent-encoded, so a key with a space gives a valid `Location` header.
     static func vanityPath(courseCode: String, assignmentSlug: String) -> String {
-        "/\(courseCode)/\(assignmentSlug)"
+        "/\(urlEncode(courseCode))/\(urlEncode(assignmentSlug))"
     }
 }

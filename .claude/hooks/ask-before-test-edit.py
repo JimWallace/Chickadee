@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""PreToolUse hook: ask before a tool changes an existing file under Tests/.
+"""PreToolUse hook: ask (or deny, when no person answers) before a tool changes
+an existing file under Tests/.
 
 The maintainer approves every change to an existing unit test. A new test
 file needs no approval. A permission rule cannot tell the two apart, because
@@ -19,8 +20,14 @@ call:
 A `cd` or `pushd` earlier in the command, and `git -C <dir>`, move the
 directory that a relative path resolves against.
 
-The hook can only return "ask". A permission mode that answers prompts
-without a person (auto mode) also answers this one (#2827).
+In most permission modes the hook returns "ask", so the maintainer sees a
+prompt. In a mode where no person answers prompts (`auto`, `dontAsk`,
+`bypassPermissions`), an "ask" was answered with nobody looking (#2827), so
+the hook returns "deny" instead (#2832). The deny reason tells the agent not
+to make the edit, to tell the maintainer the exact edit and why, and to wait.
+The maintainer approves by switching the session out of that mode; the hook
+then asks them directly. When the event carries no `permission_mode`, the
+hook keeps "ask", so a change in the event format cannot switch the guard.
 
 The Bash check reads the named paths only. A command that changes tests
 without naming them (`git reset --hard`, `git stash`, `git checkout .`)
@@ -58,13 +65,29 @@ SEGMENT_SPLIT = re.compile(r"\|\||&&|[;|\n]")
 REDIRECT_TARGET = re.compile(r"(?<![0-9&<])>>?\s*([^\s;|&<>]+)")
 
 
-def ask(reason: str) -> None:
+# Permission modes in which no person answers a prompt, so an "ask" would
+# be resolved without the maintainer (#2827, #2832). Values from the
+# `permission_mode` field of the hook input.
+UNATTENDED_MODES = {"auto", "dontAsk", "bypassPermissions"}
+
+DENY_INSTRUCTION = (
+    " No person answers prompts in this permission mode, so the edit is denied."
+    " Do not make it another way. Tell the maintainer the exact edit and why,"
+    " and wait. The maintainer approves by switching the session out of this"
+    " mode; the hook then asks them directly."
+)
+
+
+def decide(event: dict, reason: str) -> None:
+    """Asks the maintainer, or denies when no person answers prompts."""
+    mode = event.get("permission_mode")
+    unattended = isinstance(mode, str) and mode in UNATTENDED_MODES
     json.dump(
         {
             "hookSpecificOutput": {
                 "hookEventName": "PreToolUse",
-                "permissionDecision": "ask",
-                "permissionDecisionReason": reason,
+                "permissionDecision": "deny" if unattended else "ask",
+                "permissionDecisionReason": reason + (DENY_INSTRUCTION if unattended else ""),
             }
         },
         sys.stdout,
@@ -187,7 +210,8 @@ def main() -> None:
         base = event.get("cwd") or project
         targets = bash_test_targets(command, base, tests_dir)
         if targets:
-            ask(
+            decide(
+                event,
                 f"This command can change {', '.join(targets)} under Tests/. "
                 "The maintainer approves every change to an existing test."
             )
@@ -204,7 +228,8 @@ def main() -> None:
         return
 
     relative = os.path.relpath(target, project)
-    ask(
+    decide(
+        event,
         f"{relative} is an existing file under Tests/. "
         "The maintainer approves every change to an existing test."
     )

@@ -181,8 +181,14 @@ extension CourseBundleService {
             // archived duplicate, pass, and then fail on the unique index.
             switch try await courseCodeConflict(
                 manifest.course.code, term: bundledCourseTerm(manifest.course), excluding: nil,
-                reserved: reserved, on: db)
+                rules: .newCode(reserved), on: db)
             {
+            case .unsafeCharacters:
+                throw AppError.conflict(
+                    reason: """
+                        The course code "\(manifest.course.code)" cannot be used in a link. \
+                        \(CourseCodeSyntax.message) Change the code in the bundle, then re-import.
+                        """)
             case .reserved:
                 throw AppError.conflict(
                     reason: """

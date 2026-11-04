@@ -425,6 +425,10 @@ The hooks in `.claude/hooks/` do three jobs, so you need not:
 - `ask-before-test-edit.py` asks the maintainer before any change to an
   existing file under `Tests/`, by an edit tool or by a shell command. The
   project settings allow every other tool call, so this is the only prompt.
+  In a mode where no person answers prompts (`auto`, `dontAsk`,
+  `bypassPermissions`) it denies the change instead (#2832). Then tell the
+  maintainer the exact edit and why, and wait: they approve by switching the
+  session out of that mode, and the hook asks them directly.
   `scripts/test-claude-hooks.py` tests all three hooks in CI.
 
 ---
