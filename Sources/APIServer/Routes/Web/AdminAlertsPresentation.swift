@@ -41,6 +41,8 @@ extension HealthRule {
             return "less than \(Int((diskSpaceLowFreeFraction * 100).rounded()))% of the data disk is free"
         case .courseKeyShadowed:
             return "an active course's code is the first segment of a fixed route"
+        case .courseCodeNotURLSafe:
+            return "an active course's code has a character a link cannot carry"
         }
     }
 }

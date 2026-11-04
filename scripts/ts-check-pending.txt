@@ -7,3 +7,5 @@
 #
 # To see what a file needs, add `// @ts-check` as its first line and run
 # scripts/typecheck-js.sh.
+Public/jl-cell-perf-patch.js
+Public/jl-kernel-diagnostics.js

@@ -140,6 +140,17 @@ The Core type, the migration, the model accessor, and tests
   refuses only a change of code, so a course that already holds a reserved code
   can still be edited; the `courseKeyShadowed` health rule reports it
   (`docs/operational-diagnostics.md`).
+- **A code is a URL segment.** For a new code, `courseCodeConflict` first
+  applies `CourseCodeSyntax`: no `/`, `\`, `?`, `#`, `%` or control character,
+  and not `.` or `..` alone. Nothing encodes the key when it writes a link.
+  Vapor splits the path on `/` while it is still percent-encoded, and RoutingKit
+  then decodes each parameter. So a space or a non-ASCII letter works ("STAT
+  230" arrives as `STAT%20230` and decodes), but `/` splits the key, `?` and `#`
+  end the path, and `%` starts an escape. The links Chickadee writes encode the
+  key (`vanityPath`, `StudentCoursePaths`, both through `urlEncode`), so the
+  rule protects the links people type or paste. A door that keeps a course's own code
+  (`CourseCodeRules.keptCode`) skips the rule, and the `courseCodeNotURLSafe`
+  health rule reports such a course.
 - **The URL key.** `APICourse.urlKey` is the code for a course with no term,
   and "CS135-F26" for a course with one (`AcademicTerm.shortLabel`). A key is
   matched against `urlKey` by string equality and never parsed back. Every link
