@@ -59,6 +59,7 @@ scripts/check-kernel-currency.py|Asks the emscripten-forge channel for newer ker
 scripts/check-swift-currency.py --self-test|A self-test of the Swift currency check. Its cases are its assertions.
 scripts/check-swift-currency.py|Asks the package remotes for newer Swift releases, so its answer depends on the network. A scheduled report, not a gate.
 scripts/check-security-headers.sh|Reads the headers of a running server, which the ZAP job starts. A fixture has no server to break.
+scripts/zap-signed-in-session.sh|Not a check. It signs a scan account in to the server that the ZAP job starts.
 scripts/ci-compose-env.sh|Not a check without --check. It writes the .env that the ZAP job starts compose with.
 scripts/mutation-run.sh|Not a check. It runs the weekly mutation report.
 scripts/setup-jupyterlite.sh|Not a check. It installs the JupyterLite build tools.
