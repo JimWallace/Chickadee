@@ -1,4 +1,4 @@
-// APIServer/Routes/Web/SupportFileLibraryState.swift
+// APIServer/Services/SupportFileLibraryState.swift
 //
 // What the edit page's Files panel shows about the course dataset library
 // (docs/datasets-course-library.md §4.5, slice 5b): for each support file,
