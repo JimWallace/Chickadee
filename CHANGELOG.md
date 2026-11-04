@@ -9,6 +9,15 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.833] - 2026-11-04
+
+### Fixed
+
+- **Kernel publish names the token permission it needs.** `revendor-kernels.yml`
+  in publish mode now reports a `RELEASE_TOKEN` without Pull requests: read &
+  write, and `docs/release-process.md` lists that permission.
+
+
 ## [0.5.832] - 2026-11-04
 
 ### Security
