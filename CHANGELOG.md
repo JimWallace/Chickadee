@@ -9,6 +9,13 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.822] - 2026-11-04
+
+### Changed
+
+- **Every first-party frontend script is type-checked.** `jl-kernel-diagnostics.js` and `jl-cell-perf-patch.js` opt in with `// @ts-check`, with JSDoc only, and their cache-busted tags in the JupyterLite editor are re-patched. `scripts/ts-check-pending.txt` now lists no files (#2850).
+
+
 ## [0.5.821] - 2026-11-04
 
 ### Changed
