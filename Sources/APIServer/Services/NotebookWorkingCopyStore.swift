@@ -678,7 +678,9 @@ private func latestNotebookSubmissionData(
 /// Symlinks point to the shared extraction in `{testSetupsDir}/shared/{setupID}/`
 /// that is populated by `extractSupportFilesToSharedDirectory` when the test setup
 /// is created or edited. Only files that exist in the shared directory are linked;
-/// missing files are silently skipped so a missing shared dir never breaks notebook access.
+/// missing files are skipped so a missing shared dir never breaks notebook access.
+/// A file in a subfolder gets its parent folders made (`linkSupportFiles`), and
+/// a link that cannot be made is logged, not swallowed.
 func createSupportFileSymlinks(setup: APITestSetup, studentDir: String, application: Application) async {
     guard let setupID = setup.id else { return }
 
@@ -700,18 +702,21 @@ func createSupportFileSymlinks(setup: APITestSetup, studentDir: String, applicat
 
     let sharedDir = application.testSetupsDirectory + "shared/\(setupID)/"
 
-    // The exists/exists/symlink triple per support file is synchronous
+    // The checks, folder making and links per support file are synchronous
     // filesystem work on every notebook visit — run the whole pass on the
     // thread pool (#1156).
-    try? await runBlocking {
-        let fm = FileManager.default
-        for name in supportNames {
-            let src = sharedDir + name
-            let dest = studentDir + "/" + name
-            guard !fm.fileExists(atPath: dest) else { continue }  // idempotent
-            guard fm.fileExists(atPath: src) else { continue }  // skip if not yet extracted
-            try? fm.createSymbolicLink(atPath: dest, withDestinationPath: src)
+    let failures: [SupportFileLinkFailure]
+    do {
+        failures = try await runBlocking {
+            linkSupportFiles(supportNames, sharedDirectory: sharedDir, studentDirectory: studentDir)
         }
+    } catch {
+        application.logger.warning("support_file_link_pass_failed setup=\(setupID) reason=\(error)")
+        return
+    }
+    for failure in failures {
+        application.logger.warning(
+            "support_file_link_failed setup=\(setupID) file=\(failure.name) reason=\(failure.reason)")
     }
 }
 
