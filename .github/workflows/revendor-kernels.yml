@@ -42,6 +42,12 @@ name: Re-vendor xeus kernels
 # would merge untested kernels or wait forever. Publish mode refuses to run
 # without RELEASE_TOKEN.
 #
+# Auto-release needs only Contents: read & write from that token. Publish mode
+# also opens a pull request and enables auto-merge, so it needs Pull requests:
+# read & write too. Without it the branch push succeeds and `gh pr create`
+# fails with "Resource not accessible by personal access token
+# (createPullRequest)" (docs/release-process.md).
+#
 # ONLY `workflow_dispatch` commits. A pull_request run rebuilds and verifies but
 # never pushes, and that is not caution — it is required for termination.
 # `xpython.wasm` embeds the absolute path of the temp directory it was built in
@@ -290,8 +296,11 @@ jobs:
             git diff --stat HEAD~1 -- Public/jupyterlite | tail -25
             echo '```'
           } > /tmp/pr-body.md
-          url="$(gh pr create --base main --head "$BRANCH" \
-            --title "Re-vendor the xeus kernels" --body-file /tmp/pr-body.md)"
+          if ! url="$(gh pr create --base main --head "$BRANCH" \
+            --title "Re-vendor the xeus kernels" --body-file /tmp/pr-body.md)"; then
+            echo "::error::Pushed $BRANCH but could not open its pull request. RELEASE_TOKEN needs Pull requests: read & write as well as Contents: read & write (docs/release-process.md). Open the pull request from $BRANCH by hand, or grant the permission, delete $BRANCH and dispatch a new run."
+            exit 1
+          fi
           if ! gh pr merge --auto --merge "$url"; then
             echo "::error::Opened $url but could not enable auto-merge. It holds every later publish until it is merged or closed."
             exit 1
