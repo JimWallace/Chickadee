@@ -1,4 +1,4 @@
-// APIServer/Routes/Web/GroupSelectCell.swift
+// APIServer/Utilities/GroupSelectCell.swift
 //
 // What the Students tab's group select needs for one student
 // (docs/lab-groups.md, slice 1). The select posts to

@@ -1,4 +1,4 @@
-// APIServer/Routes/Web/AdminAlertsPresentation.swift
+// APIServer/Utilities/AdminAlertsPresentation.swift
 //
 // What the Health alerts page says about a rule, a webhook and a firing,
 // worked out in Swift so the template holds no branching on rule names.

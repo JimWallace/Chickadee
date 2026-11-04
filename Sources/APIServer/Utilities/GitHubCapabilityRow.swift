@@ -1,4 +1,4 @@
-// APIServer/Routes/Web/GitHubCapabilityRow.swift
+// APIServer/Utilities/GitHubCapabilityRow.swift
 
 /// One of the GitHub App's three options and whether GitHub grants it, as the
 /// admin and course GitHub pages show it (#1776).

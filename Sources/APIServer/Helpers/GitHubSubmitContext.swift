@@ -1,4 +1,4 @@
-// APIServer/Routes/Web/GitHubSubmitContext.swift
+// APIServer/Helpers/GitHubSubmitContext.swift
 //
 // The view model of the GitHub submit page (docs/github-submissions.md
 // slice 3) and the steps that fill it: the repositories the linked account

@@ -65,7 +65,7 @@ Each step is safe on Vapor 4 and does not change behaviour.
 | One request-body collect | `Helpers/Request+DecodeContent.swift` (`collectBody`) | Delete it: Vapor 5 decodes from the stream. Its one caller is the CSRF token read, which also reads `_csrf` through `decodeContent`, not `content.get(_:at:)`. |
 | Configuration reads through Swift Configuration | `Configuration/EnvironmentSource.swift` | `EnvironmentSource.get` reads through a `ConfigReader` over an `EnvironmentVariablesProvider`, the type Vapor 5 takes. The dotted key `oidc.auth.server` reads `OIDC_AUTH_SERVER`, so every variable name is the same. The library also reads one optional variable of its own, `CONFIG_ACCESS_LOG_FILE`, which turns on an access log; Vapor 5 brings the same behaviour. |
 | One client-body read and decode | `Helpers/ClientResponse+Body.swift` | Change this one file for the new client body. Every decode already awaits it. |
-| Poll fragments take a `String` | `Routes/Web/PollFragmentResponse.swift` | No `ByteBuffer` in its API. |
+| Poll fragments take a `String` | `Helpers/PollFragmentResponse.swift` | No `ByteBuffer` in its API. |
 | One test seam | `Tests/APITests/TestRequests.swift` | Re-implement its names on the Vapor 5 `TestClient` (see "The tests"). |
 | Poll fragments in the tests | `PollFragmentResponseTests`, `PollFragmentCSRFTests` | They pass a `String`. |
 | The macOS floor | `Package.swift` | It is `.macOS("27.0")`, for the worker's `withTaskCancellationShield`. That is above 26.2, the Vapor 5 minimum. No change. |

@@ -1,4 +1,4 @@
-// APIServer/Routes/Web/LatestSubmissionCell.swift
+// APIServer/Utilities/LatestSubmissionCell.swift
 //
 // The "latest submission" cell that three rows render: the student
 // dashboard's `TestSetupRow`, the course's per-student `StudentAssignmentRow`

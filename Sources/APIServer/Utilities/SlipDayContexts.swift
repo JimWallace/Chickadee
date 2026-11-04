@@ -1,4 +1,4 @@
-// APIServer/Routes/Web/SlipDayContexts.swift
+// APIServer/Utilities/SlipDayContexts.swift
 //
 // The row types behind the instructor Slip days tab
 // (`InstructorSlipDaysPage`): one row per student with its ledger entries,
@@ -6,9 +6,7 @@
 // `InstructorDashboardRoutes+SlipDays.swift` (#1716).
 
 import Core
-import Fluent
 import Foundation
-import Vapor
 
 /// One ledger entry under a student row on the Slip days tab.
 struct SlipDayLedgerSpendRow: Encodable {

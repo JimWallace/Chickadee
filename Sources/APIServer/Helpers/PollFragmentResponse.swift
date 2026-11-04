@@ -1,4 +1,4 @@
-// APIServer/Routes/Web/PollFragmentResponse.swift
+// APIServer/Helpers/PollFragmentResponse.swift
 //
 // Conditional responses for the three `?fragment=rows` poll endpoints
 // (`/instructor/students-data`, `/admin/users-data`, `/admin/runners`).
