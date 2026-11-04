@@ -57,7 +57,8 @@ swift-format, SwiftLint (force unwraps, `.style(`, `HTMLRaw(`) and the
 XCTest, inline styles and handlers, design tokens). `ElementaryPageGuardTests`
 holds every rendered page to the view rules. The Core target has no Vapor
 dependency. The settings deny list blocks edits to `VERSION`,
-`ChickadeeVersion.swift` and `CHANGELOG.md`, and a hook asks before an edit
+`ChickadeeVersion.swift` and `CHANGELOG.md`, and a hook asks (or, in auto mode,
+denies) before an edit
 to an existing test.
 
 ## How you report
