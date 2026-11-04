@@ -1,0 +1,130 @@
+name: Dead Code Scan
+
+# A REPORT, NEVER A GATE. Periphery Pro lists the Swift declarations that
+# nothing uses. The `dead-code-report` artifact is read by the weekly
+# dead-code review, a Claude Code scheduled task on the maintainer's machine
+# (not a `.claude/agents/` subagent), or by a person. No result fails this
+# job. See docs/dead-code-scan.md.
+#
+# WHY LINUX. A few files hold Linux-only code under `#if os(Linux)`. A macOS
+# scan never compiles that code, so it reports what only that code uses as
+# unused (for example `sandboxOwnProcessCount`). This scan builds what
+# production runs.
+#
+# WHY A SEPARATE BUILD. Periphery reads the compiler's index store, and a build
+# writes one only when it is asked to. The shared `.build` cache has no index
+# store, and a cache hit does not recompile, so this job builds from source
+# with `-index-store-path`. Each scan then reads that index, with no new build.
+#
+# The token: PERIPHERY_TOKEN is a repository secret. Only the `Scan` step sees
+# it. A pull request from a fork gets no secrets, so the job does not run for
+# one. The `pull_request` trigger exists because `workflow_dispatch` works only
+# once a workflow is on main: it lets a change to this file or to
+# .periphery.yml prove itself before it merges.
+
+on:
+  workflow_dispatch:
+  schedule:
+    # Sunday 08:00 UTC, so the report is ready for the Monday review.
+    - cron: "0 8 * * 0"
+  pull_request:
+    paths:
+      - .github/workflows/dead-code.yml
+      - .periphery.yml
+
+permissions:
+  contents: read
+  packages: read
+
+concurrency:
+  group: dead-code-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  scan:
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    container:
+      image: ghcr.io/jimwallace/chickadee/swift-ci:6.4-resolute
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    env:
+      # Periphery Pro is in beta. To update it, change both values. The hash is
+      # the SHA-256 of the linux_x86_64 zip on the release page:
+      # https://github.com/periphery-pro/cli-releases/releases
+      PERIPHERY_VERSION: 1.0.0.beta.9
+      PERIPHERY_SHA256: 1024ed5e0c97eef58ad924027f84d53cab4f08a8e45f28133ec6fba433503ae1
+      INDEX_STORE: .build/periphery-index
+      REPORT_DIR: dead-code-report
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Compute SPM cache key
+        id: spm-cache-key
+        run: echo "value=$(sha256sum Package.resolved | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+
+      - name: Cache SPM checkouts
+        uses: actions/cache@v6
+        with:
+          path: .build/checkouts
+          key: ${{ runner.os }}-spm-${{ steps.spm-cache-key.outputs.value }}
+          restore-keys: ${{ runner.os }}-spm-
+
+      - name: Swift test setup
+        uses: ./.github/actions/swift-test-setup
+        with:
+          build-cache: none
+          tools: curl unzip
+
+      - name: Install Periphery Pro
+        run: |
+          zip="periphery-cli_${PERIPHERY_VERSION}_linux_x86_64.zip"
+          curl -fsSL --retry 3 -o "$RUNNER_TEMP/$zip" \
+            "https://github.com/periphery-pro/cli-releases/releases/download/${PERIPHERY_VERSION}/${zip}"
+          echo "${PERIPHERY_SHA256}  $RUNNER_TEMP/$zip" | sha256sum -c -
+          unzip -q "$RUNNER_TEMP/$zip" -d "$RUNNER_TEMP/periphery"
+          echo "$RUNNER_TEMP/periphery" >> "$GITHUB_PATH"
+
+      - name: Build with an index store
+        # `--build-system native` for the same reason as test-coverage.yml: it
+        # is the engine whose per-module output is known to be complete on 6.4.
+        # `--build-tests`: code that only tests use is still used. The native
+        # engine is also why this step needs no scripts/ci-build-retry.sh: the
+        # crash that script retries is in the default Swift Build engine
+        # (docs/ci-flakiness.md, Family 7).
+        run: |
+          swift build --build-tests --build-system native \
+            -Xswiftc -index-store-path -Xswiftc "$PWD/$INDEX_STORE"
+
+      - name: Scan
+        env:
+          PERIPHERY_TOKEN: ${{ secrets.PERIPHERY_TOKEN }}
+        run: |
+          periphery version
+          mkdir -p "$REPORT_DIR"
+          scan() {
+            periphery scan --index-store-path "$INDEX_STORE" --relative-results \
+              --disable-update-check --quiet "$@"
+          }
+          scan --format agent-prompt > "$REPORT_DIR/agent-prompt.md"
+          scan --format json > "$REPORT_DIR/results.json"
+          scan --format github-markdown > "$REPORT_DIR/results.md"
+          {
+            echo "## Dead code scan"
+            echo
+            echo "Periphery Pro ${PERIPHERY_VERSION}. A report, not a gate."
+            echo
+            cat "$REPORT_DIR/results.md"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: dead-code-report
+          path: dead-code-report/
+          retention-days: 30
+          if-no-files-found: warn

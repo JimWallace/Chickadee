@@ -115,6 +115,7 @@ not exist.
 - [mutation-testing-pilot.md](mutation-testing-pilot.md) — the RunnerCore mutation-testing pilot: what a run costs and finds
 - [mutation-trend.md](mutation-trend.md) — how to read a series of mutation runs
 - [mutation-triage.md](mutation-triage.md) — the protocol that turns mutation survivors into tests
+- [dead-code-scan.md](dead-code-scan.md) — the weekly Periphery Pro scan: reading its report, results that are not dead code, updating the tool and the token
 
 ## History
 
