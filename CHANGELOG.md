@@ -9,6 +9,48 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.818] - 2026-11-04
+
+### Changed
+
+- **Six authoring files leave `Routes/Web`.** The suite-row and form contexts move to `Utilities/`, the support-file library state to `Services/`, and the composite form body and dataset edit helpers to `Helpers/`. These are pure moves with no change in behaviour (#2838).
+
+
+## [0.5.817] - 2026-11-04
+
+### Changed
+
+- **Nine course, enrollment and staff files leave `Routes/Web`.** The form and path types move to `Utilities/`, the request-bound loaders and staff provisioning to `Helpers/`, and the CSV roster enrollment to `Services/UsernameEnrollment.swift`. These are pure moves with no change in behaviour (#2837).
+
+
+## [0.5.816] - 2026-11-04
+
+### Changed
+
+- **Twelve handler-less files leave `Routes/Web`.** The shared select cells, the admin and GitHub view contexts and the response builders move to `Utilities/` or `Helpers/`, as the placement rule says. These are pure moves with no change in behaviour (#2836).
+
+
+## [0.5.815] - 2026-11-04
+
+### Changed
+
+- **The last two large frontend scripts are type-checked.** `suite-table.js` and `pattern-family-editor.js` opt in with `// @ts-check`, and only the two editor-iframe scripts stay on `scripts/ts-check-pending.txt`. The fixes are JSDoc annotations and casts only, so no served file changes behaviour (#2835).
+
+
+## [0.5.814] - 2026-11-04
+
+### Changed
+
+- **Four larger frontend scripts are type-checked.** `app.js`, `browser-runner.js`, `support-files.js` and `notebook.js` opt in with `// @ts-check`, and `tsc` reports no errors. The fixes are JSDoc annotations and casts only, so no served file changes behaviour. Two module declarations in `types/` type the dynamic imports of the iframe bridge and the runner-core loader (#2834).
+
+
+## [0.5.813] - 2026-11-04
+
+### Changed
+
+- **21 more frontend scripts are type-checked.** They opt in with `// @ts-check`, and `tsc` reports no errors. The fixes are JSDoc annotations and casts only, so no served file changes behaviour. A `paths` entry in `jsconfig.json` types the `/vendor/codemirror.js` import (#2831).
+
+
 ## [0.5.812] - 2026-11-04
 
 ### Security

@@ -1,3 +1,4 @@
+// @ts-check
 // Chickadee — Pattern Family Editor
 //
 // Browser-side module that drives the pattern-family modal on the
@@ -170,8 +171,8 @@
             var varTbody = block.querySelector('tbody.js-section-vars-body');
             if (!varTbody) return { vars: [], sectionName: sectionName, sectionID: sectionID };
             var vars = Array.from(varTbody.querySelectorAll('tr.js-section-var-row')).map(function (tr) {
-                var name = (tr.querySelector('.js-section-var-name') || {}).value || '';
-                var raw  = (tr.querySelector('.js-section-var-value') || {}).value || '';
+                var name = /** @type {{ value?: string }} */ (tr.querySelector('.js-section-var-name') || {}).value || '';
+                var raw  = /** @type {{ value?: string }} */ (tr.querySelector('.js-section-var-value') || {}).value || '';
                 name = name.trim();
                 if (!name) return null;
                 var parsed;
@@ -198,8 +199,8 @@
             var varTbody = block.querySelector('tbody.js-section-vars-body');
             if (!varTbody) return { vars: [], sectionName: sectionName, sectionID: sectionID };
             var vars = Array.from(varTbody.querySelectorAll('tr.js-section-var-row')).map(function (tr) {
-                var name = (tr.querySelector('.js-section-var-name') || {}).value || '';
-                var raw  = (tr.querySelector('.js-section-var-value') || {}).value || '';
+                var name = /** @type {{ value?: string }} */ (tr.querySelector('.js-section-var-name') || {}).value || '';
+                var raw  = /** @type {{ value?: string }} */ (tr.querySelector('.js-section-var-value') || {}).value || '';
                 name = name.trim();
                 if (!name) return null;
                 var parsed;
@@ -236,27 +237,27 @@
         // Editor modal — its markup lives in `#family-editor-body` and the
         // shell owns the chrome (title / save / close).
         var bodyEl           = document.getElementById('family-editor-body');
-        var idInput          = document.getElementById('family-id');
-        var nameInput        = document.getElementById('family-name');
-        var kindInput        = document.getElementById('family-kind');
-        var fnInput          = document.getElementById('family-function');
-        var paramsInput      = document.getElementById('family-params');
-        var fnSelect         = document.getElementById('family-function-select');
+        var idInput          = /** @type {HTMLInputElement} */ (document.getElementById('family-id'));
+        var nameInput        = /** @type {HTMLInputElement} */ (document.getElementById('family-name'));
+        var kindInput        = /** @type {HTMLSelectElement} */ (document.getElementById('family-kind'));
+        var fnInput          = /** @type {HTMLInputElement} */ (document.getElementById('family-function'));
+        var paramsInput      = /** @type {HTMLInputElement} */ (document.getElementById('family-params'));
+        var fnSelect         = /** @type {HTMLSelectElement} */ (document.getElementById('family-function-select'));
         var fnHint           = document.getElementById('family-function-hint');
-        var defaultHintInput = document.getElementById('family-default-hint');
-        var defaultFailureDetailSelect = document.getElementById('family-default-failure-detail');
-        var toleranceInput   = document.getElementById('family-default-tolerance');
+        var defaultHintInput = /** @type {HTMLInputElement} */ (document.getElementById('family-default-hint'));
+        var defaultFailureDetailSelect = /** @type {HTMLSelectElement} */ (document.getElementById('family-default-failure-detail'));
+        var toleranceInput   = /** @type {HTMLInputElement} */ (document.getElementById('family-default-tolerance'));
         var toleranceLabel   = document.getElementById('family-tolerance-label');
-        var ioComparisonSelect = document.getElementById('family-io-comparison');
+        var ioComparisonSelect = /** @type {HTMLSelectElement} */ (document.getElementById('family-io-comparison'));
         var ioComparisonLabel  = document.getElementById('family-io-comparison-label');
-        var referenceInput   = document.getElementById('family-reference-implementation');
+        var referenceInput   = /** @type {HTMLTextAreaElement} */ (document.getElementById('family-reference-implementation'));
         var referenceLabel   = document.getElementById('family-reference-label');
         var functionLabel    = document.getElementById('family-function-label');
         var casesHeader      = document.getElementById('family-cases-header');
         var casesBody        = document.getElementById('family-cases-body');
         var casesEmpty       = document.getElementById('family-cases-empty');
         var autoComputeNote  = document.getElementById('family-auto-compute-note');
-        var addCaseBtn       = document.getElementById('add-case-btn');
+        var addCaseBtn       = /** @type {HTMLButtonElement} */ (document.getElementById('add-case-btn'));
         var statusEl         = document.getElementById('family-editor-status');
 
         if (!bodyEl) {
@@ -599,7 +600,7 @@
             casesBody.appendChild(tr);
             // Author-set expected values — a literal OR a per-student `$ref` —
             // are marked manual so the auto-computer doesn't overwrite them.
-            var expCell = tr.querySelector('.js-pf-case-expected');
+            var expCell = /** @type {HTMLInputElement | null} */ (tr.querySelector('.js-pf-case-expected'));
             if (expCell && expCell.value.trim() !== '') {
                 expCell.dataset.manual = '1';
                 refreshExpectedCellHighlight(expCell, collectDeclaredInputNames());
@@ -628,7 +629,7 @@
         var variablesEmpty = document.getElementById('family-variables-empty');
         var addVariableBtn = document.getElementById('add-family-variable-btn');
         // The note that links the amber-cue explanation (ValueCueNote).
-        var variablesCueNote = bodyEl ? bodyEl.querySelector('.js-value-cue-note') : null;
+        var variablesCueNote = /** @type {HTMLElement | null} */ (bodyEl ? bodyEl.querySelector('.js-value-cue-note') : null);
 
         /// Is `s` a name the SERVER will accept for a family variable or
         /// function?
@@ -745,8 +746,8 @@
         /// until something's typed — no placeholder noise.
         function refreshVarRowStatus(row) {
             if (!row) return;
-            var nameEl   = row.querySelector('.js-pf-var-name');
-            var valueEl  = row.querySelector('.js-pf-var-value');
+            var nameEl   = /** @type {HTMLInputElement | null} */ (row.querySelector('.js-pf-var-name'));
+            var valueEl  = /** @type {HTMLInputElement | null} */ (row.querySelector('.js-pf-var-value'));
             var validEl  = row.querySelector('.pf-var-row-valid');
             if (!nameEl || !valueEl || !validEl) return;
 
@@ -760,7 +761,7 @@
                 nameError = 'Use letters, digits and underscores, starting with a letter or underscore.';
             } else if (name) {
                 var allNames = Array.from(variablesBody.querySelectorAll('.js-pf-var-name'))
-                    .map(function (el) { return el.value.trim(); });
+                    .map(/** @param {HTMLInputElement} el */ function (el) { return el.value.trim(); });
                 var dup = allNames.filter(function (n) { return n === name; }).length > 1;
                 if (dup) {
                     nameError = 'Duplicate — each variable needs a unique name.';
@@ -801,14 +802,14 @@
         /// red-flag a valid per-student ref.
         function collectDeclaredInputNames() {
             var names = new Set();
-            Array.from(variablesBody ? variablesBody.querySelectorAll('.js-pf-var-name') : []).forEach(function (el) {
+            Array.from(variablesBody ? variablesBody.querySelectorAll('.js-pf-var-name') : []).forEach(/** @param {HTMLInputElement} el */ function (el) {
                 var n = (el.value || '').trim();
                 if (n && isValidServerIdentifier(n)) names.add(n);
             });
             (currentSectionVariables || []).forEach(function (v) {
                 if (v && v.name && isValidServerIdentifier(v.name)) names.add(v.name);
             });
-            Array.from(document.querySelectorAll('.js-global-input-name')).forEach(function (el) {
+            Array.from(document.querySelectorAll('.js-global-input-name')).forEach(/** @param {HTMLInputElement} el */ function (el) {
                 var n = (el.value || '').trim();
                 if (n && isValidServerIdentifier(n)) names.add(n);
             });
@@ -883,8 +884,8 @@
             var rows = Array.from(variablesBody.querySelectorAll('tr'));
             var out = [];
             rows.forEach(function (row, i) {
-                var nameEl  = row.querySelector('.js-pf-var-name');
-                var valueEl = row.querySelector('.js-pf-var-value');
+                var nameEl  = /** @type {HTMLInputElement | null} */ (row.querySelector('.js-pf-var-name'));
+                var valueEl = /** @type {HTMLInputElement | null} */ (row.querySelector('.js-pf-var-value'));
                 var name    = (nameEl  ? nameEl.value  : '').trim();
                 var rawVal  = (valueEl ? valueEl.value : '').trim();
                 if (!name && !rawVal) return; // empty row — drop silently
@@ -934,7 +935,7 @@
         }
         if (variablesBody) {
             variablesBody.addEventListener('click', function (e) {
-                var btn = e.target && e.target.closest('.js-pf-var-remove');
+                var btn = e.target && /** @type {Element} */ (e.target).closest('.js-pf-var-remove');
                 if (!btn) return;
                 // Sync first so the other rows' in-progress edits don't
                 // disappear when we drop this one.
@@ -953,7 +954,7 @@
             // typing the variable's value, the Expected column for
             // `$name` cells picks up the resolution automatically.
             variablesBody.addEventListener('input', function (e) {
-                var row = e.target && e.target.closest('tr[data-var-index]');
+                var row = e.target && /** @type {Element} */ (e.target).closest('tr[data-var-index]');
                 if (!row) return;
                 refreshVarRowStatus(row);
                 refreshAllArgCellVarHighlighting();
@@ -1129,8 +1130,8 @@
             var out = [];
             for (var i = 0; i < rows.length; i++) {
                 var row = rows[i];
-                var label = row.querySelector('.js-pf-case-label').value.trim();
-                var rawExp = row.querySelector('.js-pf-case-expected').value;
+                var label = /** @type {HTMLInputElement} */ (row.querySelector('.js-pf-case-label')).value.trim();
+                var rawExp = /** @type {HTMLInputElement} */ (row.querySelector('.js-pf-case-expected')).value;
                 if (rawExp.trim() === '') rawExp = '';
                 var caseNum = (i + 1 < 10 ? '0' + (i + 1) : String(i + 1));
                 var args = [];
@@ -1141,12 +1142,12 @@
                     // The one column is the text fed to the program's stdin:
                     // never parsed as a literal ("3" is what the program
                     // reads, not the number 3), and legitimately empty.
-                    var stdinCell = row.querySelector('.js-pf-case-arg[data-arg-index="0"]');
+                    var stdinCell = /** @type {HTMLInputElement | null} */ (row.querySelector('.js-pf-case-arg[data-arg-index="0"]'));
                     args = [readProgramIOText(stdinCell ? stdinCell.value : '')];
                     argsProvided = [true];
                     argVarRefs   = [null];
                 } else if (paramNames.length === 0) {
-                    var rawArgs = (row.querySelector('.js-pf-case-args') || {}).value || '';
+                    var rawArgs = /** @type {{ value?: string }} */ (row.querySelector('.js-pf-case-args') || {}).value || '';
                     rawArgs = rawArgs.trim();
                     if (rawArgs !== '') {
                         try { args = JSON.parse(rawArgs); }
@@ -1157,7 +1158,7 @@
                     argVarRefs   = args.map(function () { return null; });
                 } else {
                     for (var a = 0; a < paramNames.length; a++) {
-                        var cell = row.querySelector('.js-pf-case-arg[data-arg-index="' + a + '"]');
+                        var cell = /** @type {HTMLInputElement | null} */ (row.querySelector('.js-pf-case-arg[data-arg-index="' + a + '"]'));
                         var raw = cell ? cell.value : '';
                         var trimmed = raw.trim();
                         var paramTypeHint = currentParamTypes ? currentParamTypes[a] : null;
@@ -1218,7 +1219,7 @@
                     }
                 }
                 if (!label) throw new Error('Case ' + caseNum + ': label is required');
-                var hintCell = row.querySelector('.js-pf-case-hint');
+                var hintCell = /** @type {HTMLInputElement | null} */ (row.querySelector('.js-pf-case-hint'));
                 var hint = hintCell ? hintCell.value.trim() : '';
                 var caseObj = {
                     key: caseNum,
@@ -1247,14 +1248,14 @@
         function readCasesFromTableRaw() {
             var rows = Array.from(casesBody.querySelectorAll('tr'));
             return rows.map(function (row) {
-                var label = row.querySelector('.js-pf-case-label').value;
-                var rawExp = row.querySelector('.js-pf-case-expected').value;
+                var label = /** @type {HTMLInputElement} */ (row.querySelector('.js-pf-case-label')).value;
+                var rawExp = /** @type {HTMLInputElement} */ (row.querySelector('.js-pf-case-expected')).value;
                 var args = [];
                 var argsProvided = [];
                 var argVarRefs   = [];
                 var cells = row.querySelectorAll('.js-pf-case-arg');
                 if (cells.length) {
-                    Array.from(cells).forEach(function (c, idx) {
+                    Array.from(cells).forEach(/** @param {HTMLInputElement} c @param {number} idx */ function (c, idx) {
                         var raw = c.value;
                         if (String(raw).trim() === '') {
                             args.push(null);
@@ -1275,7 +1276,7 @@
                         argVarRefs.push(null);
                     });
                 } else {
-                    var single = row.querySelector('.js-pf-case-args');
+                    var single = /** @type {HTMLInputElement | null} */ (row.querySelector('.js-pf-case-args'));
                     if (single) {
                         try { args = JSON.parse(single.value); if (!Array.isArray(args)) args = []; } catch (_) { args = []; }
                         argsProvided = args.map(function () { return true; });
@@ -1293,7 +1294,7 @@
                 } else if (rawExpTrim !== '') {
                     expected = coerceByType(rawExp, currentReturnType);
                 }
-                var hintCell = row.querySelector('.js-pf-case-hint');
+                var hintCell = /** @type {HTMLInputElement | null} */ (row.querySelector('.js-pf-case-hint'));
                 var hint = hintCell ? hintCell.value.trim() : '';
                 var obj = {
                     label: label,
@@ -1624,7 +1625,7 @@
             addCaseRow(null, paramNames);
         });
         casesBody.addEventListener('click', function (e) {
-            var btn = e.target && e.target.closest('.js-pf-case-remove');
+            var btn = e.target && /** @type {Element} */ (e.target).closest('.js-pf-case-remove');
             if (btn) {
                 var tr = btn.closest('tr');
                 if (tr) tr.remove();
@@ -1686,13 +1687,13 @@
             if (!casesBody) return;
             Array.from(casesBody.querySelectorAll('tr')).forEach(function (row) {
                 var hasVarRef = Array.from(row.querySelectorAll('.js-pf-case-arg'))
-                    .some(function (cell) {
+                    .some(/** @param {HTMLInputElement} cell */ function (cell) {
                         var v = (cell.value || '').trim();
                         return VAR_REF_RE.test(v);
                     });
                 if (!hasVarRef) return;
                 // Don't clobber the instructor's manual expected value.
-                var expectedEl = row.querySelector('.js-pf-case-expected');
+                var expectedEl = /** @type {HTMLInputElement | null} */ (row.querySelector('.js-pf-case-expected'));
                 if (expectedEl && expectedEl.dataset.manual === '1' && expectedEl.value.trim() !== '') return;
                 scheduleAutoCompute(row);
             });
@@ -1715,7 +1716,7 @@
             var paramNames = paramsInput.value.split(',').map(function (s) { return s.trim(); }).filter(Boolean);
             if (!paramNames.length) return;  // fallback JSON-args mode: no auto-compute
 
-            var expectedEl = row.querySelector('.js-pf-case-expected');
+            var expectedEl = /** @type {HTMLInputElement | null} */ (row.querySelector('.js-pf-case-expected'));
             if (!expectedEl) return;
             if (expectedEl.dataset.manual === '1' && expectedEl.value.trim() !== '') return;
             // A per-student `$name` Expected is resolved server-side per
@@ -1735,8 +1736,8 @@
             });
             if (variablesBody) {
                 Array.from(variablesBody.querySelectorAll('tr')).forEach(function (vrow) {
-                    var n = (vrow.querySelector('.js-pf-var-name') || {}).value;
-                    var v = (vrow.querySelector('.js-pf-var-value') || {}).value;
+                    var n = /** @type {{ value?: string }} */ (vrow.querySelector('.js-pf-var-name') || {}).value;
+                    var v = /** @type {{ value?: string }} */ (vrow.querySelector('.js-pf-var-value') || {}).value;
                     if (!n) return;
                     n = n.trim();
                     if (!isValidServerIdentifier(n)) return;
@@ -1782,7 +1783,7 @@
         }
 
         casesBody.addEventListener('input', function (e) {
-            var t = e.target;
+            var t = /** @type {HTMLInputElement} */ (e.target);
             if (!t || !t.classList) return;
             if (t.classList.contains('js-pf-case-arg')) {
                 // Live-highlight the `$name` binding state so the instructor
@@ -1823,8 +1824,8 @@
                      || document.getElementById('suite-config-body');
         if (suiteBody) {
             suiteBody.addEventListener('click', async function (e) {
-                var editBtn = e.target && e.target.closest('.js-family-edit-btn');
-                var delBtn  = e.target && e.target.closest('.js-family-delete-btn');
+                var editBtn = e.target && /** @type {Element} */ (e.target).closest('.js-family-edit-btn');
+                var delBtn  = e.target && /** @type {Element} */ (e.target).closest('.js-family-delete-btn');
                 if (editBtn) {
                     var fid = editBtn.getAttribute('data-family-id');
                     var idx = familiesState.findIndex(function (f) { return f.id === fid; });
