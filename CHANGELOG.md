@@ -9,6 +9,13 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.811] - 2026-11-04
+
+### Changed
+
+- **The admin People tab shows one page of 100 users.** The tab and its 5-second poll read every account on the deployment. Now the database sorts and limits each read, and Previous and Next links move between pages. Typing in the filter box filters the page shown; Enter searches every account by username, display name or role, and the links and the poll keep the search. The order keeps its meaning: most recently seen first, never seen last, then username, then join date. Usernames now compare as text, so `user10` sorts before `user2`. The header counts do not change. `/admin/users-data` with no `page` still returns every user as JSON; `?page=N` or `?q=` returns one page (#2829).
+
+
 ## [0.5.810] - 2026-11-04
 
 ### Fixed
