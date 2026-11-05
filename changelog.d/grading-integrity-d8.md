@@ -1,3 +1,0 @@
-### Changed
-
-- **A browser grade is a participation grade (grading integrity D8, #2240).** `docs/grading-integrity.md` records the decision agreed on 2026-11-05. Browser grading serves short, time-constrained work graded for taking part, so a browser result stays the grade and no native run confirms it; work whose grade must be correct uses `gradingMode: worker`. D8 replaces D1, the native-confirmation design of #2264 is not built, and class-activity leaderboards stay as they are. The note also records that the server takes a browser result's test names, tiers, points and leaderboard `metric` from the browser. No grading behaviour changes.
