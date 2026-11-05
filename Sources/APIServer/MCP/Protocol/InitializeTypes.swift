@@ -247,6 +247,11 @@ enum MCPServerInstructions {
         get_achievements, replace the whole list with update_achievements. They are server-evaluated \
         and DISPLAY-ONLY — they never change what the suite grades, so editing them does not re-validate, \
         re-grade, or close the assignment (unlike every other content edit).
+        - Course achievements — individual badges that count a student's work across a course's \
+        assignments (\(MCPAchievementSignalProse.courseCommaList)), over every assignment, one course \
+        section, one concept or a list of assignments. Read them with get_course_achievements, replace \
+        the whole list with update_course_achievements. They change no grade. No tool reports who has \
+        earned them.
         - Visibility — an assignment is closed, preview, or open (set via update_assignment `visibility`, \
         or the legacy `isOpen` boolean for open/closed). `preview` is a staff-only state: course staff \
         see and use it exactly like an open assignment (its bundled solution and tests, normal grading), \

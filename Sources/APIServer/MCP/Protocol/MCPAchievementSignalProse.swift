@@ -27,6 +27,12 @@ enum MCPAchievementSignalProse {
     /// is: these are literal values a caller matches exactly, not a sentence.
     static var commaList: String { MCPEnumProse<AchievementSignal>.oneOfList }
 
+    /// Comma list of the signals a course achievement may carry
+    /// (`AchievementSignal.allowedLevels`), for the course achievement tools.
+    static var courseCommaList: String {
+        AchievementSignalValues.at(.course).joined(separator: ", ")
+    }
+
     /// The units and semantics clause that accompanies the schema enum.
     ///
     /// Per-signal by nature — a unit is not derivable from a case name — so it
@@ -34,6 +40,12 @@ enum MCPAchievementSignalProse {
     /// the exhaustive switch means a new signal cannot silently go undescribed.
     static var unitsClause: String {
         AchievementSignal.allCases.map(unitPhrase(for:)).joined(separator: "; ")
+    }
+
+    /// `unitsClause` for the course signals only, beside the course tools'
+    /// schema enum.
+    static var courseUnitsClause: String {
+        AchievementSignal.allCases.filter(\.readsTheCourse).map(unitPhrase(for:)).joined(separator: "; ")
     }
 
     private static func unitPhrase(for signal: AchievementSignal) -> String {

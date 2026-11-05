@@ -46,6 +46,7 @@ import Testing
         "APISubmissionDiagnostics", "JobExecutionMetric", "APIClassAchievement",
         "APIAchievementResult", "APIGroupAchievementResult", "APIUserActivityEvent", "APIBrightSpaceSyncLog",
         "APIPreEnrollment", "APIAssignmentParticipation", "APIAssignmentExtension",
+        "APIAchievementAward",
     ]
 
     private static let boundaryFile = "MCPStudentDataBoundary.swift"

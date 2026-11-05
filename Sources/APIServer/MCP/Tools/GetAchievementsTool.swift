@@ -56,24 +56,37 @@ struct GetAchievementsTool: ContentTool {
     }
 }
 
+/// The row properties every achievement level shares, so the assignment row
+/// and the course row (`CourseAchievementsTools`) describe them once.
+enum AchievementRowSchemaParts {
+    static let id: JSONValue = .object([
+        "type": .string("string"),
+        "description": .string(
+            "Stable row id; omit on a new row and the server assigns one."),
+    ])
+    static let name: JSONValue = .object([
+        "type": .string("string"),
+        "description": .string("Student-facing label; also the badge/title caption."),
+    ])
+    static let detail: JSONValue = .object([
+        "type": .string("string"),
+        "description": .string("Optional longer \"how to earn this\" description."),
+    ])
+    static let match: JSONValue = .object([
+        "type": .string("string"),
+        "enum": MCPEnumProse<ConditionMatch>.jsonEnum,
+        "description": .string("Whether all conditions (AND) or any (OR) must hold. Default all."),
+    ])
+}
+
 /// The JSON Schema for one `AchievementRow`, shared by get_achievements'
 /// output and update_achievements' input so the agent sees one row shape.
 let achievementRowSchema: JSONValue = .object([
     "type": .string("object"),
     "properties": .object([
-        "id": .object([
-            "type": .string("string"),
-            "description": .string(
-                "Stable row id; omit on a new row and the server assigns one."),
-        ]),
-        "name": .object([
-            "type": .string("string"),
-            "description": .string("Student-facing label; also the badge/title caption."),
-        ]),
-        "detail": .object([
-            "type": .string("string"),
-            "description": .string("Optional longer \"how to earn this\" description."),
-        ]),
+        "id": AchievementRowSchemaParts.id,
+        "name": AchievementRowSchemaParts.name,
+        "detail": AchievementRowSchemaParts.detail,
         "scope": .object([
             "type": .string("string"),
             "enum": MCPEnumProse<AchievementScope>.jsonEnum,
@@ -82,11 +95,7 @@ let achievementRowSchema: JSONValue = .object([
                     + "(needs classPercent + points); record = a single-holder competitive title "
                     + "(needs recordDimension)."),
         ]),
-        "match": .object([
-            "type": .string("string"),
-            "enum": MCPEnumProse<ConditionMatch>.jsonEnum,
-            "description": .string("Whether all conditions (AND) or any (OR) must hold. Default all."),
-        ]),
+        "match": AchievementRowSchemaParts.match,
         "conditions": .object([
             "type": .string("array"),
             "description": .string(

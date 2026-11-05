@@ -73,6 +73,7 @@ Classification column references `policy46-classification.md`.
 | `get_support_files` | setup zip helpers | helper file bodies | No | Restricted |
 | `get_global_inputs` | manifest inputs | global + section inputs, per-student expressions | No | Confidential |
 | `get_achievements` | manifest achievements | composable awards (badges/goals/records), built-in defaults until curated | No | Confidential |
+| `get_course_achievements` | `courses.achievements` | course achievement definitions; never who earned them | No | Confidential |
 | `preview_personalization` | manifest; `python3` eval | resolved per-seed values for the *previewed* seed | No (synthetic/instructor) | Restricted |
 | `check_assignment` | manifest; starter notebook; support-file names; validation, variant and starter results; expression eval per variant seed | authoring-check findings: check id, severity, location (may name a secret-tier script file), message (may name failing tests and quote an expression error) | No (instructor reference and starter runs; variant seeds are derived constants) | Restricted |
 | `validate_assignment` | enqueues run; status | `passed`/`failed`/`no-runner` | No | Confidential |
@@ -92,6 +93,7 @@ Classification column references `policy46-classification.md`.
 | `update_solution` | solution submission | echo (filename, validation status) | No | Restricted |
 | `update_global_inputs` | manifest | echo of saved inputs | No | Confidential |
 | `update_achievements` | manifest | reconciled awards list (display-only; no regrade/close) | No | Confidential |
+| `update_course_achievements` | `courses.achievements` | reconciled course achievement list (no regrade) | No | Confidential |
 | `update_section_variables` | manifest | echo of saved vars | No | Confidential |
 | `create_suite_section` | manifest | section id | No | Confidential |
 | `rename_suite_section` | manifest | echo | No | Confidential |

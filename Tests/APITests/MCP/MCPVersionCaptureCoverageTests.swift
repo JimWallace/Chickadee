@@ -43,6 +43,8 @@ import Testing
         // Ungraded course content items (reference material). They own no test
         // setup at all.
         "CourseContentItemTools.swift",
+        // Course achievements live on the course row, not in a manifest.
+        "CourseAchievementsTools.swift",
     ]
 
     /// Write tools that reach their setup without the standard seam and so
