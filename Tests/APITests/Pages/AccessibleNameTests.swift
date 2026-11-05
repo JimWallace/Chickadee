@@ -1,4 +1,4 @@
-// Tests/APITests/AccessibleNameTests.swift
+// Tests/APITests/Pages/AccessibleNameTests.swift
 //
 // WCAG 2.5.3 (axe `label-content-name-mismatch`): a control's accessible name
 // holds its visible text, so a voice-control user who says what they see
