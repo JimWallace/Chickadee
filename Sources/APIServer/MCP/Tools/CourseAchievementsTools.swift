@@ -102,7 +102,7 @@ struct UpdateCourseAchievementsTool: ContentTool {
         let rows: [AchievementRow]
         do {
             rows = try await AchievementsEditing.apply(rows: input.achievements, course: course, on: context.db)
-        } catch let error as WebAssignmentError where error.isClientRefusal {
+        } catch let error as AppError where error.isClientRefusal {
             throw MCPToolError.from(error)
         }
         return Output(
