@@ -16,9 +16,9 @@ set -euo pipefail
 #   * One local account, registered through /register. The database is empty,
 #     so the first registrant becomes the deployment admin (AuthRoutes.register).
 #     The password is random per run and is printed nowhere.
-#   * ZAP101 (Fall 2026), created through /admin/courses with this account
+#   * ZAP101 (the current term), created through /admin/courses with this account
 #     as its instructor, so the /instructor pages render as course staff.
-#   * ZAP102 (Fall 2026), created with no instructor and joined through
+#   * ZAP102 (the current term), created with no instructor and joined through
 #     /account/enroll, so the same account is also a student there and the
 #     student dashboard lists a course.
 #
@@ -53,8 +53,19 @@ jar="$work/cookies.txt"
 
 username="zap-scan"
 password="$(openssl rand -hex 24)"
-year="2026"
-season="fall"
+# The current term, on the calendar TermSeason.current uses (Toronto time;
+# January to April is Winter, May to August Spring, September to December
+# Fall), so the scan courses are this term's and every page that lists
+# current courses shows them.
+year="$(TZ=America/Toronto date +%Y)"
+month="$(TZ=America/Toronto date +%-m)"
+if [ "$month" -le 4 ]; then
+  season="winter"
+elif [ "$month" -le 8 ]; then
+  season="spring"
+else
+  season="fall"
+fi
 
 fail() {
   echo "zap-signed-in-session: $*" >&2
