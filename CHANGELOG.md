@@ -9,6 +9,13 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.845] - 2026-11-05
+
+### Changed
+
+- **The admin MCP's database comment matches the shipped design.** `AdminToolContext` no longer says a dedicated admin database role is coming. `docs/admin-mcp.md` records that the code allowlist replaced it (#1250).
+
+
 ## [0.5.844] - 2026-11-05
 
 ### Fixed
