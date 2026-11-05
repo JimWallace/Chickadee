@@ -7,7 +7,7 @@ tests that grade it, and the plan to get there. Tracking issue: #2223.
 |---|---|---|
 | 0. Measure each attack, per language | #2239 | not started |
 | 1. Confirm browser-graded results on a native runner after the deadline | #2240 | not started |
-| 2. Per-test working directory and exit masks on the native runner | #2241 | not started |
+| 2. Per-test working directory and exit masks on the native runner | #2241 | done; grader-only files moved to phase 3 (see "Phase 2") |
 | 3. Run the submission in a separate process | #2242 | **discuss before work starts** |
 
 Decisions D1 to D3 below were agreed with the maintainer on 2026-10-05.
@@ -25,8 +25,8 @@ Resource limits between jobs are #2224.
 
 ## What a submission can do today
 
-From reading the code on 2026-10-05. Phase 0 replaces this table with measured
-results.
+From reading the code, first on 2026-10-05 and again after phase 2 on
+2026-11-05. Phase 0 replaces these tables with measured results.
 
 ### Browser-graded assignments
 
@@ -51,9 +51,13 @@ checker source with the expected output is in the same directory.
 
 | Attack | Python | R, Lua, Octave, Racket | C++, Java |
 |---|---|---|---|
-| Read every test script of every tier, and grader-only files | yes: all are in the one working directory | yes | yes |
+| Read the other test scripts of the job | no on a sandboxed runner: each one is covered while another runs; yes on an unsandboxed runner | same | same |
+| Read a grader-only file | yes: support files stay readable, because tests use them and no link says which test uses which | yes | yes |
 | Read its own test's expected value | yes: same process | yes | yes |
-| Report its own pass | yes: `sys.exit(0)` is not caught, and `passed` is a built-in | yes: no exit masks on native generated tests, and the runtime's `passed` is reachable | partly: the `CK_SENTINEL` check stops a plain `exit(0)`, but a submission can print the sentinel line itself |
+| Report its own pass with the language's exit call | no: a `SystemExit` raised through the submission's code, `passed()` included, is reported as an error | no: the call raises an error in place of exiting | partly: the `CK_SENTINEL` check stops a plain `exit(0)`, but a submission can print the sentinel line itself |
+| Report its own pass another way | yes: `os._exit(0)` ends the process with no `SystemExit` | yes: the real exit is reachable by another name (`base::quit`, `_G.os.exit`, Octave's `builtin("exit")`) and so is the runtime's `passed` | yes: as above |
+
+The last row is what phase 2 leaves open. It needs phase 3.
 
 The result of a test is its exit code and its last stdout line
 (`interpretScriptOutput`). Nothing authenticates either one. The browser
@@ -113,17 +117,42 @@ Cheap steps, each patch-sized. They do not stop a determined attacker, because
 the expected value and the runtime's `passed` function stay in the same process
 as the submission.
 
-- Each test runs in its own working directory that holds only its own script,
-  the runtime helpers, the submission and the files the test needs. The sandbox
-  already shows a script only its working directory, so other tests become
-  invisible.
-- Native generated tests stop the submission from ending the test with its own
-  exit status, as the browser kernels and `programIO` already do.
+What shipped:
+
+- **Other suite scripts are hidden.** The issue asked for a working directory
+  per test. The sandbox does the same job in the one shared directory: while a
+  suite script runs, it covers each of the job's other suite scripts with
+  `/dev/null` on Linux and denies them in the profile on macOS
+  (`NativeScriptExecutor.suiteScripts`). This holds on a runner started with
+  `--sandbox`, as all three production runners were on 2026-10-06 (#2348). An
+  unsandboxed runner hides nothing.
+- **Exit masks, in the injected runtimes.** The runner writes `test_runtime.*`
+  into every job, so a mask there covers every assignment at once, with no
+  re-save of its generated tests. Python: the native bootstrap
+  (`ScriptInvocation.swift`) reports a `SystemExit` whose traceback passes
+  through a submission file as an error. R and Lua: the submission's
+  environment gets its own `quit`/`q` and `os`. Racket: every entry into the
+  submission runs under an `exit-handler` that raises. Octave:
+  `ck_load_student` shadows the `exit` and `quit` builtins with command-line
+  functions that raise when the caller is the submission (its top-level code
+  while it loads, or a function it defined), on the native runner only; the
+  browser wrapper's masks are already in force there.
+- **C++ and Java keep the sentinel.** Every verdict in the runtime prints
+  `CK_SENTINEL` first, and the wrapper refuses a run without it, so a plain
+  `exit(0)` is an error. A submission that prints the sentinel line itself and
+  exits 0 still reads as a pass (`docs/java-support.md`, `docs/cpp-support.md`).
+
+**Moved to phase 3: grader-only files.** They stay readable to every test,
+because a support file has no link to the tests that use it. Hiding them in
+phase 2 would need that link, which is an authoring change. Phase 3 moves the
+submission out of the test's directory, which closes this without one (decided
+with the maintainer on 2026-11-05).
 
 ### Phase 3: a separate process for the submission (#2242)
 
 The direction, not a decision: the submission runs in a child process, in a
 second sandbox that shows only the submission files, and the test calls it
 through a small message protocol. The verdict then comes from a process that
-the submission cannot reach. The open questions are in #2242. Stop and discuss
-before work starts.
+the submission cannot reach. It must also leave the grader-only files out of
+the submission's view, which phase 2 did not do. The open questions are in
+#2242. Stop and discuss before work starts.

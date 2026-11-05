@@ -412,9 +412,13 @@ function env = ck_load_student()
     end
     ck_text_ = fileread(ck_file_);
     env = struct("file", ck_file_, "vars", struct());
+    ck_mask_submission_exit();
+    ck_set_loading_submission(true);
     try
         eval(["1;" sprintf("\n") ck_text_]);
+        ck_set_loading_submission(false);
     catch ck_err_
+        ck_set_loading_submission(false);
         % A parse error means nothing was defined; a runtime error partway is
         % the tolerated shape. Distinguishing them is not worth a parser: if
         % no function or variable materialised at all, report the message.
@@ -429,6 +433,43 @@ function env = ck_load_student()
     for ck_i_ = 1:numel(ck_names_)
         env.vars.(ck_names_{ck_i_}) = eval(ck_names_{ck_i_});
     end
+end
+
+% The submission runs in the test's process, and a test's result is its exit
+% status. An exit() or quit() in the submission's own code would end the test
+% with the submission's status, and status 0 reads as a pass. On the native
+% runner, `exit` and `quit` are builtins (exist() == 5), and this shadows both
+% with command-line functions that raise an error when the call comes from the
+% submission: from its top-level code while ck_load_student evaluates it (the
+% loading flag), or from a function or anonymous function it defined. Those
+% are defined by eval, so their dbstack frame names no file. (So is anything
+% else defined by eval, including a function a hand-written test defines that
+% way; such a function cannot exit after the submission loads.) Every other
+% caller (the runtime's own verdicts, the test script and its helpers) reaches
+% the builtin. In the browser the wrapper's own masks are already in force
+% (exist() == 103), so this leaves them alone. This does not stop a determined
+% submission (docs/grading-integrity.md, phase 2).
+function ck_mask_submission_exit()
+    if exist("exit") != 5 || exist("quit") != 5
+        return;
+    end
+    for ck_name_ = {"exit", "quit"}
+        eval(sprintf([ ...
+            "function %s(varargin)\n" ...
+            "    global ck_loading_submission__\n" ...
+            "    ck_caller_ = dbstack(1);\n" ...
+            "    if isequal(ck_loading_submission__, true) ...\n" ...
+            "            || (!isempty(ck_caller_) && isempty(ck_caller_(1).file))\n" ...
+            "        error(\"chickadee:submission_exit\", \"the submission ended the test (%s)\");\n" ...
+            "    end\n" ...
+            "    builtin(\"%s\", varargin{:});\n" ...
+            "end\n"], ck_name_{1}, ck_name_{1}, ck_name_{1}));
+    end
+end
+
+function ck_set_loading_submission(value)
+    global ck_loading_submission__
+    ck_loading_submission__ = value;
 end
 
 % Fetch a function the student was asked to write; a clear error when it is
