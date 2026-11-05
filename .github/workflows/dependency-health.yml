@@ -70,6 +70,31 @@ jobs:
             probe "read the repository (Contents)" "repos/$R"
             probe "read pull requests (Pull requests)" "repos/$R/pulls?per_page=1"
             probe "read Dependabot alerts (Dependabot alerts)" "repos/$R/dependabot/alerts?per_page=1"
+            # Write access, without writing. Each request is one that GitHub
+            # must refuse: a ref to a commit that does not exist, a pull
+            # request from a branch that does not exist. GitHub checks the
+            # token's permission first, so a token without it gets 403 and a
+            # token with it gets 422. Nothing is created either way.
+            # Workflows (read and write) has no such request, so it is not
+            # checked here; a push that changes a workflow fails without it.
+            write_probe() {
+              # $1 = what the call proves, $2 = the API path, $3 = the JSON body.
+              local status
+              # gh exits non-zero on the refusal this expects, and the step
+              # shell runs with -e, so the status must not end the script.
+              status="$(GH_TOKEN="$TOKEN" gh api -i -X POST "$2" --input - <<<"$3" 2>/dev/null \
+                | tr -d '\r' | sed -n '1s/^HTTP\/[0-9.]* \([0-9]*\).*/\1/p')" || true
+              if [ "$status" = "422" ]; then
+                echo "- ok: $1" >> "$GITHUB_STEP_SUMMARY"
+              else
+                echo "- FAILED: $1 (HTTP ${status:-no answer}; 422 expected)" >> "$GITHUB_STEP_SUMMARY"
+                problem="${problem}RELEASE_TOKEN cannot $1. "
+              fi
+            }
+            write_probe "write refs (Contents: write)" "repos/$R/git/refs" \
+              "{\"ref\":\"refs/heads/dependency-health-probe-$GITHUB_RUN_ID\",\"sha\":\"0000000000000000000000000000000000000000\"}"
+            write_probe "open pull requests (Pull requests: write)" "repos/$R/pulls" \
+              "{\"title\":\"dependency-health probe\",\"head\":\"dependency-health-probe-$GITHUB_RUN_ID-missing\",\"base\":\"main\"}"
             GH_TOKEN="$TOKEN" gh api -i "repos/$R" 2>/dev/null | tr -d '\r' > head.txt || true
             expiry="$(sed -n 's/^github-authentication-token-expiration: //Ip' head.txt | head -1)"
             if [ -n "$expiry" ]; then
