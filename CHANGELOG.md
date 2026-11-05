@@ -9,6 +9,13 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.846] - 2026-11-05
+
+### Fixed
+
+- **The account menu and the dashboard cards now have accessible names that contain their visible text (WCAG 2.5.3).** The account menu button was named "Account menu" but showed the user's name, and each cyclable diagnostic card was named by an `aria-label` that did not contain its window chip or its value. A voice-control user who said the visible text could not reach them, and a screen reader did not read a card's value. axe-core 4.14 (#2864) reports this as `label-content-name-mismatch`, which failed the accessibility scan of the `visual` check on every page. The account button is now named "<name>, account menu". The cards have no `aria-label`: the content names them. The window chip is hidden from screen readers, and a visually hidden phrase beside it says the window ("last 24 hours"); the card ends with a visually hidden "Press to change the time window.". The page scripts change the window through one function, `ChickadeeSparkline.setWindow`, which updates the chip and the phrase together.
+
+
 ## [0.5.845] - 2026-11-05
 
 ### Changed
