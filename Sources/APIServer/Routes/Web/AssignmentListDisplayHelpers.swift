@@ -114,9 +114,14 @@ func groupRowsBySection<Row, SectionContext>(
 /// and the course-scoped page (`/:course/students/:token/assignments/:id/history`),
 /// whose row builds were byte-identical (#1118). Grades come from the
 /// "highest grade wins" map (#1111).
+///
+/// `disagreementBySubmissionID` is a staff signal: the staff pages pass
+/// `gradeSourceDisagreementBySubmissionID`, and the student's own history
+/// passes an empty map. It has no default, so every caller decides.
 func assignmentSubmissionHistoryRows(
     submissions: [APISubmission],
     bestPercentBySubmissionID: [String: Int],
+    disagreementBySubmissionID: [String: GradeSourceDisagreement],
     fmt: DateFormatter
 ) -> [AssignmentSubmissionHistoryRow] {
     submissions.map { submission in
@@ -132,7 +137,8 @@ func assignmentSubmissionHistoryRows(
             attemptNumber: submission.attemptNumber ?? 1,
             status: submission.status,
             submittedAt: submission.submittedAt.map { fmt.string(from: $0) } ?? "—",
-            gradeText: gradeText
+            gradeText: gradeText,
+            sourceDisagreement: disagreementBySubmissionID[subID]
         )
     }
 }

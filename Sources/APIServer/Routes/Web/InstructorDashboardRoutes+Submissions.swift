@@ -45,6 +45,10 @@ extension InstructorDashboardRoutes {
             setupID: assignment.testSetupID, studentIDs: studentIDs, on: req.db)
         async let recentFetch = loadRecentSubmissionTimestamps(
             req: req, assignment: assignment, studentIDs: studentIDs)
+        // Students whose browser and native grades differ on a submission
+        // (docs/grading-integrity.md, D8).
+        async let disagreementFetch = studentsWithGradeSourceDisagreement(
+            setupID: assignment.testSetupID, studentIDs: studentIDs, on: req.db)
 
         // Instructor grade overrides for this assignment, indexed by student.
         let overrideMap = try await loadGradeOverridePercents(
@@ -66,6 +70,7 @@ extension InstructorDashboardRoutes {
 
         let summaryByStudentID = try await summaryFetch
         let bestByStudentID = try await bestFetch
+        let disagreeingStudentIDs = try await disagreementFetch
 
         // The latest submission per student, refetched as O(students) rows
         // for their timestamps.
@@ -86,6 +91,7 @@ extension InstructorDashboardRoutes {
             bestByStudentID: bestByStudentID,
             overrideByStudentID: overrideByStudentID,
             spentRevealUserIDs: spentRevealUserIDs,
+            disagreeingStudentIDs: disagreeingStudentIDs,
             passingThresholdPercent: assignment.passingThresholdPercent)
         let fmt = waterlooDateTimeFormatter()
         let rows = students.compactMap { student -> AssignmentStudentRow? in
@@ -183,6 +189,7 @@ extension InstructorDashboardRoutes {
         let bestByStudentID: [UUID: Int]
         let overrideByStudentID: [UUID: Int]
         let spentRevealUserIDs: Set<UUID>
+        let disagreeingStudentIDs: Set<UUID>
         let passingThresholdPercent: Int?
     }
 
@@ -226,7 +233,8 @@ extension InstructorDashboardRoutes {
             bestGradePercent: bestGradePercent,
             secretRevealSpent: lookups.spentRevealUserIDs.contains(studentID),
             passingLabel: passing,
-            isPassing: passing == "passing"
+            isPassing: passing == "passing",
+            gradeSourceDisagrees: lookups.disagreeingStudentIDs.contains(studentID)
         )
     }
 

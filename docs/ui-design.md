@@ -345,7 +345,7 @@ duplicate.
   badges (defined variants only:
   open/closed/extended/preview/unpublished/danger).  A bare `.tier` is the
   neutral state badge, for a state with no status colour ("Secret tests
-  revealed").  `.tier-danger` is the one
+  revealed", or a submission whose browser and native grades differ).  `.tier-danger` is the one
   that means something went wrong; `.tier-closed` is a neutral inactive grey
   and must not be borrowed for it.  One `.tier-open` is not a state: the
   result page's gain beside the grade ("+13%", result-celebration.md) uses

@@ -236,6 +236,11 @@ private struct AssignmentSubmissionsRow: HTML {
                     " "
                     span(.class(row.isPassing ? "tier tier-open" : "tier tier-closed")) { passingLabel }
                 }
+                // A signal, not an accusation (docs/grading-integrity.md, D8).
+                if row.gradeSourceDisagrees {
+                    " "
+                    span(.class("tier")) { "Browser and native differ" }
+                }
             }
             td(.class("col-hide-phone"), .data("sort-value", value: String(row.latestSubmittedAtEpoch))) {
                 SubmissionHistoryLinks(latest: row.latest, historyURL: row.fullHistoryURL)

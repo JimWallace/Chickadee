@@ -14,6 +14,10 @@ struct AssignmentSubmissionHistoryRow: Encodable {
     let status: String
     let submittedAt: String
     let gradeText: String
+    /// Set on the staff pages only, when this submission's browser and native
+    /// grades differ (`gradeSourceDisagreement`). The student's own history
+    /// never carries it: it is a signal for the instructor.
+    var sourceDisagreement: GradeSourceDisagreement?
 }
 
 /// One course section of the per-student, grouped-by-assignment view at

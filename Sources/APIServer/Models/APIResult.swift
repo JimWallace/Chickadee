@@ -24,6 +24,10 @@ final class APIResult: Model, Content, @unchecked Sendable {
     @OptionalField(key: "source")
     var source: String?
 
+    /// The `source` of a result the student's browser built. The browser
+    /// result route writes it, and `gradeSourceDisagreement` reads it.
+    static let browserSource = "browser"
+
     // MARK: - Denormalized grade fields
     //
     // Copied out of `collection_json` at write time (and, historically,

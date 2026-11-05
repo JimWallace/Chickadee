@@ -675,6 +675,21 @@ because line numbers go out of date.
     (`docs/grading-integrity.md`). A feature that trusts a value in a result
     has the same risk.
 
+### Browser and native grades differ: `gradeSourceDisagreement`
+
+- **Writers:** none. It reads the result rows: the browser path writes
+  `source = "browser"` (`BrowserResultRoutes`), and every other row is
+  native.
+- **Readers:** the staff history of one student on one assignment, and the
+  assignment roster (`studentsWithGradeSourceDisagreement`).
+- **Parallel paths.** The roster's SQL finds the submissions with both
+  sources, and the Swift rule then decides on those alone. The SQL must admit
+  every submission the rule could flag.
+- **Rules:**
+  - A staff signal only (`docs/grading-integrity.md`, D8). It changes no
+    grade, and the student's own history passes no disagreement.
+  - A new result source that a browser builds must count as browser here.
+
 ### A new student submission: `SubmissionIntake`
 
 - **Writers:** seven doors. The upload form, a GitHub commit, the two REST

@@ -301,15 +301,18 @@ extension StudentCourseRoutes {
         // "Highest grade wins" across ALL result sources — matches the
         // roster/dashboard surfaces this page is reached from (#1111; it
         // used to show the worker-preferred grade instead).
-        let bestPercentBySubmissionID = try await bestGradePercentBySubmissionID(
-            for: submissions.compactMap(\.id),
-            on: req.db
-        )
+        // One load of every result row: the best grade, and where a browser
+        // grade and a native grade differ (a staff signal, D8 in
+        // docs/grading-integrity.md).
+        let grades = try await bestGradePercentAndSourceDisagreementBySubmissionID(
+            for: submissions.compactMap(\.id), on: req.db)
+        let bestPercentBySubmissionID = grades.best
 
         let fmt = waterlooDateTimeFormatter()
         let rows = assignmentSubmissionHistoryRows(
             submissions: submissions,
             bestPercentBySubmissionID: bestPercentBySubmissionID,
+            disagreementBySubmissionID: grades.disagreements,
             fmt: fmt)
 
         let studentToken = try student.requireURLToken()

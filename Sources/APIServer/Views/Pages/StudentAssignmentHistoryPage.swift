@@ -83,7 +83,17 @@ struct StudentAssignmentHistoryRow: HTML {
             td { "\(row.attemptNumber)" }
             td { span(.class("tier")) { row.status } }
             td { row.submittedAt }
-            td { strong { row.gradeText } }
+            td {
+                strong { row.gradeText }
+                // A signal for the instructor, not an accusation
+                // (docs/grading-integrity.md, D8): a neutral badge.
+                if let disagreement = row.sourceDisagreement {
+                    " "
+                    span(.class("tier"), .title("Browser and native grades differ")) {
+                        "Browser \(disagreement.browserPercent)% · native \(disagreement.nativePercent)%"
+                    }
+                }
+            }
             td {
                 a(
                     .class("btn action-btn action-btn-icon"), .href("/submissions/\(row.submissionID)"),
