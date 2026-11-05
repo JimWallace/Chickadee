@@ -31,7 +31,7 @@
   },
   "devDependencies": {
     "@jupyterlab/builder": "~4.5.11",
-    "typescript": "~5.5.4"
+    "typescript": "~7.0.2"
   },
   "jupyterlab": {
     "extension": true,
