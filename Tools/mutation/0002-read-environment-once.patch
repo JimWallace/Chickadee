@@ -1,0 +1,175 @@
+diff --git a/Sources/muterCore/MutationSteps/ApplySchemata.swift b/Sources/muterCore/MutationSteps/ApplySchemata.swift
+index 347558b..63766fa 100644
+--- a/Sources/muterCore/MutationSteps/ApplySchemata.swift
++++ b/Sources/muterCore/MutationSteps/ApplySchemata.swift
+@@ -26,10 +26,14 @@ struct ApplySchemata: MutationStep {
+             let rewriter = MuterRewriter(mutationMap)
+ 
+             let newFile = rewriter.visit(sourceCode)
++            // Appended, not prepended, so no line of the original moves.
++            let declaration = rewriter.cachesEnvironment
++                ? MutationSwitch.cachedEnvironmentDeclaration
++                : ""
+ 
+             do {
+                 try writeFile(
+-                    newFile.description,
++                    newFile.description + declaration,
+                     mutationMap.filePath
+                 )
+             } catch {
+diff --git a/Sources/muterCore/Rewriters/MutationSwitch.swift b/Sources/muterCore/Rewriters/MutationSwitch.swift
+index f65a74f..c626d61 100644
+--- a/Sources/muterCore/Rewriters/MutationSwitch.swift
++++ b/Sources/muterCore/Rewriters/MutationSwitch.swift
+@@ -4,7 +4,8 @@ import SwiftSyntax
+ enum MutationSwitch {
+     static func apply(
+         mutationSchemata: MutationSchemata,
+-        with originalSyntax: CodeBlockItemListSyntax
++        with originalSyntax: CodeBlockItemListSyntax,
++        cachedEnvironment: Bool = true
+     ) -> CodeBlockItemListSyntax {
+         guard !mutationSchemata.isEmpty else {
+             return originalSyntax
+@@ -28,7 +29,8 @@ enum MutationSwitch {
+                         .withTrailingTrivia(.spaces(1))
+                         .withLeadingTrivia(previousElseBody.leadingTrivia),
+                     conditions: buildSchemataCondition(
+-                        withId: schema.id
++                        withId: schema.id,
++                        cachedEnvironment: cachedEnvironment
+                     ),
+                     body: CodeBlockSyntax(
+                         statements: schema.syntaxMutation,
+@@ -50,7 +52,8 @@ enum MutationSwitch {
+                 .withTrailingTrivia(.spaces(1))
+                 .withLeadingTrivia(originalSyntax.leadingTrivia),
+             conditions: buildSchemataCondition(
+-                withId: firstSchema.id
++                withId: firstSchema.id,
++                cachedEnvironment: cachedEnvironment
+             ),
+             body: CodeBlockSyntax(
+                 statements: firstSchema.syntaxMutation,
+@@ -68,8 +71,66 @@ enum MutationSwitch {
+         ])
+     }
+ 
++    /// The schemata guards read the environment once per process, not once per
++    /// check. `ProcessInfo.processInfo.environment` builds a fresh dictionary
++    /// from `environ` on every access, and a mutated function pays one access
++    /// per schema in its chain on every call -- in a hot loop that turned a
++    /// 28-second test run into one that never finished. The guards read a
++    /// file-private copy instead, declared once at the end of each mutated file
++    /// (`cachedEnvironmentDeclaration`). A global `let` initialises lazily and
++    /// exactly once, thread-safely, and `[String: String]` is `Sendable`, so
++    /// the declaration builds under Swift 6 strict concurrency and strict
++    /// memory safety. Muter sets a mutant's id in the test process's
++    /// environment before launch and never changes it after, so one read is
++    /// exact. Chickadee carries this as Tools/mutation/0002-*.patch.
++    static let cachedEnvironmentName = "__muter_environment"
++
++    static let cachedEnvironmentDeclaration = """
++
++    // Inserted by Muter: the process environment, read once rather than at
++    // every mutation guard. Not part of the original source.
++    private let \(cachedEnvironmentName): [String: String] = ProcessInfo.processInfo.environment
++
++    """
++
++    /// A `main.swift` runs its top-level code in order, so a declaration at
++    /// its end is not yet initialised when that code runs. Those files keep
++    /// the uncached guard.
++    static func canCacheEnvironment(inFileAt path: String) -> Bool {
++        URL(fileURLWithPath: path).lastPathComponent != "main.swift"
++    }
++
++    private static func environmentExpression(cached: Bool) -> ExprSyntax {
++        if cached {
++            return ExprSyntax(
++                DeclReferenceExprSyntax(
++                    baseName: .identifier(cachedEnvironmentName)
++                )
++            )
++        }
++        return ExprSyntax(
++            MemberAccessExprSyntax(
++                base: MemberAccessExprSyntax(
++                    base: MemberAccessExprSyntax(
++                        period: .periodToken(presence: .missing),
++                        declName: DeclReferenceExprSyntax(
++                            baseName: .identifier("ProcessInfo")
++                        )
++                    ),
++                    declName: DeclReferenceExprSyntax(
++                        baseName: .identifier("processInfo")
++                    )
++                ),
++                declName: DeclReferenceExprSyntax(
++                    baseName: .identifier("environment")
++                )
++            )
++        )
++    }
++
+     private static func buildSchemataCondition(
+-        withId id: String
++        withId id: String,
++        cachedEnvironment: Bool
+     ) -> ConditionElementListSyntax {
+         ConditionElementListSyntax([
+             ConditionElementSyntax(
+@@ -78,22 +139,8 @@ enum MutationSwitch {
+                         elements: ExprListSyntax([
+                             ExprSyntax(
+                                 SubscriptCallExprSyntax(
+-                                    calledExpression:
+-                                    MemberAccessExprSyntax(
+-                                        base: MemberAccessExprSyntax(
+-                                            base: MemberAccessExprSyntax(
+-                                                period: .periodToken(presence: .missing),
+-                                                declName: DeclReferenceExprSyntax(
+-                                                    baseName: .identifier("ProcessInfo")
+-                                                )
+-                                            ),
+-                                            declName: DeclReferenceExprSyntax(
+-                                                baseName: .identifier("processInfo")
+-                                            )
+-                                        ),
+-                                        declName: DeclReferenceExprSyntax(
+-                                            baseName: .identifier("environment")
+-                                        )
++                                    calledExpression: environmentExpression(
++                                        cached: cachedEnvironment
+                                     ),
+                                     leftSquare: .leftSquareToken(),
+                                     arguments:
+diff --git a/Sources/muterCore/Rewriters/MuterRewriter.swift b/Sources/muterCore/Rewriters/MuterRewriter.swift
+index f4b4d50..de0e109 100644
+--- a/Sources/muterCore/Rewriters/MuterRewriter.swift
++++ b/Sources/muterCore/Rewriters/MuterRewriter.swift
+@@ -2,9 +2,13 @@ import SwiftSyntax
+ 
+ final class MuterRewriter: SyntaxRewriter {
+     private let schemataMappings: SchemataMutationMapping
++    let cachesEnvironment: Bool
+ 
+     required init(_ schemataMappings: SchemataMutationMapping) {
+         self.schemataMappings = schemataMappings
++        cachesEnvironment = MutationSwitch.canCacheEnvironment(
++            inFileAt: schemataMappings.filePath
++        )
+     }
+ 
+     override func visit(_ node: CodeBlockItemListSyntax) -> CodeBlockItemListSyntax {
+@@ -14,7 +18,8 @@ final class MuterRewriter: SyntaxRewriter {
+ 
+         let newNode = MutationSwitch.apply(
+             mutationSchemata: mutationSchemata,
+-            with: node
++            with: node,
++            cachedEnvironment: cachesEnvironment
+         )
+ 
+         return super.visit(newNode)

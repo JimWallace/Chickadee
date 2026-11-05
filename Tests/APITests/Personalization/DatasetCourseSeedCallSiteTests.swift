@@ -43,7 +43,7 @@ import Testing
         let enumerator = try #require(FileManager.default.enumerator(at: root, includingPropertiesForKeys: nil))
         var found = 0
         var missing: [String] = []
-        for case let url as URL in enumerator where url.pathExtension == "swift" {
+        for case let url as URL in enumerator.allObjects where url.pathExtension == "swift" {
             let source = try String(contentsOf: url, encoding: .utf8)
             for call in Self.calls {
                 var searchFrom = source.startIndex

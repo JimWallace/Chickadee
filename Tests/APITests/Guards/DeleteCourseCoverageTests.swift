@@ -15,8 +15,7 @@ import VaporTesting
 @Suite(.serialized) struct DeleteCourseCoverageTests {
 
     @Test func deletingACourseRemovesItsItemCoverage() async throws {
-        let app = try await makeTestApp(prefix: "chickadee-delete-coverage")
-        try await withApp(app) { app in
+        try await withTestApp(prefix: "chickadee-delete-coverage") { app in
             let cookie = try await loginAsAdmin("delete_coverage_admin", on: app)
             let student = try await makeTestUser(on: app, username: "coverage_student", role: "student")
             let course = try await makeTestCourse(on: app, code: "COV101", name: "Coverage", archived: true)

@@ -213,7 +213,7 @@ func pfManifestCacheMaterial(_ setup: APITestSetup) throws -> String {
     //   hash(testSetupID + url + manifestBytes)
     // Using manifest bytes alone is enough to prove invalidation here.
     let digest = SHA256.hash(data: Data(setup.manifest.utf8))
-    return digest.map { String(format: "%02x", $0) }.joined()
+    return digest.map { String(cFormat: "%02x", $0) }.joined()
 }
 
 func pfDecodeManifest(_ json: String) throws -> TestProperties {

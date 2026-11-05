@@ -25,10 +25,10 @@
 
 import Core
 import Foundation
+import SystemPackage
 
 #if canImport(Glibc)
 import Glibc
-import SystemPackage
 #endif
 
 enum PersonalizationEvaluatorError: Error {

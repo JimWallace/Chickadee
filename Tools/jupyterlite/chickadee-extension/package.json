@@ -23,18 +23,22 @@
     "test": "node --test test/*.test.mjs"
   },
   "dependencies": {
-    "@jupyterlab/application": "~4.6.4",
-    "@jupyterlab/apputils": "~4.7.4",
-    "@jupyterlab/cells": "~4.6.4",
-    "@jupyterlab/notebook": "~4.6.4",
+    "@jupyterlab/application": "~4.6.5",
+    "@jupyterlab/apputils": "~4.7.5",
+    "@jupyterlab/cells": "~4.6.5",
+    "@jupyterlab/notebook": "~4.6.5",
     "@lumino/widgets": "^2.7.0"
   },
   "devDependencies": {
     "@jupyterlab/builder": "~4.5.11",
-    "typescript": "~5.5.4"
+    "typescript": "~7.0.2"
   },
   "jupyterlab": {
     "extension": true,
     "outputDir": "chickadee_jupyterlite_extension/labextension"
+  },
+  "resolutions": {
+    "katex": ">=0.18.2",
+    "sanitize-html": ">=2.18.1"
   }
 }

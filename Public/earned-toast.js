@@ -1,3 +1,4 @@
+// @ts-check
 // Public/earned-toast.js
 //
 // The Earned toast on the result page (docs/result-celebration.md, J2;
@@ -77,7 +78,7 @@
         if (!toast) { return; }
         var root = document.getElementById('submission-root');
         var pageBird = document.querySelector('.submission-bird .avatar');
-        var form = toast.querySelector('.js-earned-wear');
+        var form = /** @type {HTMLFormElement} */ (toast.querySelector('.js-earned-wear'));
         var live = toast.querySelector('.js-earned-live');
         var reduced = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
         var shown = false;
@@ -114,12 +115,13 @@
         if (!form) { return; }
         form.addEventListener('submit', function (event) {
             event.preventDefault();
-            var submit = form.querySelector('[type="submit"]');
+            var submit = /** @type {HTMLButtonElement} */ (form.querySelector('[type="submit"]'));
             if (submit) { submit.disabled = true; }
             fetch(form.action, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'Accept': 'application/json' },
-                body: new URLSearchParams(new FormData(form)),
+                // URLSearchParams accepts FormData at run time; the DOM lib types reject File entries.
+                body: new URLSearchParams(/** @type {any} */ (new FormData(form))),
                 credentials: 'same-origin'
             }).then(function (response) {
                 if (!response.ok) { form.submit(); return; }

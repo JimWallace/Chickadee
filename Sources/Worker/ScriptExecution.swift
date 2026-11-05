@@ -48,7 +48,12 @@ import Foundation
 import RunnerCore
 import Subprocess
 import Synchronization
+
+#if canImport(System)
+import System
+#else
 import SystemPackage
+#endif
 
 /// A fully-resolved subprocess launch: the executable to exec, its argument
 /// vector, and the exact environment the child receives. Building one is the
@@ -371,7 +376,19 @@ final class ScriptCapture: Sendable {
         // If the pipe cannot be made, both ends are -1.
         let ends = try? FileDescriptor.pipe()
         let descriptors = (ends?.readEnd.rawValue ?? -1, ends?.writeEnd.rawValue ?? -1)
-        for descriptor in [descriptors.0, descriptors.1] {
+        // On Darwin the write end stays inheritable. `createSession` sends
+        // Subprocess down its fork-then-`posix_spawn(SETEXEC)` path, and there
+        // a dup2 from a close-on-exec descriptor fails with EBADF, so no
+        // script would launch. Darwin does not need the flag for the leak
+        // above: Subprocess spawns every child with
+        // `POSIX_SPAWN_CLOEXEC_DEFAULT`, so no other child inherits a
+        // descriptor it was not handed.
+        #if canImport(Darwin)
+        let closeOnExec = [descriptors.0]
+        #else
+        let closeOnExec = [descriptors.0, descriptors.1]
+        #endif
+        for descriptor in closeOnExec {
             let flags = fcntl(descriptor, F_GETFD)
             if flags != -1 { _ = fcntl(descriptor, F_SETFD, flags | FD_CLOEXEC) }
         }
@@ -467,7 +484,15 @@ final class ScriptCapture: Sendable {
         while true {
             // swift-system can read only into an unsafe buffer, so this stays
             // unsafe until it can read into a span.
-            let bytesRead = unsafe read(stream.readEnd, &chunk, chunk.count)
+            //
+            // The closure is for the mutation sweep, not the compiler. Muter's
+            // parser predates SE-0458 and reads `let x = unsafe read(...)` as
+            // two statements, so RemoveSideEffects deleted the `read(...)` and
+            // left a bare `unsafe`, which does not compile and cost the whole
+            // shard in the 2026-10-27 sweep. RemoveSideEffects deletes
+            // statements only from loop, guard, do and function bodies, never
+            // from a closure, so inside one the misparse is harmless.
+            let bytesRead = { unsafe read(stream.readEnd, &chunk, chunk.count) }()
             if bytesRead > 0 {
                 stream.buffer.append(Data(chunk[0..<bytesRead]))
                 continue

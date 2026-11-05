@@ -1,9 +1,9 @@
 // Tests/APITests/Pages/WebAssignmentErrorTests.swift
 //
-// Tests for `WebAssignmentError` (issue #442 typed-errors migration).
-// As of the June 2026 audit the enum was folded into `AppError`
-// (`WebAssignmentError` is now a typealias), so these tests pin the
-// unified vocabulary:
+// Tests for `AppError` (issue #442 typed-errors migration).
+// As of the June 2026 audit the separate instructor-route enum was folded
+// into `AppError`, and its alias was removed in #2783, so these tests pin
+// the unified vocabulary:
 //
 //   1. Each enum case maps to the expected HTTP status, so future tweaks
 //      to the switch statement can't silently drop a status code.
@@ -23,14 +23,14 @@ import Vapor
 
     // MARK: - (i) Enum → HTTP status mapping
 
-    /// Walks every `WebAssignmentError` case and asserts the rendered
+    /// Walks every `AppError` case and asserts the rendered
     /// `status` matches the contract documented on each case.  Catches
     /// mistakes like `case .conflict: return .badRequest` that the
     /// compiler can't.  Sample reasons keep the test tautology-free —
     /// the assertion is on `status`, not `reason`.
     @Test(
         arguments: [
-            (WebAssignmentError.notFound(resource: "Assignment 'abc'"), HTTPResponseStatus.notFound),
+            (AppError.notFound(resource: "Assignment 'abc'"), HTTPResponseStatus.notFound),
             (.badRequest(reason: "Empty bundle upload"), .badRequest),
             (.invalidParameter(name: "draftID", reason: "missing"), .badRequest),
             (.noActiveCourse(action: "creating an assignment"), .badRequest),
@@ -39,15 +39,15 @@ import Vapor
             (.unprocessable(reason: "Section variable name is not a valid Python identifier."), .unprocessableEntity),
             (.validationRequired(reason: "validation has not passed"), .badRequest),
             (.internalFailure(reason: "Failed to package setup zip"), .internalServerError),
-        ] as [(WebAssignmentError, HTTPResponseStatus)])
-    func statusForCase(_ error: WebAssignmentError, _ expected: HTTPResponseStatus) {
+        ] as [(AppError, HTTPResponseStatus)])
+    func statusForCase(_ error: AppError, _ expected: HTTPResponseStatus) {
         #expect(error.status == expected)
     }
 
     // MARK: - (iii) No raw `Abort(...)` left in scope
 
     /// The instructor assignment routes were migrated to
-    /// `WebAssignmentError` in v0.4.143 (#442).  This test fails if any
+    /// `AppError` in v0.4.143 (#442).  This test fails if any
     /// in-scope file regresses to `throw Abort(`.  Out-of-scope Web
     /// routes (EnrollmentRoutes, CourseBundleRoutes, AccountRoutes,
     /// AdminRoutes*) are deliberately not checked — they have their
@@ -61,21 +61,27 @@ import Vapor
         // `StudentCourseRoutes`).  File paths below reflect the new
         // names.
         let inScope: [String] = [
-            "AssignmentHelpers.swift",
+            // Moved below the routes to `Helpers/` (#2847).
+            "../../Helpers/AssignmentHelpers.swift",
             // Moved below the routes to `Helpers/` (#2142).
             "../../Helpers/AssignmentDraftHelpers.swift",
-            "AssignmentRequirementHelpers.swift",
+            // Moved below the routes to `Utilities/` (#2847).
+            "../../Utilities/AssignmentRequirementHelpers.swift",
             // Moved below the routes to `Helpers/` (#2143).
             "../../Helpers/AssignmentSlugHelpers.swift",
-            // Moved below the routes to `Helpers/` (#1726).
-            "../../Helpers/ManifestFileHelpers.swift",
-            "MultipartHelpers.swift",
+            // Moved below the routes to `Helpers/` (#1726), then to
+            // `Services/` as `ManifestJSON.swift` (#2775).
+            "../../Services/ManifestJSON.swift",
+            // Moved below the routes to `Helpers/` (#2847).
+            "../../Helpers/MultipartHelpers.swift",
             "../../Helpers/NotebookScaffoldHelpers.swift",
             // Moved below the routes to `Services/` (#2140).
             "../../Services/RunnerValidationService.swift",
-            "SuiteRowHelpers.swift",
+            // Moved below the routes to `Utilities/` (#2847).
+            "../../Utilities/SuiteRowHelpers.swift",
             "../../Helpers/TestSetupZipHelpers.swift",
-            "SuiteEditHelpers.swift",
+            // Moved below the routes to `Helpers/` (#2847).
+            "../../Helpers/SuiteEditHelpers.swift",
             "InstructorDashboardRoutes.swift",
             "InstructorDashboardRoutes+List.swift",
             "InstructorDashboardRoutes+Submissions.swift",
@@ -111,7 +117,7 @@ import Vapor
 
         #expect(
             offenders.isEmpty,
-            "These files regressed to `throw Abort(` instead of `WebAssignmentError`: \(offenders.joined(separator: ", "))"
+            "These files regressed to `throw Abort(` instead of `AppError`: \(offenders.joined(separator: ", "))"
         )
     }
 

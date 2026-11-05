@@ -33,9 +33,17 @@ enum GitHubTarballFixture {
                 atPath: top.appendingPathComponent(path).path, withDestinationPath: target)
         }
         let output = root.appendingPathComponent("repo.tar.gz").path
+        // macOS's `tar` is bsdtar. It names GNU tar's `gnu` format `gnutar`,
+        // and unless told not to it adds an AppleDouble `._` entry for each
+        // file with extended attributes, which a GitHub tarball never has.
+        #if canImport(Darwin)
+        let formatArguments = ["--format=\(format == "gnu" ? "gnutar" : format)", "--no-mac-metadata"]
+        #else
+        let formatArguments = ["--format=\(format)"]
+        #endif
         try await runZipProcessExpectingSuccess(
             executablePath: "/usr/bin/tar",
-            arguments: ["--format=\(format)", "-czf", output, topDirectory],
+            arguments: formatArguments + ["-czf", output, topDirectory],
             workingDirectory: root)
         return try Data(contentsOf: URL(fileURLWithPath: output))
     }

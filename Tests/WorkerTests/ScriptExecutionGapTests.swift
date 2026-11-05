@@ -70,12 +70,24 @@ import Glibc
     /// Either one produces pipe ends without `FD_CLOEXEC`. Nothing fails at the
     /// time; the cost lands later as an unrelated process holding a duplicate
     /// write end and a drain thread that never sees EOF.
+    ///
+    /// On Darwin only the read ends are close-on-exec: there the write ends
+    /// must stay inheritable for a `createSession` launch, and Subprocess's
+    /// `POSIX_SPAWN_CLOEXEC_DEFAULT` keeps them out of other children.
     @Test func everyPipeEndIsCreatedCloseOnExec() {
         let capture = ScriptCapture()
         defer { capture.discard() }
 
         let (readEnds, writeEnds) = capture.descriptorsForTesting
-        for descriptor in readEnds + writeEnds {
+        #if canImport(Darwin)
+        let closeOnExec = readEnds
+        for descriptor in writeEnds {
+            #expect(!Self.isCloseOnExec(descriptor), "write end \(descriptor) must be inheritable on Darwin")
+        }
+        #else
+        let closeOnExec = readEnds + writeEnds
+        #endif
+        for descriptor in closeOnExec {
             let note =
                 "descriptor \(descriptor) is not close-on-exec; it will survive an exec "
                 + "into an unrelated child and postpone EOF (issues #1233 / #1139)"

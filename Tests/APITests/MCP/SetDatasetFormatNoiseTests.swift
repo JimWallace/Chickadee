@@ -41,8 +41,7 @@ import Vapor
     }
 
     @Test func aNoiseStepIsStoredAndReportedBack() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await fixture(on: app)
             let out = try await set(app, assignment, columns: ["ward"])
             #expect(out.datasets.first?.transforms.map(\.kind) == ["formatNoise"])
@@ -53,8 +52,7 @@ import Vapor
     }
 
     @Test func aNoiseStepOnAColumnTheFileLacksIsRefused() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await fixture(on: app)
             await #expect(throws: MCPToolError.self) { _ = try await set(app, assignment, columns: ["pulse"]) }
         }

@@ -53,7 +53,7 @@ struct SetActivityTool: ContentTool {
         /// manifest (`ActivityAuthoring.hasSeededRecord`). False for a union
         /// kind, which seeds none.
         let recordAchievementSeeded: Bool
-        /// The kind's opponent source (\(MCPActivityProse.opponentSourceTokens)),
+        /// The kind's opponent source (an `ActivityOpponentSource` raw value),
         /// null for an ordinary assignment.
         var opponentSource: String?
         /// The support file staged as the opponent; null when the kind has no
@@ -293,7 +293,7 @@ struct SetActivityTool: ContentTool {
         }
         // A lifecycle setting — instructor-level, like set_submission_mode.
         let (assignment, setup) = try await context.authorizedAssignmentAndSetupForWrite(
-            publicID: input.assignmentPublicID, atLeast: .instructor)
+            publicID: input.assignmentPublicID, atLeast: CourseRoleFloor.classActivity)
         let current = currentManifestActivity(setup.manifest)
         let requested = activity.map { block in
             block

@@ -70,7 +70,7 @@ while IFS=$'\t' read -r where value; do
   [ -z "$where" ] && continue
   ok=1
   IFS=';' read -ra decls <<< "$value"
-  for decl in "${decls[@]}"; do
+  for decl in ${decls[@]+"${decls[@]}"}; do
     d="$(printf '%s' "$decl" | tr -d '[:space:]')"
     [ -z "$d" ] && continue
     case "$d" in
@@ -251,7 +251,7 @@ while IFS= read -r hit; do
   value="$(printf '%s' "$hit" | sed -E 's/.*style="([^"]*)".*/\1/')"
   ok=1
   IFS=';' read -ra decls <<< "$value"
-  for decl in "${decls[@]}"; do
+  for decl in ${decls[@]+"${decls[@]}"}; do
     d="$(printf '%s' "$decl" | tr -d '[:space:]')"
     [ -z "$d" ] && continue
     case "$d" in

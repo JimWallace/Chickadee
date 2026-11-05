@@ -16,16 +16,14 @@ import Vapor
     }
 
     @Test func reportsCurrentVersion() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let out = try await GetServerInfoTool().execute(GetServerInfoTool.Input(), mcpContext(app))
             #expect(out.version == ChickadeeVersion.current)
         }
     }
 
     @Test func reportsReadWriteModeAndScopes() async throws {
-        let app = try await makeTestApp(appConfig: .testDefaults(mcp: mcpConfig(.readWrite)))
-        try await withApp(app) { app in
+        try await withTestApp(appConfig: .testDefaults(mcp: mcpConfig(.readWrite))) { app in
             let out = try await GetServerInfoTool().execute(GetServerInfoTool.Input(), mcpContext(app))
             #expect(out.mcpMode == "read_write")
             #expect(out.writeEnabled)
@@ -34,8 +32,7 @@ import Vapor
     }
 
     @Test func reportsReadOnlyModeWithoutWrite() async throws {
-        let app = try await makeTestApp(appConfig: .testDefaults(mcp: mcpConfig(.readOnly)))
-        try await withApp(app) { app in
+        try await withTestApp(appConfig: .testDefaults(mcp: mcpConfig(.readOnly))) { app in
             let out = try await GetServerInfoTool().execute(GetServerInfoTool.Input(), mcpContext(app))
             #expect(out.mcpMode == "read_only")
             #expect(!out.writeEnabled)

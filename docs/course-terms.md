@@ -131,6 +131,26 @@ The Core type, the migration, the model accessor, and tests
   code (an exact code wins over a key, so the termed course's links would
   reach the other one), and two years with one short label (2026 and 2126 are
   both "26"). Two offerings of one code in different terms do not collide.
+- **Reserved keys (#2666).** Every door that creates, renames, imports or
+  un-archives a course calls `courseCodeConflict`, which refuses a code before
+  it checks for a duplicate when the code or the URL key is the first segment of
+  a fixed route (`ReservedCourseKeys`, read from `app.routes.all`). Vapor's
+  router tries a constant segment before a parameter and never backtracks, so a
+  course coded `data` or `lab` would lose every `/:courseCode/...` link. Edit
+  refuses only a change of code, so a course that already holds a reserved code
+  can still be edited; the `courseKeyShadowed` health rule reports it
+  (`docs/operational-diagnostics.md`).
+- **A code is a URL segment.** For a new code, `courseCodeConflict` first
+  applies `CourseCodeSyntax`: no `/`, `\`, `?`, `#`, `%` or control character,
+  and not `.` or `..` alone. Nothing encodes the key when it writes a link.
+  Vapor splits the path on `/` while it is still percent-encoded, and RoutingKit
+  then decodes each parameter. So a space or a non-ASCII letter works ("STAT
+  230" arrives as `STAT%20230` and decodes), but `/` splits the key, `?` and `#`
+  end the path, and `%` starts an escape. The links Chickadee writes encode the
+  key (`vanityPath`, `StudentCoursePaths`, both through `urlEncode`), so the
+  rule protects the links people type or paste. A door that keeps a course's own code
+  (`CourseCodeRules.keptCode`) skips the rule, and the `courseCodeNotURLSafe`
+  health rule reports such a course.
 - **The URL key.** `APICourse.urlKey` is the code for a course with no term,
   and "CS135-F26" for a course with one (`AcademicTerm.shortLabel`). A key is
   matched against `urlKey` by string equality and never parsed back. Every link
@@ -266,14 +286,14 @@ code-only lookup.** Use `findActiveCourse(byKey:viewer:on:)` on the web or
 
 | Place | File |
 |---|---|
-| `findActiveCourse(byKey:viewer:on:)` | `Services/CourseLookupHelpers.swift` |
+| `findActiveCourse(byKey:viewer:on:)` | `Services/CourseLookup.swift` |
 | Vanity URLs `/:courseCode/:assignmentSlug` (and `/notebook`, `/submit`, `/history`, `/leaderboard`) | `Routes/Web/VanityURLRoutes.swift` |
-| Staff student paths `/:courseCode/students/...` | `Routes/Web/StudentCoursePaths.swift`, `StudentCourseRoutes+History.swift` |
+| Staff student paths `/:courseCode/students/...` | `Utilities/StudentCoursePaths.swift`, `StudentCourseRoutes+History.swift` |
 | MCP `resolveCourse` / `resolveCourseForWrite` (active courses are matched first; an archived course only when no active one matches, #1778) | `MCP/Tools/CourseSectionTools.swift` |
 | MCP `list_assignments`, `clone_assignment` | `MCP/Tools/ListAssignmentsTool.swift`, `CloneAssignmentTool.swift` |
 | MCP resource `chickadee://course/<code>/authoring-guidance` | `MCP/Resources/MCPResourceProvider.swift` |
 | Admin MCP `get_instructor_card_series` | `MCP/Admin/Tools/GetInstructorCardSeriesTool.swift` |
-| Bundle import conflict check (active courses only, inside the import transaction) | `Routes/Web/CourseBundleRoutes+Import.swift` |
+| Bundle import conflict check (active courses only, inside the import transaction) | `Services/CourseBundleService+Import.swift` |
 
 ---
 

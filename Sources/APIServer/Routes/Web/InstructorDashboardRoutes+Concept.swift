@@ -21,7 +21,7 @@ extension InstructorDashboardRoutes {
     /// refused with an error banner.
     @Sendable
     func saveConceptSetting(req: Request) async throws -> Response {
-        let assignment = try await loadAssignmentForWrite(req, atLeast: .instructor)
+        let assignment = try await loadAssignmentForWrite(req, atLeast: CourseRoleFloor.studentOptions)
         struct ConceptBody: Content {
             var concept: String?
         }

@@ -3,10 +3,10 @@ set -euo pipefail
 
 # Runs one Swift test lane of swift-tests.yml, then fails on any skipped test.
 #
-# The core, api, api-postgres and worker lanes each held the same tail: make the
+# The core, api and worker lanes each held the same tail: make the
 # xUnit directory, pass `--skip-build` when the shared `.build` cache was an
 # exact hit, run `swift test`, then run check-no-skipped-tests.sh on the report.
-# Four copies of one branch drift, so the tail lives here (#2719).
+# Three copies of one branch drift, so the tail lives here (#2719).
 #
 # Usage: scripts/ci-swift-test-lane.sh REPORT-NAME SWIFT-TEST-ARGUMENT...
 #
@@ -15,7 +15,10 @@ set -euo pipefail
 #
 # CACHE_HIT is the `cache-hit` output of the swift-test-setup action. When it is
 # `true`, the build job already compiled this exact tree, so the lane skips the
-# build. Any other value builds first.
+# build. Any other value builds first. In swift-tests.yml that branch does not
+# run: the lanes use `build-cache: require`, which fails the setup step on a
+# miss instead of a cold build inside the test step's budget
+# (docs/ci-flakiness.md, Family 8).
 
 if [ "$#" -lt 1 ]; then
     echo "Usage: scripts/ci-swift-test-lane.sh REPORT-NAME SWIFT-TEST-ARGUMENT..." >&2

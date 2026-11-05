@@ -10,6 +10,7 @@
 //  - `LeaderboardStandingText` — the words for a rank: "14th", "Tied 14th".
 //  - `LeaderboardNextPlace` — how far the viewer is from the next better row.
 
+import Core
 import Foundation
 
 /// One entry of a windowed list: a row, by its index in the full list, or a run
@@ -160,7 +161,7 @@ enum LeaderboardNextPlace {
     /// zero keeps two significant digits rather than promising nothing.
     static func deltaText(_ delta: Double) -> String {
         let text = formatLeaderboardMetric(delta)
-        if text == "0", delta > 0 { return "+" + String(format: "%.2g", delta) }
+        if text == "0", delta > 0 { return "+" + String(cFormat: "%.2g", delta) }
         return "+" + text
     }
 }

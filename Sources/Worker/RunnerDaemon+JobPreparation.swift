@@ -161,7 +161,7 @@ extension WorkerDaemon {
                 stageTimings: &stageTimings
             )
 
-            try removeStarterNotebookIfPresent(
+            try await removeStarterNotebookIfPresent(
                 manifest: manifest,
                 testSetupDir: testSetupDir,
                 submissionFilename: job.submissionFilename,
@@ -188,16 +188,24 @@ extension WorkerDaemon {
             }
 
             // Per-student inputs and dataset slices (`materializePersonalizedFiles`).
-            try materializePersonalizedFiles(job: job, into: testSetupDir)
+            // Off the actor, like the other workspace writes (#2779).
+            try await runOffActor { () throws in
+                try materializePersonalizedFiles(job: job, into: testSetupDir)
+            }
 
             // Install the shared test runtime helpers for every run. The set is
             // walked from `AssignmentLanguage.allCases` rather than written out
             // here — see `writeRuntimeHelpers` for what the hand-written list
-            // cost.
-            try stageTimings.measureSync("runtime_helper_setup") {
-                try writeRuntimeHelpers(in: testSetupDir)
-                try writeStudentModuleHint(in: testSetupDir, preferredFilename: preferredStudentModule)
+            // cost. Timed inline, as the make step is, so the writes can run
+            // off the actor (#2779).
+            let runtimeHelperStartedAt = Date()
+            try await runOffActor { () throws in
+                try self.writeRuntimeHelpers(in: testSetupDir)
+                try self.writeStudentModuleHint(in: testSetupDir, preferredFilename: preferredStudentModule)
             }
+            stageTimings.record(
+                "runtime_helper_setup",
+                milliseconds: Int(Date().timeIntervalSince(runtimeHelperStartedAt) * 1000))
 
             // Timed inline, as the make step is: `measure`'s closure cannot
             // hop to this actor's isolation for the download.
@@ -215,14 +223,18 @@ extension WorkerDaemon {
                 opponentDirs: opponentDirs
             )
         } catch {
-            removeWorkspaceItem(at: testSetupDir, label: "test_setup_dir", job: job)
+            await removeWorkspaceItemOffActor(at: testSetupDir, label: "test_setup_dir", job: job)
             throw error
         }
     }
 
     /// Stage the submission independently from the grading workspace so the
     /// worker can normalize it without mutating the raw artifact.
-    func stageSubmissionIntoWorkspace(
+    ///
+    /// `@concurrent nonisolated`, so the copy runs off the daemon actor
+    /// (#2779). It reads no actor state.
+    @concurrent
+    nonisolated func stageSubmissionIntoWorkspace(
         job: Job,
         paths: JobWorkspacePaths,
         stageTimings: inout JobStageTimings
@@ -253,13 +265,17 @@ extension WorkerDaemon {
     /// and the student/canonical submission.  Older manifests lack
     /// starterNotebook — fall back to "assignment.ipynb" since that is
     /// the conventional name used by every existing assignment.
+    ///
+    /// The removal runs off the actor (#2779). It is timed inline, as the
+    /// make step is, and a failure records no timing, as before.
     func removeStarterNotebookIfPresent(
         manifest: RunnerManifest,
         testSetupDir: URL,
         submissionFilename: String?,
         stageTimings: inout JobStageTimings
-    ) throws {
-        try stageTimings.measureSync("starter_cleanup") {
+    ) async throws {
+        let startedAt = Date()
+        try await runOffActor { () throws in
             let starterName = manifest.starterNotebook ?? "assignment.ipynb"
             let starterPath = testSetupDir.appendingPathComponent(starterName)
             if FileManager.default.fileExists(atPath: starterPath.path),
@@ -268,9 +284,13 @@ extension WorkerDaemon {
                 try FileManager.default.removeItem(at: starterPath)
             }
         }
+        stageTimings.record("starter_cleanup", milliseconds: Int(Date().timeIntervalSince(startedAt) * 1000))
     }
 
-    func normalizeSubmission(
+    /// `@concurrent nonisolated`, so the merge and the notebook extraction
+    /// run off the daemon actor (#2779). It reads no actor state.
+    @concurrent
+    nonisolated func normalizeSubmission(
         job: Job,
         manifest: RunnerManifest,
         paths: JobWorkspacePaths,

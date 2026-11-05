@@ -16,6 +16,8 @@ import Testing
     /// parent. Only this test uses it.
     static let dumpDirectory = "/tmp/chickadee-wedge-dump-file-test"
 
+    // Linux only: the thread table is read from `/proc/self/task`.
+    #if os(Linux)
     @Test func theAbortLeavesTheThreadTableInAFile() async throws {
         try? FileManager.default.removeItem(atPath: Self.dumpDirectory)
         try FileManager.default.createDirectory(atPath: Self.dumpDirectory, withIntermediateDirectories: true)
@@ -38,4 +40,5 @@ import Testing
         #expect(dump.contains("Stall limit was 1s"))
         #expect(dump.contains("syscall="), "each thread row names the syscall it is blocked in")
     }
+    #endif
 }

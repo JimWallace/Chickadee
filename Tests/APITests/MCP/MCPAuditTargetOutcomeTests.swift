@@ -35,8 +35,7 @@ import Vapor
     }
 
     @Test func recordsAssignmentTargetAndSuccessOutcome() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let course = try await makeTestCourse(on: app, code: "CS246", name: "OOP")
             let courseID = try course.requireID()
             let prof = try await makeTestUser(on: app, username: "jsmith", role: "instructor")
@@ -60,8 +59,7 @@ import Vapor
     }
 
     @Test func recordsNotAuthorizedOutcomeWhenUnenrolled() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let course = try await makeTestCourse(on: app, code: "CS246", name: "OOP")
             let courseID = try course.requireID()
             // Subject exists but is NOT enrolled in the course.
@@ -82,8 +80,7 @@ import Vapor
     }
 
     @Test func neverLogsToolArguments() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let course = try await makeTestCourse(on: app, code: "CS246", name: "OOP")
             let courseID = try course.requireID()
             let prof = try await makeTestUser(on: app, username: "jsmith", role: "instructor")

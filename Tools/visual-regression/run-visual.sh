@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# run-visual.sh — boot a chickadee-server on an ephemeral SQLite DB, capture
+# run-visual.sh — boot a chickadee-server on a throwaway Postgres DB, capture
 # screenshots of the key pages in light + dark, and compare them against the
 # committed baselines (#1136).  Server-boot logic mirrors
 # Tools/editor-smoke-test/run-smoke.sh.
@@ -35,22 +35,27 @@ if [ ! -x "$BIN" ]; then
   fi
 fi
 
+# shellcheck source=../../scripts/lib/scratch-database.sh
+. "$REPO_ROOT/scripts/lib/scratch-database.sh"
+
 cleanup() {
   if [ -n "${SRV_PID:-}" ] && kill -0 "$SRV_PID" 2>/dev/null; then
     kill "$SRV_PID" 2>/dev/null || true
     wait "$SRV_PID" 2>/dev/null || true
   fi
+  chickadee_scratch_db_drop
   rm -rf "$WORKDIR"
 }
 trap cleanup EXIT
+
+# A fresh Postgres database for this boot, dropped by cleanup.
+chickadee_scratch_db_create visual || exit 2
 
 echo "run-visual: booting $BIN on 127.0.0.1:$PORT"
 (
   cd "$REPO_ROOT"
   ENABLE_NON_SSO_AUTH_MODES=true \
   AUTH_MODE=local \
-  DATABASE_BACKEND=sqlite \
-  SQLITE_PATH="$WORKDIR/visual.sqlite" \
   MCP_MODE=off \
   LOG_LEVEL=info \
     exec "$BIN" serve --hostname 127.0.0.1 --port "$PORT"

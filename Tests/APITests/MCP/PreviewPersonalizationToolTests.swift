@@ -29,8 +29,7 @@ import Vapor
         let manifest = #"""
             {"schemaVersion":1,"language":"python","languageDeclared":true,"testSuites":[],"timeLimitSeconds":10,"globalVariables":[{"name":"cap","value":5}],"globalExpressions":[{"name":"offset","expression":"seed % 3"}]}
             """#
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await enrolledFixture(on: app, id: "setup_pv", manifest: manifest)
             // seed = 0xff = 255; 255 % 3 == 0.
             let output = try await PreviewPersonalizationTool().execute(
@@ -50,8 +49,7 @@ import Vapor
         let manifest = #"""
             {"schemaVersion":1,"language":"python","languageDeclared":true,"testSuites":[],"timeLimitSeconds":10,"globalVariables":[{"name":"cap","value":5}]}
             """#
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await enrolledFixture(on: app, id: "setup_pv", manifest: manifest)
             let output = try await PreviewPersonalizationTool().execute(
                 PreviewPersonalizationTool.Input(assignmentPublicID: assignment.publicID, seedHex: nil),
@@ -65,8 +63,7 @@ import Vapor
     @Test func invalidSeedThrows() async throws {
         let manifest =
             TestManifests.pythonDeclaredEmpty
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await enrolledFixture(on: app, id: "setup_pv", manifest: manifest)
             await #expect(throws: MCPToolError.self) {
                 _ = try await PreviewPersonalizationTool().execute(
@@ -93,8 +90,7 @@ import Vapor
         let zipNotebook = #"""
             {"cells":[{"cell_type":"code","metadata":{},"source":["z = {{wrongzip}}"]}],"metadata":{},"nbformat":4,"nbformat_minor":5}
             """#
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await enrolledFixture(on: app, id: "setup_pv", manifest: manifest)
             try blobNotebook.write(
                 toFile: app.testSetupsDirectory + "setup_pv.ipynb", atomically: true, encoding: .utf8)
@@ -120,8 +116,7 @@ import Vapor
         let notebook = #"""
             {"cells":[{"cell_type":"code","metadata":{},"source":["x = {{cap}}"]}],"metadata":{},"nbformat":4,"nbformat_minor":5}
             """#
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await enrolledFixture(
                 on: app, id: "setup_pv", manifest: manifest, withNotebook: false)
             try await writeZipFixture(
@@ -145,8 +140,7 @@ import Vapor
             "globalExpressions":[{"name":"patients","expression":"[1, 2, 3]"},
             {"name":"adults_expected","expression":"2"}]}
             """#
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await enrolledFixture(
                 on: app, id: "setup_pv", manifest: manifest, withNotebook: false)
             // Add a personalized family whose case references the per-student inputs.

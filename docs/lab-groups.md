@@ -79,7 +79,7 @@ are in "The model".
 | The activity block | `TestProperties.activity` (`Sources/Core/ClassActivity.swift`) | `kind`, `leaderboardVisibility`, `opponentFile`, `window`, `composite`, `runsPerGroup`. |
 | The window gate | `requireOpenStudentAssignment(gate: .submission)` | Refuses a submission outside `activity.window`. Staff are never gated. |
 | The ranking rows | `leaderboard_entries`, `activity_standings`, `activity_champions`, `match_results`, `tournament_runs`, `composite_slots` | Keyed by assignment and student. Unique on (assignment, student). The hill is unique on the assignment alone, and the composite's slots on (assignment, round, slot) too. |
-| The opponents | `WorkerJobRoutes.jobOpponentSet` / `jobOpponents` | Every classmate's latest submission in the course. |
+| The opponents | `JobOpponentSelection.jobOpponentSet` / `jobOpponents` | Every classmate's latest submission in the course. |
 | The present page | `GET /testsetups/:id/leaderboard?present=1`, `LeaderboardPresentPage` | One board per assignment, polled by the projector. |
 | The arena | `WebRoutes+TournamentArena.swift` | Plays a browser-graded tournament in the presenter's browser. |
 
@@ -152,8 +152,9 @@ Each ranking table has a per-group form:
 - `tournament_runs` has a nullable `group_id`. A run is one lab's, and its
   slots and matches follow the run.
 - The composite's slots have a twin table, `group_composite_slots`, keyed
-  (assignment, group, round, slot), because SQLite cannot drop the unique key
-  that `composite_slots` holds on (assignment, round, slot).
+  (assignment, group, round, slot), because SQLite, still supported then,
+  could not drop the unique key that `composite_slots` holds on (assignment,
+  round, slot).
   `composite_contributions` has a nullable `group_id` under its (assignment,
   student) key, because a student holds one slot per assignment.
 - The spares have a twin table, `group_composite_spares`, for the same reason
@@ -659,7 +660,8 @@ The maintainer chose best effort on 2026-10-18.
 - `group_achievement_results` (`CreateGroupAchievementResults`): the
   per-group twin of `achievement_results`, unique on (test setup, group,
   achievement). It is a twin table, because `achievement_results` is unique
-  on (test setup, achievement) and SQLite cannot drop that key.
+  on (test setup, achievement) and SQLite, still supported then, could not
+  drop that key.
 - `LabGoalGroups`: a student's lab is the group of the session they joined
   last, else the group they are a member of. A removed join, a join after
   the deadline and a removed lab do not count, so a student's lab, and with

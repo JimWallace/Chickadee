@@ -1,0 +1,203 @@
+// APIServer/Helpers/DatasetEditHelpers.swift
+//
+// Shared core for the datasets handlers — both the assignment-scoped pair
+// (`/instructor/:assignmentID/datasets`) and the draft-scoped pair the create
+// page uses (`/instructor/new/draft/datasets?draftID=<id>`).  Same split as
+// `SuiteEditHelpers.swift`: the handlers own auth + setup resolution, and the
+// validation and the manifest write are `applyDatasetsEdit` in
+// `Services/DatasetsChange.swift`, which MCP `set_dataset` calls too (#2771).
+// So no door can drift into accepting a spec another door rejects.
+//
+// See docs/datasets.md (Phase 1) for what a spec means at delivery time.
+
+import Core
+import Fluent
+import Foundation
+import Vapor
+
+/// The request body of either PUT.  The whole array is the payload: a write
+/// replaces the assignment's dataset specs, so a caller sends the complete
+/// desired state rather than a delta.
+struct DatasetsBody: Content {
+    var datasets: [DatasetSpec]
+}
+
+/// The response of either GET or PUT — the specs as the manifest now holds
+/// them, which is what the Files panel renders its controls from, plus the
+/// per-file estimates its chips show.  Serving the estimates on the
+/// same response is what makes them live: every parameter edit is a PUT, so
+/// the numbers move with the controls without a second request.
+struct DatasetsResponse: Content {
+    var datasets: [DatasetSpec]
+    var diagnostics: [DatasetFileDiagnostics]
+}
+
+/// One dataset's estimate chips: two concise numbers the row shows inline —
+/// student-to-student similarity (closed-form overlap) and drift from the
+/// pool (measured divergence).  Each title is a PHRASE naming what its number
+/// measures, within `datasetEstimateTitleWordCap`; how the estimates are
+/// computed is in docs/datasets.md, because a hover title is not a place a
+/// reader can be sent.  Display strings are built HERE, server-side, so the
+/// wording lives in one tested place and the page JS only paints.
+/// Computed by Core's `DatasetDiagnostics`; estimates about the delivered
+/// bytes, never a change to them.  See docs/datasets.md.
+struct DatasetFileDiagnostics: Content {
+    var file: String
+    /// The whole chip text, e.g. "similarity 8%": the fraction of one
+    /// student's rows a peer is expected to also hold.
+    var similarityDisplay: String
+    var similarityTitle: String
+    /// The whole chip text, e.g. "drift 0.04" — the worst column's typical
+    /// distance from the pool — or "drift —" when nothing was measurable.
+    var driftDisplay: String
+    var driftTitle: String
+}
+
+/// The word budget for a chip's hover title, matching the cap
+/// `scripts/check-ui-vocabulary.sh` enforces on titles written in templates.
+/// These are assembled from measured numbers rather than written in markup,
+/// so the script cannot see them and `DatasetEstimateSummaryTests` holds the
+/// same line instead.  A tooltip is hover-only and unsearchable: it names
+/// what the number is, and docs/datasets.md explains it.
+let datasetEstimateTitleWordCap = 20
+
+/// Files above this size skip the divergence measurement — it materializes
+/// the pool once per preflight seed, and the panel is a live control, not a
+/// batch job.  Overlap is a single pass and is always reported.
+private let datasetDivergenceByteCeiling = 4 << 20
+
+/// The estimate chips for every spec whose source file can be read as text.
+/// A file that cannot be read (or has no data rows) simply has no block —
+/// the panel hides the chips rather than showing empty ones.
+///
+/// CPU-bound (the divergence half materializes the pool `defaultSeedCount`
+/// times), so handlers call it through `runBlocking` rather than on the
+/// event loop.
+func datasetDiagnosticsReports(
+    zipPath: String, datasets: [DatasetSpec]
+) async -> [DatasetFileDiagnostics] {
+    var reports: [DatasetFileDiagnostics] = []
+    for spec in datasets {
+        guard let data = await extractZipEntry(zipPath: zipPath, entryName: spec.file),
+            let text = String(data: data, encoding: .utf8)
+        else { continue }
+        guard
+            let summary = datasetEstimateSummary(
+                for: spec, sourceCSV: text,
+                divergenceMeasurable: data.count <= datasetDivergenceByteCeiling)
+        else { continue }
+        reports.append(summary)
+    }
+    return reports
+}
+
+/// Builds one file's two chips from its spec and source text, or nil when
+/// the pool has no data rows to estimate.  Pure given its inputs — the
+/// zip-reading and the byte ceiling live in `datasetDiagnosticsReports` —
+/// so the wording and number formatting are testable on plain strings.
+func datasetEstimateSummary(
+    for spec: DatasetSpec, sourceCSV: String, divergenceMeasurable: Bool
+) -> DatasetFileDiagnostics? {
+    guard let overlap = DatasetDiagnostics.overlap(spec: spec, sourceCSV: sourceCSV)
+    else { return nil }
+
+    var similarityTitle =
+        "Rows a typical pair shares, of \(overlap.rowsPerStudent). "
+        + "Unluckiest pair of \(DatasetDiagnostics.defaultClassSize): "
+        + "\(Int(overlap.worstPairSharedRows.rounded()))."
+    if let stratum = overlap.mostCopyableStratum {
+        similarityTitle +=
+            " Most shared: \"\(hoverName(stratum.value))\" "
+            + "(\(estimatePercentText(stratum.sharedFraction)))."
+    }
+
+    let drift = driftChip(for: spec, sourceCSV: sourceCSV, measurable: divergenceMeasurable)
+    return DatasetFileDiagnostics(
+        file: spec.file,
+        similarityDisplay: "similarity \(estimatePercentText(overlap.sharedFraction))",
+        similarityTitle: similarityTitle,
+        driftDisplay: drift.display,
+        driftTitle: drift.title)
+}
+
+/// The drift chip: the worst column's *typical* (median-over-variants)
+/// normalized distance from the pool, as one number.  The title names that
+/// column and its measure and gives the unlucky-variant value; the per-column
+/// table behind it is not something a tooltip can carry, so it is not tried.
+private func driftChip(
+    for spec: DatasetSpec, sourceCSV: String, measurable: Bool
+) -> (display: String, title: String) {
+    guard measurable else {
+        return ("drift —", "Not measured: the file is too large to sample quickly.")
+    }
+    let columns = DatasetDiagnostics.divergence(spec: spec, sourceCSV: sourceCSV)
+    guard let worst = columns.max(by: { $0.median < $1.median }) else {
+        return ("drift —", "No measurable columns to compare against the pool.")
+    }
+
+    let title =
+        "Worst column \"\(hoverName(worst.column))\", "
+        + "in \(estimateMeasureName(worst.measure)). "
+        + "0 is identical; \(estimateUnitsText(worst.worst)) on an unlucky variant."
+    return ("drift \(estimateUnitsText(worst.median))", title)
+}
+
+/// A column name or category value, bounded for a hover title.
+///
+/// Both titles interpolate identifiers out of the instructor's own CSV, and
+/// `datasetEstimateTitleWordCap` is a WORD budget, so an unbounded name is a
+/// silent breach waiting for the first course whose stratum is "Type 2
+/// Diabetes" or whose column is "Systolic Blood Pressure" — the test fixture's
+/// one-letter wards cannot see it.  Bounding the name here keeps both titles
+/// within budget by construction rather than by anyone remembering: the base
+/// sentences interpolate only numbers, so with this cap the longest either can
+/// reach is 18 words.  A prefix is the right trim — the reader is matching it
+/// against a column list they already have, so the first words identify it.
+func hoverName(_ raw: String, words wordLimit: Int = 3, characters charLimit: Int = 32) -> String {
+    let parts = raw.split(whereSeparator: \.isWhitespace)
+    var name =
+        parts.count > wordLimit
+        ? parts.prefix(wordLimit).joined(separator: " ") + "…" : raw
+    if name.count > charLimit {
+        name = name.prefix(charLimit).trimmingCharacters(in: .whitespaces) + "…"
+    }
+    return name
+}
+
+/// A fraction as chip-sized percent text: whole percents from 10% up, one
+/// decimal below, and a floor marker rather than a misleading "0%".
+func estimatePercentText(_ fraction: Double) -> String {
+    let percent = fraction * 100
+    if percent >= 99.95 { return "100%" }
+    if percent >= 10 { return "\(Int(percent.rounded()))%" }
+    if percent >= 0.1 { return String(cFormat: "%.1f%%", percent) }
+    return "<0.1%"
+}
+
+/// A normalized divergence as chip-sized text: two decimals, with a floor
+/// marker rather than a "0.00" that would claim identical distributions.
+func estimateUnitsText(_ value: Double) -> String {
+    value < 0.005 ? "<0.01" : String(cFormat: "%.2f", value)
+}
+
+private func estimateMeasureName(_ measure: DatasetColumnDivergence.Measure) -> String {
+    switch measure {
+    // Both are bare noun phrases so a caller can set them in one sentence
+    // frame: one used to lead with "in" and read as a fragment wherever the
+    // other read as a unit.
+    case .wasserstein: return "pool standard deviations (Wasserstein-1)"
+    case .totalVariation: return "total-variation distance (0–1)"
+    }
+}
+
+/// The full panel payload for a setup: its specs plus their estimate blocks,
+/// computed off the event loop.  The one constructor every datasets handler
+/// uses, so the GET and PUT of both pairs cannot disagree about what the
+/// panel is told.
+func datasetsPanelResponse(req: Request, setup: APITestSetup) async throws -> DatasetsResponse {
+    let specs = datasetSpecs(inManifest: setup.manifest)
+    guard !specs.isEmpty else { return DatasetsResponse(datasets: [], diagnostics: []) }
+    let zipPath = setup.zipPath
+    let diagnostics = await datasetDiagnosticsReports(zipPath: zipPath, datasets: specs)
+    return DatasetsResponse(datasets: specs, diagnostics: diagnostics)
+}

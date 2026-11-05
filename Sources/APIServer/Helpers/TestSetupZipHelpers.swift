@@ -54,7 +54,7 @@ private func directoryContainsFile(_ dir: URL) -> Bool {
         let enumerator = FileManager.default.enumerator(
             at: dir, includingPropertiesForKeys: [.isRegularFileKey])
     else { return false }
-    for case let url as URL in enumerator
+    for case let url as URL in enumerator.allObjects
     where (try? url.resourceValues(forKeys: [.isRegularFileKey]))?.isRegularFile == true {
         return true
     }
@@ -376,7 +376,7 @@ func createRunnerSetupZip(
         do {
             try await replaceSetupZip(zipPath: zipPath, withContentsOf: tempDir)
         } catch {
-            throw WebAssignmentError.internalFailure(reason: "Failed to package setup zip")
+            throw AppError.internalFailure(reason: "Failed to package setup zip")
         }
     }
     let hasMakefile = storedNameByIndex.values.contains {

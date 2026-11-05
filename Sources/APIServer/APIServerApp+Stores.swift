@@ -8,8 +8,13 @@
 import Core
 import Fluent
 import Foundation
-import SystemPackage
 import Vapor
+
+#if canImport(System)
+import System
+#else
+import SystemPackage
+#endif
 
 // `AppSecurityConfiguration` lives in `Configuration/SecurityConfig.swift`
 // alongside the other AppConfig substructs.
@@ -355,7 +360,7 @@ func resolveStartupWorkerSecret(
     cliWorkerSecret: String?,
     workerSecretFilePath: String,
     workerSecretWordlistPath: String
-) -> String {
+) throws(WorkerSecretError) -> String {
     // 1. Explicit CLI argument — highest priority.
     if let cli = cliWorkerSecret?.trimmingCharacters(in: .whitespacesAndNewlines),
         !cli.isEmpty,
@@ -381,8 +386,11 @@ func resolveStartupWorkerSecret(
         return previous
     }
     // 4. Auto-generate a diceware passphrase (dev / first-time startup with no env var).
-    let generated = randomWorkerPassphrase(workerSecretWordlistPath: workerSecretWordlistPath)
-    writeWorkerSecretToDisk(secret: generated, workerSecretFilePath: workerSecretFilePath)
+    //    Both steps fail startup rather than run with a weak or unsaved
+    //    secret (#2776): an unsaved secret changes on the next restart, and
+    //    every runner then fails HMAC auth.
+    let generated = try randomWorkerPassphrase(workerSecretWordlistPath: workerSecretWordlistPath)
+    try persistWorkerSecret(secret: generated, workerSecretFilePath: workerSecretFilePath)
     return generated
 }
 
@@ -400,13 +408,29 @@ func readWorkerSecretFromDisk(workerSecretFilePath: String) -> String? {
     return text
 }
 
+/// Saves `secret` to the secret file, and logs a failure. The callers keep
+/// the secret in memory, so the server still runs; only the generated secret
+/// must be saved, and that path calls `persistWorkerSecret` instead.
 func writeWorkerSecretToDisk(secret: String, workerSecretFilePath: String) {
+    do {
+        try persistWorkerSecret(secret: secret, workerSecretFilePath: workerSecretFilePath)
+    } catch {
+        Logger(label: "chickadee.worker-secret").warning("\(error)")
+    }
+}
+
+/// Saves `secret` to the secret file, and throws when the file system refuses.
+func persistWorkerSecret(secret: String, workerSecretFilePath: String) throws(WorkerSecretError) {
     let value = secret.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !value.isEmpty else { return }
     // The runner shared secret is the HMAC signing key for every worker
     // request. The file is created owner read/write only (`SecretFile`), so no
     // other local user can read it and forge worker traffic.
-    try? SecretFile.write(Data(value.utf8), toPath: workerSecretFilePath)
+    do {
+        try SecretFile.write(Data(value.utf8), toPath: workerSecretFilePath)
+    } catch {
+        throw .notPersisted(path: workerSecretFilePath, reason: "\(error)")
+    }
 }
 
 private func restrictWorkerSecretFilePermissions(at path: String) {
@@ -416,16 +440,15 @@ private func restrictWorkerSecretFilePermissions(at path: String) {
     )
 }
 
-func randomWorkerPassphrase(workerSecretWordlistPath: String) -> String {
-    let fallbackWords = [
-        "oak", "river", "falcon", "amber", "lumen", "cedar", "thunder", "pebble",
-        "meadow", "quartz", "north", "willow", "harbor", "maple", "breeze",
-        "summit", "pixel", "cipher", "comet", "forest", "frost", "sparrow",
-        "orbit", "cobalt", "dawn", "ember", "ridge", "tunnel", "canyon", "signal",
-    ]
+/// A three-word diceware passphrase from the wordlist at the path. Throws
+/// when the list is missing or short: a fallback list of 30 words gave only
+/// 27,000 keys, with no log (#2776).
+func randomWorkerPassphrase(workerSecretWordlistPath: String) throws(WorkerSecretError) -> String {
     let words = loadDicewareWords(from: workerSecretWordlistPath)
-    let source = words.count >= 2048 ? words : fallbackWords
-    return (0..<3).compactMap { _ in source.randomElement() }.joined(separator: "-")
+    guard words.count >= minimumDicewareWordCount else {
+        throw .wordlistTooShort(path: workerSecretWordlistPath, wordCount: words.count)
+    }
+    return (0..<3).compactMap { _ in words.randomElement() }.joined(separator: "-")
 }
 
 func isPlaceholderWorkerSecret(_ value: String) -> Bool {

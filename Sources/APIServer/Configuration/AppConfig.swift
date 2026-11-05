@@ -34,19 +34,22 @@ struct AppConfig: Sendable {
     /// Loads the entire config tree from `Environment.get(...)`.
     ///
     /// - Parameters:
-    ///   - workDir: process working directory; used as the source of truth for
-    ///     the default SQLite path.
+    ///   - workDir: process working directory; the MCP config resolves its
+    ///     paths against it.
     ///   - authModeOverride: forces a specific AuthMode regardless of env.
     ///     Used by tests and CLI overrides.
+    ///   - databaseOverride: the database to use instead of the `DATABASE_*`
+    ///     variables. Only the lazy fallback in `Application.appConfig` passes
+    ///     one, so a test or tool without those variables still reads the rest
+    ///     of its configuration from the environment. The server never does.
     static func fromEnvironment(
         workDir: String,
-        authModeOverride: AuthMode? = nil
+        authModeOverride: AuthMode? = nil,
+        databaseOverride: DatabaseSettings? = nil
     ) throws -> AppConfig {
         let auth = AuthConfig.fromEnvironment(override: authModeOverride)
         let security = AppSecurityConfiguration.fromEnvironment(authMode: auth.mode)
-        let database = try DatabaseSettings.fromEnvironment(
-            defaultSQLitePath: workDir + "chickadee.sqlite"
-        )
+        let database = try databaseOverride ?? DatabaseSettings.fromEnvironment()
         return AppConfig(
             auth: auth,
             oidc: OIDCEnvConfig.fromEnvironment(),
@@ -74,7 +77,7 @@ struct AppConfig: Sendable {
     func logSummary(to logger: Logger) {
         let poolDescription = database.maxConnectionsPerEventLoop.map(String.init) ?? "default"
         logger.info(
-            "AppConfig loaded — auth=\(auth.mode.rawValue), database=\(database.backend.rawValue), dbPoolPerLoop=\(poolDescription)"
+            "AppConfig loaded — auth=\(auth.mode.rawValue), database=postgres, dbPoolPerLoop=\(poolDescription)"
         )
         if security.publicBaseURL != nil || security.enforceHTTPS {
             logger.info(
@@ -161,12 +164,16 @@ extension Application {
             if let existing = storage[AppConfigKey.self] { return existing }
             // Lazy fallback for tests + tooling that bypass `configure(_:)`:
             // build once from the process environment so env-set OIDC paths,
-            // SSO allowlists, etc. still flow through. Falls back to
-            // `testDefaults()` if env-parsing fails (e.g. malformed DATABASE
-            // settings — irrelevant for tests that override the DB
-            // separately via `configureTestDatabase`).
+            // SSO allowlists, etc. still flow through. A test process sets no
+            // DATABASE_* variables (`configureTestDatabase` supplies the
+            // database), so missing ones fall back to the local test database
+            // rather than discarding the rest of the environment. Falls back
+            // to `testDefaults()` if env-parsing still fails.
             let workDir = DirectoryConfiguration.detect().workingDirectory
-            let built = (try? AppConfig.fromEnvironment(workDir: workDir)) ?? AppConfig.testDefaults()
+            let database = (try? DatabaseSettings.fromEnvironment()) ?? .localTest
+            let built =
+                (try? AppConfig.fromEnvironment(workDir: workDir, databaseOverride: database))
+                ?? AppConfig.testDefaults()
             storage[AppConfigKey.self] = built
             return built
         }
@@ -182,11 +189,12 @@ extension Application {
 // MARK: - Test defaults
 
 extension AppConfig {
-    /// All-defaults config keyed on local auth, in-memory SQLite. Used by
+    /// All-defaults config keyed on local auth and the local test Postgres
+    /// (`DatabaseSettings.localTest`). Used by
     /// `makeTestApp` and by the lazy fallback in `Application.appConfig`.
     static func testDefaults(
         authMode: AuthMode = .local,
-        database: DatabaseSettings = .sqliteInMemory(),
+        database: DatabaseSettings = .localTest,
         mcp: MCPConfig = .default,
         uwDates: UWDatesConfig = .default,
         oidc: OIDCEnvConfig = .default

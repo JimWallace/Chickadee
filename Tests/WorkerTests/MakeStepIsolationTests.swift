@@ -57,15 +57,29 @@ import Testing
         try "int main() { return 0; }\n".write(
             to: submission.appendingPathComponent("main.cpp"), atomically: true, encoding: .utf8)
 
+        // On a case-insensitive volume (APFS by default) `makefile` and
+        // `Makefile` are one file, so the submission holds two names, not three.
+        let submittedMakefiles = Set(try FileManager.default.contentsOfDirectory(atPath: submission.path))
+            .subtracting(["main.cpp"])
+        #expect(submittedMakefiles.count >= 2)
         let refused = try mergeDirectoryContents(
             from: submission, into: workspace,
             protected: protectedWorkspaceFilenames(manifest: Self.manifest(makefile: MakefileConfig(target: nil))))
 
-        #expect(Set(refused) == ["Makefile", "GNUmakefile", "makefile"])
+        // Such a volume may also report the shared file under either spelling,
+        // and a `makefile` lookup there finds the instructor's `Makefile`.
+        let caseSensitive = submittedMakefiles.count == 3
+        if caseSensitive {
+            #expect(Set(refused) == submittedMakefiles)
+        } else {
+            #expect(Set(refused.map { $0.lowercased() }) == Set(submittedMakefiles.map { $0.lowercased() }))
+        }
         let makefile = try String(contentsOf: workspace.appendingPathComponent("Makefile"), encoding: .utf8)
         #expect(makefile.contains("g++"), "the instructor's makefile was replaced")
         #expect(!FileManager.default.fileExists(atPath: workspace.appendingPathComponent("GNUmakefile").path))
-        #expect(!FileManager.default.fileExists(atPath: workspace.appendingPathComponent("makefile").path))
+        if caseSensitive {
+            #expect(!FileManager.default.fileExists(atPath: workspace.appendingPathComponent("makefile").path))
+        }
         #expect(FileManager.default.fileExists(atPath: workspace.appendingPathComponent("main.cpp").path))
     }
 }

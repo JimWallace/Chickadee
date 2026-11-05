@@ -44,8 +44,7 @@ import Vapor
         frameRate: 8)
 
     @Test func choosingTheKindWithoutABlockSeedsTheStarter() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let (assignment, _) = try await fixture(on: app)
             let out = try await SetActivityTool().execute(input(assignment), mcpContext(app))
             #expect(out.kind == "classComposite")
@@ -62,8 +61,7 @@ import Vapor
     }
 
     @Test func aGivenBlockIsStoredAndAnAbsentOneIsKept() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let (assignment, _) = try await fixture(on: app)
             _ = try await SetActivityTool().execute(input(assignment, composite: sequence), mcpContext(app))
             #expect(try await storedActivity(on: app)?.composite == sequence)
@@ -75,8 +73,7 @@ import Vapor
     }
 
     @Test func aBlockOnAnotherKindIsRefused() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let (assignment, _) = try await fixture(on: app)
             await #expect(throws: MCPToolError.self) {
                 _ = try await SetActivityTool().execute(
@@ -87,8 +84,7 @@ import Vapor
     }
 
     @Test func aBlockThatBreaksARuleIsRefused() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let (assignment, _) = try await fixture(on: app)
             let wrongShape = CompositeSpec(
                 compositor: .tile, layout: .count(12), contribution: sequence.contribution)
@@ -102,8 +98,7 @@ import Vapor
     /// The composite is for the projector; each student sees only their own
     /// contribution, so the leaderboard page cannot be shown to students.
     @Test func theLeaderboardCannotBeShownToStudents() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let (assignment, _) = try await fixture(on: app)
             await #expect(throws: MCPToolError.self) {
                 _ = try await SetActivityTool().execute(input(assignment, visibility: "visible"), mcpContext(app))
@@ -117,8 +112,7 @@ import Vapor
     }
 
     @Test func theStructureLocksOnceAStudentHasSubmittedButDisplaySettingsDoNot() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let (assignment, courseID) = try await fixture(on: app)
             _ = try await SetActivityTool().execute(input(assignment, composite: sequence), mcpContext(app))
             let student = try await makeTestStudent(on: app, username: "cmp_student")

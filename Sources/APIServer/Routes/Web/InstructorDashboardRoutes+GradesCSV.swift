@@ -261,7 +261,7 @@ extension InstructorDashboardRoutes {
             for assignment in sortedAssignments {
                 let key = "\(userID.uuidString.lowercased())::\(assignment.testSetupID)"
                 if let points = bestPointsByUserAndSetup[key] {
-                    row.append(String(format: "%.1f", points))
+                    row.append(String(cFormat: "%.1f", points))
                 } else {
                     row.append("")
                 }

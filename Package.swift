@@ -30,10 +30,10 @@ let sourceSettings: [SwiftSetting] =
 let package = Package(
     name: "Chickadee",
     platforms: [
-        // Vapor 5 requires macOS 26.2, so the floor is there already and the
-        // move does not change it (docs/vapor-5-migration.md). Linux is not
-        // affected.
-        .macOS("26.2")
+        // Vapor 5 requires macOS 26.2 (docs/vapor-5-migration.md). The floor is
+        // 27.0 because the worker uses `withTaskCancellationShield`, which the
+        // Darwin standard library ships from macOS 27. Linux is not affected.
+        .macOS("27.0")
     ],
     products: [
         // Exposed so the wasm bridge sub-package (wasm/) can depend on the pure
@@ -44,7 +44,6 @@ let package = Package(
         .package(url: "https://github.com/vapor/vapor.git", from: "4.121.4"),
         .package(url: "https://github.com/vapor/fluent.git", from: "4.13.0"),
         .package(url: "https://github.com/vapor/fluent-postgres-driver.git", from: "2.12.0"),
-        .package(url: "https://github.com/vapor/fluent-sqlite-driver.git", from: "4.9.0"),
         // Every web page is an Elementary view (docs/elementary-spike.md).
         // Pre-1.0, so pinned to the minor.
         .package(url: "https://github.com/elementary-swift/elementary.git", .upToNextMinor(from: "0.8.2")),
@@ -75,16 +74,9 @@ let package = Package(
         // #1139); Subprocess spawns without that hazard and is CI-tested on the
         // distributions the runner ships on.
         //
-        // Pinned to a fork: upstream 1.0.0 plus one patch. Its Linux child
-        // comes from a raw clone3 and reset SIGABRT through glibc, which on
-        // glibc 2.41+ blocks forever if another thread was inside posix_spawn
-        // at the clone (docs/ci-flakiness.md, Family 6). Return to upstream
-        // once a release carries the fix:
-        // https://github.com/swiftlang/swift-subprocess/issues/375
-        // The steps and checks for that are in Chickadee issue #1597.
-        .package(
-            url: "https://github.com/JimWallace/swift-subprocess.git",
-            revision: "6f7083d5d16613c6183aef5b85075f24e05b6db0"),
+        // Releases before 1.0.1 hang on glibc 2.41+ (swiftlang/swift-subprocess#375,
+        // docs/ci-flakiness.md Family 6); do not lower this floor.
+        .package(url: "https://github.com/swiftlang/swift-subprocess.git", from: "1.0.2"),
         // Subprocess speaks `FilePath` at its API boundary. Already in the
         // resolved graph as its dependency; declared explicitly because a
         // target may only import what it declares.
@@ -135,7 +127,6 @@ let package = Package(
                 .product(name: "Vapor", package: "vapor"),
                 .product(name: "Fluent", package: "fluent"),
                 .product(name: "FluentPostgresDriver", package: "fluent-postgres-driver"),
-                .product(name: "FluentSQLiteDriver", package: "fluent-sqlite-driver"),
                 .product(name: "Elementary", package: "elementary"),
                 .product(name: "JWT", package: "jwt"),
                 // RSA key generation for the LTI 1.3 tool key; JWTKit can
@@ -276,7 +267,6 @@ let package = Package(
                 .target(name: "ChickadeeTestSupport"),
                 .product(name: "VaporTesting", package: "vapor"),
                 .product(name: "FluentPostgresDriver", package: "fluent-postgres-driver"),
-                .product(name: "FluentSQLiteDriver", package: "fluent-sqlite-driver"),
                 .product(name: "Elementary", package: "elementary"),
                 .product(name: "AsyncHTTPClient", package: "async-http-client"),
             ],

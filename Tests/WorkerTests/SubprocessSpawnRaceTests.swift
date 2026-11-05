@@ -19,6 +19,10 @@ import Testing
 
 #if canImport(Glibc)
 import Glibc
+#endif
+#if canImport(System)
+import System
+#else
 import SystemPackage
 #endif
 
@@ -27,10 +31,10 @@ import SystemPackage
         let isSet = Atomic<Bool>(false)
     }
 
-    /// Launches `/bin/true` with posix_spawn and waits for it, until `stop` is set.
+    /// Launches `/usr/bin/true` (macOS has no `/bin/true`) with posix_spawn and waits for it, until `stop` is set.
     /// The race needs a raw `posix_spawn`, which takes pointers, so it is unsafe.
     private static func spawnUntilStopped(_ stop: StopFlag) {
-        let path = "/bin/true"
+        let path = "/usr/bin/true"
         while !stop.isSet.load(ordering: .relaxed) {
             var pid: pid_t = 0
             let status = path.withCString { cPath -> Int32 in
@@ -54,7 +58,7 @@ import SystemPackage
 
         for _ in 0..<200 {
             let result = try await Subprocess.run(
-                .path("/bin/true"), output: .discarded, error: .discarded)
+                .path("/usr/bin/true"), output: .discarded, error: .discarded)
             #expect(result.terminationStatus.isSuccess)
         }
     }

@@ -136,7 +136,7 @@ enum LTIIdentityResolver {
     /// nothing about the person.
     static func opaqueUsername(platformID: UUID, subject: String) -> String {
         let digest = SHA256.hash(data: Data("\(platformID.uuidString)|\(subject)".utf8))
-        let hex = digest.prefix(8).map { String(format: "%02x", $0) }.joined()
+        let hex = digest.prefix(8).map { String(cFormat: "%02x", $0) }.joined()
         return "lti-" + hex
     }
 

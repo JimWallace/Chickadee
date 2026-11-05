@@ -1,3 +1,4 @@
+// @ts-check
 // Public/workbench.js
 //
 // The assignment workbench (#1266, notebook views NB6): a full-width notebook
@@ -162,6 +163,7 @@
     /// app bar, not in the swapped notebook, so it does not come back from
     /// the server with the notebook.
     function syncViewControls() {
+        /** @type {Element | null} */
         var shown = null;
         viewButtons.forEach(function (btn) {
             var pressed = controlPressed(
@@ -174,7 +176,7 @@
         });
         // The preview menu's own button names the student it shows. Its
         // labels come from the server, which writes them once.
-        var menu = shell.querySelector('.js-wb-preview-menu');
+        var menu = /** @type {HTMLDetailsElement | null} */ (shell.querySelector('.js-wb-preview-menu'));
         var summary = menu && menu.querySelector('summary');
         if (!summary) return;
         var label = summary.querySelector('.wb-preview-label');
@@ -296,7 +298,7 @@
 
     // Delegated, because a save swaps the sheet's content.
     document.addEventListener('click', function (e) {
-        var target = e.target;
+        var target = /** @type {Element} */ (e.target);
         if (!target || !target.closest) return;
         var opener = target.closest('[data-wb-open-sheet]');
         if (opener) {
@@ -336,7 +338,7 @@
     // are in the same document, so `idle-logout.js` sees them without a
     // forwarder.
 
-    window.addEventListener('chickadee:workbench', function (event) {
+    window.addEventListener('chickadee:workbench', function (/** @type {CustomEvent} */ event) {
         var type = event && event.detail && event.detail.type;
 
         if (type === 'inputs-changed') {
@@ -366,7 +368,7 @@
     // ordinary links to the workbench URL, so they work with no JS at all; this
     // only routes them through `selectPane` for the dirty-form guard.
     document.addEventListener('click', function (e) {
-        var el = e.target.closest && e.target.closest('[data-wb-file]');
+        var el = /** @type {Element} */ (e.target).closest && /** @type {Element} */ (e.target).closest('[data-wb-file]');
         if (!el || !el.getAttribute('data-wb-file')) return;
         e.preventDefault();
         selectPane(el.getAttribute('data-wb-file') === 'solution' ? 'solution' : 'assignment', activeView);
@@ -385,7 +387,7 @@
     // close-on-save; the difference rides on the `liveEdit` field only the
     // embedded form sends.
 
-    var saveBtn = document.getElementById('wb-save');
+    var saveBtn = /** @type {HTMLButtonElement | null} */ (document.getElementById('wb-save'));
     var saveStatus = document.getElementById('wb-save-status');
 
     /// Save the open notebook, if there is one to save.
@@ -448,7 +450,7 @@
 
     var formDirty = false;
     document.addEventListener('input', function (e) {
-        if (e.target && e.target.closest && e.target.closest('form[action$="/edit/save"]')) {
+        if (e.target && /** @type {Element} */ (e.target).closest && /** @type {Element} */ (e.target).closest('form[action$="/edit/save"]')) {
             formDirty = true;
         }
     });

@@ -1,3 +1,4 @@
+// @ts-check
 // section-items-dnd.js
 //
 // Drag-and-drop for the instructor dashboard's unified section item list.
@@ -137,7 +138,7 @@
         }
 
         // 2. Over an empty-section placeholder row — move into that section.
-        var emptyRow = target.closest('tr.section-empty-row');
+        var emptyRow = /** @type {HTMLTableRowElement | null} */ (target.closest('tr.section-empty-row'));
         if (emptyRow) {
             if (!mayEnter(emptyRow.parentElement)) return;
             emptyRow.style.display = 'none';

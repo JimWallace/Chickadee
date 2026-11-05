@@ -45,8 +45,7 @@ import Vapor
     }
 
     @Test func startsARunAndReportsItsShape() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await fixture(on: app, kind: .elimination, students: 3)
             let out = try await RunTournamentTool().execute(
                 .init(assignmentPublicID: assignment.publicID, schedule: nil), mcpContext(app))
@@ -70,8 +69,7 @@ import Vapor
     }
 
     @Test func refusesAnUnknownScheduleAndTooFewEntrants() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await fixture(on: app, kind: .elimination, students: 1)
             await #expect(throws: MCPToolError.self) {
                 _ = try await RunTournamentTool().execute(
@@ -89,8 +87,7 @@ import Vapor
     /// may not write `tournament_runs`, so the start runs on the owner pool.
     /// The output still names no student.
     @Test func startsARunWithTheDedicatedMCPPool() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             try app.useMCPRoleDatabase()
             let assignment = try await fixture(on: app, kind: .elimination, students: 3)
             let out = try await RunTournamentTool().execute(
@@ -112,8 +109,7 @@ import Vapor
     }
 
     @Test func refusesAnyOtherKind() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await fixture(on: app, kind: .roundRobin, students: 3)
             await #expect(throws: MCPToolError.self) {
                 _ = try await RunTournamentTool().execute(

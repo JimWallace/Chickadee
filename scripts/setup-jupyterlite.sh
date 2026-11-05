@@ -15,9 +15,12 @@ if [[ ! -d "$VENV_DIR" ]]; then
 fi
 
 "$VENV_DIR/bin/python" -m pip install --upgrade pip
-# From the repository root: requirements.txt names the Chickadee extension by
-# a path, and pip resolves a path in a requirements file from the current
-# directory.
-(cd "$ROOT_DIR" && "$VENV_DIR/bin/pip" install -r "$REQ_FILE")
+"$VENV_DIR/bin/pip" install -r "$REQ_FILE"
+# Chickadee's own extension: the editor theme, the chickadee:* bridge commands
+# and the ck:* page events. Its labextension is prebuilt and committed, so this
+# install needs no Node.js. Between full rebuilds,
+# scripts/vendor-chickadee-extension.sh puts it into the bundle. It is installed
+# here rather than named in requirements.txt; that file says why.
+"$VENV_DIR/bin/pip" install "$ROOT_DIR/Tools/jupyterlite/chickadee-extension"
 
 echo "JupyterLite toolchain ready in $VENV_DIR"

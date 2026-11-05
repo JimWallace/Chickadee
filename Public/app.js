@@ -1,3 +1,4 @@
+// @ts-check
 // CSRF tokens: use ChickadeeUI.getCsrfToken() (Public/chickadee-ui.js,
 // loaded from the layout's <head>, so it is available everywhere).  The old
 // bare-global alias that lived here was retired in the 0.5 cleanup once the
@@ -5,7 +6,7 @@
 
 // Drag-drop zone on the submission form
 const dropZone   = document.getElementById('drop-zone');
-const fileInput  = document.getElementById('file-input');
+const fileInput  = /** @type {HTMLInputElement} */ (document.getElementById('file-input'));
 const fileNameEl = document.getElementById('drop-filename');
 
 // Accepted extensions come from the input's own `accept` attribute, so the
@@ -264,7 +265,7 @@ if (root) {
     // Outside click closes any open menu.  Clicks inside a menu (e.g. the
     // account link, or a submitting course-picker button) are left alone.
     document.addEventListener('click', (e) => {
-        if (e.target.closest('[data-nav-dropdown]')) return;
+        if (/** @type {Element} */ (e.target).closest('[data-nav-dropdown]')) return;
         closeAll(null);
     });
 
@@ -342,7 +343,7 @@ if (root) {
     const reposition = () => { if (active && active.open) place(active); };
 
     document.addEventListener('toggle', (e) => {
-        const d = e.target;
+        const d = /** @type {HTMLDetailsElement} */ (e.target);
         if (!(d instanceof Element) || !d.matches('details.ext-details')) return;
         if (!panelOf(d)) return;
         if (d.open) {
@@ -377,17 +378,17 @@ if (root) {
 
     document.addEventListener('click', (e) => {
         document.querySelectorAll(POPUP + '[open]').forEach((d) => {
-            if (!d.contains(e.target)) d.open = false;
+            if (!d.contains(/** @type {Node} */ (e.target))) /** @type {HTMLDetailsElement} */ (d).open = false;
         });
     });
 
     document.addEventListener('keydown', (e) => {
         if (e.key !== 'Escape') return;
-        const open = Array.from(document.querySelectorAll(POPUP + '[open]'));
+        const open = Array.from(/** @type {NodeListOf<HTMLDetailsElement>} */ (document.querySelectorAll(POPUP + '[open]')));
         if (open.length === 0) return;
         const focused = open.find((d) => d.contains(document.activeElement)) || open[open.length - 1];
         open.forEach((d) => { d.open = false; });
-        const summary = focused.querySelector(':scope > summary');
+        const summary = /** @type {HTMLElement | null} */ (focused.querySelector(':scope > summary'));
         if (summary) summary.focus();
     // Capture phase: the floated-popover handler above also closes on Escape,
     // and if it ran first there would be nothing left open for this one to find.
@@ -412,13 +413,13 @@ if (root) {
             if (!panel) return;
             e.preventDefault();
             const kind = opener.getAttribute('data-add-kind');
-            const select = kind ? panel.querySelector('select[name="kind"]') : null;
+            const select = kind ? /** @type {HTMLSelectElement | null} */ (panel.querySelector('select[name="kind"]')) : null;
             if (select) select.value = kind;
             panel.classList.remove('is-closed');
             panel.classList.add('is-open');
             const menu = opener.closest('details');
             if (menu) menu.open = false;
-            const first = panel.querySelector('input:not([type="hidden"]):not([type="checkbox"]), select, textarea');
+            const first = /** @type {HTMLElement | null} */ (panel.querySelector('input:not([type="hidden"]):not([type="checkbox"]), select, textarea'));
             if (first) first.focus();
             return;
         }
@@ -450,7 +451,7 @@ if (root) {
     // element.  The templates use it for a visible button that stands in for a
     // hidden submit button carrying a `formaction`.
     document.addEventListener('click', (e) => {
-        const source = e.target.closest('[data-ck-click-target]');
+        const source = /** @type {Element} */ (e.target).closest('[data-ck-click-target]');
         if (!source) return;
         const target = document.getElementById(source.getAttribute('data-ck-click-target'));
         if (target) target.click();
@@ -459,7 +460,7 @@ if (root) {
     // data-ck-select-all — select this field's whole value on click, so a
     // one-shot secret can be copied without dragging across four wrapped lines.
     document.addEventListener('click', (e) => {
-        const field = e.target.closest('[data-ck-select-all]');
+        const field = /** @type {HTMLInputElement | HTMLTextAreaElement | null} */ (/** @type {Element} */ (e.target).closest('[data-ck-select-all]'));
         if (field && typeof field.select === 'function') field.select();
     });
 
@@ -478,7 +479,7 @@ if (root) {
     // title swap, so JS makes no styling decision. Used by the per-row "copy
     // student link" button and the LTI tool URLs.
     document.addEventListener('click', (e) => {
-        const button = e.target instanceof Element ? e.target.closest('[data-copy-url]') : null;
+        const button = e.target instanceof Element ? /** @type {HTMLElement | null} */ (e.target.closest('[data-copy-url]')) : null;
         if (!button || !navigator.clipboard) return;
         const value = button.getAttribute('data-copy-url');
         const url = /^https?:\/\//.test(value) ? value : window.location.origin + value;
@@ -503,7 +504,7 @@ if (root) {
     // interceptors both hang off that event.  Switching to `requestSubmit()`
     // would silently reroute these four forms through them.
     document.addEventListener('change', (e) => {
-        const control = e.target.closest('[data-ck-submit-on-change]');
+        const control = /** @type {Element} */ (e.target).closest('[data-ck-submit-on-change]');
         if (!control) return;
         const form = owningForm(control);
         if (form) form.submit();
@@ -512,7 +513,7 @@ if (root) {
     // view by setting scrollLeft on the bar itself: scrollIntoView would also
     // scroll the page.
     const courseTabs = document.querySelector('.course-tabs');
-    const activeTab = courseTabs && courseTabs.querySelector('.course-tab-active');
+    const activeTab = courseTabs && /** @type {HTMLElement | null} */ (courseTabs.querySelector('.course-tab-active'));
     if (courseTabs && activeTab) {
         courseTabs.scrollLeft = activeTab.offsetLeft - courseTabs.clientWidth / 2 + activeTab.offsetWidth / 2;
     }

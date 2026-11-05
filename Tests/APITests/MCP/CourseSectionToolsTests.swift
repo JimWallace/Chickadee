@@ -35,8 +35,7 @@ import Vapor
     }
 
     @Test func createCourseSectionPersists() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             _ = try await fixture(on: app)
             let out = try await CreateCourseSectionTool().execute(
                 .init(courseCode: "CS246", name: "Labs", defaultGradingMode: "browser"), mcpContext(app))
@@ -51,8 +50,7 @@ import Vapor
     }
 
     @Test func createCourseSectionRejectsBadMode() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             _ = try await fixture(on: app)
             await #expect(throws: MCPToolError.self) {
                 _ = try await CreateCourseSectionTool().execute(
@@ -62,8 +60,7 @@ import Vapor
     }
 
     @Test func listCourseSectionsReturnsInSortOrder() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let fx = try await fixture(on: app)
             let courseID = try fx.course.requireID()
             try await makeSection(on: app, name: "Exams", mode: "worker", order: 2, courseID: courseID)
@@ -80,8 +77,7 @@ import Vapor
     /// move — the same skip the upload-only rule gets. Adopting browser would
     /// deliver the withheld files to every student's kernel.
     @Test func setAssignmentSectionKeepsWorkerWhenGraderOnlyFilesMarked() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let fx = try await fixture(on: app)
             let courseID = try fx.course.requireID()
             try await makeTestSetup(
@@ -111,8 +107,7 @@ import Vapor
     }
 
     @Test func setAssignmentSectionMovesAndSyncsGradingMode() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let fx = try await fixture(on: app)
             let courseID = try fx.course.requireID()
             // A "worker" section; the assignment's manifest starts "browser".
@@ -137,8 +132,7 @@ import Vapor
     }
 
     @Test func setAssignmentSectionUngroups() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let fx = try await fixture(on: app)
             let courseID = try fx.course.requireID()
             let section = try await makeSection(
@@ -157,8 +151,7 @@ import Vapor
     }
 
     @Test func setAssignmentSectionRejectsUnknownSection() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let fx = try await fixture(on: app)
             await #expect(throws: MCPToolError.self) {
                 _ = try await SetAssignmentCourseSectionTool().execute(
@@ -175,8 +168,7 @@ import Vapor
     /// Archived courses are already hidden from the MCP listing surface, so this
     /// closes the remaining remembered-id write path.
     @Test func setAssignmentSectionBlockedOnArchivedCourse() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let fx = try await fixture(on: app)
             let courseID = try fx.course.requireID()
             let section = try await makeSection(
@@ -197,8 +189,7 @@ import Vapor
     }
 
     @Test func setAssignmentSectionRejectsForeignSection() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let fx = try await fixture(on: app)
             // A section in a DIFFERENT course must not be assignable here.
             let other = try await makeTestCourse(on: app, code: "CS999", name: "Other")

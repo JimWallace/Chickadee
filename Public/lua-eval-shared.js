@@ -1,3 +1,4 @@
+// @ts-check
 // Public/lua-eval-shared.js
 //
 // The snippets the pattern-family editor's auto-compute runs on the xeus-lua

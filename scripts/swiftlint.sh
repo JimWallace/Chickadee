@@ -19,4 +19,13 @@ set -euo pipefail
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$repo_root"
 
+# SwiftLint loads SourceKit from the active developer directory, and the
+# Command Line Tools have none. On a Mac whose xcode-select still points there,
+# use Xcode's when Xcode is installed.
+xcode_developer=/Applications/Xcode.app/Contents/Developer
+if [ "$(uname)" = Darwin ] && [ -z "${DEVELOPER_DIR:-}" ] && [ -d "$xcode_developer" ] \
+  && [ "$(xcode-select -p 2>/dev/null)" = /Library/Developer/CommandLineTools ]; then
+  export DEVELOPER_DIR="$xcode_developer"
+fi
+
 exec swift package --allow-writing-to-package-directory swiftlint lint --strict

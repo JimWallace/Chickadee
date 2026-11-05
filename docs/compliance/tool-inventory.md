@@ -48,6 +48,7 @@ source of truth; a census re-count is required whenever either changes
 | `get_achievements` | `GetAchievementsTool.swift:25` | `assignmentPublicID` | course-enrol (`:61`) | `APITestSetup` manifest (achievements) | composable awards (built-in defaults until curated) |
 | `get_course_achievements` | `CourseAchievementsTools.swift:31` | `courseCode` | course-enrol (`:48`) | `APICourse.achievements` | course achievements; no ledger, no student |
 | `preview_personalization` | `PreviewPersonalizationTool.swift:53` | `assignmentPublicID` | course-enrol (`:116`) + eligible (`:161`) | manifest; runs `python3` eval subprocess | per-seed resolved values |
+| `check_assignment` | `CheckAssignmentTool.swift:39` | `assignmentPublicID` | course-enrol (`:78`) | manifest; starter notebook; support-file names (setup zip listing); validation, variant (`kind==.validation`) and starter (`kind==.starterValidation`) results via `MCPStudentDataBoundary`; runs the expression eval subprocess per variant seed | authoring-check findings (script filenames, failing test names, expression errors; no script bodies) |
 | `validate_assignment` | `ValidateAssignmentTool.swift:36` | `assignmentPublicID` | course-enrol (`:82`) | enqueues validation run; reads `validationStatus` | passed/failed/no-runner |
 | `get_validation_result` | `GetValidationResultTool.swift:69` | `assignmentPublicID` | course-enrol (`:113`) | validation submission + its `APIResult` only | per-test outcomes (no student identity) |
 

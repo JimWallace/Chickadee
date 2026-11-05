@@ -250,6 +250,8 @@ COPY --from=binaries /out/chickadee-runner  ./chickadee-runner
 #
 # JupyterLite (~400 MB, changes on a re-vendor only) is its own layer, so a
 # change to the rest of Public ships ~8 MB on a deploy, not the whole tree.
+# The vendored games (~8 MB, Public/games/README.md) are a layer of their own
+# for the same reason.
 #
 # Each file keeps the mtime that CI set from its last commit
 # (scripts/restore-asset-mtimes.py), and the server's ETag is mtime plus
@@ -257,7 +259,8 @@ COPY --from=binaries /out/chickadee-runner  ./chickadee-runner
 # was built with.
 COPY Public/jupyterlite ./Public/jupyterlite
 COPY --from=kernel-assets /out/ ./Public/jupyterlite/xeus/
-COPY --exclude=jupyterlite Public ./Public
+COPY Public/games ./Public/games
+COPY --exclude=jupyterlite --exclude=games Public ./Public
 COPY Resources  ./Resources
 # Notebook working copies are runtime data. The server writes them under
 # Public/jupyterlite/files, which would otherwise be in /app, owned by root. So

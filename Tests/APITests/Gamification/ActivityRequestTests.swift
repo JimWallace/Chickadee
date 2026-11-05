@@ -116,8 +116,7 @@ import VaporTesting
     // MARK: - AvatarIdentity
 
     @Test func avatarIdentityDrawsTheStaffRingAndHidesNames() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let courseID = try await makeTestCourse(on: app, code: "CS136").requireID()
             let student = try await makeTestUser(on: app, username: "pupil")
             let studentID = try student.requireID()

@@ -342,6 +342,14 @@
     --avatar-function: #6B52C9;
     --avatar-binary: #2F6DB3;
     --avatar-pulse: #C43A4C;
+    /* The Quantum Cats ring: found, not earned (docs/student-wardrobe.md,
+       "Found items"). The colours are from the game's own icon, with the band
+       lifted to hold the concept-ring contrast floors (AvatarQuantumCatsRingTests).
+       The cat, its eyes and the orbit line are exempt, as the lamps are. */
+    --avatar-quantumcats-band: #7048B0;
+    --avatar-quantumcats-orbit: #7CA3EA;
+    --avatar-quantumcats-cat: #2B1D3A;
+    --avatar-quantumcats-eye: #F4F1FA;
     --avatar-ouroboros-body: #3F8E4A;
     --avatar-ouroboros-back: #2A6B36;
     --avatar-greenlight-band: #3E9653;
@@ -4723,6 +4731,11 @@ tr.drop-adopt  { outline: 2px solid var(--blue); outline-offset: -2px; }
 .av-function { fill: var(--avatar-function); }
 .av-binary { fill: var(--avatar-binary); }
 .av-pulse { fill: var(--avatar-pulse); }
+.av-quantumcats-band { fill: var(--avatar-quantumcats-band); }
+.av-quantumcats-orbit { fill: var(--avatar-quantumcats-orbit); }
+.av-quantumcats-orbit-line { fill: none; stroke: var(--avatar-quantumcats-orbit); }
+.av-quantumcats-cat { fill: var(--avatar-quantumcats-cat); }
+.av-quantumcats-eye { fill: var(--avatar-quantumcats-eye); }
 .av-ouroboros-body { fill: var(--avatar-ouroboros-body); }
 .av-ouroboros-back { fill: var(--avatar-ouroboros-back); }
 .av-greenlight-band { fill: var(--avatar-greenlight-band); }

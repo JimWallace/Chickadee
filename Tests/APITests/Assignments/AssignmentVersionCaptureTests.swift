@@ -294,7 +294,7 @@ import VaporTesting
         let url = repositoryRoot
         let source = try String(
             contentsOf: url.appendingPathComponent(
-                "Sources/APIServer/Routes/Web/AssignmentHelpers.swift"),
+                "Sources/APIServer/Helpers/AssignmentHelpers.swift"),
             encoding: .utf8)
         let seam = try #require(
             source.components(separatedBy: "func loadAssignmentAndSetupForWrite").last)

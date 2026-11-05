@@ -1,3 +1,4 @@
+// @ts-check
 // Public/notebook-boot.js
 //
 // The loading panel over the notebook editor while it starts (NB1, design
@@ -30,7 +31,7 @@
 // workbench swaps the notebook half for a fresh panel when it opens another
 // notebook, and the fresh panel starts at the first step.
 
-(function (global) {
+(function (/** @type {any} */ global) {
     'use strict';
 
     var STEPS = ['editor', 'kernel', 'notebook'];

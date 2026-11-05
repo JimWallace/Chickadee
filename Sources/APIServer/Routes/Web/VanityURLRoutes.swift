@@ -9,48 +9,35 @@
 // assignment routes. Slugs are persisted on assignments so URLs remain stable
 // when titles change. Only active (non-archived) courses match.
 //
-// Registered last in the auth group so fixed-path routes always win.
+// The router tries a constant segment before a parameter at every step and
+// never backtracks, so any fixed route wins over these whatever the
+// registration order. A course whose code is the first segment of a fixed route
+// would lose its links; `ReservedCourseKeys` refuses such codes and the
+// `courseKeyShadowed` health rule reports any that remain (#2666).
 
 import Fluent
 import Vapor
 
 struct VanityURLRoutes: RouteCollection {
+    /// Each vanity suffix and the canonical student page it redirects to. The
+    /// bare pair opens the notebook.
+    static let suffixes: [(suffix: String?, page: String)] = [
+        (nil, "notebook"),
+        ("notebook", "notebook"),
+        ("submit", "submit"),
+        ("history", "history"),
+        ("leaderboard", "leaderboard"),
+    ]
+
     func boot(routes: any RoutesBuilder) throws {
-        routes.get(":courseCode", ":assignmentSlug", use: vanityRedirect)
-        routes.get(":courseCode", ":assignmentSlug", "notebook", use: vanityNotebookRedirect)
-        routes.get(":courseCode", ":assignmentSlug", "submit", use: vanitySubmitRedirect)
-        routes.get(":courseCode", ":assignmentSlug", "history", use: vanityHistoryRedirect)
-        routes.get(":courseCode", ":assignmentSlug", "leaderboard", use: vanityLeaderboardRedirect)
-    }
-
-    @Sendable
-    func vanityRedirect(req: Request) async throws -> Response {
-        let assignment = try await resolveAssignment(req: req)
-        return req.redirect(to: "/testsetups/\(assignment.testSetupID)/notebook")
-    }
-
-    @Sendable
-    func vanityNotebookRedirect(req: Request) async throws -> Response {
-        let assignment = try await resolveAssignment(req: req)
-        return req.redirect(to: "/testsetups/\(assignment.testSetupID)/notebook")
-    }
-
-    @Sendable
-    func vanitySubmitRedirect(req: Request) async throws -> Response {
-        let assignment = try await resolveAssignment(req: req)
-        return req.redirect(to: "/testsetups/\(assignment.testSetupID)/submit")
-    }
-
-    @Sendable
-    func vanityHistoryRedirect(req: Request) async throws -> Response {
-        let assignment = try await resolveAssignment(req: req)
-        return req.redirect(to: "/testsetups/\(assignment.testSetupID)/history")
-    }
-
-    @Sendable
-    func vanityLeaderboardRedirect(req: Request) async throws -> Response {
-        let assignment = try await resolveAssignment(req: req)
-        return req.redirect(to: "/testsetups/\(assignment.testSetupID)/leaderboard")
+        for (suffix, page) in Self.suffixes {
+            var path: [PathComponent] = [":courseCode", ":assignmentSlug"]
+            if let suffix { path.append(.constant(suffix)) }
+            routes.get(path) { req async throws -> Response in
+                let assignment = try await resolveAssignment(req: req)
+                return req.redirect(to: "/testsetups/\(assignment.testSetupID)/\(page)")
+            }
+        }
     }
 
     private func resolveAssignment(req: Request) async throws -> APIAssignment {
@@ -75,13 +62,7 @@ struct VanityURLRoutes: RouteCollection {
         // (#417 Slice G — was the global `isInstructor` short-circuit); a plain
         // enrolled student still passes the enrollment check below.
         if !(try await isCourseStaff(user, inCourse: courseID, db: req.db)) {
-            let userID = try user.requireID()
-            let enrolled =
-                try await APICourseEnrollment.query(on: req.db)
-                .filter(\.$userID == userID)
-                .filter(\.$course.$id == courseID)
-                .count() > 0
-            guard enrolled else {
+            guard try await userIsEnrolled(userID: try user.requireID(), inCourse: courseID, db: req.db) else {
                 throw AppError.notFound(resource: "Assignment")
             }
         }
@@ -99,12 +80,9 @@ struct VanityURLRoutes: RouteCollection {
     }
 
     /// Pass the course's `urlKey` ("CS135" or "CS135-F26") as `courseCode`,
-    /// not its bare code, so the link names one offering.
+    /// not its bare code, so the link names one offering. Each segment is
+    /// percent-encoded, so a key with a space gives a valid `Location` header.
     static func vanityPath(courseCode: String, assignmentSlug: String) -> String {
-        "/\(courseCode)/\(assignmentSlug)"
-    }
-
-    static func slugify(_ title: String) -> String {
-        assignmentSlug(fromTitle: title)
+        "/\(urlEncode(courseCode))/\(urlEncode(assignmentSlug))"
     }
 }

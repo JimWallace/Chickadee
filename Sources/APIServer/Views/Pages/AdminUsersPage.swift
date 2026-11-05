@@ -1,7 +1,8 @@
 // APIServer/Views/Pages/AdminUsersPage.swift
 //
-// GET /admin/users: the People tab. Every account, with its role menu and row
-// actions. The rows are `UserRows`, which the poll renders too.
+// GET /admin/users: the People tab. One bounded page of accounts, with the
+// role menu and row actions (#2829). The rows are `UserRows`, which the poll
+// renders too.
 
 import Elementary
 
@@ -10,6 +11,14 @@ struct AdminUsersPage: HTML {
     let users: [AdminUserRow]
     let userCount: Int
     let adminCount: Int
+    /// The page links. Nil renders no links and polls page 1; the route always
+    /// passes one, and the default keeps the page fixture's call valid. The
+    /// poll swaps only the rows, so the count line and the links stay as
+    /// first rendered until the page reloads.
+    var pager: AdminUsersPager?
+
+    private var isPaged: Bool { pager?.isPaged ?? false }
+    private var search: String? { pager?.search }
 
     var body: some HTML {
         BaseLayout(title: "Users", page: page) {
@@ -21,17 +30,30 @@ struct AdminUsersPage: HTML {
                         span(.class("text-muted")) { "\(userCount) users · \(adminCount) admins" }
                     }
                 }
-                div(.class("toolbar toolbar--end section-gap")) {
+                // Typing filters the rows shown, live. Enter submits the form,
+                // and the server searches every account (#2829): the table
+                // holds one page, so a live filter alone could not find a
+                // user on another page.
+                form(.method(.get), .action("/admin/users"), .class("toolbar toolbar--end section-gap")) {
                     span(.class("filter-group")) {
                         label(.class("filter-label"), .for("users-filter")) { "Filter" }
                         input(
                             .id("users-filter"), .class("form-input filter-input"), .type(.search),
+                            .name("q"), .value(search ?? ""),
                             .placeholder("Filter by name, username or role…"),
                             .data("list-filter", value: "users-table"),
-                            .data("list-filter-empty", value: "No users match this filter."))
+                            .data(
+                                "list-filter-empty",
+                                value: isPaged
+                                    ? "No users on this page match this filter." : "No users match this filter."))
+                    }
+                    if search != nil {
+                        a(.class("btn action-btn"), .href("/admin/users")) { "Clear" }
                     }
                 }
+                if let pager { pager.summary }
                 usersTable
+                if let pager { pager }
             }
             script(.src(page.asset("/list-filter.js"))) {}
             script(.src(page.asset("/sortable-table.js"))) {}
@@ -43,7 +65,8 @@ struct AdminUsersPage: HTML {
         table(
             .class("results-table section-items section-items--manage sortable-table"), .id("users-table"),
             .data("sort-initial", value: "last-seen:desc"), .data("sort-tiebreak", value: "name"),
-            .data("poll-url", value: "/admin/users-data?fragment=rows"), .data("poll-interval", value: "5000")
+            .data("poll-url", value: pager?.pollURL ?? "/admin/users-data?fragment=rows"),
+            .data("poll-interval", value: "5000")
         ) {
             colgroup {
                 col(.class("section-items-tile"))

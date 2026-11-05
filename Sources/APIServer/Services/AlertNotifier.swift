@@ -16,6 +16,8 @@ enum HealthRule: String, CaseIterable, Codable, Sendable {
     case deployerUnhealthy
     case unclaimableJobs
     case diskSpaceLow
+    case courseKeyShadowed
+    case courseCodeNotURLSafe
 
     var humanReadable: String {
         switch self {
@@ -31,6 +33,8 @@ enum HealthRule: String, CaseIterable, Codable, Sendable {
         case .deployerUnhealthy: return "Auto-deploy not healthy"
         case .unclaimableJobs: return "Jobs no runner can grade"
         case .diskSpaceLow: return "Disk nearly full"
+        case .courseKeyShadowed: return "Course links shadowed by a page address"
+        case .courseCodeNotURLSafe: return "Course code not usable in a link"
         }
     }
 
@@ -56,6 +60,11 @@ enum HealthRule: String, CaseIterable, Codable, Sendable {
         // Warning, not critical: it fires while there is still room to act.
         // The outage it predicts is what `databaseUnreachable` reports.
         case .diskSpaceLow: return "warning"
+        // Warning: students following the course's links reach a 404 or the
+        // wrong page until an admin renames the course.
+        case .courseKeyShadowed: return "warning"
+        // Warning for the same reason: every link to the course is a 404.
+        case .courseCodeNotURLSafe: return "warning"
         case .queueBackedUp: return "warning"
         case .errorRateSpike: return "warning"
         case .editorKernelUnrecoverable: return "warning"

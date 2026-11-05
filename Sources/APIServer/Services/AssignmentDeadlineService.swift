@@ -268,9 +268,24 @@ private func postDeadlineRevealDeadline(
     now: Date = Date()
 ) async throws -> Date? {
     let extensionDueAt = try await studentExtensionDueAt(for: assignment, user: user, on: db)
-    let effective = laterDeadline(baseline: assignment.dueAt, extensionDueAt: extensionDueAt)
-    let ceiling = try await slipDayClaimWindowCeiling(
-        for: assignment, user: user, extensionDueAt: extensionDueAt, on: db, now: now)
+    let slipDay = try await slipDayClaimState(for: assignment, user: user, on: db)
+    return postDeadlineRevealDeadline(
+        dueAt: assignment.dueAt, extensionDueAt: extensionDueAt, slipDay: slipDay, now: now)
+}
+
+/// The pure form of `postDeadlineRevealDeadline`: the later of the effective
+/// (extension-aware) deadline and the slip-day claim-window ceiling, from
+/// inputs the caller has already loaded. The database form and the dashboard
+/// (which batch-loads the same inputs for every row) both resolve through
+/// this one body, so the two cannot disagree (#2665).
+func postDeadlineRevealDeadline(
+    dueAt: Date?,
+    extensionDueAt: Date?,
+    slipDay: SlipDayClaimState?,
+    now: Date
+) -> Date? {
+    let effective = laterDeadline(baseline: dueAt, extensionDueAt: extensionDueAt)
+    let ceiling = slipDay?.claimWindowCeiling(dueAt: dueAt, extensionDueAt: extensionDueAt, now: now)
     return laterDeadline(baseline: effective, extensionDueAt: ceiling)
 }
 
@@ -342,14 +357,41 @@ func solutionVisibleToStudent(
     on db: any Database,
     now: Date = Date()
 ) async throws -> Bool {
-    guard assignment.solutionVisibility == .afterDue else { return false }
-    guard !assignmentDeadlineOverrideIsActive(assignment) else { return false }
-    guard assignmentVisibleToStudentByState(assignment, now: now) else { return false }
+    // The state conditions need no query; settle them before loading the
+    // deadline inputs. The full rule is the pure form below.
+    guard solutionRevealStateAllows(assignment, now: now) else { return false }
+    let extensionDueAt = try await studentExtensionDueAt(for: assignment, user: user, on: db)
+    let slipDay = try await slipDayClaimState(for: assignment, user: user, on: db)
+    return solutionVisibleToStudent(
+        assignment: assignment, extensionDueAt: extensionDueAt, slipDay: slipDay, now: now)
+}
+
+/// The pure form of `solutionVisibleToStudent`, from inputs the caller has
+/// already loaded: the student's raw extension date and their slip-day
+/// position. The one body of the reveal rule (#2665). The database form
+/// loads the inputs and calls it; the dashboard passes its batch-loaded
+/// values, so it can never offer a Solution link the serving routes refuse.
+func solutionVisibleToStudent(
+    assignment: APIAssignment,
+    extensionDueAt: Date?,
+    slipDay: SlipDayClaimState?,
+    now: Date
+) -> Bool {
+    guard solutionRevealStateAllows(assignment, now: now) else { return false }
     guard
-        let revealAt = try await postDeadlineRevealDeadline(
-            for: assignment, user: user, on: db, now: now)
+        let revealAt = postDeadlineRevealDeadline(
+            dueAt: assignment.dueAt, extensionDueAt: extensionDueAt, slipDay: slipDay, now: now)
     else { return true }
     return revealAt <= now
+}
+
+/// The first three reveal conditions, which read only the assignment: the
+/// policy is `.afterDue`, no deadline override is active, and the assignment
+/// is student-visible by its own state.
+private func solutionRevealStateAllows(_ assignment: APIAssignment, now: Date) -> Bool {
+    assignment.solutionVisibility == .afterDue
+        && !assignmentDeadlineOverrideIsActive(assignment)
+        && assignmentVisibleToStudentByState(assignment, now: now)
 }
 
 @discardableResult

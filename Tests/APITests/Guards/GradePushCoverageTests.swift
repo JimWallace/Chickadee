@@ -44,7 +44,7 @@ import Testing
             throw IssueRecorded("Cannot list \(Self.sourcesDirectory.path)")
         }
         var scanned = 0
-        for case let file as URL in enumerator where file.pathExtension == "swift" {
+        for case let file as URL in enumerator.allObjects where file.pathExtension == "swift" {
             scanned += 1
             let name = file.lastPathComponent
             guard !Self.allowedFiles.contains(name) else { continue }

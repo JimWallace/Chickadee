@@ -96,8 +96,7 @@ import VaporTesting
     // MARK: - Recording
 
     @Test func aPassingContributionIsStoredAndCoversItsSlot() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let f = try await fixture(on: app)
             let id = try await student("cc_a", f, on: app)
             let sub = try await submission("sub_a", by: id, f, on: app)
@@ -117,8 +116,7 @@ import VaporTesting
     }
 
     @Test func aFailedContributionIsStoredButCoversNothing() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let f = try await fixture(on: app)
             let id = try await student("cc_b", f, on: app)
             let sub = try await submission("sub_b", by: id, f, on: app)
@@ -133,8 +131,7 @@ import VaporTesting
     }
 
     @Test func anInvalidPayloadIsDiscarded() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let f = try await fixture(on: app)
             let id = try await student("cc_c", f, on: app)
             let sub = try await submission("sub_c", by: id, f, on: app)
@@ -151,8 +148,7 @@ import VaporTesting
     /// The newer submission replaces the row. An older one, re-tested later,
     /// does not. The first passing contribution keeps the coverage row.
     @Test func theNewestSubmissionWins() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let f = try await fixture(on: app)
             let id = try await student("cc_d", f, on: app)
             let now = Date()
@@ -184,8 +180,7 @@ import VaporTesting
     /// Two results for one student at once: the newer submission is the one
     /// left stored, in either order.
     @Test func concurrentResultsLeaveTheNewerSubmission() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let f = try await fixture(on: app)
             let id = try await student("cc_race", f, on: app)
             let now = Date()
@@ -212,8 +207,7 @@ import VaporTesting
     }
 
     @Test func aStaffSubmissionOrAnotherKindRecordsNothing() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let f = try await fixture(on: app)
             let staff = try await makeTestUser(on: app, username: "cc_staff", role: "instructor").requireID()
             try await makeTestEnrollment(on: app, userID: staff, courseID: f.courseID)
@@ -238,8 +232,7 @@ import VaporTesting
     }
 
     @Test func aStudentWithNoSlotRecordsNothing() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let f = try await fixture(on: app)
             let id = try await makeTestStudent(on: app, username: "cc_noslot").requireID()
             try await makeTestEnrollment(on: app, userID: id, courseID: f.courseID)
@@ -255,8 +248,7 @@ import VaporTesting
     /// Both result paths call `ResultIngestEffects.apply`, so this is the
     /// wiring for each of them.
     @Test func theSharedIngestEffectsRecordTheContribution() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let f = try await fixture(on: app)
             let id = try await student("cc_e", f, on: app)
             let sub = try await submission("sub_e", by: id, f, on: app)
@@ -270,8 +262,7 @@ import VaporTesting
     // MARK: - Course deletion
 
     @Test func deletingACourseRemovesItsSlotsAndContributions() async throws {
-        let app = try await makeTestApp(prefix: "chickadee-delete-composite")
-        try await withApp(app) { app in
+        try await withTestApp(prefix: "chickadee-delete-composite") { app in
             let cookie = try await loginAsAdmin("delete_composite_admin", on: app)
             let f = try await fixture(archived: true, on: app)
             let course = try #require(try await APICourse.find(f.courseID, on: app.db))

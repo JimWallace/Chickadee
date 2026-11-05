@@ -125,7 +125,9 @@ enum BrightSpacePagePresenter {
         // A TA reaches this tab, but the course-level actions are `.instructor`
         // (#2710). Hide what the handlers refuse; disconnect stays.
         let canManage =
-            try await evaluateCourseWrite(user: user, courseID: courseUUID, atLeast: .instructor, db: db).denial == nil
+            try await evaluateCourseWrite(
+                user: user, courseID: courseUUID, atLeast: CourseRoleFloor.brightSpaceBinding, db: db
+            ).denial == nil
         let facts = learnPageFacts(
             LearnFactsInput(
                 usesServiceAccount: application.brightSpaceUsesServiceAccount,
@@ -356,11 +358,17 @@ enum BrightSpacePagePresenter {
 
     /// One student's most-recent grade-sync attempt for a test setup, used to
     /// dedupe the per-assignment counts down to distinct students.
-    private struct LatestSyncState {
+    struct LatestSyncState {
         var attemptedAt: Date
         var error: String?
         var syncedAt: Date?
         var pending: Bool
+    }
+
+    /// One student on one assignment: the unit the sync summary counts.
+    struct StudentKey: Hashable {
+        let setupID: String
+        let userID: UUID
     }
 
     /// Computes the per-assignment Synced/Failed rollup and the headline summary,
@@ -375,46 +383,7 @@ enum BrightSpacePagePresenter {
         on db: any Database
     ) async throws -> (BrightspaceSyncSummary, [String: SetupSyncCounts]) {
         // (setupID, userID) → that student's most-recent sync state.
-        struct StudentKey: Hashable {
-            let setupID: String
-            let userID: UUID
-        }
-        var latestByStudent: [StudentKey: LatestSyncState] = [:]
-
-        // Map each student submission to its (setup, student) so a result row
-        // resolves to the student whose grade it carries.
-        let submissions =
-            setupIDs.isEmpty
-            ? []
-            : try await APISubmission.query(on: db)
-                .filter(\.$testSetupID ~~ setupIDs)
-                .filter(\.$kind == APISubmission.Kind.student)
-                .all()
-        var keyBySubmissionID: [String: StudentKey] = [:]
-        for submission in submissions {
-            if let id = submission.id, let userID = submission.userID {
-                keyBySubmissionID[id] = StudentKey(setupID: submission.testSetupID, userID: userID)
-            }
-        }
-
-        // Keep each student's latest result row (highest `receivedAt`).
-        let submissionIDs = Array(keyBySubmissionID.keys)
-        let results =
-            submissionIDs.isEmpty
-            ? []
-            : try await APIResult.query(on: db)
-                .filter(\.$submissionID ~~ submissionIDs)
-                .all()
-        for result in results {
-            guard let key = keyBySubmissionID[result.submissionID] else { continue }
-            let received = result.receivedAt ?? Date.distantPast
-            if let existing = latestByStudent[key], existing.attemptedAt >= received { continue }
-            latestByStudent[key] = LatestSyncState(
-                attemptedAt: received,
-                error: result.brightspaceSyncError,
-                syncedAt: result.brightspaceSyncedAt,
-                pending: result.brightspaceSyncPending == true)
-        }
+        var latestByStudent = try await latestResultSyncStates(setupIDs: setupIDs, on: db)
 
         // Override-only students (no submissions) — their grade rides on the
         // override row. Skip any already covered by a result row: the latest

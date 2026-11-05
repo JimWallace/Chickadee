@@ -87,6 +87,14 @@ import Testing
         TestProperties(
             starterNotebook: "a.ipynb", language: nil, languageDeclared: true,
             datasets: [DatasetSpec(file: "a.ipynb")]),
+        // Each GitHub field alone. With all three set or all clear, nothing
+        // could tell which fields take part in writing the `github` block, so
+        // the 2026-10-20 mutation sweep turned either `||` into `&&`, and
+        // `githubStarterRepository != nil` into `== nil`, and the round trip
+        // still held. Each mutant drops the block for one of these.
+        TestProperties(githubSubmission: true, language: nil, languageDeclared: true),
+        TestProperties(githubStatusChecks: true, language: nil, languageDeclared: true),
+        TestProperties(githubStarterRepository: "org/starter", language: nil, languageDeclared: true),
     ]
 
     private static func v2Bytes(_ p: TestProperties) throws -> Data {

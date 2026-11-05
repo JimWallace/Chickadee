@@ -12,7 +12,12 @@
 // exit code, which `Tests/Fixtures/output-contract.json` pins.
 
 public import Subprocess
+
+#if canImport(System)
+import System
+#else
 import SystemPackage
+#endif
 
 /// How long a bounded run may take, how much it may print, and how long its
 /// process group has to exit after SIGTERM before SIGKILL.

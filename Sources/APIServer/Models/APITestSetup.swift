@@ -77,7 +77,7 @@ func decodeManifest(from data: Data) -> TestProperties? {
 
 /// String overload for call sites that have the manifest as a JSON
 /// string (e.g. `manifestJSON: String` parameters in
-/// `ManifestFileHelpers.swift`).
+/// `ManifestJSON.swift`).
 func decodeManifest(fromJSON json: String) -> TestProperties? {
     decodeManifest(from: Data(json.utf8))
 }
@@ -118,7 +118,7 @@ func manifestTextAsV1(_ stored: String) -> String {
 
 private func manifestString(_ data: Data) throws -> String {
     guard let json = String(bytes: data, encoding: .utf8) else {
-        throw WebAssignmentError.internalFailure(reason: "Failed to encode manifest.")
+        throw AppError.internalFailure(reason: "Failed to encode manifest.")
     }
     return json
 }

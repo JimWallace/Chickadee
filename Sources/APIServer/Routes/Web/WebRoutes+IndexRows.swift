@@ -49,6 +49,17 @@ struct DashboardSlipDayData {
     /// Unrefunded spends per test setup, for the per-row offer state.
     let spendCountBySetupID: [String: Int]
 
+    /// This student's slip-day position on one row, in the form the reveal
+    /// gates take: the same inputs `slipDayClaimState(for:user:on:)` loads
+    /// for one assignment. Nil when slip days are off or the row is a staff
+    /// preview, as there.
+    func claimState(forSetupID setupID: String, assignment: APIAssignment) -> SlipDayClaimState? {
+        guard policy.enabled, assignment.visibility != .preview else { return nil }
+        return SlipDayClaimState(
+            policy: policy, balance: balance,
+            spentOnAssignment: spendCountBySetupID[setupID] ?? 0)
+    }
+
     static let disabled = DashboardSlipDayData(
         policy: SlipDayPolicy.resolve(enabled: false, daysPerStudent: nil, extensionHours: nil),
         balance: 0,
@@ -418,7 +429,7 @@ extension WebRoutes {
             setupID: setupID, context: context)
         let solutionAvailable = solutionRevealAvailable(
             assignment: assignment, extensionDueAt: extensionDueAt,
-            effectiveDueAt: effectiveDueAt, setupID: setupID, context: context)
+            setupID: setupID, context: context)
         let badgeSplit = AchievementBadge.dashboardSplit(context.gradeData.latestBadgesBySetupID[setupID] ?? [])
         let gates = dashboardRowActionGates(
             props: props, canEdit: canEdit, isOpenForThisUser: isOpenForThisUser,
@@ -512,34 +523,23 @@ extension WebRoutes {
             : "Use a slip day — extends your deadline to \(deadlineText)"
     }
 
-    /// Whether the "View solution" action is offered on this row: the same
-    /// rule the serving routes enforce (`solutionVisibleToStudent` — policy
-    /// on, published, no re-open override, this student's effective deadline
-    /// passed, no slip-day claim still reachable), computed from the row
-    /// inputs the dashboard has already loaded so no extra per-row queries
-    /// run.  Students only; staff reach the solution through the workbench.
+    /// Whether the "View solution" action is offered on this row. The rule is
+    /// the serving routes' own (`solutionVisibleToStudent`, pure form), fed
+    /// the row inputs the dashboard has already loaded, so no per-row query
+    /// runs and the two cannot drift (#2665). Students only; staff reach the
+    /// solution through the workbench.
     private static func solutionRevealAvailable(
         assignment: APIAssignment?,
         extensionDueAt: Date?,
-        effectiveDueAt: Date?,
         setupID: String,
         context: IndexRowContext,
         now: Date = Date()
     ) -> Bool {
         guard let assignment, !context.isActiveCourseStaff else { return false }
-        guard assignment.solutionVisibility == .afterDue else { return false }
-        guard !(assignment.deadlineOverrideActive ?? false) else { return false }
-        guard assignmentVisibleToStudentByState(assignment, now: now) else { return false }
-        let spentCount = context.slipDay.spendCountBySetupID[setupID] ?? 0
-        let ceiling = slipDayClaimWindowCeiling(
-            policy: context.slipDay.policy,
-            dueAt: assignment.dueAt,
-            balance: context.slipDay.balance,
-            spentOnAssignment: spentCount,
-            hasForeignExtension: extensionDueAt != nil && spentCount == 0,
+        return solutionVisibleToStudent(
+            assignment: assignment,
+            extensionDueAt: extensionDueAt,
+            slipDay: context.slipDay.claimState(forSetupID: setupID, assignment: assignment),
             now: now)
-        guard let revealAt = laterDeadline(baseline: effectiveDueAt, extensionDueAt: ceiling)
-        else { return true }
-        return revealAt <= now
     }
 }

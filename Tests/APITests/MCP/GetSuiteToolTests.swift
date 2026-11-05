@@ -16,8 +16,7 @@ import Vapor
         """
 
     @Test func returnsSuiteStructureForEnrolledSubject() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let course = try await makeTestCourse(on: app, code: "CS246", name: "OOP")
             let courseID = try course.requireID()
             let tester = try await makeTestUser(on: app, username: "tester", role: "instructor")
@@ -64,8 +63,7 @@ import Vapor
         """
 
     @Test func surfacesDefaultAndPerScriptTimeLimit() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let course = try await makeTestCourse(on: app, code: "CS246", name: "OOP")
             let courseID = try course.requireID()
             let tester = try await makeTestUser(on: app, username: "tester", role: "instructor")
@@ -92,8 +90,7 @@ import Vapor
         """#
 
     @Test func returnsSectionVariablesAndExpressions() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let course = try await makeTestCourse(on: app, code: "CS246", name: "OOP")
             let courseID = try course.requireID()
             let tester = try await makeTestUser(on: app, username: "tester", role: "instructor")
@@ -122,8 +119,7 @@ import Vapor
         """#
 
     @Test func surfacesPatternFamilyCases() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let course = try await makeTestCourse(on: app, code: "CS246", name: "OOP")
             let courseID = try course.requireID()
             let tester = try await makeTestUser(on: app, username: "tester", role: "instructor")
@@ -162,8 +158,7 @@ import Vapor
         """#
 
     @Test func surfacesNotebookCheckGeneratedFilename() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let course = try await makeTestCourse(on: app, code: "CS246", name: "OOP")
             let courseID = try course.requireID()
             let tester = try await makeTestUser(on: app, username: "tester", role: "instructor")
@@ -184,8 +179,7 @@ import Vapor
     }
 
     @Test func unknownAssignmentThrows() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             await #expect(throws: MCPToolError.self) {
                 _ = try await GetSuiteTool().execute(
                     GetSuiteTool.Input(assignmentPublicID: "zzzzzz"), mcpContext(app))

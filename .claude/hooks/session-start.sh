@@ -40,3 +40,40 @@ fi
 
 # Persist PATH for the session so subsequent shells see swift.
 echo "export PATH=\"${SWIFT_BIN}:\$PATH\"" >> "${CLAUDE_ENV_FILE}"
+
+# A local Postgres for the test suite, which has no other backend. The tests
+# default to localhost:5432, database chickadee_test, user and password
+# postgres (DatabaseSettings.localTest). Best effort: a missing server or a
+# failed start prints a note and leaves the session usable, and `swift test`
+# then names the database it could not reach.
+start_test_postgres() {
+    local pg_bin pg_data="/tmp/chickadee-test-postgres"
+    pg_bin="$(ls -d /usr/lib/postgresql/*/bin 2>/dev/null | sort -V | tail -1)"
+    if [ -z "${pg_bin}" ] || [ ! -x "${pg_bin}/pg_ctl" ]; then
+        echo "Postgres binaries not found; install PostgreSQL to run APITests."
+        return 0
+    fi
+    if "${pg_bin}/pg_isready" -q -h localhost -p 5432; then
+        echo "Postgres already accepting connections on localhost:5432."
+    else
+        local as_pg=()
+        if [ "$(id -u)" = "0" ]; then
+            as_pg=(runuser -u postgres --)
+        fi
+        if [ ! -s "${pg_data}/PG_VERSION" ]; then
+            mkdir -p "${pg_data}"
+            if [ "$(id -u)" = "0" ]; then
+                chown postgres:postgres "${pg_data}"
+            fi
+            "${as_pg[@]}" "${pg_bin}/initdb" -D "${pg_data}" -U postgres --auth=trust -E UTF8 >/dev/null
+        fi
+        "${as_pg[@]}" "${pg_bin}/pg_ctl" -D "${pg_data}" -l "${pg_data}/server.log" -w \
+            -o "-c listen_addresses=localhost -c max_connections=300" start >/dev/null
+    fi
+    psql -h localhost -U postgres -d postgres -q -c "ALTER USER postgres PASSWORD 'postgres'" >/dev/null 2>&1 || true
+    if ! psql -h localhost -U postgres -d postgres -tAc "SELECT 1 FROM pg_database WHERE datname = 'chickadee_test'" 2>/dev/null | grep -q 1; then
+        psql -h localhost -U postgres -d postgres -q -c "CREATE DATABASE chickadee_test" >/dev/null 2>&1 || true
+    fi
+    echo "Postgres ready for APITests on localhost:5432 (database chickadee_test)."
+}
+start_test_postgres || echo "Could not start the test Postgres; APITests need one on localhost:5432."

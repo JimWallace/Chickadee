@@ -527,7 +527,7 @@ import Testing
             // ARGUMENTS are wrong on an interpreter that is present: that case
             // exits 1, is indistinguishable from absence to the detector, and
             // silently costs the language its capability advertisement.
-            guard code != -1, code != 127 else { continue }
+            guard code != -1, code != 127, !isMacOSJavaStubWithoutAJDK(probe.command) else { continue }
             let invocation = "\(probe.command) \(probe.versionArguments.joined(separator: " "))"
             #expect(
                 code == 0,

@@ -1,3 +1,4 @@
+// @ts-check
 // Public/tournament-arena.js
 //
 // The projector arena (docs/class-activities.md, "Projector arena"). A
@@ -86,9 +87,9 @@
     }
 
     // ── Page wiring ──
-    var root = document.querySelector('[data-arena-setup-id]');
+    var root = /** @type {HTMLElement} */ (document.querySelector('[data-arena-setup-id]'));
     if (!root) return;
-    var button = root.querySelector('[data-arena-play]');
+    var button = /** @type {HTMLButtonElement} */ (root.querySelector('[data-arena-play]'));
     var status = root.querySelector('[data-arena-status]');
     if (!button || !status) return;
 

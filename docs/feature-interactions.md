@@ -7,10 +7,9 @@ document is the map of those objects. For each object, it gives the features
 that write it, the features that read it, and the rules that must stay true.
 
 The `interaction-review` agent (`.claude/agents/interaction-review.md`) uses
-this map as its checklist. CI runs the agent on every pull request that
-changes `Sources/` or a `Public/*.js` file
-(`.github/workflows/interaction-review.yml`). Human reviewers can use the map
-in the same way.
+this map as its checklist. A Claude Code session runs the agent before it
+commits a change to `Sources/` or a `Public/*.js` file; CI does not run it.
+Human reviewers can use the map in the same way.
 
 ## How to use this map
 
@@ -154,15 +153,19 @@ because line numbers go out of date.
   claim-window ceiling (`slipDayClaimWindowCeiling`).
 - **Rule:** this is the one resolver for the reveal moment. Release-tier
   output and the solution reveal both use it (`Sources/APIServer/CLAUDE.md`).
+- **One body, two input loaders (#2665):** the pure forms of
+  `postDeadlineRevealDeadline` and `solutionVisibleToStudent`
+  (`AssignmentDeadlineService.swift`) take loaded inputs: the raw extension
+  date and a `SlipDayClaimState`. The database forms load those inputs
+  (`slipDayClaimState(for:user:on:)`) and call them. The dashboard's
+  `solutionRevealAvailable` passes its batch-loaded values
+  (`DashboardSlipDayData.claimState`), so it runs no query for each row.
+  `SolutionRevealParityTests` runs the same cases through both callers.
 - **Parallel paths:**
-  - The dashboard's `solutionRevealAvailable` (`WebRoutes+IndexRows.swift`)
-    has an inline copy of the full calculation. The copy prevents one query
-    for each row.
-  - Three places load the slip-day inputs (policy, balance, spends, staff
-    extension): `loadSlipDayDashboardData`, the slip-day route, and the
-    database form of `slipDayClaimWindowCeiling`.
+  - The slip-day inputs still load in three places: `loadSlipDayDashboardData`,
+    the slip-day route, and `slipDayClaimState`.
   - `slipDayOffer` repeats the window arithmetic.
-  - A change to the reveal rule must go to all of these.
+  - A change to what the inputs are must go to all of these.
 - **Rule:** a link or a button can hide while its URL still serves the
   content. The opposite must never occur (`docs/solution-visibility.md`,
   "Enforcement chokepoints").
@@ -195,7 +198,8 @@ because line numbers go out of date.
 - **Readers:**
   - The notebook routes that serve the solution.
   - The notice on the submission page.
-  - The dashboard copy (see "The reveal moment").
+  - The dashboard row action, through the same pure form (see "The reveal
+    moment").
 - **Rule:** the solution shows only when all four conditions are true
   (`docs/solution-visibility.md`, "The reveal gate"):
   1. The policy is `afterDue`.
@@ -216,16 +220,17 @@ because line numbers go out of date.
     `SubmissionResultPresenter`. The mask applies after release redaction,
     and only for a viewer who is not staff.
   - `NotebookGuideBuilder`.
+  - The JSON results API and the data export, through
+    `maskingFailureDetail` (#2662). The API's ETag includes the settings.
 - **Rule:** the mask is a display policy. It is not a secret
-  (`docs/failure-detail.md`, "Where it is applied").
-- **Known gap:** the JSON results API and the data export return the full
-  text. See "Gaps found while mapping".
+  (`docs/failure-detail.md`, "Where it is applied"). Every door that shows a
+  student their outcomes applies it.
 
 ### Grade push: `requestGradePush`
 
 - **Callers:**
   - `ResultIngestEffects`.
-  - `GradeOverrideHelpers`.
+  - `GradeOverrides`.
   - The class-goal freeze in `AchievementEvaluationService`.
 - **Rules:**
   - A new trigger calls `requestGradePush` one time. The function sends to
@@ -527,6 +532,15 @@ because line numbers go out of date.
   the native worker grades a retest or a failover of a browser-graded
   submission. For this reason, the two graders must agree, and the language
   gate also covers browser assignments.
+- **Consumer:** `BrowserRunnerRoutes.requireBrowserRunnerAccess` reads the
+  effective mode for the browser-runner download, manifest and seed (#2763).
+  A caller who is not course staff gets 403 unless the mode is `browser`, or
+  when the manifest does not decode. Staff pass, so the notebook preview,
+  instructor validation and the Present-page arena still work.
+- **Parallel path that differs on purpose:** on a manifest that does not
+  decode, `decodeManifestGradingMode` seeds the notebook page with `browser`,
+  but `requireBrowserRunnerAccess` refuses a student. The runner then fails
+  with a visible error and fails over to the worker. Nothing leaks.
 
 ### What a runner receives: `RunnerManifest` and the cache key
 
@@ -552,7 +566,8 @@ because line numbers go out of date.
   - `DatasetSeedDerivation.effectiveSeed`.
 - **Parallel paths.** These must give the same values:
   - The worker job payload (`WorkerJobRoutes.buildJobPayload`).
-  - The browser seed endpoint (`BrowserRunnerRoutes.getAssignmentSeed`).
+  - The browser seed endpoint (`BrowserRunnerRoutes.getAssignmentSeed`). It
+    answers a student only for a browser-graded setup (#2763).
   - Both use `gradingInputs`, `CompositeSlots` and `DatasetResolver.resolve`.
 - **Parallel paths.** The student's download must give the same bytes as
   grading:
@@ -660,6 +675,32 @@ because line numbers go out of date.
     (`docs/grading-integrity.md`). A feature that trusts a value in a result
     has the same risk.
 
+### A new student submission: `SubmissionIntake`
+
+- **Writers:** seven doors. The upload form, a GitHub commit, the two REST
+  endpoints (`SubmissionRoutes`, course staff only), and the three notebook
+  endpoints (`browser-result`, `runner-submit`, `browser-failover`).
+- **Readers:** the attempt-number readers (First-Try-Perfect, the
+  prior-attempt delta), Pathfinder (`awardFirstToSubmitRecords`), the
+  operational diagnostics and job metrics, and the runner job claim
+  (`WorkerJobClaim`).
+- **Rules:**
+  - `SubmissionIntake.accept` is the one intake chokepoint (#2768). Each door
+    keeps its own checks (enrollment, `requireOpenStudentAssignment`, the
+    grading mode). A new student door must run `requireOpenStudentAssignment`
+    with `.submission` itself; nothing forces it. The intake owns the file write, the row, the attempt number
+    and every effect of a saved row. Put a new effect of a new submission
+    there, not in one door.
+  - A `pending` row records the "accepted" and "enqueued" diagnostics and
+    wakes the local runner. A `complete` row (a browser result) does neither,
+    because no runner grades it.
+  - Pathfinder goes to the owner of a `pending` row. A `complete` row's door
+    (`browser-result`) awards it after it stores the result
+    (`BrowserResultSideEffectOrderTests`). The REST doors save no owner, so
+    they award nothing and count attempts per setup.
+  - Every door that takes a notebook merges it with
+    `mergedWithInstructorNotebook`, on the NIO thread pool.
+
 ### Content versions and restore
 
 - **Rules:**
@@ -682,6 +723,74 @@ because line numbers go out of date.
     `.validation`. A `.starterValidation` run never sets `validationStatus`
     (`Sources/APIServer/CLAUDE.md`).
 - **Trap:** the web support-file delete did not validate or retest (#2472).
+- **Trap:** MCP `delete_support_file` ran the delete steps by hand and
+  skipped the `dependsOn` check that the web delete ran (#2771). Both doors
+  now call `deleteFileFromSetup` (`Services/SetupFileDeletion.swift`).
+
+### Authoring checks: `AuthoringCheckCatalog`, `AuthoringFinding`
+
+- **Writers:** none. A check reads `AuthoringSnapshot` and changes nothing.
+  The MCP loader fills it from the manifest, the starter notebook and the
+  latest solution, variant and starter runs, and it evaluates the
+  per-student expressions for the variant seeds.
+- **Readers:** MCP `check_assignment`. Later, the model reviewers of #2747,
+  which report in the same `AuthoringFinding` format. The loader in turn
+  reads the validation submission and result, the `ValidationVariant` batch
+  and `StarterValidationRun.latest`, so a change to how a variant batch is
+  replaced or how a variant's status is set changes what
+  `validation.variantFailed` reports.
+- **Rules:**
+  - A check reports. It never refuses a save. A rule that must refuse belongs
+    in `ManifestCoherence.violations`, and `ManifestCoherenceCheck` then
+    reports a manifest that still breaks it.
+  - A check whose message states a visibility or points rule must agree with
+    "Release and secret tiers" and "A manifest suite row". The course policy
+    (the release hold) is not in the snapshot, so a message about it says
+    "may", not "does".
+  - A new check is one line in `AuthoringCheckCatalog.all`, with an id that
+    stays stable once agents have seen it.
+  - The loader reads every run through `MCPStudentDataBoundary`. The starter
+    run is read on the owner pool, as `get_suite` reads it, because the
+    least-privilege role sees only `validation` rows.
+  - `starter.passesGradedTest` uses the workbench's rule
+    (`InstructorSuiteOutlineBuilder`): starter and solution both pass, and
+    the test is worth points. Both join outcomes to entries with
+    `outcomesByScript(in:)`. Change the rule in both places together.
+  - Whether the starter ran is `StarterValidationRun.failure(of:)`, which
+    the workbench shows as "Starter didn't run". `starter.didNotRun`
+    reports it, and while it is set the other starter checks find nothing.
+  - Seed parity: `personalization.expressionError` evaluates each variant
+    seed with the course seed and deal number that the variant run uses
+    (`resolveAndCacheValidationMaterialization`): the seed as its own course
+    seed, and dealt number `index` for variant `index`. Change both together.
+  - `PersonalizationPlaceholders.used` is the one list of the names that
+    content refers to, for `preview_personalization` and the check.
+    `PersonalizationPlaceholders.declared` is a second list of the
+    manifest's inputs, beside the pool in `PersonalizationSubstitution.resolve`.
+    A new kind of input goes into both, or it reads as undeclared.
+  - `timing.margin` takes a test's limit as `entry.timeLimitSeconds ??
+    manifest.timeLimitSeconds`, the limit that the runner applies per script.
+  - `achievements.neverAwarded` skips an award listed in
+    `disabledBuiltInAwardIDs`, as every evaluator does, and reads Core's own rules
+    (`allTestRefNames`, `isSweepEvaluableClassGoal`,
+    `coveredItemsRequirement`, `coveredItemNames(inScopeOf:)`). It catches
+    what `AchievementsEditing.validate` refuses at save, after a later suite
+    edit or a hand-authored manifest. A new achievement rule goes into Core
+    so that both read it.
+  - What a student's working copy holds is `StudentWorkspaceFiles`: the
+    support files it links, minus suite scripts, reserved notebooks,
+    grader-only files and datasets, plus the datasets, which are written
+    whatever their grader-only mark. `createSupportFileSymlinks` and
+    `files.missing` both call it. `linkSupportFiles` makes the links, with
+    the parent folders of a file in a subfolder, so a nested entry that
+    `files.missing` counts as delivered is in the working copy. The browser runner's zip filter and the
+    support-file download route compute their own lists; a change to what a
+    student receives must reach all of them.
+  - `files.missing` does not guess: when the setup zip cannot be found, it
+    reports nothing and the loader adds a warning.
+  - A part the loader cannot read becomes an entry in `warnings`, not a
+    failed call. An empty `findings` list is a pass only when `warnings` is
+    empty too.
 
 ### The ranking metric and class activities
 
@@ -690,6 +799,8 @@ because line numbers go out of date.
   - `ActivityMatches` and `Tournaments`.
   - `Sources/Worker/MatrixAggregation.swift`.
   - The leaderboard routes.
+  - The `activity.noMetric` authoring check (MCP `check_assignment`), which
+    reads a leaderboard kind as `kind.aggregation == .leaderboard`.
 - **Rules** (`docs/class-activities.md`):
   - A higher metric is better.
   - The metric is never credit, and it is not gated on the grade.
@@ -745,7 +856,9 @@ because line numbers go out of date.
     accepts only shared data (`DatasetSpec.isShared`). The rule is in
     `ManifestCoherence`. A new door that writes an activity or a dataset spec
     must call `ManifestCoherence.violation(introducedBy:in:)`
-    (`docs/datasets-course-library.md` §4.11). The bundle import, the
+    (`docs/datasets-course-library.md` §4.11). The web `PUT /datasets`
+    routes and MCP `set_dataset` call it through `applyDatasetsEdit`
+    (`Services/DatasetsChange.swift`), the one dataset-spec edit (#2771). The bundle import, the
     version restore, the clone and the draft publish copy a whole manifest
     and run no coherence rule, so an existing pair passes through them.
 
@@ -831,8 +944,9 @@ because line numbers go out of date.
     of the flag must do the same, or turning it on again brings back an
     earlier lab's code.
   - A clone and a bundle import clear the flag (see Cloning).
-- **Gap:** `POST /api/v1/submissions` checks enrollment only, so it skips
-  this gate, as it skips the window.
+- `POST /api/v1/submissions` checks enrollment only, so it skips this gate,
+  as it skips the window. That route is course staff only, and staff are
+  never gated.
 
 ### The client address: `clientIPAddress` and `Request.clientNetwork`
 
@@ -881,7 +995,10 @@ because line numbers go out of date.
     enrollment: login, enrollment, CSV, staff provisioning, bundle import, a
     new term, the MCP account, auto-enrollment in `.auto` courses, and LTI
     launch.
-  - The role-change routes.
+  - `CourseEnrollmentService`: unenroll, set role and staff invite, for the
+    instructor roster and the admin pages alike (#2770). The caller is the
+    admin bypass of the last-instructor guard. The staff invite makes a
+    placeholder account only when `staffPlaceholderAllowed` is true.
 - **Readers.** All of them go through `courseRole(of:inCourse:db:)`:
   - `requireCourseRole` and `requireCourseEnrollment`.
   - `isCourseStaff` and `isStaffAnywhere`.
@@ -914,14 +1031,14 @@ because line numbers go out of date.
   .instructor)`), and `BrightSpacePagePresenter`, which hides each control
   from a viewer that `evaluateCourseWrite` refuses at `.instructor`.
 - **Rule:** the assignments dashboard shows a control only to a viewer whom
-  its route accepts (#2743). `DashboardRoleFloor` holds the floors for
+  its route accepts (#2743). `CourseRoleFloor` holds the floors for
   assignment creation, the assignment lifecycle and section management. The
   route handlers and `DashboardControls` (which `AssignmentsPage` and
   `CourseItemRow` read) use the same constants. One parallel path is in
   JavaScript: `section-items-dnd.js` posts the assignment move to another
   section, so the page sets `data-assignment-moves="locked"` for a viewer
   below `manageSections`. A new dashboard control that calls an
-  instructor route reads a `DashboardRoleFloor` constant.
+  instructor route reads a `CourseRoleFloor` constant.
 - **Trap:** some handlers had comments that said "instructor", but they had
   only the area gate (#1448). `RouteAuthorizationMatrixTests` now finds a
   route under `/instructor` or `/courses` that has no minimum role.
@@ -947,14 +1064,24 @@ because line numbers go out of date.
 - **Resolvers:**
   - The web: `findActiveCourse(byKey:viewer:on:)`.
   - MCP: `resolveMCPCourse`.
-  - Uniqueness: `activeCourseCodeIsTaken` and `courseKeysCollide`. Create,
-    edit, import and un-archive call them.
+  - Uniqueness: `courseCodeConflict`, which checks a new code against
+    `CourseCodeSyntax` and `ReservedCourseKeys`, and then every code against
+    `activeCourseCodeIsTaken` (with `courseKeysCollide`). Create, edit,
+    clone, new term, import, un-archive and the `-COPY` generator call it. A
+    new door calls it too, never one check alone.
 - **Rules** (`docs/course-terms.md`):
   - Do not add a lookup by code only.
   - On the web, the viewer's own course wins. Then the newest term wins.
   - MCP refuses a write through a code that names more than one course.
   - Every MCP result names `courseKey` and `courseTerm`.
-- **Traps:** key collisions (#2227). Un-archive and the unique index (#1777).
+- **Traps:** key collisions (#2227). Un-archive and the unique index (#1777). A code equal to the first
+  segment of any fixed route (#2666): the router prefers a constant segment and
+  never backtracks, so the course loses its vanity links. The reserved set is
+  read from `app.routes.all`, and the `courseKeyShadowed` health rule reports
+  an active course that holds one. A code with a character a link cannot carry,
+  such as `/` or `?`: the link splits or ends there, so it is a 404. A space
+  works: RoutingKit decodes each parameter.
+  `courseCodeNotURLSafe` reports such a course.
 
 ### Cloning: `CourseCloneService.clone` and `cloneAssignment`
 
@@ -1045,6 +1172,39 @@ because line numbers go out of date.
   - Only course staff (TA and up) can find the student for a handle.
   - A handle never comes from identity data.
 
+### Wardrobe unlocks: `wardrobe_unlocks`
+
+- **Writers:**
+  - `WardrobeUnlockStore.grantEarned` and `grantNew`, when the account page or
+    a result page loads. They store what graded work earns.
+  - `WardrobeUnlockStore.grantFound`, from `POST /account/wardrobe/found`
+    (`Routes/Web/AccountRoutes+Found.swift`). The Konami script
+    `Public/quantum-cats-egg.js` posts it.
+- **Readers:**
+  - The "Your bird" card (`AvatarPickerContext`) and the avatar save
+    chokepoint (`AvatarCustomization.isOpen`), which offer and accept only
+    stored items.
+  - The result page's Earned toast, which shows what `grantNew` stored.
+  - The data export.
+  - Indirectly, every page that draws a bird: a worn ring shows on
+    leaderboards and rosters (`AvatarPresentation`).
+- **Also reads `WardrobeItem.allCases`:** the course Achievements tab's
+  "Built in" list (`BuiltInRuleRow`), found items included.
+- **Rules** (`docs/student-wardrobe.md`, 6b and 6c):
+  - A stored unlock is never taken back.
+  - `earned(by:)` never returns a found item, and `grantFound` refuses an
+    earned one. `grantEarned` counts only earnable items when it decides to
+    skip the progress queries, and `grantNew` never returns a found item. A
+    new found item needs no change to the grading path.
+  - Course staff wear the staff ring: no surface offers them a ring to wear.
+    The result page's toast skips ring items for them, and the layout
+    renders them no found-ring toast (`CurrentUserContext.foundRingToast`).
+  - Every signed-in page with site chrome carries the hidden found-ring
+    toast (`#quantum-cats-found`) and `quantum-cats-egg.js`. A page that
+    also shows the result page's Earned toast has two, with distinct ids.
+  - The unique index on user and item stores an item once when two requests
+    race.
+
 ### Student data that classmates see
 
 - **Features:** the leaderboard, the class composite, collaborative
@@ -1076,6 +1236,25 @@ because line numbers go out of date.
   student's login reaches the organization only in the repository name
   (`docs/github-submissions.md`, "What reaches GitHub").
 
+### The shared outbound HTTP client: `app.http.client.configuration`
+
+- **Owner:** `OutboundHTTPClientSetup.apply`, called once from `configure`
+  before the first `app.client` use (#2765). It sets a 30 s connect timeout,
+  a 60 s read timeout and the optional outbound proxy.
+- **Readers:** every `app.client` and `req.client` call, and
+  `app.http.client.shared`. These include the SSO token exchange, OIDC
+  discovery and JWKS, the LTI key set and AGS calls, BrightSpace,
+  `GitHubTransport`, the GitHub tarball download, the alert webhook and the UW
+  dates feed.
+- **Rules:**
+  - A new outbound call uses the shared client and gets the timeout. A call
+    that needs a shorter limit sets `ClientRequest.timeout` itself.
+  - A source that builds its own `HTTPClient` sets its own read timeout and
+    is named in `OutboundHTTPClientSetupTests`.
+  - A longer read timeout cannot be set per call. The read timeout equals the
+    GitHub tarball download's 60 s budget, so that download cannot hit it
+    first.
+
 ### Course archival: `isArchived`
 
 - **Readers:**
@@ -1100,7 +1279,10 @@ because line numbers go out of date.
     (`reorder_course_sections`, `reorder_section_items`,
     `reorder_assignments`, `reorder_content_items`).
   - A move into a section and a new item append after the last item
-    (`nextSectionItemSortOrder` in `Services/SectionPlacement.swift`).
+    (`nextSectionItemSortOrder` in `Services/SectionPlacement.swift`). The
+    web routes and the MCP tools create, edit, move and delete content items
+    and course sections through `Services/CourseContentService.swift` and
+    `Services/CourseSectionService.swift` (#2769), which call it.
   - Course clone and bundle import copy it.
 - **Readers:** the display comparators in
   `Routes/Web/AssignmentListDisplayHelpers.swift` (the instructor list, the
@@ -1150,6 +1332,7 @@ not repeat them. But a change that makes one of them weaker is a finding.
 | Rows that course deletion does not remove | `DeleteCourseCoverageTests` |
 | A reorder with its own role floor or rules | `SortOrderRenumberingTests`, `ReorderSurfaceRulesTests`, `SectionItemFullListTests` |
 | A notebook worker that is not in the isolation list | `IsolatedWorkerScriptDriftTests` |
+| An outbound HTTP call that bypasses the shared client timeout | `OutboundHTTPClientSetupTests` |
 
 ---
 
@@ -1160,24 +1343,7 @@ rules above. They are listed here so that the review agent does not report
 them on every pull request. Each one has an issue that holds its decision.
 When an issue is closed, remove its item and correct the section above.
 
-1. **Failure detail outside the web page (#2662).** The JSON results API
-   (`GET /api/v1/submissions/:id/results`) and the data export return the
-   full failure text, also for an entry set to `actualOnly` or
-   `verdictOnly`. `docs/failure-detail.md` calls the setting a display
-   policy, not a secret. But it does not say that these two paths are out of
-   scope.
-2. **The dashboard copy of the reveal rule (#2665).** `solutionRevealAvailable` in
-   `WebRoutes+IndexRows.swift` is a full inline copy of
-   `solutionVisibleToStudent` and `postDeadlineRevealDeadline`. It is
-   correct now. It is the most likely place for the next drift.
-3. **Fixed routes and vanity URLs (#2666).** The vanity routes
-   (`VanityURLRoutes.swift`, `/:courseCode/:assignmentSlug`) are registered
-   last, so a fixed route with two segments wins. `/data/:courseKey` and
-   `/submissions/:submissionID` have that shape. `StudentDataRoutes.swift`
-   chose its path so that an assignment slug `data` still works. But a course
-   with the code `data` or `submissions` loses its vanity URLs. No list of
-   reserved course codes exists.
-4. **Course achievements in a clone, a bundle and after a deletion
+1. **Course achievements in a clone, a bundle and after a deletion
    (`docs/achievement-rewards.md`, S8).** `CourseCloneService.clone` and the
    course bundle do not carry `courses.achievements` yet, so a new term
    starts with none. A course achievement names course sections and

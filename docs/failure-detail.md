@@ -40,8 +40,22 @@ field, or an entry reset to the default, reads exactly as before.
 
 ## Where it is applied
 
-At results-display time, in `SubmissionResultPresenter.renderOutcomeRow`,
-through `maskFailureOutput`. The generated script prints everything it knows.
+At results-display time, through `maskFailureOutput`
+(`Sources/APIServer/Utilities/FailureDetailMasking.swift`). Every door that
+shows a student their outcomes applies it, for a viewer who is not course
+staff:
+
+- the results page, in `SubmissionResultPresenter.renderOutcomeRow`;
+- the notebook guide, in `NotebookGuideBuilder`;
+- the JSON results API, `GET /api/v1/submissions/:id/results`, through
+  `maskingFailureDetail`. The setting is part of the response's ETag, so a
+  relaxed setting re-serves every past result;
+- the personal data export (`DataExportContent.swift`), through the same
+  function. The export is a copy of what the student can see, not of the
+  stored text (#2662).
+
+A pass and a dependency skip are never masked. Staff always read the full
+text. The generated script prints everything it knows.
 This is deliberate: a setting can be relaxed after the fact and every past
 result re-reads under the new level, and the browser grader, which runs the
 suite in the student's own tab, needs no change.

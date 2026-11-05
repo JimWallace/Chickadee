@@ -12,7 +12,7 @@ public import Foundation
 /// invariants enforced by the test suite.
 public func sha256HexDigest(_ data: Data) -> String {
     let digest = SHA256.hash(data: data)
-    return digest.map { String(format: "%02x", $0) }.joined()
+    return digest.map { String(cFormat: "%02x", $0) }.joined()
 }
 
 /// Lowercase-hex SHA-256 digest of `string` interpreted as UTF-8 bytes.
@@ -36,5 +36,5 @@ public func sha256HexDigest(prefix: Data, contentsOfFile path: String) -> String
         hasher.update(data: chunk)
     }
     let digest = hasher.finalize()
-    return digest.map { String(format: "%02x", $0) }.joined()
+    return digest.map { String(cFormat: "%02x", $0) }.joined()
 }

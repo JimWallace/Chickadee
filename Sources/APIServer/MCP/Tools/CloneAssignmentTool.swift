@@ -132,7 +132,7 @@ struct CloneAssignmentTool: ContentTool {
         // the destination is write-gated (#417 Slice D-MCP).
         // Creating an assignment (clone) into the destination is instructor-level (#417).
         try await context.authorizeCourseWriteAccess(
-            targetCourseID, atLeast: .instructor)
+            targetCourseID, atLeast: CourseRoleFloor.createAssignment)
 
         let cloned: AuthoredAssignment
         do {

@@ -46,8 +46,7 @@ import Vapor
     }
 
     @Test func stopReturnsOnlyAfterTheRunningSweepHasEnded() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let probe = SweepProbe()
             let monitor = Self.monitor(probe: probe)
             monitor.start(application: app)

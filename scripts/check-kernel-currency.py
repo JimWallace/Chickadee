@@ -50,7 +50,8 @@ honoured by the solve like any other constraint, so a deliberate pin reads as
 current rather than as drift.
 
 WHEN IT FAILS, run the "Re-vendor xeus kernels" workflow
-(.github/workflows/revendor-kernels.yml) and commit what it produces.
+(.github/workflows/revendor-kernels.yml) with `publish` checked; it opens the
+update as a pull request. The scheduled run does that by itself.
 
 Needs micromamba on PATH and network to the channels, which is why this is not
 in format-lint and not in the JupyterLite job. It runs on a schedule; see
@@ -222,10 +223,14 @@ def report(differences: list[dict], env_summaries: list[str]) -> int:
             f"  {difference['change']:<7} {label}  "
             f"{_describe(difference['vendored'])} -> {_describe(difference['solved'])}"
         )
+    # kernel-currency.yml greps for "the vendored kernels are behind their
+    # channels" to decide whether to dispatch a publish. That phrase is the
+    # verdict; a failed solve also exits 1 and must not publish. Keep it.
     print(
         '\ncheck-kernel-currency: the vendored kernels are behind their channels. '
         'Run the "Re-vendor xeus kernels" workflow '
-        "(.github/workflows/revendor-kernels.yml) and commit the result."
+        "(.github/workflows/revendor-kernels.yml) with publish checked; the scheduled"
+        " run of kernel-currency.yml dispatches it by itself."
     )
     return 1
 

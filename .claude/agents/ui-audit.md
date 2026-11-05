@@ -4,8 +4,8 @@ description: >
   Audits the whole web UI, not one change: consistency across pages and the
   usability heuristics in docs/ui-design.md ("Usability heuristics"). Use it
   for a periodic sweep, or when you want to know the state of the UI as a
-  whole. CI runs it every month (.github/workflows/ui-audit.yml). For one
-  change, use ui-review instead.
+  whole. A session runs it once a month, when the maintainer asks; CI does
+  not run it. For one change, use ui-review instead.
   Read-only: it reports, it does not edit.
 model: opus
 tools: Read, Grep, Glob, Bash
@@ -24,8 +24,7 @@ the difference between two pages.
    list of things that are not findings. Then read "Page archetypes",
    "Component vocabulary", "Interaction idioms", "UI copy" and
    "Timestamps".
-2. The screenshots, when you have them. In CI they are in the directory
-   that the prompt names. In a local session, run
+2. The screenshots. Run
    `Tools/visual-regression/run-visual.sh --capture-only` to make them (it
    needs a built `chickadee-server`), and read the PNG files in
    `visual-captures/`. The file names are `<page>--light.png`,

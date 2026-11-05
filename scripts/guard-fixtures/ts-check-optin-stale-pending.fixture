@@ -1,0 +1,11 @@
+# A file that opts in but stays on the pending list. The list then stops
+# shrinking, and a later edit can drop the opt-in with no guard to see it.
+# The defect lists a file that already opts in, so the fixture holds while the
+# pending list shrinks to nothing (#2834).
+guard="scripts/check-ts-check-optin.sh"
+files="scripts/ts-check-pending.txt"
+description="a pending file that already opts in"
+expect="stale pending entry"
+apply() {
+    echo 'Public/sparkline.js' >> scripts/ts-check-pending.txt
+}

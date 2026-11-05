@@ -1,0 +1,19 @@
+{
+  "compilerOptions": {
+    "target": "ES2023",
+    "lib": ["ES2024", "DOM", "DOM.Iterable", "WebWorker.ImportScripts"],
+    "module": "preserve",
+    "allowJs": true,
+    "checkJs": false,
+    "noEmit": true,
+    "strict": false,
+    "skipLibCheck": true,
+    "types": [],
+    "paths": {
+      "/vendor/codemirror.js": ["./types/vendor-codemirror.d.ts"],
+      "/vendor/iframe-commands-host.js": ["./types/vendor-iframe-commands-host.d.ts"],
+      "/runner-wasm/runner-core.js": ["./types/runner-core-loader.d.ts"]
+    }
+  },
+  "include": ["Public/*.js", "types/*.d.ts"]
+}

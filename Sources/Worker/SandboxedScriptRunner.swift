@@ -434,6 +434,9 @@ struct SandboxVisibleDirectories {
             guard value.hasPrefix(rootPrefix) else { continue }
             guard let status = try? Stat(FilePath(value)), status.type == .directory else { continue }
             let url = URL(fileURLWithPath: value, isDirectory: true).standardizedFileURL
+            // A value naming the work root itself (macOS's `TMPDIR` ends in
+            // `/`, so it passes the prefix check) would make every job visible.
+            guard url.path != root.path else { continue }
             if !directories.contains(url) { directories.append(url) }
         }
         self.workRoot = root
@@ -703,9 +706,9 @@ private func macOSSandboxProfile(visible: SandboxVisibleDirectories, hiding hidd
     // not traverse /var → /private/var, so we call POSIX realpath(3) directly.
     func realPath(_ url: URL) -> String {
         url.path.withCString { ptr in
-            guard let buf = Darwin.realpath(ptr, nil) else { return url.path }
-            defer { free(buf) }
-            return String(cString: buf)
+            guard let buf = unsafe Darwin.realpath(ptr, nil) else { return url.path }
+            defer { unsafe free(buf) }
+            return unsafe String(cString: buf)
         }
     }
     let visibleRules = visible.directories

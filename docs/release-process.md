@@ -39,6 +39,14 @@ docs-only or trivial PR can either skip a fragment (no release) or include one
 (rolls into the next version). Version assignment is the single, serialized
 step (`concurrency: auto-release`), so two quick merges can't race.
 
+The release commit does not run the Swift test lanes again. `swift-tests.yml`
+sees that the push changes only the release files and runs its `build` job
+alone, which saves the build cache for the new tree. The merge commit before it
+ran the full suite on the same code. Each push to `main` has its own
+concurrency group, so a release commit no longer cancels the run of its merge
+commit. `scripts/ci-swift-suite-scope.sh` holds the rule, and also lets a pull
+request that changes only unread Markdown skip the Swift suite (#2781).
+
 ### Downstream triggering — set `RELEASE_TOKEN` for full automation
 
 GitHub deliberately does **not** let a tag pushed with the default
@@ -52,7 +60,11 @@ bot's tag will **not** fire `release.yml` (GitHub Release) or the tag build in
   **Contents: read & write** on this repo and save it as the repo secret
   `RELEASE_TOKEN`. The bot pushes the tag with it, so `release.yml` **and**
   `docker-build` fire naturally — fully automated, including the `:latest`
-  Docker image.
+  Docker image. Also give the token **Pull requests: read & write**. The
+  weekly kernel currency check uses the same secret to publish a kernel update
+  (`revendor-kernels.yml` in publish mode). Publish mode opens a pull request
+  with the token and turns on auto-merge, and with Contents only it pushes the
+  branch and then fails at `gh pr create`.
 - **Fallback (no secret).** The bot uses `GITHUB_TOKEN` and explicitly
   dispatches `release.yml` (so GitHub Releases still happen), **but the
   `docker-build` tag build does not run** — `:latest` won't update on release

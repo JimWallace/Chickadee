@@ -9,6 +9,787 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.845] - 2026-11-05
+
+### Changed
+
+- **The admin MCP's database comment matches the shipped design.** `AdminToolContext` no longer says a dedicated admin database role is coming. `docs/admin-mcp.md` records that the code allowlist replaced it (#1250).
+
+
+## [0.5.844] - 2026-11-05
+
+### Fixed
+
+- **The LEARN tab summary reads one row per student.** It used to read every result row of a course, with every column of the result and its submission, to keep each student's latest. Postgres now picks that row with `DISTINCT ON` and returns five columns. On 65,536 submissions the old read spent 12 s sending about 35 MB to the server, and on a busy CI runner it reached the 60 s statement timeout (#2882).
+
+
+## [0.5.843] - 2026-11-05
+
+### Changed
+
+- **The JupyterLite extension resolves modules as a bundler does.** Its
+  `tsconfig.json` sets `moduleResolution` to `bundler` in place of `node`, which
+  TypeScript 7 removed (TS5108). This unblocks the TypeScript 7 update (#2873).
+  The built extension is unchanged under TypeScript 5.5.4.
+
+
+## [0.5.842] - 2026-11-05
+
+### Fixed
+
+- **Dependabot auto-merge handles large pull requests.** The `plan` job listed a pull request's files with `gh pr diff`, which GitHub refuses past 300 changed files, so a regenerated JupyterLite bump could never auto-merge. It now reads the paginated files API (#2871).
+
+
+## [0.5.841] - 2026-11-05
+
+### Fixed
+
+- **The weekly token check tests write access.** `dependency-health.yml` checked `RELEASE_TOKEN` with read requests only, so a token without Contents or Pull requests write passed until a real push or pull request failed. It now sends one request of each kind that GitHub must refuse, and reads the refusal: 403 means the permission is missing, 422 means it is there. Nothing is created.
+- **The ZAP scan courses are in the current term.** `scripts/zap-signed-in-session.sh` created its two courses in Fall 2026, a fixed term. It now uses the current term, on the calendar that `TermSeason.current` uses.
+
+
+## [0.5.840] - 2026-11-05
+
+### Security
+
+- **The dependency rebuild no longer shares a job with the push token.** `dependabot-auto.yml` and `revendor-kernels.yml` ran the bumped packages' install and build scripts, then pushed with a personal access token in a later step of the same job. A build step can reach a later step through `$GITHUB_PATH`, `$GITHUB_ENV`, a git hook or `.git/config`. The build now runs in a job with no secret and writes a patch artifact. A separate job checks that every file in the patch is regenerated output (`scripts/regenerated-patch.sh`), then commits and pushes it.
+
+
+## [0.5.839] - 2026-11-05
+
+### Security
+
+- **Dependabot waits before it offers a release.** Every Dependabot entry now has a `cooldown`: a new version is offered when it is 3 days old, and a new major version when it is 14 days old. Dependency updates merge and deploy with no person involved, and most compromised releases are withdrawn within that time. Security updates are not delayed.
+
+
+## [0.5.838] - 2026-11-05
+
+### Fixed
+
+- **The weekly dependency sweep reports every stuck Dependabot PR.** It reported only a PR without auto-merge. A PR with auto-merge on that conflicted with `main`, fell behind it, or had a required check that never reported stayed open with no issue. The sweep now reports any Dependabot PR open after three days, and the issue says why it is stuck.
+
+
+## [0.5.837] - 2026-11-05
+
+### Changed
+
+- **The frontend type check runs on TypeScript 7.** TypeScript 7 refuses a bare `resolve()` on an untyped `Promise`, so the IndexedDB probe in `Public/notebook-preflight.js` now declares its promise as `Promise<void>`. Nothing changes at run time.
+
+
+## [0.5.836] - 2026-11-04
+
+### Fixed
+
+- **Support files in a subfolder reach the student's notebook.** A setup-zip
+  file such as `data/patients.csv` was never linked into a student's
+  JupyterLite working copy, because its parent folder was not made first, and
+  the failure was not logged. The link pass now makes the parent folders and
+  logs each link it cannot make. The `files.missing` authoring check already
+  counted such a file as delivered, so it now agrees with what students get.
+
+
+## [0.5.835] - 2026-11-04
+
+### Added
+
+- **Two starter-run checks in `check_assignment` (#2747).** `starter.didNotRun`
+  reports a starter notebook that, as students receive it, does not build or
+  errors on every test, with the same reason the workbench shows.
+  `starter.errorsInsteadOfFails` lists graded tests that report an error, not a
+  failure, on the unmodified starter while the solution passes them, so a
+  student who runs the tests early sees a traceback.
+
+
+## [0.5.834] - 2026-11-04
+
+### Changed
+
+- **Dependency updates land on their own.** `dependabot-auto.yml` regenerates the committed output a bump feeds (`Public/vendor`, the JupyterLite extension, the kernels) and enables auto-merge on every Dependabot pull request, so the required checks decide. A red update, a stalled one, a security alert Dependabot cannot fix, and a broken or expiring `RELEASE_TOKEN` each become an issue labelled `dependency-update-failed` with a brief for an agent (`dependency-failure.yml`, `dependency-health.yml`). See `docs/dependency-updates.md`.
+
+### Fixed
+
+- **Dependabot bumps `jupyterlite` and `jupyterlite-core` together.** The two pins must match, and bumped one at a time neither PR resolved under pip. Dependabot now also covers the JupyterLite extension, with `@jupyterlab/*` and `@lumino/*` grouped.
+
+### Security
+
+- **katex, sanitize-html and minimatch are past their advisories.** Their parents pinned them back, so Dependabot could not update them. The extension forces katex 0.19 and sanitize-html 2.18 with yarn `resolutions`, and the root forces minimatch 11 with npm `overrides`. All three are build-time only, and the shipped bytes do not change.
+
+
+## [0.5.833] - 2026-11-04
+
+### Fixed
+
+- **Kernel publish names the token permission it needs.** `revendor-kernels.yml`
+  in publish mode now reports a `RELEASE_TOKEN` without Pull requests: read &
+  write, and `docs/release-process.md` lists that permission.
+
+
+## [0.5.832] - 2026-11-04
+
+### Security
+
+- **The weekly ZAP scan crawls the signed-in pages.** Without a session it reached five public URLs and every other page redirected to `/login` (#2193). The job now registers a throwaway account on its CI server, makes it the admin, an instructor in one course and a student in another, and passes its session cookie to ZAP. The spider submits no forms, so the signed-in crawl cannot sign out or delete what it scans.
+- **ZAP accepts Private IP Disclosure on the admin audit page.** The audit log shows each action's client address by design. `.zap/rules.tsv` names the rule at INFO for `/admin/audit` only, so the alert stays listed in the report issue.
+
+
+## [0.5.831] - 2026-11-04
+
+### Added
+
+- **Three more authoring checks in `check_assignment` (#2747).**
+  `achievements.neverAwarded` reports an achievement that can never be
+  awarded: a test or section reference that a later suite edit removed, a
+  class goal of a shape the sweep does not evaluate, or a coverage goal that
+  asks for more items than its scope has. `points.noGradedTest` reports a suite
+  where every test is worth 0 points. `files.missing` reports a data file that
+  the starter notebook names but students do not receive, including a
+  grader-only file.
+
+
+## [0.5.830] - 2026-11-04
+
+### Fixed
+
+- **Dependabot can open pull requests again.** The `Default` branch ruleset excluded `refs/heads/dependabot/**`, which matches one path level only, so every real Dependabot branch was still refused. The exclusion is now `refs/heads/dependabot/**/*`, and the comment at the top of `.github/dependabot.yml` names that pattern and says how to check a branch name.
+
+
+## [0.5.829] - 2026-11-04
+
+### Fixed
+
+- **Mutation sweep: shard 5 no longer times out.** Muter guards each mutant
+  with a call that rebuilds the whole process environment, once per guard and
+  per call, so a mutated hot loop (AvatarSpec's weighted pick) made every
+  mutant in the shard end at the 15-minute limit, and the job was cancelled at
+  three hours for three weeks running (#2810). A second patch to the pinned
+  Muter, `Tools/mutation/0002-read-environment-once.patch`, makes each mutated
+  file read the environment once. `scripts/mutation-run.sh` now applies every
+  `Tools/mutation/*.patch` in order, and the `Mutation-testing probe` workflow
+  now builds the patched tool, which it never did before, and checks that the
+  guards read the cached copy.
+
+
+## [0.5.828] - 2026-11-04
+
+### Changed
+
+- **Why Dependabot went quiet.** `.github/dependabot.yml` now records that the
+  repository's `Default` branch ruleset, which has required `editor-smoke-gate`
+  on every branch since 21 June 2026, refuses Dependabot's branches, so no
+  Dependabot PR has opened since then. The ruleset needs
+  `refs/heads/dependabot/**` in its excluded refs. That is a repository setting.
+
+
+## [0.5.827] - 2026-11-04
+
+### Fixed
+
+- **The dead-code scan builds again.** `dead-code.yml` moved the index store with `-index-store-path`, and SwiftPM test discovery on Linux could not find it, so every run failed at the build. The job now keeps the index at SwiftPM's default path and scans it there.
+
+### Changed
+
+- **The dead-code scan also lists code that only tests use.** `dead-code.yml` now adds `results-without-tests.json`, a scan with the test targets left out, to its report. `docs/dead-code-scan.md` explains how to read it.
+
+
+## [0.5.826] - 2026-11-04
+
+### Added
+
+- **`chickadee-review` Claude Code plugin (#2747).** Six read-only reviewer
+  agents (voice, assessment alignment, student perspective, personalization,
+  curriculum fit, consistency) and a `review-assignment` skill that runs
+  `check_assignment`, chooses the reviewers an assignment needs, runs them in
+  parallel and returns one report. The repository is the plugin's marketplace.
+  Install and pilot notes are in `docs/assignment-review.md`.
+
+
+## [0.5.825] - 2026-11-04
+
+### Added
+
+- **Weekly dead-code scan.** `.github/workflows/dead-code.yml` runs Periphery Pro on Linux every Sunday and uploads a `dead-code-report` artifact that lists unused Swift declarations. It is a report, not a gate. `.periphery.yml` holds the scan options, and `docs/dead-code-scan.md` explains how to read the report and how to update the tool.
+
+
+## [0.5.824] - 2026-11-04
+
+### Added
+
+- **`check_assignment` reads the validation runs (#2747).** Six more authoring
+  checks: the reference solution fails a per-student validation variant; a
+  placeholder that no input declares; a per-student expression that fails for a
+  validation seed; a graded test that passes on the unmodified starter; a
+  solution that uses more than half of a test's time limit; and a leaderboard
+  activity whose solution run reports no `metric`. The tool reads the stored
+  solution, variant and starter runs through the student-data boundary and
+  evaluates the expressions for the variant seeds. It still starts no run. A
+  part that cannot be read is reported in `warnings` instead of failing the call.
+
+
+## [0.5.823] - 2026-11-04
+
+### Added
+
+- **`check_assignment` MCP tool and the authoring-check framework (#2747).** A
+  new `content:read` tool runs rule-based checks over an assignment's stored
+  content and returns findings in one format (`AuthoringFinding`: check id,
+  severity, location, message, suggested fix). The format already has a
+  `reviewer` source and location kinds that no check uses yet, because the
+  model reviewers planned in #2747 will report in it too. The first three checks report a manifest that breaks a coherence rule,
+  a suite with no public test, and a zero-point test. The tool reads stored
+  content only; it starts no run and changes nothing.
+
+
+## [0.5.822] - 2026-11-04
+
+### Changed
+
+- **Every first-party frontend script is type-checked.** `jl-kernel-diagnostics.js` and `jl-cell-perf-patch.js` opt in with `// @ts-check`, with JSDoc only, and their cache-busted tags in the JupyterLite editor are re-patched. `scripts/ts-check-pending.txt` now lists no files (#2850).
+
+
+## [0.5.821] - 2026-11-04
+
+### Changed
+
+- **Five authoring helpers leave `Routes/Web`.** `AssignmentHelpers`, `MultipartHelpers` and `SuiteEditHelpers` move to `Helpers/`, and `AssignmentRequirementHelpers` and `SuiteRowHelpers` to `Utilities/`. Three tests that read them by path name the new paths. These are pure moves with no change in behaviour (#2847).
+
+
+## [0.5.820] - 2026-11-04
+
+### Removed
+
+- **The CI agent workflows.** They needed an Anthropic API key or a subscription token, and the repository's token stopped working on 2026-10-20. Every agent then failed before the model ran, and the checks stayed green, so the PR reviews, the weekly digest and the docs audit stopped without anyone seeing it. The UI review, interaction review, UI audit, docs audit, CI triage, visual-diff explainer, mutation pretriage and Dependabot notes workflows are gone, with the shared agent action and its guard. The review and audit agents still run in Claude Code sessions, and CLAUDE.md now says that a session is their only route.
+
+### Changed
+
+- **The weekly digest needs no model.** A script with a self-test writes it from the same reports, by stated rules. It reads whether the ZAP scan ran from the newest run, not from the ZAP issue's date: the scan edits that issue only when its findings change, so the 2026-10-19 digest reported a missing scan in a week when the scan ran and passed. It flags a kernel update with a major version bump, where the model used to read upstream release notes.
+
+
+## [0.5.819] - 2026-11-04
+
+### Fixed
+
+- **Image builds install Trivy from its GitHub release.** The vulnerability scan installed Trivy through a download host that stopped resolving on GitHub's runners once the cached binary was evicted. No image was published from v0.5.811 to v0.5.818, so production stayed on v0.5.810. The workflow now downloads the release tarball, checks a pinned SHA-256, and tells the scan action to skip its own installer.
+
+
+## [0.5.818] - 2026-11-04
+
+### Changed
+
+- **Six authoring files leave `Routes/Web`.** The suite-row and form contexts move to `Utilities/`, the support-file library state to `Services/`, and the composite form body and dataset edit helpers to `Helpers/`. These are pure moves with no change in behaviour (#2838).
+
+
+## [0.5.817] - 2026-11-04
+
+### Changed
+
+- **Nine course, enrollment and staff files leave `Routes/Web`.** The form and path types move to `Utilities/`, the request-bound loaders and staff provisioning to `Helpers/`, and the CSV roster enrollment to `Services/UsernameEnrollment.swift`. These are pure moves with no change in behaviour (#2837).
+
+
+## [0.5.816] - 2026-11-04
+
+### Changed
+
+- **Twelve handler-less files leave `Routes/Web`.** The shared select cells, the admin and GitHub view contexts and the response builders move to `Utilities/` or `Helpers/`, as the placement rule says. These are pure moves with no change in behaviour (#2836).
+
+
+## [0.5.815] - 2026-11-04
+
+### Changed
+
+- **The last two large frontend scripts are type-checked.** `suite-table.js` and `pattern-family-editor.js` opt in with `// @ts-check`, and only the two editor-iframe scripts stay on `scripts/ts-check-pending.txt`. The fixes are JSDoc annotations and casts only, so no served file changes behaviour (#2835).
+
+
+## [0.5.814] - 2026-11-04
+
+### Changed
+
+- **Four larger frontend scripts are type-checked.** `app.js`, `browser-runner.js`, `support-files.js` and `notebook.js` opt in with `// @ts-check`, and `tsc` reports no errors. The fixes are JSDoc annotations and casts only, so no served file changes behaviour. Two module declarations in `types/` type the dynamic imports of the iframe bridge and the runner-core loader (#2834).
+
+
+## [0.5.813] - 2026-11-04
+
+### Changed
+
+- **21 more frontend scripts are type-checked.** They opt in with `// @ts-check`, and `tsc` reports no errors. The fixes are JSDoc annotations and casts only, so no served file changes behaviour. A `paths` entry in `jsconfig.json` types the `/vendor/codemirror.js` import (#2831).
+
+
+## [0.5.812] - 2026-11-04
+
+### Security
+
+- **The test-edit hook denies an existing-test edit when no person answers prompts.** In `auto`, `dontAsk` and `bypassPermissions` mode a hook "ask" could be answered with nobody looking. The hook now returns "deny", with a reason that tells the agent to describe the edit to the maintainer and wait. Every other mode, and an event with no `permission_mode`, still asks (#2832).
+
+
+## [0.5.811] - 2026-11-04
+
+### Changed
+
+- **The admin People tab shows one page of 100 users.** The tab and its 5-second poll read every account on the deployment. Now the database sorts and limits each read, and Previous and Next links move between pages. Typing in the filter box filters the page shown; Enter searches every account by username, display name or role, and the links and the poll keep the search. The order keeps its meaning: most recently seen first, never seen last, then username, then join date. Usernames now compare as text, so `user10` sorts before `user2`. The header counts do not change. `/admin/users-data` with no `page` still returns every user as JSON; `?page=N` or `?q=` returns one page (#2829).
+
+
+## [0.5.810] - 2026-11-04
+
+### Fixed
+
+- **A course code must be usable in a link.** A code with `/`, `\`, `?`, `#`
+  or `%`, or a code that is `.` or `..`, got a 404 for its links: the link
+  splits or ends at that character. The vanity links and the staff
+  student-history links now percent-encode the key (`urlEncode`), so the links
+  Chickadee writes work for any code, and a key with a space gives a valid
+  `Location` header. Course create, edit, clone, new term, bundle import and
+  un-archive now refuse such a new code. A space or a non-ASCII letter still
+  works, because the router decodes each parameter. A course that already holds
+  a refused code can still be edited, and the new `courseCodeNotURLSafe` health
+  rule reports it until it is renamed. The one-click copy of such a course asks
+  for the rename instead of reporting that no free code exists.
+
+### Added
+
+- **Tests for the course-code refusals at the instructor new-term clone and at
+  bundle import**, which #2666 added without a test of their own.
+
+
+## [0.5.809] - 2026-11-04
+
+### Fixed
+
+- **The test-edit hook follows a `cd` in the same command.** A `cd`, `pushd` or `git -C` before an in-place edit hid a relative path to an existing test, so the hook did not ask. It now resolves the path against the new directory. In auto mode the hook's "ask" is still answered without a person; #2827 lists the options for the maintainer.
+
+
+## [0.5.808] - 2026-11-04
+
+### Changed
+
+- **Test comment names the new home of `pairedJobOpponent`.** A doc comment in `ActivityBrowserStagingTests` still named `WorkerJobRoutes`. It now names `JobOpponentSelection` (#2824).
+
+
+## [0.5.807] - 2026-11-04
+
+### Fixed
+
+- **Assignment delete removes all student data for the assignment (#2809).** Deleting an assignment now also removes its submission files, after the transaction commits. It also removes the class coverage runs, item coverage and class-goal data of its setup. These rows name students and have no foreign key, so they stayed behind before. The course purge already removed them. Composite and dataset-deal rows are now deleted explicitly too, as the course purge does, not only by the cascade. Both deletes now share one helper, `SetupRowDeletion`, so their table lists cannot drift apart.
+
+
+## [0.5.806] - 2026-11-03
+
+### Removed
+
+- **Two unused members.** `LTILaunchClaims.claimPrefix` had no reader, since the coding keys spell each claim URI as a literal. `MCPActivityProse.opponentSourceTokens` was named only inside two doc comments, where the interpolation never runs; those comments now name `ActivityOpponentSource`. Behaviour does not change.
+
+### Changed
+
+- **The browser runner is rebuilt on JavaScriptKit 0.62.0** (from 0.59.0).
+  `wasm/Package.resolved` moves, and the vendored `Public/runner-wasm/`
+  artifact is rebuilt in the same change, so the browser runner tests in this
+  change exercise the new module rather than the old one. The generated
+  `runner-core.d.ts` contract is unchanged. The module is 141,501 bytes
+  gzipped, 2,276 bytes over the previous baseline and within budget.
+
+### Changed
+
+- **Kernel updates publish themselves.** When the weekly kernel currency check
+  finds the vendored xeus kernels behind their channels, it now dispatches
+  `revendor-kernels.yml` in a new publish mode. That rebuilds from `main`,
+  verifies, and opens the update as a pull request with auto-merge on, so the
+  browser grading and editor smoke test the new kernels before they reach
+  `main`. It does nothing while a re-vendor pull request is already open.
+- **The re-vendor workflow pushes with `RELEASE_TOKEN`.** The branch ruleset
+  refused its `GITHUB_TOKEN` push (GH013, required `editor-smoke-gate`), so a
+  manual re-vendor could rebuild and verify but never commit.
+
+### Security
+
+- **Swift dependencies brought current.** Dependabot has not opened a Swift
+  PR since the move to `swift-tools-version:6.4`, because its Swift toolchain
+  is 6.3.1 and refuses the manifest. This updates the root graph by hand:
+  Vapor 4.122.3, swift-nio 2.105.0, swift-nio-ssl 2.37.6, swift-certificates
+  1.21.1, jwt 5.2.0, jwt-kit 5.8.0, async-http-client 1.37.0, postgres-nio
+  1.33.2 and eleven other patch or minor releases.
+
+### Fixed
+
+- **Dependabot pip updates run again.** `Tools/jupyterlite/requirements.txt`
+  named the Chickadee extension by a local path, and every weekly pip run
+  aborted with `path_dependencies_not_reachable`. `scripts/setup-jupyterlite.sh`
+  now installs the extension itself, after the requirements file.
+
+### Changed
+
+- **The xeus kernels are re-vendored to their channels' current builds.**
+  The weekly kernel currency check found the vendored kernels behind
+  `emscripten-forge-4x`. `.github/workflows/revendor-kernels.yml` rebuilt
+  `Public/jupyterlite/` from the unchanged `Tools/jupyterlite/environment-*.yml`
+  files and verified it before this pull request was opened.
+
+### Added
+
+- **A weekly Swift package currency check.** Dependabot's Swift toolchain
+  refuses the swift-tools-version 6.4 manifests, so no Swift update PR has
+  opened since June. `.github/workflows/swift-currency.yml` runs
+  `scripts/check-swift-currency.py` in the CI image every Monday: it resolves
+  `/` and `/wasm` with `swift package update --dry-run` and goes red, naming
+  each pin and its newer version, when one is behind. It is off the pull
+  request path, so it never blocks a merge.
+
+
+## [0.5.805] - 2026-11-03
+
+### Changed
+
+- **A Swift test lane that misses the build cache fails fast (CI flakiness Family 8).** On 2026-11-03, `worker-tests` could not restore the `.build` cache that the `build` job of the same run had saved, most likely because the cache was evicted. It compiled cold and hit its 15-minute step limit before any test ran, which looked like a wedge. The Swift test lanes of `swift-tests.yml` now use `build-cache: require` on `swift-test-setup`, which fails the setup step with an error that names the family and says to re-run all jobs. `docs/ci-flakiness.md` documents the family.
+- **Pull requests no longer save the release or BuildKit caches.** The repository's Actions cache was over its 10 GB limit, and a cache saved on a pull request is readable only by that pull request. `docker-build.yml` now restores both caches on a pull request and saves them only on pushes to `main` and on tags. A re-run of a pull request now rebuilds the release binaries cold.
+- **The Swift Tests `build` job may run for 40 minutes, up from 25.** A cold build (package fetch plus compile) now takes about 25 minutes, so two runs on 2026-11-03, one of them on `main`, were cancelled while they saved the build cache.
+- **A cold Swift Tests build restores SwiftPM's package mirrors.** The `build` job spent about 4.5 minutes cloning 41 packages on a cache miss. It now restores `.build/repositories` from one cache entry that pushes to `main` save, so a pull request fetches only what changed.
+
+
+## [0.5.804] - 2026-11-03
+
+### Fixed
+
+- **The 2026-11-03 mutation sweep survivors are answered.** The three survivors were all in `TestProperties.hasCourseScopedDatasets`, which no Core test read directly. New tests pin that only a library attachment with the course scope counts: the course scope without a source, or a source with the assignment scope, does not.
+
+### Changed
+
+- **swift-subprocess is back on the upstream release (1.0.2).** Since 1.0.1
+  its Linux child comes from `posix_spawn` rather than a raw `clone3` for
+  every configuration Chickadee uses, which removes the glibc 2.41 launch
+  hang; the temporary fork is no longer used.
+
+
+## [0.5.803] - 2026-11-03
+
+### Fixed
+
+- **CI: the Swift scope check fetches only what it compares.** The `changes` job in `swift-tests.yml` checked out the full history of every branch and tag, and since 2026-11-03 17:30 UTC that fetch has run into the job's 5-minute limit on every run. The gate fails closed, so every pull request was red. A pull request now fetches depth 2, the merge commit and both parents. A push fetches its before commit by itself. Any failure still runs the full suite.
+- **CI: the changed-paths action fetches only the base commit.** The editor smoke, the browser grading smoke and the CodeQL JavaScript job checked out the full history for the same path check, and the editor smoke's `changes` job hit its 10-minute limit. Those three now check out depth 1, and the action fetches the base commit by itself.
+
+### Removed
+
+- **SQLite support.** PostgreSQL is now the server's only database. The server
+  needs `DATABASE_HOST`, `DATABASE_PORT`, `DATABASE_NAME`, `DATABASE_USER` and
+  `DATABASE_PASSWORD`, and refuses to start without them. `DATABASE_BACKEND` and
+  `SQLITE_PATH` are no longer read. Nothing moves an existing SQLite database
+  into Postgres. Production already ran on Postgres, so it needs no change.
+- **The SQLite-only workarounds.** The write-locked transaction, the
+  "database is locked" retry, the in-process job-claim queue and the SQLite
+  branches of about a dozen queries and migrations are gone. Postgres takes the
+  same paths it took before.
+
+### Changed
+
+- **Tests run on Postgres.** `swift test` needs a local Postgres. It defaults to
+  `localhost:5432`, database `chickadee_test`, user and password `postgres`, and
+  each `TEST_DATABASE_*` variable overrides one part. CI runs one API test lane
+  instead of two. The browser harnesses give each server boot its own database.
+- **The compose `db` service is required.** `docker-compose.yml` now starts
+  Postgres and points the server at it by default.
+
+
+## [0.5.802] - 2026-11-03
+
+### Changed
+
+- **`Helpers/` and `Services/` each hold one kind of code, and a guard keeps it that way (#2775).** `Helpers/` holds the HTTP edge: code that names `Request`, `Response`, `ClientResponse`, `Content`, a multipart `File` or `AbortError`. `Services/` holds database and domain logic and never names `Request`. Nineteen Helpers files that took no request move to `Services/`, `Bootstrap/` or `Utilities/`. The three `Services/*Helpers` files and three moved files lose the `Helpers` name (for example `CourseAccessHelpers` is now `Services/CourseAccess.swift`). The `Request` code in `ServiceContext`, `VisibilityAudit` and `CourseAccess` moves to `Helpers/`, and so does `RunnerFleetRows`. `scripts/check-utilities-imports.sh` enforces the rules, with fixtures, and `scripts/check-guards.sh` can now run a fixture that adds a file. No behaviour change.
+
+
+## [0.5.801] - 2026-11-03
+
+### Fixed
+
+- **The instructor staff invite follows the placeholder rule.** Under local sign-in only, the instructor roster's "Add staff member" form made a placeholder account that no login could adopt. It now refuses an unknown username, as the admin forms do. The admin and instructor unenroll, set-role and staff-invite handlers share one `CourseEnrollmentService` (#2770).
+
+
+## [0.5.800] - 2026-11-03
+
+### Security
+
+- **The browser-runner manifest and seed endpoints serve a student only a browser-graded setup (#2763 follow-up).** Before this change, a student enrolled in the course could read `/api/v1/browser-runner/testsetups/:id/manifest` and `/seed` for an open worker-graded assignment. The manifest names every test, with its tier. The seed answer carries the student's resolved personalization inputs, which can encode expected answers. Now a caller who is not course staff gets 403 on both unless the effective grading mode is `browser`, as for the zip download. A manifest that does not decode also refuses a student. Staff keep access. The seed of a setup with no assignment is still an empty answer.
+
+### Changed
+
+- **Bundle and claim logic moved out of the route files (#2774).** `CourseBundleService` now owns course bundle export and import. `WorkerJobClaim` owns the worker claim step, including the Postgres row lock. `JobOpponentSelection` owns the choice of opponents for a class activity. The routes only check the caller, parse the request and send the response. There is no change in behaviour.
+
+### Fixed
+
+- **Failed writes no longer leave wrong state behind in silence (#2776).** A server with no runner secret now fails at startup when the wordlist is missing or the generated secret cannot be saved; a saved secret still starts as before. A failed dataset write is no longer cached as current, so the next visit retries it. BrightSpace sync bookkeeping, sync log rows and the cached-id clear now log a failed save. A match row or a wardrobe unlock ignores only the unique-constraint conflict: a match row now throws on any other failure, and a wardrobe unlock logs it.
+
+
+## [0.5.799] - 2026-11-03
+
+### Fixed
+
+- **MCP `delete_support_file` refuses a file that a test depends on.** The web
+  delete and MCP `delete_support_file` now call one service,
+  `deleteFileFromSetup`. Before, the MCP path ran the steps by hand and did not
+  check `dependsOn`, so an agent could delete a support file that a suite entry
+  still needed. The dataset edit moved into `Services/` in the same way: the
+  web `PUT /datasets` routes and MCP `set_dataset` both call
+  `applyDatasetsEdit` (#2771).
+
+
+## [0.5.798] - 2026-11-03
+
+### Fixed
+
+- **Course content items and sections share one service (#2769).** The web routes and the MCP tools now call `CourseContentService` and `CourseSectionService` for the field rules and the writes, with typed errors. The web content-item form now refuses an unknown kind, as MCP does. Before, the web stored it as a link with no error. The web checks the section grading mode against `GradingMode`, not against string literals.
+
+
+## [0.5.797] - 2026-11-03
+
+### Changed
+
+- **Course and section loaders (#2773).** `loadCourse`, `loadCourseForWrite` and `loadCourseSectionForWrite` now sit beside the assignment loaders. Eleven course handlers and two section handlers call them in place of a hand-written guard. Status codes and error messages do not change.
+
+
+## [0.5.796] - 2026-11-03
+
+### Changed
+
+- **Two test comments name `CourseRoleFloor` (#2772).** They named `DashboardRoleFloor`, which #2792 renamed. Comments only.
+
+
+## [0.5.795] - 2026-11-03
+
+### Fixed
+
+- **Course-wide result queries no longer bind one parameter per submission (#2764).** The LEARN tab summary and "Sync now" now join results to submissions and filter by the course's test setups. "Sync now" also filters the errored rows in SQL. Course export and the retention purge split their submission-ID lists into chunks. Before, a course with more than 65,535 submissions made these four actions fail on PostgreSQL. The SQLite that sqlite-nio compiles allows 250,000 parameters, so it failed only at that size.
+
+
+## [0.5.794] - 2026-11-03
+
+### Security
+
+- **The browser-runner setup download serves a student only a browser-graded setup (#2763).** Before this change, a student enrolled in the course could download the setup zip of an open worker-graded assignment through `/api/v1/browser-runner/testsetups/:id/download`. That zip holds the release and secret test scripts. Now a caller who is not course staff gets 403 unless the effective grading mode is `browser`. A manifest that does not decode also refuses the download for a student, and the server logs it. Staff keep access. The grader-only filter now copies the zip off the cooperative pool and streams the copy from disk.
+
+
+## [0.5.793] - 2026-11-03
+
+### Fixed
+
+- **Index the job metrics and course child tables.** A new migration adds an index on `job_execution_metrics(completed_at)`, which the health rule, the diagnostics cards and the nightly prune filter on. It also indexes `course_id` on `course_sections` and `course_content_items`, which every course page filters on. Before, each of these queries scanned the table (#2778).
+
+
+## [0.5.792] - 2026-11-03
+
+### Added
+
+- **Type-check first-party frontend JavaScript (#2782).** `scripts/typecheck-js.sh` runs `tsc --noEmit` over `jsconfig.json` in the browser-runner CI job. There is no build step: types live in JSDoc comments, and `Public/*.js` is still served as-is. 51 of the 80 hand-written `Public/*.js` files opt in (the generated `runner-support-sources.js` is exempt) with `// @ts-check`. `types/chickadee-globals.d.ts` names each cross-file global, so a misspelt global is now a type error. `scripts/check-ts-check-optin.sh` makes every new file opt in, and the 29 files in `scripts/ts-check-pending.txt` form a shrink-only list.
+
+
+## [0.5.791] - 2026-11-03
+
+### Changed
+
+- **One table names the role floor of each operation (#2772).** `CourseRoleFloor` replaces `DashboardRoleFloor` and adds content items, the course dataset library, Student Options, the class activity and the BrightSpace binding. The web routes, their MCP twins and the views read the same constant, so a floor change on one surface reaches the others. `CourseRoleFloorGuardTests` refuses a new literal floor in a file that implements a named operation. No floor changes value.
+
+
+## [0.5.790] - 2026-11-03
+
+### Fixed
+
+- **Every outbound HTTP call has a read timeout.** The server now sets a 60-second read timeout on the shared outbound client, and states its 30-second connect timeout explicitly. A stalled identity provider, LMS, alert webhook or dates feed can no longer hold an SSO login or a shutdown drain open with no limit (#2765).
+
+
+## [0.5.789] - 2026-11-03
+
+### Security
+
+- **The MCP support-file URL fetch connects to the address it checked (#2780).** The fetcher resolved the host and checked every address, but AsyncHTTPClient resolved the host again when it connected, so a zero-TTL record could pass the check and then send the connection to a private address. The fetcher now resolves once and pins the connection to a checked address with `dnsOverride`. IPv4 comes first when the answer has one. TLS still validates the certificate against the original hostname.
+
+
+## [0.5.788] - 2026-11-03
+
+### Fixed
+
+- **Course export uses a unique temp zip path.** Two same-day exports of one course used the same temp file. `zip -r` adds to an existing archive, so the two bundles could merge, and the first stream's cleanup could delete the second's file. The temp path now has a UUID prefix; the download name does not change. `createZipArchive` now refuses an output path that already exists, so no other caller can merge archives this way (#2767).
+
+
+## [0.5.787] - 2026-11-03
+
+### Fixed
+
+- **One submission intake for every door.** All seven doors that create a
+  student submission now call `SubmissionIntake`. It writes the file, saves
+  the row with its attempt number, and runs every effect of the save. The
+  `runner-submit` and `browser-failover` doors now record the "accepted" and
+  "enqueued" diagnostics, as the upload form always did. The notebook merge
+  runs on the thread pool at every door. When the instructor notebook cannot
+  be read, the staff-only `POST /api/v1/submissions/file` now merges the
+  notebook with itself, as the notebook doors always did, instead of storing
+  it unchanged (#2768).
+
+### Removed
+
+- **Dead code, test-only wrappers and legacy aliases (#2783).** The unused
+  `JSONRPCError.missingRequiredClientCapability` factory is gone; its error
+  code stays, because the transport maps it to HTTP 400. The test-only
+  wrappers `crownFirstChampion`, `currentChampion`,
+  `gradePercentFromCollectionJSON` and `VanityURLRoutes.slugify` are gone, and
+  the tests call `Hill`, `CollectionGradeFields` and `assignmentSlug(fromTitle:)`
+  directly. The aliases `RankedIdentities`, `ConditionInput`,
+  `AchievementInput` and `WebAssignmentError` are gone; code uses
+  `AvatarIdentity`, `ConditionRow`, `AchievementRow` and `AppError`. No
+  behaviour changes.
+
+
+## [0.5.786] - 2026-11-03
+
+### Fixed
+
+- **Three five-second polls no longer load whole tables (#2777).** The admin Users list reads the staff ring with one query, not an IN list of every user ID. The admin runners count reads only the known runners and the three counted statuses. The staff leaderboard counts submissions per student with one `GROUP BY`. The pages show the same output.
+
+### Fixed
+
+- **Runner job slots no longer stall each other on workspace I/O (#2779).** The workspace setup, the submission staging and normalization, the disk-usage walk and the recursive teardown now run off the runner's daemon actor. With `--max-jobs` above 1, a large teardown in one slot no longer holds up the heartbeats, polls and reports of the other slots. The order of the steps and the cleanup guarantees do not change.
+
+
+## [0.5.785] - 2026-11-03
+
+### Fixed
+
+- **Assignment delete and course purge are atomic (#2766).** Deleting an assignment now removes all its rows in one transaction. A database error midway no longer leaves a live assignment whose submissions have no results. Both the assignment delete and the course purge now remove files only after the transaction commits, so a rollback no longer leaves rows that name deleted files. The assignment delete audit entry is now written after the commit, so a rolled-back delete leaves no false entry.
+
+
+## [0.5.784] - 2026-11-03
+
+### Changed
+
+- **CI skips the Swift suite for changes that cannot affect it (#2781).** A new `changes` job in `swift-tests.yml` runs `scripts/ci-swift-suite-scope.sh`. A pull request that changes only Markdown that no Swift file names (`docs/`, `changelog.d/`, the root changelogs) skips the build and the four Swift test lanes. The release commit runs the build job alone, to save the build cache for the new tree. `swift-tests-gate` still reports on every pull request, and it fails closed: a skip passes only when the scope allows it. Each push to `main` now has its own concurrency group, so a release commit no longer cancels the run of its merge commit, and the concurrency comment now says what GitHub does.
+
+
+## [0.5.783] - 2026-11-03
+
+### Fixed
+
+- **A course code that matches a server path is refused (#2666).** The router
+  tries a fixed path segment before a parameter and never backtracks, so a
+  course coded `data`, `lab`, `login` or any other first segment of a fixed
+  route lost every vanity link to a 404 or the wrong page. Course create, edit,
+  clone, new term, bundle import and un-archive now refuse such a code. The
+  reserved set is read from the registered routes, so a new route reserves its
+  own segment. A new health rule, `courseKeyShadowed`, reports any active
+  course that already holds one, or that a new route comes to shadow.
+
+### Changed
+
+- **The vanity routes are one table.** The five copied redirect handlers in
+  `VanityURLRoutes` are one loop over the suffixes, and the enrollment check
+  uses the shared `userIsEnrolled`.
+
+
+## [0.5.782] - 2026-11-03
+
+### Added
+
+- **A found ring.** A new wardrobe ring opens to a student who finds something hidden in Chickadee. It is not earned by graded work and is not shown until found (docs/student-wardrobe.md, "Found items").
+
+
+## [0.5.781] - 2026-11-03
+
+### Fixed
+
+- **The format-lint gate runs on macOS.** `check-styles.sh` expanded a possibly
+  empty array under `set -u`, which macOS's bash 3.2 rejects, and
+  `check-ui-vocabulary.sh` passed newline-separated lists to awk with `-v`,
+  which BSD awk rejects. Both now use forms that GNU and BSD tools accept.
+- **SwiftLint runs on a Mac whose `xcode-select` points at the Command Line
+  Tools.** `scripts/swiftlint.sh` now uses Xcode's developer directory, where
+  SourceKit lives, when Xcode is installed and `DEVELOPER_DIR` is unset.
+
+### Changed
+
+- **One scope for a test's app.** `withTestApp { app in ... }` builds the
+  standard test app and tears it down; 571 test bodies that paired
+  `makeTestApp` with `withApp` now call it, and `withWebRoutesApp` /
+  `withAssignmentRoutesApp` are thin aliases of it (#2717, step 4).
+
+
+## [0.5.780] - 2026-11-03
+
+### Fixed
+
+- **Scripts launch on a macOS runner.** The capture pipes' write ends were
+  close-on-exec, and on Darwin a `createSession` launch goes through
+  Subprocess's fork-then-`posix_spawn(SETEXEC)` path, which cannot dup2 such a
+  descriptor: every script failed with EBADF. On Darwin the write ends now stay
+  inheritable; `POSIX_SPAWN_CLOEXEC_DEFAULT` already keeps them out of other
+  children. Linux is unchanged.
+- **The sandbox no longer opens the whole work root to a variable that names
+  it.** An environment value equal to the work root (macOS's `TMPDIR` when the
+  runner works in the temporary directory) passed the "under the root" check
+  and made every job visible. Only directories strictly below the root count.
+- **Assignment version snapshots capture files on macOS.** The walk trimmed
+  `workDir`'s path off each entry, which matched nothing when the enumerator
+  reported `/private/var/…` for a `workDir` under `/var`.
+
+### Changed
+
+- **The test suite passes on macOS.** Linux-only tests (private `/tmp` and
+  discarded writes in the sandbox, `/proc` censuses) are compiled on Linux only;
+  fixtures account for bsdtar, APFS case-insensitivity, `/usr/bin/true`, and
+  the macOS Java stub.
+
+### Changed
+
+- **The Vapor 5 migration notes are current.** `docs/vapor-5-migration.md` now records the upstream state on 2026-11-02 (Vapor 5 is still at beta.4; Fluent 5, JWT and response compression are not ready), refreshed counts of what is left, all four async lifecycle handlers, the full list of test stand-ins that return futures, and the macOS 27.0 floor. Behaviour does not change.
+
+
+## [0.5.779] - 2026-11-02
+
+### Fixed
+
+- **Failure detail applies to the results API and the data export.** A student
+  reading `GET /api/v1/submissions/:id/results` or their personal data export
+  now sees each failing test at the instructor's `failureDetail` level, as on
+  the results page. Before, both returned the full text, including the expected
+  value, for an entry set to `actualOnly` or `verdictOnly`. Staff still read
+  everything. The setting is part of the API's ETag, so relaxing it re-serves
+  past results (#2662).
+
+### Changed
+
+- **One body for the solution-reveal rule.** The dashboard's "View solution"
+  action and the solution-serving routes now resolve through the same pure
+  function, so the next change to the rule cannot reach only one of them
+  (#2665).
+
+
+## [0.5.778] - 2026-11-02
+
+### Fixed
+
+- **The weekly mutation sweep loses fewer shards and reports fewer false survivors.** Two source shapes that Muter turns into code that does not compile are gone (a ternary in `CompositeDealing` and `DatasetMaterializer`, an `unsafe` call in `ScriptExecution`), and they cost a whole shard in each of the last two sweeps. `report.py` now counts killed rows against inserted schemata, so a phantom that shares a line with a killed mutant is no longer listed as a survivor; the `Tournament` and `ManifestV2` survivors of the 2026-10-20 and 2026-10-27 sweeps were this. Muter's output is line-buffered, so a shard that times out shows where it stalled. New tests cover the remaining survivors (`CompositeSpecProblem` messages, quoted-cell noise, GitHub-only manifests, dotted R names), and two equivalent mutants are recorded with their reasons.
+
+
+## [0.5.777] - 2026-11-02
+
+### Fixed
+
+- **The package builds on macOS again.** CI runs only on Linux, so code that
+  compiled only there had piled up: `FilePath` from `SystemPackage` passed to
+  Subprocess (which takes `System.FilePath` on Darwin), Glibc-only imports and
+  `sigaction` fields, `FileManager` captured in `@Sendable` closures, and
+  directory enumerators iterated in `async` code. Xcode 27.2's SDK also marks
+  `String(format:)` `@unsafe`, which strict memory safety turns into an error;
+  every call now goes through `String(cFormat:)` in Core, which marks it
+  `unsafe` only on Darwin and formats exactly as before. The macOS deployment
+  floor moves from 26.2 to 27.0 for `withTaskCancellationShield`. Linux is
+  unchanged.
+
+
+## [0.5.776] - 2026-10-20
+
+### Added
+
+- **The course Achievements tab (S4).** Course staff now edit a course's
+  achievements on a new Achievements tab in the instructor area, with the
+  same table as the assignment editor. Each condition counts every
+  assignment, one course section, one concept or a chosen list. The tab
+  also shows which students have earned each achievement, the built-in
+  wardrobe rules, and a Recompute button that stores every earned award at
+  once (docs/achievement-rewards.md).
+
+
 ## [0.5.775] - 2026-10-20
 
 ### Security

@@ -70,6 +70,7 @@ struct MCPEnrollmentDenialContractTests {
         "get_global_inputs": Sample(#"{"assignmentPublicID":"$A"}"#),
         "get_achievements": Sample(#"{"assignmentPublicID":"$A"}"#),
         "preview_personalization": Sample(#"{"assignmentPublicID":"$A"}"#),
+        "check_assignment": Sample(#"{"assignmentPublicID":"$A"}"#),
         "validate_assignment": Sample(#"{"assignmentPublicID":"$A","timeoutSeconds":1}"#),
         "get_validation_result": Sample(#"{"assignmentPublicID":"$A"}"#),
         "run_validation": Sample(#"{"assignmentPublicID":"$A","timeoutSeconds":1}"#),

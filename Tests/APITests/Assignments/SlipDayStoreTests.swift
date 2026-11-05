@@ -356,11 +356,8 @@ import VaporTesting
             let onePolicy = SlipDayPolicy(enabled: true, daysPerStudent: 1, extensionHours: 24)
 
             // Two concurrent spends against a one-day balance — the
-            // double-click case.  Whichever backend the suite runs on
-            // (SQLite on api-tests, Postgres on api-tests-postgres), at most
-            // one may commit; the loser throws (`insufficientBalance` on
-            // Postgres, possibly a BUSY-class error on SQLite — both fail
-            // closed).
+            // double-click case.  At most one may commit; the loser throws
+            // `insufficientBalance` (fails closed).
             let db = app.db
             async let firstAttempt = Self.spendSucceeded(
                 userID: userID, assignment: assignment, policy: onePolicy, db: db)

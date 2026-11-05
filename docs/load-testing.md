@@ -84,5 +84,5 @@ route.
 3. Compare p95 and p99. One run of a few seconds is noise. Use at least
    60 s, and repeat each run.
 
-SQLite and Postgres behave differently under concurrent claims
-(`atomicallyClaimSubmission`). Measure on the database that production uses.
+Concurrent claims (`WorkerJobClaim.claimSubmission`) depend on Postgres row
+locks. Measure against a Postgres configured like production's.

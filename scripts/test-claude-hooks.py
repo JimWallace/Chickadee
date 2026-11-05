@@ -86,6 +86,51 @@ def test_edit_hook() -> None:
         expect("git checkout of a test asks", bash(f"git checkout main -- {existing}"), "ask")
         expect("swift-format format of a test asks", bash(f"swift-format format --in-place {existing}"), "ask")
         expect("a write after && asks", bash(f"cd . && sed -i 's/a/b/' {existing}"), "ask")
+        # A cd earlier in the command moves the base of a relative path (#2827).
+        expect("sed -i after cd into Tests asks", bash("cd Tests/CoreTests && sed -i 's/a/b/' Existing.swift"), "ask")
+        expect("redirect after cd into Tests asks", bash("cd Tests/CoreTests; echo x > Existing.swift"), "ask")
+        expect("sed -i after pushd asks", bash("pushd Tests && sed -i 's/a/b/' CoreTests/Existing.swift"), "ask")
+        expect("sed -i in a cd subshell asks", bash("(cd Tests/CoreTests && sed -i 's/a/b/' Existing.swift)"), "ask")
+        expect("sed -i after an absolute cd asks", bash(f"cd {project}/Tests && sed -i 's/a/b/' CoreTests/Existing.swift"), "ask")
+        expect("git -C restore of a test asks", bash("git -C Tests restore CoreTests/Existing.swift"), "ask")
+        expect("a subshell cd does not hide a later path", bash(f"(cd /tmp && true); sed -i 's/a/b/' {existing}"), "ask")
+        expect("cd - does not hide a later path", bash(f"cd /tmp; cd -; sed -i 's/a/b/' {existing}"), "ask")
+        expect("a cd to an expansion does not hide a path", bash(f'cd "$(git rev-parse --show-toplevel)" && sed -i s/a/b/ {existing}'), "ask")
+        expect("a cd that may fail does not hide a path", bash(f"cd /tmp || true; sed -i 's/a/b/' {existing}"), "ask")
+        expect("git -C with -c restore of a test asks", bash("git -C Tests -c x=y restore CoreTests/Existing.swift"), "ask")
+        expect("cd out of Tests then sed -i passes", bash("cd Sources && sed -i 's/b/c/' Code.swift"), "none")
+        expect("sed -n after cd into Tests passes", bash("cd Tests/CoreTests && sed -n 1p Existing.swift"), "none")
+
+        # In a mode where no person answers prompts, the hook denies (#2832).
+        def in_mode(mode: str | None, tool_input: dict, tool: str = "Edit") -> str:
+            event = {"tool_name": tool, "tool_input": tool_input}
+            if mode is not None:
+                event["permission_mode"] = mode
+            return run_hook(hook, event, project)
+
+        expect("Edit of a test in auto mode denies", in_mode("auto", {"file_path": existing}), "deny")
+        expect("Edit of a test in dontAsk mode denies", in_mode("dontAsk", {"file_path": existing}), "deny")
+        expect(
+            "Edit of a test in bypassPermissions mode denies",
+            in_mode("bypassPermissions", {"file_path": existing}),
+            "deny",
+        )
+        expect(
+            "sed -i on a test in auto mode denies",
+            in_mode("auto", {"command": f"sed -i 's/a/b/' {existing}"}, tool="Bash"),
+            "deny",
+        )
+        expect("Edit of a test in default mode asks", in_mode("default", {"file_path": existing}), "ask")
+        expect("Edit of a test in acceptEdits mode asks", in_mode("acceptEdits", {"file_path": existing}), "ask")
+        expect("Edit of a test with no mode field asks", in_mode(None, {"file_path": existing}), "ask")
+        expect("Edit of a test in plan mode asks", in_mode("plan", {"file_path": existing}), "ask")
+        expect("Edit of a test with an unknown mode asks", in_mode("future-mode", {"file_path": existing}), "ask")
+        expect("Edit of a source file in auto mode passes", in_mode("auto", {"file_path": "Sources/Code.swift"}), "none")
+        expect(
+            "Write of a new test file in auto mode passes",
+            in_mode("auto", {"file_path": "Tests/CoreTests/New.swift"}),
+            "none",
+        )
 
         expect("sed -n on a test passes", bash(f"sed -n 1p {existing}"), "none")
         expect("redirect from a test to /tmp passes", bash(f"cat {existing} > /tmp/out.txt"), "none")

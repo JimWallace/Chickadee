@@ -53,11 +53,43 @@ jobs:
       - name: Assert security response headers
         run: scripts/check-security-headers.sh http://localhost:8080
 
+      # The scan crawls as a signed-in account. Without one it reached five
+      # public URLs and every other page redirected to /login (#2193). The
+      # script registers a throwaway account on this CI server (the first
+      # registrant is the admin), makes it the instructor of one course and a
+      # student in another, and prints its session cookie. The password is
+      # random per run, and the cookie is masked in the log. See its header
+      # for why one account covers the three page sets.
+      - name: Sign in a scan account
+        id: session
+        run: |
+          cookie="$(scripts/zap-signed-in-session.sh http://localhost:8080)"
+          echo "::add-mask::$cookie"
+          echo "cookie=$cookie" >> "$GITHUB_OUTPUT"
+
+      # -z passes ZAP options; zap-baseline.py splits them on spaces, so no
+      # value below may contain one.
+      #   * The replacer rule sets the Cookie header on every request, which
+      #     signs in every page the spider fetches.
+      #   * spider.processform=false: the spider fetches links and submits no
+      #     form. Signed in, a form carries a valid CSRF token, so a submitted
+      #     form would really sign out, archive or delete, and the crawl would
+      #     lose its session or its pages part way through. A baseline scan is
+      #     passive, so forms submit nothing it needs.
+      # -m 5 gives the spider five minutes instead of one: the signed-in site
+      # is many times larger than the five public URLs.
       - name: Run ZAP baseline scan
         uses: zaproxy/action-baseline@v0.15.0
         with:
           target: 'http://localhost:8080'
-          cmd_options: '-a'
+          cmd_options: >-
+            -a -m 5 -z "-config spider.processform=false
+            -config replacer.full_list(0).description=session
+            -config replacer.full_list(0).enabled=true
+            -config replacer.full_list(0).matchtype=REQ_HEADER
+            -config replacer.full_list(0).matchstr=Cookie
+            -config replacer.full_list(0).regex=false
+            -config replacer.full_list(0).replacement=vapor-session=${{ steps.session.outputs.cookie }}"
           rules_file_name: '.zap/rules.tsv'
           fail_action: false
           allow_issue_writing: true

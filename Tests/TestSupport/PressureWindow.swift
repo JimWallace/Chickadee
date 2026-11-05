@@ -173,7 +173,7 @@ public struct PressureWindow: Sendable {
         }
         return "the box is \(StarvationRecorder.percent(busy)) busy but only "
             + "\(StarvationRecorder.percent(ours)) is ours — something else in this VM is using it. "
-            + "A service container counts: on the api-tests-postgres lane the database is a "
+            + "A service container counts: on the api-tests lane the database is a "
             + "co-tenant and takes about half the machine, which is expected."
     }
 

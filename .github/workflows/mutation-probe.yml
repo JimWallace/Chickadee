@@ -51,8 +51,8 @@ name: Mutation-testing probe (macOS)
 # first answer without merging an unevaluated tool evaluation, and that trigger
 # is removed now the answer is in.
 #
-# ROOT CAUSE, isolated the same day — DO NOT DISPATCH THIS AGAINST THE DEFAULT
-# REF. It cannot pass, and not for a reason a re-run can change. Muter 99624ec
+# ROOT CAUSE, isolated the same day. Bare upstream Muter at the default ref
+# cannot pass, and not for a reason a re-run can change. Muter 99624ec
 # ("Prevent memory exhaustion on large codebases", PR #302) made discovery
 # return `.sourceCodeParsed([:])`, so ApplySchemata re-parses each file and
 # rewrites a NEW tree — while the schemata are keyed by SwiftSyntax nodes, which
@@ -69,12 +69,31 @@ name: Mutation-testing probe (macOS)
 #     Why a green probe would still not be grounds to trust a score against real
 #     Chickadee source: this probe is three lines of Swift.
 # Full write-up: docs/archive/handoff-mutation-testing.md.
+#
+# NOW IT BUILDS THE PATCHED TOOL, the one the sweep runs. Until 2026-11 this
+# built bare Muter at `muter_ref`, so it could only ever re-ask the upstream
+# question above; it never verified the Muter that scripts/mutation-run.sh
+# builds, with Tools/mutation/*.patch applied. It applies those patches now, in
+# the same order, so "re-verify with the probe" means what the script header
+# says it means. Set `apply_patches` to false to ask the upstream question again.
+#
+# AND IT CHECKS THE GUARDS ARE CACHED. 0002-read-environment-once.patch makes
+# each mutated file read the environment once instead of at every guard (the
+# shard-5 timeouts of #2810). The probe package builds with the repository's
+# strict settings -- Swift 6, strict memory safety, the upcoming features
+# Package.swift turns on -- so the generated declaration is compiled under the
+# rules it must survive, and the verdict reads the mutated copy to confirm
+# every guard goes through the cached copy.
 on:
   workflow_dispatch:
     inputs:
       muter_ref:
-        description: "Muter commit/tag to build. The default is the measured-broken baseline and CANNOT pass — set this to a ref that fixes muter#307."
+        description: "Muter commit/tag to build. The default is the sweep's pin; unpatched it CANNOT pass (muter#307), patched it must."
         default: "7f1f258"
+      apply_patches:
+        description: "Apply Tools/mutation/*.patch, as scripts/mutation-run.sh does. False builds bare upstream Muter."
+        type: boolean
+        default: true
 
 permissions:
   contents: read
@@ -86,6 +105,8 @@ jobs:
     timeout-minutes: 45
 
     steps:
+      - uses: actions/checkout@v7
+
       - name: Toolchain
         run: |
           swift --version
@@ -97,6 +118,12 @@ jobs:
           cd "$RUNNER_TEMP/muter"
           git checkout "${{ inputs.muter_ref || '7f1f258' }}"
           git log -1 --format='muter @ %h %ad %s' --date=short
+          if [ "${{ inputs.apply_patches }}" != "false" ]; then
+            for patch_file in "$GITHUB_WORKSPACE"/Tools/mutation/[0-9][0-9][0-9][0-9]-*.patch; do
+              git apply "$patch_file"
+              echo "applied $(basename "$patch_file")"
+            done
+          fi
           # --product muter: Muter's own test target does not build standalone.
           swift build -c release --product muter
           "$RUNNER_TEMP/muter/.build/release/muter" --version
@@ -107,14 +134,24 @@ jobs:
           mkdir -p "$PROBE/Sources/Probe" "$PROBE/Tests/ProbeTests"
 
           cat > "$PROBE/Package.swift" <<'EOF'
-          // swift-tools-version: 6.0
+          // swift-tools-version: 6.2
           import PackageDescription
+
+          // The repository's own strictness, so Muter's generated code is
+          // compiled under the rules it must survive there.
+          let strict: [SwiftSetting] = [
+              .strictMemorySafety(),
+              .enableUpcomingFeature("ExistentialAny"),
+              .enableUpcomingFeature("MemberImportVisibility"),
+              .enableUpcomingFeature("InternalImportsByDefault"),
+              .enableUpcomingFeature("InferIsolatedConformances"),
+          ]
 
           let package = Package(
               name: "Probe",
               targets: [
-                  .target(name: "Probe"),
-                  .testTarget(name: "ProbeTests", dependencies: ["Probe"]),
+                  .target(name: "Probe", swiftSettings: strict),
+                  .testTarget(name: "ProbeTests", dependencies: ["Probe"], swiftSettings: strict),
               ]
           )
           EOF
@@ -214,8 +251,22 @@ jobs:
           killed=$(grep -c 'mutant killed' "$REPORT" || true)
           survived=$(grep -c 'mutant survived' "$REPORT" || true)
           builderr=$(grep -c 'build error$' "$REPORT" || true)
+          timedout=$(grep -c 'time out$' "$REPORT" || true)
 
-          echo "killed=$killed survived=$survived build_errors=$builderr"
+          # The mutated copy is Muter's sibling of the project directory.
+          MUTATED="$RUNNER_TEMP/probe_mutated/Sources/Probe/Probe.swift"
+          if [ ! -f "$MUTATED" ]; then
+            echo "::error::No mutated copy at $MUTATED, so the guards cannot be checked."
+            echo "Muter writes it as a sibling named <project>_mutated; if that moved, fix"
+            echo "this path rather than reading the verdict below."
+            ls "$RUNNER_TEMP"
+            exit 1
+          fi
+          cached=$(grep -c '__muter_environment\[' "$MUTATED" || true)
+          uncached=$(grep -c 'processInfo\.environment\[' "$MUTATED" || true)
+
+          echo "killed=$killed survived=$survived build_errors=$builderr timeouts=$timedout"
+          echo "guards: cached=$cached uncached=$uncached"
           {
             echo "### Muter probe on macOS"
             echo ""
@@ -224,6 +275,9 @@ jobs:
             echo "| mutants killed | $killed |"
             echo "| mutants survived | $survived |"
             echo "| build errors | $builderr |"
+            echo "| time outs | $timedout |"
+            echo "| guards reading the cached environment | $cached |"
+            echo "| guards reading ProcessInfo per check | $uncached |"
           } >> "$GITHUB_STEP_SUMMARY"
 
           if [ "$killed" -eq 0 ] && [ "$survived" -eq 0 ]; then
@@ -240,6 +294,24 @@ jobs:
             echo "so a 0% score here means Muter is not inserting mutants — the same"
             echo "silent failure measured on Linux. Do NOT adopt it."
             echo "**Verdict: Muter does NOT work here.**" >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+
+          if [ "${{ inputs.apply_patches }}" != "false" ] && { [ "$cached" -eq 0 ] || [ "$uncached" -ne 0 ]; }; then
+            echo "::error::0002-read-environment-once.patch is applied but the mutated copy"
+            echo "has $cached cached and $uncached uncached guards. Every guard must read the"
+            echo "file's cached environment, or a hot loop in a mutated file rebuilds the whole"
+            echo "environment per check and its shard times out (#2810)."
+            sed -n '1,200p' "$MUTATED"
+            echo "**Verdict: guards are not cached.**" >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+
+          if [ "$builderr" -ne 0 ] || [ "$timedout" -ne 0 ]; then
+            echo "::error::$builderr build error(s) and $timedout time out(s). The generated code"
+            echo "must build under the strict settings above, and a three-line probe has no"
+            echo "business timing out."
+            echo "**Verdict: build errors or time outs.**" >> "$GITHUB_STEP_SUMMARY"
             exit 1
           fi
 
@@ -260,5 +332,7 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: muter-probe-report
-          path: ${{ runner.temp }}/muter-report.txt
+          path: |
+            ${{ runner.temp }}/muter-report.txt
+            ${{ runner.temp }}/probe_mutated/Sources/Probe/Probe.swift
           if-no-files-found: warn

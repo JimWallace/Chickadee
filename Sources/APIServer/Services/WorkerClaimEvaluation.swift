@@ -6,10 +6,10 @@
 // Split out of WorkerJobRoutes.swift (#1253).  These types were file-private
 // there, so the routes file was the only thing that could see them even though
 // none of them is about HTTP.  The one genuine coupling was the claim step
-// itself, which lives on the route collection because it needs the request;
-// it is injected as a closure rather than dragging the walk back into the
-// routes file. The walk itself takes a database, the application and a
-// logger through `ClaimEvaluator`, never a `Request` (#1732, #2145).
+// itself; it is injected as a closure (`WorkerJobClaim.claimSubmission`,
+// moved out of the routes file in #2774). The walk itself takes a database,
+// the application and a logger through `ClaimEvaluator`, never a `Request`
+// (#1732, #2145).
 
 import Core
 import Fluent

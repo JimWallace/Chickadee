@@ -77,9 +77,18 @@ jobs:
       # `.github/actions/swift-test-setup/action.yml` lists four past cases.
       # The cost: each Sources change gets a cold release build, about 13
       # minutes (#2712).
-      - name: Cache release build artifacts
+      #
+      # A pull request restores this cache but never saves it. A cache saved
+      # on a PR ref is readable only by that PR, so a PR save served nothing
+      # but its own re-runs, and each one (~0.66 GB) pushed other entries out
+      # of the repository's 10 GB cache budget (docs/ci-flakiness.md, Family
+      # 8). Pushes to main and tags save it. The tag build hits only when the
+      # run for the release commit on main has already saved; the two runs
+      # start together, so the tag build usually builds cold, as it did before.
+      # The cost on a PR: a re-run rebuilds cold unless main saved this tree.
+      - name: Restore release build artifacts
         id: build-cache
-        uses: actions/cache@v6
+        uses: actions/cache/restore@v6
         with:
           path: .build
           key: ${{ runner.os }}-release-${{ steps.setup.outputs.toolchain-key }}-${{ hashFiles('Package.resolved', 'Package.swift', 'Sources/**') }}
@@ -95,6 +104,13 @@ jobs:
           # undefined ICU symbols. Only the static release link is affected.
           swift build -c release --static-swift-stdlib --build-system native --product chickadee-server
           swift build -c release --static-swift-stdlib --build-system native --product chickadee-runner
+
+      - name: Save release build artifacts
+        if: github.event_name != 'pull_request' && steps.build-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: .build
+          key: ${{ steps.build-cache.outputs.cache-primary-key }}
 
       # The image gets each binary without its debug data and its symbol
       # table: server 301 MB to 121 MB, runner 98 MB to 64 MB (measured on
@@ -139,10 +155,9 @@ jobs:
       contents: read
       packages: write
 
-    # Postgres for the smoke test below. Production runs postgres, and the
-    # server's /health answers 503 whenever its database check fails — so a
-    # smoke test on the sqlite default proves the binary starts and nothing
-    # about the path the deploy gate actually keys on.
+    # Postgres for the smoke test below: the server's only backend. Its
+    # /health answers 503 whenever its database check fails, which is the
+    # path the deploy gate keys on.
     services:
       postgres:
         image: ghcr.io/jimwallace/chickadee/postgres:16
@@ -243,8 +258,11 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           # BuildKit layer cache for the runtime image (apt deps, asset copies).
+          # A pull request reads it but does not write it, for the reason on
+          # the release cache above: a PR's entries serve only that PR and
+          # spend the repository's cache budget.
           cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-to: ${{ github.event_name != 'pull_request' && 'type=gha,mode=max' || '' }}
 
       # Three properties of the Public layers that a green smoke test cannot see.
       #
@@ -307,9 +325,10 @@ jobs:
       #
       # `AUTH_MODE=local` is required, not cosmetic: the server refuses to boot
       # under any other mode without OIDC credentials, and a smoke test is not
-      # the place to hold real ones. Everything else runs at its default —
-      # sqlite, no worker secret (one is generated), no MCP — which is enough to
-      # prove the binary starts, migrations apply, and the HTTP server serves.
+      # the place to hold real ones. Apart from the database and MCP below,
+      # everything runs at its default (no worker secret: one is generated),
+      # which is enough to prove the binary starts, migrations apply, and the
+      # HTTP server serves.
       #
       # `PUBLIC_BASE_URL` is what actually MOUNTS the MCP surfaces. Setting
       # `MCP_MODE` alone is not enough — without an issuer/resource the server
@@ -357,7 +376,6 @@ jobs:
               -e MCP_MODE=read_write \
               -e PUBLIC_BASE_URL=http://127.0.0.1:8080 \
               -e MCP_ALLOW_OPEN_GUARDS=true \
-              -e DATABASE_BACKEND=postgres \
               -e DATABASE_HOST=127.0.0.1 \
               -e DATABASE_PORT=5432 \
               -e DATABASE_NAME=chickadee_smoke \
@@ -569,9 +587,35 @@ jobs:
           esac
           docker compose down
 
+      # Install Trivy from its GitHub release, not through trivy-action.
+      # The action restores Trivy from the Actions cache, and on a miss it runs
+      # Trivy's install script, which downloads through get.trivy.dev. That host
+      # stopped resolving on GitHub's runners (curl exit 6), and the action
+      # saves the cache only after a good install, so one eviction failed every
+      # build and nothing reached production (v0.5.811 to v0.5.818). The
+      # SHA-256 is pinned here, not read from the release's checksum file, so
+      # a replaced release asset fails the build. To upgrade, change both
+      # values; the hash is the Linux-64bit line of the release checksums.
+      - name: Install Trivy
+        env:
+          TRIVY_VERSION: "0.70.0"
+          TRIVY_SHA256: "8b4376d5d6befe5c24d503f10ff136d9e0c49f9127a4279fd110b727929a5aa9"
+        run: |
+          set -euo pipefail
+          tarball="trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz"
+          dir="$RUNNER_TEMP/trivy"
+          mkdir -p "$dir"
+          curl -fsSL --retry 4 --retry-all-errors -o "$dir/$tarball" \
+            "https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/${tarball}"
+          echo "${TRIVY_SHA256}  $dir/$tarball" | sha256sum -c -
+          tar -xzf "$dir/$tarball" -C "$dir" trivy
+          echo "$dir" >> "$GITHUB_PATH"
+          "$dir/trivy" --version
+
       - name: Scan image for vulnerabilities
         uses: aquasecurity/trivy-action@v0.36.0
         with:
+          skip-setup-trivy: true
           image-ref: ${{ fromJSON(steps.meta.outputs.json).tags[0] }}
           format: table
           exit-code: "1"

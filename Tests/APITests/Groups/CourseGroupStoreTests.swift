@@ -46,8 +46,7 @@ import VaporTesting
     // MARK: - One group per set
 
     @Test func movingAStudentLeavesOneMembership() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let f = try await fixture(on: app)
             try await CourseGroupStore.setMembership(
                 userID: f.students[0], groupID: f.labA.requireID(), in: f.set, on: app.db)
@@ -64,8 +63,7 @@ import VaporTesting
 
     /// The database itself refuses a second row for one person in one set.
     @Test func theDatabaseRefusesASecondMembershipInASet() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let f = try await fixture(on: app)
             let setID = try f.set.requireID()
             try await APICourseGroupMembership(setID: setID, groupID: f.labA.requireID(), userID: f.students[0])
@@ -81,8 +79,7 @@ import VaporTesting
     // MARK: - Replace
 
     @Test func aReplaceMovesAStudentAndDropsTheAbsent() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let f = try await fixture(on: app)
             let labA = try f.labA.requireID()
             let labB = try f.labB.requireID()
@@ -98,8 +95,7 @@ import VaporTesting
     // MARK: - Remove
 
     @Test func aRemovedGroupKeepsItsRowAndLosesItsMembers() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let f = try await fixture(on: app)
             let setID = try f.set.requireID()
             try await CourseGroupStore.setMembership(
@@ -123,8 +119,7 @@ import VaporTesting
     // MARK: - Refusals
 
     @Test func aDuplicateOrBlankGroupNameIsRefused() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let f = try await fixture(on: app)
             await #expect(throws: CourseGroupError.duplicateGroupName("lab 101")) {
                 _ = try await CourseGroupStore.addGroup(named: "lab 101", to: f.set, on: app.db)
@@ -136,8 +131,7 @@ import VaporTesting
     }
 
     @Test func aPersonNotInTheCourseIsRefused() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let f = try await fixture(on: app)
             let outsider = try await makeTestStudent(on: app, username: "outsider").requireID()
             await #expect(throws: CourseGroupError.notEnrolled) {
@@ -148,8 +142,7 @@ import VaporTesting
     }
 
     @Test func aGroupOfAnotherSetIsRefused() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let f = try await fixture(on: app)
             let other = try await CourseGroupStore.createSet(courseID: f.courseID, name: "Teams", on: app.db)
             let team = try await CourseGroupStore.addGroup(named: "Team 1", to: other, on: app.db)
@@ -161,8 +154,7 @@ import VaporTesting
     }
 
     @Test func aSyncedSetRefusesEdits() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let f = try await fixture(on: app)
             let synced = APICourseGroupSet(
                 courseID: f.courseID, name: "LEARN labs", source: .learnSections, externalID: "123")
@@ -179,8 +171,7 @@ import VaporTesting
     // MARK: - Import
 
     @Test func anImportMakesGroupsPlacesStudentsAndReportsTheRest() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let f = try await fixture(on: app)
             let ta = try await makeTestUser(on: app, username: "tara", role: "student").requireID()
             try await APICourseEnrollment(userID: ta, courseID: f.courseID, role: .ta).save(on: app.db)
@@ -207,8 +198,7 @@ import VaporTesting
     // MARK: - Data export
 
     @Test func aStudentsDataExportListsTheirGroup() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let f = try await fixture(on: app)
             try await CourseGroupStore.setMembership(
                 userID: f.students[0], groupID: f.labB.requireID(), in: f.set, on: app.db)

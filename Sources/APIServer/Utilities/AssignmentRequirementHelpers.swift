@@ -1,0 +1,162 @@
+// APIServer/Utilities/AssignmentRequirementHelpers.swift
+//
+// Build, persist, and infer `AssignmentRequirementSpec` values from
+// instructor-supplied CSVs and from scanning the assignment + solution
+// notebooks plus zip contents.  Extracted from AssignmentHelpers.swift
+// (issue #442) — no behaviour changes.
+
+import Core
+import Foundation
+
+func parsedRequirementCSV(_ raw: String) -> [String] {
+    raw
+        .split(separator: ",")
+        .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+        .filter { !$0.isEmpty }
+}
+
+func assignmentRequirementSpec(
+    platform: String,
+    architecture: String,
+    languagesCSV: String,
+    capabilitiesCSV: String
+) -> AssignmentRequirementSpec? {
+    let platformValue = platform.trimmingCharacters(in: .whitespacesAndNewlines)
+    let architectureValue = architecture.trimmingCharacters(in: .whitespacesAndNewlines)
+    let languages = parsedRequirementCSV(languagesCSV)
+        .map { AssignmentLanguageRequirement(language: $0.lowercased()) }
+    let capabilities = parsedRequirementCSV(capabilitiesCSV)
+        .map { RunnerCapability(name: $0.lowercased()) }
+    let spec = AssignmentRequirementSpec(
+        requiredPlatform: platformValue.isEmpty ? nil : platformValue.lowercased(),
+        requiredArchitecture: architectureValue.isEmpty ? nil : architectureValue.lowercased(),
+        requiredLanguages: languages,
+        requiredCapabilities: capabilities
+    )
+    guard
+        spec.requiredPlatform != nil
+            || spec.requiredArchitecture != nil
+            || !spec.requiredLanguages.isEmpty
+            || !spec.requiredCapabilities.isEmpty
+    else {
+        return nil
+    }
+    return spec
+}
+
+func detectRequirementSuggestions(
+    assignmentNotebookData: Data?,
+    solutionNotebookData: Data?,
+    setup: APITestSetup
+) async -> DraftRequirementSuggestions {
+    var languages = Set<String>()
+    var capabilities = Set<String>()
+
+    func addLanguage(_ raw: String) {
+        let normalized = raw.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !normalized.isEmpty else { return }
+        languages.insert(normalized)
+    }
+
+    func addCapability(_ raw: String) {
+        let normalized = raw.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !normalized.isEmpty else { return }
+        capabilities.insert(normalized)
+    }
+
+    func scanPythonSource(_ source: String) {
+        for module in pythonCapabilitySuggestions(in: source) {
+            addCapability(module)
+        }
+    }
+
+    func scanNotebook(_ data: Data) {
+        guard let root = JSONValue.object(from: data) else { return }
+        if let metadata = root["metadata"]?.objectValue {
+            if let kernelspec = metadata["kernelspec"]?.objectValue {
+                let name = (kernelspec["name"]?.stringValue ?? "").lowercased()
+                let language = (kernelspec["language"]?.stringValue ?? "").lowercased()
+                if name == "python" || language == "python" { addLanguage("python") }
+                // Every non-default language's kernel aliases, from the one
+                // table — `rKernelNames` alone missed `xlua`, so a Lua notebook
+                // suggested no language requirement.
+                for candidate in AssignmentLanguage.allCases
+                where candidate.notebookKernelNames.contains(name)
+                    || candidate.notebookKernelNames.contains(language)
+                {
+                    addLanguage(candidate.capabilityName)
+                }
+            }
+            if let language = metadata["language_info"]?["name"]?.stringValue {
+                addLanguage(language)
+            }
+        }
+        guard let cells = root["cells"]?.arrayOfObjects else { return }
+        for cell in cells where cell["cell_type"]?.stringValue == "code" {
+            scanPythonSource(NotebookCellSources.cellSource(cell))
+        }
+    }
+
+    func scanZipEntry(name: String, data: Data) async {
+        let ext = URL(fileURLWithPath: name).pathExtension.lowercased()
+        // Assignment languages are resolved through the one extension table
+        // (`AssignmentLanguage(scriptExtension:)`) rather than re-listed here.
+        // The hand-listed version had `py` and `r` and no `lua`, so a Lua
+        // assignment suggested no language requirement at all — and since the
+        // suggestion is what an instructor accepts, the assignment went out
+        // with nothing gating it onto a runner that has an interpreter.
+        if let language = AssignmentLanguage(scriptExtension: ext) {
+            addLanguage(language.capabilityName)
+            if language == .python, let source = String(data: data, encoding: .utf8) {
+                scanPythonSource(source)
+            }
+            return
+        }
+        switch ext {
+        case "sh", "bash":
+            addCapability("shell-bash")
+        case "zsh":
+            addCapability("shell-zsh")
+        case "swift":
+            addLanguage("swift")
+        case "js":
+            addLanguage("javascript")
+        default:
+            break
+        }
+    }
+
+    if let assignmentNotebookData { scanNotebook(assignmentNotebookData) }
+    _ = solutionNotebookData
+
+    for entry in await listZipEntries(zipPath: setup.zipPath) {
+        guard let data = await extractZipEntry(zipPath: setup.zipPath, entryName: entry) else { continue }
+        await scanZipEntry(name: entry, data: data)
+    }
+
+    return DraftRequirementSuggestions(
+        languages: languages.sorted(),
+        capabilities: capabilities.sorted()
+    )
+}
+
+private func pythonCapabilitySuggestions(in source: String) -> [String] {
+    let allowed: [String: String] = [
+        "numpy": "numpy",
+        "pandas": "pandas",
+        "scipy": "scipy",
+        "matplotlib": "matplotlib",
+    ]
+    let imports = source.matches(of: /^\s*import\s+([A-Za-z_][A-Za-z0-9_.]*)/.anchorsMatchLineEndings())
+        .map(\.output.1)
+    let fromImports = source.matches(of: /^\s*from\s+([A-Za-z_][A-Za-z0-9_.]*)\s+import\s+/.anchorsMatchLineEndings())
+        .map(\.output.1)
+    var matches = Set<String>()
+    for module in imports + fromImports {
+        let root = module.split(separator: ".").first.map(String.init)?.lowercased() ?? ""
+        if let capability = allowed[root] {
+            matches.insert(capability)
+        }
+    }
+    return matches.sorted()
+}

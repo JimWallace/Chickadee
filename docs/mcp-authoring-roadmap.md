@@ -46,6 +46,7 @@ The catalog:
 | `get_achievements` | `content:read` | The assignment's composable awards (badges / class goals / records), built-in defaults merged in until first curated |
 | `get_course_achievements` | `content:read` | The course's achievements: individual badges that count work across its assignments (docs/achievement-rewards.md, S5) |
 | `preview_personalization` | `content:read` | Resolve a seed's `name → value` map + a starter-notebook `{{placeholder}}` audit |
+| `check_assignment` | `content:read` | Run the rule-based authoring checks over the stored manifest, starter notebook, support-file list and latest validation runs (solution, variants, starter), evaluating the per-student expressions for the variant seeds; findings (checkID, severity, location, message, suggestedFix) most severe first. Starts no run ([#2747](https://github.com/JimWallace/Chickadee/issues/2747)) |
 | `validate_assignment` | `content:read` | Watch validation to completion; live SSE progress |
 | `run_validation` | `content:write` | Re-run validation with no edit, optionally on one runner (5-minute fallback to any runner) |
 | `get_validation_result` | `content:read` | Per-test outcomes of the reference solution's latest validation run (status + shortResult/longResult, all tiers); validation-only, never student data |
@@ -81,7 +82,7 @@ The catalog:
 | `create_pattern_family` | `content:write` | Create a new pattern family: kind, function, cases (args/expected/hint), defaults (tier/points/`defaultHint`) |
 | `update_pattern_family` | `content:write` | Family defaults (tier/points/`defaultHint`) + per-case args/expected/hint (incl. per-student `$ref`s), enable/disable, append new cases (`addCases`), replace prerequisites (`dependsOn`) |
 | `delete_suite_item` | `content:write` | Remove a script, family (+ its cases), or notebook check from the suite |
-| `delete_support_file` | `content:write` | Remove a non-graded support/data file from the setup zip (graded rows and reserved members refused; clears any graderOnly / dataset mark) |
+| `delete_support_file` | `content:write` | Remove a non-graded support/data file from the setup zip (graded rows, reserved members and a file a test lists in `dependsOn` refused; clears any graderOnly / dataset mark; shares `deleteFileFromSetup` with the web delete) |
 | `author_notebook_check` | `content:write` | Create/replace a notebook check (DataFrame shape/columns/equality, figures, AST, …) |
 | `author_script` | `content:write` | Escape hatch: create/replace a hand-written test (prefer a pattern family / notebook check) or a non-graded support file |
 | `update_notebook` | `content:write` | Replace the starter notebook |

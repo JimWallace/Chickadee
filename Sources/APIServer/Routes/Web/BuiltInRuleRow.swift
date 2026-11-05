@@ -14,6 +14,6 @@ struct BuiltInRuleRow: Sendable {
 
     init(_ item: WardrobeItem) {
         itemName = item.displayName
-        howEarned = "Earned \(item.howEarned)"
+        howEarned = "\(item.obtainedVerb) \(item.howEarned)"
     }
 }

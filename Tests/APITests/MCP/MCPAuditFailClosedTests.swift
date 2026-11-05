@@ -52,8 +52,7 @@ import Vapor
     }
 
     @Test func writeToolFailsClosedWhenAuditCannotPersist() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await fixture(on: app)
             // Force the pre-write audit to fail by removing its table.
             try await app.db.schema("audit_log").delete()
@@ -69,8 +68,7 @@ import Vapor
     }
 
     @Test func readToolStillSucceedsWhenAuditCannotPersist() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await fixture(on: app)
             try await app.db.schema("audit_log").delete()
 
@@ -88,8 +86,7 @@ import Vapor
     }
 
     @Test func writeToolRecordsSingleRowWithOutcomeWhenAuditHealthy() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await fixture(on: app)
 
             _ = try #require(

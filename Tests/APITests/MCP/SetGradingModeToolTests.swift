@@ -21,8 +21,7 @@ import Vapor
     }
 
     @Test func setsGradingModeWithoutClosing() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await fixture(on: app, manifest: browserManifest)
             #expect(assignment.visibility == .open)
 
@@ -39,8 +38,7 @@ import Vapor
     }
 
     @Test func rejectsUnknownMode() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await fixture(on: app, manifest: browserManifest)
             await #expect(throws: MCPToolError.self) {
                 _ = try await SetGradingModeTool().execute(
@@ -58,8 +56,7 @@ import Vapor
     /// assignment. Before this door closed, author-under-worker-then-switch
     /// reached the combination every authoring surface half-forbids.
     @Test func refusesBrowserWhileManifestMarksGraderOnlyFiles() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await fixture(on: app, manifest: workerGraderOnlyManifest)
             await #expect(throws: MCPToolError.self) {
                 _ = try await SetGradingModeTool().execute(
@@ -73,8 +70,7 @@ import Vapor
     /// The refusal is scoped to marked files: a worker-graded assignment with
     /// none switches to browser exactly as before.
     @Test func allowsBrowserWhenNoGraderOnlyFilesMarked() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let workerManifest =
                 #"{"schemaVersion":1,"gradingMode":"worker","graderOnlyFiles":[],"testSuites":[],"timeLimitSeconds":10}"#
             let assignment = try await fixture(on: app, manifest: workerManifest)
@@ -91,8 +87,7 @@ import Vapor
     /// keeps worker grading. The message is the one shared with the zip
     /// upload and set_activity.
     @Test func refusesBrowserWhileTheWorkerChoosesTheOpponent() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let opponentManifest =
                 #"{"schemaVersion":1,"gradingMode":"worker","testSuites":[],"timeLimitSeconds":10,"activity":{"kind":"kingOfTheHill"}}"#
             let assignment = try await fixture(on: app, manifest: opponentManifest)
@@ -114,8 +109,7 @@ import Vapor
     /// A bot challenge may switch to browser grading: the browser runner
     /// stages the bot as the worker does.
     @Test func allowsBrowserForABotChallenge() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let botManifest =
                 #"{"schemaVersion":1,"gradingMode":"worker","testSuites":[],"timeLimitSeconds":10,"activity":{"kind":"beatTheInstructor","opponentFile":"bot.py"}}"#
             let assignment = try await fixture(on: app, manifest: botManifest)
@@ -127,8 +121,7 @@ import Vapor
     }
 
     @Test func allowsBrowserForAnActivityWithNoOpponent() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let metricManifest =
                 #"{"schemaVersion":1,"gradingMode":"worker","testSuites":[],"timeLimitSeconds":10,"activity":{"kind":"bestMetric"}}"#
             let assignment = try await fixture(on: app, manifest: metricManifest)

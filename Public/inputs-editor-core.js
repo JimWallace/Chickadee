@@ -1,3 +1,4 @@
+// @ts-check
 // Public/inputs-editor-core.js
 //
 // The shared core of the two "inputs" panels (#1126): the Global Inputs
@@ -173,7 +174,7 @@
               +   TRASH_SVG + '</button></td>';
             tbody.appendChild(tr);
             refreshRow(tr, tbody);
-            var input = tr.querySelector('.' + classes.name);
+            var input = /** @type {HTMLInputElement | null} */ (tr.querySelector('.' + classes.name));
             if (input) input.focus();
         }
 
@@ -201,7 +202,7 @@
                 }
             }
             var seen = {};
-            var all = variables.concat(expressions);
+            var all = /** @type {Array<{ name: string }>} */ (variables).concat(expressions);
             for (var k = 0; k < all.length; k++) {
                 if (seen[all[k].name]) { valid = false; break; }
                 seen[all[k].name] = true;

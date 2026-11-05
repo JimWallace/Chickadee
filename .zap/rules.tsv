@@ -89,3 +89,24 @@
 # SharedArrayBuffer for the iframe document, so cross-origin isolation
 # is not a functional requirement on the main pages.
 90004	IGNORE	.*
+
+# Private IP Disclosure
+# Accepted on /admin/audit only. The audit log records the client address of
+# each action (auditRemoteAddress in
+# Sources/APIServer/Helpers/Request+AuditContext.swift), and the admin-only
+# audit page shows it: that is what an audit trail is for. In CI the address
+# is the Docker gateway (172.18.0.1), which ZAP reads as a private IP. The
+# regex covers that page and nothing else, so in the scan log a private
+# address on any other page is still a WARN.
+#
+# INFO, not IGNORE, because only the scan applies the URL regex. The report
+# issue and the weekly digest go by rule ID alone:
+#   * zaproxy/action-baseline drops every alert of an IGNORE rule from the
+#     issue, on every URL (filterReport in its dist/index.js). An IGNORE here
+#     would hide a private IP on any page.
+#   * scripts/weekly-digest-render.sh counts an alert as covered when this file
+#     names its rule ID. Once this line exists, it does not flag rule 2 on any
+#     page.
+# So at INFO the alert stays listed in the issue, with its URL, and a reader
+# of the issue is what catches it on a page other than /admin/audit.
+2	INFO	^https?://[^/]+/admin/audit([?#].*)?$

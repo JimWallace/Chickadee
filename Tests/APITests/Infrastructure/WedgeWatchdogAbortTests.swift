@@ -41,7 +41,9 @@ import Testing
         #expect(stderr.contains("==== WedgeWatchdog thread dump (issue #1233) ===="))
         #expect(stderr.contains("no test activity for"))
         #expect(stderr.contains("Stall limit was 1s"))
+        #if os(Linux)
         #expect(stderr.contains("wchan="), "the dump carries the per-thread table on Linux")
+        #endif
     }
 
     /// `CHICKADEE_WORKERTESTS_STALL_SECONDS=0` disables the abort: the same

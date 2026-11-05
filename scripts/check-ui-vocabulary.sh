@@ -102,11 +102,13 @@ doc_tokens="$(
 doc_names="$(grep -v -- '-\*$' <<<"$doc_tokens" || true)"
 doc_families="$(grep -- '-\*$' <<<"$doc_tokens" | sed 's/-\*$//' || true)"
 
+# The lists reach awk through ENVIRON, not `awk -v`: BSD awk (macOS) refuses a
+# newline in a -v value.
 undocumented="$(
-  awk -v names="$doc_names" -v fams="$doc_families" '
+  names="$doc_names" fams="$doc_families" awk '
     BEGIN {
-      n = split(names, a, "\n"); for (i = 1; i <= n; i++) if (a[i] != "") known[a[i]] = 1
-      m = split(fams,  b, "\n"); for (i = 1; i <= m; i++) if (b[i] != "") family[++fc] = b[i]
+      n = split(ENVIRON["names"], a, "\n"); for (i = 1; i <= n; i++) if (a[i] != "") known[a[i]] = 1
+      m = split(ENVIRON["fams"],  b, "\n"); for (i = 1; i <= m; i++) if (b[i] != "") family[++fc] = b[i]
     }
     {
       if ($0 in known) next
@@ -152,9 +154,9 @@ catalog_components="$(
 # silence here is not evidence, and the message says so rather than implying the
 # check was thorough.
 near_catalog_names() {
-  awk -v cat="$catalog_components" '
+  cat="$catalog_components" awk '
     BEGIN {
-      n = split(cat, a, "\n")
+      n = split(ENVIRON["cat"], a, "\n")
       for (i = 1; i <= n; i++) if (a[i] != "") { comp[++cn] = a[i]; ctok[cn] = split(a[i], t, "-") }
     }
     {

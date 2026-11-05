@@ -8,8 +8,7 @@ import Vapor
 
 @Suite struct EnsureSeededEnrollmentTests {
     @Test func enrollsOnceAndIsIdempotent() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let course = try await makeTestCourse(on: app, code: "CS136", name: "Systems")
             let user = try await makeTestUser(on: app, username: "student1")
             let userID = try user.requireID()

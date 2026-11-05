@@ -16,8 +16,7 @@
 #
 # Pairs with scripts/restore.sh for rollback.
 #
-# Requires the docker-compose stack to be running and DATABASE_BACKEND=postgres.
-# SQLite deployments are already covered by scripts/server-deploy.sh's volume tar.
+# Requires the docker-compose stack to be running, with its `db` service.
 
 set -euo pipefail
 
@@ -85,9 +84,10 @@ report_pruned
 # because under blue-green there is no compose `server` service: the live
 # server is a colour container started by `docker run`. That lookup returned
 # nothing silently, so this fell through to .env — and on a host that declares
-# DATABASE_BACKEND in compose rather than .env, the default below resolved to
-# `sqlite` and the script refused to run. Eighty-two consecutive nightly
-# backups were lost to exactly that.
+# DATABASE_BACKEND in compose rather than .env, a `sqlite` default resolved and
+# the script refused to run. Eighty-two consecutive nightly backups were lost
+# to exactly that. Postgres is now the only backend, so there is no backend to
+# resolve; a missing DATABASE_USER or DATABASE_NAME stops the script below.
 # ----------------------------------------------------------------
 read -r SERVER_MODE SERVER_NAME SERVER_PORT \
   <<<"$(chickadee_server_target "$COMPOSE")"
@@ -107,19 +107,6 @@ if [[ $DB_VARS_FROM_CONTAINER -eq 0 && -f "$REPO_ROOT/.env" ]]; then
   # shellcheck disable=SC1091
   source "$REPO_ROOT/.env"
   set +a
-fi
-
-DATABASE_BACKEND="${DATABASE_BACKEND:-sqlite}"
-if [[ "$DATABASE_BACKEND" != "postgres" ]]; then
-  cat >&2 <<EOF
-ERROR: snapshot.sh only supports DATABASE_BACKEND=postgres.
-       Current value: "$DATABASE_BACKEND".
-
-       SQLite deployments are already covered by scripts/server-deploy.sh,
-       which tars the chickadee-data volume (including chickadee.sqlite)
-       before every deploy.
-EOF
-  exit 1
 fi
 
 : "${DATABASE_USER:?DATABASE_USER must be set (in server container env or .env)}"

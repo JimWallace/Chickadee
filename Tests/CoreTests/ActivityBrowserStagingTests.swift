@@ -31,7 +31,7 @@ import Testing
     }
 
     /// A bracket entrant's own submission plays the bot as practice, as on
-    /// the worker (`WorkerJobRoutes.pairedJobOpponent`).
+    /// the worker (`JobOpponentSelection.pairedJobOpponent`).
     @Test func aBracketEntrantPracticesAgainstTheBot() {
         #expect(ClassActivity(kind: .elimination, opponentFile: "bot.py").browserStagedBot == "bot.py")
         #expect(ClassActivity(kind: .elimination).browserStagedBot == nil)

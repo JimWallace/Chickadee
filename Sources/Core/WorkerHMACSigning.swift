@@ -156,5 +156,5 @@ public enum WorkerHMACSigning {
 /// `WorkerHMACSigning.hmacSHA256Hex`; not part of the public API
 /// because `sha256HexDigest` already covers the SHA-256 case.
 private func hexEncoded(_ data: Data) -> String {
-    data.map { String(format: "%02x", $0) }.joined()
+    data.map { String(cFormat: "%02x", $0) }.joined()
 }

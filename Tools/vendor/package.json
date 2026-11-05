@@ -7,10 +7,10 @@
   "dependencies": {
     "@codemirror/commands": "^6.0.0",
     "@codemirror/lang-python": "^6.0.0",
-    "@codemirror/language": "^6.0.0",
-    "@codemirror/legacy-modes": "^6.0.0",
-    "@codemirror/state": "^6.0.0",
-    "@codemirror/view": "^6.0.0",
+    "@codemirror/language": "^6.13.1",
+    "@codemirror/legacy-modes": "^6.5.5",
+    "@codemirror/state": "^6.7.6",
+    "@codemirror/view": "^6.43.15",
     "@emscripten-forge/mambajs-core": "^0.23.0",
     "@emscripten-forge/untarjs": "^5.3.3",
     "jupyter-iframe-commands-host": "^0.3.0"

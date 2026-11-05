@@ -10,8 +10,7 @@ import VaporTesting
 
 @Suite struct LTIRecordReaperTests {
     @Test func reapsDeadLoginStatesAndDeepLinkRequestsKeepsLiveOnes() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let now = Date()
             let platform = APILTIPlatform(
                 issuer: "https://lms.example.edu", clientID: "client", deploymentIDs: ["d1"],

@@ -33,7 +33,7 @@ import Testing
         let pagesDirectory = repositoryRoot.appendingPathComponent("Sources/APIServer/Views/Pages")
         let enumerator = try #require(FileManager.default.enumerator(atPath: pagesDirectory.path))
         var pageTypes: [String] = []
-        for case let path as String in enumerator where path.hasSuffix(".swift") {
+        for case let path as String in enumerator.allObjects where path.hasSuffix(".swift") {
             let typeName = URL(fileURLWithPath: path).deletingPathExtension().lastPathComponent
             let source = try String(contentsOf: pagesDirectory.appendingPathComponent(path), encoding: .utf8)
             let declaration = try Regex(#"(struct|class|enum)\s+"# + typeName + #"\b[^{]*:\s*[^{]*\bHTML(Document)?\b"#)

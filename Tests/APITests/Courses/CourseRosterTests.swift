@@ -46,8 +46,7 @@ import Vapor
     }
 
     @Test func studentSetHoldsNullAndUnknownRolesAndNoStaff() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let courseID = try await makeTestCourse(on: app, code: "CS136").requireID()
             let roster = try await seedRoster(in: courseID, on: app)
 
@@ -60,8 +59,7 @@ import Vapor
     }
 
     @Test func studentRuleMatchesTheRoleAccessor() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let courseID = try await makeTestCourse(on: app, code: "CS136").requireID()
             let roster = try await seedRoster(in: courseID, on: app)
 
@@ -78,8 +76,7 @@ import Vapor
     }
 
     @Test func batchedStudentSetMatchesTheSingleCourseSet() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let courseID = try await makeTestCourse(on: app, code: "CS136").requireID()
             let staffOnlyID = try await makeTestCourse(on: app, code: "CS246").requireID()
             let emptyID = try await makeTestCourse(on: app, code: "CS350").requireID()
@@ -97,8 +94,7 @@ import Vapor
     }
 
     @Test func enrollmentIsScopedToTheCourse() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let courseID = try await makeTestCourse(on: app, code: "CS136").requireID()
             let otherID = try await makeTestCourse(on: app, code: "CS246").requireID()
             let userID = try await enroll("pupil", roleRaw: CourseRole.student.rawValue, in: courseID, on: app)
@@ -113,8 +109,7 @@ import Vapor
     /// The classmate chooser used to filter `student OR NULL` in SQL, which
     /// left out a row with an unknown role string. It reads the roster now.
     @Test func classmateChooserReadsTheRosterRule() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let courseID = try await makeTestCourse(on: app, code: "CS136").requireID()
             let roster = try await seedRoster(in: courseID, on: app)
             let setup = try await makeTestSetup(on: app, id: "setup-roster", courseID: courseID)

@@ -20,8 +20,7 @@ import Vapor
     }
 
     @Test func returnsVariablesAndExpressions() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await fixture(on: app)
             let output = try await GetGlobalInputsTool().execute(
                 GetGlobalInputsTool.Input(assignmentPublicID: assignment.publicID), mcpContext(app))
@@ -34,8 +33,7 @@ import Vapor
     }
 
     @Test func unknownAssignmentThrows() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             _ = try await fixture(on: app)
             await #expect(throws: MCPToolError.self) {
                 _ = try await GetGlobalInputsTool().execute(

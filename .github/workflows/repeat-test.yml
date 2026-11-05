@@ -41,14 +41,6 @@ on:
         options:
           - fail
           - pass
-      database:
-        description: "Database backend for APITests"
-        required: true
-        default: sqlite
-        type: choice
-        options:
-          - sqlite
-          - postgres
 
 permissions:
   contents: read
@@ -67,8 +59,7 @@ jobs:
       # The same tmpfs `/tmp` as the APITests lanes, for the same reason and
       # with the same `exec` requirement — see swift-tests.yml.
       options: "--privileged --tmpfs /tmp:rw,exec,size=2g"
-    # Always started, because a service cannot be conditional on an input.
-    # It is idle unless `database` is postgres.
+    # The database for APITests: Postgres is the server's only backend.
     services:
       postgres:
         image: ghcr.io/jimwallace/chickadee/postgres:16
@@ -103,10 +94,8 @@ jobs:
         run: swift build --build-tests
 
       - name: Point APITests at the Postgres service
-        if: inputs.database == 'postgres'
         run: |
           {
-            echo "TEST_DATABASE_BACKEND=postgres"
             echo "TEST_DATABASE_HOST=postgres"
             echo "TEST_DATABASE_PORT=5432"
             echo "TEST_DATABASE_NAME=chickadee_test"
@@ -147,7 +136,6 @@ jobs:
             echo "| filter | \`${FILTER}\` |"
             echo "| repetitions | ${REPETITIONS} |"
             echo "| until | ${UNTIL} |"
-            echo "| database | ${{ inputs.database }} |"
             echo
             echo "| result | count |"
             echo "|---|---|"

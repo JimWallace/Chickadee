@@ -32,6 +32,7 @@ enum MCPToolCatalog {
             GetAchievementsTool().erased(),
             GetCourseAchievementsTool().erased(),
             PreviewPersonalizationTool().erased(),
+            CheckAssignmentTool().erased(),
             ValidateAssignmentTool().erased(),
             GetValidationResultTool().erased(),
             RunValidationTool().erased(),

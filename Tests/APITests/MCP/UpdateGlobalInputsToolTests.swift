@@ -42,8 +42,7 @@ import Vapor
     }
 
     @Test func roundTripsVariablesAndExpressions() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await fixture(on: app)
             let output = try await UpdateGlobalInputsTool().execute(
                 input(
@@ -61,8 +60,7 @@ import Vapor
     }
 
     @Test func clearsWithEmptyLists() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await fixture(on: app)
             _ = try await UpdateGlobalInputsTool().execute(
                 input(assignment, variables: [FamilyVariable(name: "limit", value: .int(5))]),
@@ -76,8 +74,7 @@ import Vapor
     }
 
     @Test func invalidIdentifierThrows() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await fixture(on: app)
             await #expect(throws: MCPToolError.self) {
                 _ = try await UpdateGlobalInputsTool().execute(
@@ -88,8 +85,7 @@ import Vapor
     }
 
     @Test func reservedSeedNameThrows() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await fixture(on: app)
             await #expect(throws: MCPToolError.self) {
                 _ = try await UpdateGlobalInputsTool().execute(
@@ -100,8 +96,7 @@ import Vapor
     }
 
     @Test func duplicateAcrossKindsThrows() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await fixture(on: app)
             await #expect(throws: MCPToolError.self) {
                 _ = try await UpdateGlobalInputsTool().execute(

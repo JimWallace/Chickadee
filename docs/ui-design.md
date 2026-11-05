@@ -244,6 +244,14 @@ duplicate.
   wrapper, its lead-in paragraph, its italic aside.
 - **`.toolbar`** (+ `--end`), `.row-actions-tight` — horizontal control
   clusters; filter rows are `.toolbar .toolbar--end .section-gap`.
+- **`AdminUsersPager`** — paging for a table that the server bounds to one
+  page (#2829). A `.text-muted` count line above the table says which rows
+  show and that a client sort or filter covers only this page. Previous and
+  Next are `btn action-btn` links in a `nav.toolbar.toolbar--end.section-gap`
+  below it. Its live filter sits in a GET form, so typing filters the page
+  and Enter searches every row on the server; Clear follows the box, as on
+  the audit page. It adds no class. Its links name the Users routes, so the next
+  paged list takes its base path as a parameter rather than a second pager.
 - **`.filter-group`** — the one list-filter control: a `.filter-label` +
   `.filter-input[type=search]` pair that wraps as a unit.  Every
   `.filter-input` sits in one, GET-form filters included, and every one is
@@ -799,7 +807,10 @@ duplicate.
   `.earned-face-new` and `.earned-face-old` for the crossfade.  It floats
   there, not in the page flow, because it arrives during the celebration and
   must not move the grade band or the results while they animate.  It is not a
-  general toast idiom.  J3 must take this shape too, not a second one.
+  general toast idiom.  J3 must take this shape too, not a second one, and so
+  does a found item (`docs/student-wardrobe.md`, 6c): the layout renders the
+  Quantum Cats ring's toast hidden as `#quantum-cats-found`, and
+  `quantum-cats-egg.js` shows it.
 - **`.wb-shell`** — the assignment workbench (`WorkbenchPage`, NB6, design
   frame 18c).  A `.wb-appbar` (`WorkbenchAppBar`: the `.wb-title` with a ✎
   that opens the Details sheet, the due date and the language in a
@@ -1377,12 +1388,21 @@ the JS gate (CI runs it in the `browser-runner-tests` job):
 
 ```bash
 scripts/eslint.sh
+scripts/typecheck-js.sh
 node --test Tests/BrowserRunnerJSTests/*.mjs
 ```
 
 ESLint is a correctness gate (`eslint:recommended`, zero warnings), not a
 formatter; scope and shared globals live in `eslint.config.mjs`.  New
 cross-file API should hang off `ChickadeeUI` rather than adding a global.
+
+`scripts/typecheck-js.sh` runs `tsc --noEmit` over `jsconfig.json` (#2782).
+There is no build step: types go in JSDoc comments only, and the files are
+still served as-is. A file is checked when its first line is `// @ts-check`.
+Every new `Public/*.js` file opts in. `scripts/ts-check-pending.txt` lists the
+files that do not yet, and `scripts/check-ts-check-optin.sh` makes that list
+shrink-only. A new cross-file global needs a line in
+`types/chickadee-globals.d.ts`, or tsc reports the name as unknown.
 
 For changes that add or restructure markup (not just CSS values), also run
 the render tests for the affected routes, e.g.:

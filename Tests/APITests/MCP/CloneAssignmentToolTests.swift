@@ -21,8 +21,7 @@ import Vapor
     }
 
     @Test func clonesWithinSameCourse() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let source = try await fixture(on: app)
             let output = try await CloneAssignmentTool().execute(
                 CloneAssignmentTool.Input(
@@ -59,8 +58,7 @@ import Vapor
     /// The three per-assignment policies travel with the clone (#1738), as
     /// they do with the course clone.
     @Test func copiesTheThreePolicies() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let source = try await fixture(on: app)
             source.secretRevealEnabled = true
             source.passingThresholdPercent = 60
@@ -80,8 +78,7 @@ import Vapor
     /// The runner requirements the author declared travel with the clone
     /// (#2167).
     @Test func copiesTheRequirementRow() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let source = try await fixture(on: app)
             let spec = AssignmentRequirementSpec(
                 requiredPlatform: "linux", requiredArchitecture: "x86_64",
@@ -105,8 +102,7 @@ import Vapor
     /// A class activity's live-session window holds dates of the source
     /// term, so the clone drops it and keeps the rest of the block (#2189).
     @Test func clearsTheActivityWindow() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let source = try await fixture(on: app)
             let srcSetup = try #require(try await APITestSetup.find(source.testSetupID, on: app.db))
             var props = try #require(srcSetup.decodedManifest())
@@ -133,8 +129,7 @@ import Vapor
     }
 
     @Test func copiesNotebook() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let source = try await fixture(on: app)
             let output = try await CloneAssignmentTool().execute(
                 CloneAssignmentTool.Input(
@@ -153,8 +148,7 @@ import Vapor
     /// copies only the setup lands an assignment that can never be
     /// re-validated — the defect that left a copied term with no answer keys.
     @Test func carriesTheReferenceSolution() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let source = try await fixture(on: app)
             let tester = try #require(
                 try await APIUser.query(on: app.db).filter(\.$username == "tester").first())
@@ -203,8 +197,7 @@ import Vapor
     /// An assignment authored without a solution is a legitimate state, so
     /// cloning one must still succeed rather than refusing for a missing file.
     @Test func clonesAnAssignmentThatHasNoSolution() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let source = try await fixture(on: app)
             let output = try await CloneAssignmentTool().execute(
                 CloneAssignmentTool.Input(
@@ -220,8 +213,7 @@ import Vapor
     }
 
     @Test func clonesIntoAnotherEnrolledCourse() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let source = try await fixture(on: app)
             // A second course the same instructor is enrolled in.
             let other = try await makeTestCourse(on: app, code: "CS200", name: "Intro")
@@ -242,8 +234,7 @@ import Vapor
     }
 
     @Test func unknownSourceThrows() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             _ = try await fixture(on: app)
             await #expect(throws: MCPToolError.self) {
                 _ = try await CloneAssignmentTool().execute(
@@ -255,8 +246,7 @@ import Vapor
     }
 
     @Test func emptyTitleThrows() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let source = try await fixture(on: app)
             await #expect(throws: MCPToolError.self) {
                 _ = try await CloneAssignmentTool().execute(
@@ -269,8 +259,7 @@ import Vapor
     }
 
     @Test func unknownTargetCourseThrows() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let source = try await fixture(on: app)
             await #expect(throws: MCPToolError.self) {
                 _ = try await CloneAssignmentTool().execute(
@@ -283,8 +272,7 @@ import Vapor
     }
 
     @Test func deniesWhenNotEnrolledInSource() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let course = try await makeTestCourse(on: app, code: "CS246", name: "OOP")
             let courseID = try course.requireID()
             _ = try await makeTestUser(on: app, username: "tester", role: "instructor")
@@ -311,8 +299,7 @@ import Vapor
     }
 
     @Test func deniesWhenNotEnrolledInTargetCourse() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let source = try await fixture(on: app)
             // Target course the instructor is NOT enrolled in.
             _ = try await makeTestCourse(on: app, code: "CS200", name: "Intro")

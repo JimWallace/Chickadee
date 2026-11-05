@@ -75,6 +75,7 @@ Classification column references `policy46-classification.md`.
 | `get_achievements` | manifest achievements | composable awards (badges/goals/records), built-in defaults until curated | No | Confidential |
 | `get_course_achievements` | `courses.achievements` | course achievement definitions; never who earned them | No | Confidential |
 | `preview_personalization` | manifest; `python3` eval | resolved per-seed values for the *previewed* seed | No (synthetic/instructor) | Restricted |
+| `check_assignment` | manifest; starter notebook; support-file names; validation, variant and starter results; expression eval per variant seed | authoring-check findings: check id, severity, location (may name a secret-tier script file), message (may name failing tests and quote an expression error) | No (instructor reference and starter runs; variant seeds are derived constants) | Restricted |
 | `validate_assignment` | enqueues run; status | `passed`/`failed`/`no-runner` | No | Confidential |
 | `get_validation_result` | validation submission + its result; `validation_variants` batch | per-test outcomes; per-variant verdicts + synthetic seeds + failing outcomes (all reference-solution runs); **`submissionID`/`userID` dropped** (`GetValidationResultTool.swift:18-24`) | No (instructor reference run; variant seeds are derived constants, not student seeds) | Restricted |
 | `update_assignment` | assignment | echo of saved metadata | No | Confidential |

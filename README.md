@@ -73,18 +73,31 @@ Install Swift via [`swiftly`](https://swift.org/install/linux), build release bi
 
 Requires Swift 6.4 ([swift.org](https://swift.org/download)). On macOS, it requires macOS 26.2 or later.
 
+Chickadee stores everything in PostgreSQL, and so do its tests. The test suite
+connects to `localhost:5432` as user `postgres` with password `postgres`, and
+uses the database `chickadee_test`. Any PostgreSQL 16 install works, such as
+Postgres.app or Homebrew. With Docker, these commands start one:
+
 ```bash
+docker run -d --name chickadee-postgres -p 5432:5432 -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=chickadee_test postgres:16
 swift build
 swift test
 ```
 
-Run the server:
+To use another server, set `TEST_DATABASE_HOST`, `TEST_DATABASE_PORT`,
+`TEST_DATABASE_NAME`, `TEST_DATABASE_USER` or `TEST_DATABASE_PASSWORD`. Each
+one overrides only its own part. Claude Code cloud sessions start a test
+database in their session hook.
+
+Run the server against its own database. The server needs all five
+`DATABASE_*` variables, and it refuses to start without them:
 
 ```bash
-# AUTH_MODE defaults to SSO; override for local dev:
-AUTH_MODE=local ENABLE_NON_SSO_AUTH_MODES=true \
-  swift run chickadee-server serve --port 8080 --worker-secret dev-secret
+docker exec chickadee-postgres createdb -U postgres chickadee
+AUTH_MODE=local ENABLE_NON_SSO_AUTH_MODES=true DATABASE_HOST=localhost DATABASE_PORT=5432 DATABASE_NAME=chickadee DATABASE_USER=postgres DATABASE_PASSWORD=postgres swift run chickadee-server serve --port 8080 --worker-secret dev-secret
 ```
+
+`AUTH_MODE` defaults to SSO, so local development sets it to `local`.
 
 Run the runner against the local server:
 
@@ -156,6 +169,16 @@ Point an MCP client (e.g. the Claude connector, or the MCP Inspector's OAuth mod
 3. Exchanges the PKCE code at `/oauth/token` for a short-lived access token + a long, **rotating** refresh token (authorize once, works for a term).
 
 The access token's subject is the **human**; the agent is recorded separately (`client_id` / `agent_name`) so its actions are auditable as "*human*, via *agent*" (`mcp.tool_called`). Manage or revoke authorizations at **`/agents`** ("Connected agents"), or `POST /oauth/revoke` (RFC 7009). Replaying a rotated refresh token revokes the whole grant.
+
+### Reviewing an assignment with Claude Code
+
+The `chickadee-review` plugin in this repository runs `check_assignment` and a group of read-only reviewer agents over one assignment and returns one report. Install it in Claude Code with:
+
+```text
+/plugin install chickadee-review --marketplace JimWallace/Chickadee
+```
+
+Setup, sign-in and the pilot log are in [docs/assignment-review.md](docs/assignment-review.md).
 
 ### Admin-minted tokens (for headless / CI use)
 

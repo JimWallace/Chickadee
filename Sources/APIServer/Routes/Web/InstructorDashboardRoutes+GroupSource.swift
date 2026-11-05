@@ -67,7 +67,7 @@ extension InstructorDashboardRoutes {
             await Self.auditGroups(change: "source_manual", title: set.name, courseID: courseID, on: req)
             return req.redirect(to: "/instructor/groups?notice=\(GroupsNotice.learnStopped.rawValue)")
         default:
-            throw WebAssignmentError.invalidParameter(name: "source", reason: "Unknown group source.")
+            throw AppError.invalidParameter(name: "source", reason: "Unknown group source.")
         }
     }
 

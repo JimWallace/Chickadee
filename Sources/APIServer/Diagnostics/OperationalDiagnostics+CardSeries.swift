@@ -7,12 +7,12 @@
 // RunnerSnapshot is the one source whose volume is driven by a timer (a
 // heartbeat every ~30s), so 30 days is tens of thousands of rows — far more
 // than the submission-bound job-metric / queue-depth sources.  We therefore
-// pre-aggregate it to per-5-minute summed load *in the database* on Postgres
-// (production), collapsing that scan to a few hundred rows.  SQLite (dev /
-// tests) keeps an equivalent Swift aggregation: the data is tiny there and it
-// sidesteps SQLite's ambiguous Date storage in raw SQL.  Both paths produce
-// the same `RunnerLoadPoint` list, so the card math downstream is identical.
+// pre-aggregate it to per-5-minute summed load *in the database*, collapsing
+// that scan to a few hundred rows.  A driver without SQL keeps an equivalent
+// Swift aggregation; both paths produce the same `RunnerLoadPoint` list, so
+// the card math downstream is identical.
 
+import Core
 import Fluent
 import Foundation
 import SQLKit
@@ -170,10 +170,10 @@ extension OperationalDiagnosticsService {
     }
 
     /// Summed runner load per `loadBucketSeconds` bucket since `outerStart`.
-    /// Postgres aggregates server-side; every other driver (SQLite in dev /
-    /// tests) aggregates in Swift over the raw rows.
+    /// Aggregates in SQL; a driver without SQL aggregates in Swift over the raw
+    /// rows.
     func runnerLoadPoints(since outerStart: Date, on db: any Database) async throws -> [RunnerLoadPoint] {
-        if let sql = db as? (any SQLDatabase), sql.dialect.name == "postgresql" {
+        if let sql = db as? (any SQLDatabase) {
             return try await runnerLoadPointsViaPostgres(sql, since: outerStart)
         }
         return try await runnerLoadPointsInSwift(since: outerStart, on: db)
@@ -232,8 +232,8 @@ extension OperationalDiagnosticsService {
         }
     }
 
-    /// Swift-side equivalent of `runnerLoadPointsViaPostgres`, used on SQLite
-    /// (dev / tests) where the data is small.  Per (bucket, runner) keep the
+    /// Swift-side equivalent of `runnerLoadPointsViaPostgres`, for a driver
+    /// without SQL.  Per (bucket, runner) keep the
     /// peak active/capacity, then sum across runners per bucket.
     private func runnerLoadPointsInSwift(
         since outerStart: Date,
@@ -274,14 +274,14 @@ extension OperationalDiagnosticsService {
 
     /// Per-display-bucket runner utilization summary for `/admin/metrics/
     /// timeseries`, pre-aggregated so the endpoint never streams the full
-    /// RunnerSnapshot scan.  Postgres aggregates per display bucket in SQL;
-    /// SQLite (dev / tests) reuses the raw-row accumulator — both must yield
-    /// identical summaries (pinned by `runnerTimeseriesSummariesMatchSwift`).
+    /// RunnerSnapshot scan.  Aggregates per display bucket in SQL; a driver
+    /// without SQL reuses the raw-row accumulator, which must yield identical
+    /// summaries.
     func runnerTimeseriesSummaries(
         window: BucketWindow,
         on db: any Database
     ) async throws -> [RunnerBucketSummary] {
-        if let sql = db as? (any SQLDatabase), sql.dialect.name == "postgresql" {
+        if let sql = db as? (any SQLDatabase) {
             return try await runnerTimeseriesSummariesViaPostgres(sql, window: window)
         }
         let snapshots = try await RunnerSnapshot.query(on: db)
@@ -319,7 +319,7 @@ extension OperationalDiagnosticsService {
         // Align buckets to the window start (matching BucketWindow.bucketIndex)
         // rather than the epoch, so SQL bucket indices map straight onto the
         // response array.
-        let windowStartEpoch = String(format: "%.3f", window.windowStart.timeIntervalSince1970)
+        let windowStartEpoch = String(cFormat: "%.3f", window.windowStart.timeIntervalSince1970)
         // Per-row utilization, rounded half-away-from-zero and clamped to
         // [0, 100] — exactly as the Swift accumulator does; NULL when the
         // runner reported no capacity, so it drops out of the util aggregates.

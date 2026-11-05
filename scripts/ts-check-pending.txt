@@ -1,0 +1,9 @@
+# First-party Public/*.js files that do not yet opt in to type checking (#2782).
+#
+# Each file here still has tsc errors under `// @ts-check`. This list only
+# shrinks: scripts/check-ts-check-optin.sh fails when a file here already opts
+# in, or no longer exists, so remove the line in the same change that adds the
+# opt-in. A new file never goes here. It opts in from its first commit.
+#
+# To see what a file needs, add `// @ts-check` as its first line and run
+# scripts/typecheck-js.sh.

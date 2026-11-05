@@ -31,8 +31,7 @@ import Vapor
     }
 
     @Test func updatesScriptTierAndPoints() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await fixture(on: app)
             let output = try await UpdateSuiteTool().execute(
                 UpdateSuiteTool.Input(
@@ -60,8 +59,7 @@ import Vapor
     }
 
     @Test func setsDependsOn() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await fixture(on: app)
             _ = try await UpdateSuiteTool().execute(
                 UpdateSuiteTool.Input(
@@ -80,8 +78,7 @@ import Vapor
     }
 
     @Test func setsPerTestTimeLimitOverride() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await fixture(on: app)
             _ = try await UpdateSuiteTool().execute(
                 UpdateSuiteTool.Input(
@@ -99,8 +96,7 @@ import Vapor
     }
 
     @Test func clearsPerTestTimeLimitWithZero() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await fixture(on: app)
             // Set, then clear with 0.
             _ = try await UpdateSuiteTool().execute(
@@ -121,8 +117,7 @@ import Vapor
     }
 
     @Test func rejectsOutOfRangePerTestTimeLimit() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await fixture(on: app)
             await #expect(throws: MCPToolError.self) {
                 _ = try await UpdateSuiteTool().execute(
@@ -135,8 +130,7 @@ import Vapor
     }
 
     @Test func closesOpenAssignmentOnEdit() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await fixture(on: app)  // makeTestAssignment defaults isOpen: true
             #expect(assignment.isOpen)
             let output = try await UpdateSuiteTool().execute(
@@ -155,8 +149,7 @@ import Vapor
     }
 
     @Test func leavesClosedAssignmentClosed() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await fixture(on: app)
             assignment.visibility = .closed
             try await assignment.save(on: app.db)
@@ -176,8 +169,7 @@ import Vapor
     }
 
     @Test func unknownScriptThrows() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await fixture(on: app)
             await #expect(throws: MCPToolError.self) {
                 _ = try await UpdateSuiteTool().execute(
@@ -194,8 +186,7 @@ import Vapor
     }
 
     @Test func invalidTierThrows() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await fixture(on: app)
             await #expect(throws: MCPToolError.self) {
                 _ = try await UpdateSuiteTool().execute(
@@ -212,8 +203,7 @@ import Vapor
     }
 
     @Test func emptyEditsThrows() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await fixture(on: app)
             await #expect(throws: MCPToolError.self) {
                 _ = try await UpdateSuiteTool().execute(
@@ -224,8 +214,7 @@ import Vapor
     }
 
     @Test func setsAndRevertsFailureDetail() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await fixture(on: app)
             _ = try await UpdateSuiteTool().execute(
                 UpdateSuiteTool.Input(

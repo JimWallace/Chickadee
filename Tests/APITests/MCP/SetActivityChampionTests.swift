@@ -32,8 +32,7 @@ import Vapor
     }
 
     @Test func theHillKindSeedsBothRecordsAndReportsItsSource() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await fixture(on: app, gradingMode: "worker")
             let out = try await SetActivityTool().execute(
                 .init(assignmentPublicID: assignment.publicID, kind: "kingOfTheHill", leaderboardVisibility: nil),
@@ -59,8 +58,7 @@ import Vapor
     /// The hill is worker-only by construction: refused on a browser-graded
     /// assignment even with no bot chosen, unlike the bot kind.
     @Test func theHillKindIsRefusedOnABrowserGradedAssignment() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let assignment = try await fixture(on: app, gradingMode: "browser")
             await #expect(throws: MCPToolError.self) {
                 _ = try await SetActivityTool().execute(

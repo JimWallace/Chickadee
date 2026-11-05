@@ -42,8 +42,7 @@ import Vapor
     }
 
     @Test func aDraftOnlySolutionIsFoundByEveryReader() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let (assignment, setup) = try await draftOnlyAssignment(on: app)
 
             #expect(
@@ -64,8 +63,7 @@ import Vapor
 
     /// A validation run uses only a validation submission, never the draft.
     @Test func aValidationRunDoesNotUseTheDraft() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let (assignment, _) = try await draftOnlyAssignment(on: app)
             #expect(try await loadExistingSolution(assignment: assignment, on: app.db) == nil)
         }
@@ -74,8 +72,7 @@ import Vapor
     /// The search order is fixed: the linked validation run wins over the
     /// draft.
     @Test func theLinkedValidationRunComesBeforeTheDraft() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let (assignment, _) = try await draftOnlyAssignment(on: app)
             let path = app.submissionsDirectory + "sub_linked.ipynb"
             try Data(draftNotebook.utf8).write(to: URL(fileURLWithPath: path))

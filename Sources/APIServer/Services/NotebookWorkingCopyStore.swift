@@ -248,7 +248,6 @@ func ensureUserNotebookWorkingCopy(
     application: Application,
     logger: Logger
 ) async throws -> Data {
-    let fileManager = FileManager.default
     let resolvedRelativePath = relativePath ?? userNotebookWorkingCopyRelativePath(setupID: setupID, userID: userID)
     let workingCopyPath =
         application.directory.publicDirectory
@@ -262,7 +261,7 @@ func ensureUserNotebookWorkingCopy(
     // cooperative-pool threads on disk reads/writes.
     if let overwriteWith {
         try await runBlocking {
-            try fileManager.createDirectory(atPath: workingCopyDir, withIntermediateDirectories: true)
+            try FileManager.default.createDirectory(atPath: workingCopyDir, withIntermediateDirectories: true)
             try overwriteWith.write(to: URL(fileURLWithPath: workingCopyPath))
         }
         await createSupportFileSymlinks(setup: fallbackSetup, studentDir: workingCopyDir, application: application)
@@ -342,7 +341,7 @@ func ensureUserNotebookWorkingCopy(
     }
 
     try await runBlocking {
-        try fileManager.createDirectory(atPath: workingCopyDir, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(atPath: workingCopyDir, withIntermediateDirectories: true)
         try processedData.write(to: URL(fileURLWithPath: workingCopyPath))
     }
     await createSupportFileSymlinks(setup: fallbackSetup, studentDir: workingCopyDir, application: application)
@@ -384,7 +383,7 @@ func discardOtherNotebookViewCopy(
     guard fileManager.fileExists(atPath: path) else { return }
     do {
         try await runBlocking {
-            try fileManager.removeItem(atPath: path)
+            try FileManager.default.removeItem(atPath: path)
         }
     } catch {
         logger.warning(
@@ -679,7 +678,9 @@ private func latestNotebookSubmissionData(
 /// Symlinks point to the shared extraction in `{testSetupsDir}/shared/{setupID}/`
 /// that is populated by `extractSupportFilesToSharedDirectory` when the test setup
 /// is created or edited. Only files that exist in the shared directory are linked;
-/// missing files are silently skipped so a missing shared dir never breaks notebook access.
+/// missing files are skipped so a missing shared dir never breaks notebook access.
+/// A file in a subfolder gets its parent folders made (`linkSupportFiles`), and
+/// a link that cannot be made is logged, not swallowed.
 func createSupportFileSymlinks(setup: APITestSetup, studentDir: String, application: Application) async {
     guard let setupID = setup.id else { return }
 
@@ -689,41 +690,33 @@ func createSupportFileSymlinks(setup: APITestSetup, studentDir: String, applicat
         let props = decodeManifest(from: manifestData)
     else { return }
 
-    let testScriptNames = Set(props.testSuites.map(\.script))
-    let reservedNames: Set<String> = ["assignment.ipynb", "solution.ipynb"]
-    // Grader-only support files (e.g. an answer-key helper or a reserved
-    // holdout) reach the worker via the zip but are withheld from every
-    // student-facing path — here, the editor must not symlink them into the
-    // student's working copy. See docs/datasets.md (option B).
-    let graderOnly = props.graderOnlyFileSet
-    // Dataset files are written as real per-student files by writeDatasetFiles;
-    // skip symlinking them here so the symlink doesn't shadow the real file.
-    let datasetFilenames = Set(props.datasets.map(\.file))
     // Cached: this pass runs on every notebook visit (the symlinks are
     // idempotent), so listing the zip fresh each time would spawn a serialized
     // `unzip` subprocess per load. The cache busts when the zip's mtime/size
     // changes — i.e. whenever the instructor edits support files.
     let allEntries = await application.zipEntryListCache.entries(zipPath: setup.zipPath)
-    let supportNames = allEntries.filter {
-        !testScriptNames.contains($0) && !reservedNames.contains($0)
-            && !graderOnly.contains($0) && !datasetFilenames.contains($0)
-    }
+    // Not a suite script, a reserved notebook, a grader-only file or a
+    // dataset (`StudentWorkspaceFiles`, shared with the `files.missing` check).
+    let supportNames = StudentWorkspaceFiles.linkedSupportFiles(zipEntries: allEntries, manifest: props)
     guard !supportNames.isEmpty else { return }
 
     let sharedDir = application.testSetupsDirectory + "shared/\(setupID)/"
 
-    // The exists/exists/symlink triple per support file is synchronous
+    // The checks, folder making and links per support file are synchronous
     // filesystem work on every notebook visit — run the whole pass on the
     // thread pool (#1156).
-    try? await runBlocking {
-        let fm = FileManager.default
-        for name in supportNames {
-            let src = sharedDir + name
-            let dest = studentDir + "/" + name
-            guard !fm.fileExists(atPath: dest) else { continue }  // idempotent
-            guard fm.fileExists(atPath: src) else { continue }  // skip if not yet extracted
-            try? fm.createSymbolicLink(atPath: dest, withDestinationPath: src)
+    let failures: [SupportFileLinkFailure]
+    do {
+        failures = try await runBlocking {
+            linkSupportFiles(supportNames, sharedDirectory: sharedDir, studentDirectory: studentDir)
         }
+    } catch {
+        application.logger.warning("support_file_link_pass_failed setup=\(setupID) reason=\(error)")
+        return
+    }
+    for failure in failures {
+        application.logger.warning(
+            "support_file_link_failed setup=\(setupID) file=\(failure.name) reason=\(failure.reason)")
     }
 }
 
@@ -797,9 +790,12 @@ func writeDatasetFiles(
 
     // Dataset resolution reads the source CSV and materializes a per-student
     // slice, then writes one file per dataset — synchronous I/O + CPU. Thread
-    // pool (#1156).
-    let wrote: Bool =
-        (try? await runBlocking {
+    // pool (#1156). A failed write is not a success (#2776): caching the
+    // fingerprint after one left the student with a stale dataset until a
+    // restart, so a failure skips the record and the next visit retries.
+    let wrote: Bool
+    do {
+        wrote = try await runBlocking {
             guard
                 let files = DatasetDeals.withholdingUndealtParts(
                     DatasetResolver.resolve(
@@ -808,15 +804,30 @@ func writeDatasetFiles(
                     manifest: props, dealNumber: dealNumber)
             else { return false }
 
+            // Every file is attempted, as before; the first failure is
+            // thrown after the loop.
+            var firstFailure: (any Error)?
             for (filename, content) in files {
                 // Defense-in-depth (#1104): resolver keys are validated bare
                 // filenames, but never join an unvetted name onto the student dir.
                 guard FilenameSafety.bareFilename(filename) != nil else { continue }
                 let dest = studentDir + "/" + filename
-                try? content.write(toFile: dest, atomically: true, encoding: .utf8)
+                do {
+                    try content.write(toFile: dest, atomically: true, encoding: .utf8)
+                } catch {
+                    firstFailure = firstFailure ?? error
+                }
             }
+            if let firstFailure { throw firstFailure }
             return true
-        }) ?? false
+        }
+    } catch {
+        // The user id goes in metadata only (compliance audit F-1).
+        application.logger.warning(
+            "Dataset materialization failed for setup \(setupID): \(error)",
+            metadata: ["user_id": .string(userID.uuidString)])
+        return
+    }
 
     if wrote, let state {
         await cache.record(userID: userID, setupID: setupID, fingerprint: state.fingerprint)

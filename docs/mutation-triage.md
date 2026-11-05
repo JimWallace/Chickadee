@@ -99,6 +99,15 @@ run, 43 of 50 in one shard. `Tools/mutation/report.py` quarantines them against
 the guards actually present in the mutated copy. Read survivors from the run
 record or the issue's Survivors section, never from Muter's raw output.
 
+**A survivor that an existing test plainly kills is a phantom on a shared
+line until shown otherwise.** The filter used to ask only whether any schema
+sat at the reported line. Tournament.swift lines 179 and 180 held one inserted
+schema each, and Muter reported one killed and one survived row on each, so the
+survivor was the never-inserted sibling, and the pair stayed open for two weeks
+beside a test whose comment names both mutations. `report.py` now counts: a
+killed row is always real, so a site keeps at most `inserted - killed`
+survivors. Records written before that change still carry such phantoms.
+
 **A `Sources/Core` survivor is weaker evidence than a `Sources/RunnerCore` or
 `Sources/Worker` one.** The sweep skips `APITests` because it dominates the
 runtime, and ~5% of Core is reachable only from there — all four
@@ -225,15 +234,14 @@ Killed mutants leave the list on their own; phantoms, inert mutations and
 recorded equivalents are filtered into their own sections. What remains is the
 queue, and emptying it is the goal.
 
-## The automatic first pass
+## No automatic first pass
 
-When the sweep finishes, `.github/workflows/mutation-pretriage.yml` comments on
-the sweep issue with a first reading of each survivor, grouped by file: `gap`
-(with a one-line test sketch), `equivalent` (with a draft ledger argument),
-`api-only` (reached only through `APITests`, which the sweep skips) or
-`unclear`. It cannot run the verifier, so every reading is a hypothesis. Use it
-to decide where to start, then do the loop above in full. It writes no tests
-and opens no PR.
+`mutation-pretriage.yml` used to comment on the sweep issue with a model's
+first reading of each survivor. It was removed in 2026-11 because it needed an
+API key. To get the same first reading, ask a Claude Code session to read the
+sweep issue and sort each survivor into `gap`, `equivalent`, `api-only`
+(reached only through `APITests`, which the sweep skips) or `unclear`. Every
+such reading is a hypothesis: then do the loop above in full.
 
 ## Where things are
 

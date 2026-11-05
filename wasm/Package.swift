@@ -37,7 +37,7 @@ import PackageDescription
 //     settings are not here, because the code that the BridgeJS plugin
 //     generates (BridgeJS.swift, compiled into this target) does not build
 //     with them, and we cannot edit it. Measured on JavaScriptKit 0.59 and
-//     the 6.4 Embedded SDK:
+//     again on 0.62, with the 6.4 Embedded SDK; the counts did not change:
 //       - InternalImportsByDefault: the generated file imports JavaScriptKit
 //         without `public`, but declares public conformances to its
 //         protocols (107 errors).

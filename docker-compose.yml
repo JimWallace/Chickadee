@@ -33,22 +33,15 @@ services:
       AUTH_MODE:                    ${AUTH_MODE:-local}
       ENABLE_NON_SSO_AUTH_MODES:    ${ENABLE_NON_SSO_AUTH_MODES:-true}
 
-      # Database backend:
-      #   - Leave unset (or set DATABASE_BACKEND=sqlite) to keep the default SQLite path.
-      #   - To use PostgreSQL, uncomment the optional db service below and set:
-      #       DATABASE_BACKEND=postgres
-      #       DATABASE_HOST=db
-      #       DATABASE_PORT=5432
-      #       DATABASE_NAME=chickadee
-      #       DATABASE_USER=chickadee
-      #       DATABASE_PASSWORD=change-me
-      DATABASE_BACKEND:             ${DATABASE_BACKEND:-sqlite}
-      SQLITE_PATH:                  ${SQLITE_PATH:-}
-      DATABASE_HOST:                ${DATABASE_HOST:-}
-      DATABASE_PORT:                ${DATABASE_PORT:-}
-      DATABASE_NAME:                ${DATABASE_NAME:-}
-      DATABASE_USER:                ${DATABASE_USER:-}
-      DATABASE_PASSWORD:            ${DATABASE_PASSWORD:-}
+      # Database: PostgreSQL, the only backend (SQLite support was removed in
+      # 0.5). The defaults reach the db service below. Set DATABASE_PASSWORD in
+      # .env before the first `docker compose up`: the db service takes the
+      # same value, and Postgres applies it only when it creates its volume.
+      DATABASE_HOST:                ${DATABASE_HOST:-db}
+      DATABASE_PORT:                ${DATABASE_PORT:-5432}
+      DATABASE_NAME:                ${DATABASE_NAME:-chickadee}
+      DATABASE_USER:                ${DATABASE_USER:-chickadee}
+      DATABASE_PASSWORD:            ${DATABASE_PASSWORD:-change-me}
 
       # Public URL — set to your domain in production (e.g. https://chickadee.example.com)
       PUBLIC_BASE_URL:              ${PUBLIC_BASE_URL:-}
@@ -92,6 +85,9 @@ services:
       # which the runner container learns the secret, now that it no longer
       # mounts the data volume. Generate one with the command in .env.example.
       RUNNER_SHARED_SECRET:         ${RUNNER_SHARED_SECRET:?set RUNNER_SHARED_SECRET in .env - see .env.example}
+    depends_on:
+      db:
+        condition: service_healthy
     networks:
       - chickadee
     healthcheck:
@@ -106,8 +102,8 @@ services:
   # ----------------------------------------------------------------
   # The runner deliberately mounts NO volumes. It used to mount the data
   # volume read-only, purely to read /data/.worker-secret — but that volume
-  # also holds the SQLite database, every submission, and the results tree,
-  # and a test script runs as the same uid as the runner, so 0600 on the
+  # also holds every submission and the results tree, and a test script
+  # runs as the same uid as the runner, so 0600 on the
   # secret file was no barrier. A student script could therefore read the
   # HMAC secret and sign worker API calls, defeating the environment
   # allowlist in mergedScriptEnvironment that exists to withhold exactly
@@ -232,45 +228,42 @@ services:
     # cpus: "1.0"
 
   # ----------------------------------------------------------------
-  # db — optional PostgreSQL service
+  # db — PostgreSQL, the server's database
   #
-  # Leave this commented out to keep the default SQLite deployment path.
-  # To enable PostgreSQL:
-  #   1. Uncomment this service.
-  #   2. Set DATABASE_BACKEND=postgres on the server service.
-  #   3. Set DATABASE_HOST=db and the matching DATABASE_* credentials.
+  # Required. The deploy daemon refreshes the runner with `--no-deps`, so a
+  # deploy never recreates this service.
   # ----------------------------------------------------------------
-  # db:
-  #   image: postgres:16
-  #   restart: unless-stopped
-  #   # Modest tuning over the stock image. max_connections must clear the
-  #   # app's pool ceiling of 4 connections x event loops (loops = host
-  #   # cores): 200 covers a 32-core host with headroom, where the stock 100
-  #   # would not. Per-session statement/idle bounds are set by the app
-  #   # itself (PostgresSessionBounds in DatabaseConfiguration.swift), not
-  #   # here. pg_stat_statements records per-statement timing for the admin
-  #   # MCP tool get_query_stats; Postgres loads it only at startup
-  #   # (docs/operational-diagnostics.md, "Database statement timing").
-  #   command: >-
-  #     postgres
-  #     -c shared_buffers=256MB
-  #     -c max_connections=200
-  #     -c shared_preload_libraries=pg_stat_statements
-  #     -c pg_stat_statements.track=top
-  #     -c pg_stat_statements.track_utility=off
-  #   environment:
-  #     POSTGRES_DB: chickadee
-  #     POSTGRES_USER: chickadee
-  #     POSTGRES_PASSWORD: change-me
-  #   volumes:
-  #     - chickadee-postgres:/var/lib/postgresql/data
-  #   networks:
-  #     - chickadee
-  #   healthcheck:
-  #     test: ["CMD-SHELL", "pg_isready -U chickadee -d chickadee"]
-  #     interval: 10s
-  #     timeout: 5s
-  #     retries: 5
+  db:
+    image: postgres:16
+    restart: unless-stopped
+    # Modest tuning over the stock image. max_connections must clear the
+    # app's pool ceiling of 4 connections x event loops (loops = host
+    # cores): 200 covers a 32-core host with headroom, where the stock 100
+    # would not. Per-session statement/idle bounds are set by the app
+    # itself (PostgresSessionBounds in DatabaseConfiguration.swift), not
+    # here. pg_stat_statements records per-statement timing for the admin
+    # MCP tool get_query_stats; Postgres loads it only at startup
+    # (docs/operational-diagnostics.md, "Database statement timing").
+    command: >-
+      postgres
+      -c shared_buffers=256MB
+      -c max_connections=200
+      -c shared_preload_libraries=pg_stat_statements
+      -c pg_stat_statements.track=top
+      -c pg_stat_statements.track_utility=off
+    environment:
+      POSTGRES_DB: ${DATABASE_NAME:-chickadee}
+      POSTGRES_USER: ${DATABASE_USER:-chickadee}
+      POSTGRES_PASSWORD: ${DATABASE_PASSWORD:-change-me}
+    volumes:
+      - chickadee-postgres:/var/lib/postgresql/data
+    networks:
+      - chickadee
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   # ----------------------------------------------------------------
   # nginx — reverse proxy with JupyterLite headers
@@ -295,8 +288,8 @@ services:
   #     - chickadee
 
 volumes:
-  chickadee-data:   # SQLite database, submissions, test setups, results
-  chickadee-postgres: # PostgreSQL data directory when using the optional db service
+  chickadee-data:   # submissions, test setups, results, secrets
+  chickadee-postgres: # PostgreSQL data directory (the db service)
   certbot-certs:    # TLS certificates (populated by certbot — see deploy/README.md)
   certbot-www:      # ACME HTTP-01 challenge webroot
 

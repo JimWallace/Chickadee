@@ -5,7 +5,8 @@ description: >
   reports a status. Fails safe: a non-PR event, a missing base commit and an
   empty diff all answer relevant=true, because a skipped smoke on a change it
   should have tested is a falsely green gate. Callers run actions/checkout
-  with fetch-depth 0 first.
+  first; depth 1 is enough, because the action fetches the base commit by
+  itself and a two-tree diff needs no history between the two commits.
 
   This was three copies of one bash block (editor-smoke, codeql-js,
   browser-grading-smoke), and the third had drifted: it did not fetch the base
@@ -36,7 +37,6 @@ runs:
       shell: bash
       env:
         EVENT: ${{ github.event_name }}
-        BASE_REF: ${{ github.base_ref }}
         BASE_SHA: ${{ github.event.pull_request.base.sha }}
         PATTERN: ${{ inputs.pattern }}
         EXCLUDE: ${{ inputs.exclude }}
@@ -48,7 +48,9 @@ runs:
           echo "::notice::non-PR event ($EVENT) — running $LABEL."
           exit 0
         fi
-        git fetch --no-tags --quiet origin "$BASE_REF" || true
+        # The base commit alone, not the base branch history. A full-history
+        # checkout ran into the job's time limit on every run on 2026-11-03.
+        git fetch --no-tags --quiet --depth=1 origin "$BASE_SHA" || true
         if ! git cat-file -e "${BASE_SHA}^{commit}" 2>/dev/null; then
           echo "relevant=true" >> "$GITHUB_OUTPUT"
           echo "::notice::base sha unavailable — running $LABEL (fail-safe)."

@@ -84,8 +84,7 @@ import Vapor
 
     @Test(arguments: [(false, true), (true, false), (false, false)])
     func everyToolRefusesUnlessBothGatesAreOn(courseGate: Bool, assignmentGate: Bool) async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let fx = try await fixture(on: app, courseGate: courseGate, assignmentGate: assignmentGate)
             let id = fx.assignment.publicID
             await #expect(throws: MCPToolError.self) { try await list(app, id) }
@@ -103,8 +102,7 @@ import Vapor
     }
 
     @Test func aStudentAccountIsRefused() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let fx = try await fixture(on: app)
             await #expect(throws: MCPToolError.self) {
                 try await ListReflectionsTool().execute(
@@ -116,8 +114,7 @@ import Vapor
     // MARK: - Reading
 
     @Test func listReturnsHandlesAndNoIdentity() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let fx = try await fixture(on: app)
             let out = try await list(app, fx.assignment.publicID)
             #expect(out.reflectionPromptCount == 2)
@@ -138,8 +135,7 @@ import Vapor
     }
 
     @Test func getReturnsPromptsFromTheStarterAndOnlyTheTaggedAnswers() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let fx = try await fixture(on: app)
             let handle = try #require(try await list(app, fx.assignment.publicID).students.first?.handle)
             let out = try await GetReflectionsTool().execute(
@@ -160,8 +156,7 @@ import Vapor
     }
 
     @Test func anUnknownHandleIsRefused() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let fx = try await fixture(on: app)
             await #expect(throws: MCPToolError.self) {
                 try await GetReflectionsTool().execute(
@@ -177,8 +172,7 @@ import Vapor
     // MARK: - Drafting
 
     @Test func aDraftIsSavedButNotReleased() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let fx = try await fixture(on: app)
             let handle = try #require(try await list(app, fx.assignment.publicID).students.first?.handle)
             let out = try await DraftFeedbackTool().execute(
@@ -196,8 +190,7 @@ import Vapor
     }
 
     @Test func releasedFeedbackCannotBeReplacedByAnAgent() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let fx = try await fixture(on: app)
             let handle = try #require(try await list(app, fx.assignment.publicID).students.first?.handle)
             let row = try #require(try await APIReflectionFeedback.query(on: app.db).first())
@@ -217,8 +210,7 @@ import Vapor
     }
 
     @Test func aResubmissionMakesTheFeedbackStale() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let fx = try await fixture(on: app)
             let handle = try #require(try await list(app, fx.assignment.publicID).students.first?.handle)
             _ = try await DraftFeedbackTool().execute(
@@ -238,8 +230,7 @@ import Vapor
 
     @Test(arguments: ["", "   ", String(repeating: "x", count: ReflectionFeedbackService.maxDraftLength + 1)])
     func emptyOrOverlongFeedbackIsRefused(feedback: String) async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
+        try await withTestApp { app in
             let fx = try await fixture(on: app)
             let handle = try #require(try await list(app, fx.assignment.publicID).students.first?.handle)
             await #expect(throws: MCPToolError.self) {

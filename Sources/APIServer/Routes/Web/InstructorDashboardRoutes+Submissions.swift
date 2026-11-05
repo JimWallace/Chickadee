@@ -7,8 +7,9 @@
 // the per-student actions (history, retest, notebook reset, grade overrides)
 // live in `InstructorDashboardRoutes+StudentActions.swift`; the shared
 // "highest grade wins" folds live in
-// `Helpers/BestGradePercentBySubmissionID.swift`.
+// `Services/BestGradePercentBySubmissionID.swift`.
 
+import Core
 import Elementary
 import Fluent
 import Foundation
@@ -259,7 +260,7 @@ extension InstructorDashboardRoutes {
         } else {
             let total = submittedRows.reduce(0) { $0 + $1.latest.submissionCount }
             let avg = Double(total) / Double(submittedRows.count)
-            avgAttempts = String(format: "%.1f", avg)
+            avgAttempts = String(cFormat: "%.1f", avg)
         }
 
         let attemptBars = attemptDistributionBars(submittedRows)
