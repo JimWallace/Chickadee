@@ -9,6 +9,21 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.847] - 2026-11-05
+
+### Added
+
+- **MCP tools for course achievements (S5).** `get_course_achievements` reads
+  a course's achievements and `update_course_achievements` replaces them,
+  with the same validation as the course Achievements tab. Neither tool
+  reports which students have earned an achievement
+  (docs/achievement-rewards.md).
+
+### Security
+
+- **An Octave submission can no longer end a native test with its own exit status.** The submission runs inside the test's process, and a test's result is its exit status. An `exit()` or `quit()` in the submission's own code, in a function or anonymous function the test calls or in its top-level code, ended the test with the submission's status, and status 0 read as a pass. On the native runner, `ck_load_student` now shadows both builtins with command-line functions that raise an error ("the submission ended the test") when the submission calls them. The runtime's own verdicts and the test script's own `exit` still reach the builtins, and in the browser the wrapper's masks are unchanged. The browser copy of the runtime is regenerated with it. `docs/grading-integrity.md` now records what phase 2 shipped and what it leaves open: grader-only files stay readable until phase 3, and the exit masks do not stop a determined submission. Phase 2 of #2241.
+
+
 ## [0.5.846] - 2026-11-05
 
 ### Fixed
