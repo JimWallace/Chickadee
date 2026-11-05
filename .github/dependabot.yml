@@ -9,6 +9,14 @@
 # dependency-health.yml), which is what a person or an agent picks up. To hold
 # a package back, add an `ignore` entry with a comment that says why.
 #
+# WAIT BEFORE TAKING A RELEASE. A merged update reaches production in about
+# 15 minutes with no person involved, so every entry has a `cooldown`: a new
+# version is offered only once it is 3 days old, and a new major version only
+# once it is 14 days old. Most compromised releases of a package are found and
+# withdrawn within that time. Cooldown delays version updates only; a security
+# update is offered at once. Docker and GitHub Actions take `default-days` only,
+# because Dependabot does not read their tags as SemVer.
+#
 # GROUP WHAT MOVES TOGETHER. Packages that pin each other exactly, such as a
 # metapackage and its core, must be one group, or each PR is unresolvable on
 # its own (#2863).
@@ -40,6 +48,9 @@ updates:
     schedule:
       interval: "weekly"
       day: "monday"
+    cooldown:
+      default-days: 3
+      semver-major-days: 14
     open-pull-requests-limit: 5
     groups:
       swift-server-ecosystem:
@@ -70,6 +81,9 @@ updates:
     schedule:
       interval: "weekly"
       day: "monday"
+    cooldown:
+      default-days: 3
+      semver-major-days: 14
     open-pull-requests-limit: 3
 
   # Both Dockerfiles. `/` is the production image; `/.github/docker/ci-image`
@@ -96,12 +110,16 @@ updates:
     schedule:
       interval: "weekly"
       day: "monday"
+    cooldown:
+      default-days: 3
 
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
       interval: "weekly"
       day: "monday"
+    cooldown:
+      default-days: 3
     groups:
       github-actions:
         patterns:
@@ -129,6 +147,9 @@ updates:
     schedule:
       interval: "weekly"
       day: "monday"
+    cooldown:
+      default-days: 3
+      semver-major-days: 14
     open-pull-requests-limit: 5
     groups:
       frontend-tooling:
@@ -153,6 +174,9 @@ updates:
     schedule:
       interval: "weekly"
       day: "monday"
+    cooldown:
+      default-days: 3
+      semver-major-days: 14
     open-pull-requests-limit: 2
     groups:
       jupyterlite:
@@ -183,6 +207,9 @@ updates:
     schedule:
       interval: "weekly"
       day: "monday"
+    cooldown:
+      default-days: 3
+      semver-major-days: 14
     open-pull-requests-limit: 3
     groups:
       jupyterlab:
