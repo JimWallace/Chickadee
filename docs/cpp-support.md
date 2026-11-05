@@ -60,6 +60,12 @@ ordinary shortResult JSON and exits 0/1/2. Consequences, all deliberate:
   → exit 1 with a named message), and an unexpected throw inside a guarded
   kind is a graded failure with the shared "unexpected exception" wording —
   never a crash.
+- **An `exit(0)` in the submission is an error, not a pass.** Every verdict in
+  `test_runtime.hpp` prints a `CK_SENTINEL` line first, and the script refuses
+  a run that did not print one. This stops an accidental exit, not a
+  deliberate one: the submission shares the test's process and stdout, so it
+  can print the sentinel itself before it exits (`docs/grading-integrity.md`,
+  phase 3).
 
 ## Measured costs (probe, g++ 13.3 / Ubuntu 24.04)
 

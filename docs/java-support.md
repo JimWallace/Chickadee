@@ -68,6 +68,11 @@ is nothing to mask with. Every verdict in `test_runtime.java` therefore prints a
 reporting `error` (exit 2), never a pass. Printing it in the runtime rather than
 in the generated test is deliberate: a renderer cannot forget it.
 
+The sentinel stops an accidental `System.exit(0)`, not a deliberate one. The
+submission shares the test's JVM and stdout, so it can print the sentinel line
+itself before it exits. That is the limit that `docs/grading-integrity.md`
+phase 3 addresses.
+
 Asserted by `JavaRendererExecutionTests.aSubmissionCallingSystemExitIsAnErrorNotAPass`.
 
 ### 2. Boxed numeric equality is type-strict
