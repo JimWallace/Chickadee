@@ -77,8 +77,10 @@ jobs:
             write_probe() {
               # $1 = what the call proves, $2 = the API path, $3 = the JSON body.
               local status
+              # gh exits non-zero on the refusal this expects, and the step
+              # shell runs with -e, so the status must not end the script.
               status="$(GH_TOKEN="$TOKEN" gh api -i -X POST "$2" --input - <<<"$3" 2>/dev/null \
-                | tr -d '\r' | sed -n '1s/^HTTP\/[0-9.]* \([0-9]*\).*/\1/p')"
+                | tr -d '\r' | sed -n '1s/^HTTP\/[0-9.]* \([0-9]*\).*/\1/p')" || true
               if [ "$status" = "422" ]; then
                 echo "- ok: $1" >> "$GITHUB_STEP_SUMMARY"
               else
