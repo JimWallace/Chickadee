@@ -117,7 +117,11 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          files="$(gh pr diff "$PR" --repo "$R" --name-only)"
+          # The files API, not `gh pr diff`: the diff endpoint refuses a PR
+          # with more than 300 changed files (HTTP 406, #2871), and a
+          # regenerated jupyterlite bump is that large. This one lists up
+          # to 3000, 100 per page.
+          files="$(gh api --paginate "repos/$R/pulls/$PR/files?per_page=100" --jq '.[].filename')"
           has() { grep -Eq "$1" <<<"$files"; }
           vendor=false extension=false kernels=false
           if has '^Tools/vendor/package(-lock)?\.json$'; then vendor=true; fi
