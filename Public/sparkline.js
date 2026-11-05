@@ -12,6 +12,10 @@
 // pages never call.
 //
 //   ChickadeeSparkline.render(container, series, labels, formatPoint, opts)
+//   ChickadeeSparkline.setWindow(card, chipText)
+//
+// The file also owns a cyclable card's window chip: `setWindow` changes the
+// chip and its spoken phrase together (see the function).
 //
 // `series` is numbers and nulls, where null means "no data" and draws as an
 // empty slot; `labels[i]` prefixes bar i's tooltip and `formatPoint(value)`
@@ -74,7 +78,24 @@
         }).join('');
     }
 
-    global.ChickadeeSparkline = { render: render };
+    /**
+     * Shows a time window on a cyclable diagnostic card: the visible chip and
+     * the phrase a screen reader says. The chip ("24h") is `aria-hidden`; the
+     * `.js-window-spoken` beside it carries one `data-phrase-<chip>` attribute
+     * per window, rendered by DiagnosticWindowSpoken, so the words live only
+     * on the server. Call it wherever a chip changes.
+     * @param {Element | null} card
+     * @param {string} chipText
+     */
+    function setWindow(card, chipText) {
+        if (!card) return;
+        var chip = card.querySelector('.diagnostic-window-chip');
+        if (chip) chip.textContent = chipText;
+        var spoken = card.querySelector('.js-window-spoken');
+        if (spoken) spoken.textContent = spoken.getAttribute('data-phrase-' + chipText) || chipText;
+    }
+
+    global.ChickadeeSparkline = { render: render, setWindow: setWindow };
 
     // Node export for the .mjs unit tests (Tests/BrowserRunnerJSTests);
     // browsers take the global above.

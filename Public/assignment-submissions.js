@@ -12,14 +12,13 @@
     if (!card) return;
     var sparks = Array.prototype.slice.call(card.querySelectorAll('.js-subm-trend-spark'));
     if (sparks.length < 2) return;
-    var chip = card.querySelector('[data-subm-chip]');
     var valueEl = card.querySelector('[data-subm-value]');
     var index = 0;
     function show(next) {
         index = (next + sparks.length) % sparks.length;
         for (var i = 0; i < sparks.length; i++) { sparks[i].hidden = (i !== index); }
         var active = sparks[index];
-        if (chip) chip.textContent = active.getAttribute('data-subm-window') || '';
+        ChickadeeSparkline.setWindow(card, active.getAttribute('data-subm-window') || '');
         if (valueEl) valueEl.textContent = active.getAttribute('data-subm-headline') || '';
     }
     card.addEventListener('click', function () { show(index + 1); });

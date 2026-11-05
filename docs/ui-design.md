@@ -334,6 +334,10 @@ duplicate.
   `.diagnostic-value` — stat tiles.
   `.diagnostics-section` wraps a group of them under one heading.  A dashboard
   tile that a script fills from `/metrics/cards` is `MetricsDiagnosticCard`.
+  A cyclable tile (`.diagnostic-card-cyclable`) has no `aria-label`: its
+  content names it.  Its chip is `aria-hidden`, with `DiagnosticWindowSpoken`
+  beside it and `DiagnosticCardPressHint` at the end.  A script changes the
+  window only through `ChickadeeSparkline.setWindow`.
 - **`.chip`**, `.chip-row` — neutral tags.  A chip is the answer for a short
   labelled value beside a control; it carries no status colour, so if the
   value needs one it is a `.tier`, not a chip.  `.chip-ok` / `.chip-err` add
