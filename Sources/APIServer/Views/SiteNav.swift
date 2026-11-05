@@ -65,16 +65,20 @@ struct SiteNav: HTML {
     }
 
     private func accountMenu(for user: CurrentUserContext) -> some HTML {
-        div(.class("nav-dropdown nav-user"), .dataFlag("nav-dropdown")) {
+        let name = user.preferredName ?? user.displayName ?? user.username
+        return div(.class("nav-dropdown nav-user"), .dataFlag("nav-dropdown")) {
+            // The accessible name starts with the visible name, so a voice
+            // user who says the name they see reaches the button
+            // (WCAG 2.5.3, axe `label-content-name-mismatch`).
             button(
                 .type(.button), .class("nav-link nav-username nav-dropdown-toggle"),
-                .ariaHasPopup(true), .ariaExpanded(false), .ariaLabel("Account menu")
+                .ariaHasPopup(true), .ariaExpanded(false), .ariaLabel("\(name), account menu")
             ) {
                 // Decorative: the name beside it says whose bird it is.
                 if let bird = user.navAvatar {
                     Avatar(avatar: bird)
                 }
-                span { user.preferredName ?? user.displayName ?? user.username }
+                span { name }
                 " "
                 span(.class("nav-dropdown-caret"), .ariaHidden) { "▾" }
             }

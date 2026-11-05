@@ -45,18 +45,16 @@ struct AssignmentsPage: HTML {
                 div(.class("diagnostics-section")) {
                     div(.class("diagnostics-cards")) {
                         MetricsDiagnosticCard(
-                            hook: .instructor, key: "submissions", label: "Submissions", spoken: "Submissions",
+                            hook: .instructor, key: "submissions", label: "Submissions",
                             valueID: "idash-submissions")
                         MetricsDiagnosticCard(
                             hook: .instructor, key: "activeStudents", label: "Active Students",
-                            spoken: "Active students",
                             valueID: "idash-active-students")
                         MetricsDiagnosticCard(
                             hook: .instructor, key: "activeAssignments", label: "Active Assignments",
-                            spoken: "Active assignments",
                             valueID: "idash-active-assignments")
                         MetricsDiagnosticCard(
-                            hook: .instructor, key: "browserErrors", label: "Browser Errors", spoken: "Browser errors",
+                            hook: .instructor, key: "browserErrors", label: "Browser Errors",
                             valueID: "idash-browser-errors")
                     }
                 }

@@ -53,16 +53,15 @@
     }
 
     // ── Diagnostic cards: headline + sparkline, click cycles 24h/7d/30d ──
-    var windowNouns = { '24h': 'last 24 hours', '1w': 'last 7 days', '1m': 'last 30 days' };
     var cardWindowIndex = {};
     var sparkCards = [
         {
-            key: 'jobsProcessed', name: 'Jobs processed', valueEl: diagJobsProcessed,
+            key: 'jobsProcessed', valueEl: diagJobsProcessed,
             headline: function (data) { return data.headline == null ? '—' : String(data.headline); },
             point: function (v) { return v + (v === 1 ? ' job' : ' jobs'); }
         },
         {
-            key: 'load', name: 'Max load', valueEl: diagMaxLoad,
+            key: 'load', valueEl: diagMaxLoad,
             headline: function (data) {
                 if (data.activeJobs == null || data.capacity == null) return '—';
                 return String(data.activeJobs) + '/' + String(data.capacity);
@@ -70,7 +69,7 @@
             point: function (v) { return v + '% utilization'; }
         },
         {
-            key: 'queueWaitP95Ms', name: 'P95 wait time', valueEl: diagQueueP95,
+            key: 'queueWaitP95Ms', valueEl: diagQueueP95,
             headline: function (data) { return formatDuration(data.headline); },
             point: formatDuration
         }
@@ -85,13 +84,9 @@
         var data = win && win[config.key];
         if (!data) return;
         setText(config.valueEl, config.headline(data));
-        var chip = config.cardEl.querySelector('.diagnostic-window-chip');
-        if (chip) chip.textContent = win.label;
+        ChickadeeSparkline.setWindow(config.cardEl, win.label);
         var spark = config.cardEl.querySelector('.diagnostic-spark');
         if (spark) renderSpark(spark, data.series, win.bucketLabels || [], config.point);
-        config.cardEl.setAttribute(
-            'aria-label',
-            config.name + ', ' + (windowNouns[win.window] || win.label) + '. Press to change time window.');
     }
 
     function renderAllSparkCards() {
@@ -161,7 +156,6 @@
     if (activitySpark) {
         var activityCard = document.querySelector('[data-activity-card]');
         var activityValue = document.getElementById('activity-card-value');
-        var activityWindowChip = document.getElementById('activity-card-window');
         var activityWindows = ['24h', '1w', '1m'];
         var activityChipText = { '24h': '24h', '1w': '7d', '1m': '30d' };
         var activityWindow = '24h';
@@ -208,7 +202,7 @@
         var cycleActivityWindow = function () {
             var idx = activityWindows.indexOf(activityWindow);
             activityWindow = activityWindows[(idx + 1) % activityWindows.length];
-            if (activityWindowChip) activityWindowChip.textContent = activityChipText[activityWindow] || activityWindow;
+            ChickadeeSparkline.setWindow(activityCard, activityChipText[activityWindow] || activityWindow);
             refreshActivityCard();
         };
 

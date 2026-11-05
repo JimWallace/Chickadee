@@ -9,6 +9,37 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.845] - 2026-11-05
+
+### Changed
+
+- **The admin MCP's database comment matches the shipped design.** `AdminToolContext` no longer says a dedicated admin database role is coming. `docs/admin-mcp.md` records that the code allowlist replaced it (#1250).
+
+
+## [0.5.844] - 2026-11-05
+
+### Fixed
+
+- **The LEARN tab summary reads one row per student.** It used to read every result row of a course, with every column of the result and its submission, to keep each student's latest. Postgres now picks that row with `DISTINCT ON` and returns five columns. On 65,536 submissions the old read spent 12 s sending about 35 MB to the server, and on a busy CI runner it reached the 60 s statement timeout (#2882).
+
+
+## [0.5.843] - 2026-11-05
+
+### Changed
+
+- **The JupyterLite extension resolves modules as a bundler does.** Its
+  `tsconfig.json` sets `moduleResolution` to `bundler` in place of `node`, which
+  TypeScript 7 removed (TS5108). This unblocks the TypeScript 7 update (#2873).
+  The built extension is unchanged under TypeScript 5.5.4.
+
+
+## [0.5.842] - 2026-11-05
+
+### Fixed
+
+- **Dependabot auto-merge handles large pull requests.** The `plan` job listed a pull request's files with `gh pr diff`, which GitHub refuses past 300 changed files, so a regenerated JupyterLite bump could never auto-merge. It now reads the paginated files API (#2871).
+
+
 ## [0.5.841] - 2026-11-05
 
 ### Fixed

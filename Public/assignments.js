@@ -13,14 +13,13 @@
     //   reuses the shared sparkline renderer + global card styles.
     (function initInstructorCards() {
         var cards = [
-            { key: 'submissions', name: 'Submissions', valueEl: document.getElementById('idash-submissions'), unit: 'submission' },
-            { key: 'activeStudents', name: 'Active students', valueEl: document.getElementById('idash-active-students') },
-            { key: 'activeAssignments', name: 'Active assignments', valueEl: document.getElementById('idash-active-assignments') },
-            { key: 'browserErrors', name: 'Browser errors', valueEl: document.getElementById('idash-browser-errors'), unit: 'error' }
+            { key: 'submissions', valueEl: document.getElementById('idash-submissions'), unit: 'submission' },
+            { key: 'activeStudents', valueEl: document.getElementById('idash-active-students') },
+            { key: 'activeAssignments', valueEl: document.getElementById('idash-active-assignments') },
+            { key: 'browserErrors', valueEl: document.getElementById('idash-browser-errors'), unit: 'error' }
         ].filter(function (c) { return c.valueEl; });
         if (!cards.length) return;
 
-        var windowNouns = { '24h': 'last 24 hours', '1w': 'last 7 days', '1m': 'last 30 days' };
         var payload = null;
         var windowIndex = {};
 
@@ -35,15 +34,11 @@
             var data = win && win[card.key];
             if (!data) return;
             card.valueEl.textContent = data.headline == null ? '—' : String(data.headline);
-            var chip = card.cardEl.querySelector('.diagnostic-window-chip');
-            if (chip) chip.textContent = win.label;
+            ChickadeeSparkline.setWindow(card.cardEl, win.label);
             ChickadeeSparkline.render(
                 card.cardEl.querySelector('.diagnostic-spark'),
                 data.series, win.bucketLabels || [],
                 card.unit ? unitLabel(card.unit) : function (v) { return String(v); });
-            card.cardEl.setAttribute(
-                'aria-label',
-                card.name + ', ' + (windowNouns[win.window] || win.label) + '. Press to change time window.');
         }
 
         cards.forEach(function (card) {

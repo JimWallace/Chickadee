@@ -35,10 +35,10 @@ struct AdminToolContext {
         self.actingClientName = actingClientName
     }
 
-    /// The database admin diagnostic tools run on.  For now the shared default
-    /// pool; the dedicated least-privilege admin role (SELECT on PII-free
-    /// diagnostic views only) lands with the read-tool slice (docs/admin-mcp.md
-    /// §4).
+    /// The database admin diagnostic tools run on: the shared default pool.
+    /// There is no dedicated admin role (docs/admin-mcp.md §4, #1250). The PII
+    /// wall is the code allowlist: each tool builds its DTO field by field, and
+    /// per-tool tests assert no student identifier appears.
     var db: any Database { request.db }
     var logger: Logger { request.logger }
 
