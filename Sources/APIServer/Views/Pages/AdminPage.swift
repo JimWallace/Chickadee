@@ -38,14 +38,15 @@ struct AdminPage: HTML {
             div(.class("diagnostics-cards"), .id("diagnostics-cards")) {
                 div(
                     .class("diagnostic-card diagnostic-card-cyclable"), .dataFlag("activity-card"),
-                    .role("button"), .tabindex(0),
-                    .ariaLabel("Active users, last 24 hours. Press to change the time window.")
+                    .role("button"), .tabindex(0)
                 ) {
                     div(.class("diagnostic-label")) {
-                        span(.class("diagnostic-window-chip"), .id("activity-card-window")) { "24h" }
+                        span(.class("diagnostic-window-chip"), .ariaHidden) { "24h" }
+                        DiagnosticWindowSpoken(chip: "24h")
                         " Active Users"
                     }
                     div(.class("diagnostic-value"), .id("activity-card-value")) { "—" }
+                    DiagnosticCardPressHint()
                     div(.class("diagnostic-spark"), .id("activity-card-spark"), .ariaHidden) {
                         for bucket in activityChart.buckets {
                             div(
@@ -58,12 +59,12 @@ struct AdminPage: HTML {
                     }
                 }
                 MetricsDiagnosticCard(
-                    hook: .admin, key: "jobsProcessed", label: "Jobs Processed", spoken: "Jobs processed",
+                    hook: .admin, key: "jobsProcessed", label: "Jobs Processed",
                     valueID: "diag-jobs-processed")
                 MetricsDiagnosticCard(
-                    hook: .admin, key: "load", label: "Max Load", spoken: "Max load", valueID: "diag-max-load")
+                    hook: .admin, key: "load", label: "Max Load", valueID: "diag-max-load")
                 MetricsDiagnosticCard(
-                    hook: .admin, key: "queueWaitP95Ms", label: "P95 Wait Time", spoken: "P95 wait time",
+                    hook: .admin, key: "queueWaitP95Ms", label: "P95 Wait Time",
                     valueID: "diag-queue-p95")
             }
         }
