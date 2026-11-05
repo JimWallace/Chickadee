@@ -7,7 +7,7 @@ tests that grade it, and the plan to get there. Tracking issue: #2223.
 |---|---|---|
 | 0. Measure each attack, per language | #2239 | not started |
 | 1. Confirm browser-graded results on a native runner after the deadline | #2240 | not started |
-| 2. Per-test working directory and exit masks on the native runner | #2241 | done as far as patches go; grader-only files open (see "Phase 2") |
+| 2. Per-test working directory and exit masks on the native runner | #2241 | done; grader-only files moved to phase 3 (see "Phase 2") |
 | 3. Run the submission in a separate process | #2242 | **discuss before work starts** |
 
 Decisions D1 to D3 below were agreed with the maintainer on 2026-10-05.
@@ -142,16 +142,17 @@ What shipped:
   `exit(0)` is an error. A submission that prints the sentinel line itself and
   exits 0 still reads as a pass (`docs/java-support.md`, `docs/cpp-support.md`).
 
-**Open: grader-only files.** They stay readable to every test, because a
-support file has no link to the tests that use it. Hiding them needs that link
-(or a per-test list), which is an authoring change. The maintainer decides
-whether that is phase 2 work or waits for phase 3, which moves the submission
-out of the directory altogether.
+**Moved to phase 3: grader-only files.** They stay readable to every test,
+because a support file has no link to the tests that use it. Hiding them in
+phase 2 would need that link, which is an authoring change. Phase 3 moves the
+submission out of the test's directory, which closes this without one (decided
+with the maintainer on 2026-11-05).
 
 ### Phase 3: a separate process for the submission (#2242)
 
 The direction, not a decision: the submission runs in a child process, in a
 second sandbox that shows only the submission files, and the test calls it
 through a small message protocol. The verdict then comes from a process that
-the submission cannot reach. The open questions are in #2242. Stop and discuss
-before work starts.
+the submission cannot reach. It must also leave the grader-only files out of
+the submission's view, which phase 2 did not do. The open questions are in
+#2242. Stop and discuss before work starts.
