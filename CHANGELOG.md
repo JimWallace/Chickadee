@@ -9,6 +9,13 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.837] - 2026-11-05
+
+### Changed
+
+- **The frontend type check runs on TypeScript 7.** TypeScript 7 refuses a bare `resolve()` on an untyped `Promise`, so the IndexedDB probe in `Public/notebook-preflight.js` now declares its promise as `Promise<void>`. Nothing changes at run time.
+
+
 ## [0.5.836] - 2026-11-04
 
 ### Fixed
