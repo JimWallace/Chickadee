@@ -6,7 +6,7 @@ tests that grade it, and the plan to get there. Tracking issue: #2223.
 | Phase | Issue | State |
 |---|---|---|
 | 0. Measure each attack, per language | #2239 | not started |
-| 1. Confirm browser-graded results on a native runner after the deadline | #2240 | not started |
+| 1. A browser grade is a participation grade (D8) | #2240 | decided; follow-up work in D8 |
 | 2. Per-test working directory and exit masks on the native runner | #2241 | done; grader-only files moved to phase 3 (see "Phase 2") |
 | 3. Run the submission in a separate process | #2242 | **discuss before work starts** |
 
@@ -66,8 +66,8 @@ submission that exits with status 0 still reads as a pass.
 
 ## Decisions
 
-**D1. Browser-graded results are confirmed on a native runner, once, after the
-deadline.** Not every browser submission is graded again. When a student's
+**D1 (replaced by D8 on 2026-11-05). Browser-graded results are confirmed on a
+native runner, once, after the deadline.** Not every browser submission is graded again. When a student's
 post-deadline moment has passed (`postDeadlineRevealDeadline`: the
 extension-aware deadline, or the end of the slip-day claim window), the native
 runner grades the student's submission with the best browser grade.
@@ -90,6 +90,72 @@ a design discussion with the maintainer, not with code.
 **D3. This document is the plan.** Each phase has its own issue, and each phase
 ends with a staff check that proves it on the production runners.
 
+### D8 (agreed 2026-11-05): a browser grade is a participation grade
+
+**Status: agreed with the maintainer on 2026-11-05: option A, and
+leaderboards stay as they are.** D8 replaces D1, and the #2264 design is not
+built. Phase 1 had been on hold since 2026-10-06,
+because how much protection a browser result needs depends on what the grade
+is for. The draft design in #2264 assumed a grade that must be trusted. This
+section states the use case and the options, so the maintainer can decide
+before any phase 1 code is written.
+
+**The use case.** Browser grading serves short, time-constrained work: lecture
+activities and in-class exercises, where the grade rewards taking part. The
+instructor cares less that each result is correct, and less that the solution
+stays secret. Work where the grade must be correct already has a choice: an
+assignment declares `gradingMode` as `browser` or `worker`, and a
+worker-graded assignment is graded on a native runner only.
+
+**Two facts from the code** (2026-11-05):
+
+- The server checks that the student is enrolled, that the assignment is open,
+  and that the payload decodes. It recomputes the total from the outcomes and
+  sets the submission ID and attempt number itself. It does not compare the
+  outcomes with the suite: test names, tiers and points come from the browser.
+  A forged payload therefore needs no knowledge of the suite to read as 100 %.
+- The optional `metric` comes from the browser too, and a class activity's
+  leaderboard sorts on it. A forged result can therefore top a leaderboard.
+
+**Options.**
+
+| | A. Participation grade | B. Trusted grade (#2264) | C. Per assignment |
+|---|---|---|---|
+| What a browser grade means | the student ran the work; the grade is a self-check | the grade counts after a native run confirms it | the instructor picks A or B on each assignment |
+| A forged result | is accepted; staff can spot-check with a retest | does not survive the post-deadline moment | as chosen |
+| Release and secret tests | stay readable in the browser | the browser could grade public tests only (#2264, D7) | as chosen |
+| Work | a few small PRs | four PRs, with new columns, a sweep and changes to every grade fold | B plus a new setting and its interface |
+| Runner load | none | one native run per student per assignment, or more | as chosen |
+
+**Recommendation: A.** It matches the use case, and `gradingMode: worker`
+already covers work whose grade must be trusted. B protects a grade that the
+use case does not need to protect, at the cost of the largest change in this
+plan. C costs more than B and adds a second setting beside `gradingMode` that
+says almost the same thing.
+
+**The work that follows from A:**
+
+1. **Say what a browser grade means.** The authoring choice of `gradingMode`
+   and `docs/architecture.md` state that a browser grade is a self-check, and
+   that work whose grade must be correct uses worker grading.
+2. **Make a spot-check visible.** A retest already grades a browser submission
+   on a native runner, but the best grade wins, so a forged 100 % is not
+   displaced, and nothing shows that the two results differ. Show staff, for
+   each submission with both, when the browser and native results disagree. A
+   disagreement can be a forged result or a real difference between the
+   graders, so it is a signal, not an accusation.
+3. **Not done: take the suite's shape from the server.** Ignoring an outcome
+   whose test is not in the suite, and taking each test's points and tier from
+   the manifest, stops a careless forgery, not a deliberate one. It would only
+   earn its place if leaderboards (`metric`) needed it, and they do not.
+4. **Close what A makes unnecessary.** Close #2264 unmerged, and retitle #2240
+   to the work above. #2264's D7 lapses: release and secret tests stay in
+   the browser.
+
+**Leaderboards.** A forged `metric` is the one place where a browser result
+affects other students. The maintainer accepts this: a class-activity
+leaderboard ranks participation work too.
+
 ## Phases
 
 ### Phase 0: measure (#2239)
@@ -99,17 +165,13 @@ language and on the browser path. Each check passes when the attack fails. It
 also measures the cost of one extra interpreter start on the native runner,
 because the docs have native start-up numbers only for C++ and Java.
 
-### Phase 1: confirm browser results after the deadline (#2240)
+### Phase 1: a browser grade is a participation grade (#2240)
 
-As in D1. Also:
-
-- re-push the grade to BrightSpace or LTI when confirmation changes it;
-- show staff each disagreement between a browser result and its native
-  confirmation. A disagreement can mean a forged result or a real difference
-  between the browser and native graders, so it is a signal, not an accusation;
-- decide whether release and secret scripts still reach the browser. Once the
-  native run is authoritative, the browser could grade public tests only, as a
-  preview.
+As in D8. A browser result stays the grade, and no native run confirms it.
+The work is the two steps D8 lists: say what a browser grade means where the
+grading mode is chosen, and show staff when a retest's native result disagrees
+with the browser result. Release and secret tests stay in the browser. Work
+whose grade must be correct uses `gradingMode: worker`.
 
 ### Phase 2: native hardening (#2241)
 
