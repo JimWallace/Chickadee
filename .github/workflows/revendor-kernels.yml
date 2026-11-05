@@ -51,6 +51,17 @@ name: Re-vendor xeus kernels
 # fails with "Resource not accessible by personal access token
 # (createPullRequest)" (docs/release-process.md).
 #
+# THE TOKEN STAYS OUT OF THE BUILD. The build runs third-party code, and a
+# Dependabot pin bump is exactly the case where that code is new. Nothing later
+# in the same job is safe from it: a build step can add a fake `git` through
+# $GITHUB_PATH, set LD_PRELOAD through $GITHUB_ENV, write a git hook, or
+# redirect a push with `url.<base>.insteadOf`. So `revendor` builds and
+# verifies with no secret and a read-only GITHUB_TOKEN, and writes the rebuild
+# as a patch artifact. `land`, on a new runner, refuses the patch unless every
+# file in it is under Public/jupyterlite or is Tools/jupyterlite/jupyter-lite.json
+# (scripts/regenerated-patch.sh), then commits, pushes and opens the pull
+# request.
+#
 # ONLY `workflow_dispatch` commits. A pull_request run rebuilds and verifies but
 # never pushes, and that is not caution — it is required for termination.
 # `xpython.wasm` embeds the absolute path of the temp directory it was built in
@@ -103,12 +114,23 @@ concurrency:
   cancel-in-progress: true
 
 permissions:
-  contents: write
-  pull-requests: write
+  contents: read
 
 jobs:
+  # Builds and verifies. This job runs third-party code (micromamba, empack,
+  # pip, the JupyterLite build), so it holds no secret and a read-only
+  # GITHUB_TOKEN. Its result reaches `land` only as a patch artifact that
+  # `land` checks (scripts/regenerated-patch.sh). See THE TOKEN STAYS OUT OF
+  # THE BUILD above.
   revendor:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      skip: ${{ steps.gate.outputs.skip }}
+      changed: ${{ steps.diff.outputs.changed }}
+      sha: ${{ steps.base.outputs.sha }}
     # The environment solves plus the full JupyterLite build dominate this;
     # measured at roughly 15 minutes cold for two envs, less with a warm empack
     # cache. chickadee-lua adds ~10 MB of packages and little time.
@@ -150,10 +172,15 @@ jobs:
           # Publish mode builds from main. Otherwise this is the branch the
           # rebuild is pushed back to.
           ref: ${{ (env.PUBLISH == 'true' && 'main') || inputs.branch || github.event.pull_request.head.ref || github.ref_name }}
-          # No credential stays in .git/config while the build installs and runs
-          # third-party packages. The two push steps below set RELEASE_TOKEN on
-          # the remote themselves, after the build.
+          # No credential in .git/config. This job never pushes; `land` does.
           persist-credentials: false
+
+      # Before any third-party code runs. `land` checks out this commit and
+      # applies the patch to it.
+      - name: Record the commit the rebuild starts from
+        id: base
+        if: steps.gate.outputs.skip != 'true'
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
       - uses: actions/setup-python@v7
         if: steps.gate.outputs.skip != 'true'
@@ -254,10 +281,88 @@ jobs:
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
 
+      # Only regenerated output goes into the patch. `land` refuses any other
+      # path, so keep this list and the two in `land` the same.
+      - name: Write the rebuild as a patch
+        if: >-
+          steps.diff.outputs.changed == 'true'
+          && github.event_name == 'workflow_dispatch'
+          && (env.PUBLISH == 'true' || inputs.commit)
+        run: |
+          set -euo pipefail
+          scripts/regenerated-patch.sh make "$RUNNER_TEMP/revendor.patch" \
+            Public/jupyterlite Tools/jupyterlite/jupyter-lite.json
+
+      - uses: actions/upload-artifact@v7
+        if: >-
+          steps.diff.outputs.changed == 'true'
+          && github.event_name == 'workflow_dispatch'
+          && (env.PUBLISH == 'true' || inputs.commit)
+        with:
+          name: revendor-patch
+          path: ${{ runner.temp }}/revendor.patch
+          retention-days: 3
+          if-no-files-found: error
+
+      - name: Report a verify-only run
+        if: steps.diff.outputs.changed != 'false' && github.event_name == 'pull_request'
+        run: |
+          {
+            echo "### Verify-only run"
+            echo ""
+            echo "The environment solved and the kernel built and verified."
+            echo "Nothing was committed — see the header of this workflow for why"
+            echo "a pull_request trigger must not push."
+            echo ""
+            echo "To land a rebuild, run this workflow manually on this branch."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # Commits, pushes and opens the pull request. Holds the push token, and runs
+  # no third-party code: it checks out the commit the build started from,
+  # checks and applies the build's patch, and calls git and GitHub.
+  land:
+    needs: revendor
+    if: >-
+      github.event_name == 'workflow_dispatch'
+      && needs.revendor.outputs.skip != 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      # For the GITHUB_TOKEN fallback when no personal access token is set,
+      # which the ruleset refuses (see WHOSE TOKEN).
+      contents: write
+      pull-requests: write
+    env:
+      PUBLISH: ${{ github.event_name == 'workflow_dispatch' && inputs.publish }}
+    steps:
+      - uses: actions/checkout@v7
+        if: needs.revendor.outputs.changed == 'true'
+        with:
+          ref: ${{ needs.revendor.outputs.sha }}
+          persist-credentials: false
+
+      # The checker from main, not from the branch being pushed to.
+      - uses: actions/checkout@v7
+        if: needs.revendor.outputs.changed == 'true'
+        with:
+          ref: main
+          path: .trusted
+          sparse-checkout: scripts/regenerated-patch.sh
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+
+      - uses: actions/download-artifact@v8
+        if: >-
+          needs.revendor.outputs.changed == 'true'
+          && (env.PUBLISH == 'true' || inputs.commit)
+        with:
+          name: revendor-patch
+          path: ${{ runner.temp }}/revendor
+
       - name: Commit the rebuild
         # workflow_dispatch ONLY — see the termination argument in the header.
         if: >-
-          steps.diff.outputs.changed == 'true'
+          needs.revendor.outputs.changed == 'true'
           && github.event_name == 'workflow_dispatch'
           && env.PUBLISH != 'true'
           && inputs.commit
@@ -277,7 +382,8 @@ jobs:
           git remote set-url origin "https://x-access-token:${PUSH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add Public/jupyterlite Tools/jupyterlite/jupyter-lite.json
+          .trusted/scripts/regenerated-patch.sh apply "$RUNNER_TEMP/revendor/revendor.patch" \
+            Public/jupyterlite Tools/jupyterlite/jupyter-lite.json
           git commit -m "chore(jupyterlite): re-vendor the xeus kernels
 
           Rebuilt by .github/workflows/revendor-kernels.yml from
@@ -297,7 +403,7 @@ jobs:
       # Enable it here instead; the required checks still decide.
       - name: Enable auto-merge on an unchanged Dependabot branch
         if: >-
-          steps.diff.outputs.changed == 'false'
+          needs.revendor.outputs.changed == 'false'
           && startsWith(inputs.branch, 'dependabot/')
         env:
           GH_TOKEN: ${{ secrets.DEPENDABOT_MERGE_TOKEN || secrets.RELEASE_TOKEN }}
@@ -310,7 +416,7 @@ jobs:
       # changelog fragment every merge to main needs, and reaches main only
       # through a pull request whose CI tests the new kernels.
       - name: Open the re-vendor pull request
-        if: steps.diff.outputs.changed == 'true' && env.PUBLISH == 'true'
+        if: needs.revendor.outputs.changed == 'true' && env.PUBLISH == 'true'
         env:
           GH_TOKEN: ${{ secrets.RELEASE_TOKEN }}
           BRANCH: kernels/revendor-${{ github.run_id }}
@@ -320,6 +426,8 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git switch -c "$BRANCH"
+          .trusted/scripts/regenerated-patch.sh apply "$RUNNER_TEMP/revendor/revendor.patch" \
+            Public/jupyterlite Tools/jupyterlite/jupyter-lite.json
           cat > "changelog.d/revendor-kernels-${GITHUB_RUN_ID}.md" <<'EOF'
           ### Changed
 
@@ -329,7 +437,7 @@ jobs:
             `Public/jupyterlite/` from the unchanged `Tools/jupyterlite/environment-*.yml`
             files and verified it before this pull request was opened.
           EOF
-          git add Public/jupyterlite Tools/jupyterlite/jupyter-lite.json "changelog.d/revendor-kernels-${GITHUB_RUN_ID}.md"
+          git add "changelog.d/revendor-kernels-${GITHUB_RUN_ID}.md"
           git commit -m "chore(jupyterlite): re-vendor the xeus kernels
 
           Rebuilt by .github/workflows/revendor-kernels.yml (publish mode) from
@@ -357,16 +465,3 @@ jobs:
             exit 1
           fi
           echo "Opened $url with auto-merge on." >> "$GITHUB_STEP_SUMMARY"
-
-      - name: Report a verify-only run
-        if: steps.diff.outputs.changed != 'false' && github.event_name == 'pull_request'
-        run: |
-          {
-            echo "### Verify-only run"
-            echo ""
-            echo "The environment solved and the kernel built and verified."
-            echo "Nothing was committed — see the header of this workflow for why"
-            echo "a pull_request trigger must not push."
-            echo ""
-            echo "To land a rebuild, run this workflow manually on this branch."
-          } >> "$GITHUB_STEP_SUMMARY"

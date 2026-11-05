@@ -21,6 +21,13 @@ update fails.
    | `Tools/jupyterlite/chickadee-extension` | its labextension and `Public/jupyterlite/extensions/@chickadee/` | `jlpm build`, then `scripts/vendor-chickadee-extension.sh` |
    | `Tools/jupyterlite/requirements.txt` | `Public/jupyterlite/`, and the `appVersion` label in `Tools/jupyterlite/jupyter-lite.json` | `revendor-kernels.yml`, dispatched with `commit: true` |
 
+   The rebuild runs the bumped packages' own install and build scripts, so it
+   runs in a job with no secret and a read-only `GITHUB_TOKEN`. It writes its
+   result as a patch artifact. A second job on a new runner refuses the patch
+   unless every file in it is regenerated output, and only that job holds the
+   push token (`scripts/regenerated-patch.sh`). `revendor-kernels.yml` is
+   split the same way.
+
    It then enables auto-merge. The required checks on `main` decide the merge:
    a green PR merges, a red PR waits, and `auto-release.yml` deploys a merge as
    it deploys any other.

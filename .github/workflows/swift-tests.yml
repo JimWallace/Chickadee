@@ -296,6 +296,9 @@ jobs:
       - name: Post text cleanup self-tests
         run: scripts/ci-post-sanitize.sh --self-test
 
+      - name: Regenerated-bytes patch self-tests
+        run: scripts/regenerated-patch.sh --self-test
+
   # Single shared compile of the whole package + all test targets.  The
   # resulting `.build/` tree is cached and reused by every test job below
   # via `swift test --skip-build`, replacing five from-scratch compiles

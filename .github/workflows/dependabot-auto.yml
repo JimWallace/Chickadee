@@ -35,12 +35,22 @@ name: Dependabot auto-merge
 #
 # NO BARE BUMP MERGES. A run whose sender is not Dependabot enables auto-merge
 # on an update that feeds committed output only when the head commit is a
-# regeneration commit. A person who reopens the PR or pushes to its branch gets
-# no auto-merge; the weekly sweep then reports the PR as stalled.
+# regeneration commit. So a person who reopens such a PR, or pushes to its
+# branch, gets no auto-merge, and the weekly sweep reports the PR as stalled.
+# On an update that feeds no committed output, any push enables auto-merge,
+# a person's or an agent's included: the required checks decide, and no
+# person reviews that push. The brief in a `dependency-update-failed` issue
+# says so.
 #
-# THE TOKEN STAYS OUT OF THE BUILD. The rebuild steps run the install scripts
-# of the packages just bumped, so the merge token is set only on the steps that
-# call GitHub, never in the job environment.
+# THE TOKEN STAYS OUT OF THE BUILD. The rebuild runs the install and build
+# scripts of the packages just bumped. Nothing later in the same job is safe
+# from them, even with no secret in its environment: a build step can add a
+# fake `git` through $GITHUB_PATH, set LD_PRELOAD through $GITHUB_ENV, write a
+# git hook, or redirect the push with `url.<base>.insteadOf`. So the build is
+# its own job, `rebuild`, with a read-only GITHUB_TOKEN and no secret. It
+# hands its result to `land` as a patch artifact (scripts/regenerated-patch.sh),
+# and `land`, on a new runner where no third-party code has run, refuses the
+# patch unless every file in it is regenerated output, then pushes it.
 #
 # WHOSE TOKEN. A merge made with GITHUB_TOKEN starts no workflow, so
 # auto-release.yml would never tag it and nothing would deploy; a push made with
@@ -63,23 +73,27 @@ concurrency:
 permissions:
   contents: read
 
+
 jobs:
-  land:
+  # Decides what this update needs. Runs no code from the PR.
+  plan:
     if: >-
       github.event.pull_request.user.login == 'dependabot[bot]'
       && github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 10
     permissions:
       contents: read
       pull-requests: read
-      # To dispatch revendor-kernels.yml.
-      actions: write
     env:
       PR: ${{ github.event.pull_request.number }}
-      HEAD_REF: ${{ github.event.pull_request.head.ref }}
       SENDER: ${{ github.event.sender.login }}
       R: ${{ github.repository }}
+    outputs:
+      vendor: ${{ steps.plan.outputs.vendor }}
+      extension: ${{ steps.plan.outputs.extension }}
+      kernels: ${{ steps.plan.outputs.kernels }}
+      merge: ${{ steps.plan.outputs.merge }}
     steps:
       - name: Check the merge token
         env:
@@ -154,30 +168,41 @@ jobs:
             exit 1
           fi
 
+  # Runs the bumped packages' code. No secret, a read-only GITHUB_TOKEN, and
+  # no step after the build that holds a credential: its only output is the
+  # patch artifact, which `land` checks before it uses it.
+  rebuild:
+    needs: plan
+    if: needs.plan.outputs.vendor == 'true' || needs.plan.outputs.extension == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    outputs:
+      changed: ${{ steps.patch.outputs.changed }}
+    steps:
       - uses: actions/checkout@v7
-        if: steps.plan.outputs.vendor == 'true' || steps.plan.outputs.extension == 'true'
         with:
-          ref: ${{ github.event.pull_request.head.ref }}
-          # The build runs third-party packages; the push step sets its own
-          # credential afterwards.
+          # The exact head that `plan` read. `land` checks out the same commit
+          # and applies the patch to it.
+          ref: ${{ github.event.pull_request.head.sha }}
           persist-credentials: false
 
       - uses: actions/setup-node@v7
-        if: steps.plan.outputs.vendor == 'true' || steps.plan.outputs.extension == 'true'
         with:
           node-version-file: .node-version
 
       - name: Rebuild Public/vendor
-        if: steps.plan.outputs.vendor == 'true'
+        if: needs.plan.outputs.vendor == 'true'
         run: scripts/setup-vendor.sh
 
       - uses: actions/setup-python@v7
-        if: steps.plan.outputs.extension == 'true'
+        if: needs.plan.outputs.extension == 'true'
         with:
           python-version: "3.13"
 
       - name: Rebuild the Chickadee extension and vendor it into the bundle
-        if: steps.plan.outputs.extension == 'true'
+        if: needs.plan.outputs.extension == 'true'
         env:
           COREPACK_ENABLE_DOWNLOAD_PROMPT: "0"
         run: |
@@ -196,33 +221,95 @@ jobs:
           scripts/vendor-chickadee-extension.sh
           scripts/vendor-chickadee-extension.sh --check
 
+      # Only regenerated output goes into the patch. `land` refuses any other
+      # path, so keep this list and the one in `land` the same.
+      - name: Write the regenerated bytes as a patch
+        id: patch
+        run: |
+          set -euo pipefail
+          scripts/regenerated-patch.sh make "$RUNNER_TEMP/regenerated.patch" \
+            Public/vendor Public/jupyterlite \
+            Tools/jupyterlite/chickadee-extension \
+            >> "$GITHUB_OUTPUT"
+          if grep -qx 'changed=false' "$GITHUB_OUTPUT"; then
+            echo "The rebuild reproduced the committed bytes." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - uses: actions/upload-artifact@v7
+        if: steps.patch.outputs.changed == 'true'
+        with:
+          name: regenerated-patch
+          path: ${{ runner.temp }}/regenerated.patch
+          retention-days: 3
+          if-no-files-found: error
+
+  # Holds the merge token. Runs no code from the bumped packages: it checks out
+  # the PR head, checks and applies the patch, and calls git and GitHub.
+  land:
+    needs: [plan, rebuild]
+    if: >-
+      always()
+      && needs.plan.result == 'success'
+      && (needs.rebuild.result == 'success' || needs.rebuild.result == 'skipped')
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      pull-requests: read
+      # To dispatch revendor-kernels.yml.
+      actions: write
+    env:
+      PR: ${{ github.event.pull_request.number }}
+      HEAD_REF: ${{ github.event.pull_request.head.ref }}
+      R: ${{ github.repository }}
+      PUSH: ${{ needs.rebuild.outputs.changed == 'true' }}
+    steps:
+      - uses: actions/checkout@v7
+        if: env.PUSH == 'true'
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+
+      # The checker from main, not from the PR head: the boundary should not
+      # depend on a file that a push to this branch can change.
+      - uses: actions/checkout@v7
+        if: env.PUSH == 'true'
+        with:
+          ref: main
+          path: .trusted
+          sparse-checkout: scripts/regenerated-patch.sh
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+
+      - uses: actions/download-artifact@v8
+        if: env.PUSH == 'true'
+        with:
+          name: regenerated-patch
+          path: ${{ runner.temp }}/regenerated
+
+      # A push from the exact head `plan` read. If Dependabot pushed again in
+      # the meantime, the push is not a fast-forward and fails; the run for
+      # the newer head does the work.
       - name: Push the regenerated bytes
-        id: push
-        if: steps.plan.outputs.vendor == 'true' || steps.plan.outputs.extension == 'true'
+        if: env.PUSH == 'true'
         env:
           PUSH_TOKEN: ${{ secrets.DEPENDABOT_MERGE_TOKEN || secrets.RELEASE_TOKEN }}
         run: |
           set -euo pipefail
-          paths=(Public/vendor Public/jupyterlite Tools/jupyterlite/chickadee-extension)
-          if git diff --quiet -- "${paths[@]}" \
-            && [ -z "$(git ls-files --others --exclude-standard -- "${paths[@]}")" ]; then
-            echo "pushed=false" >> "$GITHUB_OUTPUT"
-            echo "The rebuild reproduced the committed bytes." >> "$GITHUB_STEP_SUMMARY"
-            exit 0
-          fi
+          .trusted/scripts/regenerated-patch.sh apply "$RUNNER_TEMP/regenerated/regenerated.patch" \
+            Public/vendor Public/jupyterlite \
+            Tools/jupyterlite/chickadee-extension
           git remote set-url origin "https://x-access-token:${PUSH_TOKEN}@github.com/${R}.git"
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -A -- "${paths[@]}"
           git commit -m "chore(deps): regenerate the committed bytes for this update
 
           Rebuilt by .github/workflows/dependabot-auto.yml. Regenerated output only."
           git push origin "HEAD:$HEAD_REF"
-          echo "pushed=true" >> "$GITHUB_OUTPUT"
           echo "Pushed the regenerated bytes; the run that push starts enables auto-merge." >> "$GITHUB_STEP_SUMMARY"
 
       - name: Re-vendor the kernels on this branch
-        if: steps.plan.outputs.kernels == 'true'
+        if: needs.plan.outputs.kernels == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -237,11 +324,11 @@ jobs:
       # regenerating, or the regeneration reproduced the committed bytes.
       - name: Enable auto-merge
         if: >-
-          steps.plan.outputs.kernels != 'true'
-          && steps.push.outputs.pushed != 'true'
-          && (steps.plan.outputs.merge == 'true'
-              || steps.plan.outputs.vendor == 'true'
-              || steps.plan.outputs.extension == 'true')
+          needs.plan.outputs.kernels != 'true'
+          && env.PUSH != 'true'
+          && (needs.plan.outputs.merge == 'true'
+              || needs.plan.outputs.vendor == 'true'
+              || needs.plan.outputs.extension == 'true')
         env:
           GH_TOKEN: ${{ secrets.DEPENDABOT_MERGE_TOKEN || secrets.RELEASE_TOKEN }}
         run: |
