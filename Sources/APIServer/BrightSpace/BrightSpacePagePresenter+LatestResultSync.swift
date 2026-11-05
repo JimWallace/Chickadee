@@ -12,7 +12,7 @@ extension BrightSpacePagePresenter {
     /// Each student's latest result row per setup (highest `received_at`),
     /// reduced to its sync state.
     ///
-    /// On SQL databases, `DISTINCT ON` picks that row in the database, so the
+    /// Postgres picks that row with `DISTINCT ON`, so the
     /// query returns one narrow row per student, not every historical result
     /// with both models' columns. The earlier read decoded about 35 MB for a
     /// course of 65,536 submissions. Postgres executed it in 0.12 s and then
@@ -24,7 +24,7 @@ extension BrightSpacePagePresenter {
     ) async throws -> [StudentKey: LatestSyncState] {
         guard !setupIDs.isEmpty else { return [:] }
         guard let sql = db as? (any SQLDatabase) else {
-            return try await latestResultSyncStatesViaFluent(setupIDs: setupIDs, on: db)
+            throw AppError.internalFailure(reason: "The LEARN sync summary needs a SQL database.")
         }
         struct LatestRow: Decodable {
             let testSetupID: String
@@ -64,31 +64,6 @@ extension BrightSpacePagePresenter {
                 error: row.syncError,
                 syncedAt: row.syncedAt,
                 pending: row.syncPending == true)
-        }
-        return latest
-    }
-
-    /// The same read through Fluent, for a database that is not SQL.
-    private static func latestResultSyncStatesViaFluent(
-        setupIDs: [String], on db: any Database
-    ) async throws -> [StudentKey: LatestSyncState] {
-        let results = try await APIResult.query(on: db)
-            .join(APISubmission.self, on: \APIResult.$submissionID == \APISubmission.$id)
-            .filter(APISubmission.self, \.$testSetupID ~~ setupIDs)
-            .filter(APISubmission.self, \.$kind == APISubmission.Kind.student)
-            .all()
-        var latest: [StudentKey: LatestSyncState] = [:]
-        for result in results {
-            let submission = try result.joined(APISubmission.self)
-            guard let userID = submission.userID else { continue }
-            let key = StudentKey(setupID: submission.testSetupID, userID: userID)
-            let received = result.receivedAt ?? Date.distantPast
-            if let existing = latest[key], existing.attemptedAt >= received { continue }
-            latest[key] = LatestSyncState(
-                attemptedAt: received,
-                error: result.brightspaceSyncError,
-                syncedAt: result.brightspaceSyncedAt,
-                pending: result.brightspaceSyncPending == true)
         }
         return latest
     }
