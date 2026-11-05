@@ -358,11 +358,17 @@ enum BrightSpacePagePresenter {
 
     /// One student's most-recent grade-sync attempt for a test setup, used to
     /// dedupe the per-assignment counts down to distinct students.
-    private struct LatestSyncState {
+    struct LatestSyncState {
         var attemptedAt: Date
         var error: String?
         var syncedAt: Date?
         var pending: Bool
+    }
+
+    /// One student on one assignment: the unit the sync summary counts.
+    struct StudentKey: Hashable {
+        let setupID: String
+        let userID: UUID
     }
 
     /// Computes the per-assignment Synced/Failed rollup and the headline summary,
@@ -377,44 +383,7 @@ enum BrightSpacePagePresenter {
         on db: any Database
     ) async throws -> (BrightspaceSyncSummary, [String: SetupSyncCounts]) {
         // (setupID, userID) → that student's most-recent sync state.
-        struct StudentKey: Hashable {
-            let setupID: String
-            let userID: UUID
-        }
-        var latestByStudent: [StudentKey: LatestSyncState] = [:]
-
-        // Each student result row, joined to its submission so the row resolves
-        // to the student whose grade it carries. The join scopes the query by
-        // the course's few setup IDs, never by a list of every submission ID,
-        // which passes the driver bind limit for a large course (#2764).
-        let results =
-            setupIDs.isEmpty
-            ? []
-            : try await APIResult.query(on: db)
-                .join(APISubmission.self, on: \APIResult.$submissionID == \APISubmission.$id)
-                .filter(APISubmission.self, \.$testSetupID ~~ setupIDs)
-                .filter(APISubmission.self, \.$kind == APISubmission.Kind.student)
-                .all()
-        var keyBySubmissionID: [String: StudentKey] = [:]
-        for result in results {
-            let submission = try result.joined(APISubmission.self)
-            if let userID = submission.userID {
-                keyBySubmissionID[result.submissionID] = StudentKey(
-                    setupID: submission.testSetupID, userID: userID)
-            }
-        }
-
-        // Keep each student's latest result row (highest `receivedAt`).
-        for result in results {
-            guard let key = keyBySubmissionID[result.submissionID] else { continue }
-            let received = result.receivedAt ?? Date.distantPast
-            if let existing = latestByStudent[key], existing.attemptedAt >= received { continue }
-            latestByStudent[key] = LatestSyncState(
-                attemptedAt: received,
-                error: result.brightspaceSyncError,
-                syncedAt: result.brightspaceSyncedAt,
-                pending: result.brightspaceSyncPending == true)
-        }
+        var latestByStudent = try await latestResultSyncStates(setupIDs: setupIDs, on: db)
 
         // Override-only students (no submissions) — their grade rides on the
         // override row. Skip any already covered by a result row: the latest
