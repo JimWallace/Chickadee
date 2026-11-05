@@ -64,7 +64,9 @@
         // (private mode, "block all site data", quota exhausted).
         if (failed.indexOf('indexedDB') === -1) {
             try {
-                await new Promise(function (resolve, reject) {
+                // The cast types resolve() as taking no value; TypeScript 7
+                // refuses a bare resolve() on an untyped Promise (TS2810).
+                await /** @type {Promise<void>} */ (new Promise(function (resolve, reject) {
                     const r = indexedDB.open('chickadee_preflight', 1);
                     r.onsuccess = function () {
                         try {
@@ -75,7 +77,7 @@
                     };
                     r.onerror   = function () { reject(r.error || new Error('open failed')); };
                     r.onblocked = function () { reject(new Error('blocked')); };
-                });
+                }));
             } catch (e) {
                 failed.push('indexedDB:open');
             }
