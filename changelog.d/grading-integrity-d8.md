@@ -1,0 +1,3 @@
+### Changed
+
+- **`docs/grading-integrity.md` proposes what a browser grade is for (D8).** Phase 1 (#2240) has been on hold because the protection a browser result needs depends on its use. D8 states the use case (short, time-constrained work graded for taking part) and compares three options: a participation grade, a grade confirmed on a native runner (#2264), or a choice per assignment. It recommends the participation grade, because `gradingMode: worker` already covers work whose grade must be trusted. It also records that the server takes a browser result's test names, tiers, points and leaderboard `metric` from the browser. D8 is a proposal; no grading behaviour changes.

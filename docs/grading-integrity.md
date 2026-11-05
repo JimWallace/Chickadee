@@ -6,7 +6,7 @@ tests that grade it, and the plan to get there. Tracking issue: #2223.
 | Phase | Issue | State |
 |---|---|---|
 | 0. Measure each attack, per language | #2239 | not started |
-| 1. Confirm browser-graded results on a native runner after the deadline | #2240 | not started |
+| 1. Confirm browser-graded results on a native runner after the deadline | #2240 | on hold: what a browser grade is for is proposed in D8 |
 | 2. Per-test working directory and exit masks on the native runner | #2241 | done; grader-only files moved to phase 3 (see "Phase 2") |
 | 3. Run the submission in a separate process | #2242 | **discuss before work starts** |
 
@@ -89,6 +89,71 @@ a design discussion with the maintainer, not with code.
 
 **D3. This document is the plan.** Each phase has its own issue, and each phase
 ends with a staff check that proves it on the production runners.
+
+### D8 (proposed 2026-11-05): what a browser grade is for
+
+**Status: proposed, not agreed.** Phase 1 has been on hold since 2026-10-06,
+because how much protection a browser result needs depends on what the grade
+is for. The draft design in #2264 assumed a grade that must be trusted. This
+section states the use case and the options, so the maintainer can decide
+before any phase 1 code is written. If D8 is agreed, it replaces D1.
+
+**The use case.** Browser grading serves short, time-constrained work: lecture
+activities and in-class exercises, where the grade rewards taking part. The
+instructor cares less that each result is correct, and less that the solution
+stays secret. Work where the grade must be correct already has a choice: an
+assignment declares `gradingMode` as `browser` or `worker`, and a
+worker-graded assignment is graded on a native runner only.
+
+**Two facts from the code** (2026-11-05):
+
+- The server checks that the student is enrolled, that the assignment is open,
+  and that the payload decodes. It recomputes the total from the outcomes and
+  sets the submission ID and attempt number itself. It does not compare the
+  outcomes with the suite: test names, tiers and points come from the browser.
+  A forged payload therefore needs no knowledge of the suite to read as 100 %.
+- The optional `metric` comes from the browser too, and a class activity's
+  leaderboard sorts on it. A forged result can therefore top a leaderboard.
+
+**Options.**
+
+| | A. Participation grade | B. Trusted grade (#2264) | C. Per assignment |
+|---|---|---|---|
+| What a browser grade means | the student ran the work; the grade is a self-check | the grade counts after a native run confirms it | the instructor picks A or B on each assignment |
+| A forged result | is accepted; staff can spot-check with a retest | does not survive the post-deadline moment | as chosen |
+| Release and secret tests | stay readable in the browser | the browser could grade public tests only (D7) | as chosen |
+| Work | a few small PRs | four PRs, with new columns, a sweep and changes to every grade fold | B plus a new setting and its interface |
+| Runner load | none | one native run per student per assignment, or more | as chosen |
+
+**Recommendation: A.** It matches the use case, and `gradingMode: worker`
+already covers work whose grade must be trusted. B protects a grade that the
+use case does not need to protect, at the cost of the largest change in this
+plan. C costs more than B and adds a second setting beside `gradingMode` that
+says almost the same thing.
+
+**If A is agreed, the work is:**
+
+1. **Say what a browser grade means.** The authoring choice of `gradingMode`
+   and `docs/architecture.md` state that a browser grade is a self-check, and
+   that work whose grade must be correct uses worker grading.
+2. **Make a spot-check visible.** A retest already grades a browser submission
+   on a native runner, but the best grade wins, so a forged 100 % is not
+   displaced, and nothing shows that the two results differ. Show staff, for
+   each submission with both, when the browser and native results disagree. A
+   disagreement can be a forged result or a real difference between the
+   graders, so it is a signal, not an accusation.
+3. **Optional: take the suite's shape from the server.** Ignore an outcome
+   whose test is not in the suite, and take each test's points and tier from
+   the manifest. This stops a careless forgery, not a deliberate one, so it
+   only earns its place if leaderboards (`metric`) need it.
+4. **Close what A makes unnecessary.** Close #2264 unmerged, and retitle #2240
+   to the work above. D7 lapses: release and secret tests stay in the browser.
+
+**Questions for the maintainer.**
+
+- Is A agreed?
+- Do class-activity leaderboards need more than A gives them? A forged
+  `metric` is the one place where a browser result affects other students.
 
 ## Phases
 
