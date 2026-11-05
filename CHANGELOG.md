@@ -9,6 +9,13 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.842] - 2026-11-05
+
+### Fixed
+
+- **Dependabot auto-merge handles large pull requests.** The `plan` job listed a pull request's files with `gh pr diff`, which GitHub refuses past 300 changed files, so a regenerated JupyterLite bump could never auto-merge. It now reads the paginated files API (#2871).
+
+
 ## [0.5.841] - 2026-11-05
 
 ### Fixed
