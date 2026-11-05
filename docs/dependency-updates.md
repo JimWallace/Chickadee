@@ -25,13 +25,16 @@ update fails.
    - `dependency-failure.yml` reports a red check on a Dependabot PR, with the
      failed jobs, the end of the log and a brief for an agent.
    - `dependency-health.yml` runs each Monday. It reports a Dependabot PR that
-     has not had auto-merge for three days, a security alert that has had no
+     is open after three days, with the reason: no auto-merge, a conflict with
+     `main`, a branch behind `main`, or required checks that have not passed.
+     A green PR with auto-merge on lands within the hour, so auto-merge alone
+     does not mean that a PR will land. It also reports a security alert that has had no
      PR for a week, and a `RELEASE_TOKEN` that is broken or near expiry. It
      closes each issue whose problem is gone.
 
 Once a regeneration commit is on a Dependabot branch, Dependabot no longer
-rebases that PR. If `main` moves and the branch falls behind, the PR waits,
-and the weekly sweep reports it as stalled.
+rebases that PR. If `main` moves and the branch conflicts or falls behind, the
+PR waits, and the weekly sweep reports it as stalled with that reason.
 
 To resolve one, point an agent at the issue. The brief in the issue states the
 rules: fix forward, skip no test, and add an `ignore` entry with a reason only

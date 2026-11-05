@@ -9,9 +9,12 @@ name: Dependency health
 #            That is what a `security_update_not_possible` job looks like from
 #            outside: the fix exists, but a parent package's range excludes it,
 #            so Dependabot gives up and says so only in its own job log.
-#   pr=N     A Dependabot PR open for three days without auto-merge. The
-#            landing step in dependabot-auto.yml did not finish, for example a
-#            kernel re-vendor that produced no commit.
+#   pr=N     A Dependabot PR open for three days, whatever its auto-merge
+#            state. A green PR with auto-merge on lands within the hour, so one
+#            that is still open is stuck: dependabot-auto.yml did not enable
+#            auto-merge, the branch conflicts with main or is behind it, or a
+#            required check never passed or never reported. The issue says
+#            which.
 #   token    RELEASE_TOKEN missing, broken, or within three weeks of expiry. An
 #            expired token stops releases and deploys silently.
 #
@@ -124,18 +127,38 @@ jobs:
         run: |
           set -euo pipefail
           gh pr list --repo "$R" --author "app/dependabot" --state open --limit 100 \
-            --json number,title,url,createdAt,autoMergeRequest,headRefName > prs.json
+            --json number,title,url,createdAt,autoMergeRequest,headRefName,mergeable,mergeStateStatus > prs.json
+          # Every Dependabot PR older than three days is stuck, whatever its
+          # auto-merge state: a green PR with auto-merge on merges within the
+          # hour. Auto-merge on does not mean it will land. A conflicted
+          # branch runs no CI, and a required check that never reports is
+          # not a failure, so dependency-failure.yml reports neither.
           cutoff="$(date -u -d '3 days ago' +%s)"
           jq -c --argjson cutoff "$cutoff" \
-            '.[] | select(.autoMergeRequest == null and (.createdAt | fromdate) < $cutoff)' prs.json |
+            '.[] | select((.createdAt | fromdate) < $cutoff)' prs.json |
           while read -r pr; do
             number="$(jq -r .number <<<"$pr")"
+            branch="$(jq -r .headRefName <<<"$pr")"
+            state="$(jq -r .mergeStateStatus <<<"$pr")"
+            if [ "$(jq -r .mergeable <<<"$pr")" = "CONFLICTING" ] || [ "$state" = "DIRTY" ]; then
+              why="has merge conflicts with \`main\`, so no CI runs and it cannot merge"
+              brief="Resolve the conflict on #$number (\`$branch\`). Dependabot does not rebase a branch that carries a regeneration commit, so the usual fix is a \`@dependabot recreate\` comment: Dependabot rebuilds the bump from \`main\`, and \`.github/workflows/dependabot-auto.yml\` regenerates the committed bytes again. If the conflict is in our own code, merge \`main\` into the branch and fix it there."
+            elif [ "$(jq -r '.autoMergeRequest == null' <<<"$pr")" = "true" ]; then
+              why="does not have auto-merge, so it will not land on its own"
+              brief="Find why \`.github/workflows/dependabot-auto.yml\` did not enable auto-merge on #$number (\`$branch\`): read its runs on that branch, and for a jupyterlite pin, the \`revendor-kernels.yml\` run it dispatched. Finish the landing (regenerate the committed bytes, or enable auto-merge) and fix the cause in the workflow if it is general."
+            elif [ "$state" = "BEHIND" ]; then
+              why="has auto-merge on but is behind \`main\`, and the ruleset requires an up-to-date branch"
+              brief="Update #$number (\`$branch\`) from \`main\` (the PR's \"Update branch\" button, or a \`@dependabot rebase\` comment when the branch carries no regeneration commit), and let the required checks run on the new head."
+            else
+              why="has auto-merge on, but its required checks have not passed (merge state \`$state\`)"
+              brief="Read the checks on the head of #$number (\`$branch\`). A red check also has an issue from \`dependency-failure.yml\`; follow its brief. If a required check never started or never reported, find why (a path filter, a skipped job, a workflow that did not trigger) and make it run. Do not skip, disable or loosen a check to get green."
+            fi
             {
-              echo "Dependabot pull request $(jq -r .url <<<"$pr") has been open since $(jq -r .createdAt <<<"$pr") without auto-merge, so it will not land on its own."
+              echo "Dependabot pull request $(jq -r .url <<<"$pr") has been open since $(jq -r .createdAt <<<"$pr") and $why."
               echo ""
               echo "### Brief for an agent"
               echo ""
-              echo "Find why \`.github/workflows/dependabot-auto.yml\` did not enable auto-merge on #$number (\`$(jq -r .headRefName <<<"$pr")\`): read its runs on that branch, and for a jupyterlite pin, the \`revendor-kernels.yml\` run it dispatched. Finish the landing (regenerate the committed bytes, or enable auto-merge) and fix the cause in the workflow if it is general."
+              echo "$brief"
             } > body.md
             scripts/dependency-issue.sh open "pr=$number" \
               "Dependency update stalled: $(jq -r .title <<<"$pr") (#$number)" body.md
