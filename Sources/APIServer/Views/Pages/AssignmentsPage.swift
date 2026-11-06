@@ -116,9 +116,12 @@ struct AssignmentsPage: HTML {
                         }
                         label(.class("form-label")) {
                             "Default grading mode"
-                            select(.class("form-input editor-input"), .name("defaultGradingMode")) {
+                            select(
+                                .class("form-input editor-input"), .name("defaultGradingMode"),
+                                .title("Student Browser grading suits a participation grade")
+                            ) {
                                 option(.value("worker")) { "Chickadee" }
-                                option(.value("browser")) { "Student Browser (participation grade)" }
+                                option(.value("browser")) { "Student Browser" }
                             }
                         }
                         button(.class("btn btn-primary btn-compact"), .type(.submit)) { "Create section" }
@@ -224,9 +227,12 @@ private struct SectionBlock: HTML {
                 input(
                     .class("form-input section-name-input"), .type(.text), .name("name"), .value(section.name),
                     .required)
-                select(.class("form-input grading-mode-select"), .name("defaultGradingMode")) {
+                select(
+                    .class("form-input grading-mode-select"), .name("defaultGradingMode"),
+                    .title("Student Browser grading suits a participation grade")
+                ) {
                     option(.value("worker")) { "Chickadee" }.attributes(.selected, when: isWorker)
-                    option(.value("browser")) { "Student Browser (participation grade)" }
+                    option(.value("browser")) { "Student Browser" }
                         .attributes(.selected, when: section.defaultGradingMode == "browser")
                 }
                 button(.class("btn btn-primary btn-compact"), .type(.submit)) { "Save" }
