@@ -9,6 +9,13 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.849] - 2026-11-06
+
+### Added
+
+- **Staff see when a browser grade and its native re-test differ (#2240).** A browser grade is a participation grade (`docs/grading-integrity.md`, D8), and the best grade wins, so a forged browser 100 % used to hide a lower native re-test with no trace on any page. The staff history of one student on one assignment now shows "Browser x% · native y%" beside each submission whose best browser grade differs from its newest native result, and the assignment's roster flags each student with such a submission. It is a signal for the instructor, not an accusation: no grade changes, and the student's own history does not show it.
+
+
 ## [0.5.848] - 2026-11-05
 
 ### Changed
