@@ -147,7 +147,7 @@
         function updateHint() {
             var selected = sectionSelect.options[sectionSelect.selectedIndex];
             var mode = selected ? selected.getAttribute('data-grading-mode') : null;
-            if (mode === 'browser') { hint.textContent = 'ⓘ This section uses Student Browser grading by default.'; hint.style.display = ''; }
+            if (mode === 'browser') { hint.textContent = 'ⓘ This section grades in the student’s browser by default, for a participation grade.'; hint.style.display = ''; }
             else if (mode === 'worker') { hint.textContent = 'ⓘ This section uses Chickadee grading by default.'; hint.style.display = ''; }
             else { hint.style.display = 'none'; }
         }

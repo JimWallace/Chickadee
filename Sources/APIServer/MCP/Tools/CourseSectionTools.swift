@@ -140,7 +140,9 @@ struct CreateCourseSectionTool: ContentTool {
             "defaultGradingMode": .object([
                 "type": .string("string"),
                 "enum": MCPEnumProse<GradingMode>.jsonEnum,
-                "description": .string("Grading mode adopted by assignments moved here. Default \"browser\"."),
+                "description": .string(
+                    "Grading mode adopted by assignments moved here. Default \"browser\". A \"browser\" grade is a "
+                        + "participation grade; use \"worker\" where the grade must be correct."),
             ]),
         ]),
         "required": .array([.string("courseCode"), .string("name")]),

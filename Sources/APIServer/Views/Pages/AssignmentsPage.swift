@@ -118,7 +118,7 @@ struct AssignmentsPage: HTML {
                             "Default grading mode"
                             select(.class("form-input editor-input"), .name("defaultGradingMode")) {
                                 option(.value("worker")) { "Chickadee" }
-                                option(.value("browser")) { "Student Browser" }
+                                option(.value("browser")) { "Student Browser (participation grade)" }
                             }
                         }
                         button(.class("btn btn-primary btn-compact"), .type(.submit)) { "Create section" }
@@ -226,7 +226,7 @@ private struct SectionBlock: HTML {
                     .required)
                 select(.class("form-input grading-mode-select"), .name("defaultGradingMode")) {
                     option(.value("worker")) { "Chickadee" }.attributes(.selected, when: isWorker)
-                    option(.value("browser")) { "Student Browser" }
+                    option(.value("browser")) { "Student Browser (participation grade)" }
                         .attributes(.selected, when: section.defaultGradingMode == "browser")
                 }
                 button(.class("btn btn-primary btn-compact"), .type(.submit)) { "Save" }

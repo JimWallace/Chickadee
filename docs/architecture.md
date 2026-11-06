@@ -529,6 +529,14 @@ test setup, less the grader-only files. So a student can open every test in
 their own browser, without a submission (see
 [failure-detail.md](failure-detail.md) and [datasets.md](datasets.md)).
 
+**A browser grade is a participation grade** (decision D8 in
+[grading-integrity.md](grading-integrity.md)). The student's browser builds
+the result, and the server keeps it; no native run confirms it, so a student
+can forge it. Choose browser grading for short work graded for taking part,
+and worker grading for work whose grade must be correct. A retest grades a
+browser submission natively, and staff see each submission where the two
+grades differ, on the student's history and on the roster.
+
 ---
 
 ## Runner Capability Matching
