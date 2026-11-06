@@ -294,8 +294,11 @@ extension WebRoutes {
         // two staff history pages (#1709): a student and their TA read one grade.
         let bestPercentBySubmissionID = try await bestGradePercentBySubmissionID(
             for: submissions.compactMap(\.id), on: req.db)
+        // No source disagreement on the student's own page: it is a staff
+        // signal (docs/grading-integrity.md, D8).
         let historyRows = assignmentSubmissionHistoryRows(
-            submissions: submissions, bestPercentBySubmissionID: bestPercentBySubmissionID, fmt: fmt)
+            submissions: submissions, bestPercentBySubmissionID: bestPercentBySubmissionID,
+            disagreementBySubmissionID: [:], fmt: fmt)
 
         let rows = zip(submissions, historyRows).map { submission, history -> SubmissionHistoryRow in
             let subID = history.submissionID

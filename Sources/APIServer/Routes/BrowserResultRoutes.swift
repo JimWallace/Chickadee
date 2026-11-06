@@ -107,7 +107,7 @@ struct BrowserResultRoutes: RouteCollection {
             collection, submissionID: subID, attemptNumber: attemptNumber)
         // Built, and flagged for grade sync, exactly as the worker report is.
         let prepared = try await ResultIngestEffects.prepareResult(
-            reconciled, source: "browser", testSetupID: body.testSetupID,
+            reconciled, source: APIResult.browserSource, testSetupID: body.testSetupID,
             application: req.application, on: req.db)
         // saveWithCollection is itself transactional (row + blob together).
         try await prepared.row.saveWithCollection(json: prepared.json, on: req.db)

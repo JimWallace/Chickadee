@@ -311,6 +311,10 @@ struct AssignmentStudentRow: Encodable {
     /// True iff `passingLabel == "passing"`; the page picks the badge
     /// colour from this rather than comparing strings.
     let isPassing: Bool
+    /// True when one of this student's submissions has a browser grade and a
+    /// native grade that differ (`studentsWithGradeSourceDisagreement`). A
+    /// staff signal, not an accusation: it changes no grade.
+    var gradeSourceDisagrees = false
 }
 
 /// The advisory pass/fail label for one student's effective best grade.

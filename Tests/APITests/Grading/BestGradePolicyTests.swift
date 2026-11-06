@@ -99,8 +99,11 @@ import VaporTesting
                         "drilldown must show the highest grade across all sources (100%), not the worker-preferred 80%"
                     )
                     #expect(
-                        !html.contains("80%"),
+                        !html.contains("<strong>80%</strong>"),
                         "the worker-preferred 80% must not be shown as the grade")
+                    // It does appear as the native side of the staff
+                    // disagreement badge (docs/grading-integrity.md, D8).
+                    #expect(html.contains("Browser 100% · native 80%"))
                 })
         }
     }
