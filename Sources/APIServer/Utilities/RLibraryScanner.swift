@@ -55,6 +55,15 @@ enum RLibraryScanner {
     static func referencedPackages(in source: String) -> [RLibraryReference] {
         var found: [RLibraryReference] = []
         var seen: Set<String> = []
+        // The patterns are built once per scan, not once per line: each read
+        // of a computed pattern, and each evaluation of a literal, builds and
+        // compiles it again.
+        let qualified = Self.qualifiedPattern
+        let attachUnquoted = Self.attachUnquotedPattern
+        // `library("dplyr")`: the quote must sit immediately inside the paren,
+        // so prose that mentions a call does not match.
+        let quoted = /\b(library|require|requireNamespace)\s*\(\s*(["'])([A-Za-z][A-Za-z0-9._]*)\2/
+            .wordBoundaryKind(.simple)
 
         for (index, rawLine) in source.split(separator: "\n", omittingEmptySubsequences: false)
             .enumerated()
@@ -64,16 +73,12 @@ enum RLibraryScanner {
             var names: [String] = []
 
             // Qualified references: anywhere on the line, strings blanked.
-            names += plausible(code.matches(of: Self.qualifiedPattern).map(\.output.1))
+            names += plausible(code.matches(of: qualified).map(\.output.1))
 
             // Attachments: column 0 only. `code` is used for the unquoted form
             // and `withoutComments` for the quoted one — see the header.
             if let first = code.first, !first.isWhitespace {
-                names += plausible(code.matches(of: Self.attachUnquotedPattern).map(\.output.2))
-                // `library("dplyr")`: the quote must sit immediately inside the
-                // paren, so prose that mentions a call does not match.
-                let quoted = /\b(library|require|requireNamespace)\s*\(\s*(["'])([A-Za-z][A-Za-z0-9._]*)\2/
-                    .wordBoundaryKind(.simple)
+                names += plausible(code.matches(of: attachUnquoted).map(\.output.2))
                 names += plausible(withoutComments.matches(of: quoted).map(\.output.3))
             }
 

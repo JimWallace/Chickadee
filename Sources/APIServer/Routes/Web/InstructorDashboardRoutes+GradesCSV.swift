@@ -198,6 +198,11 @@ extension InstructorDashboardRoutes {
                 .filter(\.$kind == APISubmission.Kind.student)
                 .filter(\.$testSetupID ~~ setupIDs)
                 .filter(\.$userID ~~ studentIDs)
+                // Only the three columns the fold reads: the export spans
+                // every student submission of the course.
+                .field(\.$id)
+                .field(\.$userID)
+                .field(\.$testSetupID)
                 .all()
         return submissionRows.compactMap { row -> (id: String, userID: UUID, setupID: String)? in
             guard let id = row.id, let userID = row.userID else { return nil }
@@ -232,11 +237,12 @@ extension InstructorDashboardRoutes {
             if pct > (bestPctByKey[key] ?? -1) { bestPctByKey[key] = pct }
         }
         // Step 2: convert best percentage → points anchored to the manifest total.
+        // One total per setup, not one per (user, setup) key.
+        let totalBySetupID = setupByID.compactMapValues { suiteTotalPoints(props: $0.decodedManifest()) }
         var best: [String: Double] = [:]
         for (key, pct) in bestPctByKey {
             guard let setupID = key.components(separatedBy: "::").last,
-                let setup = setupByID[setupID],
-                let total = suiteTotalPoints(props: setup.decodedManifest())
+                let total = totalBySetupID[setupID]
             else { continue }
             best[key] = Double(pct) / 100.0 * total
         }

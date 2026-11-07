@@ -13,7 +13,14 @@ import Foundation
 /// digits and `-._~` stay as they are. Equivalent to Python's
 /// `urllib.parse.quote(value, safe='')`.
 func urlEncode(_ s: String) -> String {
+    s.addingPercentEncoding(withAllowedCharacters: urlEncodeAllowedCharacters) ?? ""
+}
+
+/// Letters, digits and `-._~`, built once: copying and extending
+/// `CharacterSet.alphanumerics` cost more than the encoding itself, and a
+/// roster row encodes two links. `CharacterSet` is a `Sendable` value.
+private let urlEncodeAllowedCharacters: CharacterSet = {
     var allowed = CharacterSet.alphanumerics
     allowed.insert(charactersIn: "-._~")
-    return s.addingPercentEncoding(withAllowedCharacters: allowed) ?? ""
-}
+    return allowed
+}()

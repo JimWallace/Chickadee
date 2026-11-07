@@ -29,7 +29,9 @@ extension PublishedAssignmentRoutes {
     @Sendable
     func getSuite(req: Request) async throws -> Response {
         let (_, setup) = try await loadAssignmentAndSetupForStaffRead(req)
-        let payload = await buildSuitePayload(fromManifest: setup.manifest, zipPath: setup.zipPath)
+        let payload = await buildSuitePayload(
+            fromManifest: setup.manifest, zipPath: setup.zipPath,
+            scriptTexts: req.application.zipScriptTextCache)
         return try await payload.encodeResponse(for: req)
     }
 
@@ -62,7 +64,9 @@ extension PublishedAssignmentRoutes {
             .gradeAffecting, assignment: assignment, setup: setup,
             actingUserID: req.auth.get(APIUser.self)?.id, context: req)
 
-        let payload = await buildSuitePayload(fromManifest: setup.manifest, zipPath: setup.zipPath)
+        let payload = await buildSuitePayload(
+            fromManifest: setup.manifest, zipPath: setup.zipPath,
+            scriptTexts: req.application.zipScriptTextCache)
         return try await payload.encodeResponse(for: req)
     }
 

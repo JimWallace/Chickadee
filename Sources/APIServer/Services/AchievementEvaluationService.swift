@@ -561,9 +561,12 @@ func requeueFrozenClassGoalBonusPushes(
 /// per-section targets are a follow-up (there is no way to author one until the
 /// Phase 5 editor, so this covers every goal that can exist today).
 func bestAssignmentGradeByStudent(testSetupID: String, on db: any Database) async throws -> [UUID: Double] {
+    // Only the id and the owner are read, so the source columns stay behind.
     let submissions = try await APISubmission.query(on: db)
         .filter(\.$kind == APISubmission.Kind.student)
         .filter(\.$testSetupID == testSetupID)
+        .field(\.$id)
+        .field(\.$userID)
         .all()
     let identified = submissions.compactMap { sub -> (id: String, userID: UUID)? in
         guard let id = sub.id, let userID = sub.userID else { return nil }

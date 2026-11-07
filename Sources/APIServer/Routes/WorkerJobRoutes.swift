@@ -126,8 +126,12 @@ struct WorkerJobRoutes: RouteCollection {
     private func recordJobAssignmentDiagnostics(
         req: Request, body: WorkerActivityPayload, claimed: ClaimedJob
     ) async {
+        // The claim walk already resolved the course (the setup row) and the
+        // assignment (the requirement lookup), so the recorder need not
+        // query them again.
         await req.application.diagnostics.recordJobAssigned(
             submission: claimed.submission, runnerVersion: body.runnerVersion,
+            context: SubmissionDiagnosticsContext(courseID: claimed.setup.courseID, assignmentID: claimed.assignmentID),
             on: req.db, logger: req.logger
         )
         req.application.diagnostics.recordCompatibleJobAssignment(
@@ -246,6 +250,32 @@ struct WorkerJobRoutes: RouteCollection {
         // on the Job so the worker materializes the right file.
         let language = AssignmentLanguage.resolve(manifest: claimed.manifest)
 
+        // Resolve per-student dataset slices (Phase 1 datasets) for this seed.
+        // Cheap and deterministic (a file read + in-memory sample, no
+        // subprocess), so we resolve live for both student and validation
+        // submissions rather than caching it on the materialization row. A
+        // strict no-op for every assignment that declares no datasets — which is
+        // all of them until the dataset editor ships — so existing jobs are
+        // byte-identical to before. The runner-sanitized manifest below drops
+        // the dataset specs; only the resolved bytes travel, in `personalizedFiles`.
+        // Resolved first, on the thread pool (it reads files, #1156), so the
+        // expressions below read the same slices instead of resolving again.
+        let datasetSharedDir = req.application.testSetupsDirectory + "shared/\(setupID)/"
+        let manifest = claimed.manifest
+        let resolveSlices = { @Sendable [assignmentSeed, courseSeed] in
+            DatasetResolver.resolve(
+                manifest: manifest, seedHex: assignmentSeed, courseSeedHex: courseSeed, dealNumber: dealNumber,
+                sourceDirectory: datasetSharedDir)
+        }
+        let personalizedFiles: [String: String]?
+        do {
+            personalizedFiles = try await runBlocking(resolveSlices)
+        } catch {
+            // The pool refuses work only while the server shuts down. Resolve
+            // here instead, so the claim fails no more often than it did.
+            personalizedFiles = resolveSlices()
+        }
+
         // Resolve per-student personalization inputs (issue #461) for this seed,
         // server-side, so the worker can bind them in generated scripts via
         // `_ck_inputs.{py,R}`. Shared with the browser seed endpoint via
@@ -256,25 +286,12 @@ struct WorkerJobRoutes: RouteCollection {
         if let materialization {
             personalizedInputs = materialization.inputs.isEmpty ? nil : materialization.inputs
         } else {
-            let supportDir = req.application.testSetupsDirectory + "shared/\(setupID)/"
             personalizedInputs = await PersonalizationSubstitution.gradingInputs(
                 manifest: claimed.manifest, seedHex: assignmentSeed, courseSeedHex: courseSeed,
-                dealNumber: dealNumber, supportFilesDirectory: supportDir, language: language)
+                dealNumber: dealNumber, supportFilesDirectory: datasetSharedDir, language: language,
+                datasetSlices: .resolved(personalizedFiles))
         }
         personalizedInputs = CompositeSlots.merged(personalizedInputs, with: compositeInputs)
-
-        // Resolve per-student dataset slices (Phase 1 datasets) for this seed.
-        // Cheap and deterministic (a file read + in-memory sample, no
-        // subprocess), so we resolve live for both student and validation
-        // submissions rather than caching it on the materialization row. A
-        // strict no-op for every assignment that declares no datasets — which is
-        // all of them until the dataset editor ships — so existing jobs are
-        // byte-identical to before. The runner-sanitized manifest below drops
-        // the dataset specs; only the resolved bytes travel, in `personalizedFiles`.
-        let datasetSharedDir = req.application.testSetupsDirectory + "shared/\(setupID)/"
-        let personalizedFiles = DatasetResolver.resolve(
-            manifest: claimed.manifest, seedHex: assignmentSeed, courseSeedHex: courseSeed, dealNumber: dealNumber,
-            sourceDirectory: datasetSharedDir)
 
         let opponentSet = try await JobOpponentSelection.jobOpponentSet(
             manifest: claimed.manifest, submission: submission, base: base, on: req.db)

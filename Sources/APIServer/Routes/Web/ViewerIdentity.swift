@@ -65,7 +65,7 @@ extension ViewerStanding {
             ofText: "of \(total)", bestLabel: best.label, bestText: best.text,
             hasBestAt: best.reachedAt != nil,
             bestAtISO: best.reachedAt.map(iso8601String) ?? "",
-            bestAtText: best.reachedAt.map(waterlooDateTimeFormatter().string(from:)) ?? "",
+            bestAtText: best.reachedAt.map(waterlooDateTimeText) ?? "",
             nextPlaceText: best.nextPlaceText, hasNextPlace: !best.nextPlaceText.isEmpty,
             privacyLine: identity.privacyLine, submitURL: identity.submitURL)
     }

@@ -90,6 +90,14 @@ extension DatasetDiagnostics {
             return []
         }
 
+        // The pool side of each metric is the same for every seed, so it is
+        // prepared once: each numeric column sorted, each categorical column
+        // counted. Only the slice side is recomputed per seed.
+        let poolSorted: [[Double]?] = pool.numbers.map { $0?.sorted() }
+        let poolCounts: [CategoricalCounts?] = pool.names.indices.map { index in
+            pool.numbers[index] == nil ? CategoricalCounts(pool.observed[index]) : nil
+        }
+
         var samples: [[Double]] = Array(repeating: [], count: pool.names.count)
         for seed in 0..<seedCount {
             let materialized = DatasetMaterializer.materialize(
@@ -98,14 +106,14 @@ extension DatasetDiagnostics {
             for index in pool.names.indices where index < slice.observed.count {
                 let observed = slice.observed[index]
                 guard !observed.isEmpty, !pool.observed[index].isEmpty else { continue }
-                if let numbers = pool.numbers[index] {
+                if let sortedPool = poolSorted[index] {
                     let sliceNumbers = observed.compactMap(parseNumber)
                     guard !sliceNumbers.isEmpty else { continue }
-                    let transport = wasserstein1(sliceNumbers, numbers)
+                    let transport = wasserstein1(sortedFirst: sliceNumbers.sorted(), sortedSecond: sortedPool)
                     let sd = pool.standardDeviation[index]
                     samples[index].append(sd > 0 ? transport / sd : 0)
-                } else {
-                    samples[index].append(totalVariation(observed, pool.observed[index]))
+                } else if let counts = poolCounts[index] {
+                    samples[index].append(totalVariation(observed, pool: counts))
                 }
             }
         }
@@ -152,9 +160,13 @@ extension DatasetDiagnostics {
     /// of `1/(n·m)`), so the result is a pure function of the values.
     /// Internal so the metric itself can be pinned on hand-computable cases.
     static func wasserstein1(_ first: [Double], _ second: [Double]) -> Double {
-        guard !first.isEmpty, !second.isEmpty else { return 0 }
-        let a = first.sorted()
-        let b = second.sorted()
+        wasserstein1(sortedFirst: first.sorted(), sortedSecond: second.sorted())
+    }
+
+    /// `wasserstein1(_:_:)` on samples the caller has already sorted, so a
+    /// pool reused across seeds is sorted once rather than once per seed.
+    private static func wasserstein1(sortedFirst a: [Double], sortedSecond b: [Double]) -> Double {
+        guard !a.isEmpty, !b.isEmpty else { return 0 }
         let n = a.count
         let m = b.count
         var total = 0.0
@@ -177,23 +189,27 @@ extension DatasetDiagnostics {
     /// `½ Σ |p̂(v) − q̂(v)|` over the union of observed values, summed in
     /// first-appearance order so the float sum is reproducible everywhere.
     static func totalVariation(_ first: [String], _ second: [String]) -> Double {
-        guard !first.isEmpty, !second.isEmpty else { return 0 }
+        totalVariation(first, pool: CategoricalCounts(second))
+    }
+
+    /// `totalVariation(_:_:)` against a pool counted once, so a pool reused
+    /// across seeds is not recounted per seed. The union is ordered by first
+    /// appearance: the slice's values, then the pool's values the slice
+    /// lacks.
+    fileprivate static func totalVariation(_ first: [String], pool: CategoricalCounts) -> Double {
+        guard !first.isEmpty, pool.total > 0 else { return 0 }
         var order: [String] = []
         var firstCounts: [String: Int] = [:]
-        var secondCounts: [String: Int] = [:]
         for value in first {
             if firstCounts[value] == nil { order.append(value) }
             firstCounts[value, default: 0] += 1
         }
-        for value in second {
-            if firstCounts[value] == nil, secondCounts[value] == nil { order.append(value) }
-            secondCounts[value, default: 0] += 1
-        }
+        for value in pool.order where firstCounts[value] == nil { order.append(value) }
         let n = Double(first.count)
-        let m = Double(second.count)
+        let m = Double(pool.total)
         var sum = 0.0
         for value in order {
-            sum += abs(Double(firstCounts[value] ?? 0) / n - Double(secondCounts[value] ?? 0) / m)
+            sum += abs(Double(firstCounts[value] ?? 0) / n - Double(pool.counts[value] ?? 0) / m)
         }
         return sum / 2
     }
@@ -276,5 +292,25 @@ private struct ParsedColumns {
             deviations.append((squared / Double(parsed.count)).squareRoot())
         }
         return (numbers, deviations)
+    }
+}
+
+/// One categorical pool column, counted once: its distinct values in
+/// first-appearance order, each value's count, and the number of values.
+private struct CategoricalCounts {
+    let order: [String]
+    let counts: [String: Int]
+    let total: Int
+
+    init(_ values: [String]) {
+        var order: [String] = []
+        var counts: [String: Int] = [:]
+        for value in values {
+            if counts[value] == nil { order.append(value) }
+            counts[value, default: 0] += 1
+        }
+        self.order = order
+        self.counts = counts
+        self.total = values.count
     }
 }

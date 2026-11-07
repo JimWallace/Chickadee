@@ -415,7 +415,7 @@ func buildChampionPresentation(
         handle: identity.handle,
         name: identity.name,
         crownedAtISO: iso8601String(crownedAt),
-        crownedAtText: waterlooDateTimeFormatter().string(from: crownedAt),
+        crownedAtText: waterlooDateTimeText(crownedAt),
         defencesText: champion.defences == 1 ? "1 defence" : "\(champion.defences) defences",
         isViewer: champion.userID == viewerID,
         avatar: identity.avatar)
@@ -423,6 +423,8 @@ func buildChampionPresentation(
 
 /// Everything the metric board needs, built once per request.
 struct LeaderboardBoard: Sendable {
+    /// Every row, best first, for a board built with `showAll`; else only the
+    /// rows the window shows, best first. `rankedCount` counts every row.
     let rows: [LeaderboardRow]
     let items: [LeaderboardWindowItem<LeaderboardRow>]
     let you: ViewerStanding?
@@ -512,8 +514,22 @@ func buildLeaderboard(
         entries.indices.filter { ranks[$0] == rank }.compactMap { entries[$0].reachedAt }.min()
     }
 
-    var rows: [LeaderboardRow] = []
-    for (index, entry) in entries.enumerated() {
+    // A student's default view lists only the window (`LeaderboardWindow`):
+    // the top places and the places around their own. Only those rows, the
+    // viewer's own and the row their card names are built; any other row
+    // would cost a bird on every poll and then be dropped. Every entry is on
+    // the roster, so `presentation` returns a row for each, and an entry's
+    // index is its row's index.
+    let windowSlots = showAll ? nil : LeaderboardWindow.slots(ranks: ranks, viewerIndex: viewerIndex)
+    let toBuild = windowSlots.map { slots in
+        let rivalIndex = viewerIndex.flatMap {
+            LeaderboardNextPlace.targetIndex(metrics: entries.map(\.metric), viewerIndex: $0)
+        }
+        return leaderboardRowIndices(of: slots, plus: [viewerIndex, rivalIndex])
+    }
+
+    var rowByIndex: [Int: LeaderboardRow] = [:]
+    for (index, entry) in entries.enumerated() where toBuild?.contains(index) ?? true {
         let rank = ranks[index]
         let isTied = (tieSizes[rank] ?? 1) > 1
         guard
@@ -530,7 +546,7 @@ func buildLeaderboard(
                 : "Tied · reached it \(LeaderboardStandingText.duration(seconds: reached.timeIntervalSince(first))) later"
         }
         let submissions = counts[entry.userID] ?? 0
-        rows.append(
+        rowByIndex[index] =
             LeaderboardRow(
                 rank: rank,
                 rankText: LeaderboardStandingText.rankText(rank: rank, isTied: isTied),
@@ -547,27 +563,27 @@ func buildLeaderboard(
                 submissionCountText: isStaff
                     ? "\(submissions) \(submissions == 1 ? "submission" : "submissions")" : "",
                 bestAtISO: isStaff ? entry.reachedAt.map(iso8601String) ?? "" : "",
-                bestAtText: isStaff
-                    ? entry.reachedAt.map(waterlooDateTimeFormatter().string(from:)) ?? "" : "",
-                bestSubmissionURL: isStaff ? "/submissions/\(entry.submissionID)" : ""))
+                bestAtText: isStaff ? entry.reachedAt.map(waterlooDateTimeText) ?? "" : "",
+                bestSubmissionURL: isStaff ? "/submissions/\(entry.submissionID)" : "")
     }
 
-    let rowViewerIndex = rows.firstIndex(where: \.isViewer)
-    let items = leaderboardWindowItems(
-        rows: rows, ranks: rows.map(\.rank), viewerIndex: rowViewerIndex, showAll: showAll)
+    let rows = entries.indices.compactMap { rowByIndex[$0] }
+    let items =
+        windowSlots.map { leaderboardWindowItems(slots: $0) { rowByIndex[$0] } }
+        ?? leaderboardWindowItems(rows: rows, ranks: rows.map(\.rank), viewerIndex: nil, showAll: true)
     let you =
         isStaff
         ? nil
         : try await buildViewerStanding(
-            viewer: viewer, setup: setup, rows: rows, entries: entries,
-            viewerRowIndex: rowViewerIndex, on: db)
-    let summary = "\(rows.count) ranked"
+            viewer: viewer, setup: setup, rowByIndex: rowByIndex, entries: entries,
+            viewerIndex: viewerIndex, on: db)
+    let summary = "\(entries.count) ranked"
     let staffSummary =
         unranked > 0
         ? "\(summary) · \(unranked) enrolled \(unranked == 1 ? "student hasn't" : "students haven't") reported a metric yet."
         : "\(summary)."
     return LeaderboardBoard(
-        rows: rows, items: items, you: you, rankedCount: rows.count, unrankedCount: unranked,
+        rows: rows, items: items, you: you, rankedCount: entries.count, unrankedCount: unranked,
         staffSummary: staffSummary)
 }
 
@@ -580,10 +596,28 @@ func leaderboardWindowItems<Row: Encodable & Sendable>(
     guard !showAll else {
         return rows.map { LeaderboardWindowItem(isGap: false, gapLabel: "", row: $0) }
     }
-    return LeaderboardWindow.slots(ranks: ranks, viewerIndex: viewerIndex).map { slot in
+    return leaderboardWindowItems(slots: LeaderboardWindow.slots(ranks: ranks, viewerIndex: viewerIndex)) {
+        rows[$0]
+    }
+}
+
+/// The indices a windowed list's `slots` show a row for, plus `extra`: the
+/// rows a board must build when it lists only its window.
+func leaderboardRowIndices(of slots: [LeaderboardWindowSlot], plus extra: [Int?]) -> Set<Int> {
+    var indices = Set(extra.compactMap(\.self))
+    for case .row(let index) in slots { indices.insert(index) }
+    return indices
+}
+
+/// The window's `slots` as the page lists them, with `row` giving the row at
+/// an index of the full list.
+func leaderboardWindowItems<Row: Encodable & Sendable>(
+    slots: [LeaderboardWindowSlot], row: (Int) -> Row?
+) -> [LeaderboardWindowItem<Row>] {
+    slots.map { slot in
         switch slot {
         case .row(let index):
-            return LeaderboardWindowItem(isGap: false, gapLabel: "", row: rows[index])
+            return LeaderboardWindowItem(isGap: false, gapLabel: "", row: row(index))
         case .gap(let count, let low, let high, let trailing):
             return LeaderboardWindowItem(
                 isGap: true,
@@ -650,33 +684,36 @@ private func unrankedStudentCount(
 /// The viewer's card: their place and best when they are ranked, else the
 /// invitation to submit.
 private func buildViewerStanding(
-    viewer: APIUser, setup: APITestSetup, rows: [LeaderboardRow], entries: [APILeaderboardEntry],
-    viewerRowIndex: Int?, on db: any Database
+    viewer: APIUser, setup: APITestSetup, rowByIndex: [Int: LeaderboardRow], entries: [APILeaderboardEntry],
+    viewerIndex: Int?, on db: any Database
 ) async throws -> ViewerStanding? {
     guard let identity = try await ViewerIdentity.load(viewer: viewer, setup: setup, on: db) else {
         return nil
     }
-    // Every entry is on the roster by now, so rows and entries line up.
-    guard let index = viewerRowIndex else { return .notRanked(identity) }
-    let row = rows[index]
+    // Every entry is on the roster by now, so rows and entries line up, and
+    // the board built the viewer's row and the rival's (`LeaderboardNextPlace`).
+    guard let index = viewerIndex, let row = rowByIndex[index] else { return .notRanked(identity) }
     var nextPlace = ""
     let metrics = entries.map(\.metric)
-    if let target = LeaderboardNextPlace.targetIndex(metrics: metrics, viewerIndex: index) {
+    if let target = LeaderboardNextPlace.targetIndex(metrics: metrics, viewerIndex: index),
+        let rival = rowByIndex[target]
+    {
         let delta = LeaderboardNextPlace.deltaText(metrics[target] - metrics[index])
-        let rival = rows[target]
         let name = rival.handle.isEmpty ? LeaderboardStandingText.ordinal(rival.rank) : rival.handle
         nextPlace = "\(delta) to pass \(name)"
     }
     return .ranked(
-        identity, row: (row.rank, row.isTied), total: rows.count,
+        identity, row: (row.rank, row.isTied), total: entries.count,
         best: ViewerBest(
             label: "Your best", text: row.metricText, reachedAt: entries[index].reachedAt ?? Date(),
             nextPlaceText: nextPlace))
 }
 
-/// A round robin's standings as the page shows them: every row, the list the
+/// A round robin's standings as the page shows them: the rows, the list the
 /// viewer is shown, and their own card.
 struct StandingsBoard: Sendable {
+    /// Every row, best first, for a board built with `showAll`; else only the
+    /// rows the window shows, best first. `rankedCount` counts every row.
     let rows: [StandingRow]
     let items: [LeaderboardWindowItem<StandingRow>]
     let you: ViewerStanding?
@@ -711,8 +748,17 @@ func buildStandingsBoard(
     let identities = try await AvatarIdentity.load(
         userIDs: ranked.map(\.standing.userID), courseID: setup.courseID, on: db)
 
-    var rows: [StandingRow] = []
-    for entry in ranked where identities.isOnRoster(entry.standing.userID) {
+    // As in `buildLeaderboard`: a student's default view builds only the
+    // window's rows and their own. Every standing kept here is on the roster,
+    // so `presentation` returns a row for each, and a standing's index is its
+    // row's index.
+    let onRoster = ranked.filter { identities.isOnRoster($0.standing.userID) }
+    let viewerIndex = onRoster.firstIndex { $0.standing.userID == viewer.id }
+    let windowSlots = showAll ? nil : LeaderboardWindow.slots(ranks: onRoster.map(\.rank), viewerIndex: viewerIndex)
+    let toBuild = windowSlots.map { leaderboardRowIndices(of: $0, plus: [viewerIndex]) }
+
+    var rowByIndex: [Int: StandingRow] = [:]
+    for (index, entry) in onRoster.enumerated() where toBuild?.contains(index) ?? true {
         let standing = entry.standing
         let rank = entry.rank
         let isTied = entry.isTied
@@ -721,7 +767,7 @@ func buildStandingsBoard(
                 for: standing.userID, includeName: isStaff, fallbackLabel: "Student \(rank)",
                 size: .roster, on: db)
         else { continue }
-        rows.append(
+        rowByIndex[index] =
             StandingRow(
                 rank: rank,
                 rankText: LeaderboardStandingText.rankText(rank: rank, isTied: isTied),
@@ -733,24 +779,24 @@ func buildStandingsBoard(
                     "P \(standing.played) · W \(standing.wins) · D \(standing.draws) · L \(standing.losses)",
                 valueText: formatLeaderboardMetric(standing.averageScore),
                 isViewer: standing.userID == viewer.id,
-                avatar: identity.avatar))
+                avatar: identity.avatar)
     }
 
-    let viewerIndex = rows.firstIndex(where: \.isViewer)
-    let items = leaderboardWindowItems(
-        rows: rows, ranks: rows.map(\.rank), viewerIndex: viewerIndex, showAll: showAll)
+    let rows = onRoster.indices.compactMap { rowByIndex[$0] }
+    let items =
+        windowSlots.map { leaderboardWindowItems(slots: $0) { rowByIndex[$0] } }
+        ?? leaderboardWindowItems(rows: rows, ranks: rows.map(\.rank), viewerIndex: nil, showAll: true)
     var you: ViewerStanding?
     if !isStaff, let identity = try await ViewerIdentity.load(viewer: viewer, setup: setup, on: db) {
-        if let viewerIndex {
-            let row = rows[viewerIndex]
+        if let row = viewerIndex.flatMap({ rowByIndex[$0] }) {
             you = .ranked(
-                identity, row: (row.rank, row.isTied), total: rows.count,
+                identity, row: (row.rank, row.isTied), total: onRoster.count,
                 best: ViewerBest(label: "Your average", text: row.valueText, reachedAt: nil, nextPlaceText: ""))
         } else {
             you = .notRanked(identity)
         }
     }
-    return StandingsBoard(rows: rows, items: items, you: you, rankedCount: rows.count)
+    return StandingsBoard(rows: rows, items: items, you: you, rankedCount: onRoster.count)
 }
 
 /// A metric as the page prints it: an integer stays an integer ("1234"), a

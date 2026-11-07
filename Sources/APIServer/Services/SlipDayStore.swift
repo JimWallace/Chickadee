@@ -446,12 +446,24 @@ func slipDayClaimState(
     user: APIUser,
     on db: any Database
 ) async throws -> SlipDayClaimState? {
+    // The guards that need no query come first, so they cost no course read.
+    guard user.id != nil, assignment.id != nil, assignment.visibility != .preview else { return nil }
+    return try await slipDayClaimState(
+        for: assignment, user: user, course: try await APICourse.find(assignment.courseID, on: db), on: db)
+}
+
+/// `slipDayClaimState` from `assignment`'s course, already loaded by the
+/// caller (nil when it is missing), so a caller that holds the course does
+/// not read it twice.
+func slipDayClaimState(
+    for assignment: APIAssignment,
+    user: APIUser,
+    course: APICourse?,
+    on db: any Database
+) async throws -> SlipDayClaimState? {
     guard let userID = user.id, let assignmentID = assignment.id else { return nil }
     guard assignment.visibility != .preview else { return nil }
-    guard
-        let course = try await APICourse.find(assignment.courseID, on: db),
-        !course.isArchived
-    else { return nil }
+    guard let course, !course.isArchived else { return nil }
     let policy = course.slipDayPolicy
     guard policy.enabled else { return nil }
 

@@ -97,47 +97,73 @@ func detectRequirementSuggestions(
         }
     }
 
-    func scanZipEntry(name: String, data: Data) async {
-        let ext = URL(fileURLWithPath: name).pathExtension.lowercased()
-        // Assignment languages are resolved through the one extension table
-        // (`AssignmentLanguage(scriptExtension:)`) rather than re-listed here.
-        // The hand-listed version had `py` and `r` and no `lua`, so a Lua
-        // assignment suggested no language requirement at all — and since the
-        // suggestion is what an instructor accepts, the assignment went out
-        // with nothing gating it onto a runner that has an interpreter.
-        if let language = AssignmentLanguage(scriptExtension: ext) {
+    func scanZipEntry(_ requirement: ZipEntryRequirement, data: Data) {
+        switch requirement {
+        case .assignmentLanguage(let language):
             addLanguage(language.capabilityName)
             if language == .python, let source = String(data: data, encoding: .utf8) {
                 scanPythonSource(source)
             }
-            return
-        }
-        switch ext {
-        case "sh", "bash":
-            addCapability("shell-bash")
-        case "zsh":
-            addCapability("shell-zsh")
-        case "swift":
-            addLanguage("swift")
-        case "js":
-            addLanguage("javascript")
-        default:
-            break
+        case .language(let name):
+            addLanguage(name)
+        case .capability(let name):
+            addCapability(name)
         }
     }
 
     if let assignmentNotebookData { scanNotebook(assignmentNotebookData) }
     _ = solutionNotebookData
 
+    // An entry whose extension adds nothing is not extracted: it was a no-op
+    // after a full `unzip -p` of its bytes, which for a dataset can be many
+    // megabytes. Every entry that can add something still needs a successful
+    // extraction, as before, so an entry that fails to extract adds nothing.
+    // The results are sets sorted below, so the reads may overlap.
+    var requirements: [String: ZipEntryRequirement] = [:]
     for entry in await listZipEntries(zipPath: setup.zipPath) {
-        guard let data = await extractZipEntry(zipPath: setup.zipPath, entryName: entry) else { continue }
-        await scanZipEntry(name: entry, data: data)
+        let ext = URL(fileURLWithPath: entry).pathExtension.lowercased()
+        if let requirement = zipEntryRequirement(forExtension: ext) {
+            requirements[entry] = requirement
+        }
+    }
+    for (entry, data) in await extractZipEntries(zipPath: setup.zipPath, entryNames: requirements.keys) {
+        if let requirement = requirements[entry] { scanZipEntry(requirement, data: data) }
     }
 
     return DraftRequirementSuggestions(
         languages: languages.sorted(),
         capabilities: capabilities.sorted()
     )
+}
+
+/// What a zip entry adds to the suggestions, decided by its extension before
+/// its bytes are read.
+private enum ZipEntryRequirement {
+    /// An assignment language. A Python entry's imports are also scanned.
+    case assignmentLanguage(AssignmentLanguage)
+    /// A language that is not an assignment language.
+    case language(String)
+    case capability(String)
+}
+
+/// The requirement an entry with extension `ext` adds, or nil when it adds
+/// nothing. Assignment languages are resolved through the one extension table
+/// (`AssignmentLanguage(scriptExtension:)`) rather than re-listed here. The
+/// hand-listed version had `py` and `r` and no `lua`, so a Lua assignment
+/// suggested no language requirement at all — and since the suggestion is
+/// what an instructor accepts, the assignment went out with nothing gating it
+/// onto a runner that has an interpreter.
+private func zipEntryRequirement(forExtension ext: String) -> ZipEntryRequirement? {
+    if let language = AssignmentLanguage(scriptExtension: ext) {
+        return .assignmentLanguage(language)
+    }
+    switch ext {
+    case "sh", "bash": return .capability("shell-bash")
+    case "zsh": return .capability("shell-zsh")
+    case "swift": return .language("swift")
+    case "js": return .language("javascript")
+    default: return nil
+    }
 }
 
 private func pythonCapabilitySuggestions(in source: String) -> [String] {

@@ -79,6 +79,16 @@ enum JobOpponentSelection {
         }
     }
 
+    /// One classmate a matrix job plays, planned before its row opens.
+    private struct PlannedClassmate {
+        let chosen: ChosenOpponent
+        let classmate: APISubmission
+        let classmateID: String
+        let seed: String
+        /// Nil when the download URL cannot be built from the base URL.
+        let url: URL?
+    }
+
     /// The opponents a MATRIX job plays (round robin), each with its own open
     /// match row; nil for every other job. With no classmate yet the job is
     /// built like a bot match through `jobOpponent`, so this returns nil
@@ -90,22 +100,34 @@ enum JobOpponentSelection {
         guard activity.kind.opponentSource == .classmates, !classmates.isEmpty,
             let submissionID = submission.id
         else { return nil }
+        // Plan every opponent first, in classmate order, so that their rows
+        // open in one batch (`openMatches`) rather than two round trips each.
+        // A URL that cannot be built stops the plan at that classmate: the
+        // rows up to and including it open, then the job fails, as when each
+        // row opened just before its URL was built.
+        var planned: [PlannedClassmate] = []
+        for chosen in classmates {
+            guard let classmate = chosen.champion, let classmateID = classmate.id else { continue }
+            let seed = JobOpponent.matchSeed(submissionID: submissionID, opponentIdentity: chosen.identity)
+            let url = URL(string: "\(base)/api/v1/worker/submissions/\(classmateID)/download")
+            planned.append(
+                PlannedClassmate(chosen: chosen, classmate: classmate, classmateID: classmateID, seed: seed, url: url))
+            if url == nil { break }
+        }
         do {
+            try await openMatches(
+                testSetupID: submission.testSetupID, submissionID: submissionID,
+                opponents: planned.map { ($0.chosen, $0.seed) }, on: db)
             var opponents: [JobOpponent] = []
-            for chosen in classmates {
-                guard let classmate = chosen.champion, let classmateID = classmate.id else { continue }
-                let seed = JobOpponent.matchSeed(submissionID: submissionID, opponentIdentity: chosen.identity)
-                try await openMatch(
-                    testSetupID: submission.testSetupID, submissionID: submissionID,
-                    opponent: chosen, seed: seed, on: db)
-                guard let url = URL(string: "\(base)/api/v1/worker/submissions/\(classmateID)/download") else {
+            for entry in planned {
+                guard let url = entry.url else {
                     throw WorkerJobError.internalInconsistency(
                         reason: "Failed to build a classmate download URL from base=\(base)")
                 }
                 opponents.append(
                     JobOpponent(
-                        supportFile: nil, matchSeed: seed, submissionID: classmateID,
-                        submissionURL: url, submissionFilename: classmate.filename))
+                        supportFile: nil, matchSeed: entry.seed, submissionID: entry.classmateID,
+                        submissionURL: url, submissionFilename: entry.classmate.filename))
             }
             return opponents
         } catch let error as WorkerJobError {

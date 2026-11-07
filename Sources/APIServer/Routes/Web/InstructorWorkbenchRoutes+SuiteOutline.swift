@@ -35,10 +35,8 @@ extension InstructorWorkbenchRoutes {
             anchorData.map { scanNotebookDefinitions($0, language: language) }
             ?? NotebookDefinitionScan(definitions: [], sections: [], codeCellIndices: [])
 
-        var scripts: [String: String] = [:]
-        for entry in manifest.testSuites {
-            scripts[entry.script] = await readScriptFromZip(zipPath: setup.zipPath, filename: entry.script)
-        }
+        let scripts = await req.application.zipScriptTextCache.texts(
+            zipPath: setup.zipPath, filenames: manifest.testSuites.map(\.script))
 
         let outline = InstructorSuiteOutlineBuilder(
             manifest: manifest, notebook: notebook, scriptSources: scripts,

@@ -20,12 +20,17 @@ struct Avatar: HTML {
     /// Written as a custom attribute because SwiftLint bans the style
     /// modifier in views. It holds only custom properties, which the
     /// rendered-page guard allows.
+    ///
+    /// One literal rather than five joined with `+`, so the string is built
+    /// once in place; a roster poll renders up to a thousand birds.
     private var customProperties: String {
-        "--av-cap: var(\(avatar.capToken)); --av-wing: var(\(avatar.wingToken)); "
-            + "--av-body: var(\(avatar.bodyToken)); --av-bib: var(\(avatar.bibToken)); "
-            + "--av-beak: var(\(avatar.beakToken)); --av-mark: var(\(avatar.markToken)); "
-            + "--av-accent: var(\(avatar.accentToken)); --av-backdrop: var(\(avatar.backdropToken)); "
-            + "--av-border: var(\(avatar.borderToken))"
+        """
+        --av-cap: var(\(avatar.capToken)); --av-wing: var(\(avatar.wingToken)); \
+        --av-body: var(\(avatar.bodyToken)); --av-bib: var(\(avatar.bibToken)); \
+        --av-beak: var(\(avatar.beakToken)); --av-mark: var(\(avatar.markToken)); \
+        --av-accent: var(\(avatar.accentToken)); --av-backdrop: var(\(avatar.backdropToken)); \
+        --av-border: var(\(avatar.borderToken))
+        """
     }
 
     var body: some HTML {

@@ -38,12 +38,16 @@ struct MissingDataFileCheck: AuthoringCheck {
 
         var read: [(cell: Int, path: String)] = []
         var written = Set<String>()
+        // Built once per check, not once per line: each read of the computed
+        // properties builds and compiles the pattern again.
+        let writeCall = Self.writeCall
+        let dataFileLiteral = Self.dataFileLiteral
         for (index, cell) in snapshot.notebookCodeCells.enumerated() {
             guard let source = cell else { continue }
             for line in source.split(whereSeparator: \.isNewline) {
                 let code = Self.withoutComment(String(line))
-                let writes = code.contains(Self.writeCall)
-                for match in code.matches(of: Self.dataFileLiteral) {
+                let writes = code.contains(writeCall)
+                for match in code.matches(of: dataFileLiteral) {
                     let named = String(match.output.1)
                     let path = named.hasPrefix("./") ? String(named.dropFirst(2)) : named
                     guard !path.hasPrefix("/") else { continue }

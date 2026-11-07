@@ -158,7 +158,17 @@ public func scanNotebookForSectionsAndFunctions(
     guard let cells = NotebookCellView.cells(from: notebookData) else {
         return NotebookScanResult(sectionNames: [], functions: [])
     }
+    return scanNotebookForSectionsAndFunctions(cells: cells, parsing: language)
+}
 
+/// `scanNotebookForSectionsAndFunctions(_:parsing:)` over cells already
+/// decoded, so a caller that holds them does not parse the notebook again.
+func scanNotebookForSectionsAndFunctions(
+    cells: [NotebookCellView], parsing language: AssignmentLanguage
+) -> NotebookScanResult {
+    // Built once per scan: a regex built per line costs a parse and a compile
+    // on every top-level line of every code cell.
+    let parser = DefinitionParser(language)
     var sectionsInOrder: [String] = []
     var seenSections: Set<String> = []
     var currentSection: String?
@@ -178,7 +188,7 @@ public func scanNotebookForSectionsAndFunctions(
                 }
             }
         } else if cellType == "code" {
-            let fns = extractTopLevelFunctions(from: source, language: language)
+            let fns = extractTopLevelFunctions(from: source, parser: parser)
             for fn in fns {
                 rawEntriesByName[fn.name] = entries.count
                 entries.append(
@@ -223,6 +233,11 @@ public func scanNotebookForSectionsAndFunctions(
 /// the two cannot disagree about what a section is.
 public func notebookSectionNames(_ notebookData: Data) -> [String] {
     guard let cells = NotebookCellView.cells(from: notebookData) else { return [] }
+    return notebookSectionNames(cells: cells)
+}
+
+/// `notebookSectionNames(_:)` over cells already decoded.
+func notebookSectionNames(cells: [NotebookCellView]) -> [String] {
     var inOrder: [String] = []
     var seen: Set<String> = []
     for cell in cells where cell.cellType == "markdown" {
@@ -264,7 +279,7 @@ func firstSectionHeading(in source: String) -> String? {
 /// redefinitions are language-independent, and copying them per language would
 /// be five chances to diverge on the part that has nothing to do with syntax.
 private func extractTopLevelFunctions(
-    from source: String, language: AssignmentLanguage
+    from source: String, parser: DefinitionParser
 ) -> [NotebookFunctionInfo] {
     let lines = source.components(separatedBy: "\n")
     var results: [NotebookFunctionInfo] = []
@@ -272,8 +287,10 @@ private func extractTopLevelFunctions(
     for (index, line) in lines.enumerated() {
         // Top-level means no leading whitespace, in every language here.
         guard !line.isEmpty, !line.hasPrefix(" "), !line.hasPrefix("\t") else { continue }
-        let bodyLines = Array(lines.dropFirst(index + 1))
-        if let info = parseDefinition(line, bodyLines: bodyLines, language: language),
+        // A slice, not a copy of the rest of the cell: only its first five
+        // lines are read.
+        let bodyLines = lines[(index + 1)...]
+        if let info = parseDefinition(line, bodyLines: bodyLines, parser: parser),
             !info.name.hasPrefix("_")
         {
             results.append(info)
@@ -282,29 +299,54 @@ private func extractTopLevelFunctions(
     return results
 }
 
-/// One definition line, in `language`, or nil when the line is not one.
+/// A language's definition syntax with its regexes built, once per scan.
 ///
 /// The syntax comes from `LanguageDescriptor.functionScan`, which CARRIES the
 /// patterns rather than claiming a capability implemented elsewhere. A seventh
 /// language either supplies them or declares `noSolutionNotebook`; there is no
-/// answer that compiles and does nothing.
+/// answer that compiles and does nothing. `Regex` is not `Sendable`, so this
+/// lives only for the length of one scan.
+private enum DefinitionParser {
+    /// The only syntax whose parser recovers more than a name and parameters:
+    /// annotations, defaults, return type and a docstring, because Python is
+    /// the only one of the six that writes them.
+    case python(defLine: Regex<(Substring, Substring, Substring)>, returnArrow: Regex<(Substring, Substring)>)
+    /// The `definitionPatterns` alternatives, in order. A pattern that does
+    /// not compile is left out, as it matched nothing when built per line.
+    case patterns([Regex<AnyRegexOutput>])
+    /// Upload-only: unreachable through the language-aware entry point, which
+    /// refuses before reaching here.
+    case noSolutionNotebook
+
+    init(_ language: AssignmentLanguage) {
+        switch language.descriptor.functionScan {
+        case .pythonDefStatements:
+            self = .python(
+                defLine: /^def\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(([^)]*)\)/,
+                returnArrow: /\)\s*->\s*(.+?)\s*:\s*$/)
+        case .definitionPatterns(let patterns):
+            self = .patterns(patterns.compactMap { try? Regex($0) })
+        case .noSolutionNotebook:
+            self = .noSolutionNotebook
+        }
+    }
+}
+
+/// One definition line, or nil when the line is not one.
 private func parseDefinition(
-    _ line: String, bodyLines: [String], language: AssignmentLanguage
+    _ line: String, bodyLines: ArraySlice<String>, parser: DefinitionParser
 ) -> NotebookFunctionInfo? {
-    switch language.descriptor.functionScan {
-    case .pythonDefStatements:
-        // The only syntax whose parser recovers more than a name and
-        // parameters: annotations, defaults, return type and a docstring,
-        // because Python is the only one of the six that writes them.
-        return parseFunctionDef(line, bodyLines: bodyLines)
-    case .definitionPatterns(let patterns):
-        for pattern in patterns {
-            if let info = parseAssignmentStyleDefinition(line, pattern: pattern) { return info }
+    switch parser {
+    case .python(let defLine, let returnArrow):
+        // Every match of the `^def` anchor starts with these three letters.
+        guard line.hasPrefix("def") else { return nil }
+        return parseFunctionDef(line, bodyLines: bodyLines, defLine: defLine, returnArrow: returnArrow)
+    case .patterns(let regexes):
+        for regex in regexes {
+            if let info = parseAssignmentStyleDefinition(line, regex: regex) { return info }
         }
         return nil
     case .noSolutionNotebook:
-        // Upload-only: unreachable through the language-aware entry point,
-        // which refuses before reaching here.
         return nil
     }
 }
@@ -316,10 +358,9 @@ private func parseDefinition(
 /// for all three (R and Lua and Octave all spell defaults with `=`), and its
 /// `x: int` type-stripping simply never fires, since none of them writes one.
 private func parseAssignmentStyleDefinition(
-    _ line: String, pattern: String
+    _ line: String, regex: Regex<AnyRegexOutput>
 ) -> NotebookFunctionInfo? {
-    guard let regex = try? Regex(pattern),
-        let match = line.firstMatch(of: regex),
+    guard let match = line.firstMatch(of: regex),
         match.output.count > 2,
         let name = match.output[1].substring,
         let params = match.output[2].substring
@@ -339,11 +380,14 @@ private func parseAssignmentStyleDefinition(
 
 /// Attempts to parse a `def name(params...) [-> ret]:` line.
 /// Returns `nil` if the line does not match.
-private func parseFunctionDef(_ line: String, bodyLines: [String]) -> NotebookFunctionInfo? {
+private func parseFunctionDef(
+    _ line: String, bodyLines: ArraySlice<String>,
+    defLine: Regex<(Substring, Substring, Substring)>, returnArrow: Regex<(Substring, Substring)>
+) -> NotebookFunctionInfo? {
     // Pattern: def <identifier>(<anything>)
     // The params may be followed by `-> returnType` and optionally `:`.
     // We capture everything up to the first unmatched `)` for simplicity.
-    guard let match = line.firstMatch(of: /^def\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(([^)]*)\)/) else { return nil }
+    guard let match = line.firstMatch(of: defLine) else { return nil }
 
     let name = String(match.output.1)
     let paramsRaw = String(match.output.2)
@@ -353,7 +397,7 @@ private func parseFunctionDef(_ line: String, bodyLines: [String]) -> NotebookFu
     let paramNames = parsedParams.map(\.name)
     let paramTypes = parsedParams.map(\.type)
     let paramHasDefault = parsedParams.map(\.hasDefault)
-    let returnType = parseReturnType(from: line)
+    let returnType = parseReturnType(from: line, returnArrow: returnArrow)
     let hasDocstring = bodyLines.prefix(5).contains {
         let t = $0.trimmingCharacters(in: .whitespaces)
         return t.hasPrefix("\"\"\"") || t.hasPrefix("'''")
@@ -425,11 +469,12 @@ private func parseParams(from raw: String) -> [ParsedParam] {
 
 /// Extracts the `-> TYPE` return-type annotation from the signature line.
 /// Returns nil if the signature has no return annotation.
-private func parseReturnType(from line: String) -> String? {
+private func parseReturnType(from line: String, returnArrow: Regex<(Substring, Substring)>) -> String? {
     // Look for `)` followed by `->` and capture everything up to a trailing
     // colon (the `def` line's terminator).  Generic types with commas or
-    // spaces (`dict[str, int]`) are preserved verbatim.
-    guard let match = line.firstMatch(of: /\)\s*->\s*(.+?)\s*:\s*$/) else { return nil }
+    // spaces (`dict[str, int]`) are preserved verbatim. `returnArrow` is
+    // `/\)\s*->\s*(.+?)\s*:\s*$/`, built once per scan.
+    guard let match = line.firstMatch(of: returnArrow) else { return nil }
     let t = String(match.output.1).trimmingCharacters(in: .whitespaces)
     return t.isEmpty ? nil : t
 }
@@ -508,6 +553,14 @@ public func notebookFunctionScanSupport(
 public func scanNotebookForSectionsAndFunctions(
     _ notebookData: Data, language: AssignmentLanguage?
 ) -> NotebookScanResult {
+    scanNotebookForSectionsAndFunctions(cells: NotebookCellView.cells(from: notebookData), language: language)
+}
+
+/// The language-aware scan over cells already decoded, nil when the notebook
+/// did not decode: one decode serves `scanNotebookDefinitions` and this scan.
+func scanNotebookForSectionsAndFunctions(
+    cells: [NotebookCellView]?, language: AssignmentLanguage?
+) -> NotebookScanResult {
     let support = notebookFunctionScanSupport(for: language)
     guard support.isSupported else {
         // SECTIONS ARE STILL READ. `unsupportedReason` scopes to `functions`,
@@ -517,13 +570,13 @@ public func scanNotebookForSectionsAndFunctions(
         // languages as collateral from a limitation that applies to function
         // extraction alone.
         return NotebookScanResult(
-            sectionNames: notebookSectionNames(notebookData),
+            sectionNames: cells.map(notebookSectionNames(cells:)) ?? [],
             functions: [],
             unsupportedReason: support.unsupportedReason)
     }
     // `support.isSupported` is false for a nil language, so this is reached
     // only with a real one — no `?? .python` fallback, which is the shape that
     // put a Python parser on an R notebook everywhere else in this arc.
-    guard let language else { return NotebookScanResult(sectionNames: [], functions: []) }
-    return scanNotebookForSectionsAndFunctions(notebookData, parsing: language)
+    guard let language, let cells else { return NotebookScanResult(sectionNames: [], functions: []) }
+    return scanNotebookForSectionsAndFunctions(cells: cells, parsing: language)
 }

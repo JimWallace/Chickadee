@@ -45,6 +45,13 @@ enum SubmissionNormalizationError: LocalizedError {
     }
 }
 
+/// One regular file of the submission, with its path relative to the
+/// submission directory, computed once.
+private struct SubmissionFile {
+    let url: URL
+    let relativePath: String
+}
+
 /// Mutable accumulator threaded through the per-file normalisation phases.
 /// Keeps the parent function focused on flow control while helpers update
 /// the three running lists / hints they each contribute to.
@@ -81,8 +88,20 @@ struct SubmissionNormalizer {
                 "file_count": submissionFiles.count,
             ])
 
-        for fileURL in submissionFiles {
-            let fileRelativePath = relativePath(of: fileURL, under: submissionDirectory)
+        // The types of every file the loop below will classify, from one
+        // `file` run rather than one per file. A file the batch could not
+        // type is typed on its own in the loop, as every file used to be.
+        let candidates = submissionFiles.indices.filter { !protected.contains(submissionFiles[$0].relativePath) }
+        var batchedMimeTypes: [Int: String] = [:]
+        if candidates.count > 1 {
+            let detected = await mimeTypeDetector.detectMimeTypes(for: candidates.map { submissionFiles[$0].url })
+            for (index, mimeType) in zip(candidates, detected) {
+                batchedMimeTypes[index] = mimeType
+            }
+        }
+
+        for (index, file) in submissionFiles.enumerated() {
+            let fileRelativePath = file.relativePath
             guard !protected.contains(fileRelativePath) else {
                 progress.warnings.append(protectedFileSkippedWarning(fileRelativePath))
                 writeStructuredRunnerLog(
@@ -94,8 +113,8 @@ struct SubmissionNormalizer {
                 continue
             }
             try await processSubmissionFile(
-                fileURL: fileURL,
-                submissionDirectory: submissionDirectory,
+                file,
+                knownMimeType: batchedMimeTypes[index],
                 workspaceDirectory: workspaceDirectory,
                 progress: &progress
             )
@@ -130,14 +149,22 @@ struct SubmissionNormalizer {
         )
     }
 
+    /// `knownMimeType` is the file's type from the batched `file` run, nil
+    /// when the batch could not type it.
     private func processSubmissionFile(
-        fileURL: URL,
-        submissionDirectory: URL,
+        _ file: SubmissionFile,
+        knownMimeType: String?,
         workspaceDirectory: URL,
         progress: inout NormalizationProgress
     ) async throws {
-        let fileRelativePath = relativePath(of: fileURL, under: submissionDirectory)
-        let mimeType = try await mimeTypeDetector.detectMimeType(for: fileURL)
+        let fileURL = file.url
+        let fileRelativePath = file.relativePath
+        let mimeType: String
+        if let knownMimeType {
+            mimeType = knownMimeType
+        } else {
+            mimeType = try await mimeTypeDetector.detectMimeType(for: fileURL)
+        }
         writeStructuredRunnerLog(
             event: "submission_file_mime_detected",
             fields: [
@@ -305,7 +332,7 @@ struct SubmissionNormalizer {
 
     private func ensureProducedPythonFiles(
         progress: NormalizationProgress,
-        submissionFiles: [URL],
+        submissionFiles: [SubmissionFile],
         workspaceDirectory: URL
     ) throws(SubmissionNormalizationError) {
         guard progress.producedPythonFiles.isEmpty else { return }
@@ -394,7 +421,10 @@ struct SubmissionNormalizer {
         return .unsupported("content type \(mimeType) is not supported for Python grading")
     }
 
-    private func regularFiles(in directory: URL) -> [URL] {
+    /// The regular files under `directory`, ordered by their relative paths.
+    /// Each relative path is computed once, not on every comparison: it
+    /// resolves symlinks in both paths, and a sort compares O(n log n) times.
+    private func regularFiles(in directory: URL) -> [SubmissionFile] {
         guard
             let enumerator = FileManager.default.enumerator(
                 at: directory,
@@ -412,7 +442,10 @@ struct SubmissionNormalizer {
                 files.append(fileURL)
             }
         }
-        return files.sorted { relativePath(of: $0, under: directory) < relativePath(of: $1, under: directory) }
+        return
+            files
+            .map { SubmissionFile(url: $0, relativePath: relativePath(of: $0, under: directory)) }
+            .sorted { $0.relativePath < $1.relativePath }
     }
 
     private func normalizedNotebookOutputRelativePath(relativePath: String) -> String {

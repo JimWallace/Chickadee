@@ -70,26 +70,34 @@ struct UnionTally {
 
 /// Reads both halves for one assignment.
 ///
-/// Four queries regardless of class size: the roster's latest submissions,
-/// every student submission of the setup (to attribute a kill whose target
-/// has since resubmitted), and the completed match rows.
+/// Three queries regardless of class size: the roster, every student
+/// submission of the setup (the roster's latest ones, and every older one to
+/// attribute a kill whose target has since resubmitted), and the completed
+/// match rows. The two large reads select only the columns read here.
 func unionTally(setup: APITestSetup, on db: any Database) async throws -> UnionTally {
     guard let setupID = setup.id else {
         return UnionTally(kills: [], defences: [], defeatedCount: 0, targetCount: 0)
     }
-    let latestByUser = try await latestStudentSubmissionsByUser(setup: setup, on: db)
+    let students = try await CourseRoster.studentIDs(in: setup.courseID, on: db)
+
+    // Every student submission, not only the current ones: a kill keeps its
+    // target's identity after that student resubmits. Newest first, so the
+    // same rows give each student's latest (`latestStudentSubmissions`).
+    let allSubmissions = try await APISubmission.query(on: db)
+        .filter(\.$testSetupID == setupID)
+        .filter(\.$kind == APISubmission.Kind.student)
+        .field(\.$id)
+        .field(\.$userID)
+        .field(\.$status)
+        .field(\.$submittedAt)
+        .sort(\.$submittedAt, .descending)
+        .all()
+    let latestByUser = latestStudentSubmissions(from: allSubmissions, students: students)
     var userByLatestSubmission: [String: UUID] = [:]
     for (userID, submission) in latestByUser {
         if let id = submission.id { userByLatestSubmission[id] = userID }
     }
-
-    // Every student submission, not only the current ones: a kill keeps its
-    // target's identity after that student resubmits.
     var userBySubmission: [String: UUID] = [:]
-    let allSubmissions = try await APISubmission.query(on: db)
-        .filter(\.$testSetupID == setupID)
-        .filter(\.$kind == APISubmission.Kind.student)
-        .all()
     for submission in allSubmissions {
         if let id = submission.id, let userID = submission.userID { userBySubmission[id] = userID }
     }
@@ -97,6 +105,9 @@ func unionTally(setup: APITestSetup, on db: any Database) async throws -> UnionT
     let rows = try await APIMatchResult.query(on: db)
         .filter(\.$testSetupID == setupID)
         .filter(\.$completedAt != nil)
+        .field(\.$submissionID)
+        .field(\.$opponentSubmissionID)
+        .field(\.$won)
         .sort(\.$completedAt, .ascending)
         .all()
 

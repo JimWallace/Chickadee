@@ -141,7 +141,7 @@ struct WebRoutes: RouteCollection {
         async let extensionsFetch = Self.loadExtensionDueDates(
             user: user, allAssignments: allAssignments, db: req.db)
         async let previouslyOpenedFetch = Self.loadPreviouslyOpenedSetupIDs(
-            user: user, allAssignments: allAssignments, db: req.db)
+            user: user, isActiveCourseStaff: isActiveCourseStaff, allAssignments: allAssignments, db: req.db)
         async let sectionsFetch = Self.loadCourseSections(
             activeCourseUUID: courseState.activeCourseUUID, db: req.db)
         // Ungraded content items grouped alongside assignments. Staff see

@@ -202,7 +202,7 @@ struct MCPRoutes: RouteCollection {
     /// isn't a tools/call for that tool.
     private static func validateAssignmentCall(_ rpc: JSONRPCRequest) -> ValidateAssignmentTool.Input? {
         guard rpc.method == "tools/call", let params = rpc.params else { return nil }
-        guard let call = try? params.decoded(as: MCPToolCall.self),
+        guard let call = MCPToolCall(params: params),
             call.name == ValidateAssignmentTool.name,
             let input = try? (call.arguments ?? .object([:])).decoded(
                 as: ValidateAssignmentTool.Input.self)

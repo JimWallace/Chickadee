@@ -104,21 +104,15 @@ struct JupyterLiteContentsRoutes: RouteCollection {
         let attributes = attributesForItem(url: targetURL, fileManager: fm)
         // The editor's contents endpoint fires repeatedly while a student
         // works; notebooks and materialized datasets can be large. Thread
-        // pool, not the request thread (#1156).
-        let fileData = try await runBlocking { try Data(contentsOf: targetURL) }
+        // pool, not the request thread (#1156). The content is built there
+        // too: checking that a notebook parses, or base64-encoding a dataset,
+        // takes time in proportion to the file.
         let isNotebook = targetURL.pathExtension.lowercased() == "ipynb"
-        let (content, format, mimetype): (JupyterContentsModel.Content, String, String) = {
-            guard wantsContent else {
-                return (.none, "json", isNotebook ? "application/x-ipynb+json" : "application/octet-stream")
-            }
-            if let json = JupyterContentsModel.jsonContent(fileData) {
-                return (json, "json", isNotebook ? "application/x-ipynb+json" : "application/json")
-            }
-            if let text = String(data: fileData, encoding: .utf8) {
-                return (.text(text), "text", "text/plain")
-            }
-            return (.base64(fileData.base64EncodedString()), "base64", "application/octet-stream")
-        }()
+        let (fileData, (content, format, mimetype)) = try await runBlocking {
+            () throws -> (Data, (JupyterContentsModel.Content, String, String)) in
+            let fileData = try Data(contentsOf: targetURL)
+            return (fileData, Self.contentModel(of: fileData, wantsContent: wantsContent, isNotebook: isNotebook))
+        }
 
         return try jsonResponse(
             JupyterContentsModel(
@@ -133,6 +127,22 @@ struct JupyterLiteContentsRoutes: RouteCollection {
                 writable: !isSymlink(url: targetURL),
                 type: isNotebook ? "notebook" : "file"
             ))
+    }
+
+    /// The `content`, `format` and `mimetype` of a file's model.
+    private static func contentModel(
+        of fileData: Data, wantsContent: Bool, isNotebook: Bool
+    ) -> (JupyterContentsModel.Content, String, String) {
+        guard wantsContent else {
+            return (.none, "json", isNotebook ? "application/x-ipynb+json" : "application/octet-stream")
+        }
+        if let json = JupyterContentsModel.jsonContent(fileData) {
+            return (json, "json", isNotebook ? "application/x-ipynb+json" : "application/json")
+        }
+        if let text = String(data: fileData, encoding: .utf8) {
+            return (.text(text), "text", "text/plain")
+        }
+        return (.base64(fileData.base64EncodedString()), "base64", "application/octet-stream")
     }
 
     private func directoryResponse(

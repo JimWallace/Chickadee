@@ -45,12 +45,15 @@ struct GroupSessionPanel: Sendable {
         else { return nil }
         let groups = try await CourseGroupStore.groups(inSet: setID, on: req.db)
         let requested = req.query[String.self, at: "group"].flatMap(UUID.init(uuidString:))
-        let own = try await CourseGroupStore.groupIDsByUser(inSet: setID, on: req.db)[user.requireID()]
-        guard
-            let selected = groups.first(where: { $0.id == requested }) ?? groups.first(where: { $0.id == own })
-                ?? groups.first,
-            let groupID = selected.id
-        else { return nil }
+        // The presenter's own group is read only when `?group=` names none of
+        // the set's groups: both polls of the present page always name one.
+        var selected = requested.flatMap { id in groups.first { $0.id == id } }
+        if selected == nil,
+            let own = try await CourseGroupStore.groupID(ofUser: user.requireID(), inSet: setID, on: req.db)
+        {
+            selected = groups.first { $0.id == own }
+        }
+        guard let selected = selected ?? groups.first, let groupID = selected.id else { return nil }
         let session = try await ActivitySessionStore.session(
             assignmentID: assignmentID, groupID: groupID, on: req.db)
         let now = Date()

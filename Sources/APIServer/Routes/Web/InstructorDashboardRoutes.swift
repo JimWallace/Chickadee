@@ -145,18 +145,9 @@ struct InstructorDashboardRoutes: RouteCollection {
 
         let roster: CourseRosterData
         if let activeCourseUUID = courseState.activeCourseUUID {
-            roster = try await buildCourseRoster(
-                req: req,
-                activeCourseUUID: activeCourseUUID,
-                activeCourseKey: courseState.active?.urlKey ?? "",
-                fmt: fmt
-            )
+            roster = try await loadCourseRosterCounts(req: req, activeCourseUUID: activeCourseUUID)
         } else {
-            roster = CourseRosterData(
-                enrolledStudents: [],
-                enrolledStudentIDs: [],
-                enrolledStudentCount: 0
-            )
+            roster = CourseRosterData(enrolledStudentIDs: [], enrolledStudentCount: 0)
         }
 
         let uniqueSubmittersBySetup = try await loadUniqueSubmittersBySetup(

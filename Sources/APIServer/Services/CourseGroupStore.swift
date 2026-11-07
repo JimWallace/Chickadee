@@ -50,6 +50,16 @@ enum CourseGroupStore {
         return Dictionary(rows.map { ($0.userID, $0.groupID) }, uniquingKeysWith: { first, _ in first })
     }
 
+    /// One person's group in the set, or nil when they are in none. The
+    /// unique key (set, user) means there is at most one row, so this reads
+    /// what `groupIDsByUser(inSet:on:)[userID]` reads, from one row.
+    static func groupID(ofUser userID: UUID, inSet setID: UUID, on db: any Database) async throws -> UUID? {
+        try await APICourseGroupMembership.query(on: db)
+            .filter(\.$setID == setID)
+            .filter(\.$userID == userID)
+            .first()?.groupID
+    }
+
     // MARK: - Writes
 
     /// Creates a manual set in `courseID`.
@@ -119,13 +129,21 @@ enum CourseGroupStore {
         let setID = try set.requireID()
         let active = Set(try await groups(inSet: setID, on: db).compactMap(\.id))
         guard assignments.values.allSatisfy(active.contains) else { throw CourseGroupError.groupNotInSet }
+        let rows = assignments.map { userID, groupID in
+            APICourseGroupMembership(setID: setID, groupID: groupID, userID: userID)
+        }
         try await db.transaction { tx in
             try await APICourseGroupMembership.query(on: tx).filter(\.$setID == setID).delete()
-            for (userID, groupID) in assignments {
-                try await APICourseGroupMembership(setID: setID, groupID: groupID, userID: userID).save(on: tx)
+            // A multi-row INSERT per chunk rather than one round trip per
+            // student; a chunk's bind count stays far below Postgres's limit.
+            for start in stride(from: 0, to: rows.count, by: membershipInsertChunk) {
+                try await Array(rows[start..<min(start + membershipInsertChunk, rows.count)]).create(on: tx)
             }
         }
     }
+
+    /// Rows per INSERT in `replaceMemberships`: five binds each.
+    private static let membershipInsertChunk = 1_000
 
     // MARK: - Import
 

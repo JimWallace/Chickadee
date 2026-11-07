@@ -106,10 +106,11 @@ extension WebRoutes {
         let solution =
             anchorSource.map { scanNotebookDefinitions($0, language: language) }
             ?? NotebookDefinitionScan(definitions: [], sections: [], codeCellIndices: [])
-        var scripts: [String: String] = [:]
-        for entry in manifest.testSuites where !entry.isGenerated {
-            scripts[entry.script] = await readScriptFromZip(zipPath: setup.zipPath, filename: entry.script)
-        }
+        // The scripts depend only on the zip, so every student reads them from
+        // one cached copy rather than one `unzip` per script per guide.
+        let scripts = await req.application.zipScriptTextCache.texts(
+            zipPath: setup.zipPath,
+            filenames: manifest.testSuites.filter { !$0.isGenerated }.map(\.script))
         return (solution, starter, scripts)
     }
 }

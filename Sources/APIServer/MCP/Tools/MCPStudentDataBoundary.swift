@@ -139,14 +139,18 @@ extension MCPStudentDataBoundary {
 
     /// One student's handle, state and reflections in a gated assignment.
     /// Throws the same refusal for an unknown handle and for a handle of
-    /// another assignment.
+    /// another assignment. The starter is read through `notebookCache`, so a
+    /// pass over a class reads it once rather than once per student.
     static func feedbackReflections(
-        handle: String, assignment: APIAssignment, setup: APITestSetup, on db: any Database
+        handle: String, assignment: APIAssignment, setup: APITestSetup,
+        notebookCache: NotebookBytesCache, on db: any Database
     ) async throws -> (subject: MCPFeedbackSubject, reflections: [ReflectionPair]) {
         let row = try await feedbackRow(handle: handle, assignment: assignment, on: db)
-        let latest = try await ReflectionFeedbackService.latestStudentSubmissions(for: assignment, on: db)
-        let submission = latest[row.userID]
-        let reflections = await ReflectionFeedbackService.reflections(setup: setup, submission: submission)
+        let submission = try await ReflectionFeedbackService.latestStudentSubmission(
+            for: assignment, userID: row.userID, on: db)
+        let reflections = await ReflectionFeedbackService.reflections(
+            starter: await ReflectionFeedbackService.starterNotebook(for: setup, cache: notebookCache),
+            submission: submission)
         return (subject(row: row, latestSubmissionID: submission?.id), reflections)
     }
 
@@ -158,8 +162,10 @@ extension MCPStudentDataBoundary {
         clientName: String?, on db: any Database
     ) async throws -> MCPFeedbackSubject {
         let row = try await feedbackRow(handle: handle, assignment: assignment, on: db)
-        let latest = try await ReflectionFeedbackService.latestStudentSubmissions(for: assignment, on: db)
-        guard let submissionID = latest[row.userID]?.id else {
+        guard
+            let submissionID = try await ReflectionFeedbackService.latestStudentSubmission(
+                for: assignment, userID: row.userID, on: db)?.id
+        else {
             throw MCPToolError.invalidArguments(detail: "Student \(handle) has no submission to give feedback on.")
         }
         if ReflectionFeedbackService.displayState(of: row, latestSubmissionID: submissionID) == .released {

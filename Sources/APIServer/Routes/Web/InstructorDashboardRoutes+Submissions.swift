@@ -378,10 +378,16 @@ extension InstructorDashboardRoutes {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = TimeZone(identifier: "America/Toronto") ?? calendar.timeZone
 
-        let (monthStarts, monthCounts) = dailyBuckets(submissions, dayCount: 30, calendar: calendar, now: now)
+        // Each submission's day is computed once, for both daily windows.
+        var perDay: [Date: Int] = [:]
+        for submission in submissions {
+            guard let submittedAt = submission.submittedAt else { continue }
+            perDay[calendar.startOfDay(for: submittedAt), default: 0] += 1
+        }
+        let (monthStarts, monthCounts) = dailyBuckets(perDay: perDay, dayCount: 30, calendar: calendar, now: now)
         guard monthCounts.contains(where: { $0 > 0 }) else { return [] }
         let (hourStarts, hourCounts) = hourlyBuckets(submissions, calendar: calendar, now: now)
-        let (weekStarts, weekCounts) = dailyBuckets(submissions, dayCount: 7, calendar: calendar, now: now)
+        let (weekStarts, weekCounts) = dailyBuckets(perDay: perDay, dayCount: 7, calendar: calendar, now: now)
 
         let hourFormatter = DateFormatter()
         hourFormatter.locale = Locale(identifier: "en_US_POSIX")
@@ -417,20 +423,19 @@ extension InstructorDashboardRoutes {
             bars: sparklineBars(counts: counts, titles: titles))
     }
 
-    /// Buckets submissions into `dayCount` daily buckets ending today.
+    /// Buckets submissions into `dayCount` daily buckets ending today, from
+    /// their count per start of day.
     private func dailyBuckets(
-        _ submissions: [APISubmission], dayCount: Int, calendar: Calendar, now: Date
+        perDay: [Date: Int], dayCount: Int, calendar: Calendar, now: Date
     ) -> ([Date], [Int]) {
         let today = calendar.startOfDay(for: now)
         let starts: [Date] = stride(from: dayCount - 1, through: 0, by: -1).compactMap {
             calendar.date(byAdding: .day, value: -$0, to: today)
         }
-        var counts = [Int](repeating: 0, count: starts.count)
-        for submission in submissions {
-            guard let submittedAt = submission.submittedAt else { continue }
-            if let index = starts.firstIndex(of: calendar.startOfDay(for: submittedAt)) {
-                counts[index] += 1
-            }
+        // A start that repeats counts at its first index only, as a
+        // `firstIndex(of:)` lookup per submission counted it.
+        let counts = starts.indices.map { index in
+            starts.firstIndex(of: starts[index]) == index ? perDay[starts[index], default: 0] : 0
         }
         return (starts, counts)
     }
@@ -445,11 +450,15 @@ extension InstructorDashboardRoutes {
             calendar.date(byAdding: .hour, value: -$0, to: currentHour)
         }
         var counts = [Int](repeating: 0, count: starts.count)
+        guard let earliest = starts.min() else { return (starts, counts) }
+        let indexOfStart = Dictionary(starts.enumerated().map { ($1, $0) }, uniquingKeysWith: { first, _ in first })
         for submission in submissions {
-            guard let submittedAt = submission.submittedAt,
+            // A bucket is never later than its submission, so one submitted
+            // before the earliest start matches none: skip the calendar work.
+            guard let submittedAt = submission.submittedAt, submittedAt >= earliest,
                 let bucket = calendar.date(from: calendar.dateComponents(hourUnits, from: submittedAt))
             else { continue }
-            if let index = starts.firstIndex(of: bucket) {
+            if let index = indexOfStart[bucket] {
                 counts[index] += 1
             }
         }

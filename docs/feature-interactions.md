@@ -161,9 +161,12 @@ because line numbers go out of date.
   `solutionRevealAvailable` passes its batch-loaded values
   (`DashboardSlipDayData.claimState`), so it runs no query for each row.
   `SolutionRevealParityTests` runs the same cases through both callers.
+  The result page is a third caller: `studentRevealGates` loads the course,
+  the extension and, only when a gate needs it, the slip-day state once, and
+  runs both pure bodies on them.
 - **Parallel paths:**
-  - The slip-day inputs still load in three places: `loadSlipDayDashboardData`,
-    the slip-day route, and `slipDayClaimState`.
+  - The slip-day inputs still load in four places: `loadSlipDayDashboardData`,
+    the slip-day route, `slipDayClaimState` and `studentRevealGates`.
   - `slipDayOffer` repeats the window arithmetic.
   - A change to what the inputs are must go to all of these.
 - **Rule:** a link or a button can hide while its URL still serves the
@@ -557,6 +560,65 @@ because line numbers go out of date.
   - No student identity goes into the key or into the cached directory.
     Per-student bytes go only into the scratch copy for each job
     (`docs/datasets.md`, "Runner cache is preserved").
+  - The runner evicts a cache entry by renaming it to a hidden
+    `.evicted-<key>-<uuid>.tmp` tombstone on the cache actor, then deleting
+    the tombstone off the actor. The restart scan and the LRU bound skip
+    hidden names, and startup removes leftover tombstones. A population of
+    the same key never touches a tombstone.
+
+### Process-wide caches of setup content
+
+Three caches answer repeated reads of a setup's manifest, scripts and
+notebook. Each is per process, so the blue-green processes need no
+coordination, and each must see every edit.
+
+- **`ManifestDecodeMemo`** (`Utilities/ManifestDecodeMemo.swift`), behind
+  `decodeManifest(from:)` and `APITestSetup.decodedManifest()`.
+  - **Key:** the exact `test_setups.manifest` bytes, so an edit by any
+    process misses and nothing is invalidated.
+  - **Rules:** keep it keyed on the bytes, never on a setup ID. A failed
+    decode is never memoized. `TestProperties` is a value type, so a caller
+    that changes its copy changes nothing the memo returns. The claim walk's
+    strict validation decode does not use the memo, so its error still
+    surfaces.
+- **`ZipScriptTextCache`** (`Services/ZipScriptTextCache.swift`).
+  - **Readers:** the notebook guide (`guideInputs`), the suite outline, the
+    suite editor and MCP `get_suite`.
+  - **Key:** the zip path, checked against its mtime, its size and a digest
+    of its central directory, which holds every entry's CRC.
+  - **Rules:** every zip mutation replaces the file (`replaceSetupZip`), so
+    the digest changes. Scripts are read with `unzip -p` only, never
+    extracted to disk, so a symlink entry still returns its link text. A
+    ZIP64 archive or a damaged end record is read uncached. A failed
+    extraction is never remembered.
+- **`NotebookBytesCache`** (`Services/NotebookBytesCache.swift`).
+  - **Holds:** found notebooks, setups remembered as having no notebook,
+    and each cached notebook's contribution slot count
+    (`declaredContributionSlotCount`), which result ingest reads.
+  - **Rules:** a setup is remembered as absent only when the zip is the
+    backing file and it lists entries with no notebook candidate. The entry
+    is keyed on the zip's mtime and size plus `starterNotebook`, the same
+    validators a found notebook uses. A flat notebook file, an empty or
+    failed listing, or a failed extraction is never remembered.
+
+### The claim walk: `ClaimCandidateLoader`, `ClaimCandidateGroup`
+
+- **Order:** `ClaimCandidateGroup.allCases` is the claim priority: fresh
+  student work, retests, tournament matches, solution runs, starter runs,
+  composite spares, the class corpus run, composite references.
+- **Rules:**
+  - `WorkerJobClaim.claimNextEligibleJob` loads one group at a time and
+    stops at the first claim. `collectClaimCandidates` is the eager form for
+    callers that need the whole order.
+  - Fresh and retest student work share one 50-row scan cap: retests fill
+    what fresh work leaves.
+  - The validation groups throw on a missing setup or an undecodable
+    manifest. The other groups skip the candidate.
+  - A new submission kind that a runner grades needs a group here, or no
+    runner ever claims it.
+  - `ClaimWalk` reads each assignment's requirements and compatibility once
+    per poll, and emits one "no compatible runner" diagnostic after every
+    group is walked.
 
 ### The per-student seed, inputs and datasets
 
@@ -1005,6 +1067,11 @@ because line numbers go out of date.
 
 ### The per-course role: `CourseRole`
 
+- **Active-course resolution:** `resolveActiveCourse`
+  (`Helpers/Request+CourseContext.swift`) owns auto-enrollment in `.auto`
+  courses and the session's `activeCourseID`. `NavCourseContextMiddleware`
+  runs it for every page request but not for an `/api/` path, so an `/api/`
+  handler that needs the active course calls it itself.
 - **Writers:**
   - `saveSeededEnrollment` and `ensureSeededEnrollment`, for every new
     enrollment: login, enrollment, CSV, staff provisioning, bundle import, a

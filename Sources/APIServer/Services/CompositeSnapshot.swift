@@ -73,9 +73,17 @@ struct CompositeSnapshot: Content, Equatable {
         let testSetupID = scope.testSetupID
         let courseID = scope.courseID
         let spec = scope.spec
+        // Every column but the pixels: most polls send none, so `data` is
+        // read below only for the slots whose pixels go out.
         let rowQuery = APICompositeContribution.query(on: db)
             .filter(\.$assignmentID == assignmentID)
             .filter(\.$groupID == scope.groupID)
+            .field(\.$id)
+            .field(\.$userID)
+            .field(\.$slot)
+            .field(\.$submittedAt)
+            .field(\.$passed)
+            .field(\.$updatedAt)
         if let onlyUserID { rowQuery.filter(\.$userID == onlyUserID) }
         let rows = try await rowQuery.all()
         let dealt = try await scope.pool.dealt(onlyUserID: onlyUserID, on: db)
@@ -131,11 +139,14 @@ struct CompositeSnapshot: Content, Equatable {
         }
 
         func millis(_ date: Date?) -> Int64 { Int64(((date ?? .distantPast).timeIntervalSince1970 * 1000).rounded()) }
-        var pixels = shown.keys.sorted().compactMap { slot -> Pixels? in
-            guard let row = shown[slot] else { return nil }
+        let sentSlots = shown.keys.sorted().filter { slot in
             let changed = bySlot[slot, default: []].map { millis($0.updatedAt) }.max() ?? 0
-            guard since.map({ changed >= $0 }) ?? true else { return nil }
-            return Pixels(slot: slot, data: row.data)
+            return since.map { changed >= $0 } ?? true
+        }
+        let dataByID = try await pixelData(ofRows: sentSlots.compactMap { shown[$0]?.id }, on: db)
+        var pixels = sentSlots.compactMap { slot -> Pixels? in
+            guard let id = shown[slot]?.id, let data = dataByID[id] else { return nil }
+            return Pixels(slot: slot, data: data)
         }
         // A spare or a reference pixel is sent on every poll that asks for
         // pixels. A slot can fall back to one when a row is deleted, and a
@@ -154,6 +165,18 @@ struct CompositeSnapshot: Content, Equatable {
             total: spec.layout.slotCount,
             slots: slots,
             pixels: pixels)
+    }
+
+    /// The pixels of the contribution rows `ids`, by row ID. No query when
+    /// there are none, the common poll.
+    private static func pixelData(ofRows ids: [UUID], on db: any Database) async throws -> [UUID: String] {
+        guard !ids.isEmpty else { return [:] }
+        let rows = try await APICompositeContribution.query(on: db)
+            .filter(\.$id ~~ ids)
+            .field(\.$id)
+            .field(\.$data)
+            .all()
+        return Dictionary(rows.compactMap { row in row.id.map { ($0, row.data) } }) { first, _ in first }
     }
 
     /// What fills the slots that show no passing contribution. Never in the

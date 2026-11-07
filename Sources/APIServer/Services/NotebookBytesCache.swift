@@ -12,6 +12,11 @@
 // Bounded by entry count AND total bytes: notebooks with embedded outputs
 // run to MBs, so a pure entry cap could hold too much heap. Least-recently
 // used entries are evicted first.
+//
+// A setup with no notebook at all (an upload-only or hand-written suite) is
+// remembered too, apart from the notebooks, so the result-ingest path does not
+// list its zip on every result. Only a miss the zip's bytes decide is kept:
+// see `NotebookResolution.absent`.
 
 import Foundation
 import Vapor
@@ -20,11 +25,25 @@ actor NotebookBytesCache {
     static let defaultMaxEntries = 64
     static let defaultMaxTotalBytes = 128 * 1024 * 1024
 
+    /// Safety valve for remembered misses, as in `ZipEntryListCache`: they
+    /// are small, so past this many the map is dropped wholesale.
+    static let maxAbsentEntries = 4096
+
     private struct CachedNotebook {
         let sourcePath: String
         let sourceModified: Date
         let sourceSize: UInt64
         let data: Data
+        /// The contribution slots `data` declares, once something has asked.
+        var slotCount: Int?
+    }
+
+    /// A setup whose zip holds no notebook, against the inputs that decide it:
+    /// the zip's (size, mtime) and the manifest's starter name.
+    private struct AbsentNotebook {
+        let zipModified: Date
+        let zipSize: UInt64
+        let starterNotebook: String?
     }
 
     private let maxEntries: Int
@@ -35,7 +54,9 @@ actor NotebookBytesCache {
     private var entries: [String: CachedNotebook] = [:]
     private var recentKeys: [String] = []
     private var totalBytes = 0
-    private var inFlight: [String: Task<Result<Data, NotebookLookupError>, Never>] = [:]
+    private var inFlight: [String: Task<NotebookResolution, Never>] = [:]
+    /// Kept apart from `entries`, so a remembered miss never evicts a notebook.
+    private var absentByKey: [String: AbsentNotebook] = [:]
 
     init(
         maxEntries: Int = NotebookBytesCache.defaultMaxEntries,
@@ -55,35 +76,61 @@ actor NotebookBytesCache {
             touch(key)
             return cached.data
         }
+        if let absent = absentByKey[key], absentMatches(absent, source: source) {
+            throw NotebookLookupError.notFound(setupID: source.setupID ?? "unknown")
+        }
 
-        let result: Result<Data, NotebookLookupError>
+        let resolution: NotebookResolution
         if let pending = inFlight[key] {
-            result = await pending.value
+            resolution = await pending.value
         } else {
-            let resolving = Task<Result<Data, NotebookLookupError>, Never> {
-                // A closure does not infer its thrown type, so the `do` names it.
-                do throws(NotebookLookupError) {
-                    // Module-qualified: inside the actor, the bare name binds
-                    // to this actor's own notebookData(for:) method.
-                    // The call suspends rather than blocks, so it needs no
-                    // thread-pool offload.
-                    return .success(try await APIServer.notebookData(from: source))
-                } catch {
-                    return .failure(error)
-                }
+            // Stat the zip BEFORE resolving: a zip replaced meanwhile is then
+            // remembered under its old stat, which no later lookup matches.
+            let zipStat = Self.zipBackedStat(for: source)
+            // The call suspends rather than blocks, so it needs no
+            // thread-pool offload.
+            let resolving = Task<NotebookResolution, Never> {
+                await resolveNotebook(from: source)
             }
             inFlight[key] = resolving
-            result = await resolving.value
+            resolution = await resolving.value
             inFlight[key] = nil
-            if case .success(let data) = result {
+            switch resolution {
+            case .found(let data):
+                absentByKey[key] = nil
                 store(key: key, source: source, data: data)
+            case .absent:
+                if let zipStat { rememberAbsent(key: key, zipStat: zipStat, source: source) }
+            case .unavailable:
+                // An unreadable zip or a failed extraction may not repeat, so
+                // the next lookup resolves again.
+                break
             }
         }
 
-        switch result {
-        case .success(let data): return data
-        case .failure(let error): throw error
+        guard case .found(let data) = resolution else {
+            throw NotebookLookupError.notFound(setupID: source.setupID ?? "unknown")
         }
+        return data
+    }
+
+    /// How many contribution slots the setup's notebook declares
+    /// (`NotebookContributionSlots.declaredSlotCount(inInstructorNotebook:)`),
+    /// or 0 when it has no notebook. The count depends on the bytes alone, so
+    /// it is kept on the cache entry that holds them and counted once for each
+    /// version of the notebook, rather than parsed again on every result.
+    func declaredContributionSlotCount(for source: NotebookSourceRef) async -> Int {
+        guard let data = try? await notebookData(for: source) else { return 0 }
+        let key = source.zipPath
+        // No suspension between this check and the write, so no other lookup
+        // can replace the entry in between.
+        guard let cached = entries[key], cached.data == data else {
+            return NotebookContributionSlots.declaredSlotCount(inInstructorNotebook: data)
+        }
+        if let count = cached.slotCount { return count }
+        let count = NotebookContributionSlots.declaredSlotCount(inInstructorNotebook: data)
+        entries[key]?.slotCount = count
+        return count
     }
 
     // MARK: - Internals
@@ -112,6 +159,33 @@ actor NotebookBytesCache {
         return modified == cached.sourceModified && size == cached.sourceSize
     }
 
+    /// The zip's (mtime, size) when the zip is the backing file, that is when
+    /// there is no flat notebook. Nil otherwise, and then no miss is
+    /// remembered: a flat file that exists but gave no notebook leaves the
+    /// answer to the zip, which the flat file's stat does not follow.
+    private static func zipBackedStat(for source: NotebookSourceRef) -> (modified: Date, size: UInt64)? {
+        guard backingPath(for: source) == source.zipPath,
+            let attrs = try? FileManager.default.attributesOfItem(atPath: source.zipPath),
+            let modified = attrs[.modificationDate] as? Date
+        else { return nil }
+        return (modified, (attrs[.size] as? UInt64) ?? 0)
+    }
+
+    private func absentMatches(_ absent: AbsentNotebook, source: NotebookSourceRef) -> Bool {
+        guard absent.starterNotebook == source.starterNotebook,
+            let zipStat = Self.zipBackedStat(for: source)
+        else { return false }
+        return zipStat.modified == absent.zipModified && zipStat.size == absent.zipSize
+    }
+
+    private func rememberAbsent(
+        key: String, zipStat: (modified: Date, size: UInt64), source: NotebookSourceRef
+    ) {
+        if absentByKey.count >= Self.maxAbsentEntries { absentByKey.removeAll() }
+        absentByKey[key] = AbsentNotebook(
+            zipModified: zipStat.modified, zipSize: zipStat.size, starterNotebook: source.starterNotebook)
+    }
+
     private func store(key: String, source: NotebookSourceRef, data: Data) {
         let path = Self.backingPath(for: source)
         guard
@@ -124,7 +198,8 @@ actor NotebookBytesCache {
             sourcePath: path,
             sourceModified: modified,
             sourceSize: (attrs[.size] as? UInt64) ?? 0,
-            data: data
+            data: data,
+            slotCount: nil
         )
         totalBytes += data.count
         touch(key)

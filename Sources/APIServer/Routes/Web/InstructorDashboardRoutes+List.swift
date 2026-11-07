@@ -15,10 +15,9 @@ import Vapor
 
 // MARK: - Intermediate query results
 
-/// Aggregated student-roster data for the active course.
-/// `enrolledStudents` includes pending pre-enrollments at the tail.
+/// The active course's student roster, as GET /instructor reads it: who
+/// counts toward each assignment's "X / Y" badge, and the "Y".
 struct CourseRosterData {
-    let enrolledStudents: [EnrolledStudentRow]
     let enrolledStudentIDs: Set<UUID>
     let enrolledStudentCount: Int
 }
@@ -77,69 +76,59 @@ extension InstructorDashboardRoutes {
 
     // MARK: - Roster
 
-    /// Builds the enrolled-students table.  Only enrolled users with
-    /// `role == "student"` count toward the numerators / denominators on the
-    /// per-assignment "X / Y" badge — admin or instructor users enrolled for
-    /// testing must not inflate the student-facing counters.  Pending
-    /// CSV-uploaded pre-enrollments are shown as muted rows in the same table
-    /// and are counted toward the "Y students enrolled" denominator.
-    func buildCourseRoster(
+    /// The student IDs and the student count of the active course.  Only
+    /// enrolled users with a `.student` course role count toward the
+    /// numerators / denominators on the per-assignment "X / Y" badge — admin
+    /// or instructor users enrolled for testing must not inflate the
+    /// student-facing counters.  Pending CSV-uploaded pre-enrollments count
+    /// toward the "Y students enrolled" denominator.  Reads only the columns
+    /// and counts the badge needs: the Students tab builds the table itself
+    /// (`loadEnrolledStudentRows`).
+    func loadCourseRosterCounts(
         req: Request,
-        activeCourseUUID: UUID,
-        activeCourseKey: String,
-        fmt: DateFormatter
+        activeCourseUUID: UUID
     ) async throws -> CourseRosterData {
-        let (enrolledUsers, rolesByUserID, _) = try await loadEnrolledUsersForRoster(
-            req: req, activeCourseUUID: activeCourseUUID)
-        var enrolledStudents = buildEnrolledStudentRows(
-            enrolledUsers: enrolledUsers,
-            rolesByUserID: rolesByUserID,
-            activeCourseUUID: activeCourseUUID,
-            activeCourseKey: activeCourseKey,
-            fmt: fmt
-        )
-
-        // Pre-enrolled (pending) — bulk-CSV entries that haven't been
-        // claimed by a first SSO/local login yet.  Showing them keeps the
-        // count matching what the instructor uploaded.
-        let pendingPreEnrollments = try await APIPreEnrollment.query(on: req.db)
-            .filter(\.$course.$id == activeCourseUUID)
-            .sort(\.$username)
-            .all()
-        enrolledStudents.append(
-            contentsOf: buildPendingPreEnrollmentRows(
-                pendingPreEnrollments: pendingPreEnrollments,
-                activeCourseUUID: activeCourseUUID,
-                fmt: fmt
-            )
-        )
-
         // The "Y students enrolled" denominator counts per-course students only
         // (TA/instructor/admin test accounts excluded), keyed off the enrollment
         // role now that the global student role is retired (#417 Slice G2).
-        let activeStudentIDs = Set(
-            enrolledUsers
-                .compactMap(\.id)
-                .filter { rolesByUserID[$0] == .student }
-        )
+        let studentUserIDs = try await APICourseEnrollment.query(on: req.db)
+            .filter(\.$course.$id == activeCourseUUID)
+            .field(\.$userID)
+            .field(\.$roleRaw)
+            .all()
+            .filter(CourseRoster.isStudent)
+            .map(\.userID)
+        let activeStudentIDs: Set<UUID> =
+            studentUserIDs.isEmpty
+            ? []
+            : Set(
+                try await APIUser.query(on: req.db)
+                    .filter(\.$id ~~ studentUserIDs)
+                    // Exclude `mcp` service accounts: they may be enrolled to
+                    // scope an agent's access (admin MCP tab) but are not
+                    // roster members.
+                    .filter(\.$role != UserRole.mcp.rawValue)
+                    .field(\.$id)
+                    .all()
+                    .compactMap(\.id))
         // Pending pre-enrollments are CSV-uploaded students who haven't
         // logged in yet — count them toward the "Y students enrolled"
         // denominator so the badge reflects the instructor's roster intent,
         // not just who's logged in.
-        let enrolledStudentCount = activeStudentIDs.count + pendingPreEnrollments.count
-
+        let pendingCount = try await APIPreEnrollment.query(on: req.db)
+            .filter(\.$course.$id == activeCourseUUID)
+            .count()
         return CourseRosterData(
-            enrolledStudents: enrolledStudents,
             enrolledStudentIDs: activeStudentIDs,
-            enrolledStudentCount: enrolledStudentCount
+            enrolledStudentCount: activeStudentIDs.count + pendingCount
         )
     }
 
     /// Enrolled-student rows + active-student count for the active course.
     /// Shared by the Students-tab page render and its polling endpoint.
-    /// Mirrors `buildCourseRoster`: active enrollments first (last-seen-desc),
-    /// pending CSV pre-enrollments appended as muted rows, with the count
-    /// covering both.
+    /// Active enrollments first (last-seen-desc), pending CSV pre-enrollments
+    /// appended as muted rows, with the count covering both — the same count
+    /// as `loadCourseRosterCounts`.
     func loadEnrolledStudentRows(
         req: Request,
         activeCourseUUID: UUID,

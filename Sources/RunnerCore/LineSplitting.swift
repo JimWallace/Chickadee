@@ -19,29 +19,29 @@
 /// `\r` each count as exactly one line break. The result always has one more
 /// element than the number of line breaks (so `""` yields `[""]`), matching
 /// the `omittingEmptySubsequences: false` shape the callers were written for.
+///
+/// Each line is copied out of `s` in one piece, between two breaks, rather
+/// than built a scalar at a time: stdout can be a megabyte.
 func splitLines(_ s: String) -> [String] {
     var lines: [String] = []
-    var current = ""
-    var previousWasCarriageReturn = false
-    for scalar in s.unicodeScalars {
-        switch scalar {
-        case "\n":
-            // The LF of a CRLF pair: the CR already ended the line.
-            if !previousWasCarriageReturn {
-                lines.append(current)
-                current = ""
-            }
-            previousWasCarriageReturn = false
-        case "\r":
-            lines.append(current)
-            current = ""
-            previousWasCarriageReturn = true
-        default:
-            current.unicodeScalars.append(scalar)
-            previousWasCarriageReturn = false
+    let scalars = s.unicodeScalars
+    var lineStart = scalars.startIndex
+    var index = scalars.startIndex
+    while index != scalars.endIndex {
+        let scalar = scalars[index]
+        guard scalar == "\n" || scalar == "\r" else {
+            scalars.formIndex(after: &index)
+            continue
         }
+        lines.append(String(scalars[lineStart..<index]))
+        scalars.formIndex(after: &index)
+        // The LF of a CRLF pair: the CR already ended the line.
+        if scalar == "\r", index != scalars.endIndex, scalars[index] == "\n" {
+            scalars.formIndex(after: &index)
+        }
+        lineStart = index
     }
-    lines.append(current)
+    lines.append(String(scalars[lineStart..<scalars.endIndex]))
     return lines
 }
 
@@ -55,13 +55,22 @@ func isWhitespaceOrLineBreak(_ c: Character) -> Bool {
 /// `.whitespaces` would. Line breaks stay, so a caller that works one line at
 /// a time keeps its line.
 func trimHorizontalWhitespace(_ s: String) -> String {
-    let isHWS: (Character) -> Bool = { $0 == " " || $0 == "\t" }
-    return String(s.drop(while: isHWS).reversed().drop(while: isHWS).reversed())
+    trimmed(s) { $0 == " " || $0 == "\t" }
 }
 
 /// Trim leading and trailing spaces, tabs and line breaks, the way
 /// Foundation's `.whitespacesAndNewlines` would.
 func trimWhitespaceAndNewlines(_ s: String) -> String {
-    let isWS: (Character) -> Bool = isWhitespaceOrLineBreak
-    return String(s.drop(while: isWS).reversed().drop(while: isWS).reversed())
+    trimmed(s, where: isWhitespaceOrLineBreak)
+}
+
+/// `s` from its first to its last `Character` that `isTrimmed` rejects, or
+/// "" when it rejects none. One slice of `s`, where dropping, reversing and
+/// dropping again rebuilt the whole string a `Character` at a time even with
+/// nothing to trim.
+private func trimmed(_ s: String, where isTrimmed: (Character) -> Bool) -> String {
+    guard let first = s.firstIndex(where: { !isTrimmed($0) }),
+        let last = s.lastIndex(where: { !isTrimmed($0) })
+    else { return "" }
+    return String(s[first...last])
 }

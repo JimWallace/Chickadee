@@ -27,160 +27,16 @@ struct ClaimedJob {
     let requirementSpec: AssignmentRequirementSpec?
 }
 
-/// A candidate that was skipped because the runner's profile didn't match the
-/// assignment's requirements.  We keep the *first* one we see so that, when no
-/// candidate is claimable, we can emit a single "no compatible runner
-/// available" diagnostic instead of one per scanned candidate.
-private struct BlockedCandidate {
-    let submission: APISubmission
-    let assignmentID: UUID?
-    let requirements: AssignmentRequirementSpec?
-    let result: CompatibilityResult
-}
-
-/// Loads the ordered list of claim candidates (plain reads, outside the
-/// serialized claim section — the compare-and-set claim re-checks pending).
-/// Fresh student work (retestedAt == nil) is claimed before any retest
-/// (retestedAt != nil), so a manifest-revision sweep can't starve students who
-/// are actively submitting (#427). Within each group, oldest submittedAt wins.
-/// Validation submissions are always worker-mode (instructors validate via worker)
-/// and are appended after student work.
-func collectClaimCandidates(
-    on db: any Database
-) async throws -> [(APISubmission, APITestSetup, TestProperties)] {
-    // Cap the scan: a poll claims exactly one job, so walking the entire
-    // pending queue (potentially tens of thousands of rows after a retest
-    // fan-out) inside the globally-serialized claim transaction collapsed
-    // claim throughput exactly when the queue was deepest (June 2026 audit,
-    // P1.3). The cap only matters when the first `claimCandidateScanLimit`
-    // candidates are all requirement-incompatible with this runner — the next
-    // poll retries, and most assignments carry no runner requirements at all.
-    //
-    // Fresh student work (retestedAt == nil) keeps absolute priority over
-    // retests (#427) by querying the two groups separately — which also
-    // replaces the old full-scan + in-memory re-sort.
-    let claimCandidateScanLimit = 50
-    var studentSubmissions = try await APISubmission.query(on: db)
-        .filter(\.$status == SubmissionStatus.pending.rawValue)
-        .filter(\.$kind == APISubmission.Kind.student)
-        .filter(\.$retestedAt == nil)
-        .sort(\.$submittedAt, .ascending)
-        .limit(claimCandidateScanLimit)
-        .all()
-    if studentSubmissions.count < claimCandidateScanLimit {
-        studentSubmissions += try await APISubmission.query(on: db)
-            .filter(\.$status == SubmissionStatus.pending.rawValue)
-            .filter(\.$kind == APISubmission.Kind.student)
-            .filter(\.$retestedAt != nil)
-            .sort(\.$submittedAt, .ascending)
-            .limit(claimCandidateScanLimit - studentSubmissions.count)
-            .all()
+/// Loads the whole ordered list of claim candidates, every group in priority
+/// order. The claim walk itself loads the groups lazily
+/// (`WorkerJobClaim.claimNextEligibleJob`); this eager form is for callers
+/// that inspect the full order.
+func collectClaimCandidates(on db: any Database) async throws -> [ClaimCandidate] {
+    var loader = ClaimCandidateLoader(db: db)
+    var candidates: [ClaimCandidate] = []
+    for group in ClaimCandidateGroup.allCases {
+        candidates += try await loader.load(group)
     }
-
-    // Many pending submissions often target the same test setup (e.g. a class
-    // submitting to one assignment before a deadline). Resolve each setup +
-    // decoded manifest once and reuse it, rather than re-querying the row and
-    // re-decoding the identical manifest JSON for every candidate.
-    var resolvedBySetupID: [String: (APITestSetup, TestProperties)] = [:]
-    var candidates: [(APISubmission, APITestSetup, TestProperties)] = []
-
-    for candidate in studentSubmissions {
-        if let cached = resolvedBySetupID[candidate.testSetupID] {
-            candidates.append((candidate, cached.0, cached.1))
-            continue
-        }
-        guard let setup = try await APITestSetup.find(candidate.testSetupID, on: db) else { continue }
-        guard let manifest = decodeManifest(from: Data(setup.manifest.utf8)) else { continue }
-        resolvedBySetupID[candidate.testSetupID] = (setup, manifest)
-        // Accept both worker-mode and browser-mode pending submissions.
-        // Browser-mode submissions become pending when the client-side runner
-        // fails or freezes (the `browser-failover` endpoint enqueues them) or
-        // when an instructor retests; the worker serves as a backstop that runs
-        // the .py test scripts natively via python3.
-        candidates.append((candidate, setup, manifest))
-    }
-
-    // Tournament matches (docs/class-activities.md) are a live-session
-    // action, so they follow fresh student work and precede validation.
-    let pendingMatches = try await APISubmission.query(on: db)
-        .filter(\.$status == SubmissionStatus.pending.rawValue)
-        .filter(\.$kind == APISubmission.Kind.tournamentMatch)
-        .sort(\.$submittedAt, .ascending)
-        .limit(claimCandidateScanLimit)
-        .all()
-    for match in pendingMatches {
-        if let cached = resolvedBySetupID[match.testSetupID] {
-            candidates.append((match, cached.0, cached.1))
-            continue
-        }
-        guard let setup = try await APITestSetup.find(match.testSetupID, on: db) else { continue }
-        guard let manifest = decodeManifest(from: Data(setup.manifest.utf8)) else { continue }
-        resolvedBySetupID[match.testSetupID] = (setup, manifest)
-        candidates.append((match, setup, manifest))
-    }
-
-    let pendingSolutionRuns = try await APISubmission.query(on: db)
-        .filter(\.$status == SubmissionStatus.pending.rawValue)
-        .filter(\.$kind == APISubmission.Kind.validation)
-        .sort(\.$submittedAt, .ascending)
-        .limit(claimCandidateScanLimit)
-        .all()
-    // A starter run goes after every solution run: the solution run's verdict
-    // gates opening, and the starter run only warns.
-    let pendingStarterRuns = try await APISubmission.query(on: db)
-        .filter(\.$status == SubmissionStatus.pending.rawValue)
-        .filter(\.$kind == APISubmission.Kind.starterValidation)
-        .sort(\.$submittedAt, .ascending)
-        .limit(claimCandidateScanLimit)
-        .all()
-    let pendingValidation = pendingSolutionRuns + pendingStarterRuns
-
-    for validation in pendingValidation {
-        if let cached = resolvedBySetupID[validation.testSetupID] {
-            candidates.append((validation, cached.0, cached.1))
-            continue
-        }
-        guard let valSetup = try await APITestSetup.find(validation.testSetupID, on: db) else {
-            throw WorkerJobError.testSetupNotFound(id: validation.testSetupID)
-        }
-        let valManifest = try ManifestCodec.decoder.decode(
-            TestProperties.self, from: Data(valSetup.manifest.utf8))
-        resolvedBySetupID[validation.testSetupID] = (valSetup, valManifest)
-        candidates.append((validation, valSetup, valManifest))
-    }
-
-    // The class corpus run (docs/collaborative-class-assignments.md) and a
-    // class composite's reference jobs (docs/class-composite.md) go LAST,
-    // behind everything a human is waiting on. Nobody is watching them land:
-    // they feed a progress bar or a backdrop, and a deadline spike is exactly
-    // when a student's job must not queue behind them.
-    // Among these, a composite spare comes first: it is the one a student
-    // waits for, though it still waits behind every student job. Then the
-    // corpus run, because one composite can queue more reference jobs than
-    // the scan limit.
-    var pendingAggregates: [APISubmission] = []
-    let lateKinds = [
-        APISubmission.Kind.compositeSpare, APISubmission.Kind.classAggregate, APISubmission.Kind.compositeReference,
-    ]
-    for kind in lateKinds {
-        pendingAggregates += try await APISubmission.query(on: db)
-            .filter(\.$status == SubmissionStatus.pending.rawValue)
-            .filter(\.$kind == kind)
-            .sort(\.$submittedAt, .ascending)
-            .limit(claimCandidateScanLimit)
-            .all()
-    }
-    for aggregate in pendingAggregates {
-        if let cached = resolvedBySetupID[aggregate.testSetupID] {
-            candidates.append((aggregate, cached.0, cached.1))
-            continue
-        }
-        guard let setup = try await APITestSetup.find(aggregate.testSetupID, on: db) else { continue }
-        guard let manifest = decodeManifest(from: Data(setup.manifest.utf8)) else { continue }
-        resolvedBySetupID[aggregate.testSetupID] = (setup, manifest)
-        candidates.append((aggregate, setup, manifest))
-    }
-
     return candidates
 }
 
@@ -204,7 +60,7 @@ struct ClaimEvaluator {
 }
 
 func evaluateAndClaimCandidate(
-    candidates: [(APISubmission, APITestSetup, TestProperties)],
+    candidates: [ClaimCandidate],
     body: WorkerActivityPayload,
     runnerProfile: RunnerCapabilityProfile?,
     evaluator: ClaimEvaluator,
@@ -213,101 +69,10 @@ func evaluateAndClaimCandidate(
     /// collection's request-scoped database handle.
     claim: (String) async throws -> APISubmission?
 ) async throws -> ClaimedJob? {
-    var blockedCandidate: BlockedCandidate?
-
-    for (submission, setup, manifest) in candidates {
-        // A job that asks for another runner waits for it, up to the
-        // fallback time. It is not a blocked candidate: this runner could
-        // grade it, it only goes second.
-        guard
-            RunnerTargetGate.allows(
-                targetRunnerID: submission.targetRunnerID, queuedAt: submission.submittedAt,
-                runnerID: body.workerID, now: Date())
-        else { continue }
-
-        let loadedRequirements = try await evaluator.assignmentRequirements.loadRequirement(
-            for: submission, on: evaluator.db)
-        let requirementSpec = loadedRequirements.requirement?.requirementSpec
-
-        evaluator.application.diagnostics.recordAssignmentRequirementsLoaded(
-            submission: submission,
-            assignmentID: loadedRequirements.assignmentID,
-            requirements: requirementSpec,
-            logger: evaluator.logger
-        )
-
-        // One decision, shared with the unclaimable-jobs health rule
-        // (`claimCompatibility`): the capability requirements, the version
-        // gates (deployment floor and the manifest's `minimumRunnerVersion`),
-        // the implicit language gate and the class-activity gate. The
-        // language gate needs no authoring step: the manifest already knows
-        // what language the assignment is in and the runner already
-        // advertises what it has, so a runner that cannot grade this
-        // assignment leaves it for one that can instead of failing it.
-        let compatibilityResult = claimCompatibility(
-            runnerVersion: body.runnerVersion,
-            runnerProfile: runnerProfile,
-            manifest: manifest,
-            requirements: requirementSpec,
-            matcher: evaluator.compatibilityMatcher
-        )
-        await evaluator.application.diagnostics.recordCompatibilityDecision(
-            submission: submission,
-            assignmentID: loadedRequirements.assignmentID,
-            runnerID: body.workerID,
-            requirements: requirementSpec,
-            result: compatibilityResult,
-            logger: evaluator.logger
-        )
-
-        guard compatibilityResult.isCompatible else {
-            if blockedCandidate == nil {
-                blockedCandidate = BlockedCandidate(
-                    submission: submission,
-                    assignmentID: loadedRequirements.assignmentID,
-                    requirements: requirementSpec,
-                    result: compatibilityResult
-                )
-            }
-            continue
-        }
-
-        guard let submissionID = submission.id,
-            let claimed = try await claim(submissionID)
-        else {
-            // Lost the claim race (or a malformed row) — the next
-            // candidate may still be ours.
-            continue
-        }
-
-        if RunnerTargetGate.isFallback(targetRunnerID: claimed.targetRunnerID, runnerID: body.workerID) {
-            evaluator.logger.info(
-                "targeted_job_fallback",
-                metadata: [
-                    "submission_id": .string(submissionID),
-                    "target_runner_id": .string(claimed.targetRunnerID ?? ""),
-                    "runner_id": .string(body.workerID),
-                ])
-        }
-
-        return ClaimedJob(
-            submission: claimed,
-            setup: setup,
-            manifest: manifest,
-            assignmentID: loadedRequirements.assignmentID,
-            requirementSpec: requirementSpec
-        )
+    var walk = ClaimWalk(body: body, runnerProfile: runnerProfile, evaluator: evaluator)
+    if let claimed = try await walk.claimFirst(in: candidates, claim: claim) {
+        return claimed
     }
-
-    if let blockedCandidate {
-        await evaluator.application.diagnostics.recordNoCompatibleRunnerAvailable(
-            submission: blockedCandidate.submission,
-            assignmentID: blockedCandidate.assignmentID,
-            runnerID: body.workerID,
-            requirements: blockedCandidate.requirements,
-            result: blockedCandidate.result,
-            logger: evaluator.logger
-        )
-    }
+    await walk.finish()
     return nil
 }

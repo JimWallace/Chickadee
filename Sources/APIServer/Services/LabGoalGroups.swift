@@ -71,9 +71,24 @@ enum LabGoalGroups {
     static func snapshots(
         testSetupID: String, props: TestProperties, userID: UUID?, on db: any Database
     ) async throws -> [String: any ClassGoalSnapshot] {
+        // Only a per-group activity reads the assignment, to find the lab.
+        var assignment: APIAssignment?
+        if props.activity?.isPerGroup == true, userID != nil {
+            assignment = try await APIAssignment.query(on: db).filter(\.$testSetupID == testSetupID).first()
+        }
+        return try await snapshots(
+            testSetupID: testSetupID, props: props, userID: userID, assignment: assignment, on: db)
+    }
+
+    /// `snapshots` for a caller that already holds `assignment`, the
+    /// assignment whose test setup is `testSetupID` (nil when it has none),
+    /// so it is not read again.
+    static func snapshots(
+        testSetupID: String, props: TestProperties, userID: UUID?, assignment: APIAssignment?,
+        on db: any Database
+    ) async throws -> [String: any ClassGoalSnapshot] {
         var rows = try await classSnapshots(testSetupID: testSetupID, props: props, on: db)
-        guard props.activity?.isPerGroup == true, let userID,
-            let assignment = try await APIAssignment.query(on: db).filter(\.$testSetupID == testSetupID).first(),
+        guard props.activity?.isPerGroup == true, let userID, let assignment,
             let groupID = try await lab(of: userID, assignment: assignment, on: db)
         else { return rows }
         let labRows = try await APIGroupAchievementResult.query(on: db)

@@ -119,13 +119,37 @@ func loadRunnerLastSeen(on db: any Database, now: Date) async throws -> [String:
             result[row.runnerID] = max(result[row.runnerID] ?? row.recordedAt, row.recordedAt)
         }
     }
-    let rows = try await sql.select()
-        .column("runner_id")
-        .column(SQLFunction("MAX", args: SQLIdentifier("recorded_at")), as: "last_seen")
-        .from(RunnerSnapshot.schema)
-        .where("recorded_at", .greaterThanOrEqual, cutoff)
-        .groupBy("runner_id")
-        .all(decoding: RunnerLastSeenRow.self)
+    // A loose index scan over `idx_runner_snapshots_runner_recorded_at`: the
+    // recursive part steps from one runner ID to the next, and each runner's
+    // newest row is one probe. A GROUP BY over the window reads every
+    // snapshot of the last week (one row per runner per 30 s) to answer one
+    // row per runner, and Postgres 16 has no skip scan. A runner has a row at
+    // or after the cutoff exactly when its newest row is, and that row is then
+    // the newest in the window, so the answer is the one that
+    // `MAX(recorded_at) ... WHERE recorded_at >= cutoff GROUP BY runner_id`
+    // gives.
+    let rows = try await sql.raw(
+        """
+        WITH RECURSIVE runners(runner_id) AS (
+            (SELECT runner_id FROM \(unsafeRaw: RunnerSnapshot.schema) ORDER BY runner_id LIMIT 1)
+            UNION ALL
+            SELECT (
+                SELECT s.runner_id FROM \(unsafeRaw: RunnerSnapshot.schema) s
+                WHERE s.runner_id > runners.runner_id
+                ORDER BY s.runner_id LIMIT 1
+            )
+            FROM runners WHERE runners.runner_id IS NOT NULL
+        )
+        SELECT runner_id, last_seen FROM (
+            SELECT runners.runner_id, (
+                SELECT MAX(s.recorded_at) FROM \(unsafeRaw: RunnerSnapshot.schema) s
+                WHERE s.runner_id = runners.runner_id
+            ) AS last_seen
+            FROM runners WHERE runners.runner_id IS NOT NULL
+        ) newest
+        WHERE last_seen >= \(bind: cutoff)
+        """
+    ).all(decoding: RunnerLastSeenRow.self)
     return rows.reduce(into: [:]) { $0[$1.runnerID] = $1.lastSeen }
 }
 

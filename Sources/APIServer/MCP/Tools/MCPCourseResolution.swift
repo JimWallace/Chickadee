@@ -24,15 +24,19 @@ func resolveMCPCourse(
     key rawKey: String, context: ToolContext, forWrite: Bool
 ) async throws -> APICourse {
     let key = rawKey.trimmingCharacters(in: .whitespacesAndNewlines)
-    let all = try await APICourse.query(on: context.db).all()
     // Match among the active courses first, the way the web resolver does,
     // and fall back to the archived ones only when no active course matches.
     // Matching over everything and then preferring the active subset let an
     // archived legacy course coded "CS243-F26" win the key over an active
     // CS243 in Fall 2026, because the exact-code rule fired before the
-    // active filter emptied it (#1778).
-    var pool = coursesMatching(key: key, in: all.filter { !$0.isArchived })
-    if pool.isEmpty { pool = coursesMatching(key: key, in: all.filter(\.isArchived)) }
+    // active filter emptied it (#1778). The archived offerings, which
+    // accumulate every term, are read only for that fallback.
+    let active = try await APICourse.query(on: context.db).filter(\.$isArchived == false).all()
+    var pool = coursesMatching(key: key, in: active)
+    if pool.isEmpty {
+        let archived = try await APICourse.query(on: context.db).filter(\.$isArchived == true).all()
+        pool = coursesMatching(key: key, in: archived)
+    }
     guard !pool.isEmpty else {
         throw MCPToolError.invalidArguments(detail: "No course found with code \"\(key)\".")
     }

@@ -128,7 +128,7 @@ enum CompositeSpares {
         let filled = Set(
             try await APICompositeContribution.query(on: db)
                 .filter(\.$assignmentID == pool.assignmentID).filter(\.$groupID == pool.groupID)
-                .filter(\.$passed == true).all().map(\.slot))
+                .filter(\.$passed == true).all(\.$slot))
         let taken = Set(
             try await pool.spares(on: db)
                 .filter { $0.passed || !$0.finished || ($0.userID == userID && $0.finished) }.map(\.slot))

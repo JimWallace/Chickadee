@@ -48,16 +48,16 @@ extension InstructorLMSRoutes {
         let writable = course.map { !$0.isArchived } ?? false
         let hasGradeService = course?.ltiLineItemsURL != nil
         let usesAGS = course?.usesLTIGrades ?? false
-        var rows: [APILTIGradeSync] = []
-        if let course { rows = try await ltiGradeSyncRows(course: course, on: req.db) }
+        var summary = LTIGradeSyncSummary()
+        if let course { summary = try await ltiGradeSyncSummary(course: course, on: req.db) }
 
-        let failedCount = rows.count(where: { !$0.pending && $0.error != nil })
+        let failedCount = summary.failedCount
         let page = try await PageRequestContext.courseAware(req)
         let flash = FlashMessages(
             success: Self.ltiGradesNotice(
                 req.query[String.self, at: "done"], linked: req.query[Int.self, at: "linked"]),
             error: Self.ltiGradesProblem(req.query[String.self, at: "error"]))
-        let failures = try await ltiFailures(rows: rows, on: req.db)
+        let failures = try await ltiFailures(failed: summary.failedRows, on: req.db)
         return try await HTMLResponse {
             InstructorLTIGradesPage(
                 page: page,
@@ -71,8 +71,8 @@ extension InstructorLMSRoutes {
                 canChooseTransport: isInstructor && writable && platform != nil && hasGradeService,
                 canPushAll: writable && usesAGS,
                 canLinkStudents: isInstructor && writable && usesAGS && course?.ltiMembershipsURL != nil,
-                sentCount: rows.count(where: { !$0.pending && $0.error == nil && $0.syncedAt != nil }),
-                waitingCount: rows.count(where: \.pending),
+                sentCount: summary.sentCount,
+                waitingCount: summary.waitingCount,
                 failedCount: failedCount,
                 failures: failures,
                 failuresTruncated: failedCount > Self.ltiFailureListLimit)
@@ -215,25 +215,60 @@ extension InstructorLMSRoutes {
 
     // MARK: - Helpers
 
-    private func ltiGradeSyncRows(course: APICourse, on db: any Database) async throws -> [APILTIGradeSync] {
-        guard let courseID = course.id else { return [] }
+    /// The page's three counts and the first failures it lists. The counts
+    /// run in the database: one grade-sync row exists per (student, setup),
+    /// so the course's rows are never fetched.
+    private struct LTIGradeSyncSummary {
+        /// Sent: not pending, no error, and a sync time.
+        var sentCount = 0
+        /// Waiting: pending.
+        var waitingCount = 0
+        /// Failed: not pending, with an error.
+        var failedCount = 0
+        /// At most `ltiFailureListLimit` failed rows.
+        var failedRows: [APILTIGradeSync] = []
+    }
+
+    private func ltiGradeSyncSummary(course: APICourse, on db: any Database) async throws -> LTIGradeSyncSummary {
+        guard let courseID = course.id else { return LTIGradeSyncSummary() }
         let setupIDs = try await APIAssignment.query(on: db)
             .filter(\.$courseID == courseID)
-            .all()
-            .map(\.testSetupID)
-        var rows: [APILTIGradeSync] = []
+            .all(\.$testSetupID)
+        var summary = LTIGradeSyncSummary()
         for chunk in chunkedForInFilter(setupIDs) {
-            rows += try await APILTIGradeSync.query(on: db).filter(\.$testSetupID ~~ chunk).all()
+            summary.waitingCount += try await APILTIGradeSync.query(on: db)
+                .filter(\.$testSetupID ~~ chunk)
+                .filter(\.$pending == true)
+                .count()
+            summary.failedCount += try await APILTIGradeSync.query(on: db)
+                .filter(\.$testSetupID ~~ chunk)
+                .filter(\.$pending == false)
+                .filter(\.$error != nil)
+                .count()
+            summary.sentCount += try await APILTIGradeSync.query(on: db)
+                .filter(\.$testSetupID ~~ chunk)
+                .filter(\.$pending == false)
+                .filter(\.$error == nil)
+                .filter(\.$syncedAt != nil)
+                .count()
+            let budget = Self.ltiFailureListLimit - summary.failedRows.count
+            if budget > 0 {
+                summary.failedRows += try await APILTIGradeSync.query(on: db)
+                    .filter(\.$testSetupID ~~ chunk)
+                    .filter(\.$pending == false)
+                    .filter(\.$error != nil)
+                    .limit(budget)
+                    .all()
+            }
         }
-        return rows
+        return summary
     }
 
     private func ltiFailures(
-        rows: [APILTIGradeSync], on db: any Database
+        failed: [APILTIGradeSync], on db: any Database
     ) async throws
         -> [LTIGradeFailureRow]
     {
-        let failed = rows.filter { !$0.pending && $0.error != nil }.prefix(Self.ltiFailureListLimit)
         guard !failed.isEmpty else { return [] }
         let users = try await APIUser.query(on: db).filter(\.$id ~~ failed.map(\.userID)).all()
         let names = Dictionary(users.compactMap { user in user.id.map { ($0, user.username) } }) { first, _ in first }

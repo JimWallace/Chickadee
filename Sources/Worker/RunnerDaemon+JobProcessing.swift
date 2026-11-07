@@ -23,7 +23,15 @@ extension WorkerDaemon {
         var stageTimings = JobStageTimings()
 
         logJobAccepted(job)
-        try? await sendHeartbeat()
+        // The start heartbeat reports this job to the server, but the job
+        // needs nothing from it: the claiming poll already checked the runner
+        // in, and the server's heartbeat handler only records a check-in. It
+        // runs beside the workspace setup and the downloads rather than ahead
+        // of them, so a slow server, or one answering with retries, does not
+        // hold the job's start. It is never cancelled, and the end-of-job
+        // defer awaits it before the final heartbeat, so a job still sends
+        // both, start first.
+        let startHeartbeat = Task { _ = try? await self.sendHeartbeat() }
 
         let heartbeatTask = startHeartbeatLoop()
         defer {
@@ -40,6 +48,7 @@ extension WorkerDaemon {
             // that most needs a final heartbeat (the cancelled worker loop)
             // would be the one path that skipped it.
             await withTaskCancellationShield {
+                await startHeartbeat.value
                 try? await self.sendHeartbeat()
             }
         }

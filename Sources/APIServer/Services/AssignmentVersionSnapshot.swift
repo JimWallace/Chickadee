@@ -94,11 +94,14 @@ enum AssignmentVersionSnapshotBuilder {
     ) async throws -> AssignmentVersionSnapshot {
         let fileMap = try await captureZipEntries(zipPath: setup.zipPath, blobs: blobs)
 
+        // Hashing and copying the notebook is file I/O as long as the file, so
+        // it runs on the thread pool, not the request's thread (#1156).
         var notebookHash: String?
-        if let notebookPath = setup.notebookPath, !notebookPath.isEmpty,
-            FileManager.default.fileExists(atPath: notebookPath)
-        {
-            notebookHash = try blobs.putFile(at: notebookPath)
+        if let notebookPath = setup.notebookPath, !notebookPath.isEmpty {
+            notebookHash = try await runBlocking { () throws -> String? in
+                guard FileManager.default.fileExists(atPath: notebookPath) else { return nil }
+                return try blobs.putFile(at: notebookPath)
+            }
         }
 
         return AssignmentVersionSnapshot(
@@ -152,18 +155,26 @@ enum AssignmentVersionSnapshotBuilder {
         // URL and trimming `workDir`'s path off each one matched nothing on
         // macOS, where the enumerator reports `/private/var/…` for a `workDir`
         // under the `/var` symlink.
-        guard let walker = fileManager.enumerator(atPath: workDir.path) else { return [:] }
+        //
+        // The walk hashes and copies every file, which for a setup with
+        // datasets is many megabytes of synchronous I/O on every save, so it
+        // runs on the thread pool, not the request's thread (#1156). The
+        // `defer` above still removes `workDir` after it.
+        return try await runBlocking { [workDir, blobs] in
+            let fileManager = FileManager.default
+            guard let walker = fileManager.enumerator(atPath: workDir.path) else { return [:] }
 
-        var map: [String: String] = [:]
-        for case let relativePath as String in walker.allObjects {
-            // Directories and symlinks carry no content worth versioning, and a
-            // symlink's target is either already captured as its own entry or
-            // points outside the snapshot entirely.
-            let url = workDir.appendingPathComponent(relativePath)
-            let values = try? url.resourceValues(forKeys: [.isRegularFileKey])
-            guard values?.isRegularFile == true else { continue }
-            map[relativePath] = try blobs.putFile(at: url.path)
+            var map: [String: String] = [:]
+            for case let relativePath as String in walker.allObjects {
+                // Directories and symlinks carry no content worth versioning, and a
+                // symlink's target is either already captured as its own entry or
+                // points outside the snapshot entirely.
+                let url = workDir.appendingPathComponent(relativePath)
+                let values = try? url.resourceValues(forKeys: [.isRegularFileKey])
+                guard values?.isRegularFile == true else { continue }
+                map[relativePath] = try blobs.putFile(at: url.path)
+            }
+            return map
         }
-        return map
     }
 }

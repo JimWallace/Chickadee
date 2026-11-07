@@ -272,7 +272,46 @@ public enum DatasetMaterializer {
     /// CR+LF is a single Swift `Character` (one extended grapheme cluster), so
     /// `split(separator: "\n")` would not see the LF inside a CRLF ending and
     /// would return the whole file as one "line".
+    ///
+    /// One pass over the UTF-8 bytes, cutting at each LF, CR or CR LF: the
+    /// claim path runs this over the whole pool for every job, and two
+    /// `replacingOccurrences` copies plus a grapheme split took about 0.47 s
+    /// on a 2.5 MB file against 14 ms. A CR or LF byte is never inside a
+    /// multi-byte sequence, and each cut is a `Character` boundary. The lines
+    /// are those `normalizedLinesByReplacing` returns, except where a line
+    /// starts with a mark or format character: `replacingOccurrences` leaves a
+    /// line break with one of those after it, so such a file takes that path.
     static func normalizedLines(of csv: String) -> (lines: [Substring], trailingNewline: Bool) {
+        var lines: [Substring] = []
+        let utf8 = csv.utf8
+        var start = utf8.startIndex
+        var index = start
+        while index != utf8.endIndex {
+            let byte = utf8[index]
+            guard byte == UInt8(ascii: "\n") || byte == UInt8(ascii: "\r") else {
+                utf8.formIndex(after: &index)
+                continue
+            }
+            lines.append(csv[start..<index])
+            utf8.formIndex(after: &index)
+            if byte == UInt8(ascii: "\r"), index != utf8.endIndex, utf8[index] == UInt8(ascii: "\n") {
+                utf8.formIndex(after: &index)
+            }
+            if index != utf8.endIndex, utf8[index] >= 0x80, !startsCluster(csv.unicodeScalars[index]) {
+                return normalizedLinesByReplacing(csv)
+            }
+            start = index
+        }
+        let hadTrailingNewline = utf8.last == UInt8(ascii: "\n") || utf8.last == UInt8(ascii: "\r")
+        if !hadTrailingNewline {
+            lines.append(csv[start...])
+        }
+        return (lines, hadTrailingNewline)
+    }
+
+    /// `normalizedLines` as it was first written, for the files the byte scan
+    /// hands back: a line break followed by a mark or format character.
+    static func normalizedLinesByReplacing(_ csv: String) -> (lines: [Substring], trailingNewline: Bool) {
         let normalized = csv.replacingOccurrences(of: "\r\n", with: "\n")
             .replacingOccurrences(of: "\r", with: "\n")
         let hadTrailingNewline = normalized.hasSuffix("\n")
@@ -281,6 +320,22 @@ public enum DatasetMaterializer {
             lines.removeLast()
         }
         return (lines, hadTrailingNewline)
+    }
+
+    /// True for a scalar that begins a new composed character after a line
+    /// break: a letter, number, punctuation, symbol or space. A mark, a format
+    /// character (a joiner), a modifier, a control or an unassigned scalar can
+    /// attach to the break in `replacingOccurrences`'s matching, so it is not.
+    private static func startsCluster(_ scalar: Unicode.Scalar) -> Bool {
+        switch scalar.properties.generalCategory {
+        case .uppercaseLetter, .lowercaseLetter, .titlecaseLetter, .otherLetter, .decimalNumber, .letterNumber,
+            .otherNumber, .connectorPunctuation, .dashPunctuation, .openPunctuation, .closePunctuation,
+            .initialPunctuation, .finalPunctuation, .otherPunctuation, .mathSymbol, .currencySymbol,
+            .otherSymbol, .spaceSeparator:
+            return true
+        default:
+            return false
+        }
     }
 
     /// Splits one CSV record into fields, honouring double-quoted fields and

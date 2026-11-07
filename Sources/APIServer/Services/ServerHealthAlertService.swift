@@ -155,17 +155,46 @@ struct PendingQueueState: Sendable {
     static let empty = PendingQueueState(pendingCount: 0, oldestPendingAge: nil)
 }
 
+/// One aggregate row of the pending queue: its size and its oldest effective
+/// enqueue time, NULL when nothing is pending.
+private struct PendingQueueAggregateRow: Decodable {
+    let pendingCount: Int
+    let oldest: Date?
+
+    enum CodingKeys: String, CodingKey {
+        case pendingCount = "pending_count"
+        case oldest
+    }
+}
+
 private func loadPendingQueueState(on application: Application, now: Date) async throws -> PendingQueueState {
-    let pending = try await APISubmission.query(on: application.db)
-        .filter(\.$status == SubmissionStatus.pending.rawValue)
-        .all()
-    let pendingCount = pending.count
     // Use the effective enqueue time (retestedAt ?? submittedAt) so a fresh
     // retest of an old submission doesn't look like it's been queued for days.
     // Matches the queueWaitMs baseline established in v0.4.45.
-    let oldestEnqueuedAt = pending.compactMap { $0.retestedAt ?? $0.submittedAt }.min()
-    let oldestAge = oldestEnqueuedAt.map { now.timeIntervalSince($0) }
-    return PendingQueueState(pendingCount: pendingCount, oldestPendingAge: oldestAge)
+    guard let sql = application.db as? (any SQLDatabase) else {
+        // Non-SQL fallback (not hit by the Postgres driver in use).
+        let pending = try await APISubmission.query(on: application.db)
+            .filter(\.$status == SubmissionStatus.pending.rawValue)
+            .field(\.$retestedAt)
+            .field(\.$submittedAt)
+            .all()
+        let oldestEnqueuedAt = pending.compactMap { $0.retestedAt ?? $0.submittedAt }.min()
+        return PendingQueueState(
+            pendingCount: pending.count, oldestPendingAge: oldestEnqueuedAt.map { now.timeIntervalSince($0) })
+    }
+    // One aggregate row instead of every pending row: the pending set is
+    // largest exactly when this rule matters. MIN skips a row whose two
+    // times are both NULL, as `compactMap` does above, and is NULL (no age)
+    // when nothing is pending.
+    let enqueuedAt = SQLFunction("COALESCE", args: SQLColumn("retested_at"), SQLColumn("submitted_at"))
+    let row = try await sql.select()
+        .column(SQLFunction("COUNT", args: SQLLiteral.all), as: "pending_count")
+        .column(SQLFunction("MIN", args: enqueuedAt), as: "oldest")
+        .from(APISubmission.schema)
+        .where("status", .equal, SubmissionStatus.pending.rawValue)
+        .first(decoding: PendingQueueAggregateRow.self)
+    return PendingQueueState(
+        pendingCount: row?.pendingCount ?? 0, oldestPendingAge: row?.oldest.map { now.timeIntervalSince($0) })
 }
 
 /// How long a silent-but-known runner stays "remembered" by the runner-offline

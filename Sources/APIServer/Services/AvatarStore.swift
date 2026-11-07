@@ -219,12 +219,17 @@ enum AvatarStore {
 
     // MARK: - Coding
 
+    /// One decoder for every spec: a roster page decodes one per row on each
+    /// poll. `JSONDecoder` is `Sendable` and this one is never reconfigured,
+    /// as with `ManifestCodec.decoder`.
+    private static let specDecoder = JSONDecoder()
+
     /// A spec whose stored JSON no longer decodes — a slot renamed, a row
     /// hand-edited — is treated as absent and redrawn rather than crashing a
     /// page. Losing one cosmetic choice beats a 500 on the account page.
     static func decode(_ json: String) -> AvatarSpec? {
         guard let data = json.data(using: .utf8) else { return nil }
-        return try? JSONDecoder().decode(AvatarSpec.self, from: data)
+        return try? specDecoder.decode(AvatarSpec.self, from: data)
     }
 
     static func encode(_ spec: AvatarSpec) -> String? {

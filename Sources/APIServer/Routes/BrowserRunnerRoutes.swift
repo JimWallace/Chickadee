@@ -278,16 +278,30 @@ struct BrowserRunnerRoutes: RouteCollection {
             // still resolve.
             let resolved = AssignmentLanguage.resolve(manifest: manifest)
             language = resolved
+            // Resolve per-student dataset slices (Phase 1 datasets) — returns nil when
+            // the manifest declares no datasets, which is the common case. Resolved
+            // first, on the thread pool (it reads files, #1156), so the expressions
+            // below read the same slices instead of resolving again.
+            let resolveSlices = { @Sendable in
+                DatasetResolver.resolve(
+                    manifest: manifest, seedHex: seed, courseSeedHex: courseSeed, dealNumber: dealNumber,
+                    sourceDirectory: sharedDir)
+            }
+            let datasetFiles: [String: String]?
+            do {
+                datasetFiles = try await runBlocking(resolveSlices)
+            } catch {
+                // The pool refuses work only while the server shuts down.
+                // Resolve here instead, so the request fails no more often
+                // than it did.
+                datasetFiles = resolveSlices()
+            }
+            personalizedFiles = datasetFiles
             personalizedInputs = await PersonalizationSubstitution.gradingInputs(
                 manifest: manifest, seedHex: seed, courseSeedHex: courseSeed, dealNumber: dealNumber,
                 supportFilesDirectory: sharedDir,
-                language: resolved)
+                language: resolved, datasetSlices: .resolved(datasetFiles))
             personalizedInputs = CompositeSlots.merged(personalizedInputs, with: compositeInputs)
-            // Resolve per-student dataset slices (Phase 1 datasets) — returns nil when
-            // the manifest declares no datasets, which is the common case.
-            personalizedFiles = DatasetResolver.resolve(
-                manifest: manifest, seedHex: seed, courseSeedHex: courseSeed, dealNumber: dealNumber,
-                sourceDirectory: sharedDir)
         }
         return BrowserRunnerSeedResponse(
             seed: seed, personalizedInputs: personalizedInputs,

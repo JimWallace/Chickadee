@@ -36,7 +36,7 @@ struct SubmitChips: Encodable {
             } else { 0 }
         return SubmitChips(
             attemptNumber: priorAttempts + 1,
-            deadlineText: deadline.map { waterlooDateTimeFormatter().string(from: $0) },
+            deadlineText: deadline.map(waterlooDateTimeText),
             deadlineISO: deadline.map(iso8601String))
     }
 }

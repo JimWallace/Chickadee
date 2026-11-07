@@ -47,7 +47,10 @@ extension AuthoringSnapshot {
         }
         // Without the notebook the pattern-family refs are still checked.
         var notebook: Data?
-        await attempt("starter notebook") { notebook = try await notebookData(for: setup) }
+        await attempt("starter notebook") {
+            notebook = try await context.request.application.notebookBytesCache.notebookData(
+                for: NotebookSourceRef(setup))
+        }
         snapshot.placeholderNames = PersonalizationPlaceholders.used(notebookData: notebook, manifest: manifest)
         if let notebook {
             if let cells = NotebookCellSources.cells(from: notebook) {
@@ -119,22 +122,36 @@ extension AuthoringSnapshot {
     /// variant `index` holds dealt number `index`, so a partitioned dataset
     /// reads part `index`. Each evaluation is bounded by the evaluator's own
     /// timeout.
+    ///
+    /// The seeds are evaluated at once, not one after another: each
+    /// evaluation runs in its own scratch directory and shares no state, so
+    /// the call waits for the slowest interpreter rather than the sum of
+    /// them. The server-wide spawn gate still bounds how many interpreters
+    /// run. The results come back in seed order.
     private static func seedEvaluations(
         manifest: TestProperties, setupID: String, context: ToolContext
     ) async -> [SeedEvaluation] {
         guard manifest.hasExpressions else { return [] }
         let supportDir = context.request.application.testSetupsDirectory + "shared/\(setupID)/"
         let language = AssignmentLanguage.resolve(manifest: manifest)
-        var evaluations: [SeedEvaluation] = []
-        for index in 0..<validationVariantCount {
-            let seedHex = DatasetDiagnostics.preflightSeed(index)
-            let resolution = await PersonalizationSubstitution.resolve(
-                manifest: manifest, seedHex: seedHex,
-                courseSeedHex: manifest.hasCourseScopedDatasets ? seedHex : nil,
-                dealNumber: manifest.hasPartitionedDatasets ? index : nil,
-                supportFilesDirectory: supportDir, language: language)
-            evaluations.append(SeedEvaluation(seedHex: seedHex, error: resolution.evaluationError))
+        let hasCourseScopedDatasets = manifest.hasCourseScopedDatasets
+        let hasPartitionedDatasets = manifest.hasPartitionedDatasets
+        let evaluated = await withTaskGroup(of: (Int, SeedEvaluation).self) { group in
+            for index in 0..<validationVariantCount {
+                group.addTask {
+                    let seedHex = DatasetDiagnostics.preflightSeed(index)
+                    let resolution = await PersonalizationSubstitution.resolve(
+                        manifest: manifest, seedHex: seedHex,
+                        courseSeedHex: hasCourseScopedDatasets ? seedHex : nil,
+                        dealNumber: hasPartitionedDatasets ? index : nil,
+                        supportFilesDirectory: supportDir, language: language)
+                    return (index, SeedEvaluation(seedHex: seedHex, error: resolution.evaluationError))
+                }
+            }
+            var byIndex: [(Int, SeedEvaluation)] = []
+            for await pair in group { byIndex.append(pair) }
+            return byIndex
         }
-        return evaluations
+        return evaluated.sorted { $0.0 < $1.0 }.map(\.1)
     }
 }

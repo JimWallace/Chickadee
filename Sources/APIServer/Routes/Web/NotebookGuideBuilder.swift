@@ -37,6 +37,9 @@ struct NotebookGuideBuilder {
     func build() -> NotebookGuide {
         let language = AssignmentLanguage.resolve(manifest: manifest)
         let starterScan = starter.map { scanNotebookDefinitions($0, language: language) }
+        // Parsed once for the starter sources and the reflections, which both
+        // read its cells.
+        let starterCells = starter.flatMap(NotebookCellView.cells(from:))
         let outcomes = outcomesByScript()
         let hints = buildHintByFilename(manifest)
         let failureDetails = buildFailureDetailByFilename(manifest)
@@ -73,8 +76,10 @@ struct NotebookGuideBuilder {
             language: language?.rawValue,
             attempt: attemptPayload(),
             tasks: tasks,
-            starterSources: starterScan.map { starterSources(for: anchorsForStarter, in: $0) } ?? [:],
-            reflections: reflections())
+            starterSources: starterScan.map {
+                starterSources(for: anchorsForStarter, in: $0, cells: starterCells)
+            } ?? [:],
+            reflections: reflections(starterCells: starterCells))
     }
 
     // MARK: - Tasks
@@ -198,9 +203,9 @@ struct NotebookGuideBuilder {
     // MARK: - Starter and reflections
 
     private func starterSources(
-        for anchors: [NotebookGuide.Anchor], in scan: NotebookDefinitionScan
+        for anchors: [NotebookGuide.Anchor], in scan: NotebookDefinitionScan, cells: [NotebookCellView]?
     ) -> [String: String] {
-        guard let starter, let cells = NotebookCellView.cells(from: starter) else { return [:] }
+        guard let cells else { return [:] }
         var sources: [String: String] = [:]
         for anchor in anchors {
             let isSection = anchor.kind == "section"
@@ -224,9 +229,9 @@ struct NotebookGuideBuilder {
         return lines.joined(separator: "\n")
     }
 
-    private func reflections() -> [NotebookGuide.Reflection] {
-        guard let starter else { return [] }
-        let pairs = ReflectionCells.pairs(starter: starter, submission: nil)
+    private func reflections(starterCells: [NotebookCellView]?) -> [NotebookGuide.Reflection] {
+        guard let starterCells else { return [] }
+        let pairs = ReflectionCells.pairs(starterCells: starterCells, submission: nil)
         return pairs.map { pair in
             NotebookGuide.Reflection(
                 label: pairs.count == 1 ? "Reflection" : "Reflection \(pair.index)",

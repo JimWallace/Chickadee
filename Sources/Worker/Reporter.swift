@@ -57,16 +57,28 @@ struct Reporter: Sendable {
         // submission never resolved. Truncate longResults across the
         // collection instead (statuses and aggregates untouched); the
         // collection carries a visible warning when anything was cut.
-        var report = report
-        let (bounded, didTruncate) = report.collection.truncatingOversizedOutput()
-        if didTruncate {
-            report = WorkerExecutionReport(
-                collection: bounded, diagnostics: report.diagnostics, matches: report.matches)
-        }
-
+        //
+        // The report is encoded first. The collection's JSON is part of the
+        // report's JSON, so a report within the budget holds a collection
+        // within it, which the truncation would return unchanged: its body is
+        // these bytes, and the collection is not encoded a second time just
+        // to be measured.
         let encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .iso8601
-        do { request.httpBody = try encoder.encode(report) } catch { throw .transportError(error) }
+        do {
+            var body = try encoder.encode(report)
+            if body.count > TestOutcomeCollection.defaultSerializedBudgetBytes {
+                let (bounded, didTruncate) = report.collection.truncatingOversizedOutput()
+                if didTruncate {
+                    body = try encoder.encode(
+                        WorkerExecutionReport(
+                            collection: bounded, diagnostics: report.diagnostics, matches: report.matches))
+                }
+            }
+            request.httpBody = body
+        } catch {
+            throw .transportError(error)
+        }
 
         try await sendWithRetry(
             request,

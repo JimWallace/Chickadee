@@ -136,7 +136,7 @@ public enum WorkerHMACSigning {
     public static func hmacSHA256Hex(message: String, secret: String) -> String {
         let key = SymmetricKey(data: Data(secret.utf8))
         let mac = HMAC<SHA256>.authenticationCode(for: Data(message.utf8), using: key)
-        return hexEncoded(Data(mac))
+        return lowercaseHex(mac)
     }
 
     /// Constant-time string equality.  Both sides must be the same
@@ -150,11 +150,4 @@ public enum WorkerHMACSigning {
         for i in left.indices { result |= left[i] ^ right[i] }
         return result == 0
     }
-}
-
-/// Internal — hex-encodes raw bytes lowercase.  Used by
-/// `WorkerHMACSigning.hmacSHA256Hex`; not part of the public API
-/// because `sha256HexDigest` already covers the SHA-256 case.
-private func hexEncoded(_ data: Data) -> String {
-    data.map { String(cFormat: "%02x", $0) }.joined()
 }

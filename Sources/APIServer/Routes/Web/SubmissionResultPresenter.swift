@@ -551,8 +551,18 @@ func loadClassGoalViews(
 
     let rowByAchievement = try await LabGoalGroups.snapshots(
         testSetupID: testSetupID, props: props, userID: userID, on: db)
+    return classGoalViews(goals: goals, snapshots: rowByAchievement)
+}
 
-    return goals.map { goal in
+/// The "Achievements" section's rows for `goals` (the manifest's class
+/// goals), from their snapshots by achievement, already read. A goal with no
+/// snapshot yet shows no progress.
+func classGoalViews(
+    goals: [Achievement], snapshots rowByAchievement: [String: any ClassGoalSnapshot]
+)
+    -> [ClassGoalView]
+{
+    goals.map { goal in
         let row = rowByAchievement[goal.id]
         let progress = row?.progress ?? 0
         let rewardLabel: String

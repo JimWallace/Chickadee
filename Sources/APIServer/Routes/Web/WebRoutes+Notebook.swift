@@ -289,7 +289,7 @@ extension WebRoutes {
                 embedded: args.embedded,
                 kernelLanguage: NotebookBootFacts.kernelLanguage(manifestJSON: setup.manifest),
                 bootBird: NotebookBootFacts.bird(avatarSpecJSON: args.user.avatarSpecJSON, isStaff: args.isAuthor),
-                dueLabel: args.assignment?.dueAt.map { waterlooDateTimeFormatter().string(from: $0) },
+                dueLabel: args.assignment?.dueAt.map(waterlooDateTimeText),
                 definitionPatterns: NotebookBootFacts.definitionPatterns(manifestJSON: setup.manifest)
             ))
     }
@@ -441,7 +441,7 @@ extension WebRoutes {
             aiFeedbackNotice: aiFeedbackNotice,
             kernelLanguage: NotebookBootFacts.kernelLanguage(manifestJSON: setup.manifest),
             bootBird: NotebookBootFacts.bird(avatarSpecJSON: args.user.avatarSpecJSON, isStaff: args.isAuthor),
-            dueLabel: args.assignment?.dueAt.map { waterlooDateTimeFormatter().string(from: $0) },
+            dueLabel: args.assignment?.dueAt.map(waterlooDateTimeText),
             definitionPatterns: NotebookBootFacts.definitionPatterns(manifestJSON: setup.manifest)
         )
     }

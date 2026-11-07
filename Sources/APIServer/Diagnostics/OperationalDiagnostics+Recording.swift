@@ -252,15 +252,24 @@ extension OperationalDiagnosticsService {
         )
     }
 
+    /// `context` is the course and assignment when the caller already
+    /// holds them (the claim path resolved both while it chose the job);
+    /// nil loads them.
     func recordJobAssigned(
         submission: APISubmission,
         runnerVersion: String? = nil,
+        context knownContext: SubmissionDiagnosticsContext? = nil,
         on db: any Database,
         logger: Logger
     ) async {
         guard configuration.enabled, let submissionID = submission.id else { return }
         do {
-            let context = try await loadSubmissionContext(for: submission, on: db)
+            let context: SubmissionDiagnosticsContext
+            if let knownContext {
+                context = knownContext
+            } else {
+                context = try await loadSubmissionContext(for: submission, on: db)
+            }
             let diagnostics = try await findOrCreateSubmissionDiagnostics(
                 submission: submission,
                 context: context,
@@ -348,15 +357,24 @@ extension OperationalDiagnosticsService {
         }
     }
 
+    /// `submission` is the row when the caller has just loaded and saved it
+    /// (result ingest); nil finds it by the collection's id.
     func recordWorkerExecutionReport(
         collection: TestOutcomeCollection,
         diagnostics workerDiagnostics: WorkerExecutionDiagnostics?,
+        submission knownSubmission: APISubmission? = nil,
         on db: any Database,
         logger: Logger
     ) async {
         guard configuration.enabled else { return }
         do {
-            guard let submission = try await APISubmission.find(collection.submissionID, on: db) else {
+            let found: APISubmission?
+            if let knownSubmission {
+                found = knownSubmission
+            } else {
+                found = try await APISubmission.find(collection.submissionID, on: db)
+            }
+            guard let submission = found else {
                 logger.warning(
                     "diagnostics_missing_submission",
                     metadata: [

@@ -51,7 +51,7 @@ extension AdminRoutes {
         req.session.data["bs_flash_success"] = nil
         req.session.data["bs_flash_error"] = nil
 
-        let capturedAt = stored?.capturedAt.map { waterlooDateTimeFormatter().string(from: $0) }
+        let capturedAt = stored?.capturedAt.map(waterlooDateTimeText)
 
         // Relax `form-action` so the Re-authorize form on THIS page can POST →
         // 303 to the LMS origin. The browser enforces form-action using the CSP

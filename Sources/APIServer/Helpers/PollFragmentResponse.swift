@@ -73,13 +73,55 @@ extension Response {
         return Response(status: .notModified, headers: headers)
     }
 
+    /// SHA-256 over `html` with every `csrfToken` removed, as the first 32
+    /// lowercase hex digits. The rows are hashed in the pieces between the
+    /// tokens rather than through a token-free copy: on a 1000-student roster
+    /// `replacingOccurrences` alone took about 60 ms per poll, and the byte
+    /// scan takes about 2 ms. The bytes hashed are the same, so the ETag is.
     static func weakETag(for html: String, ignoring csrfToken: String? = nil) -> String {
-        var text = html
+        let bytes = Array(html.utf8)
+        var hasher = SHA256()
         if let csrfToken, !csrfToken.isEmpty {
-            text = text.replacingOccurrences(of: csrfToken, with: "")
+            if let kept = rangesOutsideToken(Array(csrfToken.utf8), in: bytes) {
+                for range in kept { hasher.update(data: bytes[range]) }
+            } else {
+                hasher.update(data: Data(html.replacingOccurrences(of: csrfToken, with: "").utf8))
+            }
+        } else {
+            hasher.update(data: bytes)
         }
-        let digest = SHA256.hash(data: Data(text.utf8))
-        let hex = digest.map { String(cFormat: "%02x", $0) }.joined()
-        return "W/\"\(hex.prefix(32))\""
+        return "W/\"\(lowercaseHex(hasher.finalize().prefix(16)))\""
+    }
+
+    /// The ranges of `bytes` left once every occurrence of `token` is cut,
+    /// leftmost first and without overlap, as `replacingOccurrences(of:with:)`
+    /// cuts them. nil when that call might cut a different set, and the caller
+    /// then makes it: it matches composed characters, not bytes, so an
+    /// occurrence next to a combining mark is one it may skip. A token of
+    /// lowercase hex digits and dashes (every CSRF token) with an ASCII byte
+    /// or the end of the rows on each side matches both ways.
+    private static func rangesOutsideToken(_ token: [UInt8], in bytes: [UInt8]) -> [Range<Int>]? {
+        let isTokenByte: (UInt8) -> Bool = { byte in
+            (UInt8(ascii: "0")...UInt8(ascii: "9")).contains(byte)
+                || (UInt8(ascii: "a")...UInt8(ascii: "f")).contains(byte) || byte == UInt8(ascii: "-")
+        }
+        guard let first = token.first, token.allSatisfy(isTokenByte) else { return nil }
+        var kept: [Range<Int>] = []
+        var start = 0
+        var index = 0
+        while index + token.count <= bytes.count {
+            guard bytes[index] == first, bytes[index..<index + token.count].elementsEqual(token) else {
+                index += 1
+                continue
+            }
+            let end = index + token.count
+            if index > 0, bytes[index - 1] >= 0x80 { return nil }
+            if end < bytes.count, bytes[end] >= 0x80 { return nil }
+            kept.append(start..<index)
+            start = end
+            index = end
+        }
+        kept.append(start..<bytes.count)
+        return kept
     }
 }

@@ -64,7 +64,9 @@ public func interpretScriptOutput(_ output: ScriptOutput) -> InterpretedScriptRe
     }
 
     let lines = splitLines(output.stdout)
-    let lastLine = lines.map(trimHorizontalWhitespace).last { !$0.isEmpty }
+    // Scanned from the end, so usually one line is trimmed, not every line.
+    let lastLineIndex = lines.indices.last { !trimHorizontalWhitespace(lines[$0]).isEmpty }
+    let lastLine = lastLineIndex.map { trimHorizontalWhitespace(lines[$0]) }
 
     // The footer is the last non-empty line iff it's a JSON object.
     let footer: [String: FooterValue]? = {
@@ -95,8 +97,9 @@ public func interpretScriptOutput(_ output: ScriptOutput) -> InterpretedScriptRe
     let strippedStdout: String
     if footer != nil {
         var stdoutLines = lines
-        if let lastIdx = stdoutLines.indices.last(where: { !trimHorizontalWhitespace(stdoutLines[$0]).isEmpty }) {
-            stdoutLines.remove(at: lastIdx)
+        // The footer's line: the last non-empty one, found above.
+        if let lastLineIndex {
+            stdoutLines.remove(at: lastLineIndex)
         }
         strippedStdout = stdoutLines.joined(separator: "\n")
     } else {

@@ -222,13 +222,16 @@ struct SecurityHeadersMiddleware: AsyncMiddleware {
     /// directive whose allow-list always includes `'self'` and any extra
     /// origins passed in.
     static func renderCSP(base: [String], formActionOrigins: [String]) -> String {
+        (base + [formActionDirective(formActionOrigins)]).joined(separator: "; ")
+    }
+
+    /// The `form-action` directive: `'self'`, then each extra origin once.
+    static func formActionDirective(_ origins: [String]) -> String {
         var sources = ["'self'"]
-        for origin in formActionOrigins where !sources.contains(origin) {
+        for origin in origins where !sources.contains(origin) {
             sources.append(origin)
         }
-        var directives = base
-        directives.append("form-action " + sources.joined(separator: " "))
-        return directives.joined(separator: "; ")
+        return "form-action " + sources.joined(separator: " ")
     }
 
     /// Extracts the scheme://host[:port] origin from a URL string, suitable
@@ -283,6 +286,13 @@ struct SecurityHeadersMiddleware: AsyncMiddleware {
     let crossOriginOpenerPolicy: String
     let crossOriginResourcePolicy: String
     let strictTransportSecurity: String?
+    /// The base directives joined, as `renderCSP` joins them ahead of
+    /// `form-action`, or nil when there are none. Built once: the policy is
+    /// the same for every response that admits no extra framing origin.
+    private let joinedBaseDirectives: String?
+    /// The same for the vendored editor's responses, whose `script-src`
+    /// carries the inline-script hashes.
+    private let joinedEditorDirectives: String?
 
     init(
         cspBaseDirectives: [String] = Self.defaultContentSecurityPolicyBase,
@@ -298,6 +308,9 @@ struct SecurityHeadersMiddleware: AsyncMiddleware {
         self.crossOriginOpenerPolicy = crossOriginOpenerPolicy
         self.crossOriginResourcePolicy = crossOriginResourcePolicy
         self.strictTransportSecurity = strictTransportSecurity
+        let editorDirectives = Self.editorDirectives(cspBaseDirectives, hashes: editorInlineScriptHashes)
+        joinedBaseDirectives = cspBaseDirectives.isEmpty ? nil : cspBaseDirectives.joined(separator: "; ")
+        joinedEditorDirectives = editorDirectives.isEmpty ? nil : editorDirectives.joined(separator: "; ")
     }
 
     func respond(
@@ -308,10 +321,7 @@ struct SecurityHeadersMiddleware: AsyncMiddleware {
         let frameAncestors = request.storage[FrameAncestorsKey.self] ?? []
         let csp =
             request.storage[ContentSecurityPolicyKey.self]
-            ?? Self.renderCSP(
-                base: Self.withFrameAncestors(frameAncestors, in: cspDirectives(for: request)),
-                formActionOrigins: formActionExtras(for: request)
-            )
+            ?? contentSecurityPolicy(for: request, frameAncestors: frameAncestors)
         // Never cache authenticated HTML — a logged-out browser must re-ask
         // the server rather than render a stale dashboard from its bf-cache or
         // disk cache. Scoped to text/html so static assets stay cacheable.
@@ -354,11 +364,33 @@ struct SecurityHeadersMiddleware: AsyncMiddleware {
     /// student or instructor logs into — keeps a `script-src` that permits no
     /// inline execution of any kind.
     private func cspDirectives(for request: Request) -> [String] {
-        guard !editorInlineScriptHashes.isEmpty,
-            request.url.path.hasPrefix(Self.vendoredEditorPathPrefix)
-        else { return cspBaseDirectives }
-        let scriptSrc = Self.scriptSrc(inlineScriptHashes: editorInlineScriptHashes)
-        return cspBaseDirectives.map { $0.hasPrefix("script-src ") ? scriptSrc : $0 }
+        guard isEditorRequest(request) else { return cspBaseDirectives }
+        return Self.editorDirectives(cspBaseDirectives, hashes: editorInlineScriptHashes)
+    }
+
+    /// True when this response carries the editor's inline-script hashes.
+    private func isEditorRequest(_ request: Request) -> Bool {
+        !editorInlineScriptHashes.isEmpty && request.url.path.hasPrefix(Self.vendoredEditorPathPrefix)
+    }
+
+    /// `directives` with `script-src` re-rendered to carry `hashes`.
+    private static func editorDirectives(_ directives: [String], hashes: [String]) -> [String] {
+        let scriptSrc = Self.scriptSrc(inlineScriptHashes: hashes)
+        return directives.map { $0.hasPrefix("script-src ") ? scriptSrc : $0 }
+    }
+
+    /// The policy `renderCSP` renders for this response. With no extra
+    /// framing origin the base directives are the ones joined in `init`, so
+    /// only `form-action`, which can name a per-request origin, is built here.
+    private func contentSecurityPolicy(for request: Request, frameAncestors: [String]) -> String {
+        guard frameAncestors.isEmpty else {
+            return Self.renderCSP(
+                base: Self.withFrameAncestors(frameAncestors, in: cspDirectives(for: request)),
+                formActionOrigins: formActionExtras(for: request))
+        }
+        let formAction = Self.formActionDirective(formActionExtras(for: request))
+        let joined = isEditorRequest(request) ? joinedEditorDirectives : joinedBaseDirectives
+        return joined.map { $0 + "; " + formAction } ?? formAction
     }
 
     /// The directives with `frame-ancestors` widened to `origins`, which a

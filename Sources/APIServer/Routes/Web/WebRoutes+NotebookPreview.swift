@@ -76,7 +76,7 @@ extension WebRoutes {
             aiFeedbackNotice: false,
             kernelLanguage: NotebookBootFacts.kernelLanguage(manifestJSON: setup.manifest),
             bootBird: NotebookBootFacts.bird(avatarSpecJSON: user.avatarSpecJSON, isStaff: true),
-            dueLabel: assignment.dueAt.map { waterlooDateTimeFormatter().string(from: $0) },
+            dueLabel: assignment.dueAt.map(waterlooDateTimeText),
             definitionPatterns: NotebookBootFacts.definitionPatterns(manifestJSON: setup.manifest),
             previewGuideURL: "/instructor/\(assignment.publicID)/preview-guide.json?as=\(student.token)"
         )
