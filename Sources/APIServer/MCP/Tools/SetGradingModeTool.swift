@@ -35,7 +35,9 @@ struct SetGradingModeTool: ContentTool {
         + "path, not the tests, so it does not re-grade existing submissions, re-run validation, or "
         + "change the open/closed state (matching set_assignment_course_section and the web setup editor). Read "
         + "the current mode from get_assignment. To make a whole course section default to a mode, use "
-        + "create_course_section / rename_course_section instead."
+        + "create_course_section / rename_course_section instead. A \"browser\" grade is a participation "
+        + "grade: the student's browser reports it and the server keeps it unchecked, so choose \"worker\" "
+        + "for work whose grade must be correct."
     static let inputSchema: JSONValue = .object([
         "type": .string("object"),
         "properties": .object([
