@@ -35,7 +35,9 @@
 #
 # The model that wrote this digest until 2026-11 also read upstream release
 # notes for each kernel package. A major version bump is the rule that stands
-# in for that judgement.
+# in for that judgement. The digest asks for a check, not a hold: the
+# re-vendor pull request auto-merges on green CI, usually before the digest
+# runs (#2848).
 #
 # Needs bash and jq: the GitHub-hosted runner has both. The plain Swift CI
 # image has no jq, so the self-test runs in the script-self-tests job.
@@ -175,7 +177,7 @@ render() {
           kernels+=("- $change $pkg: $have to $want")
         done <<< "$changes"
         majors="$(awk '$1 == "VERSION" { split($3, a, /[.-]/); split($5, b, /[.-]/); if (a[1] != b[1]) print $2 }' <<< "$changes" | paste -sd ',' | sed 's/,/, /g')"
-        [ -n "$majors" ] && needs+=("A kernel update makes a major version bump: $majors. Hold the re-vendor pull request until its release notes are checked.")
+        [ -n "$majors" ] && needs+=("A kernel update makes a major version bump: $majors. Read its release notes and check the kernel: the re-vendor pull request auto-merges when its CI is green, so the update may already be live.")
       fi
     else
       needs+=("The newest kernel-currency run ended $k_state: $k_url")
@@ -351,7 +353,7 @@ self_test() {
     'currency	Are current?	2026-11-02T07:01:00Z   VERSION chickadee-python/pillow    12.3.0-h1_0 -> 13.0.0-h2_0' \
     'currency	Are current?	2026-11-02T07:01:00Z   BUILD   chickadee-python/pyjs-rt   4.0.6-h1_0 -> 4.0.6-h2_0' > "$tmp/d/kernel.log"
   run
-  if [ "$count" = "1" ] && grep -q 'major version bump: chickadee-python/pillow\.' <<< "$body" \
+  if [ "$count" = "1" ] && grep -q 'major version bump: chickadee-python/pillow\. Read its release notes' <<< "$body" \
     && grep -qx -- '- VERSION chickadee-octave/narwhals: 2.27.0-pyh_0 to 2.27.1-pyh_0' <<< "$body" \
     && grep -qx -- '- BUILD chickadee-python/pyjs-rt: 4.0.6-h1_0 to 4.0.6-h2_0' <<< "$body"; then
     pass "lists kernel changes and flags only a major bump"
