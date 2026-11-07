@@ -9,6 +9,13 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.851] - 2026-11-07
+
+### Changed
+
+- **The weekly digest asks for a check of a major kernel bump, not a hold.** The re-vendor pull request auto-merges on green CI, usually before the digest runs, so "hold" was an instruction nobody could follow (#2848). The digest now asks a person to read the release notes and check the kernel, and says the update may already be live.
+
+
 ## [0.5.850] - 2026-11-07
 
 ### Changed
