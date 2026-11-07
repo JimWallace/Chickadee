@@ -9,7 +9,8 @@ name: Weekly digest
 #   * Kernel currency: when kernel-currency.yml (Mondays 07:00) is red, which
 #     kernel packages moved. kernel-currency.yml itself dispatches
 #     revendor-kernels.yml in publish mode, which opens an auto-merging pull
-#     request; the digest flags a major version bump so a person can hold it.
+#     request; the digest flags a major version bump so a person reads its
+#     release notes. It cannot hold it: that pull request usually merges first.
 #   * Flake telemetry: the week's tally (flake-telemetry.yml, 06:41).
 #   * Dependabot: the open Dependabot pull requests.
 #
