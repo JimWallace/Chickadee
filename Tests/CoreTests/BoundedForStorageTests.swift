@@ -53,6 +53,14 @@ import Testing
         return try encoder.encode(collection)
     }
 
+    /// The JSON with its object keys sorted. `JSONEncoder` without
+    /// `.sortedKeys` does not keep one key order across encodes of the same
+    /// value on Linux, so two encodings are compared in this form.
+    private func canonical(_ json: Data) throws -> Data {
+        try JSONSerialization.data(
+            withJSONObject: JSONSerialization.jsonObject(with: json), options: [.sortedKeys])
+    }
+
     /// One collection size against one budget.
     struct Case: Sendable, CustomTestStringConvertible {
         let outcomeCount: Int
@@ -79,8 +87,8 @@ import Testing
         let truncated = collection.truncatingOversizedOutput(budgetBytes: testCase.budgetBytes)
 
         let json = try #require(bounded.json)
-        #expect(json == (try encoded(bounded.collection)))
-        #expect(json == (try encoded(truncated.collection)))
+        #expect(try canonical(json) == canonical(encoded(bounded.collection)))
+        #expect(try canonical(json) == canonical(encoded(truncated.collection)))
         #expect(bounded.didTruncate == truncated.didTruncate)
         #expect(bounded.didTruncate == ((try encoded(collection)).count > testCase.budgetBytes))
     }

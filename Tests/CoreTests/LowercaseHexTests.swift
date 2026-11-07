@@ -20,7 +20,7 @@ import Testing
     @Test func everyByteValueMatchesTheFormatCall() {
         let all = (0...255).map { UInt8($0) }
         #expect(lowercaseHex(all) == Self.formatHex(all))
-        #expect(lowercaseHex([]) == "")
+        #expect(lowercaseHex([]).isEmpty)
         #expect(lowercaseHex([0x00, 0x0A, 0xF0, 0xFF]) == "000af0ff")
     }
 

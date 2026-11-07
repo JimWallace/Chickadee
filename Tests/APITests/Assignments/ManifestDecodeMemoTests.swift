@@ -32,7 +32,7 @@ import Testing
     @Test func aFailedDecodeIsNilAndIsNotMemoized() {
         let memo = ManifestDecodeMemo()
         #expect(memo.manifest(decoding: Data("not json".utf8)) == nil)
-        #expect(memo.count == 0)
+        #expect(memo.isEmpty)
     }
 
     /// Different bytes are different keys, even when they decode to the

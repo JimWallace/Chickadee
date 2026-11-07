@@ -10,9 +10,11 @@
 // disagree (a combining mark or a joiner beside a token, a token that is not
 // lowercase hex).
 
+import Core
 import Crypto
 import Foundation
 import Testing
+import Vapor
 
 @testable import APIServer
 

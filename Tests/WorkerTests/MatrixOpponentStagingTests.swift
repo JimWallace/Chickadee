@@ -119,10 +119,10 @@ import Testing
         }
 
         switch error {
-        case .opponentFileMissing(let name)?:
+        case .opponentFileMissing(let name):
             #expect(missingIndex < notBareIndex)
             #expect(name == "absent-\(missingIndex).py")
-        case .opponentFileNotBare(let name)?:
+        case .opponentFileNotBare(let name):
             #expect(notBareIndex < missingIndex)
             #expect(name == "../bot-\(notBareIndex).py")
         default:

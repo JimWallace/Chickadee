@@ -11,6 +11,7 @@ import ChickadeeTestSupport
 import Core
 import Foundation
 import Testing
+import Vapor
 
 @testable import APIServer
 
@@ -48,8 +49,8 @@ import Testing
             Application.inlineMarkup("  <!-- a -->\n<svg>\n  <!-- b\n -->\n  <g/>  x <g/>\n</svg>\n")
                 == "<svg><g/>  x <g/></svg>")
         #expect(Application.inlineMarkup("<a> <!-- open") == "<a> <!-- open")
-        #expect(Application.inlineMarkup("<!---->") == "")
-        #expect(Application.inlineMarkup("") == "")
+        #expect(Application.inlineMarkup("<!---->").isEmpty)
+        #expect(Application.inlineMarkup("").isEmpty)
     }
 
     @Test func theTabIconDrawsTheSameFromTheInlinedAvatarSprite() throws {
