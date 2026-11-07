@@ -70,6 +70,20 @@ import Testing
         let payload = Payload(id: 3, text: "é \"quoted\" \\ / \n line", values: [1, 2.5, -0.0])
         let frame = try MCPTransport.sseMessageFrame(encoding: payload)
         let buffer = try MCPTransport.sseMessageFrameBuffer(encoding: payload)
-        #expect(Array(buffer.readableBytesView) == Array(frame.utf8))
+        let bufferFrame = try #require(buffer.getString(at: buffer.readerIndex, length: buffer.readableBytes))
+        #expect(try Self.canonicalJSON(inFrame: bufferFrame) == Self.canonicalJSON(inFrame: frame))
+    }
+
+    /// The JSON of an SSE message frame with its object keys sorted, after
+    /// checking the frame's fixed head and tail. `JSONEncoder` without
+    /// `.sortedKeys` does not keep one key order across encodes of the same
+    /// value on Linux, so two frames are compared in this form.
+    private static func canonicalJSON(inFrame frame: String) throws -> Data {
+        let head = "event: message\ndata: "
+        let tail = "\n\n"
+        try #require(frame.hasPrefix(head) && frame.hasSuffix(tail))
+        let json = Data(frame.dropFirst(head.count).dropLast(tail.count).utf8)
+        return try JSONSerialization.data(
+            withJSONObject: JSONSerialization.jsonObject(with: json), options: [.sortedKeys])
     }
 }
