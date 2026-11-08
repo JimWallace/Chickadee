@@ -78,15 +78,25 @@ actor TestSetupCache {
         Self.removeLeftoverTombstones(cacheRoot: cacheRoot)
     }
 
-    /// The name prefix of an evicted entry awaiting its delete. Hidden, and
-    /// ending in `.tmp`, so neither the restart scan nor a directory listing
-    /// that skips hidden files counts it as an entry.
-    private static let tombstonePrefix = ".evicted-"
+    /// The hidden directory under the cache root that holds evicted entries
+    /// awaiting their delete. The off-actor delete removes a child of this
+    /// directory, never a child of the cache root. On Linux,
+    /// `contentsOfDirectory(at:includingPropertiesForKeys:options:)` reads the
+    /// attributes of every child, hidden ones included, and throws when a
+    /// child is deleted during the read; `.skipsHiddenFiles` does not prevent
+    /// it. The restart scan does not count this directory, because it has no
+    /// `prepared`.
+    private static let tombstoneDirectoryName = ".evicted"
+
+    /// The name prefix of a tombstone that a runner before the tombstone
+    /// directory left in the cache root itself. Only the cleanup reads it.
+    private static let legacyTombstonePrefix = ".evicted-"
 
     private static func removeLeftoverTombstones(cacheRoot: URL) {
         let fm = FileManager.default
+        try? fm.removeItem(at: cacheRoot.appendingPathComponent(tombstoneDirectoryName))
         guard let entries = try? fm.contentsOfDirectory(atPath: cacheRoot.path) else { return }
-        for name in entries where name.hasPrefix(tombstonePrefix) && name.hasSuffix(".tmp") {
+        for name in entries where name.hasPrefix(legacyTombstonePrefix) && name.hasSuffix(".tmp") {
             try? fm.removeItem(at: cacheRoot.appendingPathComponent(name))
         }
     }
@@ -150,10 +160,6 @@ actor TestSetupCache {
         // immutable, so the only hazard is eviction racing the copy — rare
         // (needs 16+ distinct setups churning), and retried once below: with
         // the entry gone, the retry takes the populate path.
-        //
-        // The copy stays on the actor, with no suspension between finding the
-        // entry and copying it: eviction also runs on the actor, so it cannot
-        // move the entry out from under a copy that is walking it.
         do {
             let source = try await acquireSource(testSetupID: testSetupID, populate: populate)
             let scratch = try Self.copyToScratch(
@@ -168,14 +174,17 @@ actor TestSetupCache {
     }
 
     /// Whether a failed scratch copy lost the race with eviction: the entry's
-    /// directory disappeared during the copy. Only that failure is retried,
-    /// because the retry repopulates the entry. Any other failure (a full
-    /// disk, a permission error) would fail the same way again. A separate
-    /// function because no test can make eviction land in the middle of a
-    /// copy, and the mutation sweep of 2026-09-22 (#1574) showed that nothing
-    /// else could see this rule change.
+    /// directory disappeared before or during the copy. On Linux, `copyItem`
+    /// throws `.fileReadNoSuchFile` when the source is gone before the copy
+    /// starts, and `.fileNoSuchFile` when it goes during the copy. Only that
+    /// failure is retried, because the retry repopulates the entry. Any other
+    /// failure (a full disk, a permission error) would fail the same way
+    /// again. A separate function because no test can make eviction land in
+    /// the middle of a copy, and the mutation sweep of 2026-09-22 (#1574)
+    /// showed that nothing else could see this rule change.
     nonisolated static func isEvictionRace(_ error: any Error) -> Bool {
-        (error as? CocoaError)?.code == .fileReadNoSuchFile
+        guard let code = (error as? CocoaError)?.code else { return false }
+        return code == .fileReadNoSuchFile || code == .fileNoSuchFile
     }
 
     /// Actor-isolated bookkeeping half of `acquire`: returns the committed
@@ -379,22 +388,25 @@ actor TestSetupCache {
     /// path finishes.
     ///
     /// The entry leaves its key's path here, on the actor, by one rename to a
-    /// tombstone beside it, so every later lookup of the key misses at once,
-    /// as it did when the entry was deleted here. The recursive delete of the
-    /// tombstone, which for a setup with a dataset is hundreds of MB and
-    /// thousands of files, runs later and off the actor: every job's
+    /// tombstone in the tombstone directory (`tombstoneDirectoryName`), so
+    /// every later lookup of the key misses at once, as it did when the
+    /// entry was deleted here. The recursive delete of the tombstone, which
+    /// for a setup with a dataset is hundreds of MB and thousands of files,
+    /// runs later and off the actor: every job's
     /// `acquire`, a hit included, needs this actor, and none of them waits on
     /// the delete. A population of the same key cannot race the delete,
     /// because it commits to the key's path and the delete touches only the
     /// tombstone's.
     private func evictIfNeededForNew(key: String) {
         guard !lruKeys.contains(key) else { return }
+        let tombstoneDirectory = cacheRoot.appendingPathComponent(Self.tombstoneDirectoryName, isDirectory: true)
         while lruKeys.count >= maxEntries {
             let evicted = lruKeys.removeFirst()
             let evictedRoot = cacheRoot.appendingPathComponent(evicted)
-            let tombstone = cacheRoot.appendingPathComponent(
-                "\(Self.tombstonePrefix)\(evicted)-\(UUID().uuidString).tmp", isDirectory: true)
+            let tombstone = tombstoneDirectory.appendingPathComponent(
+                "\(evicted)-\(UUID().uuidString).tmp", isDirectory: true)
             do {
+                try FileManager.default.createDirectory(at: tombstoneDirectory, withIntermediateDirectories: true)
                 try FileManager.default.moveItem(at: evictedRoot, to: tombstone)
             } catch {
                 Self.logEvictFailed(evicted: evicted, path: evictedRoot, error: error)
@@ -447,7 +459,15 @@ actor TestSetupCache {
                 "chickadee_ts_\(label)_\(UUID().uuidString)",
                 isDirectory: true
             )
-        try FileManager.default.copyItem(at: source, to: dest)
+        do {
+            try FileManager.default.copyItem(at: source, to: dest)
+        } catch {
+            // A copy that fails part way leaves what it copied. Nothing else
+            // removes a `chickadee_ts_` directory, and the scratch root is the
+            // runner's work root in production.
+            try? FileManager.default.removeItem(at: dest)
+            throw error
+        }
         return dest
     }
 

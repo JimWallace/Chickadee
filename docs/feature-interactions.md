@@ -560,11 +560,24 @@ because line numbers go out of date.
   - No student identity goes into the key or into the cached directory.
     Per-student bytes go only into the scratch copy for each job
     (`docs/datasets.md`, "Runner cache is preserved").
-  - The runner evicts a cache entry by renaming it to a hidden
-    `.evicted-<key>-<uuid>.tmp` tombstone on the cache actor, then deleting
-    the tombstone off the actor. The restart scan and the LRU bound skip
-    hidden names, and startup removes leftover tombstones. A population of
-    the same key never touches a tombstone.
+  - The runner evicts a cache entry by renaming it to a
+    `<key>-<uuid>.tmp` tombstone in the hidden `.evicted/` directory under
+    the cache root, on the cache actor, then deleting the tombstone off the
+    actor. The delete never removes a child of the cache root itself: on
+    Linux, `contentsOfDirectory(at:includingPropertiesForKeys:options:)`
+    throws when a child is deleted during the read. The restart scan skips
+    `.evicted/` (it has no `prepared`), and startup removes it and any
+    leftover tombstone. A population of the same key never touches a
+    tombstone.
+  - The cache root is the runner's work root in production, so `.evicted/`
+    is a permanent child of it, beside the job workspaces and scratch copies.
+    Code that walks or sweeps the work root must not count `.evicted/` as an
+    entry or a job directory, and must not remove it while the runner runs.
+  - A scratch copy that loses the race with eviction is retried once. On
+    Linux the copy throws `.fileReadNoSuchFile` when the entry is gone
+    before the copy starts and `.fileNoSuchFile` when it goes during the
+    copy, so `isEvictionRace` accepts both. A failed copy removes its
+    partial `chickadee_ts_` directory.
 
 ### Process-wide caches of setup content
 
