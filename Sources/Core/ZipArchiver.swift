@@ -25,6 +25,9 @@ public enum ZipArchiverError: Error, CustomStringConvertible {
     case executableNotFound(String)
     case pathTraversalDetected(String)
     case outputAlreadyExists(String)
+    /// The archive's directory declares more than `ZipExtractionLimits`
+    /// allows, or could not be read to find out.
+    case extractionLimitExceeded(String)
 
     public var description: String {
         switch self {
@@ -36,7 +39,61 @@ public enum ZipArchiverError: Error, CustomStringConvertible {
             return "Zip entry would escape destination directory: \(entry)"
         case .outputAlreadyExists(let path):
             return "Zip output path already exists: \(path)"
+        case .extractionLimitExceeded(let detail):
+            return "Zip archive exceeds the extraction limit: \(detail)"
         }
+    }
+}
+
+// MARK: - Extraction limits
+
+/// The most an archive may unpack to (#2898). A small deflated archive can
+/// expand about 1000:1, so the upload limit alone does not bound the disk an
+/// extraction writes.
+public struct ZipExtractionLimits: Sendable, Equatable {
+    public let maxTotalUncompressedBytes: Int
+    public let maxEntryCount: Int
+
+    public init(maxTotalUncompressedBytes: Int, maxEntryCount: Int) {
+        self.maxTotalUncompressedBytes = maxTotalUncompressedBytes
+        self.maxEntryCount = maxEntryCount
+    }
+
+    /// A student submission on the runner: the server's test-setup upload
+    /// total (`ZipUploadLimits.default`), and an entry count no real
+    /// submission approaches.
+    public static let submission = ZipExtractionLimits(
+        maxTotalUncompressedBytes: 256 * 1024 * 1024, maxEntryCount: 10_000)
+}
+
+/// The entry count and total uncompressed size in `unzip -Zt` output
+/// ("2 files, 3000003 bytes uncompressed, 2926 bytes compressed:  99.9%"),
+/// or nil when the line is not there.
+func zipDirectoryTotals(_ text: String) -> (entries: Int, uncompressedBytes: Int)? {
+    let pattern = /(\d+) files?, (\d+) bytes? uncompressed/
+    guard let match = text.firstMatch(of: pattern),
+        let entries = Int(match.output.1), let bytes = Int(match.output.2)
+    else { return nil }
+    return (entries, bytes)
+}
+
+/// Refuses an archive whose directory declares more than `limits`, before
+/// anything is written. Fails closed: an archive whose totals cannot be read
+/// is refused too.
+func requireWithinExtractionLimits(zipPath: String, limits: ZipExtractionLimits) async throws {
+    let result = try await runZipProcess(executablePath: "/usr/bin/unzip", arguments: ["-Zt", zipPath])
+    guard result.terminationStatus == 0,
+        let totals = zipDirectoryTotals(String(data: result.stdout, encoding: .utf8) ?? "")
+    else {
+        throw ZipArchiverError.extractionLimitExceeded("the archive directory could not be read")
+    }
+    guard totals.entries <= limits.maxEntryCount else {
+        throw ZipArchiverError.extractionLimitExceeded(
+            "\(totals.entries) entries, limit \(limits.maxEntryCount)")
+    }
+    guard totals.uncompressedBytes <= limits.maxTotalUncompressedBytes else {
+        throw ZipArchiverError.extractionLimitExceeded(
+            "\(totals.uncompressedBytes) bytes uncompressed, limit \(limits.maxTotalUncompressedBytes)")
     }
 }
 
@@ -72,8 +129,16 @@ public func createZipArchive(sourceDir: URL, outputPath: String) async throws {
 /// Equivalent to: /usr/bin/unzip -q <zipPath> -d <destinationDir>
 ///
 /// Guards against zip-slip path traversal by validating every entry's resolved
-/// path stays inside `destinationDir` before invoking the extractor.
-public func extractZipArchive(zipPath: String, into destinationDir: URL) async throws {
+/// path stays inside `destinationDir` before invoking the extractor. With
+/// `limits`, also refuses an archive whose directory declares more entries or
+/// uncompressed bytes than they allow (#2898). Pass them for an archive an
+/// untrusted user built.
+public func extractZipArchive(
+    zipPath: String, into destinationDir: URL, limits: ZipExtractionLimits? = nil
+) async throws {
+    if let limits {
+        try await requireWithinExtractionLimits(zipPath: zipPath, limits: limits)
+    }
     // --- Zip-slip guard ---
     // List all entries first and reject any that would land outside destinationDir
     // after resolving ".."-style components or absolute paths.
