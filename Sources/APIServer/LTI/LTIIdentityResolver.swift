@@ -69,10 +69,12 @@ enum LTIIdentityResolver {
         }
 
         let resolution: Resolution
-        if platform.trustUsername == true, let username = trustedUsername(launch) {
-            resolution = try await linkOrCreate(
+        if platform.trustUsername == true, let username = trustedUsername(launch),
+            let linked = try await linkOrCreate(
                 username: username, launch: launch, platformID: platformID,
                 authProvider: authMode == .local ? "lti" : "duo-oidc", on: db)
+        {
+            resolution = linked
         } else {
             let username = opaqueUsername(platformID: platformID, subject: launch.subject)
             let existing = try await APIUser.query(on: db)
@@ -140,10 +142,17 @@ enum LTIIdentityResolver {
         return "lti-" + hex
     }
 
+    /// The account a trusted username links to, or nil when that account
+    /// signs in with a local password. Anyone can register a local account
+    /// under any free username (`POST /register`), so linking to one would
+    /// let a stranger pre-claim an LMS user's identity and role (#2899). The
+    /// launch then gets its own opaque account instead, as on an untrusted
+    /// platform. The trusted path exists to share an account with a DUO
+    /// sign-in, and an SSO or LTI account holds no password.
     private static func linkOrCreate(
         username: String, launch: LTIValidatedLaunch, platformID: UUID, authProvider: String,
         on db: any Database
-    ) async throws -> Resolution {
+    ) async throws -> Resolution? {
         guard let existing = try await APIUser.query(on: db).filter(\.$username == username).first() else {
             return Resolution(
                 user: try await create(username: username, launch: launch, authProvider: authProvider, on: db),
@@ -157,6 +166,9 @@ enum LTIIdentityResolver {
         guard !existing.isAdmin, !existing.isMCPAgent, !alreadyLinked else {
             throw Failure.linkRefused(username: username)
         }
+        // After the refusals: an admin or MCP account is still refused, not
+        // passed over for an opaque one.
+        guard existing.passwordHash.isEmpty else { return nil }
         return Resolution(user: existing, created: false)
     }
 

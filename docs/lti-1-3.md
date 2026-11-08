@@ -223,7 +223,10 @@ person can sign in with DUO and also launch from the LMS. In order:
    `username` custom parameter (D2L: `username=$User.username`), the launch
    links to the account with that username. If there is none, it creates one
    shaped like a pre-SSO stub (`duo-oidc`, no subject), so a later DUO sign-in
-   adopts the same account.
+   adopts the same account. An account that signs in with a local password is
+   never linked this way: anyone can register one under a free username, so a
+   stranger could pre-claim an LMS user (#2899). That launch falls through to
+   step 3.
 3. Otherwise the subject gets its own account, `lti-` plus 16 hex digits of
    SHA-256(platform|subject): stable, and opaque.
 
