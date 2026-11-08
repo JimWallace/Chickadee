@@ -27,7 +27,8 @@ struct ClientDiagnosticsGrowthTests {
         let now = Date()
         var admitted = 0
         for index in 0..<10 {
-            if await limiter.admit(key: key(user, source: "s\(index)"), now: now) { admitted += 1 }
+            let accepted = await limiter.admit(key: key(user, source: "s\(index)"), now: now)
+            admitted += accepted ? 1 : 0
         }
         #expect(admitted == 3)
         // Another user has their own allowance.
