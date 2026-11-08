@@ -160,9 +160,25 @@ struct JupyterLiteContentsRoutes: RouteCollection {
                 format: format,
                 mimetype: mimetype,
                 size: fileData.count,
-                writable: !isSymlink(url: targetURL),
+                writable: try await mayWrite(req: req, caller: caller, relativePath: cleanRel, url: targetURL),
                 type: isNotebook ? "notebook" : "file"
             ))
+    }
+
+    /// The `writable` of a file's model: whether the write routes would accept a
+    /// save of it from this caller. JupyterLab opens a file it may not write
+    /// read-only, so a staff member reading a student's copy, a support file, a
+    /// dataset or a `view-`/`preview-` record gets no autosave that the server
+    /// would refuse (#469).
+    private func mayWrite(req: Request, caller: APIUser, relativePath: String, url: URL) async throws -> Bool {
+        guard !isSymlink(url: url), let userRoot = try userRootPath(for: caller, isStaff: false),
+            relativePath.hasPrefix(userRoot + "/")
+        else { return false }
+        let parts = relativePath.split(separator: "/", maxSplits: 3).map(String.init)
+        guard parts.count == 4 else { return true }
+        let protected = try await WorkingCopyProtectedFiles.paths(
+            setupID: parts[2], on: req.db, application: req.application)
+        return !WorkingCopyProtectedFiles.touchesProtected(parts[3], in: protected)
     }
 
     /// The `content`, `format` and `mimetype` of a file's model.

@@ -1,10 +1,12 @@
 // Tests/APITests/Notebooks/StaffPracticeWriteBackTests.swift
 //
 // Staff test-submit from the student view, as a student does. After a browser
-// result, the submitted notebook is written back to the viewer's student-view
-// copy: a student's own copy, or the staff practice copy. It never reaches the
-// staff authoring copy, which "Save to assignment" writes back for every
-// student.
+// result on the IndexedDB drive (the `ck_server_drive=0` opt-out), the
+// submitted notebook is written back to the viewer's student-view copy: a
+// student's own copy, or the staff practice copy. It never reaches the staff
+// authoring copy, which "Save to assignment" writes back for every student. On
+// the server drive (#469, the default) the editor has saved the copy itself,
+// so nothing is written back under the open editor.
 
 import Core
 import Fluent
@@ -56,7 +58,8 @@ import VaporTesting
         app.directory.publicDirectory + "jupyterlite/files/" + relative
     }
 
-    @Test func aStaffBrowserResultWritesThePracticeCopyNotTheAuthoringCopy() async throws {
+    @Test(arguments: [false, true])
+    func aStaffBrowserResultWritesThePracticeCopyNotTheAuthoringCopy(serverDrive: Bool) async throws {
         try await withApp(app) { _ in
             let course = APICourse(code: "PR101", name: "Practice Course", enrollmentMode: .auto)
             try await course.save(on: app.db)
@@ -80,7 +83,8 @@ import VaporTesting
             try await app.asyncTest(
                 .POST, "/api/v1/submissions/browser-result",
                 beforeRequest: { req in
-                    req.headers.add(name: .cookie, value: sessionCookie)
+                    req.headers.add(
+                        name: .cookie, value: serverDrive ? sessionCookie : sessionCookie + "; ck_server_drive=0")
                     req.body = .init(
                         buffer: self.multipart(
                             boundary: "practice-boundary",
@@ -94,11 +98,10 @@ import VaporTesting
                 },
                 afterResponse: { res in #expect(res.status == .ok, "body: \(res.body.string)") })
 
-            let practice = try String(
-                contentsOfFile: path(
-                    staffPracticeWorkingCopyRelativePath(setupID: setupID, userID: userID, fileKind: .assignment)),
-                encoding: .utf8)
-            #expect(practice.contains("answer = 42"))
+            let practicePath = path(
+                staffPracticeWorkingCopyRelativePath(setupID: setupID, userID: userID, fileKind: .assignment))
+            let practice = (try? String(contentsOfFile: practicePath, encoding: .utf8)) ?? ""
+            #expect(practice.contains("answer = 42") == !serverDrive)
             let authoring = path(userNotebookWorkingCopyRelativePath(setupID: setupID, userID: userID))
             let authoringText = (try? String(contentsOfFile: authoring, encoding: .utf8)) ?? ""
             #expect(authoringText.contains("answer = 42") == false)

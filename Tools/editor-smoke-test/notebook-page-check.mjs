@@ -205,14 +205,14 @@ async function main() {
   }
   const browser = await browserType.launch(launchOptions);
   const context = await browser.newContext({ storageState: seeded.storageState });
-  // SMOKE_SERVER_DRIVE=1 runs the same flow on the server-backed editor drive
-  // (#469 spike, notebook-server-drive-check.mjs): the opt-in cookie, and a
-  // check below that the drive really was active.
-  const serverDrive = process.env.SMOKE_SERVER_DRIVE === "1";
+  // The server-backed editor drive (#469) is the default. SMOKE_SERVER_DRIVE=0
+  // runs the same flow on the IndexedDB drive (the ck_server_drive=0 opt-out);
+  // otherwise a check below confirms the server drive really was active.
+  const serverDrive = process.env.SMOKE_SERVER_DRIVE !== "0";
   const serverDriveLog = [];
-  if (serverDrive) {
-    await context.addCookies([{ name: "ck_server_drive", value: "1", domain: new URL(baseURL).hostname, path: "/" }]);
-    context.on("console", (msg) => serverDriveLog.push(msg.text()));
+  context.on("console", (msg) => serverDriveLog.push(msg.text()));
+  if (!serverDrive) {
+    await context.addCookies([{ name: "ck_server_drive", value: "0", domain: new URL(baseURL).hostname, path: "/" }]);
   }
   // Capture the in-iframe kernel-boot collector's breadcrumbs on the PARENT
   // window (the collector posts to window.parent, which IS the notebook page

@@ -56,6 +56,9 @@ struct NotebookBody: HTML {
     /// The previewed student's guide (NB6b). It gives the editor the task
     /// headers, with no outline beside the editor.
     var previewGuideURL: String?
+    /// Whether the editor may use the server-backed drive (#469,
+    /// `NotebookContext.serverDrive`).
+    var serverDrive = false
 
     var body: some HTML {
         // The `.main` override only when this body is the page.
@@ -230,6 +233,7 @@ struct NotebookBody: HTML {
             .data("notebook-url", value: notebookURL),
             .data("editor-url", value: jupyterLiteEditorURL),
             .data("working-copy-mtime", value: String(workingCopyMtime)),
+            .data("server-drive", value: String(serverDrive)),
             .data("read-only", value: String(isReadOnly)),
             .data("definition-patterns", value: definitionPatternsJSON),
             .data("guide-url", value: guideURL),
@@ -349,7 +353,8 @@ extension NotebookBody {
             dueLabel: context.dueLabel,
             csrfToken: csrfToken,
             definitionPatterns: context.definitionPatterns,
-            previewGuideURL: context.previewGuideURL
+            previewGuideURL: context.previewGuideURL,
+            serverDrive: context.serverDrive
         )
     }
 }

@@ -2,8 +2,8 @@
 //
 // Spike for #469: does the server-backed editor drive work end to end?
 //
-// The `ck_server_drive=1` cookie makes the server add `chickadeeServerDrive` to
-// the served jupyter-lite.json, and the Chickadee extension then replaces
+// The server adds `chickadeeServerDrive` to the served jupyter-lite.json (the
+// default; the `ck_server_drive=0` cookie opts out), and the Chickadee extension then replaces
 // JupyterLite's IndexedDB drive with JupyterLab's REST drive, which saves to
 // `PUT /jupyterlite/api/contents/<path>` (JupyterLiteContentsRoutes+Write.swift).
 //
@@ -24,7 +24,7 @@
 //   6. Reload the first editor: the reset starter is shown, with no IndexedDB
 //      eviction needed.
 //
-// Control: SMOKE_SERVER_DRIVE=0 runs the same flow without the cookie. Step 1
+// Control: SMOKE_SERVER_DRIVE=0 runs the same flow with the opt-out cookie. Step 1
 // then fails (no server drive), which shows the check can tell the two apart.
 //
 // Usage:  node notebook-server-drive-check.mjs <baseURL>
@@ -307,16 +307,18 @@ const SERVER_DRIVE = process.env.SMOKE_SERVER_DRIVE !== "0";
 const PROBE_FILE = `ck_probe_${STAMP}.txt`;
 const PROBE_DIR = `ck_dir_${STAMP}`;
 
-function driveCookie() {
+// The server drive is the default, so the main run sets no cookie and proves
+// the default; the control run opts this browser out.
+function optOutCookie() {
   const url = new URL(baseURL);
-  return { name: "ck_server_drive", value: "1", domain: url.hostname, path: "/" };
+  return { name: "ck_server_drive", value: "0", domain: url.hostname, path: "/" };
 }
 
-/// A browser context for the seeded student, with the opt-in cookie and the
+/// A browser context for the seeded student, with the control run's opt-out cookie and the
 /// kernel-diag listener, and a log of console lines and contents-API calls.
 async function newStudentContext(browser, storageState) {
   const context = await browser.newContext({ storageState });
-  if (SERVER_DRIVE) await context.addCookies([driveCookie()]);
+  if (!SERVER_DRIVE) await context.addCookies([optOutCookie()]);
   await context.addInitScript(() => {
     try {
       window.__ckKernelDiag = [];

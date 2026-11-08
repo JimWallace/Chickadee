@@ -364,6 +364,13 @@ struct NotebookContext: Encodable {
     /// (notebook views NB6b), or nil. A student's own notebook reads its
     /// guide from `/testsetups/:id/notebook-guide.json` instead.
     var previewGuideURL: String?
+    /// True when the editor may use the server-backed drive (#469): the copy
+    /// holds the viewer's own work and nothing on the server rewrites it under
+    /// the open editor. False for a staff authoring copy, which the page
+    /// rebuilds from the stored notebook on every load (`workingCopySeed`), and
+    /// for a submission record or a preview. Rendered as
+    /// `data-server-drive`; `serverDrive.ts` and `notebook.js` read it.
+    var serverDrive = false
 }
 
 // MARK: - Submission history page

@@ -852,16 +852,33 @@ coordination, and each must see every edit.
   - The write routes check ownership only, not `requireOpenStudentAssignment`
     (open question for #469). Submission is gated separately.
 
-### The server-drive opt-in: the `ck_server_drive` cookie
+### The server drive and its opt-out: the `ck_server_drive` cookie
 
-- **Writers:** the browser (set by hand during the #469 spike).
-- **Readers:** `JupyterLiteConfigFlagMiddleware`, which adds
+- **Writers:** the browser. The server drive is the default; `ck_server_drive=0`,
+  set by hand, opts one browser out to the IndexedDB drive.
+- **Readers:** `JupyterLiteConfigFlagMiddleware.serverDriveEnabled`, which adds
   `chickadeeServerDrive` to the served `jupyter-lite.json` and varies on
   `Cookie`; the Chickadee extension (`serverDrive.ts`), which registers its
   REST drive only when that option is set; and `Public/notebook.js`
   (`serverDriveActive`), which skips the IndexedDB reseed.
-- **Rules:** the three readers must agree. A browser without the cookie gets
-  the IndexedDB drive and every existing behaviour unchanged.
+- **Rules:**
+  - The three readers must agree: only the value `0` opts out.
+  - The page decides too: the editor frame carries `data-server-drive`
+    (`NotebookContext.serverDrive`), true only on a copy that holds the
+    viewer's own editable work. A staff authoring copy is rebuilt from the
+    stored notebook on every page load (`workingCopySeed` refresh) and
+    "Save to assignment" rewrites it, so it stays on the IndexedDB drive; so
+    do a closed assignment's locked copy, a submission record and a preview.
+    `serverDrive.ts` and `serverDriveActive` both require the attribute.
+  - A browser result writes the submitted notebook back to the student-view
+    copy only on the IndexedDB drive. On the server drive the copy is already
+    the student's work, and a rewrite under the open editor would raise
+    "File changed" on the next save (`BrowserResultRoutes`,
+    `StaffPracticeWriteBackTests`).
+  - A file's model reports `writable` as the write routes would answer
+    (`mayWrite` in `JupyterLiteContentsRoutes`), so JupyterLab opens a
+    provided file, a record or another user's copy read-only and never
+    autosaves into a refusal.
 
 ### Content versions and restore
 
