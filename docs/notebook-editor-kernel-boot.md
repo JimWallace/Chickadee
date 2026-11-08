@@ -162,7 +162,8 @@ A `data:` worker is blocked by our CSP (`worker-src 'self' blob:`) **and** by CO
 `waitAsync`): `Refused to create a worker from 'data:…' … worker-src 'self' blob:`.
 
 Fixed by vending the polyfill worker as a `blob:` URL instead
-(`scripts/patch-pyodide-waitasync-worker.py`, run from `build-jupyterlite.sh` and
+(`scripts/patch-waitasync-worker.py` (renamed from
+`patch-pyodide-waitasync-worker.py`), run from `build-jupyterlite.sh` and
 asserted by `verify-jupyterlite.sh`): a `blob:` worker is same-origin, inherits
 the page's COEP, and is already allowed by the CSP — so these engines boot the
 kernel **with cross-origin isolation (SharedArrayBuffer) intact, no fallback
@@ -179,7 +180,8 @@ isolation for everyone.
 The v0.4.467-named alternative remains: patch the pyodide-kernel so `mountDrive`
 waits on `navigator.serviceWorker.controller` before using the SW sync path.
 Harder to do cleanly here than the nb_mypy wheel patch
-(`scripts/patch-pyodide-kernel.py`) because the gating logic lives in
+(`scripts/patch-pyodide-kernel.py`, removed with Pyodide in v0.5.19; see
+[jupyterlite.md](jupyterlite.md)) because the gating logic lives in
 content-hash-named webpack chunks rather than a fixed-name Python member.
 Prefer plan C; this is a per-browser safety net only.
 

@@ -159,7 +159,7 @@ list cannot drift from the file the worker actually writes. Resolution order is
 
 A stale hint never wins: it must name an existing `.R` file or the scan takes
 over. That matters because the hint is produced by
-`legacyPreferredStudentModuleFilename`, which extracts a notebook to its
+`preferredStudentModuleFilename` (`Sources/Worker/SubmissionStaging.swift`), which extracts a notebook to its
 assignment's source language — an R job's `analysis.ipynb` becomes `analysis.R`,
 not `analysis.py`.
 

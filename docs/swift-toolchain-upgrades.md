@@ -92,9 +92,9 @@ The pins live in these places:
 | `Dockerfile` compile stage | `swift:<X.Y>-resolute` |
 | `.github/docker/ci-image/Dockerfile` | `BASE_IMAGE`, and the comment above it |
 | `.github/workflows/mirror-images.yml` | the mirror source, the derived tag, the comments |
-| 13 workflow files | approximately 20 job images, `swift:` and `swift-ci:` |
+| 11 workflow files | approximately 23 job images, `swift:` and `swift-ci:` |
 | `.github/workflows/swift-tests.yml` `format-lint` | pinned to the **noble** tag, on purpose — see below |
-| `.github/workflows/runner-wasm-vendor.yml` | the swiftly version, twice |
+| `.github/workflows/runner-wasm-vendor.yml` | the swiftly version, once |
 | `wasm/wasm-sdk.pin` | the bundle URL and the checksum |
 | `scripts/build-runner-wasm.sh` | the default SDK identifier |
 | `scripts/ci-compose-env.sh` | the image names in the comments |

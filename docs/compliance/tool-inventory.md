@@ -9,11 +9,15 @@ This is a complete, one-row-per-tool inventory of the MCP capability surface,
 walked from the live registry (`MCPToolCatalog.live`,
 `Sources/APIServer/MCP/Transport/MCPServerRegistration.swift`) down to each
 tool's handler. As of the 2026-07 refresh (plus `delete_support_file`) the content catalog
-registers **54 tools** (the table below plus the six-tool addendum), and a second,
-admin-only diagnostic surface (`AdminMCPToolCatalog.live`) registers
+registered **54 tools** (the table below plus the six-tool addendum), and a second,
+admin-only diagnostic surface (`AdminMCPToolCatalog.live`) registered
 **20 read-only tools** — inventoried in the addendum. The registries are the
 source of truth; a census re-count is required whenever either changes
 (remediation P2-3).
+
+> **Note (2026-11):** the per-tool table stops at the 2026-07 refresh. At
+> v0.5.854 `MCPToolCatalog.live` registers 71 content tools; the 17 added since
+> are not yet inventoried here. The admin count (20) is current.
 
 ## How to read this table
 
@@ -157,7 +161,7 @@ authorization chokepoints (pinned registry-wide by
 | `restore_assignment_version` | `RestoreAssignmentVersionTool.swift` | `assignmentPublicID`, version id | course-enrol write (TA+) | `APIAssignmentVersion`, `APITestSetup` | restored content; closes + revalidates via `finalizeContentEdit` |
 | `set_dataset` | `SetDatasetTool.swift` | `assignmentPublicID`, filename | course-enrol write (TA+) | `APITestSetup` manifest (`TestProperties.datasets`) | dataset specs after edit (file, sampleSize) |
 | `set_time_limit` | `SetTimeLimitTool.swift` | `assignmentPublicID` | course-enrol write (TA+) | `APITestSetup` manifest (`timeLimitSeconds`) | updated limit |
-| `set_minimum_runner_version` | `SetMinimumRunnerVersionTool.swift` | `assignmentPublicID` | course-enrol write (TA+) | `APIAssignmentRequirement` | updated requirement |
+| `set_minimum_runner_version` | `SetMinimumRunnerVersionTool.swift` | `assignmentPublicID` | course-enrol write (TA+) | `APITestSetup` (manifest `minimumRunnerVersion`) | updated requirement |
 
 All six return instructor-authored content or configuration only; none touches
 a student-data model (enforced by `MCPStudentDataWallTests`, whose scan now
