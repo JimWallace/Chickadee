@@ -87,9 +87,15 @@ jobs:
           # toolchain installs but `swift` won't run. Install the documented
           # Swift-on-Ubuntu dependency set (apt is idempotent for ones already
           # present).
+          #
+          # binutils-gold: on the Ubuntu 26.04 runner, binutils 2.46 no longer
+          # ships the gold linker, and `swiftly install` exits 1 when its
+          # dependency check finds it missing (run 42432656970, the first
+          # re-vendor after the image moved). 26.04 still has gold as the
+          # separate, deprecated binutils-gold package.
           sudo apt-get update
           sudo apt-get install -y \
-            binutils libc6-dev libcurl4-openssl-dev libedit2 libgcc-13-dev \
+            binutils binutils-gold libc6-dev libcurl4-openssl-dev libedit2 libgcc-13-dev \
             libncurses-dev libpython3-dev libsqlite3-0 libstdc++-13-dev \
             libxml2-dev libz3-dev pkg-config tzdata unzip zlib1g-dev
           # Install swiftly from its binary release (the legacy swiftly-install.sh
