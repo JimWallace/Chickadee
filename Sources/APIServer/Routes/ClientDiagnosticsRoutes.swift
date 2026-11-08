@@ -107,31 +107,34 @@ struct ClientDiagnosticsRoutes: RouteCollection {
         let trimmedStack = body.stack.map { String($0.prefix(4096)) }
         let trimmedAppVersion = body.appVersion.map { String($0.prefix(32)) }
 
-        // De-duplicate within an hour so reloads don't multiply rows.  The
-        // source is part of the key so distinct error origins (onerror vs.
-        // unhandledrejection vs. kernel) each keep a slot rather than the first
-        // one suppressing the rest; preflight/watchdog records pass nil and so
-        // dedupe by (user, setup, kind) exactly as before.
-        let limiter = req.application.clientDiagnosticsRateLimiter
-        let key = ClientDiagnosticsRateLimiter.Key(
-            userID: userID,
-            testSetupID: body.testSetupID,
-            kind: body.kind,
-            subkey: trimmedSource
-        )
-        let admitted = await limiter.admit(key: key, now: Date())
-        guard admitted else { return .accepted }
-
         // Verify the supplied setup exists before storing the FK.  A stale
         // page (e.g. the assignment was deleted between page load and the
         // diagnostic post) should still record a row — just without the
         // setup link — instead of returning 500 from a FK violation.
-        var verifiedSetupID: String? = body.testSetupID
+        var verifiedSetupID: String? = body.testSetupID.map { String($0.prefix(128)) }
         if let candidate = verifiedSetupID,
             try await APITestSetup.find(candidate, on: req.db) == nil
         {
             verifiedSetupID = nil
         }
+
+        // De-duplicate within an hour so reloads don't multiply rows.  The
+        // source is part of the key so distinct error origins (onerror vs.
+        // unhandledrejection vs. kernel) each keep a slot rather than the first
+        // one suppressing the rest; preflight/watchdog records pass nil and so
+        // dedupe by (user, setup, kind) exactly as before. The key holds the
+        // VERIFIED setup: a client-chosen ID that names no setup keys as nil,
+        // so random IDs cannot each open a fresh slot (#2900). The per-user
+        // hourly cap in `admit` bounds what the free-text source can open.
+        let limiter = req.application.clientDiagnosticsRateLimiter
+        let key = ClientDiagnosticsRateLimiter.Key(
+            userID: userID,
+            testSetupID: verifiedSetupID,
+            kind: body.kind,
+            subkey: trimmedSource
+        )
+        let admitted = await limiter.admit(key: key, now: Date())
+        guard admitted else { return .accepted }
 
         let record = APIClientDiagnostic(
             userID: userID,
@@ -188,23 +191,40 @@ actor ClientDiagnosticsRateLimiter {
     }
 
     private var lastAdmitted: [Key: Date] = [:]
+    /// Rows admitted per user in the current window (#2900).
+    private var perUser: [UUID: (windowStart: Date, count: Int)] = [:]
     private let cooldown: TimeInterval
+    private let maxPerUserPerWindow: Int
 
-    init(cooldown: TimeInterval = 3600) {
+    /// `maxPerUserPerWindow` caps one user's rows per `cooldown` window,
+    /// whatever the keys. A student who opens ten assignments in an hour
+    /// sends about a hundred telemetry rows, so 200 leaves room.
+    init(cooldown: TimeInterval = 3600, maxPerUserPerWindow: Int = 200) {
         self.cooldown = cooldown
+        self.maxPerUserPerWindow = maxPerUserPerWindow
     }
 
     /// Returns true if the key has not been admitted within the cooldown
-    /// window, and records this admission.  False otherwise.
+    /// window and the user is under the per-window cap, and records this
+    /// admission.  False otherwise.
     func admit(key: Key, now: Date) -> Bool {
         if let previous = lastAdmitted[key], now.timeIntervalSince(previous) < cooldown {
             return false
         }
+        var window = perUser[key.userID] ?? (windowStart: now, count: 0)
+        if now.timeIntervalSince(window.windowStart) >= cooldown {
+            window = (windowStart: now, count: 0)
+        }
+        guard window.count < maxPerUserPerWindow else { return false }
+        window.count += 1
+        perUser[key.userID] = window
         lastAdmitted[key] = now
-        // Cheap eviction: every ~1000 admissions, drop anything older than 24h.
+        // Cheap eviction once the map is large: drop anything older than the
+        // window, which is all the dedup and the cap read.
         if lastAdmitted.count > 1000 {
-            let stale = now.addingTimeInterval(-24 * 60 * 60)
+            let stale = now.addingTimeInterval(-cooldown)
             lastAdmitted = lastAdmitted.filter { $0.value >= stale }
+            perUser = perUser.filter { $0.value.windowStart >= stale }
         }
         return true
     }
