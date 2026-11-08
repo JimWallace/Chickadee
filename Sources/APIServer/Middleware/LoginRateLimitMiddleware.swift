@@ -118,8 +118,13 @@ func clientIPAddress(from request: Request, trustForwardedFor: Bool) -> String {
     if trustForwardedFor,
         let xff = request.headers.first(name: "X-Forwarded-For")
     {
-        if let first = xff.split(separator: ",").first {
-            let trimmed = String(first).trimmingCharacters(in: .whitespacesAndNewlines)
+        // The LAST entry: nginx appends the peer it saw
+        // (`$proxy_add_x_forwarded_for`) after whatever the client sent, so
+        // the first entry is the client's to choose. Keying on it let any
+        // caller dodge the per-IP limit with a fresh header per request.
+        // Same rule as `Request.clientNetwork`.
+        if let last = xff.split(separator: ",").last {
+            let trimmed = String(last).trimmingCharacters(in: .whitespacesAndNewlines)
             if !trimmed.isEmpty { return trimmed }
         }
     }

@@ -76,6 +76,17 @@ struct BrowserResultRoutes: RouteCollection {
             throw AppError.unprocessable(reason: "Invalid TestOutcomeCollection: \(e)")
         }
 
+        // A browser result is a grade the student's own browser computed, so the
+        // student can forge it (docs/grading-integrity.md D8). Accept one only
+        // for a browser-graded assignment: a worker-graded assignment is graded
+        // on a native runner only, so a collection posted here for one would
+        // store an unverified grade. Checked before anything is persisted.
+        guard let manifest = decodeManifest(from: Data(setup.manifest.utf8)),
+            manifest.effectiveGradingMode == .browser
+        else {
+            throw AppError.badRequest(reason: "This assignment is not graded in the browser.")
+        }
+
         // Persist the notebook to disk as the submission artifact.  Merge the
         // student's notebook with the instructor's canonical notebook so the
         // hidden test cells (secret, release) are present in the stored artifact:
