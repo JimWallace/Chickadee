@@ -33,7 +33,18 @@ struct UserFileNamespaceMiddleware: AsyncMiddleware {
         return try await next.respond(to: req)
     }
 
-    private static func requestedUserNamespace(from path: String) -> String? {
+    /// Matches on the path the way `FileMiddleware` resolves it, not on the
+    /// raw URL: it percent-decodes the path and lets the filesystem collapse
+    /// `//` and `.` segments, so `/jupyterlite//files/users/…`,
+    /// `/jupyterlite/files/./users/…` and `/jupyterlite/files/%75sers/…` all
+    /// reach the same file and must hit the same check. Lowercased because a
+    /// case-insensitive filesystem (macOS default) also serves `/FILES/USERS/`.
+    static func requestedUserNamespace(from rawPath: String) -> String? {
+        let decoded = rawPath.removingPercentEncoding ?? rawPath
+        let segments = decoded.lowercased()
+            .split(separator: "/", omittingEmptySubsequences: true)
+            .filter { $0 != "." }
+        let path = "/" + segments.joined(separator: "/")
         for prefix in guardedPrefixes where path.hasPrefix(prefix) {
             let remainder = String(path.dropFirst(prefix.count))
             guard !remainder.isEmpty else { return nil }

@@ -152,7 +152,9 @@ struct ToolContext {
     /// Authorizes the token subject for an action scoped to `courseID`.
     ///
     /// The subject must be MCP-eligible (`requireEligibleSubject`) and enrolled
-    /// in the target course — admins included. An agent token never reaches
+    /// in the target course — admins included. A human who is not an admin
+    /// must also be course staff (`.ta`+) there: eligibility only says "staff
+    /// in some course". An agent token never reaches
     /// further than the courses its human is enrolled in (the dashboard tab
     /// strip): enrolling widens an agent's reach, and unenrolling revokes it on
     /// the next call, since the enrollment row is re-checked per request.
@@ -163,6 +165,22 @@ struct ToolContext {
     func authorizeCourseAccess(_ courseID: UUID) async throws -> APIUser {
         let user = try await requireEligibleSubject()
         try await requireEnrollment(of: user, in: courseID)
+        // Eligibility is "staff in ANY course", so a TA in course A who is a
+        // student in course B passes it. A human caller must be staff in THIS
+        // course too, or the read tools (get_solution, get_suite,
+        // get_notebook) hand course B's answer key to one of its students.
+        // An `mcp` service account is enrolled by an admin and keeps
+        // enrollment-only access. An admin bypasses per-course roles, as on
+        // the write path, but still needs the enrollment checked above.
+        if !user.isMCPAgent && !user.isAdmin {
+            guard let userID = user.id,
+                let role = try await courseRole(of: userID, inCourse: courseID, db: db),
+                role >= .ta
+            else {
+                throw MCPToolError.notAuthorized(
+                    detail: "The MCP account is not course staff in the target course.")
+            }
+        }
         return user
     }
 
@@ -217,7 +235,8 @@ struct ToolContext {
     /// implementation for the web and MCP surfaces — this wrapper only maps the
     /// denial to `MCPToolError`. The single chokepoint every MCP write resolver
     /// funnels through; the *read* resolvers stay on `authorizeCourseAccess`
-    /// (enrollment only) so archived courses remain readable (#417 Slice D-MCP).
+    /// (enrollment plus `.ta` for a non-admin human, no lifecycle check) so
+    /// archived courses remain readable (#417 Slice D-MCP).
     func authorizeCourseWriteAccess(
         _ courseID: UUID, atLeast minimum: CourseRole
     ) async throws {
