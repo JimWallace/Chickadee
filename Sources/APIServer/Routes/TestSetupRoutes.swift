@@ -235,6 +235,21 @@ struct TestSetupRoutes: RouteCollection {
         return try await req.fileio.asyncStreamFile(at: setup.zipPath)
     }
 
+    /// Refuses an enrolled student the content of an assignment that has not
+    /// opened, a preview, or a staff draft (#2897). The vanity link handed out
+    /// the setup ID whatever the assignment's state, and these three routes
+    /// checked only enrollment.
+    private func requireReadableAssignmentContent(
+        setupID: String, setup: APITestSetup, caller: APIUser, req: Request
+    ) async throws {
+        guard
+            try await studentMayReadAssignmentContent(
+                testSetupID: setupID, courseID: setup.courseID, user: caller, on: req)
+        else {
+            throw AppError.forbidden(action: "open an assignment that is not open")
+        }
+    }
+
     // MARK: - GET /api/v1/testsetups/:id/assignment  [enrolled students + instructors]
 
     @Sendable
@@ -245,6 +260,7 @@ struct TestSetupRoutes: RouteCollection {
         else { throw AppError.notFound(resource: "Test setup") }
 
         try await requireCourseEnrollment(caller: caller, courseID: setup.courseID, db: req.db)
+        try await requireReadableAssignmentContent(setupID: setupID, setup: setup, caller: caller, req: req)
 
         // Cached, single-flighted, resolved on the thread pool (#1156/#1171).
         let raw = try await req.application.notebookBytesCache.notebookData(
@@ -274,6 +290,7 @@ struct TestSetupRoutes: RouteCollection {
         else { throw AppError.notFound(resource: "Test setup") }
 
         try await requireCourseEnrollment(caller: caller, courseID: setup.courseID, db: req.db)
+        try await requireReadableAssignmentContent(setupID: setupID, setup: setup, caller: caller, req: req)
 
         // Cached, single-flighted, resolved on the thread pool (#1156/#1171).
         let raw = try await req.application.notebookBytesCache.notebookData(
@@ -318,6 +335,7 @@ struct TestSetupRoutes: RouteCollection {
         else { throw AppError.notFound(resource: "Test setup") }
 
         try await requireCourseEnrollment(caller: caller, courseID: setup.courseID, db: req.db)
+        try await requireReadableAssignmentContent(setupID: setupID, setup: setup, caller: caller, req: req)
 
         // Refuse path-traversal-shaped filenames outright.  Names with
         // slashes, backslashes, or `..` segments are never produced by

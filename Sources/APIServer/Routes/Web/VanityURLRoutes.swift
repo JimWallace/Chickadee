@@ -78,6 +78,16 @@ struct VanityURLRoutes: RouteCollection {
             throw AppError.notFound(resource: "Assignment")
         }
 
+        // The redirect names the setup ID, which the content routes take. A
+        // student is not told an assignment exists before it opens, nor given
+        // a preview's or a draft's ID (#2897); 404 as for the cases above.
+        guard
+            try await studentMayReadAssignmentContent(
+                testSetupID: assignment.testSetupID, courseID: courseID, user: user, on: req)
+        else {
+            throw AppError.notFound(resource: "Assignment")
+        }
+
         return assignment
     }
 
