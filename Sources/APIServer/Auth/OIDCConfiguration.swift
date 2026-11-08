@@ -92,6 +92,27 @@ struct OIDCConfiguration: Sendable {
     let redirectURI: String
     let discovery: OIDCDiscovery
     let claimConfig: OIDCClaimConfig
+    /// The CSP origin of `discovery.endSessionEndpoint`, which
+    /// `SecurityHeadersMiddleware` appends to `form-action`. Parsed here, once
+    /// per configuration, not on every response; a configuration that
+    /// discovery resolves late carries its own. Nil when the IdP publishes no
+    /// end-session endpoint or its URL names no host.
+    let endSessionOrigin: String?
+
+    init(
+        clientID: String,
+        clientSecret: String,
+        redirectURI: String,
+        discovery: OIDCDiscovery,
+        claimConfig: OIDCClaimConfig
+    ) {
+        self.clientID = clientID
+        self.clientSecret = clientSecret
+        self.redirectURI = redirectURI
+        self.discovery = discovery
+        self.claimConfig = claimConfig
+        endSessionOrigin = discovery.endSessionEndpoint.flatMap(SecurityHeadersMiddleware.cspOrigin(of:))
+    }
 
     // MARK: Startup loading
 

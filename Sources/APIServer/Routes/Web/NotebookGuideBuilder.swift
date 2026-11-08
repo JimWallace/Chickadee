@@ -36,10 +36,11 @@ struct NotebookGuideBuilder {
 
     func build() -> NotebookGuide {
         let language = AssignmentLanguage.resolve(manifest: manifest)
-        let starterScan = starter.map { scanNotebookDefinitions($0, language: language) }
-        // Parsed once for the starter sources and the reflections, which both
-        // read its cells.
+        // Parsed once for the definition scan, the starter sources and the
+        // reflections, which all read its cells. A starter that does not
+        // decode has no scan, so no sources, and no reflections.
         let starterCells = starter.flatMap(NotebookCellView.cells(from:))
+        let starterScan = starterCells.map { scanNotebookDefinitions(cells: $0, language: language) }
         let outcomes = outcomesByScript()
         let hints = buildHintByFilename(manifest)
         let failureDetails = buildFailureDetailByFilename(manifest)

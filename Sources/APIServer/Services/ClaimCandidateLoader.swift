@@ -112,6 +112,17 @@ struct ClaimCandidateLoader {
 
     /// The oldest pending submissions of `kind`. `retested` splits student
     /// work into fresh (`false`) and retest (`true`) passes; nil reads both.
+    ///
+    /// The two student passes read only pending rows, whatever the planner
+    /// statistics say. The fresh pass sorts on `retested_at` first. Every row it returns has a NULL `retested_at`, so the order is
+    /// exactly `submitted_at`, but only `idx_submissions_claim_priority`
+    /// returns that order, from the range that holds the fresh pending rows;
+    /// any other plan must sort every row it reads. Sorted on `submitted_at`
+    /// alone, statistics that showed a large pending share made the planner
+    /// walk `idx_submissions_submitted_at` from the oldest row and filter out
+    /// every completed submission (36 ms per poll on a 225k-row table). The
+    /// retest pass reads `idx_submissions_pending_retest_submitted_at`
+    /// (CreatePendingRetestIndex.swift).
     private func pending(
         kind: String, retested: Bool? = nil, limit: Int? = nil
     ) async throws -> [APISubmission] {
@@ -119,7 +130,7 @@ struct ClaimCandidateLoader {
             .filter(\.$status == SubmissionStatus.pending.rawValue)
             .filter(\.$kind == kind)
         switch retested {
-        case .some(false): query = query.filter(\.$retestedAt == nil)
+        case .some(false): query = query.filter(\.$retestedAt == nil).sort(\.$retestedAt, .ascending)
         case .some(true): query = query.filter(\.$retestedAt != nil)
         case nil: break
         }

@@ -219,20 +219,27 @@ enum AssignmentVersionStore {
             .first()
     }
 
-    /// `newestVersion` with only its number and snapshot hash loaded: the
-    /// dedupe and the numbering read nothing else, so the manifest and the
-    /// file map stay in the database. Any other property of the row is not
-    /// loaded and must not be read.
+    /// The two columns of the newest version that the dedupe and the
+    /// numbering read.
+    private struct VersionHeader {
+        let versionNumber: Int
+        let snapshotHash: String
+    }
+
+    /// `newestVersion` with only its number and snapshot hash loaded, so the
+    /// manifest and the file map stay in the database. A header, not the
+    /// partly loaded row, so no caller can read a property that was not
+    /// loaded.
     private static func newestVersionHeader(
         setupID: String, on db: any Database
-    ) async throws -> APIAssignmentVersion? {
-        try await APIAssignmentVersion.query(on: db)
+    ) async throws -> VersionHeader? {
+        let row = try await APIAssignmentVersion.query(on: db)
             .filter(\.$testSetupID == setupID)
             .sort(\.$versionNumber, .descending)
-            .field(\.$id)
             .field(\.$versionNumber)
             .field(\.$snapshotHash)
             .first()
+        return row.map { VersionHeader(versionNumber: $0.versionNumber, snapshotHash: $0.snapshotHash) }
     }
 
     /// The published assignment for a setup, or nil for a hidden draft.

@@ -26,12 +26,16 @@ func isAssignmentEffectivelyOpen(
         assignment, for: user, isStaff: isStaff, on: req.db, now: now)
 }
 
+/// `setup` is the row for `testSetupID` when the caller already holds it, so
+/// the activity-window gate reads its manifest without finding it again. A
+/// row for any other ID is ignored.
 func requireOpenStudentAssignment(
     for testSetupID: String,
     user: APIUser,
     gate: StudentAssignmentGate,
     on req: Request,
-    now: Date = Date()
+    now: Date = Date(),
+    setup: APITestSetup? = nil
 ) async throws -> APIAssignment? {
     guard
         let assignment = try await assignmentByTestSetupID(testSetupID, on: req.db)
@@ -64,7 +68,7 @@ func requireOpenStudentAssignment(
     }
     if gate == .submission {
         try await requireOpenActivityWindow(
-            testSetupID: testSetupID, assignment: assignment, user: user, on: req, now: now)
+            testSetupID: testSetupID, heldSetup: setup, assignment: assignment, user: user, on: req, now: now)
     }
     return assignment
 }
@@ -80,23 +84,29 @@ func requireOpenStudentAssignment(
 ///
 /// Course staff are not gated. They run the session — starting it, testing the
 /// bot, submitting a demonstration entry while the room watches — and an
-/// instructor locked out of their own contest has no way in.
+/// instructor locked out of their own contest has no way in. The staff check
+/// reads the request's role memo, which the enrollment gate has filled.
 private func requireOpenActivityWindow(
     testSetupID: String,
+    heldSetup: APITestSetup?,
     assignment: APIAssignment,
     user: APIUser,
     on req: Request,
     now: Date
 ) async throws {
-    guard let setup = try await APITestSetup.find(testSetupID, on: req.db),
-        let activity = setup.decodedManifest()?.activity
-    else { return }
+    let setup =
+        if let heldSetup, heldSetup.id == testSetupID {
+            heldSetup
+        } else {
+            try await APITestSetup.find(testSetupID, on: req.db)
+        }
+    guard let activity = setup?.decodedManifest()?.activity else { return }
     if activity.isPerGroup {
         try await requireOpenGroupSession(assignment: assignment, user: user, on: req, now: now)
         return
     }
     guard !activity.acceptsSubmissions(at: now), let window = activity.window else { return }
-    if try await isCourseStaff(user, inCourse: assignment.courseID, db: req.db) { return }
+    if try await req.cachedIsCourseStaff(user, inCourse: assignment.courseID) { return }
 
     let formatter = waterlooDateTimeFormatter()
     switch window.state(at: now) {
@@ -121,7 +131,7 @@ private func requireOpenActivityWindow(
 private func requireOpenGroupSession(
     assignment: APIAssignment, user: APIUser, on req: Request, now: Date
 ) async throws {
-    if try await isCourseStaff(user, inCourse: assignment.courseID, db: req.db) { return }
+    if try await req.cachedIsCourseStaff(user, inCourse: assignment.courseID) { return }
     let joined = try await ActivitySessionStore.hasJoined(
         assignmentID: assignment.requireID(), userID: user.requireID(), on: req.db)
     guard !joined else { return }

@@ -23,6 +23,13 @@ private struct PendingKindSetupCountRow: Decodable {
     }
 }
 
+/// What `pendingQueueDepth` counts, and how many pending rows it read to
+/// count it.
+private struct PendingQueueDepthCount {
+    let depth: Int
+    let countedRows: Int
+}
+
 extension OperationalDiagnosticsService {
 
     func findOrCreateSubmissionDiagnostics(
@@ -100,13 +107,46 @@ extension OperationalDiagnosticsService {
     /// validation, plus pending student work whose assignment is not
     /// browser-graded.
     ///
-    /// Cost scales with the number of *distinct assignments* holding pending
-    /// work, never with queue depth. This used to load every pending student
-    /// row into memory to produce one log field, which made each claim and each
-    /// submission-accept slower exactly as the backlog grew — the wrong
-    /// direction under pressure, and unbounded after a retest fan-out flips
-    /// tens of thousands of rows back to pending (#1361).
+    /// Its round trips and memory scale with the number of *distinct
+    /// assignments* holding pending work, never with queue depth. This used to
+    /// load every pending student row into memory to produce one log field,
+    /// which made each claim and each submission-accept slower exactly as the
+    /// backlog grew — the wrong direction under pressure, and unbounded after a
+    /// retest fan-out flips tens of thousands of rows back to pending (#1361).
+    ///
+    /// The database still reads every pending row to count them (7 to 10 ms
+    /// at a 25,000-row backlog), so the per-event `queue_depth` log field goes
+    /// through `queueDepthForLog(on:)` instead. This one is always exact.
     func pendingQueueDepth(on db: any Database) async throws -> Int {
+        try await countPendingQueueDepth(on: db).depth
+    }
+
+    /// The `queue_depth` field of the `job_enqueued` and `job_assigned` log
+    /// lines: `pendingQueueDepth(on:)`, except that while the backlog is
+    /// large a count from the last few seconds is reused
+    /// (`QueueDepthLogSampleStore`). Nothing else may read it.
+    func queueDepthForLog(on db: any Database) async throws -> Int {
+        let now = ContinuousClock.now
+        if let depth = await queueDepthLogSampler.reusableDepth(at: now) {
+            return depth
+        }
+        let count = try await countPendingQueueDepth(on: db)
+        await queueDepthLogSampler.record(depth: count.depth, countedRows: count.countedRows, takenAt: now)
+        return count.depth
+    }
+
+    /// `queueDepthForLog(on:)` for a line that `logger` writes at info, or nil
+    /// when `logger` drops info lines. Only info lines carry the depth, so a
+    /// server run at `notice` (Vapor's production default when `LOG_LEVEL`
+    /// is unset) needs no count at all.
+    func queueDepthForLog(on db: any Database, logger: Logger) async throws -> Int? {
+        guard logger.logLevel <= .info else { return nil }
+        return try await queueDepthForLog(on: db)
+    }
+
+    /// `pendingQueueDepth(on:)`, with the number of pending rows the count
+    /// read: the cost that `queueDepthForLog(on:)` decides on.
+    private func countPendingQueueDepth(on db: any Database) async throws -> PendingQueueDepthCount {
         // A starter run (NB8) is a runner job like a solution run.
         let validationKinds = [APISubmission.Kind.validation, APISubmission.Kind.starterValidation]
 
@@ -147,7 +187,10 @@ extension OperationalDiagnosticsService {
                 pendingStudentsBySetupID[setupID, default: 0] += 1
             }
         }
-        guard !pendingStudentsBySetupID.isEmpty else { return pendingValidation }
+        let countedRows = pendingStudentsBySetupID.values.reduce(pendingValidation, +)
+        guard !pendingStudentsBySetupID.isEmpty else {
+            return PendingQueueDepthCount(depth: pendingValidation, countedRows: countedRows)
+        }
 
         let workerModeSetupIDs = try await workerModeTestSetupIDs(
             for: Array(pendingStudentsBySetupID.keys),
@@ -156,7 +199,7 @@ extension OperationalDiagnosticsService {
         let pendingWorkerStudents = pendingStudentsBySetupID.reduce(0) { total, entry in
             workerModeSetupIDs.contains(entry.key) ? total + entry.value : total
         }
-        return pendingValidation + pendingWorkerStudents
+        return PendingQueueDepthCount(depth: pendingValidation + pendingWorkerStudents, countedRows: countedRows)
     }
 
     func maxQueueDepthSince(windowStart: Date, now: Date, on db: any Database) async throws -> Int {

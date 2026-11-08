@@ -231,6 +231,7 @@ final class OperationalDiagnosticsService: Sendable {
     let configuration: DiagnosticsConfiguration
     let compatibilityCounters = CompatibilityCounterStore()
     let snapshotSampler = RunnerSnapshotSampleStore()
+    let queueDepthLogSampler = QueueDepthLogSampleStore()
     let hotPathStats = HotPathRequestStats()
 
     init(configuration: DiagnosticsConfiguration) {

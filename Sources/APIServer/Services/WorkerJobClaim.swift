@@ -30,16 +30,24 @@ enum WorkerJobClaim {
         // Idle-poll short-circuit (2026-07 audit): most polls find nothing to
         // claim, yet each one previously entered the claim section and opened
         // a write transaction issuing 2–3 candidate SELECTs. One cheap indexed
-        // existence probe (status prefix of
-        // idx_submissions_status_kind_submitted_at) answers the empty case. Deliberately a fresh DB read, not
-        // cached state: there is nothing to invalidate, it is correct across
-        // processes, and a submission enqueued right after the probe is
-        // simply seen by the runner's next poll — the same pickup latency
-        // the poll cadence already implies. The claim transaction below
-        // re-reads candidates, so this never affects claim atomicity.
+        // existence probe answers the empty case. Deliberately a fresh DB
+        // read, not cached state: there is nothing to invalidate, it is
+        // correct across processes, and a submission enqueued right after the
+        // probe is simply seen by the runner's next poll — the same pickup
+        // latency the poll cadence already implies. The claim transaction
+        // below re-reads candidates, so this never affects claim atomicity.
+        //
+        // The sort on `kind` changes no answer; it is there for the planner.
+        // Only an index led by `(status, kind)` returns that order without
+        // sorting, from the pending range, so the probe reads the first
+        // pending entry or an empty range, whatever the statistics say.
+        // Unsorted, statistics taken during a backlog made it a sequential
+        // scan, which read the whole table on every idle poll once the
+        // backlog was gone (24 ms on a 225k-row table).
         let hasPendingWork =
             try await APISubmission.query(on: db)
             .filter(\.$status == SubmissionStatus.pending.rawValue)
+            .sort(\.$kind, .ascending)
             .field(\.$id)
             .first() != nil
         guard hasPendingWork else { return nil }

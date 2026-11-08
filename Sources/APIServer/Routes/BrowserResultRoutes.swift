@@ -46,9 +46,9 @@ struct BrowserResultRoutes: RouteCollection {
             throw AppError.invalidParameter(name: "testSetupID", reason: "no test setup with that ID")
         }
 
-        try await requireCourseEnrollment(caller: caller, courseID: setup.courseID, db: req.db)
+        try await req.cachedRequireCourseEnrollment(caller: caller, courseID: setup.courseID)
         _ = try await requireOpenStudentAssignment(
-            for: body.testSetupID, user: caller, gate: .submission, on: req)
+            for: body.testSetupID, user: caller, gate: .submission, on: req, setup: setup)
 
         // Decode the TestOutcomeCollection the browser sent.
         let decoder = JSONDecoder()
@@ -161,9 +161,9 @@ struct BrowserResultRoutes: RouteCollection {
             throw AppError.invalidParameter(name: "testSetupID", reason: "no test setup with that ID")
         }
 
-        try await requireCourseEnrollment(caller: caller, courseID: setup.courseID, db: req.db)
+        try await req.cachedRequireCourseEnrollment(caller: caller, courseID: setup.courseID)
         _ = try await requireOpenStudentAssignment(
-            for: body.testSetupID, user: caller, gate: .submission, on: req)
+            for: body.testSetupID, user: caller, gate: .submission, on: req, setup: setup)
 
         let manifestData = Data(setup.manifest.utf8)
         if let manifest = decodeManifest(from: manifestData),
@@ -223,9 +223,9 @@ struct BrowserResultRoutes: RouteCollection {
             throw AppError.invalidParameter(name: "testSetupID", reason: "no test setup with that ID")
         }
 
-        try await requireCourseEnrollment(caller: caller, courseID: setup.courseID, db: req.db)
+        try await req.cachedRequireCourseEnrollment(caller: caller, courseID: setup.courseID)
         _ = try await requireOpenStudentAssignment(
-            for: body.testSetupID, user: caller, gate: .submission, on: req)
+            for: body.testSetupID, user: caller, gate: .submission, on: req, setup: setup)
 
         // The failover only applies to browser-graded setups — worker-graded
         // assignments already enqueue through `runner-submit` and can't freeze a

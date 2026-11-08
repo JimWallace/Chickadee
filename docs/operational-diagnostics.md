@@ -249,6 +249,13 @@ Keys are kept consistent across events where possible:
 - `test_id`
 - `status`
 - `queue_wait_ms`
+- `queue_depth` — on `job_enqueued` and `job_assigned`: the pending jobs that
+  the native worker fleet owes. Below 1,000 pending rows each line counts
+  again. Above that, a count up to 5 seconds old is reused, so the claims of
+  one 5-second window share one count in each server process. When a window
+  ends, the events that arrive together may each count once. A server that
+  logs above `info` writes neither line and does not
+  count. MCP `get_queue_state` always counts.
 - `execution_ms`
 - `total_processing_ms`
 - `tests_passed`

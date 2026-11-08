@@ -406,11 +406,10 @@ struct SecurityHeadersMiddleware: AsyncMiddleware {
     /// redirect chain is blocked and "Log out" silently does nothing.
     private func formActionExtras(for request: Request) -> [String] {
         // Per-request origins set by a handler (e.g. the OAuth consent page's
-        // redirect_uri) come first, then the SSO end_session_endpoint origin.
+        // redirect_uri) come first, then the SSO end_session_endpoint origin,
+        // which `OIDCConfiguration` parsed once when it was built.
         var origins = request.storage[FormActionOriginsKey.self] ?? []
-        if let endpoint = request.application.oidcConfig?.discovery.endSessionEndpoint,
-            let origin = Self.cspOrigin(of: endpoint), !origins.contains(origin)
-        {
+        if let origin = request.application.oidcConfig?.endSessionOrigin, !origins.contains(origin) {
             origins.append(origin)
         }
         return origins
