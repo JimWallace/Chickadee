@@ -1063,11 +1063,13 @@ coordination, and each must see every edit.
   session networks (`Request.clientNetwork`).
 - **Rules:**
   - `X-Forwarded-For` is read only when `trustForwardedProto` is set.
-  - `clientIPAddress` takes the FIRST entry, which the client can choose:
-    the deployment's nginx appends the real peer
-    (`$proxy_add_x_forwarded_for`) after what the client sent.
-  - `Request.clientNetwork` takes the LAST entry, the one nginx appended,
-    because a session network is evidence that staff read.
+  - Both take the LAST entry, the one nginx appended
+    (`$proxy_add_x_forwarded_for`) after whatever the client sent. The
+    first entry is the client's to choose. `clientIPAddress` read the first
+    until the 2026-11 security audit, which let any caller dodge the per-IP
+    login limit with a fresh header per request.
+  - A second proxy hop in front of nginx makes the last entry that proxy's
+    address, so every user would share one rate-limit key.
   - A change to either reading changes every reader of it. A front proxy
     other than the repository's nginx can change which entry is real.
 

@@ -482,14 +482,18 @@ private func importBundledTestSetups(
         // The starter notebook: the flat file the bundle carries (#1736), else
         // the zip entry an older bundle may hold (browser-mode setups).
         var notebookPath: String?
+        // The name is bundle-supplied, so it goes through `bundleEntryURL` like
+        // the zip: a `../` name would otherwise copy any server file in as the
+        // starter notebook, which students are then served.
         if let bundledNotebook = bundledSetup.notebookFilename,
-            FileManager.default.fileExists(atPath: extractDir.appendingPathComponent(bundledNotebook).path)
+            let srcNotebook = bundleEntryURL(
+                extractDir: extractDir, path: bundledNotebook, directory: "testsetups"),
+            FileManager.default.fileExists(atPath: srcNotebook.path)
         {
             let nbPath = setupsDir + "\(newSetupID).ipynb"
             tally.createdPaths.append(nbPath)
             try await runBlocking {
-                try FileManager.default.copyItem(
-                    at: extractDir.appendingPathComponent(bundledNotebook), to: URL(fileURLWithPath: nbPath))
+                try FileManager.default.copyItem(at: srcNotebook, to: URL(fileURLWithPath: nbPath))
             }
             notebookPath = nbPath
         } else if let nbData = await extractNotebookFromZip(zipPath: newZipPath) {
