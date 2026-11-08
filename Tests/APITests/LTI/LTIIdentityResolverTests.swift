@@ -61,7 +61,8 @@ import VaporTesting
     @Test func trustedPlatformLinksToTheExistingAccount() async throws {
         try await withApp(app) { _ in
             let platform = try await makePlatform(trustUsername: true)
-            let existing = try await makeTestUser(on: app, username: "alovelace", role: "user")
+            // An SSO account: no local password (#2899 refuses to link one with).
+            let existing = try await makeTestUser(on: app, username: "alovelace", role: "user", passwordHash: "")
             let resolution = try await resolve(try launch(username: " ALovelace "), platform)
             #expect(!resolution.created)
             #expect(resolution.user.id == existing.id)
@@ -94,7 +95,7 @@ import VaporTesting
     @Test func trustedPlatformNeverGivesOneAccountTwoSubjects() async throws {
         try await withApp(app) { _ in
             let platform = try await makePlatform(trustUsername: true)
-            try await makeTestUser(on: app, username: "alovelace", role: "user")
+            try await makeTestUser(on: app, username: "alovelace", role: "user", passwordHash: "")
             _ = try await resolve(try launch(subject: "subject-1", username: "alovelace"), platform)
             await #expect(throws: LTIIdentityResolver.Failure.linkRefused(username: "alovelace")) {
                 try await self.resolve(try self.launch(subject: "subject-2", username: "alovelace"), platform)
