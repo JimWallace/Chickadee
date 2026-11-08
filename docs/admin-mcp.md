@@ -158,8 +158,9 @@ enum DiagnosticScope: String, CaseIterable, Sendable {
 Read-only is enforced three ways, defense in depth:
 
 1. The scope enum has no write case.
-2. `AdminMCPMode` has no `read_write`; its `scopeCeiling` is `{.read}`.
-3. Every admin tool is a pure read — no tool in `MCPToolCatalog.adminLive`
+2. The surface advertises and honours only `diagnostics:read`, even under
+   `MCP_MODE=read_write`. There is no admin mode setting.
+3. Every admin tool is a pure read — no tool in `AdminMCPToolCatalog.live`
    performs a mutating Fluent query, asserted by a guard test analogous to the
    content-side template guards.
 
@@ -184,7 +185,7 @@ What this decision implies (the work to do):
   audience, so a content token can't call admin tools and vice versa (§2).
 - **Discovery.** A second `.well-known/oauth-protected-resource` describes the
   admin resource (the `MCPMetadataRoutes` pattern), advertising
-  `diagnostics:read` under `ADMIN_MCP_MODE`.
+  `diagnostics:read`. It mounts when MCP is on (`MCP_MODE`).
 - **DCR.** Dynamic client registration is shared; requested scopes are still
   clamped to each resource's advertised ceiling.
 
@@ -216,7 +217,8 @@ e.g. `admin.diagnostic_queried`, or reuse `mcpToolCalled` with
 **New / parallel** (the auth + scope + context layer, where the two surfaces
 differ):
 
-- `AdminMCPConfig`, `AdminMCPMode`, `DiagnosticScope`.
+- `DiagnosticScope`. (The planned `AdminMCPConfig` and `AdminMCPMode` were not
+  built: the surface follows `MCP_MODE` and reuses `MCPConfig`; see §3.1.)
 - An admin bearer middleware (or a generalized `MCPBearerAuthMiddleware`):
   today it hardcodes `ContentScope.allCases` and
   `appConfig.mcp.mode.scopeCeiling` (lines ~49–50). It must be parameterized
@@ -281,14 +283,16 @@ by the Postgres role, not only the in-process boundary
 
 The admin surface should follow the same playbook, with a twist: it *needs* to
 read diagnostic tables that contain student FKs, so the role can't simply be
-denied those tables. Instead:
+denied those tables. The plan below was **dropped** (decision 5 at the top): the
+wall is a code allowlist of hand-built DTOs, with no views and no dedicated role.
+The original plan was:
 
 - Define **PII-free SQL views** over the diagnostic tables — e.g.
   `diag_browser_errors_v`, `diag_job_metrics_v`, `diag_runner_snapshots_v` —
   that project only non-PII columns (drop `user_id`, drop raw `submission_id` or
   replace it with a salted hash; keep `test_setup_id` since that maps to
   instructor content, timings, statuses, counts, `user_agent`, error text).
-- Grant a dedicated `ADMIN_MCP_DATABASE_USER` role `SELECT` on **only those
+- Grant a dedicated database role `SELECT` on **only those
   views** (and the already-clean `runner_snapshots`), nothing else.
 - Admin tools read the views. The result: even a tool bug can't return
   `user_id` — the column isn't reachable through the role.
@@ -328,10 +332,10 @@ All `diagnostics:read`. Names are provisional.
 
 | Tool | Returns | PII posture |
 |------|---------|-------------|
-| `get_deployment_info` | Version/build, `ADMIN_MCP_MODE`, advertised scopes, uptime, redacted env summary (the startup-summary view), feature flags | clean |
-| `get_runner_health` | Per-runner liveness from `runner_snapshots` + `WorkerActivityStore`: id, hostname, version, active/max jobs, capacity, last poll/heartbeat | clean |
+| `get_deployment_info` | Version/build, `MCP_MODE`, advertised scopes, uptime, redacted env summary (the startup-summary view), feature flags | clean |
+| `get_runner_health` | **Not built: `get_metrics_snapshot` covers it (§7 step 3); `list_runners` and `get_runner_detail` give per-runner detail.** Per-runner liveness from `runner_snapshots` + `WorkerActivityStore`: id, hostname, version, active/max jobs, capacity, last poll/heartbeat | clean |
 | `get_queue_state` | Pending/assigned counts, oldest-pending age, stuck-submission count (the reaper's view) | aggregate, clean |
-| `get_job_metrics_summary` | `job_execution_metrics` over a window: status counts, queue-wait/execution percentiles, per-stage timing breakdown, test-setup cache-hit rate, compatibility counters | aggregate, no row identifiers |
+| `get_job_metrics_summary` | **Not built: `get_metrics_snapshot` covers it (§7 step 3).** `job_execution_metrics` over a window: status counts, queue-wait/execution percentiles, per-stage timing breakdown, test-setup cache-hit rate, compatibility counters | aggregate, no row identifiers |
 | `get_browser_diagnostics` | `client_diagnostics` (post-§6): counts by `kind`/`failedChecks`/`user_agent` over a window **plus recent redacted samples** incl. error message/stack | `user_id` dropped |
 | `query_logs` | Recent structured log records from the in-process ring buffer (§6), filterable by event name / level / time window | PII metadata redacted |
 | `get_health_alerts` | Current `ServerHealthAlertService` rule states (which are firing) + configured thresholds | clean |
@@ -424,18 +428,18 @@ OAuth and DB-wall work lands.
    `window.onerror`/`unhandledrejection` capture, kernel-failure evidence. The
    log ring buffer (§6.2) is deferred to land alongside `query_logs` (step 4).
 2. **Scaffold the admin surface.** Split into:
-   - **2a — dispatch-layer foundation.** ◀ **This slice.** `AdminMCPMode` /
-     `DiagnosticScope` / `AdminMCPConfig` (+ `AppConfig` wiring + startup
-     summary), `AdminToolContext` (`requireAdminSubject`), the `DiagnosticTool`
+   - **2a — dispatch-layer foundation.** ✅ **Done.** `DiagnosticScope`
+     (the planned `AdminMCPMode` / `AdminMCPConfig` were dropped when the
+     surface was tied to `MCP_MODE`), `AdminToolContext` (`requireAdminSubject`), the `DiagnosticTool`
      protocol / registry, `AdminMCPDispatcher` (tools-only, read-only),
      `AdminMCPServerInstructions`, `AdminMCPToolCatalog`, and the first tool
      `get_deployment_info` — proven end to end at the dispatch layer with unit
-     tests. **Nothing is mounted**, so there is zero production impact while the
-     architecture is reviewed.
+     tests. At 2a nothing was mounted yet, so it had zero production impact
+     while the architecture was reviewed.
    - **2b — HTTP mount + bearer.** ✅ **Done.** Mounts `POST /admin-mcp` behind
-     `ADMIN_MCP_MODE` with `AdminMCPBearerAuthMiddleware` enforcing the admin
-     audience + `diagnostics:read` (separate signing key from the content
-     surface), the admin `.well-known/oauth-protected-resource/admin-mcp`
+     `MCP_MODE` (it mounts when MCP is on) with `AdminMCPBearerAuthMiddleware`
+     enforcing the admin audience + `diagnostics:read` (the signing key is
+     shared with the content surface; the audience separates them), the admin `.well-known/oauth-protected-resource/admin-mcp`
      discovery, the production DNS-rebinding fail-safe, and admin tool-call
      audit (`admin_mcp.tool_called`). Tokens minted via `MCPTokenAuthority`
      (admin audience) for tests; production issuance is 2c.

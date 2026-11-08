@@ -84,7 +84,7 @@ not exist.
 ## Achievements and avatars
 
 - [achievements-unification.md](achievements-unification.md) — one achievements model, endpoint and editor; phases A to C shipped, phase D not finished
-- [achievement-rewards.md](achievement-rewards.md) — proposed: achievements at the assignment, course and site levels, one award ledger, and a wardrobe item as a reward
+- [achievement-rewards.md](achievement-rewards.md) — partly shipped (S1, S3 to S5): achievements at the assignment, course and site levels, one award ledger, and a wardrobe item as a reward
 - [result-celebration.md](result-celebration.md) — the result-page celebration: the 100% moment, the bird, and the Earned toast
 - [student-avatars.md](student-avatars.md) — generated avatars and the per-course pseudonymous handle
 - [avatar-species.md](avatar-species.md) — eleven avatar species on one shared skeleton, the colourway decides the species, the trait weights, the prototype findings; opens with a Status table

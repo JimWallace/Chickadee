@@ -355,7 +355,7 @@ panel.
    content-addressed blob store, `AssignmentVersionStore.record` with dedupe and
    lazy baseline. Unit tests on hashing, dedupe, and numbering under
    concurrency.
-2. **Capture.** Wire the web service-layer sites and the `finalizeMCPWrite`
+2. **Capture.** Wire the web service-layer sites and the `finalizeContentEdit`
    chokepoint; add the coverage guard test. No user-visible change yet — history
    starts accumulating.
 3. **Read tools.** `list_assignment_versions`, `get_assignment_version`, plus

@@ -4,6 +4,10 @@ Where the multi-language transition stands as of v0.5.59 (#1330, #1331), what
 the rule now is, and what became of the fourteen call sites that were still
 answering a different question.
 
+> **Note (2026-11):** this document predates Java support
+> ([java-support.md](java-support.md)). Seven languages ship now. Counts written
+> at v0.5.59 ("five of six") describe the six languages of that time.
+
 ---
 
 ## The rule
@@ -294,7 +298,7 @@ Python assignment runs under `Rscript`, and always has.
 
 This is the original design — "test suites are shell scripts; the runner
 executes them generically" — with per-language generation layered on top rather
-than replacing it. **Shell is the substrate all six languages sit on**, which
+than replacing it. **Shell is the substrate all seven languages sit on**, which
 is why "None" means "nothing is generated" and, in practice, "hand-written
 scripts only".
 

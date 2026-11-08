@@ -285,13 +285,14 @@ Authenticated admins can query:
 
 The response is JSON and includes:
 
-- current `queueDepth`
-- current `inFlightJobs`
+- `maxQueueDepth` and `jobsProcessed24h`
+- `peakUtilizationPercent`, `maxLoadActiveJobs` and `maxLoadCapacity`
 - `activeRunners` seen recently
-- per-runner active job and capacity values
-- recent job counts grouped by final status
-- average, p50, and p95 queue wait and execution times for the recent window
-- compatibility counters since server start:
+- `runnerLoads`: per-runner active job and capacity values
+- `jobStatusCounts`: recent job counts grouped by final status, over
+  `recentWindowHours`
+- `queueWait` and `execution`: average, p50, and p95 times for the recent window
+- `compatibility`: counters since server start:
   - `compatibleAssignmentAttempts`
   - `incompatibleAssignmentAttempts`
   - `jobsBlockedNoCompatibleRunner`
@@ -431,7 +432,7 @@ Connection recovery signals:
 
 Can I add more runners?
 
-- Check `/admin/metrics` for sustained non-zero `queueDepth`, rising queue wait,
+- Check `/admin/metrics` for a sustained non-zero `maxQueueDepth`, rising queue wait,
   and runners with `availableCapacity` near zero.
 
 Are jobs timing out more than usual?

@@ -62,7 +62,7 @@ Targets, as declared in `Package.swift`:
   only) so it compiles both natively and to wasm32 under Embedded Swift. It
   owns suite execution (`executeSuites`), output interpretation
   (`interpretScriptOutput`), script classification (extension → shebang →
-  content), notebook extraction (`extractPython` / `extractR`), the
+  content), notebook extraction (one `extract<Language>` per language), the
   `TestOutcome` / `TestTier` / `TestStatus` types, and an embedded-safe JSON
   layer (`JSONLite`). Because the native worker and the browser runner drive
   the same loop, the two graders cannot drift; parity is pinned by
@@ -100,7 +100,7 @@ Sources/
     OutputInterpretation.swift  exit code + last-line JSON → status/score
     ScriptClassification.swift  extension → shebang → content dispatch
     ScriptExecutor.swift    substrate protocol (native and browser executors)
-    NotebookExtraction.swift    extractPython / extractR
+    NotebookExtraction.swift    one extract<Language> per language
     TestOutcome.swift · TestStatus.swift · TestTier.swift · JSONLite.swift
   Core/                     Shared models (no Vapor; re-exports RunnerCore)
     Models/ + top-level     Job, TestProperties, PatternFamily, Achievement,
@@ -125,7 +125,7 @@ Sources/
     ScriptRunner.swift      ScriptRunner protocol + UnsandboxedScriptRunner
     SandboxedScriptRunner.swift
     SubmissionNormalizer.swift · NotebookExtractor.swift · MimeTypeDetector.swift
-    TestRuntimeSources.swift    Embedded Python + R runtime sources
+    TestRuntimeSources.swift    Embedded runtime helper sources, one set per language
     TestSetupCache.swift    LRU cache of prepared test setup directories
 wasm/                       SwiftPM sub-package: RunnerCore → wasm32 bridge
 Public/runner-wasm/         Vendored wasm artifact + JS bridge (checked in)
@@ -191,8 +191,8 @@ WorkerJobRoutes  ←────── runner polls POST /worker/request ──�
                                                           (GET /api/v1/testsetups/:id/download)
                                                           (TestSetupCache reuses prepared setups)
                                                         • SubmissionNormalizer (Python jobs)
-                                                        • extractNotebooksToCode (ipynb → .py/.R)
-                                                        • Write test_runtime.py / test_runtime.R
+                                                        • extractNotebooksToCode (ipynb → the language's extension)
+                                                        • Write test_runtime.* (one helper set per language)
                                                         • Write _ck_inputs.py / _ck_inputs.R
                                                           (per-student personalized values)
                                                         • Optional: run make

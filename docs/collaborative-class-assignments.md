@@ -115,8 +115,8 @@ Two platform constraints apply:
   MCP `author_script`. The streaming filter and the browser manifest endpoint,
   which serves only the runner contract (`browserRunnerManifestJSON`), are
   backstops for setups that predate the rule. The refusal is covered by
-  `uploadRejectsGraderOnlyFilesWithBrowserGrading`,
-  `BrowserManifestGraderOnlyStripTests`, and the two MCP tool suites. So an
+  `uploadRejectsGraderOnlyFilesWithBrowserGrading` (in
+  `ArchivedCourseLifecycleRouteTests`) and the two MCP tool suites. So an
   instructor marks the variant implementations `graderOnly`, and browser grading
   becomes unavailable by construction. This is an authoring instruction, not a
   code change. Worker grading is safe on the other side too:
