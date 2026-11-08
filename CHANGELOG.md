@@ -9,6 +9,15 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.854] - 2026-11-08
+
+### Changed
+
+- **Runner claims and idle polls stay on the pending rows whatever the planner statistics say.** After a large deadline backlog, Postgres could plan the fresh-student claim query on `idx_submissions_submitted_at` and filter out every completed submission (about 37 ms per claim on a 225k-row table), and could turn the idle-poll probe into a sequential scan. The fresh pass and the probe now sort in an order that only the status-led indexes return, and a new partial index (`idx_submissions_pending_retest_submitted_at`) serves the retest pass. In the statistics states measured, each took about 0.1 ms where it can run.
+- **The `queue_depth` log field costs less in a backlog.** It is counted only when the info-level line that carries it is written. Above 1,000 pending rows, the log lines of each server process reuse a count for up to 5 seconds, so the field can lag by that much; `pendingQueueDepth` and MCP `get_queue_state` still count exactly.
+- **Smaller costs.** The metrics cards label their buckets with one date formatter, not one per bucket. The GitHub submit path unpacks the tarball off the cooperative pool. The CSP header reads the SSO end-session origin computed once, not parsed per response. The notebook guide decodes the starter notebook once. The browser-result doors reuse the request's enrollment and staff checks and the setup they hold.
+
+
 ## [0.5.853] - 2026-11-08
 
 ### Fixed
