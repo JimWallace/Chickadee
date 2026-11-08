@@ -822,6 +822,47 @@ coordination, and each must see every edit.
   - Every door that takes a notebook merges it with
     `mergedWithInstructorNotebook`, on the NIO thread pool.
 
+### The working-copy tree: `Public/jupyterlite/files/users/<id>/<setupID>/`
+
+- **Writers:** the seeder (`ensureUserNotebookWorkingCopy`, with the dataset
+  files from `writeDatasetFiles` and the support-file symlinks from
+  `linkSupportFiles`), the reset routes, `POST /testsetups/:id/notebook/save`,
+  and, for a browser with the server drive on, the contents write routes
+  (`Routes/JupyterLiteContentsRoutes+Write.swift`: PUT, POST, PATCH, DELETE).
+- **Readers:** the contents GET routes, the notebook page (the
+  `data-working-copy-mtime` stamp and `syncNotebookFromServerSnapshot` in
+  `Public/notebook.js`), the staff preview, and the dataset fingerprint check.
+- **Rules:**
+  - A write route writes only under the caller's own `users/<id>/`, staff
+    included, and never over or through a symlink (a support file or a shared
+    dataset directory). `JupyterLiteContentsWriteRoutesTests` pins it.
+  - The file's mtime is the only reset signal. JupyterLab's save compares it
+    with its last save and raises "File changed". The page's IndexedDB reseed
+    reads it too, so it is skipped when the server drive is on: a drive save
+    would otherwise read as a reset on the next visit.
+  - A seeder never replaces a real file, so a write to a file the assignment
+    provides would persist and no reset would repair it. The write routes
+    therefore refuse every path in `StudentWorkspaceFiles.delivered` (the
+    datasets and support files) and the `view-` and `preview-` notebook
+    records, any path above or below one (compared without case), and a
+    rename that would move one or the assignment folder itself
+    (`WorkingCopyProtectedFiles`, `JupyterLiteContentsProtectedFilesTests`).
+    A new kind of delivered file must join `delivered`, or the drive can
+    write over it.
+  - The write routes check ownership only, not `requireOpenStudentAssignment`
+    (open question for #469). Submission is gated separately.
+
+### The server-drive opt-in: the `ck_server_drive` cookie
+
+- **Writers:** the browser (set by hand during the #469 spike).
+- **Readers:** `JupyterLiteConfigFlagMiddleware`, which adds
+  `chickadeeServerDrive` to the served `jupyter-lite.json` and varies on
+  `Cookie`; the Chickadee extension (`serverDrive.ts`), which registers its
+  REST drive only when that option is set; and `Public/notebook.js`
+  (`serverDriveActive`), which skips the IndexedDB reseed.
+- **Rules:** the three readers must agree. A browser without the cookie gets
+  the IndexedDB drive and every existing behaviour unchanged.
+
 ### Content versions and restore
 
 - **Rules:**

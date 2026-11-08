@@ -26,7 +26,9 @@
     "@jupyterlab/application": "~4.6.5",
     "@jupyterlab/apputils": "~4.7.5",
     "@jupyterlab/cells": "~4.6.5",
+    "@jupyterlab/coreutils": "~6.6.5",
     "@jupyterlab/notebook": "~4.6.5",
+    "@jupyterlab/services": "~7.6.5",
     "@lumino/widgets": "^2.7.0"
   },
   "devDependencies": {
