@@ -6,6 +6,7 @@
 // a student, and submits once (stays pending — no runner attached).
 import { request as pwRequest } from "playwright";
 import JSZip from "jszip";
+import { createHash, createHmac, randomUUID } from "node:crypto";
 
 export const INSTRUCTOR = { username: "vis_instructor", password: "vis-instructor-pass-1" };
 export const STUDENT = { username: "vis_student", password: "vis-student-pass-1" };
@@ -91,11 +92,9 @@ const MANIFEST = JSON.stringify({
 // here lands in a pixel baseline, so nothing may derive from the clock, the
 // run, or the machine.
 //
-// Shape mirrors `buildCollection` in Public/browser-runner.js: the browser
-// grader posts exactly this to /api/v1/submissions/browser-result, which is a
-// real production path and needs no runner and no HMAC secret. That is the
-// whole reason the graded page can be captured at all — the fixture attaches
-// no runner, so a worker-graded submission stays pending forever.
+// Shape mirrors `buildCollection` in Public/browser-runner.js. The fixture
+// attaches no runner, so the seed reports the grade itself, as a runner would:
+// a signed POST to /api/v1/worker/results (`postWorkerResult`).
 function gradedOutcome(name, tier, status, opts = {}) {
   return {
     testName: name,
@@ -113,8 +112,8 @@ function gradedOutcome(name, tier, status, opts = {}) {
   };
 }
 
-/// Wraps outcomes in the collection envelope `buildCollection` produces in
-/// Public/browser-runner.js. Fixed values only — these reach a pixel baseline.
+// Wraps outcomes in the collection envelope `buildCollection` produces in
+// Public/browser-runner.js. Fixed values only — these reach a pixel baseline.
 function gradedCollection(setupID, outcomes) {
   return {
     submissionID: "",
@@ -194,7 +193,7 @@ const COMPOSITE_PIXELS = Buffer.from(
   Array.from({ length: 16 }, (_, i) => ((i % 4) + Math.floor(i / 4)) * 36)
 ).toString("base64");
 
-/// Uploads, publishes and opens the composite assignment. Returns its setup ID.
+// Uploads, publishes and opens the composite assignment. Returns its setup ID.
 async function seedCompositeAssignment(instr, courseID) {
   const zipBuf = await buildCompositeZip();
   let csrf = await csrfFrom(instr, "/");
@@ -238,21 +237,35 @@ async function seedCompositeAssignment(instr, courseID) {
   return setupID;
 }
 
-/// The student opens the composite, which deals them slot 0, and posts one
-/// passing tile. Returns the graded submission's path.
-async function seedCompositeContribution(stud, setupID) {
+// The student opens the composite, which deals them slot 0, and posts one
+// passing tile. Returns the graded submission's path.
+async function seedCompositeContribution(stud, setupID, baseURL) {
   await expectOK("open composite notebook", stud.get(`/testsetups/${setupID}/notebook`), [200]);
   const outcome = {
     ...gradedOutcome("test_tile.py", "public", "pass", { points: 1, shortResult: "tile ok" }),
     composite: { w: 4, h: 4, frames: 1, format: "gray8", data: COMPOSITE_PIXELS },
   };
+  // Worker-graded, like the lab: submitted through runner-submit and graded
+  // by a signed runner report (see the lab's graded submissions below).
+  const id = await runnerSubmit(stud, setupID, "composite submission");
+  await postWorkerResult(baseURL, workerCollection(id, 1, gradedCollection(setupID, [outcome])));
+  return `/submissions/${id}`;
+}
+
+// The fixture's runner secret. The run-*.sh scripts export it, so the server
+// (RUNNER_SHARED_SECRET) and this seed share it.
+const RUNNER_SECRET = process.env.RUNNER_SHARED_SECRET;
+
+// Submits the notebook through runner-submit, as a worker-graded notebook
+// assignment's page does. Returns the new submission's ID.
+async function runnerSubmit(stud, setupID, label) {
   const csrf = await csrfFrom(stud, `/testsetups/${setupID}/submit`);
   const res = await expectOK(
-    "composite browser submission",
-    stud.post("/api/v1/submissions/browser-result", {
+    label,
+    stud.post("/api/v1/submissions/runner-submit", {
       multipart: {
-        collection: JSON.stringify(gradedCollection(setupID, [outcome])),
         testSetupID: setupID,
+        filename: "assignment.ipynb",
         notebook: {
           name: "assignment.ipynb",
           mimeType: "application/octet-stream",
@@ -264,8 +277,58 @@ async function seedCompositeContribution(stud, setupID) {
     [200, 201]
   );
   const id = JSON.parse(await res.text()).submissionID;
-  if (!id) throw new Error("no submissionID in composite browser-result response");
-  return `/submissions/${id}`;
+  if (!id) throw new Error(`no submissionID in ${label} response`);
+  return id;
+}
+
+// The collection a runner reports for `submissionID`, stamped with the
+// server's attempt number and the weighted grade, as browser-result used to
+// reconcile them (BrowserResultRoutes.reconcileBrowserCollection).
+function workerCollection(submissionID, attemptNumber, collection) {
+  const outcomes = collection.outcomes.map((o) => ({
+    ...o,
+    attemptNumber,
+    isFirstPassSuccess: attemptNumber === 1 && o.status === "pass",
+  }));
+  return {
+    ...collection,
+    submissionID,
+    attemptNumber,
+    outcomes,
+    totalPoints: outcomes.reduce((sum, o) => sum + o.points, 0),
+    earnedPoints: outcomes.reduce((sum, o) => sum + o.points * o.score, 0),
+  };
+}
+
+// Posts a runner's result report, HMAC-signed as WorkerRequestSigner signs
+// it (Sources/Core/WorkerHMACSigning.swift).
+async function postWorkerResult(baseURL, collection) {
+  if (!RUNNER_SECRET) {
+    throw new Error("RUNNER_SHARED_SECRET is not set: the run script exports it for the server and the seed");
+  }
+  const path = "/api/v1/worker/results";
+  const body = JSON.stringify({ collection, diagnostics: null });
+  const bodyHash = createHash("sha256").update(body).digest("hex");
+  const timestamp = String(Math.floor(Date.now() / 1000));
+  const nonce = randomUUID();
+  const signature = createHmac("sha256", RUNNER_SECRET)
+    .update(["POST", path, bodyHash, timestamp, nonce].join("\n"))
+    .digest("hex");
+  const res = await fetch(new URL(path, baseURL), {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      "x-worker-timestamp": timestamp,
+      "x-worker-nonce": nonce,
+      "x-worker-body-sha256": bodyHash,
+      "x-worker-signature": signature,
+      "x-worker-id": "visual-fixture",
+    },
+    body,
+  });
+  if (res.status !== 200) {
+    throw new Error(`worker result for ${collection.submissionID}: status ${res.status}: ${await res.text()}`);
+  }
 }
 
 export async function seed(baseURL) {
@@ -428,54 +491,33 @@ export async function seed(baseURL) {
   // graded attempt exists — and that line is a fourth item in the score band,
   // which is exactly the case that laid the band out wrong in production while
   // a first-attempt baseline looked fine.
-  csrf = await csrfFrom(stud, `/testsetups/${setupID}/submit`);
-  await expectOK(
-    "first graded browser submission",
-    stud.post("/api/v1/submissions/browser-result", {
-      multipart: {
-        collection: JSON.stringify({
-          ...gradedCollection(
-            setupID,
-            // A worse prior attempt, so the second one reports fixes.
-            GRADED_OUTCOMES.map((o) =>
-              o.tier === "public" ? { ...o, status: "fail", score: 0 } : o
-            )
-          ),
-        }),
-        testSetupID: setupID,
-        notebook: {
-          name: "assignment.ipynb",
-          mimeType: "application/octet-stream",
-          buffer: Buffer.from(NOTEBOOK_JSON),
-        },
-      },
-      headers: { "x-csrf-token": csrf },
-    }),
-    [200, 201]
+  // Graded the way production grades a worker-graded notebook: the student
+  // submits through runner-submit, and the grade arrives as a signed runner
+  // report. The fixture used to post these through browser-result, which a
+  // worker-graded assignment now refuses, because a browser-computed grade can
+  // be forged (#2902, docs/grading-integrity.md D8). The values match
+  // what browser-result stored (attempt numbers, points), so the baselines
+  // keep their pixels.
+  const firstGradedID = await runnerSubmit(stud, setupID, "first graded submission");
+  await postWorkerResult(
+    baseURL,
+    workerCollection(
+      firstGradedID,
+      2,
+      gradedCollection(
+        setupID,
+        // A worse prior attempt, so the second one reports fixes.
+        GRADED_OUTCOMES.map((o) =>
+          o.tier === "public" ? { ...o, status: "fail", score: 0 } : o
+        )
+      )
+    )
   );
-
-  csrf = await csrfFrom(stud, `/testsetups/${setupID}/submit`);
-  const gradedRes = await expectOK(
-    "graded browser submission",
-    stud.post("/api/v1/submissions/browser-result", {
-      multipart: {
-        collection: JSON.stringify(collection),
-        testSetupID: setupID,
-        notebook: {
-          name: "assignment.ipynb",
-          mimeType: "application/octet-stream",
-          buffer: Buffer.from(NOTEBOOK_JSON),
-        },
-      },
-      headers: { "x-csrf-token": csrf },
-    }),
-    [200, 201]
-  );
-  const gradedID = JSON.parse(await gradedRes.text()).submissionID;
-  if (!gradedID) throw new Error("no submissionID in browser-result response");
+  const gradedID = await runnerSubmit(stud, setupID, "graded submission");
+  await postWorkerResult(baseURL, workerCollection(gradedID, 3, collection));
   const gradedResultsPath = `/submissions/${gradedID}`;
 
-  const compositeResultsPath = await seedCompositeContribution(stud, compositeSetupID);
+  const compositeResultsPath = await seedCompositeContribution(stud, compositeSetupID, baseURL);
 
   // The first result page a student opens after earning a wardrobe item
   // grants it and shows the Earned toast (docs/result-celebration.md, J2).

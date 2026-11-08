@@ -12,6 +12,11 @@
 # Server-boot logic mirrors run-visual.sh.
 
 set -euo pipefail
+
+# The fixture's runner secret, shared by the server and the seed: the seed
+# grades the lab as a runner would, with a signed result report (seed.mjs,
+# postWorkerResult). An existing variable, fixed for a throwaway server.
+export RUNNER_SHARED_SECRET="visual-fixture-runner-secret"
 cd "$(dirname "$0")"
 
 REPO_ROOT="$(cd ../.. && pwd)"
