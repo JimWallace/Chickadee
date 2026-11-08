@@ -47,7 +47,7 @@ extension OperationalDiagnosticsService {
             return existing
         }
 
-        let created = APISubmissionDiagnostics(
+        return APISubmissionDiagnostics(
             submissionID: submission.id ?? "",
             testSetupID: submission.testSetupID,
             courseID: context.courseID,
@@ -55,7 +55,6 @@ extension OperationalDiagnosticsService {
             kind: submission.kind,
             submittedAt: submission.submittedAt
         )
-        return created
     }
 
     /// The submission's metric row, or a new one NOT yet saved, like
@@ -72,7 +71,7 @@ extension OperationalDiagnosticsService {
             return existing
         }
 
-        let created = JobExecutionMetric(
+        return JobExecutionMetric(
             submissionID: submission.id ?? "",
             jobID: submission.id ?? "",
             testSetupID: submission.testSetupID,
@@ -84,7 +83,6 @@ extension OperationalDiagnosticsService {
             attemptNumber: submission.attemptNumber,
             enqueuedAt: submission.retestedAt ?? submission.submittedAt
         )
-        return created
     }
 
     func loadSubmissionContext(
