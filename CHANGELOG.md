@@ -9,6 +9,13 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.860] - 2026-11-08
+
+### Security
+
+- **Students cannot read an assignment before it opens (#2897).** `GET /api/v1/testsetups/:id/assignment`, its download and the support-file route checked only enrollment, and the course vanity link redirected to the setup ID whatever the assignment's state. All four now apply the notebook page's rule: the assignment is open, or the student opened it while it was. A setup with no published assignment is refused to students. Course staff are not gated.
+
+
 ## [0.5.859] - 2026-11-08
 
 ### Changed
