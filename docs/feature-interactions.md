@@ -619,6 +619,37 @@ coordination, and each must see every edit.
   - `ClaimWalk` reads each assignment's requirements and compatibility once
     per poll, and emits one "no compatible runner" diagnostic after every
     group is walked.
+- **Index coupling.** The candidate queries and the idle-poll probe depend
+  on named indexes, so the loader and the migrations move together:
+  - The fresh pass sorts on `retested_at` before `submitted_at`, and the
+    idle probe in `WorkerJobClaim` sorts on `kind`. Neither sort changes a
+    result; each keeps the planner on a status-led index
+    (`idx_submissions_claim_priority`, `idx_submissions_status_kind_submitted_at`)
+    whatever the statistics say. Do not remove them as a cleanup.
+  - The retest pass reads the partial index
+    `idx_submissions_pending_retest_submitted_at`, whose predicate is the
+    query's whole filter (`CreatePendingRetestIndex`). A change to the
+    status, kind or `retested_at` filter of that pass must change the
+    predicate too.
+  - A wrong plan here changes no result, only the time: a full walk of
+    `submissions` on every poll. Check a new candidate query with
+    `EXPLAIN` under statistics taken during a backlog.
+
+### Pending queue depth: `pendingQueueDepth`, `queueDepthForLog`
+
+- **Writer:** `OperationalDiagnosticsService` counts pending rows
+  (`countPendingQueueDepth`).
+- **Readers:**
+  - `pendingQueueDepth(on:)`: exact on every call. MCP `get_queue_state`
+    reads it.
+  - `queueDepthForLog(on:logger:)`: the `queue_depth` field of the
+    `job_enqueued` and `job_assigned` log lines. It skips the count when the
+    logger is above `info`, and above 1,000 pending rows it reuses a count up
+    to 5 seconds old (`QueueDepthLogSampleStore`).
+  - The backed-up-queue health rule counts on its own
+    (`ServerHealthAlertService.loadPendingQueueState`).
+- **Rule:** only those two log lines may read `queueDepthForLog`. An alert, a
+  page, an MCP tool or any decision reads the exact count.
 
 ### The per-student seed, inputs and datasets
 

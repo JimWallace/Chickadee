@@ -36,7 +36,7 @@ extension OperationalDiagnosticsService {
             metric.enqueuedAt = submission.submittedAt ?? metric.enqueuedAt
             try await metric.save(on: db)
 
-            let queueDepth = try await pendingQueueDepth(on: db)
+            let queueDepth = try await queueDepthForLog(on: db, logger: logger)
             logger.info(
                 "observability",
                 metadata: logMetadata(
@@ -54,7 +54,7 @@ extension OperationalDiagnosticsService {
                     context: context,
                     extra: [
                         "status": .string(SubmissionStatus.pending.rawValue),
-                        "queue_depth": .stringConvertible(queueDepth),
+                        "queue_depth": queueDepth.map { .stringConvertible($0) } ?? .string(""),
                     ]
                 )
             )
@@ -333,7 +333,7 @@ extension OperationalDiagnosticsService {
             metric.queueWaitMs = millisecondsBetween(metric.enqueuedAt, metric.assignedAt)
             try await metric.save(on: db)
 
-            let queueDepth = try await pendingQueueDepth(on: db)
+            let queueDepth = try await queueDepthForLog(on: db, logger: logger)
             logger.info(
                 "observability",
                 metadata: logMetadata(
@@ -343,7 +343,7 @@ extension OperationalDiagnosticsService {
                     extra: [
                         "status": .string(SubmissionStatus.assigned.rawValue),
                         "queue_wait_ms": metric.queueWaitMs.map { .stringConvertible($0) } ?? .string(""),
-                        "queue_depth": .stringConvertible(queueDepth),
+                        "queue_depth": queueDepth.map { .stringConvertible($0) } ?? .string(""),
                     ]
                 )
             )

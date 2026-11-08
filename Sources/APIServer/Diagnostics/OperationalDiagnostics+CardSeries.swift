@@ -90,9 +90,7 @@ extension OperationalDiagnosticsService {
 
         let load = loadSeriesAndPeak(points: loadPoints, grid: grid)
 
-        let bucketLabels = (0..<grid.bucketCount).map { index in
-            window.label(forBucketStart: grid.bucketStart(forIndex: index))
-        }
+        let bucketLabels = window.bucketLabels(for: grid)
 
         return MetricsCardWindowSeries(
             window: window.rawValue,

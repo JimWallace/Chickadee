@@ -31,26 +31,56 @@ enum GitHubTarball {
     }
 
     /// Converts `gzipped` into a zip at `zipPath`.
+    ///
+    /// The tar parse and the file writes block, so they run through
+    /// `runBlocking` (#1156): a repository of a few hundred files would
+    /// otherwise park a cooperative thread for the whole conversion.
     static func writeZip(fromGzippedTar gzipped: Data, to zipPath: String) async throws {
-        let entries = try files(inTar: try await gunzip(gzipped))
+        let tar = try await gunzip(gzipped)
+        let workDir = try await runBlocking { try stageFiles(fromTar: tar) }
+        do {
+            try await createZipArchive(sourceDir: workDir, outputPath: zipPath)
+        } catch {
+            await removeWorkDir(workDir)
+            throw error
+        }
+        await removeWorkDir(workDir)
+    }
+
+    /// Parses `tar` and writes its regular files under a fresh temporary
+    /// directory, which it returns. Throws `.empty` when the commit has no
+    /// regular files, and removes the directory when a write fails.
+    /// Blocking: call it through `runBlocking`.
+    private static func stageFiles(fromTar tar: Data) throws -> URL {
+        let entries = try files(inTar: tar)
         guard !entries.isEmpty else { throw GitHubSubmitError.empty }
         let fm = FileManager.default
         let workDir = fm.temporaryDirectory.appendingPathComponent("chickadee_github_\(UUID().uuidString)")
         try fm.createDirectory(at: workDir, withIntermediateDirectories: true)
-        defer { try? fm.removeItem(at: workDir) }
-        for entry in entries {
-            let url = workDir.appendingPathComponent(entry.path)
-            try fm.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
-            try entry.data.write(to: url)
+        do {
+            for entry in entries {
+                let url = workDir.appendingPathComponent(entry.path)
+                try fm.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+                try entry.data.write(to: url)
+            }
+        } catch {
+            try? fm.removeItem(at: workDir)
+            throw error
         }
-        try await createZipArchive(sourceDir: workDir, outputPath: zipPath)
+        return workDir
+    }
+
+    /// Removes the staging directory off the cooperative pool; a failure is
+    /// ignored, as the synchronous `defer` this replaces ignored it.
+    private static func removeWorkDir(_ dir: URL) async {
+        _ = try? await runBlocking { try FileManager.default.removeItem(at: dir) }
     }
 
     /// Decompresses `gzipped`, refusing output larger than `maxTarBytes`.
     static func gunzip(_ gzipped: Data, limit: Int = maxTarBytes) async throws -> Data {
         let fm = FileManager.default
         let input = fm.temporaryDirectory.appendingPathComponent("chickadee_github_\(UUID().uuidString).tar.gz")
-        try gzipped.write(to: input)
+        try await runBlocking { try gzipped.write(to: input) }
         defer { try? fm.removeItem(at: input) }
         do {
             // Every child the server launches gets an explicit environment

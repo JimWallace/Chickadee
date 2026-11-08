@@ -91,6 +91,14 @@ public func scanNotebookDefinitions(
     guard let cells = NotebookCellView.cells(from: notebookData) else {
         return NotebookDefinitionScan(definitions: [], sections: [], codeCellIndices: [])
     }
+    return scanNotebookDefinitions(cells: cells, language: language)
+}
+
+/// `scanNotebookDefinitions(_:language:)` over cells already decoded, for a
+/// caller that reads the same cells for something else.
+package func scanNotebookDefinitions(
+    cells: [NotebookCellView], language: AssignmentLanguage?
+) -> NotebookDefinitionScan {
     var sections: [NotebookSectionHeading] = []
     var codeCells: [(index: Int, source: String)] = []
     for (index, cell) in cells.enumerated() {

@@ -155,9 +155,7 @@ extension OperationalDiagnosticsService {
             windowBrowserErrors += 1
         }
 
-        let bucketLabels = (0..<grid.bucketCount).map { index in
-            window.label(forBucketStart: grid.bucketStart(forIndex: index))
-        }
+        let bucketLabels = window.bucketLabels(for: grid)
         // A zero bucket is genuine "no activity" here (counts, not gauges), so
         // the series carries 0 rather than nil — the sparkline draws an empty
         // bar either way, but the headline math stays simple.

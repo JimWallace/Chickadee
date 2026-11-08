@@ -526,6 +526,10 @@ func registerMigrations(on app: Application) {
     // only; the tables are created far above.
     app.migrations.add(CreateUserTimelineAndSyncLogIndexes())
 
+    // The claim walk's retest pass: pending retests, oldest first, whatever
+    // the planner statistics say. Index only; the table is created far above.
+    app.migrations.add(CreatePendingRetestIndex())
+
     // ---------------------------------------------------------------------
     // DATA MIGRATIONS. Keep these at the end, and add every new schema
     // migration ABOVE this block (#1805).
