@@ -10,8 +10,10 @@ struct UserSessionAuthenticator: AsyncSessionAuthenticator {
     typealias User = APIUser
 
     func authenticate(sessionID: String, for request: Request) async throws {
+        // Through SQLKit, not Fluent's `find`: this runs on every request with
+        // a session cookie (`APIUserSessionLookup`, #2905).
         guard let uuid = UUID(uuidString: sessionID),
-            let user = try await APIUser.find(uuid, on: request.db)
+            let user = try await APIUserSessionLookup.find(uuid, on: request.db)
         else { return }  // Not found → stay unauthenticated; middleware handles it.
         request.auth.login(user)
     }

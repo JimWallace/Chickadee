@@ -276,6 +276,9 @@ struct SecurityHeadersMiddleware: AsyncMiddleware {
     /// since it's near-impossible to undo.
     static let defaultStrictTransportSecurity: String = "max-age=63072000; includeSubDomains"
 
+    /// A JSON body shorter than this many bytes goes out uncompressed.
+    static let smallJSONLimit = 1024
+
     let cspBaseDirectives: [String]
     /// CSP `script-src` hash expressions for the vendored editor's inline
     /// bootstraps, applied only to `/jupyterlite/` responses.  Empty when the
@@ -334,6 +337,12 @@ struct SecurityHeadersMiddleware: AsyncMiddleware {
             // CSRF token, and compressing a secret alongside reflectable
             // request data is the precondition for BREACH-style compression
             // oracles.  Static assets carry no secrets and stay compressible.
+            response.headers.responseCompression = .disable
+        } else if response.headers.contentType == .json, (0..<Self.smallJSONLimit).contains(response.body.count) {
+            // A small JSON reply, such as the result view's 2 s status poll
+            // (about 170 bytes), saves almost nothing on the wire and costs a
+            // compressor per response (about 46 µs, #2905). A body of unknown
+            // length counts as -1, so a stream keeps compression.
             response.headers.responseCompression = .disable
         }
         response.headers.replaceOrAdd(name: "X-Content-Type-Options", value: "nosniff")
