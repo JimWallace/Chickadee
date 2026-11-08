@@ -322,9 +322,12 @@ extension WorkerDaemon {
                     try FileManager.default.copyItem(at: paths.submissionZip, to: dest)
                 }
             } else {
+                // A student built this archive, and it unpacks outside the
+                // sandbox's disk limit, so its declared size is capped (#2898).
                 try await extractZipArchive(
                     zipPath: paths.submissionZip.path,
-                    into: paths.submissionDir
+                    into: paths.submissionDir,
+                    limits: .submission
                 )
             }
         }
