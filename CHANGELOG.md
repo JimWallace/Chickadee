@@ -9,6 +9,13 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.859] - 2026-11-08
+
+### Changed
+
+- **A trivial request costs about 40% less server CPU (#2905).** A profile of the release server put a status poll at 4.3 ms of CPU, mostly in thread hand-offs: Vapor 4 runs each `AsyncMiddleware` as its own Task behind a future bridge, and a status poll passed 27 of them. The middleware now runs as a few `AsyncMiddlewareGroup`s, each one layer to Vapor, with every middleware unchanged and in the same order. The status poll reads only the submission columns it returns, the session authenticator reads the signed-in user through SQLKit into the same model state Fluent gives, the idle runner poll's pending-work probe runs through SQLKit, and JSON replies under 1 KB go out uncompressed. A prototype measured a status poll at about 2.6 ms and an idle runner poll at about 2.65 ms of server CPU.
+
+
 ## [0.5.858] - 2026-11-08
 
 ### Security
