@@ -168,14 +168,34 @@ struct ResultIngestEffects {
         }
         guard collection.buildStatus == .passed else { return }
 
+        // Class composite: the student's part of the shared image, and the
+        // slot's coverage row when it passed (docs/class-composite.md).
+        // It reads the setup only for a composite outcome, so it runs ahead
+        // of the shared read below and does not depend on it.
+        await bestEffort("composite_contribution", submissionID: submissionID) {
+            try await CompositeContributions.record(submission: submission, collection: collection, on: db)
+        }
+
+        // Every effect below reads the same setup row, manifest included.
+        // Read once here: each helper used to find it again, five reads of
+        // the row per report.
+        let setup: APITestSetup
+        do {
+            guard let found = try await APITestSetup.find(testSetupID, on: db) else { return }
+            setup = found
+        } catch {
+            logger.warning("result_side_effect_failed setup_read for \(submissionID): \(error)")
+            return
+        }
+
         // Only contribution assignments accumulate a union, so the slot count
         // comes from the instructor's starter notebook, read through
         // `notebookBytesCache` (#1171). No notebook is 0 slots: "not a
         // contribution assignment", the right answer for every ordinary one.
-        let slotCount = await declaredContributionSlotCount(testSetupID: testSetupID, app: application, on: db)
+        let slotCount = await declaredContributionSlotCount(setup: setup, app: application)
         await bestEffort("class_item_coverage", submissionID: submissionID) {
             try await recordClassItemCoverage(
-                testSetupID: testSetupID, userID: userID, submissionID: submissionID,
+                setup: setup, userID: userID, submissionID: submissionID,
                 outcomes: collection.outcomes, declaredSlotCount: slotCount, on: db)
             // A new contribution changes what the class's combined corpus
             // covers, so the corpus is re-graded: the class's, or the lab's
@@ -193,7 +213,7 @@ struct ResultIngestEffects {
         // 100% gate too.
         await bestEffort("leaderboard_entry", submissionID: submissionID) {
             try await recordLeaderboardEntry(
-                testSetupID: testSetupID, userID: userID, submissionID: submissionID,
+                setup: setup, userID: userID, submissionID: submissionID,
                 outcomes: collection.outcomes, on: db)
         }
 
@@ -201,23 +221,15 @@ struct ResultIngestEffects {
         // played (docs/class-activities.md).
         await bestEffort("activity_match", submissionID: submissionID) {
             try await recordActivityMatch(
-                testSetupID: testSetupID, userID: userID, submissionID: submissionID,
+                setup: setup, userID: userID, submissionID: submissionID,
                 outcomes: collection.outcomes, matches: matches, on: db)
         }
 
-        // Class composite: the student's part of the shared image, and the
-        // slot's coverage row when it passed (docs/class-composite.md).
-        await bestEffort("composite_contribution", submissionID: submissionID) {
-            try await CompositeContributions.record(submission: submission, collection: collection, on: db)
-        }
-
         guard !isRetest, gradePercent(from: collection) == 100 else { return }
-        let disabled =
-            (try? await APITestSetup.find(testSetupID, on: db))
-            .map { BuiltInAchievements.disabled(in: $0) } ?? []
+        let disabled = BuiltInAchievements.disabled(in: setup)
         await bestEffort("class_badges", submissionID: submissionID) {
             try await awardClassBadgesFor100Percent(
-                testSetupID: testSetupID, userID: userID, submissionID: submissionID,
+                setup: setup, userID: userID, submissionID: submissionID,
                 executionTimeMs: collection.executionTimeMs,
                 attemptNumber: submission.attemptNumber ?? 1,
                 disabled: disabled, on: db)

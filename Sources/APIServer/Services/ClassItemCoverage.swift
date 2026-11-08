@@ -49,12 +49,27 @@ func recordClassItemCoverage(
     declaredSlotCount: Int,
     on db: any Database
 ) async throws {
-    guard declaredSlotCount > 0 else { return }
+    guard let setup = try await APITestSetup.find(testSetupID, on: db) else { return }
+    try await recordClassItemCoverage(
+        setup: setup, userID: userID, submissionID: submissionID, outcomes: outcomes,
+        declaredSlotCount: declaredSlotCount, on: db)
+}
+
+/// `recordClassItemCoverage(testSetupID:…)` for a caller that has already
+/// loaded the setup: the result path reads it once for every effect.
+func recordClassItemCoverage(
+    setup: APITestSetup,
+    userID: UUID,
+    submissionID: String,
+    outcomes: [TestOutcome],
+    declaredSlotCount: Int,
+    on db: any Database
+) async throws {
+    guard declaredSlotCount > 0, let testSetupID = setup.id else { return }
     let covered = outcomes.filter { $0.status == .pass }.map(\.testName)
     guard !covered.isEmpty else { return }
 
-    guard let setup = try await APITestSetup.find(testSetupID, on: db),
-        try await courseRole(of: userID, inCourse: setup.courseID, db: db) == .student
+    guard try await courseRole(of: userID, inCourse: setup.courseID, db: db) == .student
     else { return }
 
     // On an activity that runs per lab group, the items count for the lab of
@@ -157,5 +172,11 @@ func declaredContributionSlotCount(
     testSetupID: String, app: Application, on db: any Database
 ) async -> Int {
     guard let setup = try? await APITestSetup.find(testSetupID, on: db) else { return 0 }
-    return await app.notebookBytesCache.declaredContributionSlotCount(for: NotebookSourceRef(setup))
+    return await declaredContributionSlotCount(setup: setup, app: app)
+}
+
+/// `declaredContributionSlotCount(testSetupID:…)` for a caller that has
+/// already loaded the setup.
+func declaredContributionSlotCount(setup: APITestSetup, app: Application) async -> Int {
+    await app.notebookBytesCache.declaredContributionSlotCount(for: NotebookSourceRef(setup))
 }

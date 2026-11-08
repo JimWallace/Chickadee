@@ -38,9 +38,13 @@ enum GradePushScope {
 func requestGradePush(_ scope: GradePushScope, testSetupID: String, on db: any Database) async throws {
     switch scope {
     case .result(let result, let application):
-        try await flagResultForBrightSpaceSync(
-            result, testSetupID: testSetupID, application: application, on: db)
-        try await LTIGradeSyncQueue.queue(submissionID: result.submissionID, testSetupID: testSetupID, on: db)
+        // Both integrations decide from the setup's assignment and course.
+        // Read them once: this runs inside the worker report's transaction,
+        // on every result.
+        let (assignment, course) = try await gradePushTarget(testSetupID: testSetupID, on: db)
+        flagResultForBrightSpaceSync(result, assignment: assignment, course: course, application: application)
+        try await LTIGradeSyncQueue.queue(
+            submissionID: result.submissionID, course: course, testSetupID: testSetupID, on: db)
     case .student(let studentUserID, let override):
         try await LTIGradeSyncQueue.queue(userIDs: [studentUserID], testSetupID: testSetupID, on: db)
         try await flagStudentForBrightSpaceSync(
@@ -50,4 +54,12 @@ func requestGradePush(_ scope: GradePushScope, testSetupID: String, on db: any D
         try await requeueFrozenClassGoalBonusPushes(
             assignment: assignment, testSetupID: testSetupID, on: db, logger: logger)
     }
+}
+
+/// The assignment a setup belongs to and that assignment's course: what both
+/// LMS integrations decide a push from. Either is nil when the setup has no
+/// assignment.
+func gradePushTarget(testSetupID: String, on db: any Database) async throws -> (APIAssignment?, APICourse?) {
+    guard let assignment = try await assignmentByTestSetupID(testSetupID, on: db) else { return (nil, nil) }
+    return (assignment, try await APICourse.find(assignment.courseID, on: db))
 }

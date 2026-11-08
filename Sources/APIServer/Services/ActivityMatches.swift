@@ -276,7 +276,22 @@ func recordActivityMatch(
     matches: [MatchReport]? = nil,
     on db: any Database
 ) async throws {
-    guard let setup = try await APITestSetup.find(testSetupID, on: db),
+    guard let setup = try await APITestSetup.find(testSetupID, on: db) else { return }
+    try await recordActivityMatch(
+        setup: setup, userID: userID, submissionID: submissionID, outcomes: outcomes, matches: matches, on: db)
+}
+
+/// `recordActivityMatch(testSetupID:…)` for a caller that has already loaded
+/// the setup: the result path reads it once for every effect.
+func recordActivityMatch(
+    setup: APITestSetup,
+    userID: UUID,
+    submissionID: String,
+    outcomes: [TestOutcome],
+    matches: [MatchReport]? = nil,
+    on db: any Database
+) async throws {
+    guard let testSetupID = setup.id,
         let activity = setup.decodedManifest()?.activity
     else { return }
     switch activity.kind.opponentSource {
