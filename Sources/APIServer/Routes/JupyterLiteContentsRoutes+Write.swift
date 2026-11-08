@@ -27,11 +27,16 @@
 // working copy is a symlink into a shared directory, so a write is refused when
 // the target is a symlink or its resolved parent leaves the caller's folder.
 //
+// The files the assignment provides (its datasets and support files) and the
+// read-only submission records are refused by name (WorkingCopyProtectedFiles):
+// a student's change to one would persist, and no reset would repair it.
+//
 // Conflicts are JupyterLab's: before a save it compares the file's
 // `last_modified` with its own last save, so a reset done on the server since
 // then raises its "File changed" dialog. A save therefore answers with the
 // file's real mtime after the write.
 
+import Fluent
 import Foundation
 import NIOFoundationCompat
 import Vapor
@@ -60,6 +65,7 @@ extension JupyterLiteContentsRoutes {
         let caller = try req.auth.require(APIUser.self)
         let relPath = req.parameters.getCatchall().joined(separator: "/")
         let target = try writableTarget(req: req, caller: caller, relativePath: relPath)
+        try await refuseProtected(req: req, target, movingContents: false)
         let save = try Self.decodeSave(req.body.data)
 
         try await runBlocking {
@@ -146,6 +152,8 @@ extension JupyterLiteContentsRoutes {
         }
         let source = try writableTarget(req: req, caller: caller, relativePath: relPath)
         let destination = try writableTarget(req: req, caller: caller, relativePath: newPath)
+        try await refuseProtected(req: req, source, movingContents: true)
+        try await refuseProtected(req: req, destination, movingContents: true)
         let isDirectory: Bool = try await runBlocking {
             let fm = FileManager.default
             guard let attributes = try? fm.attributesOfItem(atPath: source.url.path) else {
@@ -195,6 +203,28 @@ extension JupyterLiteContentsRoutes {
     }
 
     // MARK: - Scope
+
+    /// Refuses a write to a file only the server writes (WorkingCopyProtectedFiles):
+    /// a delivered dataset or support file, or a submission record. With
+    /// `movingContents` (a rename), also refuses the setup folder itself and a
+    /// folder that holds a protected file.
+    func refuseProtected(req: Request, _ target: WritableTarget, movingContents: Bool) async throws {
+        // users/<id>/<setupID>/<path inside the working copy>
+        let parts = target.relativePath.split(separator: "/", maxSplits: 3).map(String.init)
+        guard parts.count >= 3 else { return }
+        guard parts.count == 4 else {
+            if movingContents { throw AppError.forbidden(action: "rename an assignment folder") }
+            return
+        }
+        let protected = try await WorkingCopyProtectedFiles.paths(
+            setupID: parts[2], on: req.db, application: req.application)
+        let inside = parts[3]
+        if WorkingCopyProtectedFiles.isProtected(inside, in: protected)
+            || (movingContents && WorkingCopyProtectedFiles.holdsProtected(inside, in: protected))
+        {
+            throw AppError.forbidden(action: "change a file the assignment provides (\(inside))")
+        }
+    }
 
     /// A path the caller may write, resolved under the JupyterLite files root.
     struct WritableTarget: Sendable {

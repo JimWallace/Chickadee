@@ -827,9 +827,14 @@ coordination, and each must see every edit.
     with its last save and raises "File changed". The page's IndexedDB reseed
     reads it too, so it is skipped when the server drive is on: a drive save
     would otherwise read as a reset on the next visit.
-  - A seeder never replaces a real file. A student's drive write over a
-    dataset file or at a support-file name therefore persists, and reset
-    does not repair it (open question for #469).
+  - A seeder never replaces a real file, so a write to a file the assignment
+    provides would persist and no reset would repair it. The write routes
+    therefore refuse every path in `StudentWorkspaceFiles.delivered` (the
+    datasets and support files) and the `view-<submissionID>.ipynb` records,
+    and a rename that would move one or the assignment folder itself
+    (`WorkingCopyProtectedFiles`, `JupyterLiteContentsProtectedFilesTests`).
+    A new kind of delivered file must join `delivered`, or the drive can
+    write over it.
   - The write routes check ownership only, not `requireOpenStudentAssignment`
     (open question for #469). Submission is gated separately.
 
