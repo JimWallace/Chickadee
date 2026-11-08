@@ -46,12 +46,16 @@ export const serverDrivePlugin: ServiceManagerPlugin<Contents.IDrive> = {
   autoStart: true,
   provides: IDefaultDrive,
   activate: (): Contents.IDrive => {
+    // The token is read on every request, not once: the page can be
+    // re-rendered (and its token re-minted) while the editor stays open.
+    const withCsrf = (input: RequestInfo, init?: RequestInit): Promise<Response> => {
+      const request = new Request(input, init);
+      request.headers.set('x-csrf-token', parentCsrfToken());
+      return window.fetch(request);
+    };
     const serverSettings = ServerConnection.makeSettings({
-      init: {
-        cache: 'no-store',
-        credentials: 'same-origin',
-        headers: { 'x-csrf-token': parentCsrfToken() }
-      }
+      init: { cache: 'no-store', credentials: 'same-origin' },
+      fetch: withCsrf
     });
     console.info('[chickadee] server drive active', serverSettings.baseUrl);
     return new Drive({ serverSettings });

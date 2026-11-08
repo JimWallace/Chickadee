@@ -66,6 +66,10 @@ extension JupyterLiteContentsRoutes {
             let fm = FileManager.default
             switch save {
             case .directory:
+                let existing = (try? fm.attributesOfItem(atPath: target.url.path))?[.type] as? FileAttributeType
+                guard existing == nil || existing == .typeDirectory else {
+                    throw AppError.conflict(reason: "\(target.relativePath) is a file.")
+                }
                 try fm.createDirectory(at: target.url, withIntermediateDirectories: true)
             case .bytes(let data):
                 try fm.createDirectory(
@@ -92,10 +96,9 @@ extension JupyterLiteContentsRoutes {
     func postContents(req: Request) async throws -> Response {
         let caller = try req.auth.require(APIUser.self)
         let relPath = req.parameters.getCatchall().joined(separator: "/")
-        guard relPath.hasSuffix("/checkpoints") else {
+        guard let filePath = checkpointedFile(req: req, relativePath: relPath) else {
             return try await createUntitledDirectory(req: req, caller: caller, parentPath: relPath)
         }
-        let filePath = String(relPath.dropLast("/checkpoints".count))
         let target = try writableTarget(req: req, caller: caller, relativePath: filePath)
         let body = try JSONEncoder().encode(checkpoint(of: target))
         return Response(status: .created, headers: ["Content-Type": "application/json"], body: .init(data: body))
@@ -151,6 +154,9 @@ extension JupyterLiteContentsRoutes {
             guard (try? fm.attributesOfItem(atPath: destination.url.path)) == nil else {
                 throw AppError.conflict(reason: "\(destination.relativePath) already exists.")
             }
+            guard (try? fm.attributesOfItem(atPath: destination.url.deletingLastPathComponent().path)) != nil else {
+                throw AppError.notFound(resource: "Folder")
+            }
             try fm.moveItem(at: source.url, to: destination.url)
             return attributes[.type] as? FileAttributeType == .typeDirectory
         }
@@ -162,11 +168,30 @@ extension JupyterLiteContentsRoutes {
     func deleteContents(req: Request) async throws -> Response {
         let caller = try req.auth.require(APIUser.self)
         let relPath = req.parameters.getCatchall().joined(separator: "/")
-        guard let range = relPath.range(of: "/checkpoints/") else {
+        let parts = relPath.split(separator: "/")
+        let checkpointsPath = parts.dropLast().joined(separator: "/")
+        guard parts.count > 2, let filePath = checkpointedFile(req: req, relativePath: checkpointsPath) else {
             throw AppError.methodNotAllowed(reason: "Deleting files is not supported.")
         }
-        _ = try writableTarget(req: req, caller: caller, relativePath: String(relPath[..<range.lowerBound]))
+        _ = try writableTarget(req: req, caller: caller, relativePath: filePath)
         return Response(status: .noContent)
+    }
+
+    /// The file whose checkpoints `relativePath` (`<file>/checkpoints`) names,
+    /// or nil when it is not a checkpoint path: it does not end in
+    /// `/checkpoints`, a real item has that path (a student's own
+    /// `checkpoints/` folder), or the file before it is not a regular file.
+    func checkpointedFile(req: Request, relativePath: String) -> String? {
+        let clean = relativePath.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        guard clean.hasSuffix("/checkpoints") else { return nil }
+        let filePath = String(clean.dropLast("/checkpoints".count))
+        let base = req.application.directory.publicDirectory + "jupyterlite/files/"
+        let fm = FileManager.default
+        guard (try? fm.attributesOfItem(atPath: base + clean)) == nil,
+            let type = (try? fm.attributesOfItem(atPath: base + filePath))?[.type] as? FileAttributeType,
+            type == .typeRegular
+        else { return nil }
+        return filePath
     }
 
     // MARK: - Scope
@@ -196,16 +221,10 @@ extension JupyterLiteContentsRoutes {
         let rootURL = baseURL.appendingPathComponent(userRoot, isDirectory: true).resolvingSymlinksInPath()
         let parentURL = targetURL.deletingLastPathComponent().resolvingSymlinksInPath()
         let withinRoot = parentURL.path == rootURL.path || parentURL.path.hasPrefix(rootURL.path + "/")
-        guard withinRoot, !isSymlinkItem(targetURL) else {
+        guard withinRoot, !isSymlink(url: targetURL) else {
             throw AppError.forbidden(action: "save over a shared file")
         }
         return WritableTarget(relativePath: clean, url: targetURL)
-    }
-
-    /// True when the item at `url` is itself a symlink (not followed).
-    private func isSymlinkItem(_ url: URL) -> Bool {
-        let type = (try? FileManager.default.attributesOfItem(atPath: url.path))?[.type] as? FileAttributeType
-        return type == .typeSymbolicLink
     }
 
     // MARK: - Models

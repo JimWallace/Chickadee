@@ -1540,8 +1540,18 @@
         }
     }
 
+    // True when this browser opted into the server-backed editor drive (#469
+    // spike: the ck_server_drive cookie, serverDrive.ts). The server is then the
+    // only copy, so there is no IndexedDB copy to reconcile, and every drive
+    // save moves the working copy's mtime, which the reset check below would
+    // read as a server reset on the next visit.
+    function serverDriveActive() {
+        return /(?:^|;\s*)ck_server_drive=1(?:;|$)/.test(document.cookie || '');
+    }
+
     async function syncNotebookFromServerSnapshot() {
         if (!lockedNotebookPath || serverSyncInFlight || serverSyncComplete) return;
+        if (serverDriveActive()) { serverSyncComplete = true; return; }
         serverSyncInFlight = true;
         try {
             const snapshotRes = await fetch(notebookURL, { method: 'GET' });

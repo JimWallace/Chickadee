@@ -173,6 +173,41 @@ import VaporTesting
         }
     }
 
+    @Test func aRealCheckpointsFolderIsNotShadowedByTheStub() async throws {
+        try await withApp(app) { _ in
+            let folder = "\(userRoot)/setup_a/checkpoints"
+            try FileManager.default.createDirectory(atPath: filesDir + folder, withIntermediateDirectories: true)
+            try Data("w".utf8).write(to: URL(fileURLWithPath: filesDir + folder + "/model.pkl"))
+            try await app.asyncTest(.GET, "/jupyterlite/api/contents/\(folder)?content=1") { res in
+                #expect(res.status == .ok)
+                let model = try self.object(res)
+                #expect(model["type"] as? String == "directory")
+            }
+            // Not a checkpoint delete: refused, and the file is still there.
+            try await app.asyncTest(.DELETE, "/jupyterlite/api/contents/\(folder)/model.pkl") { res in
+                #expect(res.status == .methodNotAllowed)
+            }
+            #expect(FileManager.default.fileExists(atPath: filesDir + folder + "/model.pkl"))
+        }
+    }
+
+    @Test func refusesADirectoryOverAFileAndARenameIntoNoFolder() async throws {
+        try await withApp(app) { _ in
+            let dir = "\(userRoot)/setup_a"
+            try Data("x".utf8).write(to: URL(fileURLWithPath: filesDir + dir + "/f.txt"))
+            try await put("\(dir)/f.txt", #"{"type":"directory"}"#) { res in
+                #expect(res.status == .conflict)
+            }
+            try await app.asyncTest(
+                .PATCH, "/jupyterlite/api/contents/\(dir)/f.txt",
+                beforeRequest: { req in
+                    req.headers.contentType = .json
+                    req.body = ByteBuffer(string: #"{"path":"\#(dir)/missing/f.txt"}"#)
+                },
+                afterResponse: { res in #expect(res.status == .notFound) })
+        }
+    }
+
     @Test func makesADirectoryAsTheKernelDoes() async throws {
         try await withApp(app) { _ in
             let dir = "\(userRoot)/setup_a"

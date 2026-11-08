@@ -43,8 +43,8 @@ struct JupyterLiteContentsRoutes: RouteCollection {
         // `<file>/checkpoints` is the server drive's checkpoint list (the write
         // half, JupyterLiteContentsRoutes+Write.swift). A catch-all route must
         // be last, so the suffix is matched here.
-        if relPath.hasSuffix("/checkpoints") {
-            return try await listCheckpoints(req: req, filePath: String(relPath.dropLast("/checkpoints".count)))
+        if let filePath = checkpointedFile(req: req, relativePath: relPath) {
+            return try await listCheckpoints(req: req, filePath: filePath)
         }
         return try await contentsResponse(req: req, relativePath: relPath)
     }
@@ -260,7 +260,7 @@ struct JupyterLiteContentsRoutes: RouteCollection {
     }
 
     /// Returns true if `url` is a symbolic link (used to mark support files read-only).
-    private func isSymlink(url: URL) -> Bool {
+    func isSymlink(url: URL) -> Bool {
         (try? url.resourceValues(forKeys: [.isSymbolicLinkKey]).isSymbolicLink) == true
     }
 
