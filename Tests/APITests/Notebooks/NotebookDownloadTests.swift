@@ -36,7 +36,10 @@ import VaporTesting
     // MARK: - Auth helpers
 
     /// Saves a notebook JSON directly as a flat .ipynb file and returns the setup ID.
-    private func insertSetupWithNotebook(notebookJSON: String) async throws -> String {
+    /// `assignmentTitle` nil saves no assignment: a staff draft.
+    private func insertSetupWithNotebook(
+        notebookJSON: String, assignmentTitle: String? = "Test Lab"
+    ) async throws -> String {
         let setupID = "setup_test_\(UUID().uuidString.lowercased().prefix(6))"
         let notebookPath = app.testSetupsDirectory + "\(setupID).ipynb"
         let manifest = """
@@ -51,6 +54,11 @@ import VaporTesting
         let setup = APITestSetup(id: setupID, manifest: manifest, zipPath: dummyZipPath, courseID: courseID)
         setup.notebookPath = notebookPath
         try await setup.save(on: app.db)
+        // A published, open assignment: a student reads the content of no
+        // other kind of setup (#2897).
+        if let assignmentTitle {
+            try await makeTestAssignment(on: app, testSetupID: setupID, courseID: courseID, title: assignmentTitle)
+        }
         return setupID
     }
 
@@ -147,14 +155,9 @@ import VaporTesting
 
     @Test func downloadFilenameUsesTitle() async throws {
         try await withApp(app) { _ in
-            let setupID = try await insertSetupWithNotebook(notebookJSON: mixedNotebookJSON)
+            let setupID = try await insertSetupWithNotebook(
+                notebookJSON: mixedNotebookJSON, assignmentTitle: "Lab 1 Warmup")
             let cookie = try await loginAsStudent("teststudent", on: app)
-
-            // Create an assignment record with a title.
-            let courseID = try await app.testCourseID(enrollmentMode: .auto)
-            let a = APIAssignment(
-                testSetupID: setupID, title: "Lab 1 Warmup", dueAt: nil, isOpen: true, courseID: courseID)
-            try await a.save(on: app.db)
 
             try await app.asyncTest(
                 .GET, "/api/v1/testsetups/\(setupID)/assignment/download",
@@ -174,9 +177,12 @@ import VaporTesting
 
     @Test func downloadFilenameFallsBackToSetupID() async throws {
         try await withApp(app) { _ in
-            let setupID = try await insertSetupWithNotebook(notebookJSON: mixedNotebookJSON)
-            let cookie = try await loginAsStudent("teststudent", on: app)
-            // No assignment record — filename falls back to setupID.
+            // No assignment record — filename falls back to setupID. Such a
+            // setup is a staff draft, which only staff read (#2897).
+            let setupID = try await insertSetupWithNotebook(notebookJSON: mixedNotebookJSON, assignmentTitle: nil)
+            let cookie = try await loginUser(
+                username: "draft_staff", password: "pass", role: "instructor", on: app)
+            try await enrollInTestCourse(username: "draft_staff", role: .instructor, on: app)
 
             try await app.asyncTest(
                 .GET, "/api/v1/testsetups/\(setupID)/assignment/download",

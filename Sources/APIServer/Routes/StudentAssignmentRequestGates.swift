@@ -164,3 +164,20 @@ extension Request {
         }
     }
 }
+
+/// Whether a non-staff `user` may read the content of the assignment on
+/// `testSetupID`: its starter notebook, its support files, its vanity link
+/// (#2897).
+///
+/// The rule is the notebook page's own (`notebookSource`): the assignment is
+/// effectively open, or the student opened it while it was. A setup with no
+/// published assignment is a staff draft, so it is refused. Course staff are
+/// not gated. Enrollment is the caller's own check, made before this one.
+func studentMayReadAssignmentContent(
+    testSetupID: String, courseID: UUID, user: APIUser, on req: Request
+) async throws -> Bool {
+    if try await req.cachedIsCourseStaff(user, inCourse: courseID) { return true }
+    guard let assignment = try await assignmentByTestSetupID(testSetupID, on: req.db) else { return false }
+    if try await isAssignmentEffectivelyOpen(assignment, for: user, req: req) { return true }
+    return try await studentHasOpenedAssignment(assignment: assignment, userID: try user.requireID(), on: req.db)
+}
