@@ -48,6 +48,8 @@ struct JupyterLiteContentsRoutes: RouteCollection {
         // admin) get the full authoring tree, everyone else is scoped to their
         // own `users/<id>` folder (#417 Slice G — was the global
         // `caller.isInstructor`). A past-term TA is a student here (#2663).
+        // Inside `users/`, staff reach another user's folder only through
+        // `mayReadUserFile`: course staff of that setup's course (#2895).
         let isStaff = try await isStaffAnywhere(caller, includingArchived: false, db: req.db)
         let fm = FileManager.default
         let baseDir = req.application.directory.publicDirectory + "jupyterlite/files/"
@@ -66,6 +68,20 @@ struct JupyterLiteContentsRoutes: RouteCollection {
                 || targetURL.path.hasPrefix(userRootURL.path + "/")
             guard withinUserRoot else {
                 throw AppError.forbidden(action: "open files outside your own folder")
+            }
+        } else {
+            // Staff see the authoring tree, but another user's folder only as
+            // `mayReadUserFile` allows (#2895). The segments come from the
+            // standardized target, so `shared/../users/…` is caught too.
+            let resolved = targetURL.path.dropFirst(baseURL.path.count)
+                .split(separator: "/", omittingEmptySubsequences: true)
+            // Without case: a case-insensitive filesystem serves `Users/` too.
+            if resolved.first?.lowercased() == "users" {
+                let owner = resolved.count >= 2 && resolved[1] != "all.json" ? String(resolved[1]) : nil
+                let setupID = resolved.count >= 3 && resolved[2] != "all.json" ? String(resolved[2]) : nil
+                guard try await mayReadUserFile(caller, owner: owner, setupID: setupID, db: req.db) else {
+                    throw AppError.forbidden(action: "open another user's files")
+                }
             }
         }
 

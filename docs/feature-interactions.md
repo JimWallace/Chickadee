@@ -1159,9 +1159,14 @@ coordination, and each must see every edit.
   route under `/instructor` or `/courses` that has no minimum role.
 - **Rule:** every caller of `isStaffAnywhere` states `includingArchived`
   (#2663).
-  - `false` where a `true` answer opens data that no per-course check guards:
-    the user-file namespace and the JupyterLite contents. A TA in a past term
-    is a student there, as in `AvatarStore.courseStaff` (#1756).
+  - `false` for the JupyterLite contents tree, where a `true` answer opens
+    the authoring tree. A TA in a past term is a student there, as in
+    `AvatarStore.courseStaff` (#1756).
+  - Another user's folder under `users/` is never opened by
+    `isStaffAnywhere`. `mayReadUserFile` admits the owner, an admin, or
+    course staff of the setup's live course, for both the static files and
+    the contents API (#2895). Before #2895 a TA in one course read every
+    course's solution notebooks there.
   - `true` where a per-course check follows: MCP eligibility and the OAuth
     content consent. An instructor whose only course is archived can still
     read it through MCP (`MCPArchivedWriteBlockTests`).

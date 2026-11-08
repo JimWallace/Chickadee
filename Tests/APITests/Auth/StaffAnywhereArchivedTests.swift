@@ -107,15 +107,16 @@ import VaporTesting
             try await configureTestDatabase(app)
             app.middleware.use(InjectAuthMiddleware(user: user))
             app.middleware.use(UserFileNamespaceMiddleware())
-            app.get("jupyterlite", "files", "users", ":userID", "assignment.ipynb") { _ in
+            app.get("jupyterlite", "files", "users", ":userID", ":setupID", "assignment.ipynb") { _ in
                 Response(status: .ok, body: .init(string: "notebook"))
             }
         }
     }
 
-    /// A TA reaches another user's folder only while the course is live. The
-    /// live case is the control: it shows that the refusal comes from the
-    /// archived state, not from the route or the fixture.
+    /// A TA reaches another user's folder only while the course is live, and
+    /// only inside a setup of that course (#2895). The live case is the
+    /// control: it shows that the refusal comes from the archived state, not
+    /// from the route or the fixture.
     @Test(arguments: [(archived: false, expected: HTTPStatus.ok), (archived: true, expected: .forbidden)])
     func userFileNamespaceAdmitsOnlyLiveCourseTA(archived: Bool, expected: HTTPStatus) async throws {
         let ta = APIUser(id: UUID(), username: "namespace-ta", passwordHash: "unused", role: "student")
@@ -125,8 +126,13 @@ import VaporTesting
             try await APICourseEnrollment(
                 userID: try ta.requireID(), courseID: try course.requireID(), role: .ta
             ).save(on: app.db)
+            // The row alone: this minimal app has no test-setups folder.
+            try await APITestSetup(
+                id: "setup_nsta", manifest: TestManifests.browserEmpty, zipPath: "unused.zip",
+                courseID: try course.requireID()
+            ).save(on: app.db)
             try await app.asyncTest(
-                .GET, "/jupyterlite/files/users/\(UUID().uuidString.lowercased())/assignment.ipynb"
+                .GET, "/jupyterlite/files/users/\(UUID().uuidString.lowercased())/setup_nsta/assignment.ipynb"
             ) { res in
                 #expect(res.status == expected)
             }

@@ -150,10 +150,9 @@ func resolvedRoleIsStaff(_ role: CourseRole?) -> Bool {
 ///   gate. Downstream per-course checks still apply there, and an archived
 ///   course stays readable through MCP, so an instructor whose only course is
 ///   archived keeps that access.
-/// - `false` for the deployment-wide file trees (the user-file namespace and
-///   the JupyterLite contents). There a `true` answer opens every user's
-///   folder, and no per-course check follows. A TA in a past term is a student
-///   now (#1756, #2663).
+/// - `false` for the JupyterLite contents tree. There a `true` answer opens
+///   the authoring tree; another user's folder still needs `mayReadUserFile`
+///   (#2895). A TA in a past term is a student now (#1756, #2663).
 func isStaffAnywhere(_ user: APIUser, includingArchived: Bool, db: any Database) async throws -> Bool {
     if user.isAdmin { return true }
     guard let userID = user.id else { return false }

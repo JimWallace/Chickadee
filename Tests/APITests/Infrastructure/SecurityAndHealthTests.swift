@@ -116,10 +116,11 @@ import VaporTesting
         }
     }
 
-    @Test func userFileNamespaceAllowsCourseStaffAcrossNamespaces() async throws {
-        // Deployment-wide namespace: a user who is staff (instructor/TA) in ANY
-        // course may reach another user's folder (#417 Slice G — per-course
-        // `isStaffAnywhere`, not the old global `instructor` role).
+    @Test func userFileNamespaceRefusesCourseStaffOutsideTheirSetups() async throws {
+        // Staff in a course do NOT reach another user's folder outside a setup
+        // of that course (#2895). Before #2895 staff in ANY course reached
+        // every folder, so a TA read other courses' solutions. The per-setup
+        // cases are in `UserFileAccessTests`.
         let staff = makeUser(role: "student")
         try await withApp(try await makeNamespaceApp(user: staff)) { app in
             // Persist the staff user: the enrollment's FK to `users` is enforced
@@ -131,7 +132,7 @@ import VaporTesting
             ).save(on: app.db)
             try await app.asyncTest(.GET, "/jupyterlite/files/users/\(UUID().uuidString.lowercased())/assignment.ipynb")
             { res in
-                #expect(res.status == .ok)
+                #expect(res.status == .forbidden)
             }
         }
     }
