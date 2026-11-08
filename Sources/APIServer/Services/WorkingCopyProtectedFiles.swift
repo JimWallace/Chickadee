@@ -10,7 +10,8 @@
 //   that the materialization pass does not rewrite while its fingerprint is
 //   current, and a support-file name is never relinked over a real file, so a
 //   student's write to either would persist and no reset would repair it;
-// - the read-only submission records, `view-<submissionID>.ipynb`.
+// - the records the server writes for viewing: `view-<submissionID>.ipynb` and
+//   staff `preview-<token>.ipynb`.
 //
 // A student's own new files are not protected, and the notebook is not.
 
@@ -31,16 +32,20 @@ enum WorkingCopyProtectedFiles {
         return StudentWorkspaceFiles.delivered(zipEntries: entries, manifest: manifest)
     }
 
-    /// True when `relativePath` (inside the setup folder) names a protected
-    /// file: a delivered one, or a submission record.
-    static func isProtected(_ relativePath: String, in protected: Set<String>) -> Bool {
-        if protected.contains(relativePath) { return true }
-        return !relativePath.contains("/") && relativePath.hasPrefix("view-") && relativePath.hasSuffix(".ipynb")
-    }
-
-    /// True when `relativePath` is a folder that holds a protected file, so a
-    /// rename of it would move that file.
-    static func holdsProtected(_ relativePath: String, in protected: Set<String>) -> Bool {
-        protected.contains { $0.hasPrefix(relativePath + "/") }
+    /// True when a write at `relativePath` (inside the setup folder) would
+    /// touch a protected file: it names one, lies below one (a dataset turned
+    /// into a folder) or holds one (a folder renamed away, or a file put where
+    /// a support file's folder must go). Compared without case, because a
+    /// macOS file system treats `Cases.CSV` and `cases.csv` as one file.
+    static func touchesProtected(_ relativePath: String, in protected: Set<String>) -> Bool {
+        let path = relativePath.lowercased()
+        let top = path.split(separator: "/").first.map(String.init) ?? path
+        if top.hasSuffix(".ipynb"), top.hasPrefix("view-") || top.hasPrefix("preview-") {
+            return true
+        }
+        return protected.contains { file in
+            let file = file.lowercased()
+            return file == path || path.hasPrefix(file + "/") || file.hasPrefix(path + "/")
+        }
     }
 }

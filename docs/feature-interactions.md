@@ -830,8 +830,9 @@ coordination, and each must see every edit.
   - A seeder never replaces a real file, so a write to a file the assignment
     provides would persist and no reset would repair it. The write routes
     therefore refuse every path in `StudentWorkspaceFiles.delivered` (the
-    datasets and support files) and the `view-<submissionID>.ipynb` records,
-    and a rename that would move one or the assignment folder itself
+    datasets and support files) and the `view-` and `preview-` notebook
+    records, any path above or below one (compared without case), and a
+    rename that would move one or the assignment folder itself
     (`WorkingCopyProtectedFiles`, `JupyterLiteContentsProtectedFilesTests`).
     A new kind of delivered file must join `delivered`, or the drive can
     write over it.

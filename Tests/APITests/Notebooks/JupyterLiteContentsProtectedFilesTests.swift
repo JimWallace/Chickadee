@@ -94,13 +94,57 @@ import VaporTesting
         try String(contentsOfFile: filesDir + setupDir + "/" + inside, encoding: .utf8)
     }
 
-    @Test(arguments: ["cases.csv", "lib/helper.py", "view-sub_1.ipynb", "view-sub_2.ipynb"])
+    @Test(arguments: [
+        "cases.csv", "lib/helper.py", "view-sub_1.ipynb", "view-sub_2.ipynb", "preview-tok.ipynb",
+        // Case variants (one file on a macOS file system).
+        "Cases.CSV", "LIB/helper.py", "View-sub_1.ipynb",
+        // Below a protected file, and at a protected file's folder.
+        "cases.csv/x", "lib",
+    ])
     func refusesAWriteToAProvidedFile(inside: String) async throws {
         try await withApp(app) { _ in
             try await seedSetup()
             try await put(inside) { res in #expect(res.status == .forbidden, "\(inside)") }
-            if inside != "view-sub_2.ipynb" {
-                #expect(try contents(inside) == "original")
+            for file in ["cases.csv", "lib/helper.py", "view-sub_1.ipynb"] {
+                #expect(try contents(file) == "original")
+            }
+        }
+    }
+
+    @Test func refusesADirectoryAtAProvidedName() async throws {
+        try await withApp(app) { _ in
+            try await seedSetup()
+            try FileManager.default.removeItem(atPath: filesDir + setupDir + "/cases.csv")
+            try await app.asyncTest(
+                .PUT, "/jupyterlite/api/contents/\(setupDir)/cases.csv",
+                beforeRequest: { req in
+                    req.headers.contentType = .json
+                    req.body = ByteBuffer(string: #"{"type":"directory"}"#)
+                },
+                afterResponse: { res in #expect(res.status == .forbidden) })
+            #expect(!FileManager.default.fileExists(atPath: filesDir + setupDir + "/cases.csv"))
+        }
+    }
+
+    @Test func refusesAnUntitledFolderRenamedOntoAProvidedFolder() async throws {
+        try await withApp(app) { _ in
+            try await seedSetup()
+            try FileManager.default.removeItem(atPath: filesDir + setupDir + "/lib")
+            var created = ""
+            try await app.asyncTest(
+                .POST, "/jupyterlite/api/contents/\(setupDir)",
+                beforeRequest: { req in
+                    req.headers.contentType = .json
+                    req.body = ByteBuffer(string: #"{"type":"directory"}"#)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .created)
+                    let object = try JSONSerialization.jsonObject(with: Data(res.body.string.utf8)) as? [String: Any]
+                    created = try #require(object?["path"] as? String)
+                })
+            try await rename(created, to: "\(setupDir)/lib") { res in #expect(res.status == .forbidden) }
+            try await rename(created, to: "\(setupDir)/view-sub_9.ipynb") { res in
+                #expect(res.status == .forbidden)
             }
         }
     }

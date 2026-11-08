@@ -204,25 +204,24 @@ extension JupyterLiteContentsRoutes {
 
     // MARK: - Scope
 
-    /// Refuses a write to a file only the server writes (WorkingCopyProtectedFiles):
-    /// a delivered dataset or support file, or a submission record. With
-    /// `movingContents` (a rename), also refuses the setup folder itself and a
-    /// folder that holds a protected file.
+    /// Refuses a write that would touch a file only the server writes
+    /// (WorkingCopyProtectedFiles): a delivered dataset or support file, or a
+    /// record. With `movingContents` (a rename), also refuses a rename of, onto
+    /// or out to the top of the caller's folder, where the assignment folders
+    /// are.
     func refuseProtected(req: Request, _ target: WritableTarget, movingContents: Bool) async throws {
         // users/<id>/<setupID>/<path inside the working copy>
         let parts = target.relativePath.split(separator: "/", maxSplits: 3).map(String.init)
         guard parts.count >= 3 else { return }
         guard parts.count == 4 else {
-            if movingContents { throw AppError.forbidden(action: "rename an assignment folder") }
+            if movingContents { throw AppError.forbidden(action: "rename at the top of your folder") }
             return
         }
+        // One row read per write. The zip listing behind it is cached.
         let protected = try await WorkingCopyProtectedFiles.paths(
             setupID: parts[2], on: req.db, application: req.application)
-        let inside = parts[3]
-        if WorkingCopyProtectedFiles.isProtected(inside, in: protected)
-            || (movingContents && WorkingCopyProtectedFiles.holdsProtected(inside, in: protected))
-        {
-            throw AppError.forbidden(action: "change a file the assignment provides (\(inside))")
+        if WorkingCopyProtectedFiles.touchesProtected(parts[3], in: protected) {
+            throw AppError.forbidden(action: "change a file the assignment provides (\(parts[3]))")
         }
     }
 
