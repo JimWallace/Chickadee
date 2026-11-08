@@ -9,6 +9,13 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.863] - 2026-11-08
+
+### Security
+
+- **A trusted LMS username no longer links to a locally registered account (#2899).** On a platform with "Trust this platform's username" on, a launch linked to any non-admin account with that username, including one a stranger registered through `/register` with a password they know. The stranger then held the LMS user's role. A launch now links only to an account with no local password (an SSO or LTI account); otherwise it gets its own opaque `lti-` account.
+
+
 ## [0.5.862] - 2026-11-08
 
 ### Added
