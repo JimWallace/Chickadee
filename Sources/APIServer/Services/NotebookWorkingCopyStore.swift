@@ -289,7 +289,10 @@ func ensureUserNotebookWorkingCopy(
     let seedData: Data
     if let defaultData {
         seedData = defaultData
-    } else if viewMode == .template, let starter = try? await notebookData(for: fallbackSetup) {
+    } else if viewMode == .template,
+        let starter = try? await application.notebookBytesCache.notebookData(
+            for: NotebookSourceRef(fallbackSetup))
+    {
         // A template copy is a view of the *assignment*, not of this viewer's
         // work, so it seeds from the stored starter.  Without this an author
         // who had also submitted would open their own submission and save it
@@ -440,7 +443,11 @@ func personalizedStarterNotebook(
     application: Application,
     logger: Logger
 ) async -> Data? {
-    guard let setupID = setup.id, let starter = try? await notebookData(for: setup) else { return nil }
+    // Through the bytes cache: the starter is the same for every student, and
+    // the guide asks for it on each student's first open.
+    guard let setupID = setup.id,
+        let starter = try? await application.notebookBytesCache.notebookData(for: NotebookSourceRef(setup))
+    else { return nil }
     return await applyNotebookSubstitutionsIfNeeded(
         seedData: starter,
         setup: setup,

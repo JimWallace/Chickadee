@@ -141,7 +141,7 @@ extension InstructorDashboardRoutes {
         }
         return GroupSetPanel(
             id: setID.uuidString, name: set.name, isManual: set.acceptsManualEdits, source: set.source,
-            lastSyncedText: set.lastSyncedAt.map { waterlooDateTimeFormatter().string(from: $0) },
+            lastSyncedText: set.lastSyncedAt.map(waterlooDateTimeText),
             lastSyncedISO: set.lastSyncedAt.map { iso8601String($0) }, groups: rows,
             studentCount: students.count, ungroupedCount: students.count - counts.values.reduce(0, +))
     }

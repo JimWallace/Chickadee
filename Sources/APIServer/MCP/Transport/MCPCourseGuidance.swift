@@ -55,7 +55,14 @@ extension MCPServerInstructions {
 /// `isCustomized == false`.  An unknown subject resolves to nothing rather than
 /// an error — initialize must succeed regardless.
 func mcpCourseGuidance(forSubject subject: String, db: any Database) async throws -> [MCPCourseGuidance] {
-    try await mcpAuthorableCourses(forSubject: subject, db: db).map { course in
+    mcpCourseGuidance(for: try await mcpAuthorableCourses(forSubject: subject, db: db))
+}
+
+/// The effective authoring voice of each of `courses`, in their order: the
+/// pure half of `mcpCourseGuidance(forSubject:db:)`, for a caller that has
+/// already resolved the subject's authorable courses.
+func mcpCourseGuidance(for courses: [APICourse]) -> [MCPCourseGuidance] {
+    courses.map { course in
         MCPCourseGuidance(
             courseCode: course.urlKey,
             text: courseAuthoringVoice(course),

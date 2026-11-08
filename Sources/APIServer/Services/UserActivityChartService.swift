@@ -12,6 +12,7 @@
 import Core
 import Fluent
 import Foundation
+import SQLKit
 import Vapor
 
 /// The selectable chart windows.  Raw values are the query-string tokens.
@@ -85,10 +86,7 @@ enum UserActivityChartService {
 
         // Single trailing range scan; only the small set of in-window rows is
         // fetched and bucketed in memory.
-        let events = try await APIUserActivityEvent.query(on: db)
-            .filter(\.$createdAt >= windowStart)
-            .filter(\.$createdAt <= now)
-            .all()
+        let events = try await eventTimes(from: windowStart, through: now, on: db)
 
         let bucketCount = window.bucketCount
         let bucketSeconds = window.bucketSeconds
@@ -119,5 +117,45 @@ enum UserActivityChartService {
             generatedAt: iso8601String(now),
             buckets: buckets
         )
+    }
+
+    /// The two columns bucketing reads, of one activity event.
+    private struct EventTime: Decodable {
+        let userID: UUID
+        let createdAt: Date?
+
+        enum CodingKeys: String, CodingKey {
+            case userID = "user_id"
+            case createdAt = "created_at"
+        }
+    }
+
+    /// Every event in `[start, end]`, as its user and time only. A month
+    /// window holds hundreds of thousands of rows, so the SQL path decodes
+    /// plain values rather than models, and selects only the columns of
+    /// `idx_user_activity_events_created_user`, which allows an index-only
+    /// scan.
+    private static func eventTimes(
+        from start: Date, through end: Date, on db: any Database
+    ) async throws
+        -> [EventTime]
+    {
+        guard let sql = db as? (any SQLDatabase) else {
+            // Non-SQL fallback (not hit by the Postgres driver in use).
+            return try await APIUserActivityEvent.query(on: db)
+                .filter(\.$createdAt >= start)
+                .filter(\.$createdAt <= end)
+                .field(\.$userID)
+                .field(\.$createdAt)
+                .all()
+                .map { EventTime(userID: $0.userID, createdAt: $0.createdAt) }
+        }
+        return try await sql.select()
+            .column("user_id")
+            .column("created_at")
+            .from(APIUserActivityEvent.schema)
+            .where("created_at", .greaterThanOrEqual, start)
+            .where("created_at", .lessThanOrEqual, end)
+            .all(decoding: EventTime.self)
     }
 }

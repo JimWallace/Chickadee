@@ -143,12 +143,19 @@ private func enqueueRound(
     run: APITournamentRun, slots: [TournamentSlot], inArena: Bool, on db: any Database
 ) async throws {
     let runID = try run.requireID()
-    let entrants = run.entrants
+    // The first entrant of a seed wins, as `first(where:)` would.
+    let entrantBySeed = Dictionary(run.entrants.map { ($0.seed, $0) }, uniquingKeysWith: { first, _ in first })
+    // Every home entry, read in one query rather than one per slot.
+    let homeSubmissionIDs = slots.filter { !$0.isBye }.compactMap { entrantBySeed[$0.homeSeed]?.submissionID }
+    var originalByID: [String: APISubmission] = [:]
+    for chunk in chunkedForInFilter(homeSubmissionIDs) {
+        for submission in try await APISubmission.query(on: db).filter(\.$id ~~ chunk).all() {
+            if let id = submission.id { originalByID[id] = submission }
+        }
+    }
     for slot in slots {
         var matchSubmissionID: String?
-        if !slot.isBye, let home = entrants.first(where: { $0.seed == slot.homeSeed }),
-            let original = try await APISubmission.find(home.submissionID, on: db)
-        {
+        if !slot.isBye, let home = entrantBySeed[slot.homeSeed], let original = originalByID[home.submissionID] {
             let match = APISubmission(
                 id: freshShortID(prefix: "sub"),
                 testSetupID: run.testSetupID,

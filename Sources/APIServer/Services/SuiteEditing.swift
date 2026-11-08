@@ -136,6 +136,15 @@ func jsonResponse<T: Encodable>(_ value: T, status: HTTPResponseStatus = .ok) th
 /// suite list, collapsing fully-expanded family filename sets back into
 /// `family:<id>` tokens so the editor sees intent, not plumbing.
 func buildSuitePayload(fromManifest manifest: String, zipPath: String? = nil) async -> SuitePayload {
+    await buildSuitePayload(fromManifest: manifest, zipPath: zipPath, scriptTexts: nil)
+}
+
+/// The same, reading the raw scripts' bodies through `scriptTexts` when it is
+/// given: a read of an unchanged zip then spawns no `unzip`. Without it each
+/// body is read by its own `unzip -p`, a few at a time.
+func buildSuitePayload(
+    fromManifest manifest: String, zipPath: String?, scriptTexts: ZipScriptTextCache?
+) async -> SuitePayload {
     guard let props = decodeManifest(fromJSON: manifest)
 
     else {
@@ -246,10 +255,11 @@ func buildSuitePayload(fromManifest manifest: String, zipPath: String? = nil) as
     // metadata-only script rows). Generated family/check files are derived
     // from their specs, so only `kind == "script"` rows need a body.
     if let zipPath {
+        let bodies = await rawScriptBodies(
+            items.compactMap { $0.kind == "script" ? $0.script?.script : nil },
+            zipPath: zipPath, scriptTexts: scriptTexts)
         for i in items.indices where items[i].kind == "script" {
-            if let name = items[i].script?.script,
-                let body = await readScriptFromZip(zipPath: zipPath, filename: name)
-            {
+            if let name = items[i].script?.script, let body = bodies[name] {
                 items[i].script?.content = body
             }
         }
@@ -259,6 +269,18 @@ func buildSuitePayload(fromManifest manifest: String, zipPath: String? = nil) as
         TestSuiteSectionDTO(id: $0.id, name: $0.name)
     }
     return SuitePayload(items: items, sections: sections)
+}
+
+/// The text of each named raw script in the zip, absent where
+/// `readScriptFromZip` gives nil: through `scriptTexts` when it is given, else
+/// one `unzip -p` per script, a few at a time.
+private func rawScriptBodies(
+    _ names: [String], zipPath: String, scriptTexts: ZipScriptTextCache?
+) async -> [String: String] {
+    if let scriptTexts {
+        return await scriptTexts.texts(zipPath: zipPath, filenames: names)
+    }
+    return await readScriptsFromZip(zipPath: zipPath, filenames: names)
 }
 
 /// Maps a `ScriptDTO.failureDetail` string to the enum: absent or empty means

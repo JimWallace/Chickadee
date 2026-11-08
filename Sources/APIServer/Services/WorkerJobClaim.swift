@@ -52,16 +52,24 @@ enum WorkerJobClaim {
             logger: logger
         )
 
-        let candidates = try await collectClaimCandidates(on: db)
-        return try await evaluateAndClaimCandidate(
-            candidates: candidates,
-            body: body,
-            runnerProfile: runnerProfile,
-            evaluator: evaluator,
-            claim: {
-                try await claimSubmission(id: $0, workerID: body.workerID, db: db)
+        // Load and walk one candidate group at a time, in priority order, and
+        // stop at the first claim. In a backlog the first fresh student job
+        // is nearly always claimable, so the later groups' queries and their
+        // setups are never read (2026-11 performance audit).
+        var loader = ClaimCandidateLoader(db: db)
+        var walk = ClaimWalk(body: body, runnerProfile: runnerProfile, evaluator: evaluator)
+        for group in ClaimCandidateGroup.allCases {
+            let candidates = try await loader.load(group)
+            guard !candidates.isEmpty else { continue }
+            if let claimed = try await walk.claimFirst(
+                in: candidates,
+                claim: { try await claimSubmission(id: $0, workerID: body.workerID, db: db) })
+            {
+                return claimed
             }
-        )
+        }
+        await walk.finish()
+        return nil
     }
 
     /// Atomically claims one submission (#1172). It claims only the

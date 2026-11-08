@@ -66,7 +66,10 @@ struct CompositeBoardPresentation {
             .filter(\.$course.$id == courseID)
             .filter(\.$userID ~~ userIDs)
             .all(\.$userID)
-        let handles = try await AvatarStore.handles(for: enrolled, on: db)
+        // `enrolled` is a subset of `userIDs`, so every stored handle is
+        // already on a row in `users`: no second read of the same users.
+        let handles = Dictionary(
+            uniqueKeysWithValues: Set(enrolled).compactMap { id in users[id]?.avatarHandle.map { (id, $0) } })
 
         let holders = dealt.map { row -> Holder in
             let name = users[row.userID].map { $0.displayName ?? $0.username } ?? "Unknown"

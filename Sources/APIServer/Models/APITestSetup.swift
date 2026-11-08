@@ -71,8 +71,12 @@ extension APITestSetup {
 /// Free helper for the sites that already have raw `Data` bytes (HTTP
 /// body, zip-extracted manifest, etc.) rather than an `APITestSetup`
 /// model.  Same lenient semantics as `APITestSetup.decodedManifest()`.
+///
+/// Memoized by the exact bytes (`ManifestDecodeMemo`): the same manifest is
+/// decoded many times per request and per runner poll, and it changes only
+/// when an author edits it.
 func decodeManifest(from data: Data) -> TestProperties? {
-    try? ManifestCodec.decoder.decode(TestProperties.self, from: data)
+    ManifestDecodeMemo.shared.manifest(decoding: data)
 }
 
 /// String overload for call sites that have the manifest as a JSON

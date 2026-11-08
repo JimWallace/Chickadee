@@ -15,6 +15,16 @@ import Foundation
 
 enum PersonalizationSubstitution {
 
+    /// Where `resolve` gets the dataset slices an expression reads.
+    enum DatasetSlices: Sendable {
+        /// Resolve them from `supportFilesDirectory`.
+        case resolveHere
+        /// The caller already resolved them: `DatasetResolver.resolve` with the
+        /// same manifest, seed, course seed and deal number, from
+        /// `supportFilesDirectory`. Nil means the manifest declares none.
+        case resolved([String: String]?)
+    }
+
     struct Resolution: Sendable {
         /// Resolved `name → Python-literal` map (literals + evaluated expressions).
         let substitutions: [String: String]
@@ -63,13 +73,19 @@ enum PersonalizationSubstitution {
     /// number, so an expression reading a partition sees the student's part
     /// (§4.11). Every production call site uses this form;
     /// `DatasetCourseSeedCallSiteTests` checks it.
+    ///
+    /// `datasetSlices` says where the student's dataset slices come from. A
+    /// caller that also ships the slices resolves them once and passes
+    /// `.resolved`, so a claim reads and samples the dataset files once rather
+    /// than twice.
     static func resolve(
         manifest: TestProperties,
         seedHex: String?,
         courseSeedHex: String?,
         dealNumber: Int?,
         supportFilesDirectory: String?,
-        language: AssignmentLanguage?
+        language: AssignmentLanguage?,
+        datasetSlices: DatasetSlices = .resolveHere
     ) async -> Resolution {
         let language = language ?? .python
         // Combined static name pool — global first, then sections, so a
@@ -102,12 +118,18 @@ enum PersonalizationSubstitution {
         // and the student's copy are the same bytes by construction rather than
         // by two call sites agreeing.  Nil for every assignment declaring no
         // datasets, which leaves the evaluation exactly as it was.
-        let datasetFiles =
-            supportFilesDirectory.flatMap {
-                DatasetResolver.resolve(
-                    manifest: manifest, seedHex: seedHex, courseSeedHex: courseSeedHex, dealNumber: dealNumber,
-                    sourceDirectory: $0)
-            } ?? [:]
+        let datasetFiles: [String: String]
+        switch datasetSlices {
+        case .resolveHere:
+            datasetFiles =
+                supportFilesDirectory.flatMap {
+                    DatasetResolver.resolve(
+                        manifest: manifest, seedHex: seedHex, courseSeedHex: courseSeedHex, dealNumber: dealNumber,
+                        sourceDirectory: $0)
+                } ?? [:]
+        case .resolved(let files):
+            datasetFiles = files ?? [:]
+        }
 
         do {
             let evaluated = try await PersonalizationEvaluator.evaluate(
@@ -157,21 +179,23 @@ enum PersonalizationSubstitution {
             supportFilesDirectory: supportFilesDirectory, language: language)
     }
 
-    /// The same, with the student's course seed and deal number (see
-    /// `resolve`).
+    /// The same, with the student's course seed and deal number, and where
+    /// the dataset slices come from (see `resolve`). The worker job and the
+    /// browser seed both ship the slices, so they pass `.resolved`.
     static func gradingInputs(
         manifest: TestProperties,
         seedHex: String?,
         courseSeedHex: String?,
         dealNumber: Int?,
         supportFilesDirectory: String?,
-        language: AssignmentLanguage?
+        language: AssignmentLanguage?,
+        datasetSlices: DatasetSlices = .resolveHere
     ) async -> [String: String]? {
         guard let seedHex, !seedHex.isEmpty else { return nil }
         guard manifest.hasExpressions else { return nil }
         let resolution = await resolve(
             manifest: manifest, seedHex: seedHex, courseSeedHex: courseSeedHex, dealNumber: dealNumber,
-            supportFilesDirectory: supportFilesDirectory, language: language)
+            supportFilesDirectory: supportFilesDirectory, language: language, datasetSlices: datasetSlices)
         let exprNames = Set(resolution.evaluatedExpressionNames)
         let values = resolution.substitutions.filter { exprNames.contains($0.key) }
         return values.isEmpty ? nil : values

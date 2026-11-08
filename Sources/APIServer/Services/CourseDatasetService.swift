@@ -139,32 +139,67 @@ enum CourseDatasetService {
     /// Every assignment and draft in the dataset's course whose manifest names
     /// the dataset as a source, in setup ID order.
     static func usage(of dataset: APICourseDataset, on db: any Database) async throws -> [Usage] {
+        try await usageBySlug(courseID: dataset.courseID, onlySlug: dataset.slug, on: db)[dataset.slug] ?? []
+    }
+
+    /// `usage(of:)` for every dataset of the course at once, by slug: one
+    /// read of the course's setups and one of their assignments, however many
+    /// datasets the library holds. A slug that nothing attaches is absent.
+    static func usageBySlug(courseID: UUID, on db: any Database) async throws -> [String: [Usage]] {
+        try await usageBySlug(courseID: courseID, onlySlug: nil, on: db)
+    }
+
+    /// The one body of `usage(of:)` and `usageBySlug(courseID:on:)`: the
+    /// attachments of `onlySlug`, or of every slug when it is nil. Setups are
+    /// visited by ID and each manifest's datasets in order, so each slug's
+    /// list is in setup ID order.
+    private static func usageBySlug(
+        courseID: UUID, onlySlug: String?, on db: any Database
+    ) async throws -> [String: [Usage]] {
         let setups = try await APITestSetup.query(on: db)
-            .filter(\.$courseID == dataset.courseID)
+            .filter(\.$courseID == courseID)
             .sort(\.$id)
             .all()
-        var found: [(setupID: String, spec: DatasetSpec, source: DatasetSource)] = []
+        var found: [String: [(setupID: String, spec: DatasetSpec, source: DatasetSource)]] = [:]
+        var foundSetupIDs: Set<String> = []
         for setup in setups {
             guard let setupID = setup.id, let datasets = setup.decodedManifest()?.datasets else { continue }
             for spec in datasets {
-                if let source = spec.source, source.slug == dataset.slug {
-                    found.append((setupID, spec, source))
+                if let source = spec.source, onlySlug == nil || source.slug == onlySlug {
+                    found[source.slug, default: []].append((setupID, spec, source))
+                    foundSetupIDs.insert(setupID)
                 }
             }
         }
-        guard !found.isEmpty else { return [] }
+        guard !found.isEmpty else { return [:] }
 
         let assignments = try await APIAssignment.query(on: db)
-            .filter(\.$testSetupID ~~ Set(found.map(\.setupID)))
+            .filter(\.$testSetupID ~~ foundSetupIDs)
             .all()
         let assignmentBySetup = Dictionary(
             assignments.map { ($0.testSetupID, $0) }, uniquingKeysWith: { first, _ in first })
-        return found.map { entry in
-            let assignment = assignmentBySetup[entry.setupID]
-            return Usage(
-                testSetupID: entry.setupID, assignmentPublicID: assignment?.publicID,
-                assignmentTitle: assignment?.title, file: entry.spec.file, version: entry.source.version)
+        return found.mapValues { entries in
+            entries.map { entry in
+                let assignment = assignmentBySetup[entry.setupID]
+                return Usage(
+                    testSetupID: entry.setupID, assignmentPublicID: assignment?.publicID,
+                    assignmentTitle: assignment?.title, file: entry.spec.file, version: entry.source.version)
+            }
         }
+    }
+
+    /// Every version of each of `datasets`, oldest first, by dataset ID, in
+    /// one query. A dataset with no version is absent.
+    static func versionsByDataset(
+        _ datasets: [APICourseDataset], on db: any Database
+    ) async throws -> [UUID: [APICourseDatasetVersion]] {
+        let ids = try datasets.map { try $0.requireID() }
+        guard !ids.isEmpty else { return [:] }
+        let versions = try await APICourseDatasetVersion.query(on: db)
+            .filter(\.$datasetID ~~ ids)
+            .sort(\.$version)
+            .all()
+        return Dictionary(grouping: versions, by: \.datasetID)
     }
 
     /// The newest version of each dataset, by dataset ID, in one query.

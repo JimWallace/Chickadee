@@ -251,13 +251,14 @@ extension OperationalDiagnosticsService {
 
         let setups = try await APITestSetup.query(on: db)
             .filter(\.$id ~~ Array(uniqueIDs))
+            .field(\.$id)
+            .field(\.$manifest)
             .all()
 
         var result: Set<String> = []
         for setup in setups {
             guard let setupID = setup.id else { continue }
-            let manifest = try? JSONDecoder().decode(
-                TestProperties.self, from: Data(setup.manifest.utf8))
+            let manifest = setup.decodedManifest()
             // Browser-graded setups are graded by the in-browser runner, not the
             // native worker. Exclude them from the worker queue depth metric.
             guard manifest?.effectiveGradingMode != .browser else { continue }

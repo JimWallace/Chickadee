@@ -120,19 +120,12 @@ extension DraftAssignmentRoutes {
             fileKind: .assignment,
             fallbackPath: setup.notebookPath
         )
-        let solutionData = draftNotebookData(
-            req: req,
-            setupID: setupID,
-            userID: userID,
-            fileKind: .solution,
-            fallbackPath: draftSolutionNotebookPath(
-                testSetupsDirectory: req.application.testSetupsDirectory,
-                setupID: setupID
-            )
-        )
+        // The solution notebook is not read: the detector ignores it (its
+        // imports are not the student's requirements), so reading and parsing
+        // it on every page load bought nothing.
         return await detectRequirementSuggestions(
             assignmentNotebookData: assignmentData,
-            solutionNotebookData: solutionData,
+            solutionNotebookData: nil,
             setup: setup
         )
     }

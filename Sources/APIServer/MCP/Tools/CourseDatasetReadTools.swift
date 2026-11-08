@@ -46,9 +46,19 @@ struct ListDatasetsTool: ContentTool {
 
     func execute(_ input: Input, _ context: ToolContext) async throws -> Output {
         let course = try await resolveCourse(code: input.courseCode, context: context)
+        let courseID = try course.requireID()
+        let library = try await CourseDatasetService.list(courseID: courseID, on: context.db)
+        // The versions and the usage of every dataset in one read each, not
+        // one per dataset: usage reads every manifest of the course.
         var datasets: [DatasetDTO] = []
-        for dataset in try await CourseDatasetService.list(courseID: try course.requireID(), on: context.db) {
-            datasets.append(try await datasetDTO(dataset, context: context))
+        if !library.isEmpty {
+            let versionsByDataset = try await CourseDatasetService.versionsByDataset(library, on: context.db)
+            let usageBySlug = try await CourseDatasetService.usageBySlug(courseID: courseID, on: context.db)
+            datasets = try library.map { dataset in
+                datasetDTO(
+                    dataset, versions: versionsByDataset[try dataset.requireID()] ?? [],
+                    usage: usageBySlug[dataset.slug] ?? [])
+            }
         }
         return Output(
             courseCode: course.code, courseKey: course.urlKey, courseTerm: course.term?.displayName,

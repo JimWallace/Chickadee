@@ -95,11 +95,11 @@ extension InstructorDashboardRoutes {
         let course = try await req.requireActiveCourseForWrite(
             user, atLeast: .ta, action: "recomputing course achievements")
         // A failure for one student is logged and the rest go on, as on a
-        // page load; the next Recompute or page load grants it again.
-        for enrollment in try await CourseRoster.studentEnrollments(in: course.requireID(), on: req.db) {
-            await AchievementAwardStore.grantCourseAchievementsOrLog(
-                for: enrollment.userID, in: [course], on: req.db, logger: req.logger)
-        }
+        // page load; the next Recompute or page load grants it again. The
+        // course-wide reads run once for the whole roster.
+        let students = try await CourseRoster.studentEnrollments(in: course.requireID(), on: req.db).map(\.userID)
+        await AchievementAwardStore.grantCourseAchievementsOrLog(
+            forStudents: students, in: course, on: req.db, logger: req.logger)
         return req.redirect(to: "/instructor/achievements?notice=\(AchievementsNotice.recomputed.rawValue)")
     }
 

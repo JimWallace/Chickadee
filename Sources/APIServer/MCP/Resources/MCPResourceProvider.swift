@@ -120,22 +120,25 @@ struct MCPResourceProvider: Sendable {
 
         // The shared visibility resolver: non-archived enrolled courses, for
         // every role — an admin's agent sees its enrolments, not the world.
-        let courses: [APICourse]
+        // Read once, with the roles, for both the listing and the guidance.
+        let coursesWithRoles: [(course: APICourse, role: CourseRole)]
         if let userID = user.id {
-            courses = try await enrolledCourses(for: userID, on: context.db)
+            coursesWithRoles = try await enrolledCoursesWithRoles(for: userID, on: context.db)
         } else {
-            courses = []
+            coursesWithRoles = []
         }
+        let courses = coursesWithRoles.map(\.course)
 
         let courseByID = Dictionary(
             courses.compactMap { course in course.id.map { ($0, course) } },
             uniquingKeysWith: { first, _ in first })
         // Per-course authoring guidance, for the courses the subject can
-        // author in (same resolver the initialize embedding uses, so the two
-        // surfaces can't disagree about who sees which course's guidance).
-        let guidanceEntries: [JSONValue] = try await mcpCourseGuidance(
-            forSubject: context.subject, db: context.db
-        ).map { guidance in
+        // author in: the rule of `mcpAuthorableCourses` (TA and up, or an
+        // admin through any enrolment), which the initialize embedding uses,
+        // so the two surfaces can't disagree about who sees which course's
+        // guidance.
+        let authorable = coursesWithRoles.filter { user.isAdmin || $0.role >= .ta }.map(\.course)
+        let guidanceEntries: [JSONValue] = mcpCourseGuidance(for: authorable).map { guidance in
             let origin =
                 guidance.isCustomized
                 ? "The course's own guide, set by its instructors"

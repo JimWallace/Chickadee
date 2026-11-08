@@ -230,7 +230,7 @@ the property the Optional bought.
 | Site | Why the default stays |
 |---|---|
 | `Worker/NotebookExtractor.swift:135` | Extraction has to write a file in *some* syntax; grading path |
-| `Worker/RunnerDaemon+JobPreparation.swift:334` | The student-module hint must name the file the extractor actually wrote |
+| `Worker/RunnerDaemon+JobPreparation.swift:449` | The student-module hint must name the file the extractor actually wrote |
 | `Worker/OpponentStaging.swift:124` | The same hint, for a class activity's opponent: it must name the file the extractor wrote for the opponent's notebook; grading path |
 | `PersonalizationSubstitution.swift:55` | There is no literal without a syntax |
 | ~~`TestScriptTemplates.swift`~~ | **Gone.** A language-less suite gets a *shell* scaffold — see below |

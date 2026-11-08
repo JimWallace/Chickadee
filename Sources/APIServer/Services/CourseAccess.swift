@@ -95,15 +95,17 @@ func enrolledCourses(for userID: UUID, on db: any Database) async throws -> [API
 func enrolledCoursesWithRoles(
     for userID: UUID, on db: any Database
 ) async throws -> [(course: APICourse, role: CourseRole)] {
+    // One round trip: the course rides on a join, and archived courses are
+    // left out by the database rather than fetched and dropped.
     let enrollments = try await APICourseEnrollment.query(on: db)
         .filter(\.$userID == userID)
-        .with(\.$course)
+        .join(APICourse.self, on: \APICourseEnrollment.$course.$id == \APICourse.$id)
+        .filter(APICourse.self, \.$isArchived == false)
         .all()
     return
-        enrollments
-        .filter { !$0.course.isArchived }
+        try enrollments
+        .map { (course: try $0.joined(APICourse.self), role: $0.role) }
         .sorted { courseListPrecedes($0.course, $1.course) }
-        .map { (course: $0.course, role: $0.role) }
 }
 
 /// The order of every course list: newest term first, courses with no term
@@ -174,7 +176,11 @@ func isStaffAnywhere(_ user: APIUser, includingArchived: Bool, db: any Database)
 /// Used to scope per-course staff checks on the submission view/download/query
 /// paths (#417 Slice G).
 func courseID(ofSubmission submission: APISubmission, on db: any Database) async throws -> UUID? {
-    try await APITestSetup.find(submission.testSetupID, on: db)?.courseID
+    // Only `course_id`: the row's manifest is large and not read here.
+    try await APITestSetup.query(on: db)
+        .filter(\.$id == submission.testSetupID)
+        .field(\.$courseID)
+        .first()?.courseID
 }
 
 /// Whether `user` is staff (TA+ or admin) for `submission`'s course — the

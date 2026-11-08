@@ -171,8 +171,18 @@ enum CourseTimelineService {
         if let actorFilter {
             query = query.filter(\.$actorUsername ~~ actorFilter)
         }
+        // Only the columns a row prints: `manifest` and `file_map` are large
+        // and never read here.
         let versions =
             try await query
+            .field(\.$id)
+            .field(\.$assignmentID)
+            .field(\.$versionNumber)
+            .field(\.$actorUsername)
+            .field(\.$origin)
+            .field(\.$summary)
+            .field(\.$restoredFromVersion)
+            .field(\.$createdAt)
             .sort(\.$createdAt, .descending)
             .limit(limit)
             .all()

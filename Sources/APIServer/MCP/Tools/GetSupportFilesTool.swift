@@ -135,10 +135,18 @@ struct GetSupportFilesTool: ContentTool {
             // The same lookup the authoring pages' Files panel reads, so this
             // listing and that control cannot disagree about a file's mark.
             let datasetSpecs = setup.decodedManifest()?.datasetSpecsByFile ?? [:]
+            // Sizes from the zip's directory, so a listing does not
+            // decompress every dataset into memory. A name the directory
+            // cannot answer for exactly is extracted, as it always was.
+            let knownSizes = await verifiedZipEntrySizes(zipPath: setup.zipPath, entryNames: supportNames)
             var entries: [FileEntry] = []
             for name in supportNames.sorted() {
-                let sizeBytes =
-                    await extractZipEntry(zipPath: setup.zipPath, entryName: name)?.count ?? 0
+                let sizeBytes: Int
+                if let known = knownSizes[name] {
+                    sizeBytes = known
+                } else {
+                    sizeBytes = await extractZipEntry(zipPath: setup.zipPath, entryName: name)?.count ?? 0
+                }
                 entries.append(
                     FileEntry(
                         filename: name,

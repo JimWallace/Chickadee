@@ -98,11 +98,13 @@ private func isArenaEntrySubmission(
         .filter(\.$tournamentID == runID)
         .filter(\.$round == run.currentRound)
         .all()
+    // The entrants are decoded once, not once per slot; the first entrant
+    // of a seed wins, as `first(where:)` would.
+    let entrySubmissionBySeed = Dictionary(
+        run.entrants.map { ($0.seed, $0.submissionID) }, uniquingKeysWith: { first, _ in first })
     for slot in slots where slot.matchSubmissionID != nil {
         if slot.matchSubmissionID == submissionID { return true }
-        if let awaySeed = slot.awaySeed,
-            run.entrants.first(where: { $0.seed == awaySeed })?.submissionID == submissionID
-        {
+        if let awaySeed = slot.awaySeed, entrySubmissionBySeed[awaySeed] == submissionID {
             return true
         }
     }

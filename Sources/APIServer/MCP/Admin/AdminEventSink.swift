@@ -27,7 +27,15 @@ struct CapturedEvent: Encodable, Sendable {
 /// `LogHandler.log` is synchronous and called from arbitrary threads, so an
 /// actor (async-only) can't sit on that path.
 final class AdminEventSink: Sendable {
-    private let events = Mutex<[CapturedEvent]>([])
+    /// The stored events. Until it is full they are in arrival order; after
+    /// that a new event overwrites the oldest, at `oldest`, so recording one
+    /// never shifts the other `capacity - 1` while the lock is held.
+    private struct Ring {
+        var events: [CapturedEvent] = []
+        var oldest = 0
+    }
+
+    private let ring = Mutex(Ring())
     private let capacity: Int
 
     init(capacity: Int = 2000) {
@@ -37,17 +45,21 @@ final class AdminEventSink: Sendable {
     var bufferCapacity: Int { capacity }
 
     func record(_ event: CapturedEvent) {
-        events.withLock { events in
-            events.append(event)
-            if events.count > capacity {
-                events.removeFirst(events.count - capacity)
+        ring.withLock { ring in
+            if ring.events.count < capacity {
+                ring.events.append(event)
+            } else {
+                ring.events[ring.oldest] = event
+                ring.oldest = (ring.oldest + 1) % capacity
             }
         }
     }
 
     /// A point-in-time copy of the buffer, oldest first.
     func snapshot() -> [CapturedEvent] {
-        events.withLock { $0 }
+        ring.withLock { ring in
+            Array(ring.events[ring.oldest...]) + ring.events[..<ring.oldest]
+        }
     }
 }
 

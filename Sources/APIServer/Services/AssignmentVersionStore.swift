@@ -116,7 +116,7 @@ enum AssignmentVersionStore {
         let snapshot = try await AssignmentVersionSnapshotBuilder.build(
             setup: setup, blobs: blobs)
 
-        if let newest = try await newestVersion(setupID: setupID, on: db),
+        if let newest = try await newestVersionHeader(setupID: setupID, on: db),
             newest.snapshotHash == snapshot.snapshotHash
         {
             return .unchanged(version: newest.versionNumber)
@@ -219,6 +219,22 @@ enum AssignmentVersionStore {
             .first()
     }
 
+    /// `newestVersion` with only its number and snapshot hash loaded: the
+    /// dedupe and the numbering read nothing else, so the manifest and the
+    /// file map stay in the database. Any other property of the row is not
+    /// loaded and must not be read.
+    private static func newestVersionHeader(
+        setupID: String, on db: any Database
+    ) async throws -> APIAssignmentVersion? {
+        try await APIAssignmentVersion.query(on: db)
+            .filter(\.$testSetupID == setupID)
+            .sort(\.$versionNumber, .descending)
+            .field(\.$id)
+            .field(\.$versionNumber)
+            .field(\.$snapshotHash)
+            .first()
+    }
+
     /// The published assignment for a setup, or nil for a hidden draft.
     private static func publishedAssignment(
         setupID: String, on db: any Database
@@ -245,7 +261,7 @@ enum AssignmentVersionStore {
     ) async throws -> Int {
         var lastError: (any Error)?
         for _ in 0..<numberingAttempts {
-            let next = (try await newestVersion(setupID: setupID, on: db)?.versionNumber ?? 0) + 1
+            let next = (try await newestVersionHeader(setupID: setupID, on: db)?.versionNumber ?? 0) + 1
             let row = APIAssignmentVersion(
                 testSetupID: setupID,
                 assignmentID: assignment.id,
@@ -280,14 +296,20 @@ extension AssignmentVersionStore {
     /// skips collection on failure.
     static func referencedBlobHashes(on db: any Database) async throws -> Set<String> {
         var referenced: Set<String> = []
-        for row in try await APIAssignmentVersion.query(on: db).all() {
+        // Only the two columns that name blobs: every version's manifest
+        // would otherwise be read just to be dropped.
+        let versionRows = try await APIAssignmentVersion.query(on: db)
+            .field(\.$fileMapJSON)
+            .field(\.$notebookHash)
+            .all()
+        for row in versionRows {
             referenced.formUnion(row.decodedFileMap().values)
             if let notebookHash = row.notebookHash { referenced.insert(notebookHash) }
         }
         // The course dataset library keeps its version bytes in the same store
         // (docs/datasets-course-library.md).
-        for row in try await APICourseDatasetVersion.query(on: db).all() {
-            referenced.insert(row.sha256)
+        for sha256 in try await APICourseDatasetVersion.query(on: db).all(\.$sha256) {
+            referenced.insert(sha256)
         }
         return referenced
     }

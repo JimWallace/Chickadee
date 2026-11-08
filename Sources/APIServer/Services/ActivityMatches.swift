@@ -74,10 +74,19 @@ func latestStudentSubmissionsByUser(
         .filter(\.$userID ~~ students)
         .sort(\.$submittedAt, .descending)
         .all()
+    return latestStudentSubmissions(from: candidates, students: studentSet)
+}
+
+/// The pick behind `latestStudentSubmissionsByUser`: the first complete
+/// submission of each student in `students`. `rows` must be the setup's
+/// `.student` submissions, newest first (`submitted_at` descending); they may
+/// include other statuses and other users, which are passed over. The union
+/// read model calls this on the one submission list it already reads.
+func latestStudentSubmissions(from rows: [APISubmission], students: Set<UUID>) -> [UUID: APISubmission] {
     var latestByUser: [UUID: APISubmission] = [:]
-    for candidate in candidates {
-        guard let userID = candidate.userID, latestByUser[userID] == nil else { continue }
-        latestByUser[userID] = candidate
+    for row in rows where row.status == SubmissionStatus.complete.rawValue {
+        guard let userID = row.userID, students.contains(userID), latestByUser[userID] == nil else { continue }
+        latestByUser[userID] = row
     }
     return latestByUser
 }
@@ -141,26 +150,88 @@ func openMatch(
         .filter(\.$opponentIdentity == opponent.identity)
         .first()
     if let existing {
-        existing.score = nil
-        existing.metric = nil
-        existing.won = nil
-        existing.completedAt = nil
-        existing.createdAt = Date()
-        existing.seed = seed
-        existing.round = round
+        reopen(existing, seed: seed, round: round)
         try await existing.update(on: db)
     } else {
         // Ignore the conflict only: two claims of one submission at once,
         // first insert wins — the same shape as `awardImmutableBadge`. Any
         // other failure is thrown, so a lost connection no longer drops the
         // match row in silence (#2776).
-        let row = APIMatchResult(
-            testSetupID: testSetupID, submissionID: submissionID,
-            opponentSubmissionID: opponent.champion?.id, opponentIdentity: opponent.identity,
-            seed: seed, createdAt: Date())
-        row.round = round
-        try await row.createIgnoringConflict(on: db)
+        try await newMatchRow(
+            testSetupID: testSetupID, submissionID: submissionID, opponent: opponent, seed: seed, round: round
+        ).createIgnoringConflict(on: db)
     }
+}
+
+/// `openMatch` for every opponent of one matrix job (round robin), in one
+/// read of the rows already open and one multi-row insert of the rest,
+/// instead of two round trips per classmate on the claim path. The rows are
+/// the ones `openMatch` writes, one per (submission, opponent identity).
+/// When an insert hits the unique key (two claims of one submission at
+/// once), its rows are inserted one by one with the conflict ignored, which
+/// is `openMatch`'s first-insert-wins result. Not for a transaction: a
+/// failed insert would abort it.
+func openMatches(
+    testSetupID: String, submissionID: String, opponents: [(opponent: ChosenOpponent, seed: String)],
+    on db: any Database
+) async throws {
+    guard !opponents.isEmpty else { return }
+    var existingByIdentity: [String: APIMatchResult] = [:]
+    for chunk in chunkedForInFilter(opponents.map(\.opponent.identity)) {
+        let rows = try await APIMatchResult.query(on: db)
+            .filter(\.$submissionID == submissionID)
+            .filter(\.$opponentIdentity ~~ chunk)
+            .all()
+        for row in rows where existingByIdentity[row.opponentIdentity] == nil {
+            existingByIdentity[row.opponentIdentity] = row
+        }
+    }
+    var fresh: [APIMatchResult] = []
+    for (opponent, seed) in opponents {
+        if let existing = existingByIdentity[opponent.identity] {
+            // A re-claim: reopen the row in place, as `openMatch` does.
+            reopen(existing, seed: seed, round: nil)
+            try await existing.update(on: db)
+        } else {
+            fresh.append(
+                newMatchRow(
+                    testSetupID: testSetupID, submissionID: submissionID, opponent: opponent, seed: seed,
+                    round: nil))
+        }
+    }
+    // Chunked so that one statement stays well under the bind-parameter limit.
+    for start in stride(from: 0, to: fresh.count, by: 1000) {
+        let batch = Array(fresh[start..<min(start + 1000, fresh.count)])
+        do {
+            try await batch.create(on: db)
+        } catch  where isInsertConflict(error) {
+            for row in batch { try await row.createIgnoringConflict(on: db) }
+        }
+    }
+}
+
+/// Resets a match row for a re-test against the same opponent: open again,
+/// with the new job's seed and round.
+private func reopen(_ row: APIMatchResult, seed: String, round: Int?) {
+    row.score = nil
+    row.metric = nil
+    row.won = nil
+    row.completedAt = nil
+    row.createdAt = Date()
+    row.seed = seed
+    row.round = round
+}
+
+/// A new open match row against `opponent`.
+private func newMatchRow(
+    testSetupID: String, submissionID: String, opponent: ChosenOpponent, seed: String, round: Int?
+) -> APIMatchResult {
+    let row = APIMatchResult(
+        testSetupID: testSetupID, submissionID: submissionID,
+        opponentSubmissionID: opponent.champion?.id, opponentIdentity: opponent.identity,
+        seed: seed, createdAt: Date())
+    row.round = round
+    return row
 }
 
 /// Voids a submission's completed matrix rows before a re-claim opens the

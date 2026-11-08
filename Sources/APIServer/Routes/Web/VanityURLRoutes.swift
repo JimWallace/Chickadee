@@ -60,9 +60,11 @@ struct VanityURLRoutes: RouteCollection {
         // assignment enumeration vector for students browsing the
         // institutional catalogue.  Staff (TA+ or admin) of this course bypass
         // (#417 Slice G — was the global `isInstructor` short-circuit); a plain
-        // enrolled student still passes the enrollment check below.
-        if !(try await isCourseStaff(user, inCourse: courseID, db: req.db)) {
-            guard try await userIsEnrolled(userID: try user.requireID(), inCourse: courseID, db: req.db) else {
+        // enrolled student still passes the enrollment check below. Both
+        // checks read the request's role memo, so the enrollment row is read
+        // once (a role is nil exactly when there is no enrollment row).
+        if !(try await req.cachedIsCourseStaff(user, inCourse: courseID)) {
+            guard try await req.cachedCourseRole(of: try user.requireID(), inCourse: courseID) != nil else {
                 throw AppError.notFound(resource: "Assignment")
             }
         }

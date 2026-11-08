@@ -53,6 +53,20 @@ enum ReflectionFeedbackService {
         return latest
     }
 
+    /// One student's latest submission to the assignment: the row
+    /// `latestStudentSubmissions` keeps for `userID`, by the same filters and
+    /// order, read with one index seek instead of the whole assignment.
+    static func latestStudentSubmission(
+        for assignment: APIAssignment, userID: UUID, on db: any Database
+    ) async throws -> APISubmission? {
+        try await APISubmission.query(on: db)
+            .filter(\.$testSetupID == assignment.testSetupID)
+            .filter(\.$kind == APISubmission.Kind.student)
+            .filter(\.$userID == userID)
+            .sort(\.$submittedAt, .descending)
+            .first()
+    }
+
     /// The feedback rows for `userIDs`, creating any that are missing with a
     /// fresh random handle. A handle collision (one in about 600 million per
     /// pair) retries with a new draw.
@@ -66,8 +80,21 @@ enum ReflectionFeedbackService {
                 .all()
                 .map { ($0.userID, $0) },
             uniquingKeysWith: { first, _ in first })
-        for userID in userIDs where rows[userID] == nil {
-            rows[userID] = try await createRow(assignmentID: assignmentID, userID: userID, on: db)
+        let missing = Array(Set(userIDs.filter { rows[$0] == nil }))
+        guard !missing.isEmpty else { return rows }
+        // One multi-row insert for every missing student. It is atomic, so a
+        // handle collision or a concurrent creator stores none of it, and
+        // the one-by-one path below, which handles both, runs instead.
+        let fresh = missing.map {
+            APIReflectionFeedback(assignmentID: assignmentID, userID: $0, handle: FeedbackHandle.random())
+        }
+        do {
+            try await fresh.create(on: db)
+            for row in fresh { rows[row.userID] = row }
+        } catch let error as any DatabaseError where error.isConstraintFailure {
+            for userID in missing {
+                rows[userID] = try await createRow(assignmentID: assignmentID, userID: userID, on: db)
+            }
         }
         return rows
     }
@@ -116,10 +143,27 @@ enum ReflectionFeedbackService {
     static func reflections(
         setup: APITestSetup, submission: APISubmission?
     ) async -> [ReflectionPair] {
-        guard let starter = try? await notebookData(for: setup) else { return [] }
+        await reflections(starter: try? await notebookData(for: setup), submission: submission)
+    }
+
+    /// The same, against starter bytes the caller has already read, so a page
+    /// or a tool that shows many students reads the starter once. A nil
+    /// starter gives `[]` without reading the submission.
+    static func reflections(
+        starter: Data?, submission: APISubmission?
+    ) async -> [ReflectionPair] {
+        guard let starter else { return [] }
         let submitted: Data? =
             if let submission { await submittedNotebook(submission) } else { nil }
         return ReflectionCells.pairs(starter: starter, submission: submitted)
+    }
+
+    /// The starter notebook of `setup` through the process-wide bytes cache:
+    /// the bytes `notebookData(for:)` returns. Nil when the setup has none.
+    static func starterNotebook(
+        for setup: APITestSetup, cache: NotebookBytesCache
+    ) async -> Data? {
+        try? await cache.notebookData(for: NotebookSourceRef(setup))
     }
 
     /// The notebook a student submitted: the artifact itself when it is an

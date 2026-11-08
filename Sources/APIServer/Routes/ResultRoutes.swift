@@ -51,8 +51,9 @@ struct ResultRoutes: RouteCollection {
 
         // Server-side half of the size budget: current runners truncate
         // before posting; this guards against older runners and keeps the
-        // unbounded blob out of the results table either way.
-        let (collection, didTruncate) = report.collection.truncatingOversizedOutput()
+        // unbounded blob out of the results table either way. The JSON it
+        // measured the collection with is the JSON stored below.
+        let (collection, collectionJSON, didTruncate) = report.collection.boundedForStorage()
         if didTruncate {
             // Submission id in metadata only — message text reaches the admin
             // query_logs buffer unredacted (compliance audit F-1).
@@ -69,7 +70,7 @@ struct ResultRoutes: RouteCollection {
         let completedSubmission = try await req.db.transaction { tx -> APISubmission? in
             let prepared = try await ResultIngestEffects.prepareResult(
                 collection, source: "worker", testSetupID: collection.testSetupID,
-                application: req.application, on: tx)
+                encodedJSON: collectionJSON, application: req.application, on: tx)
             // Row and blob side-table row persist together, inside this
             // transaction (persist and submission status flip).
             try await prepared.row.saveWithCollection(json: prepared.json, on: tx)
@@ -85,6 +86,7 @@ struct ResultRoutes: RouteCollection {
             await req.application.diagnostics.recordWorkerExecutionReport(
                 collection: collection,
                 diagnostics: report.diagnostics,
+                submission: submission,
                 on: req.db,
                 logger: req.logger
             )

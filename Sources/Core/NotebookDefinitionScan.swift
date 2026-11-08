@@ -108,7 +108,8 @@ public func scanNotebookDefinitions(
     }
     let codeCellIndices = codeCells.map(\.index)
 
-    let functionScan = scanNotebookForSectionsAndFunctions(notebookData, language: language)
+    // The cells decoded above, not the bytes again.
+    let functionScan = scanNotebookForSectionsAndFunctions(cells: cells, language: language)
     guard let language, functionScan.unsupportedReason == nil,
         case .assignmentPattern(let pattern) = language.descriptor.variableScan,
         let assignment = try? Regex(pattern)

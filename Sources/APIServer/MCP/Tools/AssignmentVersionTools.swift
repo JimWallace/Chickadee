@@ -122,10 +122,21 @@ struct ListAssignmentVersionsTool: ContentTool {
         if let before = input.beforeVersion {
             query = query.filter(\.$versionNumber < before)
         }
+        // Only the columns an entry reads: the manifest stays in the database.
         let rows =
             try await query
             .sort(\.$versionNumber, .descending)
             .limit(limit)
+            .field(\.$id)
+            .field(\.$versionNumber)
+            .field(\.$createdAt)
+            .field(\.$actorUsername)
+            .field(\.$origin)
+            .field(\.$summary)
+            .field(\.$manifestHash)
+            .field(\.$fileMapJSON)
+            .field(\.$notebookHash)
+            .field(\.$restoredFromVersion)
             .all()
 
         let total = try await APIAssignmentVersion.query(on: context.mainDB)

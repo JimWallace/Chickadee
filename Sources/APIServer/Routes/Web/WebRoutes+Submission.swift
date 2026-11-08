@@ -335,17 +335,13 @@ extension WebRoutes {
         // Per-course staff (TA+ or admin) see instructor-level detail for this
         // submission's course; everyone else may view only their own
         // submission (#417 Slice G — was the global `user.isInstructor`).
-        let isStaff = try await isSubmissionStaff(user, submission: submission, on: req.db)
+        let (setup, isStaff) = try await submissionSetupAndStaff(req: req, user: user, submission: submission)
         guard isStaff || submission.userID == user.id else {
             throw AppError.forbidden(action: "view this submission")
         }
 
-        // Fetch the assignment for deadline-based output gating, and the test
-        // setup + decoded manifest ONCE — the page's helpers (manifest display
-        // data, class-goal bonus, badges, class-goal views) all read them, and
-        // each used to re-fetch and re-decode independently (#1128).
+        // Fetch the assignment for deadline-based output gating.
         let submissionAssignment = try await assignmentByTestSetupID(submission.testSetupID, on: req.db)
-        let setup = try await APITestSetup.find(submission.testSetupID, on: req.db)
         let setupProps = setup?.decodedManifest()
         // Students see public + release rows itemized (release output is gated
         // on the deadline); secret is itemized only after the student spends
@@ -364,9 +360,9 @@ extension WebRoutes {
         let reveal = try await SecretRevealState.resolve(
             assignment: submissionAssignment, userID: user.id, isStaff: isStaff, on: req.db)
         let itemized = itemizedTiers(isStaff: isStaff, secretRevealed: reveal.revealed)
-        let releaseDeadline = try await releaseVisibilityDeadline(
-            for: submissionAssignment, user: user, on: req.db)
-        let releaseOutput = releaseOutputVisible(isStaff: isStaff, effectiveDueAt: releaseDeadline)
+        let studentReveal = try await studentRevealState(
+            isStaff: isStaff, assignment: submissionAssignment, user: user, on: req.db)
+        let releaseOutput = releaseOutputVisible(isStaff: isStaff, effectiveDueAt: studentReveal.releaseDeadline)
 
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
@@ -392,13 +388,18 @@ extension WebRoutes {
             )
         }
 
-        try await applyClassGoalBonus(
-            to: &processed, setupProps: setupProps,
-            testSetupID: submission.testSetupID, userID: submission.userID, on: req.db)
+        // The class goals' snapshots feed both the bonus and the goal panel,
+        // so they are read once.
+        let classGoalAchievements = setupProps?.achievements.filter(\.isClassGoal) ?? []
+        let goalSnapshots = try await classGoalSnapshots(
+            goals: classGoalAchievements, props: setupProps, submission: submission,
+            assignment: submissionAssignment, on: req.db)
+        applyClassGoalBonus(to: &processed, goals: classGoalAchievements, snapshots: goalSnapshots)
 
         let badges = try await submissionBadges(
             req: req, submission: submission, displayCollection: displayCollection, setupProps: setupProps,
-            processed: processed, awardRecipient: awardRecipient(user, submission, isStaff: isStaff))
+            processed: processed,
+            awardRecipient: awardRecipient(user, submission, isStaff: isStaff, course: studentReveal.course))
 
         let sectionedOutcomes = buildSectionedOutcomes(
             outcomes: processed.outcomes,
@@ -427,12 +428,9 @@ extension WebRoutes {
                 setupID: submission.testSetupID, userID: submissionUserID, on: req.db)
         }
 
-        let classGoals = try await loadClassGoalViews(
-            testSetupID: submission.testSetupID, props: setupProps, userID: submission.userID, on: req.db)
-
-        let links = try await studentFacingLinks(
+        let links = studentFacingLinks(
             submission: submission, assignment: submissionAssignment, props: setupProps,
-            user: user, isStaff: isStaff, on: req.db)
+            user: user, isStaff: isStaff, solutionVisible: studentReveal.solutionVisible)
 
         var ctx = buildSubmissionContext(
             subID: subID,
@@ -442,7 +440,7 @@ extension WebRoutes {
             decorations: SubmissionDecorations(
                 badges: badges,
                 overrideGradePercent: overrideGradePercent,
-                classGoals: classGoals,
+                classGoals: classGoalViews(goals: classGoalAchievements, snapshots: goalSnapshots),
                 secretReveal: SecretRevealBanner(
                     available: reveal.enabled && !reveal.spent && !isStaff
                         && hasSecretTierTests(setupProps),
@@ -537,8 +535,10 @@ extension WebRoutes {
         for user: APIUser, wearing spec: AvatarSpec, isStaff: Bool, on db: any Database
     ) async throws -> SubmissionEarnedItem? {
         let userID = try user.requireID()
-        guard let staff = try? await AvatarStore.courseStaff(among: [userID], on: db),
-            let granted = try? await WardrobeUnlockStore.grantNew(for: userID, on: db), !granted.isEmpty
+        // The staff lookup only matters when something was granted, which is
+        // rare, so it runs after the grant.
+        guard let granted = try? await WardrobeUnlockStore.grantNew(for: userID, on: db), !granted.isEmpty,
+            let staff = try? await AvatarStore.courseStaff(among: [userID], on: db)
         else {
             return nil
         }
@@ -549,6 +549,56 @@ extension WebRoutes {
 
     // MARK: - submissionPage helpers
 
+    /// The submission's test setup, read ONCE, and whether `user` is staff
+    /// (TA+ or admin) of its course. The page's helpers (manifest display
+    /// data, class-goal bonus, badges, class-goal views) all read the
+    /// setup's decoded manifest, which each used to re-fetch and re-decode
+    /// independently (#1128). A missing setup (hence course) leaves the
+    /// viewer non-staff, as `isSubmissionStaff` does (#417 Slice G).
+    private func submissionSetupAndStaff(
+        req: Request, user: APIUser, submission: APISubmission
+    ) async throws -> (setup: APITestSetup?, isStaff: Bool) {
+        guard let setup = try await APITestSetup.find(submission.testSetupID, on: req.db) else {
+            return (nil, false)
+        }
+        return (setup, try await req.cachedIsCourseStaff(user, inCourse: setup.courseID))
+    }
+
+    /// A student viewer's reveal state on their own result: the assignment's
+    /// course, the deadline that gates release-tier output, and whether the
+    /// solution link shows. The two gates read the course, the extension
+    /// and the slip-day state once (`studentRevealGates`). Staff see release
+    /// output regardless and reach the solution through the workbench, so
+    /// for them, and with no assignment, nothing is read.
+    private struct StudentRevealState {
+        var course: APICourse?
+        var releaseDeadline: Date?
+        var solutionVisible = false
+    }
+
+    private func studentRevealState(
+        isStaff: Bool, assignment: APIAssignment?, user: APIUser, on db: any Database
+    ) async throws -> StudentRevealState {
+        guard !isStaff, let assignment else { return StudentRevealState() }
+        let course = try await APICourse.find(assignment.courseID, on: db)
+        let gates = try await studentRevealGates(for: assignment, course: course, user: user, on: db)
+        return StudentRevealState(
+            course: course, releaseDeadline: gates.releaseDeadline, solutionVisible: gates.solutionVisible)
+    }
+
+    /// The snapshots of `goals` (the manifest's class goals) that apply to
+    /// the submitter (`LabGoalGroups.snapshots`), read once for both the
+    /// bonus and the goal panel. No class goals, no read.
+    private func classGoalSnapshots(
+        goals: [Achievement], props: TestProperties?, submission: APISubmission, assignment: APIAssignment?,
+        on db: any Database
+    ) async throws -> [String: any ClassGoalSnapshot] {
+        guard let props, !goals.isEmpty else { return [:] }
+        return try await LabGoalGroups.snapshots(
+            testSetupID: submission.testSetupID, props: props, userID: submission.userID,
+            assignment: assignment, on: db)
+    }
+
     /// The two optional links a student reviewing their results may follow.
     ///
     /// The solution link is for the owner-student once their reveal moment
@@ -557,14 +607,14 @@ extension WebRoutes {
     /// staff view of a student's submission should not read as the student's
     /// page anyway. The leaderboard link appears when the viewer may open it:
     /// staff always, a student once the instructor has published it.
+    /// `solutionVisible` is the student's reveal gate, already resolved
+    /// (`studentRevealGates`).
     private func studentFacingLinks(
         submission: APISubmission, assignment: APIAssignment?, props: TestProperties?,
-        user: APIUser, isStaff: Bool, on db: any Database
-    ) async throws -> (solutionURL: String?, leaderboardURL: String?) {
+        user: APIUser, isStaff: Bool, solutionVisible: Bool
+    ) -> (solutionURL: String?, leaderboardURL: String?) {
         var solutionURL: String?
-        if !isStaff, submission.userID == user.id, let assignment,
-            try await solutionVisibleToStudent(assignment: assignment, user: user, on: db)
-        {
+        if !isStaff, submission.userID == user.id, assignment != nil, solutionVisible {
             solutionURL =
                 props?.effectiveSubmissionMode == .uploadOnly
                 ? "/testsetups/\(submission.testSetupID)/solution/download"
@@ -578,16 +628,15 @@ extension WebRoutes {
     /// Class-goal bonus: true extra credit on the autograded grade, so a
     /// student already at full marks reads above 100% (no-op unless the
     /// assignment has a points-rewarded class goal).
+    /// `snapshots` are the class goals' snapshots that apply to the
+    /// submitter (`LabGoalGroups.snapshots`), already read.
     private func applyClassGoalBonus(
         to processed: inout ProcessedCollection,
-        setupProps: TestProperties?,
-        testSetupID: String,
-        userID: UUID?,
-        on db: any Database
-    ) async throws {
+        goals: [Achievement],
+        snapshots: [String: any ClassGoalSnapshot]
+    ) {
         guard processed.totalPoints > 0 else { return }
-        let bonus = try await classGoalBonusPoints(
-            testSetupID: testSetupID, props: setupProps, userID: userID, on: db)
+        let bonus = classGoalBonusPoints(goals: goals, snapshots: snapshots)
         guard bonus > 0 else { return }
         let bonused = earnedWithClassGoalBonus(
             earned: processed.rawEarnedPoints,
@@ -602,11 +651,23 @@ extension WebRoutes {
     /// the student's own view of their own student submission writes
     /// (docs/achievement-rewards.md, S1): a staff view writes nothing, so
     /// reading a student's work never changes the student's record.
-    private func awardRecipient(_ viewer: APIUser, _ submission: APISubmission, isStaff: Bool) -> UUID? {
+    /// `course` is the assignment's course, which the page read for the
+    /// student's reveal gates (nil when there is no assignment): the course
+    /// whose achievements the view grants.
+    private func awardRecipient(
+        _ viewer: APIUser, _ submission: APISubmission, isStaff: Bool, course: APICourse?
+    ) -> AwardRecipient? {
         guard !isStaff, submission.kind == APISubmission.Kind.student,
             let viewerID = viewer.id, submission.userID == viewerID
         else { return nil }
-        return viewerID
+        return AwardRecipient(userID: viewerID, course: course)
+    }
+
+    /// The student whose ledger a page view writes to, and the course of
+    /// the assignment, for the course achievements.
+    private struct AwardRecipient {
+        let userID: UUID
+        let course: APICourse?
     }
 
     /// Assembles the badge strip for one submission: the badges its own
@@ -623,7 +684,7 @@ extension WebRoutes {
         displayCollection: TestOutcomeCollection?,
         setupProps: TestProperties?,
         processed: ProcessedCollection,
-        awardRecipient: UUID?
+        awardRecipient: AwardRecipient?
     ) async throws -> [AchievementBadge] {
         let subID = try submission.requireID()
         let classAchievements = try await APIClassAchievement.query(on: req.db)
@@ -645,11 +706,14 @@ extension WebRoutes {
             let recorded = AchievementAwardStore.Earned(
                 testSetupID: submission.testSetupID, submissionID: subID, badges: earned)
             await AchievementAwardStore.recordOrLog(
-                [recorded], earnedBy: awardRecipient, on: req.db, logger: req.logger)
+                [recorded], earnedBy: awardRecipient.userID, on: req.db, logger: req.logger)
             // After the assignment's badges, so a course achievement that
-            // counts them sees the ones this page just stored.
-            await AchievementAwardStore.grantCourseAchievementsOrLog(
-                for: awardRecipient, courseOfTestSetup: submission.testSetupID, on: req.db, logger: req.logger)
+            // counts them sees the ones this page just stored. No assignment,
+            // no course; an archived course grants nothing.
+            if let course = awardRecipient.course, !course.isArchived {
+                await AchievementAwardStore.grantCourseAchievementsOrLog(
+                    for: awardRecipient.userID, in: [course], on: req.db, logger: req.logger)
+            }
         }
         return earned + classRecordBadges(classAchievements, props: setupProps)
     }

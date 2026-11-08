@@ -6,9 +6,9 @@
 
 import Foundation
 
-struct JupyterContentsModel: Encodable {
+struct JupyterContentsModel: Encodable, Sendable {
     /// The `content` key of a model.
-    enum Content {
+    enum Content: Sendable {
         /// `null`: a listing entry, or a request without `?content=1`.
         case none
         /// A text file.
@@ -75,9 +75,24 @@ struct JupyterContentsModel: Encodable {
     static func jsonContent(_ data: Data) -> Content? {
         var bytes = data
         if bytes.starts(with: [0xEF, 0xBB, 0xBF]) { bytes.removeFirst(3) }
+        // A JSON object or array opens with `{` or `[` after JSON whitespace.
+        // A first byte that is any other printable ASCII character rules both
+        // out without reading further, so a script or a CSV is rejected here
+        // and not after a scan of every byte. Anything else (a second
+        // byte-order mark, a control byte, a non-ASCII byte) goes on to the
+        // full check, which decides as it always did.
+        let jsonWhitespace: Set<UInt8> = [0x20, 0x09, 0x0A, 0x0D]
+        if let first = bytes.first(where: { !jsonWhitespace.contains($0) }),
+            (0x21...0x7E).contains(first), first != UInt8(ascii: "{"), first != UInt8(ascii: "[")
+        {
+            return nil
+        }
         // Valid UTF-8 JSON has no NUL byte; UTF-16 and UTF-32 JSON, which
         // JSONSerialization also reads, have many and cannot be spliced.
-        guard !bytes.contains(0),
+        // `range(of:)` is Foundation's byte search, several times faster on a
+        // notebook than `Data.contains(0)`, which visits one element at a time.
+        let firstNUL = bytes.range(of: Data([0]))
+        guard firstNUL == nil,
             let object = try? JSONSerialization.jsonObject(with: bytes),
             object is [Any] || object is [String: Any]
         else { return nil }

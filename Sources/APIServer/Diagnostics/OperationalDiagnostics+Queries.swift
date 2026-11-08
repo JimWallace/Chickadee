@@ -7,7 +7,21 @@
 import Core
 import Fluent
 import Foundation
+import SQLKit
 import Vapor
+
+/// One row of the grouped pending count in `pendingQueueDepth`.
+private struct PendingKindSetupCountRow: Decodable {
+    let kind: String
+    let testSetupID: String
+    let total: Int
+
+    enum CodingKeys: String, CodingKey {
+        case kind
+        case testSetupID = "test_setup_id"
+        case total
+    }
+}
 
 extension OperationalDiagnosticsService {
 
@@ -94,37 +108,54 @@ extension OperationalDiagnosticsService {
     /// tens of thousands of rows back to pending (#1361).
     func pendingQueueDepth(on db: any Database) async throws -> Int {
         // A starter run (NB8) is a runner job like a solution run.
-        let pendingValidation = try await APISubmission.query(on: db)
-            .filter(\.$status == SubmissionStatus.pending.rawValue)
-            .filter(\.$kind ~~ [APISubmission.Kind.validation, APISubmission.Kind.starterValidation])
-            .count()
+        let validationKinds = [APISubmission.Kind.validation, APISubmission.Kind.starterValidation]
 
-        let distinctSetupIDs = Set(
-            try await APISubmission.query(on: db)
+        // One grouped count answers both halves: the pending validation total
+        // and the pending student count per setup, which the browser-graded
+        // filter below needs. It replaces a validation count, a DISTINCT
+        // setup read and a second student count.
+        var pendingValidation = 0
+        var pendingStudentsBySetupID: [String: Int] = [:]
+        if let sql = db as? (any SQLDatabase) {
+            let rows = try await sql.select()
+                .column("kind")
+                .column("test_setup_id")
+                .column(SQLFunction("COUNT", args: SQLLiteral.all), as: "total")
+                .from(APISubmission.schema)
+                .where("status", .equal, SubmissionStatus.pending.rawValue)
+                .where("kind", .in, [APISubmission.Kind.student] + validationKinds)
+                .groupBy("kind")
+                .groupBy("test_setup_id")
+                .all(decoding: PendingKindSetupCountRow.self)
+            for row in rows {
+                if row.kind == APISubmission.Kind.student {
+                    pendingStudentsBySetupID[row.testSetupID, default: 0] += row.total
+                } else {
+                    pendingValidation += row.total
+                }
+            }
+        } else {
+            pendingValidation = try await APISubmission.query(on: db)
+                .filter(\.$status == SubmissionStatus.pending.rawValue)
+                .filter(\.$kind ~~ validationKinds)
+                .count()
+            for setupID in try await APISubmission.query(on: db)
                 .filter(\.$status == SubmissionStatus.pending.rawValue)
                 .filter(\.$kind == APISubmission.Kind.student)
-                .unique()
                 .all(\.$testSetupID)
-        )
-        guard !distinctSetupIDs.isEmpty else { return pendingValidation }
+            {
+                pendingStudentsBySetupID[setupID, default: 0] += 1
+            }
+        }
+        guard !pendingStudentsBySetupID.isEmpty else { return pendingValidation }
 
         let workerModeSetupIDs = try await workerModeTestSetupIDs(
-            for: Array(distinctSetupIDs),
+            for: Array(pendingStudentsBySetupID.keys),
             on: db
         )
-        guard !workerModeSetupIDs.isEmpty else { return pendingValidation }
-
-        var studentQuery = APISubmission.query(on: db)
-            .filter(\.$status == SubmissionStatus.pending.rawValue)
-            .filter(\.$kind == APISubmission.Kind.student)
-        // When every pending assignment is worker-graded — the common case —
-        // the `IN` list would select exactly the rows already matched, so skip
-        // binding it.
-        if workerModeSetupIDs.count < distinctSetupIDs.count {
-            studentQuery = studentQuery.filter(\.$testSetupID ~~ Array(workerModeSetupIDs))
+        let pendingWorkerStudents = pendingStudentsBySetupID.reduce(0) { total, entry in
+            workerModeSetupIDs.contains(entry.key) ? total + entry.value : total
         }
-        let pendingWorkerStudents = try await studentQuery.count()
-
         return pendingValidation + pendingWorkerStudents
     }
 

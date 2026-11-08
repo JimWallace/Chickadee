@@ -133,7 +133,8 @@ struct PreviewPersonalizationTool: ContentTool {
             supportFilesDirectory: supportDir, language: AssignmentLanguage.resolve(manifest: manifest))
 
         let placeholders = await Self.placeholderAudit(
-            manifest: manifest, setup: setup, resolution: resolution)
+            manifest: manifest, setup: setup, resolution: resolution,
+            notebookCache: context.request.application.notebookBytesCache)
         let values = resolution.substitutions
             .map { Output.ResolvedValue(name: $0.key, value: $0.value) }
             .sorted { $0.name < $1.name }
@@ -189,16 +190,19 @@ struct PreviewPersonalizationTool: ContentTool {
 
     private static func placeholderAudit(
         manifest: TestProperties, setup: APITestSetup,
-        resolution: PersonalizationSubstitution.Resolution
+        resolution: PersonalizationSubstitution.Resolution,
+        notebookCache: NotebookBytesCache
     ) async -> Output.Placeholders {
         // Read the notebook the student actually opens: `notebookData(for:)`
         // prefers the standalone `notebookPath` blob — what `update_notebook`,
         // the editor, and the student first-open path all use — and only falls
         // back to the zip's starter entry. (Before #811 this read the zip and
         // missed markers added via `update_notebook`, which writes
-        // `notebookPath`, not the zip entry.)
+        // `notebookPath`, not the zip entry.) Read through the bytes cache,
+        // which holds exactly what `notebookData(for:)` returns.
         let used = PersonalizationPlaceholders.used(
-            notebookData: try? await notebookData(for: setup), manifest: manifest)
+            notebookData: try? await notebookCache.notebookData(for: NotebookSourceRef(setup)),
+            manifest: manifest)
         let resolved = Set(resolution.substitutions.keys)
         let unresolved = used.filter { !resolved.contains($0) }
         return Output.Placeholders(used: used.sorted(), unresolved: unresolved.sorted())

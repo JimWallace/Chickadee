@@ -6,9 +6,10 @@
 //
 // This is the first, read-only slice of notebook authoring (roadmap Phase 5):
 // an agent needs to see the current notebook before it can reason about or
-// (later) edit it. Loading reuses the canonical `notebookData(for:)` helper —
-// the same flat-file-then-zip resolution + JupyterLite normalization the web
-// notebook routes use — so the agent sees exactly what the editor would.
+// (later) edit it. Loading reads through `notebookBytesCache`, which holds what
+// the canonical `notebookData(for:)` helper returns — the same
+// flat-file-then-zip resolution + JupyterLite normalization the web notebook
+// routes use — so the agent sees exactly what the editor would.
 //
 // No cell filtering: only instructors / admins / mcp service accounts can use
 // MCP at all (students are rejected at the tool layer), so the full notebook is
@@ -17,6 +18,7 @@
 import Core
 import Fluent
 import Foundation
+import Vapor
 
 struct GetNotebookTool: ContentTool {
     struct Input: Decodable, Sendable {
@@ -54,7 +56,8 @@ struct GetNotebookTool: ContentTool {
 
         let data: Data
         do {
-            data = try await notebookData(for: setup)
+            data = try await context.request.application.notebookBytesCache.notebookData(
+                for: NotebookSourceRef(setup))
         } catch {
             throw MCPToolError.invalidArguments(detail: "This assignment has no notebook to return.")
         }

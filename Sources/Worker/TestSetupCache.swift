@@ -71,6 +71,24 @@ actor TestSetupCache {
         // /tmp without bound across restarts and manifest edits (June 2026
         // audit, P2.4). Seed oldest-first so eviction order approximates LRU.
         lruKeys = Self.existingEntryKeysSortedByAge(cacheRoot: cacheRoot)
+        // An evicted entry is renamed to a tombstone and deleted later, off
+        // the actor (`evictIfNeededForNew`). A runner stopped before that
+        // delete finished leaves the tombstone behind; remove it here, or it
+        // holds its disk until someone notices.
+        Self.removeLeftoverTombstones(cacheRoot: cacheRoot)
+    }
+
+    /// The name prefix of an evicted entry awaiting its delete. Hidden, and
+    /// ending in `.tmp`, so neither the restart scan nor a directory listing
+    /// that skips hidden files counts it as an entry.
+    private static let tombstonePrefix = ".evicted-"
+
+    private static func removeLeftoverTombstones(cacheRoot: URL) {
+        let fm = FileManager.default
+        guard let entries = try? fm.contentsOfDirectory(atPath: cacheRoot.path) else { return }
+        for name in entries where name.hasPrefix(tombstonePrefix) && name.hasSuffix(".tmp") {
+            try? fm.removeItem(at: cacheRoot.appendingPathComponent(name))
+        }
     }
 
     /// Keys of committed cache entries already on disk, oldest modification
@@ -132,6 +150,10 @@ actor TestSetupCache {
         // immutable, so the only hazard is eviction racing the copy — rare
         // (needs 16+ distinct setups churning), and retried once below: with
         // the entry gone, the retry takes the populate path.
+        //
+        // The copy stays on the actor, with no suspension between finding the
+        // entry and copying it: eviction also runs on the actor, so it cannot
+        // move the entry out from under a copy that is walking it.
         do {
             let source = try await acquireSource(testSetupID: testSetupID, populate: populate)
             let scratch = try Self.copyToScratch(
@@ -355,29 +377,55 @@ actor TestSetupCache {
     /// `key` is genuinely new (not already tracked).  This prevents spurious
     /// evictions when a concurrent awaiter registers the key before the miss
     /// path finishes.
+    ///
+    /// The entry leaves its key's path here, on the actor, by one rename to a
+    /// tombstone beside it, so every later lookup of the key misses at once,
+    /// as it did when the entry was deleted here. The recursive delete of the
+    /// tombstone, which for a setup with a dataset is hundreds of MB and
+    /// thousands of files, runs later and off the actor: every job's
+    /// `acquire`, a hit included, needs this actor, and none of them waits on
+    /// the delete. A population of the same key cannot race the delete,
+    /// because it commits to the key's path and the delete touches only the
+    /// tombstone's.
     private func evictIfNeededForNew(key: String) {
         guard !lruKeys.contains(key) else { return }
         while lruKeys.count >= maxEntries {
             let evicted = lruKeys.removeFirst()
             let evictedRoot = cacheRoot.appendingPathComponent(evicted)
+            let tombstone = cacheRoot.appendingPathComponent(
+                "\(Self.tombstonePrefix)\(evicted)-\(UUID().uuidString).tmp", isDirectory: true)
             do {
-                try FileManager.default.removeItem(at: evictedRoot)
-                writeStructuredRunnerLog(
-                    event: "test_setup_cache_evicted",
-                    fields: [
-                        "test_setup_id": evicted
-                    ])
+                try FileManager.default.moveItem(at: evictedRoot, to: tombstone)
             } catch {
-                writeStructuredRunnerLog(
-                    event: "test_setup_cache_evict_failed",
-                    fields: [
-                        "test_setup_id": evicted,
-                        "path": evictedRoot.path,
-                        "error_type": String(describing: type(of: error)),
-                        "error_message_summary": error.localizedDescription,
-                    ])
+                Self.logEvictFailed(evicted: evicted, path: evictedRoot, error: error)
+                continue
+            }
+            Task {
+                await runOffActor {
+                    do {
+                        try FileManager.default.removeItem(at: tombstone)
+                        writeStructuredRunnerLog(
+                            event: "test_setup_cache_evicted",
+                            fields: [
+                                "test_setup_id": evicted
+                            ])
+                    } catch {
+                        Self.logEvictFailed(evicted: evicted, path: tombstone, error: error)
+                    }
+                }
             }
         }
+    }
+
+    private static func logEvictFailed(evicted: String, path: URL, error: any Error) {
+        writeStructuredRunnerLog(
+            event: "test_setup_cache_evict_failed",
+            fields: [
+                "test_setup_id": evicted,
+                "path": path.path,
+                "error_type": String(describing: type(of: error)),
+                "error_message_summary": error.localizedDescription,
+            ])
     }
 
     // MARK: - Path helpers

@@ -41,6 +41,12 @@ public enum ReflectionCells {
     /// no cell. A submission that is not a notebook yields nil responses.
     public static func pairs(starter: Data, submission: Data?) -> [ReflectionPair] {
         guard let starterCells = NotebookCellView.cells(from: starter) else { return [] }
+        return pairs(starterCells: starterCells, submission: submission)
+    }
+
+    /// The same, for a starter the caller has already parsed, so a caller
+    /// that reads the starter's cells for other things parses it once.
+    public static func pairs(starterCells: [NotebookCellView], submission: Data?) -> [ReflectionPair] {
         let submittedTagged = submission.flatMap(NotebookCellView.cells(from:))?.filter(isTagged) ?? []
         let submittedByID = Dictionary(
             submittedTagged.compactMap { cell in cellID(cell).map { ($0, cell) } },

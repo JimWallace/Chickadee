@@ -36,6 +36,11 @@ struct ResultIngestEffects {
     /// Encodes `collection`, builds its result row and marks the row for grade
     /// sync, on `db`.
     ///
+    /// `encodedJSON`, when given, must be the encoding of exactly `collection`
+    /// by the stored-collection encoder (`.iso8601` dates, default formatting),
+    /// as `TestOutcomeCollection.boundedForStorage` returns it. It saves
+    /// encoding the collection a second time. Nil encodes it here.
+    ///
     /// Both ingest paths call this (#2259, item 5). The browser copy once
     /// skipped the grade-sync flag, so notebook labs never reached LEARN on
     /// their own. Each caller saves the row inside its own transaction or
@@ -47,12 +52,19 @@ struct ResultIngestEffects {
         _ collection: TestOutcomeCollection,
         source: String,
         testSetupID: String,
+        encodedJSON: Data? = nil,
         application: Application,
         on db: any Database
     ) async throws -> PreparedResult {
-        let encoder = JSONEncoder()
-        encoder.dateEncodingStrategy = .iso8601
-        let json = try String(data: encoder.encode(collection), encoding: .utf8) ?? "{}"
+        let data: Data
+        if let encodedJSON {
+            data = encodedJSON
+        } else {
+            let encoder = JSONEncoder()
+            encoder.dateEncodingStrategy = .iso8601
+            data = try encoder.encode(collection)
+        }
+        let json = String(data: data, encoding: .utf8) ?? "{}"
         let row = APIResult(
             id: freshShortID(prefix: "res"), submissionID: collection.submissionID, source: source)
         try await requestGradePush(.result(row, application: application), testSetupID: testSetupID, on: db)

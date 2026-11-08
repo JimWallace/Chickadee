@@ -88,30 +88,36 @@ extension WebRoutes {
     /// visible (read-only review) and keep their Edit link.  Empty for
     /// instructors/admins — they already see every setup in the course.  The
     /// two engagement reads are independent and run concurrently.
+    ///
+    /// `isActiveCourseStaff` is the caller's staff test for the active
+    /// course, the course every assignment of `allAssignments` belongs to.
     static func loadPreviouslyOpenedSetupIDs(
         user: APIUser,
+        isActiveCourseStaff: Bool,
         allAssignments: [APIAssignment],
         db: any Database
     ) async throws -> Set<String> {
-        guard let userID = user.id, let courseID = allAssignments.first?.courseID else { return [] }
+        guard let userID = user.id, !allAssignments.isEmpty else { return [] }
         // Staff (TA+ or admin) of the course already see every setup, so they
         // need no per-student engagement set (#417 Slice G — was the global
         // `user.isInstructor`).
-        if try await isCourseStaff(user, inCourse: courseID, db: db) { return [] }
+        if isActiveCourseStaff { return [] }
         let allSetupIDs = Set(allAssignments.map(\.testSetupID))
         let setupIDByAssignmentID = setupIDByAssignmentID(allAssignments)
 
+        // One row per setup, one column: the set below is all that is read.
         async let submittedFetch = APISubmission.query(on: db)
             .filter(\.$userID == userID)
             .filter(\.$testSetupID ~~ allSetupIDs)
             .filter(\.$kind == APISubmission.Kind.student)
-            .all()
+            .unique()
+            .all(\.$testSetupID)
         async let participationsFetch = APIAssignmentParticipation.query(on: db)
             .filter(\.$userID == userID)
             .filter(\.$assignmentID ~~ Set(setupIDByAssignmentID.keys))
             .all()
 
-        var opened = Set(try await submittedFetch.map(\.testSetupID))
+        var opened = Set(try await submittedFetch)
         for row in try await participationsFetch {
             if let setupID = setupIDByAssignmentID[row.assignmentID] {
                 opened.insert(setupID)

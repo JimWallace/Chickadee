@@ -521,6 +521,11 @@ func registerMigrations(on app: Application) {
     // created far above.
     app.migrations.add(CreateCompletedAtAndCourseIndexes())
 
+    // The `user_id` index on submissions, the `course_id` index on assignment
+    // versions and the `status` index on the BrightSpace sync log. Index
+    // only; the tables are created far above.
+    app.migrations.add(CreateUserTimelineAndSyncLogIndexes())
+
     // ---------------------------------------------------------------------
     // DATA MIGRATIONS. Keep these at the end, and add every new schema
     // migration ABOVE this block (#1805).

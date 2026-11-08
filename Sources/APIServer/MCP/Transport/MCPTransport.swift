@@ -19,6 +19,7 @@
 import Core
 import Foundation
 import NIOCore
+import NIOFoundationCompat
 import Vapor
 
 struct MCPTransport: Sendable {
@@ -169,11 +170,12 @@ struct MCPTransport: Sendable {
     // MARK: - Body / response helpers
 
     private func decodeRequest(_ req: Request) throws -> JSONRPCRequest {
-        guard var buffer = req.body.data else {
+        guard let buffer = req.body.data else {
             throw AppError.badRequest(reason: "Missing request body.")
         }
-        let bytes = buffer.readBytes(length: buffer.readableBytes) ?? []
-        return try JSONDecoder().decode(JSONRPCRequest.self, from: Data(bytes))
+        // Straight from the buffer: a large notebook argument is not copied
+        // into an array and then into `Data` first.
+        return try JSONDecoder().decode(JSONRPCRequest.self, from: buffer)
     }
 
     private func jsonResponse(
@@ -204,12 +206,10 @@ struct MCPTransport: Sendable {
     /// forward-compatible: progress notifications can precede the response
     /// (which is exactly what the validation stream does).
     private func eventStreamResponse(_ payload: JSONRPCResponse) throws -> Response {
-        let frame = try Self.sseMessageFrame(encoding: payload)
+        let frame = try Self.sseMessageFrameBuffer(encoding: payload)
         let response = Response(status: .ok, headers: Self.sseHeaders())
         response.body = .init(stream: { writer in
-            var buffer = ByteBufferAllocator().buffer(capacity: frame.utf8.count)
-            buffer.writeString(frame)
-            writer.write(.buffer(buffer)).whenComplete { _ in
+            writer.write(.buffer(frame)).whenComplete { _ in
                 writer.write(.end, promise: nil)
             }
         })
@@ -237,6 +237,21 @@ struct MCPTransport: Sendable {
     static func sseMessageFrame(encoding value: some Encodable) throws -> String {
         let json = String(bytes: try JSONEncoder().encode(value), encoding: .utf8) ?? ""
         return sseMessageFrame(jsonString: json)
+    }
+
+    /// The bytes of `sseMessageFrame(encoding:)`, written straight into a
+    /// buffer: the encoded JSON is copied once, not through a `String` and an
+    /// interpolated frame first. `JSONEncoder` writes UTF-8, so the bytes are
+    /// the same.
+    static func sseMessageFrameBuffer(encoding value: some Encodable) throws -> ByteBuffer {
+        let json = try JSONEncoder().encode(value)
+        let head = "event: message\ndata: "
+        let tail = "\n\n"
+        var buffer = ByteBufferAllocator().buffer(capacity: head.utf8.count + json.count + tail.utf8.count)
+        buffer.writeString(head)
+        buffer.writeBytes(json)
+        buffer.writeString(tail)
+        return buffer
     }
 
     /// Builds the `WWW-Authenticate: Bearer …, error="insufficient_scope", scope="…"`

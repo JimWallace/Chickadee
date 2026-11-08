@@ -11,8 +11,7 @@ public import Foundation
 /// silently break the retest gate — see `HashingTests` for the format
 /// invariants enforced by the test suite.
 public func sha256HexDigest(_ data: Data) -> String {
-    let digest = SHA256.hash(data: data)
-    return digest.map { String(cFormat: "%02x", $0) }.joined()
+    lowercaseHex(SHA256.hash(data: data))
 }
 
 /// Lowercase-hex SHA-256 digest of `string` interpreted as UTF-8 bytes.
@@ -35,6 +34,25 @@ public func sha256HexDigest(prefix: Data, contentsOfFile path: String) -> String
     while let chunk = try? handle.read(upToCount: 1 << 20), !chunk.isEmpty {
         hasher.update(data: chunk)
     }
-    let digest = hasher.finalize()
-    return digest.map { String(cFormat: "%02x", $0) }.joined()
+    return lowercaseHex(hasher.finalize())
+}
+
+/// `bytes` as lowercase hex, two zero-padded digits per byte in order: the
+/// text `String(format: "%02x")` per byte, joined, gives. A digest, an
+/// authentication code or a byte array all qualify. One digit computed per
+/// nibble and appended in place, where a format call per byte parsed the
+/// format string and allocated a `String` for each.
+public func lowercaseHex(_ bytes: some Sequence<UInt8>) -> String {
+    var hex = ""
+    hex.reserveCapacity(bytes.underestimatedCount * 2)
+    for byte in bytes {
+        hex.unicodeScalars.append(hexDigit(byte >> 4))
+        hex.unicodeScalars.append(hexDigit(byte & 0x0F))
+    }
+    return hex
+}
+
+/// The lowercase ASCII digit for `nibble` (0 through 15).
+private func hexDigit(_ nibble: UInt8) -> Unicode.Scalar {
+    Unicode.Scalar(nibble < 10 ? UInt8(ascii: "0") + nibble : UInt8(ascii: "a") + (nibble - 10))
 }

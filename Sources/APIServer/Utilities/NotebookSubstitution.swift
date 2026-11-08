@@ -82,6 +82,9 @@ enum NotebookSubstitution {
             return notebookData
         }
 
+        // Built once per notebook: each read of `placeholderRegex` builds and
+        // compiles the pattern again.
+        let regex = placeholderRegex
         for (idx, cell) in cells.enumerated() {
             guard cell["cell_type"]?.stringValue == "code" else {
                 continue
@@ -90,7 +93,8 @@ enum NotebookSubstitution {
             let (rewritten, substituted) = try applyToCellSource(
                 originalSource,
                 substitutions: substitutions,
-                strict: strict
+                strict: strict,
+                regex: regex
             )
             guard !substituted.isEmpty || rewritten != originalSource else { continue }
 
@@ -125,12 +129,13 @@ enum NotebookSubstitution {
     /// sorted output.
     static func placeholderNames(in notebookData: Data) -> [String] {
         guard let cells = NotebookCellSources.cells(from: notebookData) else { return [] }
+        let regex = placeholderRegex
         var found = Set<String>()
         for cell in cells {
             guard cell["cell_type"]?.stringValue == "code" else {
                 continue
             }
-            found.formUnion(placeholderNames(inSource: NotebookCellSources.cellSource(cell)))
+            found.formUnion(placeholderNames(inSource: NotebookCellSources.cellSource(cell), using: regex))
         }
         return found.sorted()
     }
@@ -140,7 +145,17 @@ enum NotebookSubstitution {
     /// `PersonalizedCellRestoration` to confirm a canonical cell really is the
     /// template a rendered cell came from.  Deduplicated and sorted.
     static func placeholderNames(inSource source: String) -> [String] {
-        Set(source.matches(of: placeholderRegex).map { String($0.output.1) }).sorted()
+        placeholderNames(inSource: source, using: placeholderRegex)
+    }
+
+    /// `placeholderNames(inSource:)` with the pattern built by the caller, so
+    /// a notebook builds it once rather than once per cell.
+    private static func placeholderNames(
+        inSource source: String, using regex: Regex<(Substring, Substring)>
+    ) -> [String] {
+        // Every match holds a literal `{{`, and most cells have none.
+        guard source.contains("{{") else { return [] }
+        return Set(source.matches(of: regex).map { String($0.output.1) }).sorted()
     }
 
     // MARK: - Private helpers
@@ -169,9 +184,12 @@ enum NotebookSubstitution {
     private static func applyToCellSource(
         _ source: String,
         substitutions: [String: String],
-        strict: Bool
+        strict: Bool,
+        regex: Regex<(Substring, Substring)>
     ) throws -> (String, Set<String>) {
-        let matches = source.matches(of: placeholderRegex)
+        // Every match holds a literal `{{`, and most cells have none.
+        guard source.contains("{{") else { return (source, []) }
+        let matches = source.matches(of: regex)
         guard !matches.isEmpty else { return (source, []) }
         // Strict mode names the last unknown placeholder in the cell.
         if strict, let unknown = matches.last(where: { substitutions[String($0.output.1)] == nil }) {

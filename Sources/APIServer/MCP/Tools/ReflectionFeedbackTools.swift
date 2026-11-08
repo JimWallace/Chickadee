@@ -13,6 +13,7 @@
 
 import Core
 import Foundation
+import Vapor
 
 /// One student as `list_reflections` reports them.
 struct MCPReflectionListEntry: Encodable, Sendable {
@@ -64,7 +65,9 @@ struct ListReflectionsTool: ContentTool {
             publicID: input.assignmentPublicID, atLeast: .ta)
         let setup = try await MCPStudentDataBoundary.gatedFeedbackSetup(for: assignment, on: context.db)
         let subjects = try await MCPStudentDataBoundary.feedbackSubjects(for: assignment, on: context.db)
-        let promptCount = await ReflectionFeedbackService.reflections(setup: setup, submission: nil).count
+        let starter = await ReflectionFeedbackService.starterNotebook(
+            for: setup, cache: context.request.application.notebookBytesCache)
+        let promptCount = await ReflectionFeedbackService.reflections(starter: starter, submission: nil).count
         return Output(
             assignmentPublicID: assignment.publicID,
             reflectionPromptCount: promptCount,
@@ -128,7 +131,8 @@ struct GetReflectionsTool: ContentTool {
             publicID: input.assignmentPublicID, atLeast: .ta)
         let setup = try await MCPStudentDataBoundary.gatedFeedbackSetup(for: assignment, on: context.db)
         let (subject, reflections) = try await MCPStudentDataBoundary.feedbackReflections(
-            handle: input.handle, assignment: assignment, setup: setup, on: context.db)
+            handle: input.handle, assignment: assignment, setup: setup,
+            notebookCache: context.request.application.notebookBytesCache, on: context.db)
         return Output(
             assignmentPublicID: assignment.publicID,
             handle: subject.handle,

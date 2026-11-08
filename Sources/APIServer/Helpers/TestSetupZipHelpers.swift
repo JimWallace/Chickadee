@@ -130,20 +130,8 @@ func validateZipUploadSize(
         throw ZipUploadValidationError.inspectionFailed
     }
 
-    var inEntries = false
     var total = 0
-    for line in text.split(separator: "\n").map(String.init) {
-        if line.hasPrefix("--------") {
-            inEntries.toggle()
-            continue
-        }
-        guard inEntries else { continue }
-        let parts =
-            line.trimmingCharacters(in: .whitespaces)
-            .split(separator: " ", omittingEmptySubsequences: true)
-            .map(String.init)
-        guard parts.count >= 8, let length = Int(parts[0]) else { continue }
-        let name = parts.dropFirst(7).joined(separator: " ")
+    for (name, length) in zipVerboseListingRows(text) {
         if length > limits.maxEntryUncompressedBytes {
             throw ZipUploadValidationError.entrySizeExceeded(
                 name: name, actualBytes: length,
@@ -157,6 +145,70 @@ func validateZipUploadSize(
                 limitBytes: limits.maxTotalUncompressedBytes
             )
         }
+    }
+}
+
+/// The rows of `unzip -v` output, in order: each entry's name and declared
+/// uncompressed length. The rows sit between a pair of dashed separator lines,
+/// and each has seven space-separated columns (Length, Method, Size, Cmpr,
+/// Date, Time, CRC-32) before the name. The name is the remaining columns
+/// joined by one space, so a name with a run of spaces, or with leading
+/// spaces, does not come back as it is stored.
+func zipVerboseListingRows(_ text: String) -> [(name: String, length: Int)] {
+    var rows: [(name: String, length: Int)] = []
+    var inEntries = false
+    for line in text.split(separator: "\n").map(String.init) {
+        if line.hasPrefix("--------") {
+            inEntries.toggle()
+            continue
+        }
+        guard inEntries else { continue }
+        let parts =
+            line.trimmingCharacters(in: .whitespaces)
+            .split(separator: " ", omittingEmptySubsequences: true)
+            .map(String.init)
+        guard parts.count >= 8, let length = Int(parts[0]) else { continue }
+        rows.append((parts.dropFirst(7).joined(separator: " "), length))
+    }
+    return rows
+}
+
+/// The byte count `extractZipEntry` would return for each of `entryNames`,
+/// read from the zip's directory instead of by decompressing every entry into
+/// memory. A name is in the result only when the answer is certain to be the
+/// same:
+///
+/// - `unzip -t` must test every name cleanly. That proves each name matches a
+///   stored entry literally and that the entry decompresses with a good CRC,
+///   which is when `unzip -p` succeeds. One failure leaves the result empty.
+/// - The name must appear exactly once in the `unzip -v` table. A name shown
+///   twice (duplicate entries, or two names that print the same) is left out.
+/// - Its length must be under the 64 MiB that `unzip -p` output is capped at,
+///   past which `extractZipEntry` returns nil.
+///
+/// A name left out is for the caller to extract, as before.
+func verifiedZipEntrySizes(zipPath: String, entryNames: [String]) async -> [String: Int] {
+    guard !entryNames.isEmpty,
+        let tested = try? await runZipProcess(
+            executablePath: "/usr/bin/unzip",
+            arguments: ["-tqq", zipPath] + entryNames.map(unzipLiteralPattern)
+        ),
+        tested.terminationStatus == 0,
+        let listed = try? await runZipProcess(
+            executablePath: "/usr/bin/unzip",
+            arguments: ["-v", zipPath]
+        ),
+        listed.terminationStatus == 0,
+        let text = String(data: listed.stdout, encoding: .utf8)
+    else { return [:] }
+
+    let rows = zipVerboseListingRows(text)
+    let timesShown = Dictionary(rows.map { ($0.name, 1) }, uniquingKeysWith: +)
+    let lengths = Dictionary(rows.map { ($0.name, $0.length) }, uniquingKeysWith: { first, _ in first })
+    let wanted = Set(entryNames)
+    return lengths.filter { name, length in
+        wanted.contains(name) && timesShown[name] == 1
+            && length < ZipUploadLimits.default.maxEntryUncompressedBytes
     }
 }
 
@@ -190,6 +242,43 @@ func listZipEntries(zipPath: String) async -> [String] {
 func readScriptFromZip(zipPath: String, filename: String) async -> String? {
     guard let data = await extractZipEntry(zipPath: zipPath, entryName: filename) else { return nil }
     return String(data: data, encoding: .utf8)
+}
+
+/// The most `unzip -p` reads that `extractZipEntries` keeps running at once.
+let maxConcurrentZipEntryReads = 8
+
+/// `extractZipEntry` for each of `entryNames`, with at most
+/// `maxConcurrentZipEntryReads` running at once.
+///
+/// Each name is still read by its own `unzip -p`, exactly as a loop over
+/// `extractZipEntry` reads it, so a symlink entry gives its link text and a
+/// name is matched literally. Only the waiting overlaps. Nothing is
+/// extracted to disk. A name that does not extract is absent from the result.
+func extractZipEntries(zipPath: String, entryNames: some Sequence<String>) async -> [String: Data] {
+    let names = Array(Set(entryNames))
+    return await withTaskGroup(of: (String, Data?).self, returning: [String: Data].self) { group in
+        var next = names.makeIterator()
+        for _ in 0..<maxConcurrentZipEntryReads {
+            guard let name = next.next() else { break }
+            group.addTask { (name, await extractZipEntry(zipPath: zipPath, entryName: name)) }
+        }
+        var extracted: [String: Data] = [:]
+        while let (name, data) = await group.next() {
+            if let data { extracted[name] = data }
+            if let following = next.next() {
+                group.addTask { (following, await extractZipEntry(zipPath: zipPath, entryName: following)) }
+            }
+        }
+        return extracted
+    }
+}
+
+/// `readScriptFromZip` for each of `filenames`, read as `extractZipEntries`
+/// reads them. A name with no UTF-8 text is absent, as a nil from
+/// `readScriptFromZip` leaves it.
+func readScriptsFromZip(zipPath: String, filenames: some Sequence<String>) async -> [String: String] {
+    await extractZipEntries(zipPath: zipPath, entryNames: filenames)
+        .compactMapValues { String(data: $0, encoding: .utf8) }
 }
 
 /// Replaces or adds a file in the test setup zip with new UTF-8 text content.

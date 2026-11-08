@@ -331,10 +331,8 @@ public struct LiveSessionWindow: Codable, Equatable, Sendable {
             opensAtISO: opensAt.map(Self.format), closesAtISO: closesAt.map(Self.format))
     }
 
-    /// A formatter per call, as every other ISO-8601 site in this codebase
-    /// does: `ISO8601DateFormatter` is not `Sendable`, so a shared static one
-    /// does not compile under strict concurrency, and the allocation is
-    /// nothing beside the file write a submission already does.
+    /// A formatter per parse: `ISO8601DateFormatter` is not `Sendable`, so a
+    /// shared static one does not compile under strict concurrency.
     private static func formatter(fractionalSeconds: Bool) -> ISO8601DateFormatter {
         let formatter = ISO8601DateFormatter()
         formatter.formatOptions =
@@ -355,9 +353,11 @@ public struct LiveSessionWindow: Codable, Equatable, Sendable {
             ?? formatter(fractionalSeconds: true).date(from: iso)
     }
 
-    /// Renders an instant the way this type stores one.
+    /// Renders an instant the way this type stores one: `iso8601String`,
+    /// which prints what the `.withInternetDateTime` formatter prints without
+    /// building one.
     public static func format(_ date: Date) -> String {
-        formatter(fractionalSeconds: false).string(from: date)
+        iso8601String(date)
     }
 
     public var opensAt: Date? { Self.parse(opensAtISO) }

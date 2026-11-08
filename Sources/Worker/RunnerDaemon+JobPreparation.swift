@@ -97,21 +97,88 @@ extension WorkerDaemon {
         let single = try await stageOpponentWorkspace(
             job: job, workDir: paths.workDir, testSetupDir: testSetupDir,
             downloadedSubmission: downloadedOpponent)
+        let matrix = try await stageMatrixOpponents(job: job, paths: paths, testSetupDir: testSetupDir)
+        return (single, matrix)
+    }
+
+    /// How many matrix opponents are downloaded and staged at once. A matrix
+    /// job plays every other student in the class, and one at a time it sat
+    /// on a round trip per classmate before the first match ran. A constant,
+    /// not configuration.
+    static let opponentStagingWidth = 8
+
+    /// Downloads and stages every opponent of a matrix job, at most
+    /// `opponentStagingWidth` at a time, and returns their directories in
+    /// `job.opponents` order.
+    ///
+    /// The job fails with the error a one-at-a-time loop would throw: the
+    /// first failing opponent in `job.opponents` order, and its download's
+    /// error before its staging's. Opponents are started in index order and
+    /// none is started after a failure, so every opponent before the first
+    /// failure has run to its end. A later opponent already in flight then
+    /// finishes too; its files stay in the work dir, which is removed with
+    /// the job.
+    ///
+    /// No child throws and the group is never cancelled, so one opponent's
+    /// failure never cancels another's in-flight download. That cancellation
+    /// deadlocks on Linux (see `fetchJobArtifacts`). Cancelling the job still
+    /// cancels every child, as it cancelled the loop.
+    private func stageMatrixOpponents(
+        job: Job, paths: JobWorkspacePaths, testSetupDir: URL
+    ) async throws -> [URL] {
+        let opponents = job.opponents ?? []
+        guard !opponents.isEmpty else { return [] }
+        var results = [Result<URL, any Error>?](repeating: nil, count: opponents.count)
+        await withTaskGroup(of: (Int, Result<URL, any Error>).self) { group in
+            var nextIndex = 0
+            var sawFailure = false
+            func startNext() {
+                let index = nextIndex
+                group.addTask {
+                    await self.stageMatrixOpponent(
+                        opponents[index], index: index, job: job, paths: paths, testSetupDir: testSetupDir)
+                }
+                nextIndex += 1
+            }
+            while nextIndex < min(Self.opponentStagingWidth, opponents.count) { startNext() }
+            while let (index, result) = await group.next() {
+                results[index] = result
+                if case .failure = result { sawFailure = true }
+                if !sawFailure, nextIndex < opponents.count { startNext() }
+            }
+        }
         var matrix: [URL] = []
-        for (index, opponent) in (job.opponents ?? []).enumerated() {
+        for result in results {
+            // Nil only after a failure at a lower index, which threw first.
+            guard let result else { break }
+            matrix.append(try result.get())
+        }
+        return matrix
+    }
+
+    /// One opponent of a matrix job: its download, when it has a
+    /// submission, then its staging into `opponent-<index>/`. Never throws;
+    /// the first error is the result. Off the actor, like the staging it
+    /// awaits; only the download's bookkeeping hops back.
+    @concurrent
+    nonisolated private func stageMatrixOpponent(
+        _ opponent: JobOpponent, index: Int, job: Job, paths: JobWorkspacePaths, testSetupDir: URL
+    ) async -> (Int, Result<URL, any Error>) {
+        do {
             var downloaded: URL?
             if let url = opponent.submissionURL {
                 let destination = opponentDownloadDestination(workDir: paths.workDir, index: index)
                 try await download(url: url, to: destination, stage: .downloadOpponent)
                 downloaded = destination
             }
-            matrix.append(
-                try await stageOpponent(
-                    opponent, manifest: job.manifest,
-                    into: opponentDirectory(workDir: paths.workDir, index: index),
-                    testSetupDir: testSetupDir, downloadedSubmission: downloaded))
+            let staged = try await stageOpponent(
+                opponent, manifest: job.manifest,
+                into: opponentDirectory(workDir: paths.workDir, index: index),
+                testSetupDir: testSetupDir, downloadedSubmission: downloaded)
+            return (index, .success(staged))
+        } catch {
+            return (index, .failure(error))
         }
-        return (single, matrix)
     }
 
     /// Downloads + unzips the submission and test setup, stages the
@@ -232,7 +299,8 @@ extension WorkerDaemon {
     /// worker can normalize it without mutating the raw artifact.
     ///
     /// `@concurrent nonisolated`, so the copy runs off the daemon actor
-    /// (#2779). It reads no actor state.
+    /// (#2779). It reads no actor state. The copy itself goes through
+    /// `runOffActor`, so it does not hold a cooperative-pool thread either.
     @concurrent
     nonisolated func stageSubmissionIntoWorkspace(
         job: Job,
@@ -241,16 +309,18 @@ extension WorkerDaemon {
     ) async throws {
         try await stageTimings.measure("submission_unpack") {
             if let filename = job.submissionFilename {
-                let dest = stagedSubmissionDestination(
-                    submissionDirectory: paths.submissionDir,
-                    submittedFilename: filename
-                )
-                try FileManager.default.createDirectory(
-                    at: dest.deletingLastPathComponent(),
-                    withIntermediateDirectories: true
-                )
-                try? FileManager.default.removeItem(at: dest)
-                try FileManager.default.copyItem(at: paths.submissionZip, to: dest)
+                try await runOffActor { () throws in
+                    let dest = stagedSubmissionDestination(
+                        submissionDirectory: paths.submissionDir,
+                        submittedFilename: filename
+                    )
+                    try FileManager.default.createDirectory(
+                        at: dest.deletingLastPathComponent(),
+                        withIntermediateDirectories: true
+                    )
+                    try? FileManager.default.removeItem(at: dest)
+                    try FileManager.default.copyItem(at: paths.submissionZip, to: dest)
+                }
             } else {
                 try await extractZipArchive(
                     zipPath: paths.submissionZip.path,
@@ -288,7 +358,10 @@ extension WorkerDaemon {
     }
 
     /// `@concurrent nonisolated`, so the merge and the notebook extraction
-    /// run off the daemon actor (#2779). It reads no actor state.
+    /// run off the daemon actor (#2779). It reads no actor state. The
+    /// synchronous merge-and-extract arm goes through `runOffActor`, so its
+    /// copies and its walk of the workspace do not hold a cooperative-pool
+    /// thread either.
     @concurrent
     nonisolated func normalizeSubmission(
         job: Job,
@@ -321,54 +394,73 @@ extension WorkerDaemon {
                 return (normalization.warnings, normalization.preferredStudentModule)
 
             case .extractToSource(let forcedLanguage):
-                // The student's upload must not be able to replace the tests it
-                // is about to be graded by (#1357). Skipped files are warned
-                // about rather than dropped silently.
-                let protected = protectedWorkspaceFilenames(manifest: manifest)
-                let refused = try mergeDirectoryContents(
-                    from: paths.submissionDir,
-                    into: testSetupDir,
-                    protected: protected)
-                // A suite owned by a non-default language extracts every notebook
-                // to THAT source, regardless of the submission's kernelspec (the
-                // in-browser editor can rewrite it) — so the student-module hint
-                // has to name the same file, or it points at a path that was
-                // never written.
-                // The student's own filename is passed so the submission
-                // guarantees apply to it and not to an instructor's helper
-                // notebook sitting in the same merged workspace.
-                let warnings = try extractNotebooksToCode(
-                    in: testSetupDir,
-                    forcedLanguage: forcedLanguage,
-                    studentNotebookName: job.submissionFilename.map {
-                        URL(fileURLWithPath: $0).lastPathComponent
-                    },
-                    protected: protected)
-                // nil `forcedLanguage` means the extractor trusted the
-                // notebook's own metadata, which for an unrecognised kernel
-                // falls back to Python — so the hint has to agree. Spelled
-                // `?? .python` at the call site rather than behind a named
-                // constant: `no-language-defaults.sh` permits a nil-coalescing
-                // fallback precisely because it stays VISIBLE here, and hiding
-                // it behind a name is the shape that guard exists to prevent.
-                let hintLanguage = forcedLanguage ?? .python
-                // The hint names the student's file. When the upload carries no
-                // filename — every ARCHIVE submission, since a zip stores nil —
-                // it is derived from what the submission directory actually
-                // held, which is the only place the student's own files can
-                // still be told apart from the instructor's. Without it the
-                // generated C++ wrapper globbed the merged workspace and graded
-                // `helpers.cpp` instead of `solution.cpp` (#1390).
-                let studentModule =
-                    preferredStudentModuleFilename(
-                        submissionFilename: job.submissionFilename,
-                        language: hintLanguage)
-                    ?? studentModuleFromSubmittedFiles(
-                        in: paths.submissionDir, language: hintLanguage)
-                return (refused.map(protectedFileSkippedWarning) + warnings, studentModule)
+                return try await runOffActor { () throws -> ([String], String?) in
+                    try mergeAndExtractSubmission(
+                        job: job, manifest: manifest, paths: paths, testSetupDir: testSetupDir,
+                        forcedLanguage: forcedLanguage)
+                }
             }
         }
     }
+}
+
+/// The `.extractToSource` arm of `normalizeSubmission`: merges the
+/// submission into the workspace, extracts every notebook to source in
+/// the routed language, and names the student's module. Synchronous, so
+/// it runs whole through `runOffActor`. A free function, so the closure
+/// that runs it captures no daemon state.
+private func mergeAndExtractSubmission(
+    job: Job,
+    manifest: RunnerManifest,
+    paths: JobWorkspacePaths,
+    testSetupDir: URL,
+    forcedLanguage: AssignmentLanguage?
+) throws -> ([String], String?) {
+    // The student's upload must not be able to replace the tests it
+    // is about to be graded by (#1357). Skipped files are warned
+    // about rather than dropped silently.
+    let protected = protectedWorkspaceFilenames(manifest: manifest)
+    let refused = try mergeDirectoryContents(
+        from: paths.submissionDir,
+        into: testSetupDir,
+        protected: protected)
+    // A suite owned by a non-default language extracts every notebook
+    // to THAT source, regardless of the submission's kernelspec (the
+    // in-browser editor can rewrite it) — so the student-module hint
+    // has to name the same file, or it points at a path that was
+    // never written.
+    // The student's own filename is passed so the submission
+    // guarantees apply to it and not to an instructor's helper
+    // notebook sitting in the same merged workspace.
+    let warnings = try extractNotebooksToCode(
+        in: testSetupDir,
+        forcedLanguage: forcedLanguage,
+        studentNotebookName: job.submissionFilename.map {
+            URL(fileURLWithPath: $0).lastPathComponent
+        },
+        protected: protected)
+    // nil `forcedLanguage` means the extractor trusted the
+    // notebook's own metadata, which for an unrecognised kernel
+    // falls back to Python — so the hint has to agree. Spelled
+    // `?? .python` at the call site rather than behind a named
+    // constant: `no-language-defaults.sh` permits a nil-coalescing
+    // fallback precisely because it stays VISIBLE here, and hiding
+    // it behind a name is the shape that guard exists to prevent.
+    let hintLanguage = forcedLanguage ?? .python
+    // The hint names the student's file. When the upload carries no
+    // filename — every ARCHIVE submission, since a zip stores nil —
+    // it is derived from what the submission directory actually
+    // held, which is the only place the student's own files can
+    // still be told apart from the instructor's. Without it the
+    // generated C++ wrapper globbed the merged workspace and graded
+    // `helpers.cpp` instead of `solution.cpp` (#1390).
+    let studentModule =
+        preferredStudentModuleFilename(
+            submissionFilename: job.submissionFilename,
+            language: hintLanguage)
+        ?? studentModuleFromSubmittedFiles(
+            in: paths.submissionDir, language: hintLanguage)
+    return (refused.map(protectedFileSkippedWarning) + warnings, studentModule)
 }
 
 /// Writes a job's per-student files into the grading workspace: the inputs

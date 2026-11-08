@@ -264,11 +264,12 @@ func isAssignmentEffectivelyOpenResolved(
 private func postDeadlineRevealDeadline(
     for assignment: APIAssignment,
     user: APIUser,
+    course: APICourse?,
     on db: any Database,
     now: Date = Date()
 ) async throws -> Date? {
     let extensionDueAt = try await studentExtensionDueAt(for: assignment, user: user, on: db)
-    let slipDay = try await slipDayClaimState(for: assignment, user: user, on: db)
+    let slipDay = try await slipDayClaimState(for: assignment, user: user, course: course, on: db)
     return postDeadlineRevealDeadline(
         dueAt: assignment.dueAt, extensionDueAt: extensionDueAt, slipDay: slipDay, now: now)
 }
@@ -309,12 +310,42 @@ func releaseVisibilityDeadline(
     on db: any Database
 ) async throws -> Date? {
     guard let assignment else { return nil }
-    if let course = try await APICourse.find(assignment.courseID, on: db),
-        !course.slipDayPolicy.releaseRevealHold
-    {
+    let course = try await APICourse.find(assignment.courseID, on: db)
+    if let course, !course.slipDayPolicy.releaseRevealHold {
         return try await effectiveDueAt(for: assignment, user: user, on: db)
     }
-    return try await postDeadlineRevealDeadline(for: assignment, user: user, on: db)
+    // The course is read once, here, and handed to the slip-day state.
+    return try await postDeadlineRevealDeadline(for: assignment, user: user, course: course, on: db)
+}
+
+/// A student viewer's two post-deadline reveal gates on one result page,
+/// from one read of the course, the extension and the slip-day state:
+/// `releaseVisibilityDeadline` and `solutionVisibleToStudent`, through the
+/// same pure bodies. `course` is `assignment`'s course (nil when missing).
+/// The slip-day state is read only when one of the gates needs it, as each
+/// database form does.
+func studentRevealGates(
+    for assignment: APIAssignment,
+    course: APICourse?,
+    user: APIUser,
+    on db: any Database,
+    now: Date = Date()
+) async throws -> (releaseDeadline: Date?, solutionVisible: Bool) {
+    let extensionDueAt = try await studentExtensionDueAt(for: assignment, user: user, on: db)
+    // A missing course holds release output, as `releaseVisibilityDeadline` does.
+    let holdsRelease = course.map(\.slipDayPolicy.releaseRevealHold) ?? true
+    var slipDay: SlipDayClaimState?
+    if holdsRelease || solutionRevealStateAllows(assignment, now: now) {
+        slipDay = try await slipDayClaimState(for: assignment, user: user, course: course, on: db)
+    }
+    let releaseDeadline =
+        holdsRelease
+        ? postDeadlineRevealDeadline(
+            dueAt: assignment.dueAt, extensionDueAt: extensionDueAt, slipDay: slipDay, now: now)
+        : laterDeadline(baseline: assignment.dueAt, extensionDueAt: extensionDueAt)
+    let solutionVisible = solutionVisibleToStudent(
+        assignment: assignment, extensionDueAt: extensionDueAt, slipDay: slipDay, now: now)
+    return (releaseDeadline, solutionVisible)
 }
 
 /// The reveal gate for serving a reference solution to a non-staff viewer:

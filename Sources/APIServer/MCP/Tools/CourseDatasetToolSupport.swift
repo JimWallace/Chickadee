@@ -221,8 +221,17 @@ func requireCourseDataset(slug: String, courseID: UUID, context: ToolContext) as
 /// The full output shape of `dataset`: its versions, the newest dictionary and
 /// the assignments that attach it.
 func datasetDTO(_ dataset: APICourseDataset, context: ToolContext) async throws -> DatasetDTO {
-    let versions = try await CourseDatasetService.versions(of: dataset, on: context.db)
-    let usage = try await CourseDatasetService.usage(of: dataset, on: context.db)
+    datasetDTO(
+        dataset,
+        versions: try await CourseDatasetService.versions(of: dataset, on: context.db),
+        usage: try await CourseDatasetService.usage(of: dataset, on: context.db))
+}
+
+/// `datasetDTO` from the dataset's versions (oldest first) and its usage,
+/// already read, for a list of datasets that reads them in batch.
+func datasetDTO(
+    _ dataset: APICourseDataset, versions: [APICourseDatasetVersion], usage: [CourseDatasetService.Usage]
+) -> DatasetDTO {
     let newest = versions.first { $0.version == dataset.currentVersion }
     return DatasetDTO(
         slug: dataset.slug, name: dataset.name, description: dataset.datasetDescription,

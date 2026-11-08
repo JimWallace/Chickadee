@@ -145,7 +145,9 @@ func labItemCoverage(testSetupID: String, on db: any Database) async throws -> [
 /// Shared by both result-ingest paths so the gate cannot be applied on one and
 /// forgotten on the other — the audit-A2 shape. Reads through
 /// `notebookBytesCache` (#1171) rather than unzipping per result, so a deadline
-/// spike of submissions shares one notebook resolution.
+/// spike of submissions shares one notebook resolution. The cache also keeps
+/// the count beside the bytes, and remembers a setup with no notebook, so a
+/// result neither parses the notebook again nor lists the zip again.
 ///
 /// Best-effort by construction: any failure to resolve the notebook yields 0,
 /// which means "not a contribution assignment" and skips accumulation. That is
@@ -154,8 +156,6 @@ func labItemCoverage(testSetupID: String, on db: any Database) async throws -> [
 func declaredContributionSlotCount(
     testSetupID: String, app: Application, on db: any Database
 ) async -> Int {
-    guard let setup = try? await APITestSetup.find(testSetupID, on: db),
-        let data = try? await app.notebookBytesCache.notebookData(for: NotebookSourceRef(setup))
-    else { return 0 }
-    return NotebookContributionSlots.declaredSlotCount(inInstructorNotebook: data)
+    guard let setup = try? await APITestSetup.find(testSetupID, on: db) else { return 0 }
+    return await app.notebookBytesCache.declaredContributionSlotCount(for: NotebookSourceRef(setup))
 }

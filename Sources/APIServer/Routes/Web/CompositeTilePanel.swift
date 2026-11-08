@@ -70,7 +70,8 @@ struct CompositeTilePanel: Encodable {
         }
         let ownPassed =
             try await APICompositeContribution.query(on: db)
-            .filter(\.$assignmentID == assignmentID).filter(\.$userID == userID).first()?.passed ?? false
+            .filter(\.$assignmentID == assignmentID).filter(\.$userID == userID).field(\.$passed).first()?.passed
+            ?? false
         if ownPassed, assignment.isOpen, activity.acceptsSubmissions(at: Date()),
             try await CompositeSpares.playsInSession(of: pool, userID: userID, on: db),
             !spares.contains(where: \.grading),

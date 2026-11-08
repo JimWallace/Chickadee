@@ -37,10 +37,20 @@ enum WardrobeUnlockStore {
         if let testSetupIDs {
             query = query.filter(APISubmission.self, \.$testSetupID ~~ Array(testSetupIDs))
         }
-        let results = try await query.all()
+        // Only the columns the rules read: with no setup filter this spans
+        // every graded submission the student has made.
+        let results =
+            try await query
+            .field(\.$earnedPoints)
+            .field(\.$totalPoints)
+            .field(\.$passCount)
+            .field(\.$totalTests)
+            .field(APISubmission.self, \.$testSetupID)
+            .field(APISubmission.self, \.$attemptNumber)
+            .field(APISubmission.self, \.$submittedAt)
+            .all()
         let submissions = try results.map { try $0.joined(APISubmission.self) }
-        let dueDates = try await dueDates(of: Set(submissions.map(\.testSetupID)), on: db)
-        let concepts = try await concepts(of: Set(submissions.map(\.testSetupID)), on: db)
+        let (dueDates, concepts) = try await dueDatesAndConcepts(of: Set(submissions.map(\.testSetupID)), on: db)
         return zip(results, submissions).map { result, submission in
             WardrobeProgress.Graded(
                 assignmentID: submission.testSetupID,
@@ -55,42 +65,33 @@ enum WardrobeUnlockStore {
         }
     }
 
-    /// The due date of each test setup's assignment. A setup whose
-    /// assignment has no due date is not in the result. The early rule reads
-    /// the assignment's own due date, not a student's extension.
-    private static func dueDates(of testSetupIDs: Set<String>, on db: any Database) async throws -> [String: Date] {
-        guard !testSetupIDs.isEmpty else { return [:] }
+    /// The due date and the concept of each test setup's assignment, from
+    /// one read of the assignments. A setup whose assignment has no due date
+    /// is not in the first map, and one whose assignment has no concept is
+    /// not in the second. The early rule reads the assignment's own due date,
+    /// not a student's extension.
+    private static func dueDatesAndConcepts(
+        of testSetupIDs: Set<String>, on db: any Database
+    ) async throws -> (dueDates: [String: Date], concepts: [String: AssignmentConcept]) {
+        guard !testSetupIDs.isEmpty else { return ([:], [:]) }
         let assignments = try await APIAssignment.query(on: db)
             .filter(\.$testSetupID ~~ Array(testSetupIDs))
-            .filter(\.$dueAt != nil)
+            .field(\.$testSetupID)
+            .field(\.$dueAt)
+            .field(\.$conceptRaw)
             .all()
         var dueDates: [String: Date] = [:]
+        var concepts: [String: AssignmentConcept] = [:]
         for assignment in assignments {
-            dueDates[assignment.testSetupID] = assignment.dueAt
+            if let dueAt = assignment.dueAt { dueDates[assignment.testSetupID] = dueAt }
+            if let concept = assignment.concept { concepts[assignment.testSetupID] = concept }
         }
-        return dueDates
+        return (dueDates, concepts)
     }
 
     private static func secondsBeforeDue(_ submittedAt: Date?, _ dueAt: Date?) -> Double? {
         guard let submittedAt, let dueAt else { return nil }
         return dueAt.timeIntervalSince(submittedAt)
-    }
-
-    /// The concept each test setup's assignment is tagged with. A setup
-    /// whose assignment has no concept is not in the result.
-    private static func concepts(
-        of testSetupIDs: Set<String>, on db: any Database
-    ) async throws -> [String: AssignmentConcept] {
-        guard !testSetupIDs.isEmpty else { return [:] }
-        let assignments = try await APIAssignment.query(on: db)
-            .filter(\.$testSetupID ~~ Array(testSetupIDs))
-            .filter(\.$conceptRaw != nil)
-            .all()
-        var concepts: [String: AssignmentConcept] = [:]
-        for assignment in assignments {
-            concepts[assignment.testSetupID] = assignment.concept
-        }
-        return concepts
     }
 
     /// Stores every item `userID` has earned and not yet stored, and returns
@@ -99,7 +100,13 @@ enum WardrobeUnlockStore {
     /// log: the next load grants again. The unique index stores an item once
     /// when two requests race, and that conflict is not logged (#2776).
     static func grantEarned(for userID: UUID, on db: any Database) async throws -> Set<WardrobeItem> {
-        let stored = try await unlocked(for: userID, on: db)
+        try await grantEarned(for: userID, stored: try await unlocked(for: userID, on: db), on: db)
+    }
+
+    /// `grantEarned` from the items `userID` has stored, already read.
+    private static func grantEarned(
+        for userID: UUID, stored: Set<WardrobeItem>, on db: any Database
+    ) async throws -> Set<WardrobeItem> {
         // A found item is never earned, so a student who has earned every
         // earnable item skips the progress queries, found items or not.
         guard !stored.isSuperset(of: WardrobeItem.allCases.filter { !$0.isFound }) else { return stored }
@@ -149,7 +156,7 @@ enum WardrobeUnlockStore {
     /// item is still stored, and the account page offers it.
     static func grantNew(for userID: UUID, on db: any Database) async throws -> [WardrobeItem] {
         let stored = try await unlocked(for: userID, on: db)
-        let granted = try await grantEarned(for: userID, on: db).subtracting(stored)
+        let granted = try await grantEarned(for: userID, stored: stored, on: db).subtracting(stored)
         // A found item stored by a concurrent request is not this grant's to
         // show: the found item's own toast said so.
         return WardrobeItem.allCases.filter { granted.contains($0) && !$0.isFound }

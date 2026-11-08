@@ -37,8 +37,13 @@ struct LeaderboardGroupScope: Sendable {
         let shownID: UUID?
         if isStaff {
             let requested = req.query[String.self, at: "group"].flatMap(UUID.init(uuidString:))
-            let own = try await CourseGroupStore.groupIDsByUser(inSet: setID, on: req.db)[userID]
-            shownID = (groups.first { $0.id == requested } ?? groups.first { $0.id == own } ?? groups.first)?.id
+            // The staff member's own group is read only when `?group=` names
+            // none of the set's groups.
+            var shown = requested.flatMap { id in groups.first { $0.id == id } }
+            if shown == nil, let own = try await CourseGroupStore.groupID(ofUser: userID, inSet: setID, on: req.db) {
+                shown = groups.first { $0.id == own }
+            }
+            shownID = (shown ?? groups.first)?.id
         } else {
             shownID = try await studentGroup(
                 userID: userID, setupID: setup.id ?? "", assignmentID: assignmentID, setID: setID, on: req.db)
@@ -84,6 +89,6 @@ struct LeaderboardGroupScope: Sendable {
         {
             return ranked
         }
-        return try await CourseGroupStore.groupIDsByUser(inSet: setID, on: db)[userID]
+        return try await CourseGroupStore.groupID(ofUser: userID, inSet: setID, on: db)
     }
 }

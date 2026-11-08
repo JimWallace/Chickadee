@@ -9,7 +9,7 @@
 // `compilerOutput` across the whole collection; statuses, short results,
 // and every aggregate stay intact.
 
-import Foundation
+public import Foundation
 
 extension TestOutcomeCollection {
     /// Default serialized-size budget: comfortably under the server's result
@@ -29,7 +29,26 @@ extension TestOutcomeCollection {
     public func truncatingOversizedOutput(
         budgetBytes: Int = TestOutcomeCollection.defaultSerializedBudgetBytes
     ) -> (collection: TestOutcomeCollection, didTruncate: Bool) {
-        guard serializedSize() > budgetBytes else { return (self, false) }
+        let bounded = boundedForStorage(budgetBytes: budgetBytes)
+        return (bounded.collection, bounded.didTruncate)
+    }
+
+    /// `truncatingOversizedOutput(budgetBytes:)`, plus the JSON it measured
+    /// the returned collection with, so a caller that stores or sends that
+    /// collection need not encode it a second time.
+    ///
+    /// `json` is the encoding of exactly the returned `collection`, by an
+    /// encoder configured as `TestOutcomeCollection` is stored (`.iso8601`
+    /// dates, default formatting). It is nil only when that encoding failed;
+    /// the caller then encodes the collection itself, so the failure surfaces
+    /// where it always did.
+    public func boundedForStorage(
+        budgetBytes: Int = TestOutcomeCollection.defaultSerializedBudgetBytes
+    ) -> (collection: TestOutcomeCollection, json: Data?, didTruncate: Bool) {
+        let encoder = Self.measuringEncoder()
+        let fullJSON = try? encoder.encode(self)
+        let fullSize = fullJSON?.count ?? 0
+        guard fullSize > budgetBytes else { return (self, fullJSON, false) }
 
         // Everything except the long outputs is effectively fixed overhead;
         // the budget left for outputs is shared across the carriers. JSON
@@ -38,16 +57,18 @@ extension TestOutcomeCollection {
         let longBytes =
             outcomes.reduce(0) { $0 + ($1.longResult?.utf8.count ?? 0) }
             + (compilerOutput?.utf8.count ?? 0)
-        let overhead = max(0, serializedSize() - longBytes)
+        let overhead = max(0, fullSize - longBytes)
 
         var perCarrierCap = max(1024, (budgetBytes - overhead) / max(1, outputCarrierCount))
         var truncated = self
+        var truncatedJSON: Data?
         for _ in 0..<8 {
             truncated = truncatedCopy(perCarrierCap: perCarrierCap)
-            if truncated.serializedSize() <= budgetBytes { break }
+            truncatedJSON = try? encoder.encode(truncated)
+            if (truncatedJSON?.count ?? 0) <= budgetBytes { break }
             perCarrierCap = max(256, perCarrierCap / 2)
         }
-        return (truncated, true)
+        return (truncated, truncatedJSON, true)
     }
 
     /// Everything that shares the output budget: each outcome carrying a
@@ -68,10 +89,10 @@ extension TestOutcomeCollection {
             + ((compilerOutput?.isEmpty == false) ? 1 : 0)
     }
 
-    private func serializedSize() -> Int {
+    private static func measuringEncoder() -> JSONEncoder {
         let encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .iso8601
-        return (try? encoder.encode(self).count) ?? 0
+        return encoder
     }
 
     private func truncatedCopy(perCarrierCap: Int) -> TestOutcomeCollection {

@@ -66,6 +66,9 @@ extension InstructorDashboardRoutes {
             .filter(\.$id ~~ Array(latest.keys))
             .all()
 
+        // One read of the starter for the whole page: it is the same for
+        // every row, and each row and the prompts pair against it.
+        let starter = try? await notebookData(for: setup)
         var reviewRows: [FeedbackReviewRow] = []
         for user in users.sorted(by: { $0.username < $1.username }) {
             guard let userID = user.id, let row = rows[userID] else { continue }
@@ -74,7 +77,7 @@ extension InstructorDashboardRoutes {
             let hasText = row.draftText != nil && state != .discarded
             let reflections =
                 hasText
-                ? await ReflectionFeedbackService.reflections(setup: setup, submission: submission) : []
+                ? await ReflectionFeedbackService.reflections(starter: starter, submission: submission) : []
             reviewRows.append(
                 FeedbackReviewRow(
                     handle: row.handle,
@@ -90,7 +93,7 @@ extension InstructorDashboardRoutes {
                         FeedbackReviewText(index: $0.index, paragraphs: ProseParagraphs.split($0.response ?? ""))
                     }))
         }
-        let prompts = await ReflectionFeedbackService.reflections(setup: setup, submission: nil).map {
+        let prompts = await ReflectionFeedbackService.reflections(starter: starter, submission: nil).map {
             FeedbackReviewText(index: $0.index, paragraphs: ProseParagraphs.split($0.prompt))
         }
 
@@ -163,8 +166,9 @@ extension InstructorDashboardRoutes {
             }
             // The student's latest submission is what the reviewed text now
             // answers, so the row stops reading as stale.
-            let latest = try await ReflectionFeedbackService.latestStudentSubmissions(for: assignment, on: req.db)
-            row.submissionID = latest[row.userID]?.id ?? row.submissionID
+            let latest = try await ReflectionFeedbackService.latestStudentSubmission(
+                for: assignment, userID: row.userID, on: req.db)
+            row.submissionID = latest?.id ?? row.submissionID
             try await row.save(on: req.db)
             if body.action == "release" {
                 await recordFeedbackReview(.aiFeedbackReleased, assignment: assignment, handle: handle, on: req)

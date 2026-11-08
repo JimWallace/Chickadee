@@ -270,11 +270,36 @@ func notebookData(for setup: APITestSetup) async throws(NotebookLookupError) -> 
 /// `@Sendable` thread-pool closure. Behaviour is identical to the model-based
 /// overload.
 func notebookData(from source: NotebookSourceRef) async throws(NotebookLookupError) -> Data {
+    guard case .found(let data) = await resolveNotebook(from: source) else {
+        throw NotebookLookupError.notFound(setupID: source.setupID ?? "unknown")
+    }
+    return data
+}
+
+/// What resolving a setup's notebook found. `notebookData(from:)` returns the
+/// bytes of `.found` and throws `.notFound` for both other cases; the two are
+/// told apart only so `NotebookBytesCache` knows which miss it may remember.
+enum NotebookResolution: Sendable {
+    /// The normalized notebook.
+    case found(Data)
+    /// No flat notebook was read, and the zip lists entries, none of them a
+    /// notebook candidate. The answer is fixed by the zip's bytes and the
+    /// manifest's starter name.
+    case absent
+    /// No notebook was read, for a reason that may not repeat: the zip lists
+    /// nothing (which is also what an unreadable zip gives), or every
+    /// candidate failed to extract.
+    case unavailable
+}
+
+/// The resolution `notebookData(from:)` is built on: the flat `.ipynb` first,
+/// then each notebook candidate in the zip.
+func resolveNotebook(from source: NotebookSourceRef) async -> NotebookResolution {
     if let path = source.notebookPath,
         let data = try? Data(contentsOf: URL(fileURLWithPath: path)),
         !data.isEmpty
     {
-        return normalizeNotebookForJupyterLite(data)
+        return .found(normalizeNotebookForJupyterLite(data))
     }
 
     let entries = await listZipEntries(zipPath: source.zipPath)
@@ -284,10 +309,10 @@ func notebookData(from source: NotebookSourceRef) async throws(NotebookLookupErr
         guard let data = await extractZipEntry(zipPath: source.zipPath, entryName: entryName),
             !data.isEmpty
         else { continue }
-        return normalizeNotebookForJupyterLite(data)
+        return .found(normalizeNotebookForJupyterLite(data))
     }
 
-    throw NotebookLookupError.notFound(setupID: source.setupID ?? "unknown")
+    return entries.isEmpty || !preferredEntryNames.isEmpty ? .unavailable : .absent
 }
 
 private func notebookCandidateEntryNames(starterNotebook: String?, entries: [String]) -> [String] {

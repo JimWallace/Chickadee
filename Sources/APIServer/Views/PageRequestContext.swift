@@ -97,6 +97,59 @@ extension Application {
 
     private func readSprite(_ sprite: StaticSprite) -> String {
         let path = directory.resourcesDirectory + "Sprites/" + sprite.rawValue
-        return (try? String(contentsOfFile: path, encoding: .utf8)) ?? ""
+        guard let svg = try? String(contentsOfFile: path, encoding: .utf8) else { return "" }
+        return Self.inlineMarkup(svg)
+    }
+
+    /// The sprite as a page inlines it: every `<!-- … -->` comment, the
+    /// whitespace between two tags and the whitespace at either end removed.
+    /// That is about 14.6 KB of the 65 KB both sprites add to every
+    /// signed-in page, which is sent uncompressed and uncached. Neither sprite
+    /// has a text node, so the drawing is unchanged, and the favicon renderer
+    /// trims and joins each symbol's lines, so its output is too. A byte scan
+    /// rather than two `Regex` replacements: those took 15 ms, and a test app
+    /// that never ran `loadSprites()` reads the sprites for every page.
+    static func inlineMarkup(_ svg: String) -> String {
+        let source = Array(svg.utf8)
+        let (open, bang, dash, close) = (UInt8(ascii: "<"), UInt8(ascii: "!"), UInt8(ascii: "-"), UInt8(ascii: ">"))
+        // A space, or a tab, line feed, vertical tab, form feed or return.
+        let isSpace: (UInt8) -> Bool = { $0 == 0x20 || (0x09...0x0D).contains($0) }
+        var kept: [UInt8] = []
+        kept.reserveCapacity(source.count)
+        var lastNonSpace: Int?  // in `kept`
+        var index = 0
+        while index < source.count {
+            let byte = source[index]
+            if byte == open, index + 3 < source.count, source[index + 1] == bang, source[index + 2] == dash,
+                source[index + 3] == dash
+            {
+                // `end` stops on the `-->` that closes it.
+                var end = index + 4
+                while end + 2 < source.count,
+                    source[end] != dash || source[end + 1] != dash || source[end + 2] != close
+                {
+                    end += 1
+                }
+                // An unterminated comment is left as it is, with what follows.
+                guard end + 2 < source.count else {
+                    kept += source[index...]
+                    break
+                }
+                index = end + 3
+                continue
+            }
+            if byte == open, let last = lastNonSpace, kept[last] == close {
+                // Only whitespace since the last tag closed: drop it.
+                kept.removeSubrange((last + 1)...)
+            }
+            kept.append(byte)
+            if !isSpace(byte) { lastNonSpace = kept.count - 1 }
+            index += 1
+        }
+        let first = kept.firstIndex { !isSpace($0) } ?? kept.endIndex
+        let last = kept.lastIndex { !isSpace($0) }.map { $0 + 1 } ?? first
+        // Only whole comments and ASCII whitespace were cut, so the bytes are
+        // still UTF-8; the file as read is the fallback all the same.
+        return String(bytes: kept[first..<max(first, last)], encoding: .utf8) ?? svg
     }
 }

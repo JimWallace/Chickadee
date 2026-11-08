@@ -23,8 +23,13 @@ extension InstructorDashboardRoutes {
             return InstructorCardSeriesResponse(generatedAt: Date(), windows: [])
         }
 
-        let setups = try await loadCourseSetups(req: req, activeCourseUUID: activeCourseUUID)
-        let setupIDs = setups.compactMap(\.id)
+        // The ids only feed `IN` filters, so neither the order nor the
+        // manifest of each setup is needed.
+        let setupIDs = try await APITestSetup.query(on: req.db)
+            .filter(\.$courseID == activeCourseUUID)
+            .field(\.$id)
+            .all()
+            .compactMap(\.id)
 
         // Students are `.student`-role enrollments now (#417 Slice G2).
         let studentIDs = try await CourseRoster.studentIDs(in: activeCourseUUID, on: req.db)

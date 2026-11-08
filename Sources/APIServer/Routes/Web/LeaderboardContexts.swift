@@ -143,21 +143,20 @@ struct LiveSessionPresentation: Encodable {
     /// before slice 8 and every one that does not run to a clock.
     static func make(_ activity: ClassActivity, now: Date = Date()) -> LiveSessionPresentation? {
         guard let window = activity.window else { return nil }
-        let formatter = waterlooDateTimeFormatter()
         let state = window.state(at: now)
         guard let boundary = window.nextBoundary(at: now) else {
             // Closed, or open with no end: both have nothing to count down
             // to, and they say opposite things, so only the closed one gets a
             // line. An open-ended session is just an open assignment.
             guard state == .afterClose else { return nil }
-            let closedAt = window.closesAt.map(formatter.string(from:)) ?? ""
+            let closedAt = window.closesAt.map(waterlooDateTimeText) ?? ""
             return LiveSessionPresentation(
                 label: "Closed", boundaryText: closedAt,
                 boundaryISO: window.closesAtISO ?? "", isClosed: true, isOpen: false)
         }
         return LiveSessionPresentation(
             label: state == .beforeOpen ? "Opens" : "Closes",
-            boundaryText: formatter.string(from: boundary),
+            boundaryText: waterlooDateTimeText(boundary),
             boundaryISO: LiveSessionWindow.format(boundary),
             isClosed: false,
             isOpen: state == .open)

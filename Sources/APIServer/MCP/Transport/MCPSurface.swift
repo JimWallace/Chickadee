@@ -63,6 +63,28 @@ struct MCPToolCall: Decodable, Sendable {
     let arguments: JSONValue?
 }
 
+extension MCPToolCall {
+    /// The call that `params` names, read straight from the JSON tree rather
+    /// than round-tripped through an encoder and a decoder: nil exactly when
+    /// the synthesized decoding fails. `params` must be an object whose
+    /// `name` is a JSON string (a decoder never coerces another type to a
+    /// string); `arguments` is any value, and an absent or null one is nil,
+    /// as `decodeIfPresent` gives. Other keys, such as `_meta`, are ignored.
+    /// The tree was decoded from JSON, so its values are the ones a round
+    /// trip would rebuild.
+    init?(params: JSONValue?) {
+        guard case .object(let fields) = params ?? .object([:]), case .string(let name)? = fields["name"] else {
+            return nil
+        }
+        self.name = name
+        if let arguments = fields["arguments"], arguments != .null {
+            self.arguments = arguments
+        } else {
+            self.arguments = nil
+        }
+    }
+}
+
 // MARK: - tools/list
 
 /// Advertises only the tools the caller can actually invoke: a tool is listed
@@ -94,10 +116,7 @@ func mcpToolsCallResponse<Surface>(
     guard let context else {
         return .failure(id: id, error: .internalError("Tool execution context is unavailable."))
     }
-    let call: MCPToolCall
-    do {
-        call = try (params ?? .object([:])).decoded(as: MCPToolCall.self)
-    } catch {
+    guard let call = MCPToolCall(params: params) else {
         return .failure(id: id, error: .invalidParams("tools/call requires a \"name\" and optional \"arguments\"."))
     }
     guard let tool = tools.tool(named: call.name) else {
