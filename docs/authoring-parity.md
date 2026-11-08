@@ -1,4 +1,9 @@
-# Authoring parity across the six languages
+# Authoring parity across the languages
+
+> **Note (2026-11):** this document predates Java support
+> ([java-support.md](java-support.md)). Seven languages ship now, and three are
+> upload-only: C++, Racket and Java. The analysis below covers the first six;
+> where a sentence states the present, it counts seven.
 
 What an instructor authoring in R, Lua, Octave, C++ or Racket can and cannot do
 that a Python author can — which of those differences are defects, which are
@@ -81,7 +86,7 @@ and declarations must land *inside* the module it opens. A `(define …)` above
 `#lang` is a read error no comment placement rescues, so `#lang` now keeps line 1
 the way a shebang does.
 
-`RawScriptVariableInliningTests` covers all six languages, and its execution
+`RawScriptVariableInliningTests` covers all seven languages, and its execution
 suite writes the emitted file and runs it in each interpreter present on the
 host — which is the only kind of assertion that would have caught the original
 bug.
@@ -197,7 +202,7 @@ below said it was "the only template with no pattern-family equivalent, and it
 is reachable with a family plus auto-compute". The second half was the weaker
 claim: auto-compute fills in an expected value for a case an author has already
 enumerated, which is exactly the work a differential test exists to avoid. It is
-now `PatternKind.differential`, rendering in all six languages, computing each
+now `PatternKind.differential`, rendering in all seven languages, computing each
 case's expected value by running the instructor's reference at grade time.
 
 The template survives it, deliberately: it is a one-shot text dump the

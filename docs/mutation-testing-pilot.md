@@ -19,7 +19,7 @@ compare against.
 
 **The question this page ends on — "is it worth a monthly run?" — was answered
 with a weekly one.** `mutation-weekly.yml` sweeps the whole logic tier
-(RunnerCore + Core + Worker, ~2,750 mutants, 12 shards) every Tuesday;
+(RunnerCore + Core + Worker, ~2,650 mutants, 12 shards) every Tuesday;
 `mutation-pr.yml` covers just what a pull request changed. This page stays the
 method-and-cost record those workflows cite; the current scope and its
 reasoning live in `Tools/mutation/config.json`, and the running state of the

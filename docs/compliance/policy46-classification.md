@@ -50,7 +50,7 @@ These are provisional engineering assessments, not an official ruling.
 
 ## Addendum (2026-07): admin diagnostic surface data types
 
-The read-only admin diagnostic surface (`/admin-mcp`, 19 tools — see
+The read-only admin diagnostic surface (`/admin-mcp`, 20 tools — see
 `tool-inventory.md` addendum and `mcp-student-data-audit-2026-07.md`) adds
 these outbound data types. Consent for this surface requires the admin role.
 

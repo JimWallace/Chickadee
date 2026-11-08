@@ -421,7 +421,8 @@ or audit that a session does not run does not happen.
   verdict is advisory for now. When a change adds a shared object, add its
   row to the map.
 
-The hooks in `.claude/hooks/` do three jobs, so you need not:
+The hooks in `.claude/hooks/` do three jobs, so you need not (a fourth,
+`session-start.sh`, installs the Swift toolchain on web sessions):
 - `format-swift.py` runs `swift-format` on each Swift file that you edit.
 - `pre-push-format-lint.py` runs `scripts/format-lint.sh` (every step of the CI
   `format-lint` job) before `git push`, and stops the push when a step fails.
@@ -433,7 +434,7 @@ The hooks in `.claude/hooks/` do three jobs, so you need not:
   `bypassPermissions`) it denies the change instead (#2832). Then tell the
   maintainer the exact edit and why, and wait: they approve by switching the
   session out of that mode, and the hook asks them directly.
-  `scripts/test-claude-hooks.py` tests all three hooks in CI.
+  `scripts/test-claude-hooks.py` tests the three job hooks in CI.
 
 ---
 

@@ -17,7 +17,7 @@ So the controls that matter for this submission are:
 1. **The inbound gate** — who may connect (`MCPBearerAuthMiddleware`) and what
    they may do (per-tool scope + per-course enrolment check).
 2. **The bounded tool surface** — special-purpose typed tools, no general
-   escape hatch: 51 content tools as of the 2026-07 refresh
+   escape hatch: 51 content tools as of the 2026-07 refresh (71 at v0.5.854)
    (`tool-inventory.md`, base tables + addendum).
 3. **The student-data wall** — tools read the authoring store and the
    instructor's own validation runs, never student submissions/grades/roster.

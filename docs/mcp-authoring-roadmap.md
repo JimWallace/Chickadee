@@ -20,8 +20,8 @@ added in the `mcp-course-scoping-and-hardening` work, PR #704).
 The original vertical slice (two tools, proving the auth/transport/dispatch
 pipeline) has grown into the full feature. The live tool catalog
 (`MCPToolCatalog.live` in
-`Sources/APIServer/MCP/Transport/MCPServerRegistration.swift`) now ships
-fifty-one tools, all `content:read` / `content:write` scoped and
+`Sources/APIServer/MCP/Transport/MCPServerRegistration.swift`) ships
+71 tools at v0.5.854, all `content:read` / `content:write` scoped and
 course-scoped. `MCPToolCatalog.live` is the source of truth for the count —
 prefer it over any prose figure, which can drift.
 
@@ -168,7 +168,7 @@ change.
 
 These are already `Database`-based and callable from a tool directly:
 
-- `applySuiteEdit(setup:body:on db:)` — `Sources/APIServer/Routes/Web/SuiteEditHelpers.swift`
+- `applySuiteEdit(setup:body:on db:)` — `Sources/APIServer/Helpers/SuiteEditHelpers.swift`
   (the core of `PUT /suite`: authored items → `applyPatternFamilies`).
 - `applyPatternFamilies(...)` — the canonical generator.
 - `retestAllSubmissionsForSetup(setupID:triggeredBy:on db:force:)` —

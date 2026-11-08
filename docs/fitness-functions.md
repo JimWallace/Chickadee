@@ -2,8 +2,8 @@
 
 An inventory of the automated checks that hold Chickadee's architecture, using
 the vocabulary from [Building Evolutionary Architectures][beas]. Two reasons it
-is worth writing down: the checks are spread across 31 scripts, ~333 Swift test
-files, 51 docs and a dozen workflows, so nothing answers *"what governs this?"*
+is worth writing down: the checks are spread across `scripts/`, `Tests/`, `docs/` and
+`.github/workflows/`, so nothing answers *"what governs this?"*
 in one place; and the taxonomy sorts them in a way that makes a real gap
 visible.
 
@@ -30,7 +30,7 @@ The `scripts/check-*.sh` family (palette, type/radius/spacing scales, CSS var
 resolution, class resolution, component vocabulary, maintenance-page palette,
 vendored-kernel integrity, wasm size, version), the six shrink-only ratchets,
 `no-language-defaults.sh`, `no-new-xctest.sh`, SwiftLint at `--strict`,
-swift-format, ESLint, and most of the ~3,000 tests.
+swift-format, ESLint, and most of the tests in `Tests/`.
 
 These carry a property most codebases' linters do not: **ratchets**, which
 encode a *direction of travel* rather than a threshold. `PAGE_STYLE_BASELINE`
