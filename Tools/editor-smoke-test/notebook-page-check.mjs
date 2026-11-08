@@ -205,6 +205,15 @@ async function main() {
   }
   const browser = await browserType.launch(launchOptions);
   const context = await browser.newContext({ storageState: seeded.storageState });
+  // SMOKE_SERVER_DRIVE=1 runs the same flow on the server-backed editor drive
+  // (#469 spike, notebook-server-drive-check.mjs): the opt-in cookie, and a
+  // check below that the drive really was active.
+  const serverDrive = process.env.SMOKE_SERVER_DRIVE === "1";
+  const serverDriveLog = [];
+  if (serverDrive) {
+    await context.addCookies([{ name: "ck_server_drive", value: "1", domain: new URL(baseURL).hostname, path: "/" }]);
+    context.on("console", (msg) => serverDriveLog.push(msg.text()));
+  }
   // Capture the in-iframe kernel-boot collector's breadcrumbs on the PARENT
   // window (the collector posts to window.parent, which IS the notebook page
   // here). Installed in every frame before any page script. Lets us assert the
@@ -425,7 +434,11 @@ async function main() {
       );
     }
 
-    console.log(`E2E PASS — real notebook page isolated, workers spawned, kernel booted, submit graded 1/1 (engine=${browserName})`);
+    if (serverDrive && !serverDriveLog.some((l) => l.includes("[chickadee] server drive active"))) {
+      return fail("SMOKE_SERVER_DRIVE=1 but the server drive did not activate");
+    }
+
+    console.log(`E2E PASS — real notebook page isolated, workers spawned, kernel booted, submit graded 1/1 (engine=${browserName}${serverDrive ? ", server drive" : ""})`);
     console.log(phaseTrail());
     await finish(0);
   } catch (err) {

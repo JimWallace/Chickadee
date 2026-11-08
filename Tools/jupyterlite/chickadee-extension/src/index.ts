@@ -22,6 +22,7 @@ import { Guide } from './guide.js';
 import { GuideView } from './guideView.js';
 import { Suite, findItem } from './margin.js';
 import { MarginView } from './marginView.js';
+import { serverDriveEnabled, serverDrivePlugin } from './serverDrive.js';
 
 const LIGHT = 'Chickadee';
 const DARK = 'Chickadee dark';
@@ -345,4 +346,6 @@ function findCell(notebook: Notebook, args: { [key: string]: unknown }, patterns
   return null;
 }
 
-export default [themePlugin, bridgePlugin];
+// The server drive is decided once, at load: the plugin registry reads this
+// list before it resolves the service manager (serverDrive.ts).
+export default serverDriveEnabled() ? [themePlugin, bridgePlugin, serverDrivePlugin] : [themePlugin, bridgePlugin];

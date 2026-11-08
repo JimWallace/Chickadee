@@ -34,6 +34,12 @@ struct JupyterLiteConfigFlagMiddleware: AsyncMiddleware {
     static let serviceWorkerManagerExtension =
         "@jupyterlite/application-extension:service-worker-manager"
 
+    /// The cookie that opts one browser into the server-backed drive (#469).
+    static let serverDriveCookie = "ck_server_drive"
+
+    /// The PageConfig option the Chickadee extension reads (serverDrive.ts).
+    static let serverDriveOption = "chickadeeServerDrive"
+
     private let publicDirectory: String
 
     init(publicDirectory: String) {
@@ -82,26 +88,35 @@ struct JupyterLiteConfigFlagMiddleware: AsyncMiddleware {
             changed = true
         }
 
-        // The served config now varies by engine (SW enablement), so every
-        // response for this path must mark itself as varying on the User-Agent —
-        // even when nothing changed for this request — or a shared cache could
-        // hand a WebKit body to Chrome (or vice versa).
+        // (3) Server-backed drive (spike for #469) — opt-in per browser with the
+        //     `ck_server_drive=1` cookie, so the trial runs on a deployment
+        //     without touching any other viewer. The extension registers its
+        //     drive only when this option is set (serverDrive.ts).
+        if request.cookies[Self.serverDriveCookie]?.string == "1" {
+            configData[Self.serverDriveOption] = "true"
+            changed = true
+        }
+
+        // The served config now varies by engine (SW enablement) and by the
+        // server-drive cookie, so every response for this path must mark itself
+        // as varying on both — even when nothing changed for this request — or a
+        // shared cache could hand one browser's body to another.
         guard changed else {
             let response = try await next.respond(to: request)
-            response.headers.add(name: "Vary", value: "User-Agent")
+            response.headers.add(name: "Vary", value: "User-Agent, Cookie")
             return response
         }
 
         json["jupyter-config-data"] = configData
         guard let body = try? JSONSerialization.data(withJSONObject: json) else {
             let response = try await next.respond(to: request)
-            response.headers.add(name: "Vary", value: "User-Agent")
+            response.headers.add(name: "Vary", value: "User-Agent, Cookie")
             return response
         }
         let response = Response(status: .ok, body: .init(data: body))
         response.headers.contentType = .json
         response.headers.replaceOrAdd(name: "Cache-Control", value: "no-cache")
-        response.headers.add(name: "Vary", value: "User-Agent")
+        response.headers.add(name: "Vary", value: "User-Agent, Cookie")
         return response
     }
 }

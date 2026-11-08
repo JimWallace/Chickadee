@@ -28,6 +28,8 @@ struct JupyterLiteContentsRoutes: RouteCollection {
         routes.get("jupyterlite", "lab", "api", "contents", "**", use: contentsPath)
         routes.get("jupyterlite", "notebooks", "api", "contents", use: contentsRoot)
         routes.get("jupyterlite", "notebooks", "api", "contents", "**", use: contentsPath)
+
+        bootWriteRoutes(routes)
     }
 
     @Sendable
@@ -38,6 +40,12 @@ struct JupyterLiteContentsRoutes: RouteCollection {
     @Sendable
     func contentsPath(req: Request) async throws -> Response {
         let relPath = req.parameters.getCatchall().joined(separator: "/")
+        // `<file>/checkpoints` is the server drive's checkpoint list (the write
+        // half, JupyterLiteContentsRoutes+Write.swift). A catch-all route must
+        // be last, so the suffix is matched here.
+        if relPath.hasSuffix("/checkpoints") {
+            return try await listCheckpoints(req: req, filePath: String(relPath.dropLast("/checkpoints".count)))
+        }
         return try await contentsResponse(req: req, relativePath: relPath)
     }
 
@@ -53,6 +61,18 @@ struct JupyterLiteContentsRoutes: RouteCollection {
         let baseDir = req.application.directory.publicDirectory + "jupyterlite/files/"
         try fm.createDirectory(atPath: baseDir, withIntermediateDirectories: true)
         let baseURL = URL(fileURLWithPath: baseDir, isDirectory: true).standardizedFileURL
+
+        // The kernel's file system walks to the notebook's folder one level at a
+        // time, so it reads `users` before `users/<id>`. A student who may not
+        // read the tree gets a `users` that lists only their own folder; a 403
+        // here leaves the kernel's working directory at the drive root (#469).
+        if !isStaff, let userRoot = try userRootPath(for: caller, isStaff: false),
+            relativePath.trimmingCharacters(in: CharacterSet(charactersIn: "/")) == "users"
+        {
+            return try ownUsersDirectoryResponse(
+                baseURL: baseURL, userRoot: userRoot, fileManager: fm,
+                includeContent: req.query[String.self, at: "content"] == "1")
+        }
 
         let cleanRel = try scopedRelativePath(for: caller, requested: relativePath, isStaff: isStaff)
         let targetURL = baseURL.appendingPathComponent(cleanRel).standardizedFileURL
@@ -206,7 +226,28 @@ struct JupyterLiteContentsRoutes: RouteCollection {
             ))
     }
 
-    private func jsonResponse(_ model: JupyterContentsModel) throws -> Response {
+    /// `users` as a student sees it: a directory whose one child is their own
+    /// folder. Nothing about any other user's folder is read or returned.
+    private func ownUsersDirectoryResponse(
+        baseURL: URL, userRoot: String, fileManager: FileManager, includeContent: Bool
+    ) throws -> Response {
+        let rootURL = baseURL.appendingPathComponent(userRoot, isDirectory: true)
+        try fileManager.createDirectory(at: rootURL, withIntermediateDirectories: true)
+        let attributes = attributesForItem(url: rootURL, fileManager: fileManager)
+        let modified = isoDate(asDate(attributes[.modificationDate]))
+        let created = isoDate(asDate(attributes[.creationDate]))
+        let own = JupyterContentsModel(
+            name: rootURL.lastPathComponent, path: userRoot, lastModified: modified, created: created,
+            content: .none, format: "json", mimetype: "application/json", size: 0, writable: true,
+            type: "directory")
+        return try jsonResponse(
+            JupyterContentsModel(
+                name: "users", path: "users", lastModified: modified, created: created,
+                content: includeContent ? .children([own]) : .none, format: "json",
+                mimetype: "application/json", size: 0, writable: false, type: "directory"))
+    }
+
+    func jsonResponse(_ model: JupyterContentsModel) throws -> Response {
         Response(
             status: .ok,
             headers: ["Content-Type": "application/json"],
@@ -231,11 +272,11 @@ struct JupyterLiteContentsRoutes: RouteCollection {
         (any as? Date) ?? Date()
     }
 
-    private func isoDate(_ date: Date) -> String {
+    func isoDate(_ date: Date) -> String {
         iso8601String(date)
     }
 
-    private func userRootPath(for caller: APIUser, isStaff: Bool) throws -> String? {
+    func userRootPath(for caller: APIUser, isStaff: Bool) throws -> String? {
         if isStaff {
             return nil
         }
