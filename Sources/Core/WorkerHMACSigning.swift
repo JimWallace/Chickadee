@@ -100,7 +100,8 @@ public enum WorkerHMACSigning {
     ///
     /// Note: `headers.bodyHash` is the value the client sent —
     /// verifying that it matches the *actual* body bytes is the
-    /// caller's responsibility (the middleware does this separately).
+    /// caller's responsibility: `WorkerHMACAuthMiddleware` compares it with
+    /// the collected body after this check (#2896).
     public static func verify(
         method: String,
         path: String,

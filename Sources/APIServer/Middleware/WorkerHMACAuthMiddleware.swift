@@ -1,6 +1,7 @@
 import Core
 import Fluent
 import Foundation
+import NIOFoundationCompat
 import Vapor
 
 /// Authenticates internal worker requests using per-request HMAC
@@ -13,6 +14,10 @@ import Vapor
 struct WorkerHMACAuthMiddleware: AsyncMiddleware {
     let maxClockSkewSeconds: Int64
     let nonceTTLSeconds: Int64
+
+    /// The longest `X-Worker-Id` accepted. Runner ids are hostnames or short
+    /// operator-chosen names; the id is stored in every nonce row.
+    static let maxWorkerIDBytes = 256
 
     init(maxClockSkewSeconds: Int64 = 60, nonceTTLSeconds: Int64 = 300) {
         self.maxClockSkewSeconds = maxClockSkewSeconds
@@ -43,14 +48,9 @@ struct WorkerHMACAuthMiddleware: AsyncMiddleware {
             throw AppError.unauthorized(reason: "Worker request timestamp is outside the accepted window.")
         }
 
-        let nonceKey = (workerID ?? "_anonymous") + ":" + nonce
-        let wasInserted = try await WorkerNonceReplayGuard.insertIfNew(
-            nonceKey: nonceKey,
-            expiresAt: Date(timeIntervalSince1970: TimeInterval(now + nonceTTLSeconds)),
-            on: request.db
-        )
-        guard wasInserted else {
-            throw AppError.unauthorized(reason: "Replay detected.")
+        // The id is part of the nonce key, and a row is stored per request.
+        if let workerID, workerID.utf8.count > Self.maxWorkerIDBytes {
+            throw AppError.unauthorized(reason: "Worker id is too long.")
         }
 
         let headers = WorkerHMACSigning.SignedHeaders(
@@ -69,6 +69,28 @@ struct WorkerHMACAuthMiddleware: AsyncMiddleware {
             )
         else {
             throw AppError.unauthorized(reason: "Invalid worker signature.")
+        }
+
+        // The signature covers the body-hash header, not the body. Check that
+        // the header names the bytes received, or an attacker on the path
+        // keeps the signed headers and swaps the body (#2896). The route's
+        // own size cap applies; an empty body hashes as the runner hashes it.
+        try await request.collectBody()
+        let bodyHash = sha256HexDigest(request.body.data.map { Data(buffer: $0) } ?? Data())
+        guard WorkerHMACSigning.constantTimeEquals(bodyHash, bodyHashHeader.lowercased()) else {
+            throw AppError.unauthorized(reason: "Worker request body does not match its signed hash.")
+        }
+
+        // Record the nonce only for a request that is genuinely signed, so an
+        // unauthenticated caller cannot write `worker_nonces` rows (#2896).
+        let nonceKey = (workerID ?? "_anonymous") + ":" + nonce
+        let wasInserted = try await WorkerNonceReplayGuard.insertIfNew(
+            nonceKey: nonceKey,
+            expiresAt: Date(timeIntervalSince1970: TimeInterval(now + nonceTTLSeconds)),
+            on: request.db
+        )
+        guard wasInserted else {
+            throw AppError.unauthorized(reason: "Replay detected.")
         }
 
         let response = try await next.respond(to: request)
