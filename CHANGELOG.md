@@ -9,6 +9,18 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.861] - 2026-11-08
+
+### Fixed
+
+- **The runner's test setup cache no longer deletes a direct child of its root in the background.** #2892 renamed an evicted entry to a hidden tombstone in the cache root and deleted it off the actor. On Linux, `contentsOfDirectory(at:includingPropertiesForKeys:options:)` throws when a child is deleted during the read, so `TestSetupCacheTests.lRUEvictionBoundsCache` sometimes counted 0 entries in CI. Tombstones now go into a hidden `.evicted/` directory under the cache root, which startup removes. Production was not affected: the runner lists the cache root only at startup.
+- **A scratch copy that loses the race with eviction is retried, as intended.** On Linux, a copy whose source goes during the copy throws `.fileNoSuchFile`, not `.fileReadNoSuchFile`, so the retry did not run and the job failed. A failed copy also no longer leaves its partial `chickadee_ts_` directory in the work root.
+
+### Security
+
+- **The runner refuses a submission zip that would unpack too large (#2898).** A small deflated archive can expand about 1000:1, and the runner extracts submissions outside the sandbox's disk limit. `extractZipArchive` takes optional `ZipExtractionLimits` and reads the archive's directory totals first; the runner passes `.submission` (256 MB uncompressed, 10,000 entries). An archive whose totals cannot be read is refused.
+
+
 ## [0.5.860] - 2026-11-08
 
 ### Security
