@@ -322,7 +322,8 @@ async function postWorkerResult(baseURL, collection) {
       "x-worker-nonce": nonce,
       "x-worker-body-sha256": bodyHash,
       "x-worker-signature": signature,
-      "x-worker-id": "visual-fixture",
+      // No x-worker-id: the middleware would record the id as an active
+      // runner, and the admin dashboard baseline shows no runner.
     },
     body,
   });
