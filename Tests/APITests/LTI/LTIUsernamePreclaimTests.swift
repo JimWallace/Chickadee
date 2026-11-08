@@ -28,7 +28,8 @@ struct LTIUsernamePreclaimTests {
     }
 
     private func launch(username: String) throws -> LTIValidatedLaunch {
-        let claims = LTITestPlatform.claims(nonce: "n", subject: "alice-subject", custom: ["username": .string(username)])
+        let claims = LTITestPlatform.claims(
+            nonce: "n", subject: "alice-subject", custom: ["username": .string(username)])
         let registration = LTIPlatformRegistration(
             issuer: LTITestPlatform.issuer, clientID: LTITestPlatform.clientID,
             deploymentIDs: [LTITestPlatform.deploymentID])
