@@ -22,6 +22,12 @@ extension Request {
     /// An oversized body fails here as it would at that step. Vapor 5 decodes
     /// from the stream, so this goes away at the move.
     func collectBody() async throws {
-        _ = try await body.collect(max: application.routes.defaultMaxBodySize.value).get()
+        try await collectBody(maxBytes: application.routes.defaultMaxBodySize.value)
+    }
+
+    /// The same, with an explicit cap: for a middleware that must read the
+    /// body before a route whose own limit is above the default.
+    func collectBody(maxBytes: Int) async throws {
+        _ = try await body.collect(max: maxBytes).get()
     }
 }

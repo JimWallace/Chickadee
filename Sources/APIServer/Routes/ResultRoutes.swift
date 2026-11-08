@@ -12,7 +12,12 @@ import Vapor
 struct ResultRoutes: RouteCollection {
     func boot(routes: any RoutesBuilder) throws {
         let api = routes.grouped("api", "v1", "worker")
-        api.post("results", use: reportResults)
+        // The route's own body limit is the ingest limit below. A plain
+        // `post` took the app default (10 MB), so the limit never applied.
+        api.on(
+            .POST, "results",
+            body: .collect(maxSize: ByteCount(value: Self.resultIngestBodyLimitBytes)),
+            use: reportResults)
     }
 
     /// Result-ingest body limit (#1157): well above the worker's own

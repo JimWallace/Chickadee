@@ -75,7 +75,10 @@ struct WorkerHMACAuthMiddleware: AsyncMiddleware {
         // the header names the bytes received, or an attacker on the path
         // keeps the signed headers and swaps the body (#2896). The route's
         // own size cap applies; an empty body hashes as the runner hashes it.
-        try await request.collectBody()
+        // Collected up to the largest worker body, a result report, so a
+        // report the route accepts is not refused here first. Only a request
+        // with a good signature reaches this line.
+        try await request.collectBody(maxBytes: ResultRoutes.resultIngestBodyLimitBytes)
         let bodyHash = sha256HexDigest(request.body.data.map { Data(buffer: $0) } ?? Data())
         guard WorkerHMACSigning.constantTimeEquals(bodyHash, bodyHashHeader.lowercased()) else {
             throw AppError.unauthorized(reason: "Worker request body does not match its signed hash.")
