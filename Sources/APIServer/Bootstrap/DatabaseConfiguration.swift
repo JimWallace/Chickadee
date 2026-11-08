@@ -530,6 +530,11 @@ func registerMigrations(on app: Application) {
     // the planner statistics say. Index only; the table is created far above.
     app.migrations.add(CreatePendingRetestIndex())
 
+    // The `validation_variants`, `audit_log` actor and target, and
+    // `class_achievements` submission indexes. Index only; the tables are
+    // created far above.
+    app.migrations.add(CreateAuditAndValidationIndexes())
+
     // ---------------------------------------------------------------------
     // DATA MIGRATIONS. Keep these at the end, and add every new schema
     // migration ABOVE this block (#1805).
