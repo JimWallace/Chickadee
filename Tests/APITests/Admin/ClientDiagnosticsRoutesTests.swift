@@ -460,6 +460,10 @@ import VaporTesting
     @Test func differentSetupOrKindAreNotDeduplicated() async throws {
         try await withApp(app) { _ in
             let auth = try await loginAsStudent()
+            // Real setups: an ID that names no setup keys as none, so random
+            // IDs cannot each open a slot (#2900).
+            try await insertSetup(id: "setup_a")
+            try await insertSetup(id: "setup_b")
 
             let res1 = try await postJSON(
                 #"{"kind":"watchdog_timeout","testSetupID":"setup_a"}"#, auth: auth)
