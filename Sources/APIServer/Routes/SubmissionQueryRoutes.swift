@@ -65,9 +65,11 @@ struct SubmissionQueryRoutes: RouteCollection {
     @Sendable
     func getSubmission(req: Request) async throws -> SubmissionStatusResponse {
         let caller = try req.auth.require(APIUser.self)
+        // Only the columns the poll returns, not the whole model
+        // (`SubmissionStatusRow`, #2905).
         guard
             let subID = req.parameters.get("submissionID"),
-            let submission = try await APISubmission.find(subID, on: req.db)
+            let submission = try await SubmissionStatusRow.find(subID, on: req.db)
         else {
             throw AppError.notFound(resource: "Submission")
         }
@@ -76,11 +78,11 @@ struct SubmissionQueryRoutes: RouteCollection {
         // filtering, unlike getResults). The owner check is free; the staff
         // check costs a setup lookup + an enrollment-role query per poll.
         if submission.userID != caller.id {
-            guard try await isSubmissionStaff(caller, submission: submission, on: req.db) else {
+            guard try await isSubmissionStaff(caller, testSetupID: submission.testSetupID, on: req.db) else {
                 throw AppError.forbidden(action: "view this submission")
             }
         }
-        return SubmissionStatusResponse(submission: submission)
+        return SubmissionStatusResponse(row: submission)
     }
 
     // MARK: - GET /api/v1/submissions/:id/results
@@ -252,12 +254,14 @@ struct SubmissionStatusResponse: Content {
     let submittedAt: Date?
     let assignedAt: Date?
 
-    init(submission: APISubmission) {
-        self.submissionID = submission.id ?? ""
-        self.testSetupID = submission.testSetupID
-        self.status = submission.status
-        self.attemptNumber = submission.attemptNumber ?? 1
-        self.submittedAt = submission.submittedAt
-        self.assignedAt = submission.assignedAt
+    /// The response from the status poll's narrow row. A submission with no
+    /// recorded attempt number reads as attempt 1.
+    init(row: SubmissionStatusRow) {
+        self.submissionID = row.id
+        self.testSetupID = row.testSetupID
+        self.status = row.status
+        self.attemptNumber = row.attemptNumber ?? 1
+        self.submittedAt = row.submittedAt
+        self.assignedAt = row.assignedAt
     }
 }

@@ -170,18 +170,6 @@ func isStaffAnywhere(_ user: APIUser, includingArchived: Bool, db: any Database)
     return try await query.count() > 0
 }
 
-/// The UUID of the course that owns `submission`, resolved through its test
-/// setup (`test_setups.course_id`). Nil only if the setup row is missing.
-/// Used to scope per-course staff checks on the submission view/download/query
-/// paths (#417 Slice G).
-func courseID(ofSubmission submission: APISubmission, on db: any Database) async throws -> UUID? {
-    // Only `course_id`: the row's manifest is large and not read here.
-    try await APITestSetup.query(on: db)
-        .filter(\.$id == submission.testSetupID)
-        .field(\.$courseID)
-        .first()?.courseID
-}
-
 /// Whether `user` is staff (TA+ or admin) for `submission`'s course — the
 /// per-course view gate for the submission view/download paths. False when the
 /// submission's setup (hence course) can't be resolved (#417 Slice G).
@@ -190,7 +178,25 @@ func isSubmissionStaff(
 ) async throws
     -> Bool
 {
-    guard let owningCourseID = try await courseID(ofSubmission: submission, on: db) else {
+    try await isSubmissionStaff(user, testSetupID: submission.testSetupID, on: db)
+}
+
+/// `isSubmissionStaff(_:submission:on:)` for a caller that holds only the
+/// submission's test setup ID, such as the status poll's narrow row
+/// (`SubmissionStatusRow`). The submission form calls this one, so the two
+/// gates cannot drift.
+func isSubmissionStaff(
+    _ user: APIUser, testSetupID: String, on db: any Database
+) async throws
+    -> Bool
+{
+    // Only `course_id`: the row's manifest is large and not read here.
+    guard
+        let owningCourseID = try await APITestSetup.query(on: db)
+            .filter(\.$id == testSetupID)
+            .field(\.$courseID)
+            .first()?.courseID
+    else {
         return false
     }
     return try await isCourseStaff(user, inCourse: owningCourseID, db: db)

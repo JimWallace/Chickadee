@@ -1418,6 +1418,40 @@ coordination, and each must see every edit.
 - **Parallel path:** none now. Do not write `sortOrder` in a new reorder
   route or tool; call the service.
 
+### The middleware chain: `bootstrapAppMiddleware`, `AsyncMiddlewareGroup`
+
+- **Order:** the header of `Bootstrap/AppMiddleware.swift` lists it. The
+  middleware above Vapor's `SessionsMiddleware` runs as one
+  `AsyncMiddlewareGroup` and the middleware below it as another (#2905). Each
+  session route group in `routes.swift` (`auth`, `instructor`, `admin`) runs
+  its `sessionAuth`, role, nav and CSRF middleware as one group.
+- **Rules:**
+  - A group calls its members in the listed order, so a new middleware goes
+    into the right group at the position it needs, exactly as it would have
+    been registered on its own.
+  - The test app does not run `bootstrapAppMiddleware`.
+    `AppMiddlewareOrderTests` pins the production order from the source,
+    `AsyncMiddlewareGroupTests` pins the group's order, short-circuit and
+    error behaviour, and the server and browser smoke jobs run the real
+    chain.
+  - The session authenticator loads the user through `APIUserSessionLookup`,
+    which decodes the row with the model's own `output(from:)`. The avatar
+    and account routes save that user, and a save must write only the fields
+    it changed. Do not replace it with a hand-built model.
+  - `SecurityHeadersMiddleware`, outermost, decides response compression:
+    HTML never, and JSON under 1 KB never (`smallJSONLimit`). A route that
+    wants a small JSON reply compressed is overridden there.
+- **Parallel paths:**
+  - Two hot reads name `submissions` columns as strings, not through the
+    model: `SubmissionStatusRow` (the status poll) and
+    `WorkerJobClaim.hasPendingWork` (the idle runner poll). A renamed column
+    fails them at run time; `SubmissionStatusRowTests` ties the row's
+    columns to the model's field keys, and `PendingWorkProbeTests` runs the
+    probe.
+  - The per-course staff gate for a submission has one body,
+    `isSubmissionStaff(_:testSetupID:on:)`. The form that takes a submission
+    delegates to it.
+
 ### Browser isolation and the CSP
 
 - **Rules:**

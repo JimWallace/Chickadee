@@ -1,7 +1,10 @@
 // APIServer/Bootstrap/AppMiddleware.swift
 //
 // Order-sensitive middleware registration plus view/static-file setup.
-// The order here is load-bearing:
+// The order here is load-bearing. Everything above `sessions.middleware`
+// runs as one AsyncMiddlewareGroup and everything below it as another (#2905);
+// a group calls its members in the listed order, so the list below is the
+// order a request sees:
 //
 //   SecurityHeadersMiddleware — outermost so it adds CSP / nosniff /
 //                               Permissions-Policy to EVERY response,
@@ -113,16 +116,26 @@ func bootstrapAppMiddleware(_ app: Application, appConfig: AppConfig) {
     }
     let editorInlineScriptHashes =
         (vendoredEditorHashes ?? []) + [JupyterLiteAppIndexMiddleware.selfCloseScriptSourceExpression]
-    app.middleware.use(
+    // The middleware below runs as two groups around Vapor's
+    // SessionsMiddleware (#2905). Vapor 4 runs each AsyncMiddleware it is
+    // given as its own Task behind a future bridge, which cost about 47 µs of
+    // CPU per layer and about 38% of a trivial request. An
+    // AsyncMiddlewareGroup is one layer to Vapor and calls its members in the
+    // listed order, so the order below is the request's order, exactly as if
+    // each were registered on its own. SessionsMiddleware is Vapor's own
+    // future-based middleware and stays a layer of its own between the
+    // groups.
+    var outerMiddleware: [any AsyncMiddleware] = [
         SecurityHeadersMiddleware(
             editorInlineScriptHashes: editorInlineScriptHashes,
-            strictTransportSecurity: hstsValue))
+            strictTransportSecurity: hstsValue)
+    ]
 
     // Error page middleware sits beneath SecurityHeadersMiddleware so it
     // catches errors from all subsequent middleware and route handlers.
-    app.middleware.use(ErrorPageMiddleware())
+    outerMiddleware.append(ErrorPageMiddleware())
     if securityConfiguration.enforceHTTPS {
-        app.middleware.use(HTTPSRedirectMiddleware(configuration: securityConfiguration))
+        outerMiddleware.append(HTTPSRedirectMiddleware(configuration: securityConfiguration))
     }
     // Vendored editor assets short-circuit here, before any session work.
     // See EditorAssetFastPathMiddleware for the whitelist + cache policy.
@@ -132,7 +145,7 @@ func bootstrapAppMiddleware(_ app: Application, appConfig: AppConfig) {
     // sees them.  It must therefore carry the cross-origin-isolation headers itself,
     // or the isolated editor page spawns a worker whose script lacks COEP and
     // Chrome blocks it (ERR_BLOCKED_BY_RESPONSE).
-    app.middleware.use(
+    outerMiddleware.append(
         EditorAssetFastPathMiddleware(
             publicDirectory: app.directory.publicDirectory,
             crossOriginIsolation: true))
@@ -145,29 +158,30 @@ func bootstrapAppMiddleware(_ app: Application, appConfig: AppConfig) {
     // VERBOSE_REQUEST_TIMING) and skips idle runner check-ins, so hot-path
     // worker polls don't turn into per-poll INSERTs.  (Shipped in v0.4.573
     // but never registered — the metrics pipeline had been silently empty.)
-    app.middleware.use(RequestTimingMiddleware())
+    outerMiddleware.append(RequestTimingMiddleware())
+    app.middleware.use(AsyncMiddlewareGroup(outerMiddleware))
     app.middleware.use(app.sessions.middleware)
-    app.middleware.use(UserSessionAuthenticator())
+    var innerMiddleware: [any AsyncMiddleware] = [UserSessionAuthenticator()]
     if securityConfiguration.sessionIdleTimeoutSeconds > 0 {
-        app.middleware.use(
+        innerMiddleware.append(
             SessionIdleTimeoutMiddleware(
                 idleTimeoutSeconds: securityConfiguration.sessionIdleTimeoutSeconds
             )
         )
     }
-    app.middleware.use(
+    innerMiddleware.append(
         UserActivityMiddleware(
             debounceWindow: UserActivityMiddleware.debounceWindow(
                 forIdleTimeoutSeconds: securityConfiguration.sessionIdleTimeoutSeconds
             )
         )
     )
-    app.middleware.use(UserFileNamespaceMiddleware())
+    innerMiddleware.append(UserFileNamespaceMiddleware())
     // Snapshots assignment content after a successful instructor write. Must
     // sit after the session authenticator so the version row can be attributed
     // to the acting user. A no-op (one storage read) on every request that
     // doesn't resolve a test setup for write.
-    app.middleware.use(AssignmentVersionCaptureMiddleware())
+    innerMiddleware.append(AssignmentVersionCaptureMiddleware())
     // Scan-mode seatbelt: when SCAN_MODE=true is set in the environment, the
     // middleware 503s POSTs against destructive routes (submissions, test-setup
     // uploads, retests, user delete/role) so an in-progress vulnerability scan
@@ -177,7 +191,7 @@ func bootstrapAppMiddleware(_ app: Application, appConfig: AppConfig) {
             "SCAN_MODE=true — destructive POST endpoints are returning 503. Disable after the scan window."
         )
     }
-    app.middleware.use(ScanModeMiddleware(configuration: scanModeConfiguration))
+    innerMiddleware.append(ScanModeMiddleware(configuration: scanModeConfiguration))
     // Allow notebook uploads from the assignment-creation flow.
     app.routes.defaultMaxBodySize = "10mb"
 
@@ -189,6 +203,8 @@ func bootstrapAppMiddleware(_ app: Application, appConfig: AppConfig) {
     // HTML opts out per-response in SecurityHeadersMiddleware: pages embed the
     // per-session CSRF token, and compressing a secret alongside reflectable
     // request data is the precondition for BREACH-style compression oracles.
+    // JSON under 1 KB also opts out there: a compressor per response costs more
+    // CPU than the few bytes it saves (#2905).
     app.http.server.configuration.responseCompression = .enabledForCompressibleTypes
 
     // MARK: - Views + static files
@@ -214,8 +230,8 @@ func bootstrapAppMiddleware(_ app: Application, appConfig: AppConfig) {
     // wasm middleware's more specific policies (immutable hashed wasm,
     // no-cache loader) win — StaticAssetCacheMiddleware never overwrites an
     // existing Cache-Control.
-    app.middleware.use(StaticAssetCacheMiddleware())
-    app.middleware.use(RunnerWasmCacheMiddleware())
+    innerMiddleware.append(StaticAssetCacheMiddleware())
+    innerMiddleware.append(RunnerWasmCacheMiddleware())
     // Cache discipline for the editor bundle assets that ride the SLOW path
     // (FileMiddleware) rather than EditorAssetFastPathMiddleware — notably
     // /jupyterlite/jupyter-lite.json and the lab/notebooks/repl entry HTML, whose
@@ -223,20 +239,20 @@ func bootstrapAppMiddleware(_ app: Application, appConfig: AppConfig) {
     // propagates on the next load; immutable only for content-hashed chunks. The
     // fast path stamps the build/extensions/pyodide trees itself (it
     // short-circuits before this runs); this covers what falls through to it.
-    app.middleware.use(BundleAssetCacheMiddleware())
+    innerMiddleware.append(BundleAssetCacheMiddleware())
     // Cross-origin isolation for the notebook editor (unconditional). This
     // middleware runs BEFORE FileMiddleware so it can decorate the SLOW-PATH
     // /jupyterlite/* responses FileMiddleware serves (the editor HTML documents —
     // repl/lab/notebooks index.html — which are NOT on the fast path); the fast
     // path above isolates the vendored asset trees it serves itself, and
     // COEPMiddleware (after FileMiddleware) covers the dynamic notebook page.
-    app.middleware.use(NotebookAssetIsolationMiddleware(enabled: true))
+    innerMiddleware.append(NotebookAssetIsolationMiddleware(enabled: true))
     // Inject the `exposeAppInBrowser` PageConfig flag into the served JupyterLite
     // jupyter-lite.json configs (kept OUT of the verified bundle — see the
     // middleware). Runs just before FileMiddleware so it intercepts the static
     // config fetch; the cache + isolation middlewares above still decorate its
     // response on the way back.
-    app.middleware.use(
+    innerMiddleware.append(
         JupyterLiteConfigFlagMiddleware(publicDirectory: app.directory.publicDirectory))
     // JupyterLite (Notebook 7) opens documents at canonical URLs like
     // `/jupyterlite/notebooks?path=…` with no `/index.html` — it assumes the host
@@ -245,14 +261,15 @@ func bootstrapAppMiddleware(_ app: Application, appConfig: AppConfig) {
     // notebook opened in a new tab). Redirect the app dirs to their index.html,
     // preserving the query, so the app loads. Runs just before FileMiddleware,
     // which would otherwise 404 the bare directory.
-    app.middleware.use(JupyterLiteAppIndexMiddleware())
+    innerMiddleware.append(JupyterLiteAppIndexMiddleware())
     // A large kernel file with a brotli copy from the image build goes out as
     // that copy. It returns without calling next, so the on-the-fly
     // compression below never sees it.
-    app.middleware.use(PrecompressedAssetMiddleware(publicDirectory: app.directory.publicDirectory))
+    innerMiddleware.append(PrecompressedAssetMiddleware(publicDirectory: app.directory.publicDirectory))
     // The kernel .so libraries are octet-stream, which the compression
     // allowlist above skips. They compress about 4x, so they opt in.
-    app.middleware.use(KernelLibraryCompressionMiddleware())
-    app.middleware.use(FileMiddleware(publicDirectory: app.directory.publicDirectory))
-    app.middleware.use(COEPMiddleware(isolateNotebook: true))
+    innerMiddleware.append(KernelLibraryCompressionMiddleware())
+    innerMiddleware.append(FileMiddleware(publicDirectory: app.directory.publicDirectory))
+    innerMiddleware.append(COEPMiddleware(isolateNotebook: true))
+    app.middleware.use(AsyncMiddlewareGroup(innerMiddleware))
 }

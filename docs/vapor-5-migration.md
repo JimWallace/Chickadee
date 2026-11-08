@@ -68,6 +68,7 @@ Each step is safe on Vapor 4 and does not change behaviour.
 | Poll fragments take a `String` | `Helpers/PollFragmentResponse.swift` | No `ByteBuffer` in its API. |
 | One test seam | `Tests/APITests/TestRequests.swift` | Re-implement its names on the Vapor 5 `TestClient` (see "The tests"). |
 | Poll fragments in the tests | `PollFragmentResponseTests`, `PollFragmentCSRFTests` | They pass a `String`. |
+| Async middleware runs in groups | `Middleware/AsyncMiddlewareGroup.swift`, `Bootstrap/AppMiddleware.swift`, `routes.swift` | Vapor 4 runs each `AsyncMiddleware` as its own Task behind a future bridge, so the chain runs as a few groups, each one layer (#2905). Vapor 5's chain is async, so replace each group with its members, in the same order, and delete the type. |
 | The macOS floor | `Package.swift` | It is `.macOS("27.0")`, for the worker's `withTaskCancellationShield`. That is above 26.2, the Vapor 5 minimum. No change. |
 | A guard keeps it so | `scripts/check-vapor5-readiness.sh` | `format-lint` fails on new event-loop API, on a wait on a future (`).get()`, `body.collect(max:)`) outside two named files, on `content.decode` or `content.get` outside the two helpers, and on a test that uses VaporTesting or builds a `Request` outside the seam. |
 

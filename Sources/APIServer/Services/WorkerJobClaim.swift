@@ -27,30 +27,7 @@ enum WorkerJobClaim {
         body: WorkerActivityPayload, runnerProfile: RunnerCapabilityProfile?,
         db: any Database, application: Application, logger: Logger
     ) async throws -> ClaimedJob? {
-        // Idle-poll short-circuit (2026-07 audit): most polls find nothing to
-        // claim, yet each one previously entered the claim section and opened
-        // a write transaction issuing 2–3 candidate SELECTs. One cheap indexed
-        // existence probe answers the empty case. Deliberately a fresh DB
-        // read, not cached state: there is nothing to invalidate, it is
-        // correct across processes, and a submission enqueued right after the
-        // probe is simply seen by the runner's next poll — the same pickup
-        // latency the poll cadence already implies. The claim transaction
-        // below re-reads candidates, so this never affects claim atomicity.
-        //
-        // The sort on `kind` changes no answer; it is there for the planner.
-        // Only an index led by `(status, kind)` returns that order without
-        // sorting, from the pending range, so the probe reads the first
-        // pending entry or an empty range, whatever the statistics say.
-        // Unsorted, statistics taken during a backlog made it a sequential
-        // scan, which read the whole table on every idle poll once the
-        // backlog was gone (24 ms on a 225k-row table).
-        let hasPendingWork =
-            try await APISubmission.query(on: db)
-            .filter(\.$status == SubmissionStatus.pending.rawValue)
-            .sort(\.$kind, .ascending)
-            .field(\.$id)
-            .first() != nil
-        guard hasPendingWork else { return nil }
+        guard try await hasPendingWork(on: db) else { return nil }
 
         let evaluator = ClaimEvaluator(
             assignmentRequirements: application.assignmentRequirements,
@@ -78,6 +55,45 @@ enum WorkerJobClaim {
         }
         await walk.finish()
         return nil
+    }
+
+    /// Whether any submission is pending: the idle-poll short-circuit.
+    ///
+    /// Most polls find nothing to claim, yet each one previously entered the
+    /// claim section and opened a write transaction issuing 2–3 candidate
+    /// SELECTs (2026-07 audit). One cheap indexed existence probe answers the
+    /// empty case. Deliberately a fresh DB read, not cached state: there is
+    /// nothing to invalidate, it is correct across processes, and a submission
+    /// enqueued right after the probe is simply seen by the runner's next poll
+    /// — the same pickup latency the poll cadence already implies. The claim
+    /// below re-reads candidates, so this never affects claim atomicity.
+    ///
+    /// The sort on `kind` changes no answer; it is there for the planner.
+    /// Only an index led by `(status, kind)` returns that order without
+    /// sorting, from the pending range, so the probe reads the first pending
+    /// entry or an empty range, whatever the statistics say. Unsorted,
+    /// statistics taken during a backlog made it a sequential scan, which read
+    /// the whole table on every idle poll once the backlog was gone (24 ms on a
+    /// 225k-row table).
+    ///
+    /// The probe runs through SQLKit: every runner slot polls up to once a
+    /// second, and a Fluent query costs about twice the CPU of the same select
+    /// (#2905). A database without SQL uses the same query through Fluent.
+    static func hasPendingWork(on db: any Database) async throws -> Bool {
+        guard let sql = db as? (any SQLDatabase) else {
+            return try await APISubmission.query(on: db)
+                .filter(\.$status == SubmissionStatus.pending.rawValue)
+                .sort(\.$kind, .ascending)
+                .field(\.$id)
+                .first() != nil
+        }
+        return try await sql.select()
+            .column("id")
+            .from(APISubmission.schema)
+            .where("status", .equal, SubmissionStatus.pending.rawValue)
+            .orderBy("kind", .ascending)
+            .limit(1)
+            .first() != nil
     }
 
     /// Atomically claims one submission (#1172). It claims only the
