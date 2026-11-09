@@ -168,20 +168,10 @@ enum PersonalizationSubstitution {
     ///
     /// Shared by the worker job payload (`WorkerJobRoutes`) and the browser
     /// seed endpoint (`BrowserRunnerRoutes`) so both grade identically.
-    static func gradingInputs(
-        manifest: TestProperties,
-        seedHex: String?,
-        supportFilesDirectory: String?,
-        language: AssignmentLanguage?
-    ) async -> [String: String]? {
-        await gradingInputs(
-            manifest: manifest, seedHex: seedHex, courseSeedHex: nil, dealNumber: nil,
-            supportFilesDirectory: supportFilesDirectory, language: language)
-    }
-
-    /// The same, with the student's course seed and deal number, and where
-    /// the dataset slices come from (see `resolve`). The worker job and the
-    /// browser seed both ship the slices, so they pass `.resolved`.
+    ///
+    /// Takes the student's course seed and deal number, and where the dataset
+    /// slices come from (see `resolve`). The worker job and the browser seed
+    /// both ship the slices, so they pass `.resolved`.
     static func gradingInputs(
         manifest: TestProperties,
         seedHex: String?,

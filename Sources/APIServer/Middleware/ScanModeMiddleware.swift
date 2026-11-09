@@ -85,10 +85,3 @@ struct ScanModeMiddleware: AsyncMiddleware {
 struct ScanModeConfigurationKey: StorageKey {
     typealias Value = ScanModeConfiguration
 }
-
-extension Application {
-    var scanModeConfiguration: ScanModeConfiguration {
-        get { storage[ScanModeConfigurationKey.self] ?? .default }
-        set { storage[ScanModeConfigurationKey.self] = newValue }
-    }
-}
