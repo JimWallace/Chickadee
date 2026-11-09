@@ -62,7 +62,12 @@ struct JupyterLiteContentsRoutes: RouteCollection {
         let fm = FileManager.default
         let baseDir = req.application.directory.publicDirectory + "jupyterlite/files/"
         try fm.createDirectory(atPath: baseDir, withIntermediateDirectories: true)
-        let baseURL = URL(fileURLWithPath: baseDir, isDirectory: true).standardizedFileURL
+        // Resolved, because the production image links `jupyterlite/files` to
+        // the data volume (`Dockerfile`). Unresolved, the drive root is the link
+        // itself, which `isDirectory` does not count as a folder, so a staff
+        // listing of the root answered 404 and the editor's file browser showed
+        // "Directory not found" on every poll.
+        let baseURL = URL(fileURLWithPath: baseDir, isDirectory: true).standardizedFileURL.resolvingSymlinksInPath()
 
         // The kernel's file system walks to the notebook's folder one level at a
         // time, so it reads `users` before `users/<id>`. A student who may not
