@@ -810,9 +810,14 @@ coordination, and each must see every edit.
   - The browser runner (`buildCollection`). It calculates counts only.
   - The server (`reconcileBrowserCollection`). It calculates the points
     again, but keeps the counts from the browser.
-- **Parallel paths.** Two formulas calculate the grade percent:
+- **Parallel paths.** These calculate the grade percent, and each must equal
+  `GradePercent.of`, where only a full mark reads 100:
   - `gradePercent(from:)` in `Utilities/TierFilter.swift`.
   - `CollectionGradeFields` in `Utilities/CollectionGradeFields.swift`.
+  - `GradeResultSummary.gradePercentValue`, from the result's grade columns.
+  - `GradePercentSQL`, the SQL fold behind the dashboard, the roster and
+    the grades CSV. `GradePercentFoldTests` runs it and the Swift fold on
+    the same rows.
 - **Rules:**
   - `ResultIngestEffects` is the one ingest chokepoint. The worker path, the
     browser path and the tournament arena all use it. Put a new side effect
