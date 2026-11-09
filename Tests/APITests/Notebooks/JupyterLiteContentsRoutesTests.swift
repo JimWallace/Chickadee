@@ -56,6 +56,23 @@ import VaporTesting
         self.instructorUser = instructorUser
     }
 
+    /// Staff read the authoring tree at the root; only a student's root is
+    /// reduced to `users` (#2924).
+    @Test func staffRootListsTheTree() async throws {
+        try await withApp(app) { _ in
+            let notebookName = "setup_root-listing.ipynb"
+            try Data(#"{"nbformat":4,"nbformat_minor":5,"metadata":{},"cells":[]}"#.utf8)
+                .write(to: URL(fileURLWithPath: publicDir + "jupyterlite/files/" + notebookName))
+            try await app.asyncTest(.GET, "/jupyterlite/api/contents?content=1") { res in
+                #expect(res.status == .ok)
+                let object = try #require(
+                    try JSONSerialization.jsonObject(with: Data(res.body.string.utf8)) as? [String: Any])
+                let content = try #require(object["content"] as? [[String: Any]])
+                #expect(content.contains { ($0["name"] as? String) == notebookName })
+            }
+        }
+    }
+
     @Test func allJSONListsNotebook() async throws {
         try await withApp(app) { _ in
             let notebookName = "setup_test-assignment.ipynb"
