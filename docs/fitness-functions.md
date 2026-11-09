@@ -69,8 +69,9 @@ exemption list. Before it, five guards ran with no fixture.
   build if one skips authorization.
 - **The database guards** ([database-design.md](database-design.md)) — read the
   *migrated catalog*, not the Swift text. `SchemaDesignTests` (foreign-key
-  indexes, covered indexes, column types) and `ModelSchemaAgreementTests`
-  (every Fluent field against its column) are shrink-only allowlists.
+  indexes, covered indexes, column types) holds shrink-only allowlists.
+  `ModelSchemaAgreementTests` checks every Fluent field against its column,
+  through Fluent's own property reflection, and has no allowlist.
   `StudentWorkDeletionCoverageTests` seeds a row into every table keyed to a
   setup, submission, assignment or course and runs the real delete, so a new
   table is covered with no edit. `HotPathStatementBudgetTests` pins the

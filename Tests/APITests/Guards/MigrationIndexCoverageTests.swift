@@ -36,11 +36,11 @@ import VaporTesting
         // An index is created either as raw SQL or through the SQLKit builder;
         // both shapes are read, so a migration written either way is covered.
         let create = [
-            try Regex(#"CREATE (?:UNIQUE )?INDEX (?:IF NOT EXISTS )?(idx_[a-z0-9_]+)"#),
+            try Regex(#"CREATE (?:UNIQUE )?INDEX (?:CONCURRENTLY )?(?:IF NOT EXISTS )?(idx_[a-z0-9_]+)"#),
             try Regex(#"create\(index: "(idx_[a-z0-9_]+)""#),
         ]
         let drop = [
-            try Regex(#"DROP INDEX (?:IF EXISTS )?(idx_[a-z0-9_]+)"#),
+            try Regex(#"DROP INDEX (?:CONCURRENTLY )?(?:IF EXISTS )?(idx_[a-z0-9_]+)"#),
             try Regex(#"drop\(index: "(idx_[a-z0-9_]+)""#),
         ]
 

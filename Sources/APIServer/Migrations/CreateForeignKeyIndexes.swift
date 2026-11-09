@@ -14,6 +14,14 @@
 // The four dropped indexes are each a leading prefix of another index on the
 // same table, or a duplicate of a unique constraint, so every query they
 // served is served by the wider index. Dropping them only saves write work.
+//
+// The three indexes on the request and grading logs build `CONCURRENTLY`:
+// those tables take a write on every request or job, and a plain build would
+// block them while the new server migrates beside the live one. A concurrent
+// build cannot run inside a transaction; Fluent runs each migration outside
+// one. A concurrent build that fails leaves an invalid index behind, so each
+// drops any index of its name first: the migration has not been recorded, so
+// an index of that name can only be a failed attempt.
 
 import Fluent
 import SQLKit
@@ -23,14 +31,18 @@ struct CreateForeignKeyIndexes: ChickadeeMigration {
         guard let sql = database as? (any SQLDatabase) else { return }
 
         // Cascades and SET NULL from a submission, setup or assignment delete.
+        // The first three are on the request and grading logs: concurrent.
+        try await sql.raw("DROP INDEX CONCURRENTLY IF EXISTS idx_request_metrics_submission_id").run()
         try await sql.raw(
-            "CREATE INDEX IF NOT EXISTS idx_request_metrics_submission_id ON request_metrics(submission_id) WHERE submission_id IS NOT NULL"
+            "CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_request_metrics_submission_id ON request_metrics(submission_id) WHERE submission_id IS NOT NULL"
         ).run()
+        try await sql.raw("DROP INDEX CONCURRENTLY IF EXISTS idx_submission_diagnostics_test_setup_id").run()
         try await sql.raw(
-            "CREATE INDEX IF NOT EXISTS idx_submission_diagnostics_test_setup_id ON submission_diagnostics(test_setup_id)"
+            "CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_submission_diagnostics_test_setup_id ON submission_diagnostics(test_setup_id)"
         ).run()
+        try await sql.raw("DROP INDEX CONCURRENTLY IF EXISTS idx_job_execution_metrics_test_setup_id").run()
         try await sql.raw(
-            "CREATE INDEX IF NOT EXISTS idx_job_execution_metrics_test_setup_id ON job_execution_metrics(test_setup_id)"
+            "CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_job_execution_metrics_test_setup_id ON job_execution_metrics(test_setup_id)"
         ).run()
         try await sql.raw(
             "CREATE INDEX IF NOT EXISTS idx_composite_contributions_submission_id ON composite_contributions(submission_id)"
@@ -81,10 +93,12 @@ struct CreateForeignKeyIndexes: ChickadeeMigration {
         ).run()
 
         // Covered by a wider index or a unique constraint on the same columns.
-        try await sql.raw("DROP INDEX IF EXISTS idx_course_enrollments_user_id").run()
-        try await sql.raw("DROP INDEX IF EXISTS idx_assignments_course_id").run()
-        try await sql.raw("DROP INDEX IF EXISTS idx_user_activity_events_created").run()
-        try await sql.raw("DROP INDEX IF EXISTS idx_assignment_versions_setup_number").run()
+        // Concurrent: a plain drop queued behind a long transaction on the
+        // table would block every read of it while it waits.
+        try await sql.raw("DROP INDEX CONCURRENTLY IF EXISTS idx_course_enrollments_user_id").run()
+        try await sql.raw("DROP INDEX CONCURRENTLY IF EXISTS idx_assignments_course_id").run()
+        try await sql.raw("DROP INDEX CONCURRENTLY IF EXISTS idx_user_activity_events_created").run()
+        try await sql.raw("DROP INDEX CONCURRENTLY IF EXISTS idx_assignment_versions_setup_number").run()
     }
 
     func revert(on database: any Database) async throws {

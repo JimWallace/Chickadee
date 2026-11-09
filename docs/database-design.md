@@ -14,7 +14,7 @@ model).
 | Every foreign key has an index | `SchemaDesignTests.everyForeignKeyHasAnIndex` |
 | No index is covered by another | `SchemaDesignTests.noIndexIsCoveredByAnother` |
 | Timestamps are `timestamptz`; new JSON is `jsonb` | `SchemaDesignTests.columnTypesFollowTheConventions` |
-| A model's fields match its columns, nullability included | `ModelSchemaAgreementTests` |
+| Every model field has a column, and no non-optional field sits over a nullable column | `ModelSchemaAgreementTests` |
 | A delete leaves no row keyed to what it deleted | `StudentWorkDeletionCoverageTests` |
 | A hot request sends a fixed number of statements | `HotPathStatementBudgetTests` |
 | Everything that needs judgment (below) | the `db-review` agent |
@@ -69,7 +69,10 @@ only shrink: an entry that no longer applies fails its test.
   `registerMigrations` (#1805). `MigrationOrderTests` checks the order.
 - **A `Create*` fold must not change a column.** Consolidating `Add*`
   migrations into `Create*` once changed nullability against production;
-  `ModelSchemaAgreementTests` now compares every model with its table.
+  `ModelSchemaAgreementTests` now fails when a non-optional field sits over
+  a nullable column, the direction that fails to decode a NULL row. The other
+  direction (an optional field over a NOT NULL column, as every `@Timestamp`
+  is) is safe and not reported.
 
 ## A query
 
