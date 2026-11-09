@@ -62,13 +62,16 @@ with the `Chickadee_Admin` MCP connected, as the weekly dead-code review does
    moved more than 25%.
 4. Opens a draft pull request with the log entry. The maintainer merges it, so
    the log is reviewed like any other change.
-5. For each confirmed regression, finds the commit that caused it and opens a
-   draft pull request with the smallest fix, at most two a week; larger work
-   becomes an issue labelled `performance`. In a week with no regression, it
-   makes one measured improvement in that week's layer.
+5. For each confirmed regression, finds the commit that caused it, fixes it
+   in a pull request, merges it when CI is green, and checks that the deploy
+   is healthy and the number moved, reverting if production got worse. A
+   migration, a design decision or a large change stays an unmerged pull
+   request with an issue. In a week with no regression, it makes one
+   measured improvement in that week's layer.
 
-It never writes to production, never runs `chickadee-loadtest` against it, and
-never merges. The full procedure is `Tools/perf-bench/weekly-task.md`.
+It changes production only through merges to `main` and never runs
+`chickadee-loadtest` against it. The full procedure is
+`Tools/perf-bench/weekly-task.md`.
 
 These admin MCP calls answer the questions that matter for the week. Record
 each as a row (date, version from `get_deployment_info`, value):
@@ -128,7 +131,7 @@ that regresses it fails before merge.
 
 | Ratchet | How it is measured | Where it runs |
 |---|---|---|
-| SQL statements per hot-path request | **Done:** `StatementBudgetTests` counts the statements of each page of the baseline table in `database-performance.md`, plus the idle runner poll, and holds each at an exact budget. A test-only middleware counts PostgresKit's per-statement log on the request's logger. The claim path is still to add | `swift-tests.yml` |
+| SQL statements per hot-path request | **Done:** `StatementBudgetTests` counts the statements of each page of the baseline table in `database-performance.md`, plus the idle runner poll, and holds each within a budget: more statements fail, fewer print the new count to lower the budget to. A test-only middleware counts PostgresKit's per-statement log on the request's logger. The claim path is still to add | `swift-tests.yml` |
 | Statements that grow with the table | **Done:** the same suite at two course sizes (2 students with 2 attempts each, 8 with 3); the counts must be equal, and a failure lists the extra statements. A count that grows is an N+1 | `swift-tests.yml` |
 | Rows hydrated per request | Same suite; the count of Fluent models decoded. Fluent hydration costs 40–60 µs per row on the event loop ([database-performance.md](database-performance.md)) | `swift-tests.yml` |
 | Foreign keys without an index | Exists: `ForeignKeyIndexCoverageTests` | — |

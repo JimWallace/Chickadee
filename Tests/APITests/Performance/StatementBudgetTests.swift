@@ -7,9 +7,13 @@
 //
 // Two checks per page:
 //
-// - **The count equals its budget.** A change that adds a statement fails
-//   here. A change that removes one fails too, with the new count, so the
-//   budget is lowered in the same pull request and cannot creep back up.
+// - **The count stays within its budget.** A change that adds a statement
+//   fails here. A change that removes one passes and prints a note with the
+//   new count, as the ratchets in scripts/check-styles.sh do; lower the
+//   budget then, so the count cannot creep back up. A count below its budget
+//   does not fail because the weekly performance task
+//   (Tools/perf-bench/weekly-task.md) merges its own fixes and may not edit
+//   this file; it lists the budgets to lower for the maintainer.
 // - **The count does not grow with the data.** Each page is measured on a
 //   small course and on a larger one. A count that differs is a query per
 //   row: an N+1.
@@ -47,8 +51,9 @@ struct StatementBudgetTests {
 
     /// The pages measured, and the statements each may send.
     ///
-    /// When a count goes down, lower its budget here in the same pull request.
-    /// When a count must go up, raise it with the reason in the pull request.
+    /// When a count goes down, lower its budget here (the test prints the new
+    /// count). When a count must go up, raise it with the reason in the pull
+    /// request.
     static let budgets: [Page: Int] = [
         .studentDashboard: 20,
         .studentSubmission: 15,
@@ -95,9 +100,14 @@ struct StatementBudgetTests {
             let budget = try #require(Self.budgets[page], "\(page.rawValue) has no budget")
             let count = try #require(statements[page]).count
             #expect(
-                count == budget,
-                "\(page.rawValue): \(count) statements, budget \(budget). \(count < budget ? "Lower the budget to \(count)." : "Find the added statement.")"
+                count <= budget,
+                "\(page.rawValue): \(count) statements, budget \(budget). Find the added statement."
             )
+            if count < budget {
+                print(
+                    "note: \(page.rawValue) sends \(count) statements; lower its budget in StatementBudgetTests from \(budget) to \(count)."
+                )
+            }
         }
     }
 
