@@ -181,11 +181,12 @@ Read from the code on 2026-11-09:
   has a new cache key, so each runner downloads and prepares the setup once.
 - **Results.** Each re-graded attempt adds a result row and flags a
   BrightSpace grade push.
-- **A known defect.** With `force: true`, a row that a runner is still
-  grading is re-queued, and that runner's result, graded with the old suite,
-  still marks the row complete. The re-test of that row is lost. This needs
-  its own fix; result ingest should accept a report only from the runner
-  that holds the job.
+- **Stale results (fixed, #2947).** With `force: true`, a row that a runner
+  is still grading is re-queued. That runner's result, graded with the old
+  suite, used to mark the row complete, and the re-test of that row was lost.
+  Result ingest now accepts a report only for the claim the runner holds: the
+  job carries a claim token that the runner echoes back, and a superseded
+  report gets HTTP 410 (`ResultClaimCheck`; docs/feature-interactions.md).
 
 ### What to measure
 
@@ -218,8 +219,8 @@ submission is the next job claimed.
 3. **Validation ahead of re-tests.** Move solution validation ahead of
    `retestStudent`, so the instructor learns that the fixed suite passes the
    solution before 1,500 jobs run on it.
-4. **Fix the stale-result defect** above before tuning anything else, because
-   it makes the drain look shorter than it is.
+4. **The stale-result defect is fixed** (#2947). Before that fix, a forced
+   re-test's drain looked shorter than it was; measure drains from after it.
 5. **Keep a slot for fresh work.** No preemption means that a runner whose
    slots are all on re-tests delays a fresh job by up to one job's length.
    A runner flag (for example `--reserve-fresh-slots 1`; a CLI flag, not a
@@ -399,7 +400,7 @@ lease) and that the table sizes are flat week over week.
 3. Extend `Tools/perf-bench/` with the grading run, the status-poll load and
    CPU per request, and add the digest section.
    Add the re-test scenario to it, and a test that pins fresh-before-re-test
-   priority. Fix the stale-result defect.
+   priority.
 4. Apply the Postgres settings one at a time, a week apart, and read each
    result in the production snapshot.
 5. Set up the scheduled task on the maintainer's work machine: the
