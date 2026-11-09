@@ -862,6 +862,10 @@ coordination, and each must see every edit.
   (`serverDriveActive`), which skips the IndexedDB reseed.
 - **Rules:** the three readers must agree. A browser without the cookie gets
   the IndexedDB drive and every existing behaviour unchanged.
+- **Planned (0.6):** the IndexedDB drive is deprecated. From 0.6 the server
+  drive is on by default and the cookie is no longer needed. At that point
+  the three readers stop branching on the option, and the IndexedDB reseed
+  in `Public/notebook.js` goes.
 
 ### Content versions and restore
 
