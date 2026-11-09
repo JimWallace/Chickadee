@@ -63,10 +63,30 @@ enum SetupRowDeletion {
         // lab's item coverage. Keyed by setup with no foreign key, so nothing
         // else removes them.
         try await LabGoalGroups.deleteClassGoalData(forTestSetups: setupIDs, on: db)
+        try await deleteActivityRows(forSetups: setupIDs, on: db)
         try await APISubmission.query(on: db)
             .filter(\.$testSetupID ~~ setupIDs).delete()
 
         return RemovedWork(submissionCount: submissions.count, filePaths: submissions.map(\.zipPath))
+    }
+
+    /// Deletes the class-activity and grade-push rows keyed by setup with no
+    /// foreign key: badges, leaderboards, king-of-the-hill matches and
+    /// champions, round-robin standings, tournaments (their matches go by
+    /// cascade) and the LTI push queue, the class's and each lab group's. Each
+    /// names a student and a submission, so nothing may outlive the setup.
+    /// `StudentWorkDeletionCoverageTests` finds every such table from the
+    /// catalog, so a new one fails there until it is deleted here.
+    private static func deleteActivityRows(forSetups setupIDs: [String], on db: any Database) async throws {
+        try await APIClassAchievement.query(on: db).filter(\.$testSetupID ~~ setupIDs).delete()
+        try await APILeaderboardEntry.query(on: db).filter(\.$testSetupID ~~ setupIDs).delete()
+        try await APIGroupLeaderboardEntry.query(on: db).filter(\.$testSetupID ~~ setupIDs).delete()
+        try await APIMatchResult.query(on: db).filter(\.$testSetupID ~~ setupIDs).delete()
+        try await APIActivityChampion.query(on: db).filter(\.$testSetupID ~~ setupIDs).delete()
+        try await APIGroupActivityChampion.query(on: db).filter(\.$testSetupID ~~ setupIDs).delete()
+        try await APIActivityStanding.query(on: db).filter(\.$testSetupID ~~ setupIDs).delete()
+        try await APITournamentRun.query(on: db).filter(\.$testSetupID ~~ setupIDs).delete()
+        try await APILTIGradeSync.query(on: db).filter(\.$testSetupID ~~ setupIDs).delete()
     }
 
     /// Deletes the per-assignment rows that map students to their work: a

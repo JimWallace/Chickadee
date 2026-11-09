@@ -18,6 +18,7 @@ not exist.
 - [runner-capability-profiles.md](runner-capability-profiles.md) — runner capability matching, the language gate, `minimumRunnerVersion`
 - [feature-interactions.md](feature-interactions.md) — the shared objects that several features read or write, and the rule for each; the `interaction-review` agent's map
 - [fitness-functions.md](fitness-functions.md) — the inventory of automated checks that hold the architecture
+- [database-design.md](database-design.md) — the rules for a new table, migration and query; the schema guards, the statement budgets and the `db-review` agent
 
 ## Browser grading and the wasm runner
 

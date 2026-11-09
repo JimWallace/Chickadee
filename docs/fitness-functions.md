@@ -67,6 +67,15 @@ exemption list. Before it, five guards ran with no fixture.
   gets its denial row with no edit to the test.
 - **`MCPAuthorizationCoverageTests`** — scans every tool's source and fails the
   build if one skips authorization.
+- **The database guards** ([database-design.md](database-design.md)) — read the
+  *migrated catalog*, not the Swift text. `SchemaDesignTests` (foreign-key
+  indexes, covered indexes, column types) and `ModelSchemaAgreementTests`
+  (every Fluent field against its column) are shrink-only allowlists.
+  `StudentWorkDeletionCoverageTests` seeds a row into every table keyed to a
+  setup, submission, assignment or course and runs the real delete, so a new
+  table is covered with no edit. `HotPathStatementBudgetTests` pins the
+  statement count of six hot requests. It found nine tables that the
+  assignment and course deletes left behind.
 - **`Tools/visual-regression/run-repaint-probe.sh`** — the seam where the
   shared filter, sort, poll and icon sprite meet, which a screenshot cannot
   catch because both sides would agree.

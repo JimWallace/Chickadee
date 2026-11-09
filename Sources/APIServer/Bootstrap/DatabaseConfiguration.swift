@@ -534,6 +534,13 @@ func registerMigrations(on app: Application) {
     // `class_achievements` submission indexes. Index only; the tables are
     // created far above.
     app.migrations.add(CreateAuditAndValidationIndexes())
+    // `assignments.slug` NOT NULL, as the model assumes. Raw SQL over
+    // `slug` and `public_id`, both created by CreateAssignments.
+    app.migrations.add(RequireAssignmentSlug())
+    // Indexes for the foreign keys that had none, and the drop of four
+    // covered indexes (SchemaDesignTests). Index only; the tables are created
+    // far above.
+    app.migrations.add(CreateForeignKeyIndexes())
 
     // ---------------------------------------------------------------------
     // DATA MIGRATIONS. Keep these at the end, and add every new schema
