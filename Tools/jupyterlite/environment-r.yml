@@ -83,3 +83,7 @@ dependencies:
   - r-tibble
   - r-purrr
   - r-forcats
+  # EXPERIMENT (claude/reticulate-experiment): R calling Python in the
+  # browser. Brings python, libpython and numpy into the R kernel.
+  - r-reticulate
+  - pandas

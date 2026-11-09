@@ -80,6 +80,8 @@ const LANGUAGES = {
         scripts: [
             'publictest_pass.R', 'publictest_fail.R', 'publictest_boom.R',
             'publictest_context.R', 'publictest_nopackage.R', 'publictest_packages.R',
+            'publictest_reticulate.R', 'publictest_reticulate_py.R',
+            'publictest_reticulate_np.R', 'publictest_reticulate_pd.R',
             'publictest_trycatch.R',
             'publictest_leak.R', 'publictest_isolation.R',
         ],
@@ -132,6 +134,38 @@ stopifnot(nrow(tidyr::pivot_longer(tibble::tibble(a = 1, b = 2), everything())) 
 stopifnot(as.character(forcats::fct_rev(factor(c("a", "b")))[1]) == "a")
 stopifnot(readr::parse_number("42 items") == 42)
 passed("all declared packages attached and ran")
+`,
+            // EXPERIMENT: R calling Python through reticulate, timed per step.
+            'publictest_reticulate.R': `source("test_runtime.R")
+t0 <- Sys.time()
+suppressPackageStartupMessages(library(reticulate))
+cat("library(reticulate) =", round(as.numeric(Sys.time() - t0, units = "secs"), 2), "s\\n")
+passed("reticulate attached")
+`,
+            'publictest_reticulate_py.R': `source("test_runtime.R")
+library(reticulate)
+t0 <- Sys.time()
+py_run_string("x = sum(range(10))")
+cat("first py_run_string =", round(as.numeric(Sys.time() - t0, units = "secs"), 2), "s\\n")
+stopifnot(py$x == 45)
+cat("python", py_config()$version, "\\n")
+passed("reticulate ran Python")
+`,
+            'publictest_reticulate_np.R': `source("test_runtime.R")
+library(reticulate)
+t0 <- Sys.time()
+np <- import("numpy")
+cat("import numpy =", round(as.numeric(Sys.time() - t0, units = "secs"), 2), "s\\n")
+stopifnot(np$mean(c(1, 2, 3)) == 2)
+passed("numpy from R")
+`,
+            'publictest_reticulate_pd.R': `source("test_runtime.R")
+library(reticulate)
+t0 <- Sys.time()
+py_run_string("import pandas as pd\\ndf2 = pd.DataFrame({'w': [70, 80], 'h': [175, 180]})\\ndf2['bmi'] = df2.w / (df2.h / 100) ** 2")
+cat("import pandas + BMI =", round(as.numeric(Sys.time() - t0, units = "secs"), 2), "s\\n")
+stopifnot(abs(py$df2$bmi[1] - 22.857) < 0.01)
+passed("pandas BMI from R")
 `,
             // The label exists only because the wrapper masks commandArgs();
             // the seed comes from the environment and the input from _ck_inputs.
@@ -523,7 +557,7 @@ const PROBE_PAGE = `<!doctype html><meta charset="utf-8"><title>browser grading 
 <body><pre id="log"></pre><script>
 window.__result = null;
 const files = ${JSON.stringify(FILES)};
-const scripts = ${JSON.stringify(LANG.scripts)};
+const scripts = ${JSON.stringify(process.env.SMOKE_ONLY ? process.env.SMOKE_ONLY.split(',') : LANG.scripts)};
 (async () => {
   const worker = new Worker('${LANG.worker}');
   let counter = 0;
@@ -814,11 +848,13 @@ const launchOptions = {};
 if (browserName === 'chromium' && process.env.PLAYWRIGHT_CHROMIUM_PATH) {
     launchOptions.executablePath = process.env.PLAYWRIGHT_CHROMIUM_PATH;
 }
+if (process.env.SMOKE_CHROME_LOG) { launchOptions.args = ['--enable-logging=stderr', '--v=0']; launchOptions.dumpio = true; launchOptions.logger = { isEnabled: () => false, log: () => {} }; }
 const browser = await playwright[browserName].launch(launchOptions);
 let result;
 try {
     const page = await browser.newPage();
     page.on('pageerror', (err) => console.log('[pageerror]', err.message));
+    if (process.env.SMOKE_CONSOLE) { page.on('console', (m) => console.log('[console]', m.type(), m.text().slice(0, 400))); page.on('crash', () => console.log('[crash] page crashed')); page.on('worker', (w) => w.on('console', (m) => console.log('[worker]', m.text().slice(0, 400)))); }
     await page.goto(`http://localhost:${PORT}/`);
     // waitForFunction is (pageFunction, arg, options) — passing the options as
     // the SECOND argument silently makes them the `arg` and leaves Playwright's
@@ -1035,6 +1071,13 @@ if (language === 'r') {
         packages && packages.exitCode === 0,
         JSON.stringify(packages));
     console.log('  attach timings:', (packages?.stdout || '').replace(/\n/g, ' ').trim());
+
+    for (const name of ['publictest_reticulate.R', 'publictest_reticulate_py.R',
+        'publictest_reticulate_np.R', 'publictest_reticulate_pd.R']) {
+        const r = result.results[name];
+        check(`EXPERIMENT: ${name}`, r && r.exitCode === 0, String(JSON.stringify(r)).slice(0, 1500));
+        console.log(`  ${name}:`, String(JSON.stringify(r)).slice(0, 1500));
+    }
 
     const noPackage = result.results['publictest_nopackage.R'];
     check('a package the environment lacks still fails normally',
