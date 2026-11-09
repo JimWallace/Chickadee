@@ -9,6 +9,14 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.886] - 2026-11-09
+
+### Fixed
+
+- **Class activity leaderboards under a burst of submissions.** A leaderboard row, and the ranked class records that a result raises (highest metric, fastest, fewest attempts), now move to a better value in one conditional database update. Before, two results that landed at once could both read the old value, and the worse one could overwrite the better one: a student's best could fall, or the highest-metric record could name the wrong student. A leaderboard write that fails at ingest now schedules a repair of that assignment's board from the stored results, retried with backoff, instead of leaving the student off the board. Per-group boards are not repaired.
+- **macOS build of `main`.** Three `String(format:)` calls added this week did not compile under strict memory safety with the macOS 27 SDK. They now use the portable `String(cFormat:)`.
+
+
 ## [0.5.885] - 2026-11-09
 
 ### Added
