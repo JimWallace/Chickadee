@@ -990,6 +990,15 @@ coordination, and each must see every edit.
   - Every lookup for "the newest validation row is the solution" filters on
     `.validation`. A `.starterValidation` run never sets `validationStatus`
     (`Sources/APIServer/CLAUDE.md`).
+- **The workbench pill.** `WorkbenchAppBar` renders the validation pill once
+  from `validationStatus`. `Public/workbench-rail.js` redraws it from
+  `suite-outline.json` and asks again while the status is `pending`, or while
+  the starter run is behind the solution run after a save (`pollDelay`).
+  The rail's wording mirrors `pillText`; `workbench-poll.test.mjs` checks
+  that they agree. A new `validationStatus` value needs wording in both, and
+  a `pollDelay` case if a runner will settle it later.
+- **Trap:** the workbench fetched the outline once after a save, while the
+  run was still pending, so the pill said "Validating…" until a reload.
 - **Trap:** the web support-file delete did not validate or retest (#2472).
 - **Trap:** MCP `delete_support_file` ran the delete steps by hand and
   skipped the `dependsOn` check that the web delete ran (#2771). Both doors
