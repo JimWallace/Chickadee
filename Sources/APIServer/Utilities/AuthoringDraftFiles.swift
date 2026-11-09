@@ -23,6 +23,7 @@
 // With no base on record (a draft from before #2925), a draft that equals the
 // seed is in sync; any other draft is treated as having unpublished edits.
 
+import Core
 import Foundation
 
 /// What `AuthoringDraftFiles.reconcile` did to a draft.
@@ -130,7 +131,7 @@ enum AuthoringDraftFiles {
         calendar.timeZone = TimeZone(identifier: "America/Toronto") ?? .current
         let parts = calendar.dateComponents([.year, .month, .day, .hour, .minute], from: now)
         let stamp = String(
-            format: "%04d-%02d-%02d %02d%02d",
+            cFormat: "%04d-%02d-%02d %02d%02d",
             parts.year ?? 0, parts.month ?? 0, parts.day ?? 0, parts.hour ?? 0, parts.minute ?? 0)
         let directory = draftURL.deletingLastPathComponent()
         let stem = draftURL.deletingPathExtension().lastPathComponent

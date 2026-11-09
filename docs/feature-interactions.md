@@ -1130,6 +1130,9 @@ coordination, and each must see every edit.
 
 - **Readers:**
   - `LeaderboardEntries`, from `ResultIngestEffects`.
+  - `repairLeaderboardEntries` (`LeaderboardRepair`), which
+    `LeaderboardRepairQueue` runs after a failed leaderboard write. It reads
+    the stored collections and writes through `recordLeaderboardEntry`.
   - `ActivityMatches` and `Tournaments`.
   - `Sources/Worker/MatrixAggregation.swift`.
   - The leaderboard routes.
@@ -1139,6 +1142,19 @@ coordination, and each must see every edit.
   - A higher metric is better.
   - The metric is never credit, and it is not gated on the grade.
   - Only `.student` rows in the setup's own course get a rank.
+  - A leaderboard row and a ranked class record (`updateRecordBadge`) move
+    only through `writeBestSoFar`: one conditional UPDATE that raises them,
+    so results landing at once cannot undo each other. A new writer of these
+    rows raises them the same way. The exceptions are the retest recompute
+    (`storeRecordHolder`) and the held records (`setRecordHolder`), which
+    still read then write.
+  - A ranking gate belongs in `recordLeaderboardEntry`, which the repair
+    calls too; the repair repeats only the "build passed" rule that
+    `ResultIngestEffects.apply` applies before it. `reachedAt` is when the
+    metric was reached (the submission's time on a repair), never when the
+    row was written: ties and `LeaderboardGroupScope.studentGroup` read it.
+  - `ResultIngestEffects.bestEffort` returns whether its effect succeeded,
+    for an effect that has a repair. Only the leaderboard has one.
   - Connect a new accumulator at both ingest paths. An accumulator on one
     path shows only the half of the class that one substrate grades, as if it
     were the whole class.

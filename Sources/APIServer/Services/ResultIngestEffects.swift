@@ -117,11 +117,17 @@ struct ResultIngestEffects {
     ///
     /// A class badge is worth an ordinary amount; a student's grade is not
     /// worth losing for one.
-    func bestEffort(_ what: String, submissionID: String, _ work: () async throws -> Void) async {
+    ///
+    /// Returns whether `work` succeeded, for an effect that has a way to make
+    /// up for a failure (the leaderboard's repair).
+    @discardableResult
+    func bestEffort(_ what: String, submissionID: String, _ work: () async throws -> Void) async -> Bool {
         do {
             try await work()
+            return true
         } catch {
             logger.warning("result_side_effect_failed \(what) for \(submissionID): \(error)")
+            return false
         }
     }
 
@@ -211,10 +217,21 @@ struct ResultIngestEffects {
         // A ranking metric is whatever the script measured, and the script
         // decides whether a failing run reports one, so this is outside the
         // 100% gate too.
-        await bestEffort("leaderboard_entry", submissionID: submissionID) {
+        //
+        // A failed write is not left lost: it schedules a repair of the
+        // assignment's board from the stored results
+        // (`LeaderboardRepairQueue`), on the application's database because
+        // it runs after this request has finished.
+        let ranked = await bestEffort("leaderboard_entry", submissionID: submissionID) {
             try await recordLeaderboardEntry(
                 setup: setup, userID: userID, submissionID: submissionID,
-                outcomes: collection.outcomes, on: db)
+                outcomes: collection.outcomes, reachedAt: Date(), on: db)
+        }
+        if !ranked {
+            let appDB = application.db
+            await application.leaderboardRepairQueue.schedule(testSetupID, logger: logger) {
+                try await repairLeaderboardEntries(testSetupID: testSetupID, on: appDB)
+            }
         }
 
         // King of the hill and the round robin: complete the match this job

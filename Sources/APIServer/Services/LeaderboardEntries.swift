@@ -56,16 +56,32 @@ func recordLeaderboardEntry(
         let setup = try await APITestSetup.find(testSetupID, on: db)
     else { return }
     try await recordLeaderboardEntry(
-        setup: setup, userID: userID, submissionID: submissionID, outcomes: outcomes, on: db)
+        setup: setup, userID: userID, submissionID: submissionID, outcomes: outcomes, reachedAt: Date(), on: db)
 }
 
 /// `recordLeaderboardEntry(testSetupID:…)` for a caller that has already
 /// loaded the setup: the result path reads it once for every effect.
+///
+/// `reachedAt` is when the student reached this metric: now, for a result
+/// landing at ingest; the submission's time, for the repair
+/// (`repairLeaderboardEntries`), which writes a row late and must not lose
+/// the student a tie for it. Ties rank the earlier `reachedAt` first.
+///
+/// These are the ranking gates, and the repair goes through them too, so a
+/// new gate added here holds for both.
+///
+/// Every write only RAISES a row, in one conditional statement
+/// (`writeBestSoFar`), so results that land at the same moment cannot undo
+/// each other and the order they land in does not matter. The record is
+/// offered every time rather than only when the row moved: it compares
+/// against the class best itself, and a record that a failed write left
+/// behind catches up on the next result.
 func recordLeaderboardEntry(
     setup: APITestSetup,
     userID: UUID,
     submissionID: String,
     outcomes: [TestOutcome],
+    reachedAt: Date,
     on db: any Database
 ) async throws {
     guard let metric = submissionMetric(from: outcomes),
@@ -75,63 +91,79 @@ func recordLeaderboardEntry(
         try await courseRole(of: userID, inCourse: setup.courseID, db: db) == .student
     else { return }
 
+    let write = BestMetricWrite(
+        testSetupID: testSetupID, userID: userID, submissionID: submissionID, metric: metric, reachedAt: reachedAt)
     if activity.isPerGroup {
         guard
             let session = try await ActivitySessionStore.sessionAtSubmission(
                 testSetupID: testSetupID, userID: userID, submissionID: submissionID, on: db)
         else { return }
-        try await recordGroupLeaderboardEntry(
-            testSetupID: testSetupID, groupID: session.groupID, userID: userID, submissionID: submissionID,
-            metric: metric, on: db)
+        try await recordGroupLeaderboardEntry(write, groupID: session.groupID, on: db)
     } else {
-        let existing = try await APILeaderboardEntry.query(on: db)
-            .filter(\.$testSetupID == testSetupID)
-            .filter(\.$userID == userID)
-            .first()
-        if let existing {
-            // Strictly better only: a tie keeps the earlier submission, which
-            // is also what keeps a replayed report from moving `reachedAt`.
-            guard metric > existing.metric else { return }
-            existing.metric = metric
-            existing.submissionID = submissionID
-            existing.reachedAt = Date()
-            try await existing.update(on: db)
-        } else {
-            // Ignore the conflict: two first submissions from one student
-            // landing at once, first insert wins. Same shape as
-            // `awardImmutableBadge`.
-            try await APILeaderboardEntry(
-                testSetupID: testSetupID, userID: userID, submissionID: submissionID, metric: metric, reachedAt: Date()
-            ).createIgnoringConflict(on: db)
-        }
+        try await recordCourseLeaderboardEntry(write, on: db)
     }
 
     try await awardHighestMetricRecords(
         setup: setup, userID: userID, submissionID: submissionID, metric: metric, on: db)
 }
 
+/// One student's metric on its way to a leaderboard row.
+private struct BestMetricWrite {
+    let testSetupID: String
+    let userID: UUID
+    let submissionID: String
+    let metric: Double
+    let reachedAt: Date
+}
+
+/// The course-wide best-so-far row. Strictly better only: a tie keeps the
+/// earlier submission, which is also what keeps a replayed report from moving
+/// `reachedAt`.
+private func recordCourseLeaderboardEntry(_ write: BestMetricWrite, on db: any Database) async throws {
+    let row = APILeaderboardEntry.query(on: db)
+        .filter(\.$testSetupID == write.testSetupID)
+        .filter(\.$userID == write.userID)
+    try await writeBestSoFar(
+        raise: {
+            try await row.copy()
+                .filter(\.$metric < write.metric)
+                .set(\.$metric, to: write.metric)
+                .set(\.$submissionID, to: write.submissionID)
+                .set(\.$reachedAt, to: write.reachedAt)
+                .update()
+        },
+        exists: { try await row.copy().first() != nil },
+        insert: {
+            try await APILeaderboardEntry(
+                testSetupID: write.testSetupID, userID: write.userID, submissionID: write.submissionID,
+                metric: write.metric, reachedAt: write.reachedAt
+            ).create(on: db)
+        })
+}
+
 /// The per-group twin of the best-so-far write above: one row per (setup,
 /// group, student), so a student who plays in two labs ranks in each.
-private func recordGroupLeaderboardEntry(
-    testSetupID: String, groupID: UUID, userID: UUID, submissionID: String, metric: Double, on db: any Database
-) async throws {
-    let existing = try await APIGroupLeaderboardEntry.query(on: db)
-        .filter(\.$testSetupID == testSetupID)
+private func recordGroupLeaderboardEntry(_ write: BestMetricWrite, groupID: UUID, on db: any Database) async throws {
+    let row = APIGroupLeaderboardEntry.query(on: db)
+        .filter(\.$testSetupID == write.testSetupID)
         .filter(\.$groupID == groupID)
-        .filter(\.$userID == userID)
-        .first()
-    if let existing {
-        guard metric > existing.metric else { return }
-        existing.metric = metric
-        existing.submissionID = submissionID
-        existing.reachedAt = Date()
-        try await existing.update(on: db)
-    } else {
-        try await APIGroupLeaderboardEntry(
-            testSetupID: testSetupID, groupID: groupID, userID: userID, submissionID: submissionID, metric: metric,
-            reachedAt: Date()
-        ).createIgnoringConflict(on: db)
-    }
+        .filter(\.$userID == write.userID)
+    try await writeBestSoFar(
+        raise: {
+            try await row.copy()
+                .filter(\.$metric < write.metric)
+                .set(\.$metric, to: write.metric)
+                .set(\.$submissionID, to: write.submissionID)
+                .set(\.$reachedAt, to: write.reachedAt)
+                .update()
+        },
+        exists: { try await row.copy().first() != nil },
+        insert: {
+            try await APIGroupLeaderboardEntry(
+                testSetupID: write.testSetupID, groupID: groupID, userID: write.userID,
+                submissionID: write.submissionID, metric: write.metric, reachedAt: write.reachedAt
+            ).create(on: db)
+        })
 }
 
 /// The activity's ranking, best first; ties rank the earlier row first. With
