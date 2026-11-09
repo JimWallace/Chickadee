@@ -571,7 +571,7 @@
             var list = (root.performance && root.performance.getEntriesByType)
                 ? root.performance.getEntriesByType('resource') : [];
             for (var i = 0; i < list.length && out.length < 500; i++) {
-                var e = list[i];
+                var e = /** @type {PerformanceResourceTiming} */ (list[i]);
                 var path;
                 try { path = new URL(e.name).pathname; } catch (_) { continue; }
                 if (path.indexOf('/jupyterlite/xeus/') !== 0) continue;

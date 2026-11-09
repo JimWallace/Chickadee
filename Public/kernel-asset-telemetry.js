@@ -231,6 +231,7 @@
                 var second = missing.length ? await probeCached(missing, fetchImpl) : [];
                 var hits = first.filter(function (r) { return r.cached; });
                 var fetched = second.filter(function (r) { return r.cached; });
+                /** @type {Record<string, any>} */
                 var fields = {};
                 if (!hits.length && !fetched.length) {
                     fields.probe = 'unsupported';
@@ -362,7 +363,8 @@
 
     function appVersion() {
         try {
-            var m = root.document && root.document.querySelector('meta[name="app-version"]');
+            var m = /** @type {HTMLMetaElement | null} */ (
+                root.document && root.document.querySelector('meta[name="app-version"]'));
             return m && m.content ? String(m.content).slice(0, 32) : undefined;
         } catch (_) {
             return undefined;

@@ -308,7 +308,7 @@
      *
      * @param {Uint8Array} submissionBytes Raw bytes of the submitted solution file.
      * @param {string}     setupID         The test setup ID for this assignment.
-     * @param {{filename?: string, opponentSubmission?: {bytes: Uint8Array, filename: string, seed: string}, reportPhase?: (phase: string, detail?: string) => void}} options
+     * @param {{filename?: string, opponentSubmission?: {bytes: Uint8Array, filename: string, seed: string}, reportPhase?: (phase: string, detail?: string, assets?: any) => void}} options
      * @returns {Promise<{ outcomes: object[], collection: object, sections: {id: string, name: string}[], sectionIDs: (?string)[] }>}
      */
     async function runScripts(submissionBytes, setupID, options = {}) {
