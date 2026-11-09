@@ -337,6 +337,20 @@ claimer holds is skipped rather than waited on, so the loser moves to its next
 candidate. This holds across any number of server processes, with no
 in-process serialisation.
 
+### Held polls
+
+A runner slot with no job asks the server to hold its poll for up to 20 s
+(`WorkerLongPoll`, `WorkerActivityPayload.longPollSeconds`). The server claims,
+waits on `PendingWorkSignal`, and claims again when pending work appears. It
+answers with the job, or with 204 and the `Chickadee-Poll-Held` header when the
+hold ends, and the runner then polls again at once. `SubmissionIntake` wakes
+the held polls when a student submission is committed. A watcher that counts
+pending rows once a second covers every other path. A slot used to back off up
+to 30 s between empty polls, so a submission in a quiet period could wait that
+long before any runner asked for it. At shutdown the signal releases every held
+poll before Vapor waits for in-flight requests. An older runner sends no hold,
+and an older server ignores it, so each side keeps the old behaviour alone.
+
 ### WorkerDaemon concurrency
 
 The runner side uses structured concurrency: `WorkerDaemon` spawns one `Task`

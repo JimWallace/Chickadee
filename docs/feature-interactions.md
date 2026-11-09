@@ -648,6 +648,32 @@ coordination, and each must see every edit.
     `submissions` on every poll. Check a new candidate query with
     `EXPLAIN` under statistics taken during a backlog.
 
+### Held runner polls: `PendingWorkSignal`, `WorkerLongPoll`
+
+- **Writers:** `SubmissionIntake.accept` calls `notify()` once a `pending`
+  student row is committed. The signal's own watcher calls it when
+  `WorkerJobClaim.pendingCount` rises, once a second while a poll is held.
+  `PendingWorkSignalLifecycleHandler` closes it at shutdown.
+- **Readers:** `WorkerJobRoutes.requestJob`, for a poll whose
+  `WorkerActivityPayload.longPollSeconds` asks for a hold. The runner's
+  `JobPoller.pollForJob` reads the `WorkerLongPoll.heldHeader` on the 204.
+- **Rules:**
+  - Call `notify()` after the row is committed, not inside the transaction
+    that writes it. A poll woken before the commit cannot see the row, and
+    goes back to waiting until the watcher counts it.
+  - Every other path that makes a row pending (validation runs, retests, the
+    stuck-claim reaper, a second server process during a cutover) relies on
+    the watcher, so its pickup can take up to a second. A path a student
+    waits on calls `notify()` too.
+  - The watcher wakes polls only when the count rises. A pending row that no
+    runner can claim must not wake the held polls on every count.
+  - The hold stays below the runner's 30 s request timeout
+    (`WorkerLongPoll.maxHoldSeconds`). The close runs before Vapor waits for
+    in-flight requests, so a deploy's drain does not wait for a held poll.
+  - Each side falls back alone: a poll without `longPollSeconds` is
+    answered at once, and a runner that gets a 204 without the header backs
+    off as before.
+
 ### Pending queue depth: `pendingQueueDepth`, `queueDepthForLog`
 
 - **Writer:** `OperationalDiagnosticsService` counts pending rows
@@ -812,8 +838,9 @@ coordination, and each must see every edit.
     with `.submission` itself; nothing forces it. The intake owns the file write, the row, the attempt number
     and every effect of a saved row. Put a new effect of a new submission
     there, not in one door.
-  - A `pending` row records the "accepted" and "enqueued" diagnostics and
-    wakes the local runner. A `complete` row (a browser result) does neither,
+  - A `pending` row records the "accepted" and "enqueued" diagnostics, wakes
+    the runner polls the server holds (`PendingWorkSignal.notify`) and wakes
+    the local runner. A `complete` row (a browser result) does none of these,
     because no runner grades it.
   - Pathfinder goes to the owner of a `pending` row. A `complete` row's door
     (`browser-result`) awards it after it stores the result

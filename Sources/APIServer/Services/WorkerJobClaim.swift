@@ -64,8 +64,8 @@ enum WorkerJobClaim {
     /// SELECTs (2026-07 audit). One cheap indexed existence probe answers the
     /// empty case. Deliberately a fresh DB read, not cached state: there is
     /// nothing to invalidate, it is correct across processes, and a submission
-    /// enqueued right after the probe is simply seen by the runner's next poll
-    /// — the same pickup latency the poll cadence already implies. The claim
+    /// enqueued right after the probe is seen by the held poll's next claim
+    /// attempt (`PendingWorkSignal`), or by the runner's next poll. The claim
     /// below re-reads candidates, so this never affects claim atomicity.
     ///
     /// The sort on `kind` changes no answer; it is there for the planner.
@@ -94,6 +94,34 @@ enum WorkerJobClaim {
             .orderBy("kind", .ascending)
             .limit(1)
             .first() != nil
+    }
+
+    /// How many submissions are pending, counted to at most `limit`. The
+    /// held-poll watcher (`PendingWorkSignal`) compares one count with the
+    /// next, once a second while a runner poll is held.
+    ///
+    /// The inner select sorts on `kind` and stops at `limit` for the reason
+    /// `hasPendingWork` does: it keeps the planner on an index led by
+    /// `(status, kind)` whatever the statistics say, and the cap bounds the
+    /// read during a backlog. Past the cap the count stops growing, which
+    /// costs a held poll at most its hold.
+    static func pendingCount(on db: any Database, limit: Int = 1000) async throws -> Int {
+        guard let sql = db as? (any SQLDatabase) else {
+            return try await APISubmission.query(on: db)
+                .filter(\.$status == SubmissionStatus.pending.rawValue)
+                .count()
+        }
+        let row = try await sql.raw(
+            """
+            SELECT count(*) AS pending FROM (
+              SELECT 1 FROM submissions
+              WHERE status = \(bind: SubmissionStatus.pending.rawValue)
+              ORDER BY kind
+              LIMIT \(bind: limit)
+            ) AS capped
+            """
+        ).first()
+        return try row?.decode(column: "pending", as: Int.self) ?? 0
     }
 
     /// Atomically claims one submission (#1172). It claims only the

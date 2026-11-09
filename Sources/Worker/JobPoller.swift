@@ -12,6 +12,24 @@ import FoundationNetworking  // URLSession, URLRequest on Linux
 
 protocol JobPolling: Sendable {
     func requestJob(activeJobs: Int) async throws(JobPollerError) -> Core.Job?
+    /// One poll of the daemon's loop. A poller that cannot ask the server to
+    /// hold the poll takes the default, which never reports a held poll.
+    func pollForJob(activeJobs: Int) async throws(JobPollerError) -> JobPollResult
+}
+
+extension JobPolling {
+    func pollForJob(activeJobs: Int) async throws(JobPollerError) -> JobPollResult {
+        JobPollResult(job: try await requestJob(activeJobs: activeJobs), serverHeldPoll: false)
+    }
+}
+
+/// What one poll returned.
+struct JobPollResult: Sendable {
+    /// The claimed job, or nil when the server had none for this runner.
+    let job: Core.Job?
+    /// True when the server held an empty poll open (`WorkerLongPoll`). The
+    /// server has already waited, so the slot polls again at once.
+    let serverHeldPoll: Bool
 }
 
 struct JobPoller: Sendable {
@@ -19,6 +37,10 @@ struct JobPoller: Sendable {
     let workerID: String
     let maxConcurrentJobs: Int
     let profile: RunnerCapabilityProfile?
+    /// A 204 that took less than this was not held, whatever its header says
+    /// (a server shutting down releases its held polls at once), so the slot
+    /// backs off as it does for any empty poll.
+    let minimumHeldDuration: Duration
     private let signer: WorkerRequestSigner
     private let session: URLSession
 
@@ -28,7 +50,8 @@ struct JobPoller: Sendable {
         workerSecret: String,
         maxConcurrentJobs: Int,
         profile: RunnerCapabilityProfile? = nil,
-        session: URLSession = JobPoller.defaultSession()
+        session: URLSession = JobPoller.defaultSession(),
+        minimumHeldDuration: Duration = .seconds(1)
     ) {
         self.apiBaseURL = apiBaseURL
         self.workerID = workerID
@@ -36,6 +59,7 @@ struct JobPoller: Sendable {
         self.profile = profile
         self.signer = WorkerRequestSigner(sharedSecret: workerSecret, workerID: workerID)
         self.session = session
+        self.minimumHeldDuration = minimumHeldDuration
     }
 
     static func defaultSession() -> URLSession {
@@ -46,7 +70,18 @@ struct JobPoller: Sendable {
     }
 
     /// POST /api/v1/worker/request → Job, or nil when no work is available.
+    /// Asks for an immediate answer.
     func requestJob(activeJobs: Int) async throws(JobPollerError) -> Core.Job? {
+        try await poll(activeJobs: activeJobs, longPollSeconds: nil).job
+    }
+
+    /// The daemon's poll: asks the server to hold the poll open while it has
+    /// no job for this runner (`WorkerLongPoll`).
+    func pollForJob(activeJobs: Int) async throws(JobPollerError) -> JobPollResult {
+        try await poll(activeJobs: activeJobs, longPollSeconds: WorkerLongPoll.requestedHoldSeconds)
+    }
+
+    private func poll(activeJobs: Int, longPollSeconds: Int?) async throws(JobPollerError) -> JobPollResult {
         let url = apiBaseURL.appendingPathComponent("api/v1/worker/request")
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
@@ -58,13 +93,17 @@ struct JobPoller: Sendable {
             runnerVersion: ChickadeeVersion.current,
             maxConcurrentJobs: maxConcurrentJobs,
             activeJobs: activeJobs,
-            profile: profile
+            profile: profile,
+            longPollSeconds: longPollSeconds
         )
         do { request.httpBody = try JSONEncoder().encode(payload) } catch { throw .transportError(error) }
         signer.sign(&request)
 
+        let clock = ContinuousClock()
+        let started = clock.now
         let (data, response): (Data, URLResponse)
         do { (data, response) = try await session.data(for: request) } catch { throw .transportError(error) }
+        let elapsed = clock.now - started
 
         guard let http = response as? HTTPURLResponse else {
             throw .unexpectedResponse
@@ -78,9 +117,17 @@ struct JobPoller: Sendable {
             // problem — classify it distinctly so ops doesn't chase a transport
             // issue that doesn't exist (June 2026 audit, P2.5). Still retryable:
             // the mismatch usually resolves when the other side is upgraded.
-            do { return try decoder.decode(Core.Job.self, from: data) } catch { throw .decodingFailed(error) }
+            do {
+                return JobPollResult(job: try decoder.decode(Core.Job.self, from: data), serverHeldPoll: false)
+            } catch {
+                throw .decodingFailed(error)
+            }
         case 204:
-            return nil
+            let held =
+                longPollSeconds != nil
+                && http.value(forHTTPHeaderField: WorkerLongPoll.heldHeader) != nil
+                && elapsed >= minimumHeldDuration
+            return JobPollResult(job: nil, serverHeldPoll: held)
         case 409:
             struct ServerError: Decodable { let error: String }
             let msg =

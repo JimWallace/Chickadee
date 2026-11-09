@@ -24,10 +24,41 @@ struct WorkerJobRoutes: RouteCollection {
 
         let runnerProfile = try await recordRunnerCheckIn(req: req, body: body, seenAt: seenAt, reason: .poll)
 
-        guard let claimed = try await claimNextEligibleJob(req: req, body: body, runnerProfile: runnerProfile) else {
-            return Response(status: .noContent)
+        guard let holdSeconds = WorkerLongPoll.grantedHoldSeconds(requested: body.longPollSeconds) else {
+            guard let claimed = try await claimNextEligibleJob(req: req, body: body, runnerProfile: runnerProfile)
+            else {
+                return Response(status: .noContent)
+            }
+            return try await respondWithClaimedJob(req: req, body: body, claimed: claimed)
         }
 
+        // The runner asked for a held poll. Claim, and if nothing is
+        // claimable, wait for pending work to appear and claim again, until
+        // the hold ends or the server shuts down. The generation is read
+        // before each claim, so work that arrives during the claim walk ends
+        // the wait at once.
+        let signal = req.application.pendingWorkSignal
+        let deadline = ContinuousClock.now + .seconds(holdSeconds)
+        while true {
+            let generation = await signal.currentGeneration
+            if let claimed = try await claimNextEligibleJob(req: req, body: body, runnerProfile: runnerProfile) {
+                return try await respondWithClaimedJob(req: req, body: body, claimed: claimed)
+            }
+            if await signal.isClosed || ContinuousClock.now >= deadline {
+                break
+            }
+            await signal.wait(after: generation, until: deadline)
+            if await signal.isClosed {
+                break
+            }
+        }
+        return Response(status: .noContent, headers: [WorkerLongPoll.heldHeader: "1"])
+    }
+
+    /// Records the assignment and returns the claimed job to the runner.
+    private func respondWithClaimedJob(
+        req: Request, body: WorkerActivityPayload, claimed: ClaimedJob
+    ) async throws -> Response {
         await req.application.workerActivityStore.incrementAssignedJobs(for: body.workerID)
         await recordJobAssignmentDiagnostics(req: req, body: body, claimed: claimed)
 

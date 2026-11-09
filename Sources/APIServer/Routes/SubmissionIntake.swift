@@ -93,6 +93,9 @@ struct SubmissionIntake {
         // Everything below is a side effect of a row that is already stored,
         // so none of it may fail the submission (#1708).
         guard status == .pending else { return submission }
+        // Wake the runner polls the server holds, now that the row is
+        // committed, so grading starts without waiting for a poll.
+        await req.application.pendingWorkSignal.notify()
         await req.application.diagnostics.recordSubmissionCreated(
             submission: submission, on: req.db, logger: req.logger)
         if let userID = owner?.id {
