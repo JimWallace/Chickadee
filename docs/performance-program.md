@@ -5,7 +5,9 @@ it names an existing tool.
 
 This page sets out how Chickadee measures its performance every week, how a
 measured gain becomes a floor that later changes cannot fall below, and how to
-tune the production setup (one server, Postgres, two runners). It builds on
+tune the production setup. Production is one host for the server (blue-green)
+and Postgres, and two runner machines of their own, which the maintainer
+controls. It builds on
 what exists: `chickadee-loadtest` ([load-testing.md](load-testing.md)), the
 course-scale profile in [database-performance.md](database-performance.md),
 `/admin/metrics` and the admin MCP tools
@@ -41,12 +43,26 @@ Monday, so it lands in the same week as the weekly digest
 
 | Step | What | Who runs it | Output |
 |---|---|---|---|
-| 1. Production snapshot | Read the week's production numbers through the admin MCP | Claude Code scheduled task (CI runs no model) | One row per metric appended to `docs/perf-log.md` |
+| 1. Production snapshot | Read the week's production numbers through the admin MCP | Claude Code scheduled task on the maintainer's work machine (CI runs no model) | One row per metric appended to `docs/perf-log.md` |
 | 2. Benchmark run | Release build, seeded course-scale database, fixed `chickadee-loadtest` profile, grading benchmark | New workflow `perf-weekly.yml` | JSON artifact; counts compared to baselines |
 | 3. Digest | The benchmark's deltas and the production snapshot | `weekly-digest-render.sh`, one new section | Lines in the weekly digest issue |
 | 4. Layer review | Profile and clean one layer (rotation below) | Maintainer with a Claude Code session | One PR per week that tightens at least one baseline or removes code |
 
 ### Step 1: the production snapshot
+
+This runs as a Claude Code scheduled task on the maintainer's work machine,
+with the `Chickadee_Admin` MCP connected, as the weekly dead-code review does
+(`docs/dead-code-scan.md`). It is not set up yet. The task:
+
+1. Calls the tools in the table below, read-only.
+2. Appends one dated section to `docs/perf-log.md` on a branch, with the
+   version from `get_deployment_info` and one row per number.
+3. Compares each number with the previous section and lists the ones that
+   moved more than 25%.
+4. Opens a draft pull request with the log entry. The maintainer merges it, so
+   the log is reviewed like any other change.
+
+It never writes to production and never runs `chickadee-loadtest`.
 
 These admin MCP calls answer the questions that matter for the week. Record
 each as a row (date, version from `get_deployment_info`, value):
@@ -145,12 +161,12 @@ A fifth week in a month repeats whichever layer regressed most.
 
 ## Tuning the production setup (two runners)
 
-The numbers below come from the code and `docker-compose.yml`. The host's
+The numbers below come from the code and `docker-compose.yml`. Each machine's
 core count and memory decide the final values, so start by recording them.
 
 ### First, record the current state
 
-On the host:
+On the server host:
 
 ```sh
 nproc
@@ -160,14 +176,27 @@ docker inspect --format "{{.Name}} {{.HostConfig.NanoCpus}} {{.HostConfig.Memory
 docker compose exec db psql -U chickadee -c "SHOW shared_buffers"
 ```
 
+On each runner machine:
+
+```sh
+nproc
+free -g
+systemctl cat chickadee-runner
+docker compose ps
+```
+
+Run whichever of the last two matches how that runner is started; the
+`--max-jobs` value is on its command line.
+
 Through the admin MCP: `list_runners` (each runner's `maxJobs` and version),
 `get_metrics_snapshot` (queue wait and execution) for the last deadline, and `get_query_stats`.
 
 ### Runner concurrency (`--max-jobs`)
 
 Grading is CPU-bound, and the default is `--max-jobs 4` per runner (eight
-jobs across two runners). In Compose the value comes from the existing
-`RUNNER_MAX_JOBS` in `.env` (default 4), so a change goes there.
+jobs across two runners). Under Compose the value comes from the existing
+`RUNNER_MAX_JOBS` in that machine's `.env` (default 4); under systemd it is on
+the `ExecStart` line of `chickadee-runner.service`.
 
 The right value comes from two numbers at the last
 deadline:
@@ -178,8 +207,11 @@ deadline:
   CPU. Lower `--max-jobs`, or give the runners more cores.
 - Both low: leave it.
 
-As a starting point, total `--max-jobs` across both runners should be about
-the cores left after the server and Postgres take theirs (below), not more.
+Each runner has its own machine, so the starting point is `--max-jobs`
+equal to that machine's cores, less one for the runner process, the
+download and unzip work and the operating system. A test script that starts
+several processes (a C++ build, `make -j`) uses more than one core; for a
+course of those, start at half the cores.
 Timeouts also count: a CPU-starved job can hit its time limit and turn into a
 `timeout` the student did not cause. Check `jobStatusCounts.timeout` at each
 deadline.
@@ -193,22 +225,39 @@ and the comments in `docker-compose.yml` give each formula:
 | `mem_limit` | `max-jobs × 1024 MB + 512 MB`, and more than the tmpfs size | 4.5 GB |
 | `tmpfs /tmp` size | the setup cache (16 prepared setups) plus one workspace per job | 1 GB today |
 
-`mem_limit` and `cpus` are unset today, so two runners can take every core
-on the host during a deadline and slow the server and Postgres with them. Set
-both.
+`mem_limit` and `cpus` are unset in `docker-compose.yml`. On a dedicated
+runner machine that is safe for the server, which is elsewhere, but set
+`mem_limit` anyway: without it a deadline that fills the job cgroups and the
+tmpfs can push the machine into swap, and every job on it slows. Under
+systemd, the matching settings are `MemoryMax=` and `TasksMax=` in the
+unit.
 
-### Place the work on cores
+### Two machines, one queue
 
-If the server, Postgres and both runners share one host, reserve cores so a
-deadline's grading cannot starve the web tier:
+Both runners poll the same queue, so the server sends work to whichever asks
+first. If the two machines differ in cores, give each a `--max-jobs` that
+matches its own cores; the faster machine then takes more jobs on its own.
+Compare the two in `list_runners` and `get_runner_detail` each week: active
+jobs, execution p95 and cache hit rate per runner. A runner whose execution
+p95 is clearly higher than the other's on the same assignments has too many
+jobs for its cores.
 
-- server: 2 cores (it saturated on CPU in the profile, not on the database);
-- Postgres: 2 cores;
-- runners: the rest, split evenly, through `cpus:` on the runner service
-  (or `cpuset` to pin them away from the server).
+Each runner keeps its own setup cache, so the first job of each assignment
+is a cache miss once per runner. The cache lives in `/tmp`, so a runner
+restart empties it. With two runners that is two misses per assignment per
+restart, which costs little.
 
-If the runners are on their own hosts, set `--max-jobs` to that host's
-cores and skip the reservation.
+Under Compose, updating a runner drains it (`stop_grace_period: 10m`): it
+finishes its jobs while the other keeps grading. Update the two one at a time, never together, and never in the hour
+before a deadline.
+
+### The server host
+
+With the runners elsewhere, the server host holds the server and Postgres
+only, and during a blue-green cutover two server processes. The server
+saturated on CPU in the 2026-11-09 profile, not on the database, so the
+server's p95 under load is the number to watch here; if it rises with
+runner polls, `hotPaths` shows which route.
 
 ### Postgres
 
@@ -250,22 +299,30 @@ lease) and that the table sizes are flat week over week.
 
 ## Order of work
 
-1. Record the production host's cores, memory and current runner settings.
-   Set `mem_limit`, `cpus` and `pids_limit` on the runner service to match.
+1. Record each runner machine's cores, memory and `--max-jobs`, and the
+   server host's cores and memory. Set `--max-jobs` on each runner from its
+   cores, then its `pids_limit` and `mem_limit` (or `TasksMax=` and
+   `MemoryMax=`) to match.
 2. Add the statement- and hydration-count suite with its baselines. This is
    the ratchet that pays for itself first.
 3. Check in the deterministic seeder.
 4. Add `perf-weekly.yml` and the digest section.
 5. Apply the Postgres settings one at a time, a week apart, and read each
    result in the production snapshot.
-6. Start the layer rotation.
-7. Make the remaining ratchets shrink-only as each one's first clean-up lands.
+6. Set up the production snapshot as a scheduled task on the maintainer's
+   work machine.
+7. Start the layer rotation.
+8. Make the remaining ratchets shrink-only as each one's first clean-up lands.
 
-## Decisions for the maintainer
+## Decisions
 
-- Where the production snapshot runs: a Claude Code scheduled task on the
-  maintainer's machine (as the dead-code review does) or a cloud scheduled
-  task with the admin MCP connected.
+Made:
+
+- The two runners are separate machines that the maintainer controls.
+- The production snapshot runs as a Claude Code scheduled task on the
+  maintainer's work machine. It is set up after this plan lands.
+
+Open:
+
 - Whether `docs/perf-log.md` is the right home for the weekly numbers, or a
-  pinned issue updated each week.
-- The host layout: whether the two runners share the server's host.
+  pinned issue updated each week. The plan assumes the file.
