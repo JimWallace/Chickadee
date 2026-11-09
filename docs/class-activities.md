@@ -172,6 +172,33 @@ staff test run never takes a place. The `highestMetric` class record follows the
 same event, higher wins, awarded outside the 100% gate the other four records
 sit behind.
 
+**Results that land together cannot undo each other.** A browser-graded
+activity has every student post their result inside the same few seconds, and
+each request writes its own row. So the leaderboard rows and the ranked class
+records that ingest raises (`highestMetric`, and the 100% records `fastest` and
+`shortest` through `updateRecordBadge`) move only through one conditional
+UPDATE that changes them where the new value is strictly better
+(`writeBestSoFar`). The database decides the comparison, and the order the
+results land in does not matter. Two other writers of `class_achievements` are
+still read-then-write: the recompute a retest runs (`storeRecordHolder`) and
+the held records (`setRecordHolder`, the hill and the standings leader). Neither
+runs on an ordinary student result.
+
+**A lost write is repaired, on a course-wide board.** The leaderboard write is
+best effort, because it must never fail a stored grade. When it fails (a
+database pool that ran short during the burst), it schedules
+`repairLeaderboardEntries` for the assignment (`LeaderboardRepairQueue`). The
+repair reads the stored results and offers each student's best one to the same
+`recordLeaderboardEntry`, gates and all, so it only adds what is missing, and it
+stamps the row with the submission's time so a late row keeps its place in a
+tie. Asks that arrive while one is waiting join it. It waits 30 s first, so it
+does not compete with the burst, and retries with backoff for about seven
+minutes. The queue is in-process: a restart drops a waiting repair, and the next
+failed write schedules another. The repair reads stored collections, which a
+page poll must never do, so it runs only after a failure. A per-group board is
+not repaired: staff removing a student deletes their row on purpose, and a
+student who rejoined would make a repair bring it back.
+
 The page, `GET /testsetups/:id/leaderboard` (vanity
 `/:courseCode/:assignmentSlug/leaderboard`), names a student by their per-course
 handle and their chickadee, never by name. The avatar is the identity primitive

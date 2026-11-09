@@ -35,7 +35,7 @@ import VaporTesting
         let base = Date().addingTimeInterval(-3600)
         var ids: [String] = []
         for index in 0..<count {
-            let id = String(format: "sub_paging_%02d", index)
+            let id = String(cFormat: "sub_paging_%02d", index)
             try await APISubmission(
                 id: id, testSetupID: setupID, zipPath: app.submissionsDirectory + "\(id).zip",
                 attemptNumber: 1, status: SubmissionStatus.pending.rawValue

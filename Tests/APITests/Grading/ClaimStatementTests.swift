@@ -52,7 +52,7 @@ import VaporTesting
             // The first page is held for another runner: queued just now, so
             // inside the target gate's fallback window.
             for index in 0..<pageSize {
-                let id = String(format: "sub_held_%02d", index)
+                let id = String(cFormat: "sub_held_%02d", index)
                 try await pending(id, setupID: "setup_stmt", on: app)
                 try await APISubmission.query(on: app.db).filter(\.$id == id)
                     .set(\.$targetRunnerID, to: "someone-else")
@@ -95,7 +95,7 @@ import VaporTesting
             try await setup("setup_stmt_null", on: app)
             let pageSize = ClaimCandidateLoader.firstPageSize
             for index in 0..<pageSize {
-                try await pending(String(format: "sub_timed_%02d", index), setupID: "setup_stmt_null", on: app)
+                try await pending(String(cFormat: "sub_timed_%02d", index), setupID: "setup_stmt_null", on: app)
             }
             for index in 0..<3 {
                 let id = "sub_untimed_\(index)"
