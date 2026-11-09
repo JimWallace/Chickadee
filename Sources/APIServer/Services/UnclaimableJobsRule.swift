@@ -81,13 +81,13 @@ func evaluateUnclaimableJobs(on application: Application, now: Date) async throw
     let active = await application.workerActivityStore.activeRunners(
         withinSeconds: unclaimableJobsOnlineRunnerSeconds, now: now)
     guard !active.isEmpty else { return .ok }
-    var runners: [OnlineRunner] = []
-    for runner in active {
-        let profile = try await application.runnerProfiles.profile(for: runner.workerID, on: application.db)
-        runners.append(
-            OnlineRunner(
-                workerID: runner.workerID, runnerVersion: runner.runnerVersion,
-                profile: profile?.capabilityProfile))
+    // One read for every online runner's profile, not one per runner.
+    let profiles = try await application.runnerProfiles.profiles(
+        for: active.map(\.workerID), on: application.db)
+    let runners = active.map { runner in
+        OnlineRunner(
+            workerID: runner.workerID, runnerVersion: runner.runnerVersion,
+            profile: profiles[runner.workerID]?.capabilityProfile)
     }
 
     let cutoff = now.addingTimeInterval(-unclaimableJobsMinimumWaitSeconds)
@@ -98,10 +98,20 @@ func evaluateUnclaimableJobs(on application: Application, now: Date) async throw
         .all()
         .filter { ($0.retestedAt ?? $0.submittedAt).map { $0 <= cutoff } ?? false }
 
+    let jobsBySetup = Dictionary(grouping: waiting, by: \.testSetupID)
+    // One read for every waiting setup, not one per setup on each tick.
+    let setupIDs = Array(jobsBySetup.keys)
+    let setupsByID: [String: APITestSetup] =
+        setupIDs.isEmpty
+        ? [:]
+        : Dictionary(
+            try await APITestSetup.query(on: application.db).filter(\.$id ~~ setupIDs).all()
+                .compactMap { setup in setup.id.map { ($0, setup) } },
+            uniquingKeysWith: { first, _ in first })
     var groups: [WaitingJobGroup] = []
-    for (testSetupID, jobs) in Dictionary(grouping: waiting, by: \.testSetupID) {
+    for (testSetupID, jobs) in jobsBySetup {
         guard let first = jobs.first,
-            let setup = try await APITestSetup.find(testSetupID, on: application.db),
+            let setup = setupsByID[testSetupID],
             let manifest = decodeManifest(fromJSON: setup.manifest)
         else { continue }
         let requirement = try await application.assignmentRequirements.loadRequirement(

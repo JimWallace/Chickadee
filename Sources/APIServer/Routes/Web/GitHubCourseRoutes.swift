@@ -393,15 +393,29 @@ struct GitHubCourseRoutes: RouteCollection {
     ) async throws -> [InstructorGitHubAssignmentRow] {
         let assignments = try await APIAssignment.query(on: db).filter(\.$courseID == courseID)
             .sort(\.$title).all()
+        // Three reads for the whole course, not three per assignment.
+        let setupIDs = assignments.map(\.testSetupID)
+        guard !setupIDs.isEmpty else { return [] }
+        let setups = try await APITestSetup.query(on: db).filter(\.$id ~~ setupIDs).all()
+        let offered = Set(
+            setups.filter { GitHubSubmissionOffer.isOffered(manifest: $0.decodedManifest()) }.compactMap(\.id))
+        let offeredIDs = setupIDs.filter(offered.contains)
+        guard !offeredIDs.isEmpty else { return [] }
+        let chosenTemplates = Dictionary(
+            try await APIGitHubAssignmentTemplate.query(on: db).filter(\.$testSetupID ~~ offeredIDs).all()
+                .map { ($0.testSetupID, $0) },
+            uniquingKeysWith: { first, _ in first })
+        var repositoryCounts: [String: Int] = [:]
+        for setupID in try await APIGitHubCourseRepository.query(on: db)
+            .filter(\.$testSetupID ~~ offeredIDs).all(\.$testSetupID)
+        {
+            repositoryCounts[setupID, default: 0] += 1
+        }
+
         var rows: [InstructorGitHubAssignmentRow] = []
-        for assignment in assignments {
-            guard let setup = try await APITestSetup.find(assignment.testSetupID, on: db),
-                GitHubSubmissionOffer.isOffered(manifest: setup.decodedManifest())
-            else { continue }
-            let chosen = try await APIGitHubAssignmentTemplate.query(on: db)
-                .filter(\.$testSetupID == assignment.testSetupID).first()
-            let count = try await APIGitHubCourseRepository.query(on: db)
-                .filter(\.$testSetupID == assignment.testSetupID).count()
+        for assignment in assignments where offered.contains(assignment.testSetupID) {
+            let chosen = chosenTemplates[assignment.testSetupID]
+            let count = repositoryCounts[assignment.testSetupID, default: 0]
             let options =
                 [
                     SelectOption(
