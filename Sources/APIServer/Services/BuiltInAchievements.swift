@@ -165,11 +165,6 @@ enum BuiltInAchievements {
     /// even when the filtered list is empty — the instructor removed every
     /// per-submission badge, so return [] rather than nil (audit A5: an empty
     /// curated list used to silently resurrect the registry defaults).
-    static func manifestPerSubmission(in setup: APITestSetup?) -> [Achievement]? {
-        manifestPerSubmission(props: setup?.decodedManifest())
-    }
-
-    /// `manifestPerSubmission(in:)` over an already-decoded manifest.
     static func manifestPerSubmission(props: TestProperties?) -> [Achievement]? {
         guard let props else { return nil }
         let perSub = props.achievements.filter(\.isPerSubmissionBadge)

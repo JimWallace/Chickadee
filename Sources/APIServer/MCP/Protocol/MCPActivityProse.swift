@@ -10,12 +10,6 @@ import Core
 
 enum MCPActivityProse {
 
-    /// `"Beat the instructor or Best metric"` — for a sentence about what the
-    /// system supports.
-    static var displayNames: String {
-        LanguageProse.list(ActivityKind.allCases.map(\.displayName))
-    }
-
     /// `"beatTheInstructor or bestMetric"` — the wire tokens a caller passes.
     static var tokens: String { MCPEnumProse<ActivityKind>.orList }
 

@@ -491,12 +491,6 @@ extension AvatarSpec {
         }
         return filled
     }
-
-    /// `fillingMissing(_:using:)` with the system RNG — the production path.
-    public func fillingMissing(_ axes: Set<AvatarLateAxis>) -> AvatarSpec {
-        var generator = SystemRandomNumberGenerator()
-        return fillingMissing(axes, using: &generator)
-    }
 }
 
 // MARK: - Drawing

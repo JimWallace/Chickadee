@@ -83,8 +83,8 @@ func loadDraftSetupForWrite(_ req: Request) async throws -> APITestSetup {
     return setup
 }
 
-// The suite-list edit (`applySuiteEdit`) and `jsonResponse` are in
-// `Services/SuiteEditing.swift`, because the MCP tools use them too (#2496).
+// The suite-list edit (`applySuiteEdit`) is in `Services/SuiteEditing.swift`,
+// because the MCP tools use it too (#2496).
 
 // MARK: - Suite-section manifest mutations
 //
