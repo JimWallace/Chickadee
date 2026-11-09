@@ -345,7 +345,8 @@ waits on `PendingWorkSignal`, and claims again when pending work appears. It
 answers with the job, or with 204 and the `Chickadee-Poll-Held` header when the
 hold ends, and the runner then polls again at once. `SubmissionIntake` wakes
 the held polls when a student submission is committed. A watcher that counts
-pending rows once a second covers every other path. A slot used to back off up
+pending rows once a second covers every other path, usually within a second and
+at worst within the hold. A slot used to back off up
 to 30 s between empty polls, so a submission in a quiet period could wait that
 long before any runner asked for it. At shutdown the signal releases every held
 poll before Vapor waits for in-flight requests. An older runner sends no hold,

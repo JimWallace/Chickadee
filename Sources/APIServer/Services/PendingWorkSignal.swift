@@ -156,7 +156,7 @@ extension Application {
             lazyStored(PendingWorkSignalKey.self) {
                 PendingWorkSignal { [weak self] in
                     guard let self else { throw CancellationError() }
-                    return try await WorkerJobClaim.pendingCount(on: self.db)
+                    return try await WorkerJobClaim.pendingCount(on: db)
                 }
             }
         }

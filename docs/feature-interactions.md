@@ -661,10 +661,24 @@ coordination, and each must see every edit.
   - Call `notify()` after the row is committed, not inside the transaction
     that writes it. A poll woken before the commit cannot see the row, and
     goes back to waiting until the watcher counts it.
+  - Call it after the row's other effects too. A woken poll claims the row
+    at once, and the claim's `recordJobAssigned` writes the same
+    `JobExecutionMetric` and `APISubmissionDiagnostics` rows that
+    `recordSubmissionCreated` writes; neither write takes a lock, so the two
+    must not overlap.
   - Every other path that makes a row pending (validation runs, retests, the
     stuck-claim reaper, a second server process during a cutover) relies on
-    the watcher, so its pickup can take up to a second. A path a student
-    waits on calls `notify()` too.
+    the watcher. Its pickup usually takes up to a second, and at worst the
+    rest of the hold: the watcher misses a row that arrives between a poll's
+    last claim and its first count, or in the same second that another row
+    is claimed. A path a student waits on calls `notify()` too.
+  - A held poll walks the claim again on every wake, but reports a job no
+    compatible runner can take only on its first walk
+    (`reportsNoCompatibleRunner`), so the blocked-job count stays a count of
+    jobs, not of wakes.
+  - The time a held poll waits (`Request.heldPollWait`) is left out of its
+    request timing, so the hot-path stats and `request_metrics` still
+    measure the server's work.
   - The watcher wakes polls only when the count rises. A pending row that no
     runner can claim must not wake the held polls on every count.
   - The hold stays below the runner's 30 s request timeout

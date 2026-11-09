@@ -23,8 +23,13 @@ enum WorkerJobClaim {
     /// the claim itself is transactional, and a candidate another runner
     /// claimed between our scan and our claim yields nil, so the walk simply
     /// moves to the next candidate.
+    ///
+    /// `reportsNoCompatibleRunner` is false for a held poll's later walks
+    /// (`WorkerLongPoll`), so a held poll reports a blocked job once, not
+    /// once per wake.
     static func claimNextEligibleJob(
         body: WorkerActivityPayload, runnerProfile: RunnerCapabilityProfile?,
+        reportsNoCompatibleRunner: Bool,
         db: any Database, application: Application, logger: Logger
     ) async throws -> ClaimedJob? {
         guard try await hasPendingWork(on: db) else { return nil }
@@ -53,7 +58,9 @@ enum WorkerJobClaim {
                 return claimed
             }
         }
-        await walk.finish()
+        if reportsNoCompatibleRunner {
+            await walk.finish()
+        }
         return nil
     }
 

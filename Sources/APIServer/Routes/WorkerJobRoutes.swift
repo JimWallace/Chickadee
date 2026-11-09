@@ -25,7 +25,9 @@ struct WorkerJobRoutes: RouteCollection {
         let runnerProfile = try await recordRunnerCheckIn(req: req, body: body, seenAt: seenAt, reason: .poll)
 
         guard let holdSeconds = WorkerLongPoll.grantedHoldSeconds(requested: body.longPollSeconds) else {
-            guard let claimed = try await claimNextEligibleJob(req: req, body: body, runnerProfile: runnerProfile)
+            guard
+                let claimed = try await claimNextEligibleJob(
+                    req: req, body: body, runnerProfile: runnerProfile, reportsNoCompatibleRunner: true)
             else {
                 return Response(status: .noContent)
             }
@@ -37,17 +39,29 @@ struct WorkerJobRoutes: RouteCollection {
         // the hold ends or the server shuts down. The generation is read
         // before each claim, so work that arrives during the claim walk ends
         // the wait at once.
+        //
+        // Only the first walk reports a job no compatible runner can take.
+        // Every wake walks again, and a report per wake would count walks,
+        // not blocked jobs. The time spent waiting is recorded on the request
+        // so the request timing measures the server's work, not the hold.
         let signal = req.application.pendingWorkSignal
-        let deadline = ContinuousClock.now + .seconds(holdSeconds)
+        let clock = ContinuousClock()
+        let deadline = clock.now + .seconds(holdSeconds)
+        var isFirstWalk = true
         while true {
             let generation = await signal.currentGeneration
-            if let claimed = try await claimNextEligibleJob(req: req, body: body, runnerProfile: runnerProfile) {
+            if let claimed = try await claimNextEligibleJob(
+                req: req, body: body, runnerProfile: runnerProfile, reportsNoCompatibleRunner: isFirstWalk)
+            {
                 return try await respondWithClaimedJob(req: req, body: body, claimed: claimed)
             }
-            if await signal.isClosed || ContinuousClock.now >= deadline {
+            isFirstWalk = false
+            if await signal.isClosed || clock.now >= deadline {
                 break
             }
+            let waitStarted = clock.now
             await signal.wait(after: generation, until: deadline)
+            req.addHeldPollWait(waitStarted.duration(to: clock.now))
             if await signal.isClosed {
                 break
             }
@@ -136,10 +150,11 @@ struct WorkerJobRoutes: RouteCollection {
     /// Finds and claims the best pending job for this runner. The claim
     /// logic is in `WorkerJobClaim` (#2774).
     private func claimNextEligibleJob(
-        req: Request, body: WorkerActivityPayload, runnerProfile: RunnerCapabilityProfile?
+        req: Request, body: WorkerActivityPayload, runnerProfile: RunnerCapabilityProfile?,
+        reportsNoCompatibleRunner: Bool
     ) async throws -> ClaimedJob? {
         try await WorkerJobClaim.claimNextEligibleJob(
-            body: body, runnerProfile: runnerProfile,
+            body: body, runnerProfile: runnerProfile, reportsNoCompatibleRunner: reportsNoCompatibleRunner,
             db: req.db, application: req.application, logger: req.logger)
     }
 

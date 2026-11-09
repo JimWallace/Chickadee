@@ -34,7 +34,14 @@ import VaporTesting
     }
 }
 
+/// A wait whose deadline is an hour away can end within the suite's time
+/// limit only by the cause under test, so these tests assert on that, not on
+/// a wall-clock bound a loaded machine can miss.
 @Suite(.timeLimit(.minutes(1))) struct PendingWorkSignalTests {
+
+    private static func farDeadline() -> ContinuousClock.Instant {
+        ContinuousClock.now + .seconds(3600)
+    }
 
     /// A pending count that a test sets.
     private actor CountSource {
@@ -63,13 +70,12 @@ import VaporTesting
     @Test func notifyEndsAWaitEarly() async throws {
         let signal = PendingWorkSignal { 0 }
         let generation = await signal.currentGeneration
-        let started = ContinuousClock.now
-        let waiter = Task { await signal.wait(after: generation, until: started + .seconds(30)) }
+        let waiter = Task { await signal.wait(after: generation, until: Self.farDeadline()) }
         try await waitUntilHeld(signal)
         await signal.notify()
         await waiter.value
-        #expect(ContinuousClock.now - started < .seconds(10))
         #expect(await signal.currentGeneration != generation)
+        #expect(await signal.heldCount == 0)
     }
 
     /// Work that arrives between the generation read and the wait is not
@@ -78,24 +84,22 @@ import VaporTesting
         let signal = PendingWorkSignal { 0 }
         let generation = await signal.currentGeneration
         await signal.notify()
-        let started = ContinuousClock.now
-        await signal.wait(after: generation, until: started + .seconds(30))
-        #expect(ContinuousClock.now - started < .seconds(10))
+        await signal.wait(after: generation, until: Self.farDeadline())
+        #expect(await signal.heldCount == 0)
     }
 
     @Test func closeReleasesEveryWaitAndHoldsNoNewOne() async throws {
         let signal = PendingWorkSignal { 0 }
         let generation = await signal.currentGeneration
-        let started = ContinuousClock.now
-        let first = Task { await signal.wait(after: generation, until: started + .seconds(30)) }
-        let second = Task { await signal.wait(after: generation, until: started + .seconds(30)) }
+        let first = Task { await signal.wait(after: generation, until: Self.farDeadline()) }
+        let second = Task { await signal.wait(after: generation, until: Self.farDeadline()) }
         try await waitUntilHeld(signal, count: 2)
         await signal.close()
         await first.value
         await second.value
-        await signal.wait(after: await signal.currentGeneration, until: ContinuousClock.now + .seconds(30))
-        #expect(ContinuousClock.now - started < .seconds(10))
+        await signal.wait(after: await signal.currentGeneration, until: Self.farDeadline())
         #expect(await signal.isClosed)
+        #expect(await signal.heldCount == 0)
     }
 
     /// A row made pending by a path that does not call `notify()` still ends
@@ -105,14 +109,13 @@ import VaporTesting
         await source.set(2)
         let signal = PendingWorkSignal(watchInterval: .milliseconds(20)) { await source.count }
         let generation = await signal.currentGeneration
-        let started = ContinuousClock.now
-        let waiter = Task { await signal.wait(after: generation, until: started + .seconds(30)) }
+        let waiter = Task { await signal.wait(after: generation, until: Self.farDeadline()) }
         try await waitUntilHeld(signal)
         // Let the watcher take its first count before the rise.
         try await Task.sleep(for: .milliseconds(100))
         await source.set(3)
         await waiter.value
-        #expect(ContinuousClock.now - started < .seconds(10))
+        #expect(await signal.currentGeneration != generation)
         await signal.close()
     }
 
@@ -137,6 +140,12 @@ import VaporTesting
     init() async throws {
         self.app = try await makeTestApp(prefix: "chickadee-longpoll")
         app.workerSecretStore = WorkerSecretStore(initialOverride: workerSecret)
+        // `makeTestApp` installs neither the production middleware chain nor
+        // `PendingWorkSignalLifecycleHandler`. The timing middleware feeds the
+        // hot-path stats; each test that holds a poll closes the signal
+        // itself before teardown, so the watcher never counts after Fluent
+        // shuts down.
+        app.middleware.use(RequestTimingMiddleware())
     }
 
     @Test func aPollWithNoHoldAnswersAtOnceWithoutTheHeader() async throws {
@@ -148,12 +157,30 @@ import VaporTesting
     }
 
     @Test func aHeldPollWithNoWorkAnswersWhenTheHoldEnds() async throws {
-        try await withApp(app) { _ in
+        try await withApp(app) { app in
             let started = ContinuousClock.now
             let response = try await poll(workerID: "lp-idle", longPollSeconds: 1)
             #expect(response.status == .noContent)
             #expect(response.headers.first(name: WorkerLongPoll.heldHeader) == "1")
             #expect(ContinuousClock.now - started >= .seconds(1))
+            await app.pendingWorkSignal.close()
+        }
+    }
+
+    /// The hold is not the server's work: the poll route's timing leaves it
+    /// out, so the hot-path stats still read as they did before polls were
+    /// held.
+    @Test func aHeldPollsTimingLeavesTheHoldOut() async throws {
+        try await withApp(app) { app in
+            let response = try await poll(workerID: "lp-timing", longPollSeconds: 2)
+            #expect(response.status == .noContent)
+            await app.pendingWorkSignal.close()
+
+            let snapshot = await app.diagnostics.hotPathStats.snapshot(now: Date())
+            let route = try #require(snapshot.routes.first { $0.route == HotPathRoute.workerPoll.rawValue })
+            #expect(route.sinceStart.requestCount == 1)
+            let maxMs = try #require(route.sinceStart.maxMs)
+            #expect(maxMs < 2000)
         }
     }
 
@@ -189,6 +216,7 @@ import VaporTesting
             #expect(try response.content.decode(Job.self).submissionID == submission.id)
             #expect(ContinuousClock.now - started < .seconds(WorkerLongPoll.maxHoldSeconds))
             #expect(try await APISubmission.find(submission.requireID(), on: app.db)?.status == "assigned")
+            await signal.close()
         }
     }
 
@@ -212,6 +240,7 @@ import VaporTesting
             #expect(response.status == .ok)
             #expect(try response.content.decode(Job.self).submissionID == submission.id)
             #expect(ContinuousClock.now - started < .seconds(WorkerLongPoll.maxHoldSeconds))
+            await app.pendingWorkSignal.close()
         }
     }
 

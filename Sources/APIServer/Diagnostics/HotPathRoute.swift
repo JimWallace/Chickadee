@@ -5,7 +5,8 @@
 /// The raw value is the normalized route shape. It holds no identifier, so
 /// the admin surfaces can report it as is.
 enum HotPathRoute: String, CaseIterable, Codable, Sendable {
-    /// Each runner slot polls for a job, with a backoff of up to 30 s.
+    /// Each runner slot polls for a job. An idle slot's poll is held for up
+    /// to 20 s (`WorkerLongPoll`); its timing leaves the hold out.
     case workerPoll = "POST /api/v1/worker/request"
     /// Each runner sends a heartbeat while it runs a job.
     case workerHeartbeat = "POST /api/v1/worker/heartbeat"
