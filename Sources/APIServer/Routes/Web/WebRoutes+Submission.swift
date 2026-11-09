@@ -461,7 +461,7 @@ extension WebRoutes {
             delta: DeltaBanner(hasDelta: hasDelta, headerText: deltaHeaderText)
         )
         ctx.bird = try await submissionBird(
-            for: user, submission: submission, context: ctx, isStaff: isStaff, graded: displayCollection, on: req.db)
+            for: user, submission: submission, context: ctx, isStaff: isStaff, graded: displayCollection, req: req)
         let page = PageRequestContext(request: req)
         let flash = SpareFlash.messages(for: req.query[String.self, at: "spare"])
         return try await HTMLResponse { SubmissionPage(page: page, result: ctx, flash: flash) }.encodeResponse(for: req)
@@ -474,12 +474,13 @@ extension WebRoutes {
     /// it is stored: no reaction and no celebration.
     private func submissionBird(
         for user: APIUser, submission: APISubmission, context: SubmissionContext, isStaff: Bool,
-        graded: TestOutcomeCollection?, on db: any Database
+        graded: TestOutcomeCollection?, req: Request
     ) async throws -> SubmissionBird? {
+        let db = req.db
         guard submission.kind == APISubmission.Kind.student, let submitterID = submission.userID else { return nil }
         if user.id == submitterID {
             return try await ownBird(
-                for: user, submission: submission, context: context, isStaff: isStaff, graded: graded, on: db)
+                for: user, submission: submission, context: context, isStaff: isStaff, graded: graded, req: req)
         }
         guard isStaff, let submitter = try await APIUser.find(submitterID, on: db) else { return nil }
         let spec = try await AvatarStore.ensureSpec(for: submitter, on: db)
@@ -495,8 +496,9 @@ extension WebRoutes {
     /// first.
     private func ownBird(
         for user: APIUser, submission: APISubmission, context: SubmissionContext, isStaff: Bool,
-        graded: TestOutcomeCollection?, on db: any Database
+        graded: TestOutcomeCollection?, req: Request
     ) async throws -> SubmissionBird {
+        let db = req.db
         let spec = try await AvatarStore.ensureSpec(for: user, on: db)
         let reaction = AvatarReaction(
             passCount: context.passCount, totalTests: context.totalTests,
@@ -517,7 +519,7 @@ extension WebRoutes {
             }
         }
         let earned =
-            context.isPending ? nil : try await earnedItem(for: user, wearing: spec, isStaff: isStaff, on: db)
+            context.isPending ? nil : try await earnedItem(for: user, wearing: spec, isStaff: isStaff, req: req)
         return SubmissionBird(
             avatar: AvatarPresentation(
                 for: reaction.applied(to: spec), size: .result, accessibility: .decorative, isStaff: isStaff),
@@ -532,12 +534,15 @@ extension WebRoutes {
     /// on the next load. Course staff cannot choose a ring, so a ring is
     /// never theirs to wear.
     private func earnedItem(
-        for user: APIUser, wearing spec: AvatarSpec, isStaff: Bool, on db: any Database
+        for user: APIUser, wearing spec: AvatarSpec, isStaff: Bool, req: Request
     ) async throws -> SubmissionEarnedItem? {
+        let db = req.db
         let userID = try user.requireID()
         // The staff lookup only matters when something was granted, which is
         // rare, so it runs after the grant.
-        guard let granted = try? await WardrobeUnlockStore.grantNew(for: userID, on: db), !granted.isEmpty,
+        guard
+            let granted = try? await WardrobeUnlockStore.grantNew(
+                for: userID, on: db, checks: req.application.wardrobeGrantChecks), !granted.isEmpty,
             let staff = try? await AvatarStore.courseStaff(among: [userID], on: db)
         else {
             return nil

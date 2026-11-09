@@ -1463,6 +1463,13 @@ coordination, and each must see every edit.
     also shows the result page's Earned toast has two, with distinct ids.
   - The unique index on user and item stores an item once when two requests
     race.
+  - The result page runs `grantNew` only when
+    `WardrobeUnlockStore.gradedFingerprint` changed since the last complete
+    grant (`WardrobeGrantChecks`). The fingerprint must cover every input of
+    `graded(for:inTestSetups:)`: the student's results, and the due date and
+    concept of their assignments. A new input to the earned rules needs a
+    term in the fingerprint, or the result page stops granting on it. It
+    relies on result rows never being edited in place.
 
 ### Student data that classmates see
 
