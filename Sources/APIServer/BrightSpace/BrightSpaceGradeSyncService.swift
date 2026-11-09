@@ -139,18 +139,21 @@ func saveSyncLog(_ entry: APIBrightSpaceSyncLog, db: any Database, logger: Logge
 /// Gates on app-level config (not a live global client) so per-instructor-only
 /// deployments still flag results for the per-course sync to pick up. Call it
 /// through `requestGradePush`, which also queues the LTI push.
+///
+/// `assignment` and `course` are the setup's, which the caller has read once
+/// for both integrations.
 func flagResultForBrightSpaceSync(
     _ result: APIResult,
-    testSetupID: String,
-    application: Application,
-    on db: any Database
-) async throws {
+    assignment: APIAssignment?,
+    course: APICourse?,
+    application: Application
+) {
     guard application.brightSpaceAppCredentials != nil else { return }
     guard
-        let assignment = try await assignmentByTestSetupID(testSetupID, on: db),
+        let assignment,
         let gradeObjectID = assignment.brightspaceGradeObjectID,
         !gradeObjectID.isEmpty,
-        let course = try await APICourse.find(assignment.courseID, on: db),
+        let course,
         let orgUnitID = course.brightspaceOrgUnitID,
         !orgUnitID.isEmpty,
         // A course on AGS never sends through Valence (docs/lti-1-3.md).

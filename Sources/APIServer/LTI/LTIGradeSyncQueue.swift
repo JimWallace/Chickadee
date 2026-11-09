@@ -21,7 +21,16 @@ enum LTIGradeSyncQueue {
     /// Queues the owner of a newly graded submission. Validation and other
     /// non-student submissions have no grade to send.
     static func queue(submissionID: String, testSetupID: String, on db: any Database) async throws {
-        guard try await courseUsesLTIGrades(testSetupID: testSetupID, on: db),
+        let (_, course) = try await gradePushTarget(testSetupID: testSetupID, on: db)
+        try await queue(submissionID: submissionID, course: course, testSetupID: testSetupID, on: db)
+    }
+
+    /// `queue(submissionID:testSetupID:on:)` for a caller that has already
+    /// read the setup's course (nil when the setup has no assignment).
+    static func queue(
+        submissionID: String, course: APICourse?, testSetupID: String, on db: any Database
+    ) async throws {
+        guard course?.usesLTIGrades == true,
             let submission = try await APISubmission.find(submissionID, on: db),
             submission.kind == APISubmission.Kind.student,
             let userID = submission.userID
@@ -71,10 +80,7 @@ enum LTIGradeSyncQueue {
     }
 
     private static func courseUsesLTIGrades(testSetupID: String, on db: any Database) async throws -> Bool {
-        guard let assignment = try await assignmentByTestSetupID(testSetupID, on: db),
-            let course = try await APICourse.find(assignment.courseID, on: db)
-        else { return false }
-        return course.usesLTIGrades
+        try await gradePushTarget(testSetupID: testSetupID, on: db).1?.usesLTIGrades == true
     }
 
     private static func markPending(userIDs: [UUID], testSetupID: String, on db: any Database, now: Date) async throws {

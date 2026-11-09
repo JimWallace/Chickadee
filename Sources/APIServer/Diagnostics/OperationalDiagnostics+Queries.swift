@@ -32,7 +32,10 @@ private struct PendingQueueDepthCount {
 
 extension OperationalDiagnosticsService {
 
-    func findOrCreateSubmissionDiagnostics(
+    /// The submission's diagnostics row, or a new one NOT yet saved. Every
+    /// caller fills in fields and saves, so a new row costs one INSERT rather
+    /// than an INSERT and then an UPDATE.
+    func findOrMakeSubmissionDiagnostics(
         submission: APISubmission,
         context: SubmissionDiagnosticsContext,
         on db: any Database
@@ -44,7 +47,7 @@ extension OperationalDiagnosticsService {
             return existing
         }
 
-        let created = APISubmissionDiagnostics(
+        return APISubmissionDiagnostics(
             submissionID: submission.id ?? "",
             testSetupID: submission.testSetupID,
             courseID: context.courseID,
@@ -52,11 +55,11 @@ extension OperationalDiagnosticsService {
             kind: submission.kind,
             submittedAt: submission.submittedAt
         )
-        try await created.save(on: db)
-        return created
     }
 
-    func findOrCreateJobExecutionMetric(
+    /// The submission's metric row, or a new one NOT yet saved, like
+    /// `findOrMakeSubmissionDiagnostics`.
+    func findOrMakeJobExecutionMetric(
         submission: APISubmission,
         context: SubmissionDiagnosticsContext,
         on db: any Database
@@ -68,7 +71,7 @@ extension OperationalDiagnosticsService {
             return existing
         }
 
-        let created = JobExecutionMetric(
+        return JobExecutionMetric(
             submissionID: submission.id ?? "",
             jobID: submission.id ?? "",
             testSetupID: submission.testSetupID,
@@ -80,8 +83,6 @@ extension OperationalDiagnosticsService {
             attemptNumber: submission.attemptNumber,
             enqueuedAt: submission.retestedAt ?? submission.submittedAt
         )
-        try await created.save(on: db)
-        return created
     }
 
     func loadSubmissionContext(

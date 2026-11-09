@@ -26,7 +26,24 @@ func awardClassBadgesFor100Percent(
     disabled: Set<String> = [],
     on db: any Database
 ) async throws {
-    guard let setup = try await APITestSetup.find(testSetupID, on: db),
+    guard let setup = try await APITestSetup.find(testSetupID, on: db) else { return }
+    try await awardClassBadgesFor100Percent(
+        setup: setup, userID: userID, submissionID: submissionID, executionTimeMs: executionTimeMs,
+        attemptNumber: attemptNumber, disabled: disabled, on: db)
+}
+
+/// `awardClassBadgesFor100Percent(testSetupID:…)` for a caller that has
+/// already loaded the setup: the result path reads it once for every effect.
+func awardClassBadgesFor100Percent(
+    setup: APITestSetup,
+    userID: UUID,
+    submissionID: String,
+    executionTimeMs: Int,
+    attemptNumber: Int,
+    disabled: Set<String> = [],
+    on db: any Database
+) async throws {
+    guard let testSetupID = setup.id,
         try await courseRole(of: userID, inCourse: setup.courseID, db: db) == .student
     else { return }
 

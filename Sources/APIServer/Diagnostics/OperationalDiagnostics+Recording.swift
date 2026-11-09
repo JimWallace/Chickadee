@@ -20,7 +20,7 @@ extension OperationalDiagnosticsService {
         guard configuration.enabled, let submissionID = submission.id else { return }
         do {
             let context = try await loadSubmissionContext(for: submission, on: db)
-            let diagnostics = try await findOrCreateSubmissionDiagnostics(
+            let diagnostics = try await findOrMakeSubmissionDiagnostics(
                 submission: submission,
                 context: context,
                 on: db
@@ -28,7 +28,7 @@ extension OperationalDiagnosticsService {
             diagnostics.submittedAt = submission.submittedAt ?? diagnostics.submittedAt
             try await diagnostics.save(on: db)
 
-            let metric = try await findOrCreateJobExecutionMetric(
+            let metric = try await findOrMakeJobExecutionMetric(
                 submission: submission,
                 context: context,
                 on: db
@@ -270,7 +270,7 @@ extension OperationalDiagnosticsService {
             } else {
                 context = try await loadSubmissionContext(for: submission, on: db)
             }
-            let diagnostics = try await findOrCreateSubmissionDiagnostics(
+            let diagnostics = try await findOrMakeSubmissionDiagnostics(
                 submission: submission,
                 context: context,
                 on: db
@@ -283,7 +283,7 @@ extension OperationalDiagnosticsService {
             diagnostics.runnerVersion = runnerVersion ?? diagnostics.runnerVersion
             try await diagnostics.save(on: db)
 
-            let metric = try await findOrCreateJobExecutionMetric(
+            let metric = try await findOrMakeJobExecutionMetric(
                 submission: submission,
                 context: context,
                 on: db
@@ -383,7 +383,7 @@ extension OperationalDiagnosticsService {
                 return
             }
             let context = try await loadSubmissionContext(for: submission, on: db)
-            let diagnostics = try await findOrCreateSubmissionDiagnostics(
+            let diagnostics = try await findOrMakeSubmissionDiagnostics(
                 submission: submission,
                 context: context,
                 on: db
@@ -513,7 +513,7 @@ extension OperationalDiagnosticsService {
     ) async throws -> JobExecutionMetric {
         let collection = inputs.collection
         let workerDiagnostics = inputs.workerDiagnostics
-        let metric = try await findOrCreateJobExecutionMetric(
+        let metric = try await findOrMakeJobExecutionMetric(
             submission: submission,
             context: context,
             on: db

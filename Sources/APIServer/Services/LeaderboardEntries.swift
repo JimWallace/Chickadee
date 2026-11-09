@@ -52,8 +52,24 @@ func recordLeaderboardEntry(
     outcomes: [TestOutcome],
     on db: any Database
 ) async throws {
+    guard submissionMetric(from: outcomes) != nil,
+        let setup = try await APITestSetup.find(testSetupID, on: db)
+    else { return }
+    try await recordLeaderboardEntry(
+        setup: setup, userID: userID, submissionID: submissionID, outcomes: outcomes, on: db)
+}
+
+/// `recordLeaderboardEntry(testSetupID:…)` for a caller that has already
+/// loaded the setup: the result path reads it once for every effect.
+func recordLeaderboardEntry(
+    setup: APITestSetup,
+    userID: UUID,
+    submissionID: String,
+    outcomes: [TestOutcome],
+    on db: any Database
+) async throws {
     guard let metric = submissionMetric(from: outcomes),
-        let setup = try await APITestSetup.find(testSetupID, on: db),
+        let testSetupID = setup.id,
         let activity = setup.decodedManifest()?.activity,
         activity.kind.aggregation == .leaderboard,
         try await courseRole(of: userID, inCourse: setup.courseID, db: db) == .student
