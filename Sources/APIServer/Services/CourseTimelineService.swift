@@ -72,7 +72,7 @@ enum TimelineCategoryTile {
         case AuditCategory.enrollment.rawValue, AuditCategory.users.rawValue:
             return ("roster", "outline", "#i-list")
         case AuditCategory.grading.rawValue, AuditCategory.submissions.rawValue:
-            return ("grade", "graded", "#i-calendar-check")
+            return ("grade", "graded", "#i-clipboard-check")
         default:
             return ("other", "link", "#i-link")
         }

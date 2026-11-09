@@ -78,7 +78,7 @@ struct SubmissionHistoryTableRow: HTML {
                             .class("btn action-btn action-btn-icon"), .href(row.openInNotebookURL ?? ""),
                             .title("Open in notebook"), .ariaLabel("Open in notebook")
                         ) {
-                            Icon("i-book")
+                            Icon("i-notebook")
                         }
                     }
                 }

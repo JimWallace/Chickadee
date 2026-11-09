@@ -127,7 +127,7 @@ struct ContentAttachmentView: Encodable {
 /// dashboard lines up.
 struct ContentActionView: Encodable {
     let href: String
-    let iconHref: String  // "#i-eye" | "#i-download" | "#i-book" | "#i-external"
+    let iconHref: String  // "#i-eye" | "#i-download" | "#i-notebook" | "#i-external"
     let label: String  // title + aria-label
     let opensNewTab: Bool  // true → target="_blank" rel="noopener noreferrer"
 }
@@ -190,7 +190,7 @@ struct ContentItemRow: Encodable {
     static func iconHref(for kind: ContentItemKind) -> String {
         switch kind {
         case .slides: return "#i-slides"
-        case .notebook: return "#i-book"
+        case .notebook: return "#i-notebook"
         case .document: return "#i-file-text"
         case .link: return "#i-link"
         case .outline: return "#i-list"
@@ -230,7 +230,7 @@ struct ContentItemRow: Encodable {
         // two identical arrows leave the reader guessing which is which.
         let isNotebook = kind == .notebook || link.label.lowercased().contains("notebook")
         return ContentActionView(
-            href: link.url, iconHref: isNotebook ? "#i-book" : "#i-external",
+            href: link.url, iconHref: isNotebook ? "#i-notebook" : "#i-external",
             label: label, opensNewTab: true)
     }
 

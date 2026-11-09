@@ -271,7 +271,7 @@ private struct SlipDayLedgerRow: HTML {
                     CSRFField(token: page.csrfToken)
                     input(.type(.hidden), .name("spendID"), .value(spend.id))
                     button(.class("row-menu-item"), .type(.submit), .role("menuitem")) {
-                        Icon("i-rewind")
+                        Icon("i-undo")
                         "Refund \(spend.assignmentTitle) slip day"
                     }
                 }

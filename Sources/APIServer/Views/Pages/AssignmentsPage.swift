@@ -258,7 +258,7 @@ private struct AddItemMenu: HTML {
     let panelID: String
 
     private static let materials: [(kind: String, icon: String, label: String)] = [
-        ("slides", "i-slides", "Slides"), ("notebook", "i-book", "Notebook"),
+        ("slides", "i-slides", "Slides"), ("notebook", "i-notebook", "Notebook"),
         ("document", "i-file-text", "Document"), ("link", "i-link", "Link"), ("outline", "i-list", "Outline"),
         ("heading", "i-heading", "Heading"),
     ]
@@ -272,7 +272,7 @@ private struct AddItemMenu: HTML {
             div(.class("add-section-popup card suite-section-popup row-menu-panel"), .role("menu")) {
                 if let newAssignmentHref {
                     a(.class("row-menu-item"), .href(newAssignmentHref), .role("menuitem")) {
-                        span(.class("item-tile"), .data("kind", value: "graded")) { Icon("i-calendar-check") }
+                        span(.class("item-tile"), .data("kind", value: "graded")) { Icon("i-clipboard-check") }
                         "Assignment"
                     }
                     hr()

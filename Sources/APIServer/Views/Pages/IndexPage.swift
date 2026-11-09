@@ -198,7 +198,7 @@ private struct IndexAssignmentRow: HTML {
     var body: some HTML {
         tr {
             td(.class("item-tile-cell")) {
-                span(.class("item-tile"), .data("kind", value: "graded")) { Icon("i-calendar-check") }
+                span(.class("item-tile"), .data("kind", value: "graded")) { Icon("i-clipboard-check") }
             }
             td(.class("item-main")) { mainCell }
             td(.class("item-status")) {
@@ -332,7 +332,7 @@ private struct IndexAssignmentActions: HTML {
                         .ariaLabel("Reset notebook to starter")
                     ) {
                         " "
-                        Icon("i-rewind")
+                        Icon("i-eraser")
                         " "
                     }
                 }
@@ -347,7 +347,7 @@ private struct IndexAssignmentActions: HTML {
             }
             if let leaderboardURL = row.leaderboardURL {
                 " "
-                IndexIconLink(href: leaderboardURL, label: "Leaderboard", icon: "i-award")
+                IndexIconLink(href: leaderboardURL, label: "Leaderboard", icon: "i-podium")
             }
         }
     }

@@ -152,7 +152,7 @@ private struct AdminCourseHeader: HTML {
             ) {
                 CSRFField(token: csrfToken)
                 button(.class("row-menu-item"), .type(.submit), .role("menuitem")) {
-                    Icon("i-archive")
+                    Icon("i-archive-restore")
                     "Unarchive course"
                 }
             }
@@ -332,7 +332,7 @@ private struct AdminCourseAssignmentItem: HTML {
     var body: some HTML {
         tr {
             td(.class("item-tile-cell")) {
-                span(.class("item-tile"), .data("kind", value: "graded")) { Icon("i-calendar-check") }
+                span(.class("item-tile"), .data("kind", value: "graded")) { Icon("i-clipboard-check") }
             }
             td(.class("item-main")) {
                 div(.class("item-title")) {
@@ -496,7 +496,7 @@ private struct AdminCourseUserRow: HTML {
                             button(
                                 .class("row-menu-item row-menu-item--danger"), .type(.submit), .role("menuitem")
                             ) {
-                                Icon("i-trash")
+                                Icon("i-user-minus")
                                 "Remove from course"
                             }
                         }

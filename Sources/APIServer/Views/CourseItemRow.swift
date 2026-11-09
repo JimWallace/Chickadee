@@ -260,9 +260,9 @@ private struct CourseAssignmentItemRow: HTML {
             }
             td(.class("item-tile-cell")) {
                 if row.assignmentID != nil {
-                    span(.class("item-tile"), .data("kind", value: "graded")) { Icon("i-calendar-check") }
+                    span(.class("item-tile"), .data("kind", value: "graded")) { Icon("i-clipboard-check") }
                 } else {
-                    span(.class("item-tile")) { Icon("i-upload") }
+                    span(.class("item-tile")) { Icon("i-file-dashed") }
                 }
             }
             td(.class("item-main")) { mainCell }
@@ -449,7 +449,7 @@ private struct CourseAssignmentItemRow: HTML {
             button(
                 .class("btn action-btn action-btn-icon"), .type(.button), .title("Copy student link"),
                 .ariaLabel("Copy student link"), .data("copy-url", value: row.vanityURL ?? "")
-            ) { Icon("i-link") }
+            ) { Icon("i-copy") }
             a(
                 .class("btn action-btn action-btn-icon"), .href("/instructor/\(assignmentID)/workbench"),
                 .title("Edit assignment"), .ariaLabel("Edit assignment")
@@ -457,7 +457,7 @@ private struct CourseAssignmentItemRow: HTML {
             RowMenu(for: row.title ?? "") {
                 if let leaderboardURL = row.leaderboardURL {
                     a(.class("row-menu-item"), .href(leaderboardURL), .role("menuitem")) {
-                        Icon("i-award")
+                        Icon("i-podium")
                         "Leaderboard"
                     }
                 }
@@ -466,7 +466,7 @@ private struct CourseAssignmentItemRow: HTML {
                         action: "/instructor/\(assignmentID)/clone",
                         confirm:
                             "Duplicate this assignment? A closed, unvalidated copy will be created for you to edit.",
-                        icon: "i-copy", label: "Duplicate", danger: false)
+                        icon: "i-copy-plus", label: "Duplicate", danger: false)
                 }
                 menuForm(
                     action: "/instructor/\(assignmentID)/retest",

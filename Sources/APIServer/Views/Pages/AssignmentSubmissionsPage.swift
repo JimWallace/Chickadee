@@ -268,7 +268,7 @@ private struct AssignmentSubmissionsRow: HTML {
                     "Reset this student’s working-copy notebook back to the original assignment starter? Past submissions are not affected. The student will see the fresh starter automatically on their next visit.",
                 returnTo: returnTo, buttonClass: "btn action-btn action-btn-icon action-danger",
                 label: "Reset notebook to starter", title: "Reset notebook to starter (past submissions unaffected)",
-                icon: "i-rewind", csrfToken: csrfToken)
+                icon: "i-eraser", csrfToken: csrfToken)
             if secretRevealEnabled && row.secretRevealSpent {
                 RowActionForm(
                     action: "\(studentPath)/regrant-reveal-token",

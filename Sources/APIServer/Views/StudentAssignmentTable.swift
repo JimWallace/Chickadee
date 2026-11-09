@@ -111,7 +111,7 @@ private struct StudentAssignmentTableRow: HTML {
                             .title("Reset this student’s working-copy notebook to the original starter")
                         ) {
                             " "
-                            Icon("i-rewind")
+                            Icon("i-eraser")
                             " "
                         }
                     }

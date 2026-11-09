@@ -142,7 +142,7 @@ struct InstructorStudentsPage: HTML {
                     .class("row-menu-item"), .href("#add-staff-panel"), .role("menuitem"),
                     .data("add-target", value: "add-staff-panel")
                 ) {
-                    span(.class("item-tile"), .data("kind", value: "graded")) { Icon("i-key") }
+                    span(.class("item-tile"), .data("kind", value: "graded")) { Icon("i-user-plus") }
                     span {
                         "Add staff member"
                         br()
@@ -249,7 +249,7 @@ private struct StaffRow: HTML {
                                     .class("row-menu-item row-menu-item--danger"), .type(.submit),
                                     .role("menuitem")
                                 ) {
-                                    Icon("i-trash")
+                                    Icon("i-user-minus")
                                     "Remove from course"
                                 }
                             }

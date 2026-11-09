@@ -231,7 +231,7 @@ private struct AdminCourseTableRow: HTML {
                         .class("btn action-btn action-btn-icon"), .href("/admin/courses/\(course.id)#clone-course"),
                         .title("Clone course"), .ariaLabel("Clone course")
                     ) {
-                        Icon("i-copy")
+                        Icon("i-copy-plus")
                     }
                     rowMenu
                 }
