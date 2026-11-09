@@ -818,6 +818,9 @@ coordination, and each must see every edit.
   - `GradePercentSQL`, the SQL fold behind the dashboard, the roster and
     the grades CSV. `GradePercentFoldTests` runs it and the Swift fold on
     the same rows.
+- **Parallel paths.** `gradeColumnsRows` (`BestGradePercentBySubmissionID.swift`)
+  names the result's grade columns twice: in its raw SELECT and in its
+  Fluent fallback. A new grade column goes into both.
 - **Rules:**
   - `ResultIngestEffects` is the one ingest chokepoint. The worker path, the
     browser path and the tournament arena all use it. Put a new side effect
