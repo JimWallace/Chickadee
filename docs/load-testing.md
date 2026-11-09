@@ -9,7 +9,10 @@ measure a change to these routes before the change reaches production.
 | Runner poll | `POST /api/v1/worker/request` | HMAC check, nonce insert, runner check-in, pending-work query, and a claim when work is pending |
 | Status poll | `GET /api/v1/submissions/:id` | Session lookup, submission read, access check |
 
-A real runner slot polls with a backoff of up to 30 s. A result view polls
+A real runner slot asks the server to hold an idle poll for up to 20 s
+(`WorkerLongPoll`), so each idle slot sends about three polls a minute. The
+tool's simulated runners do not ask for a hold, so `--runner-poll-interval`
+sets their rate directly. A result view polls
 every 2 s while its submission is pending. During a deadline, both streams
 grow with the number of runners and students.
 

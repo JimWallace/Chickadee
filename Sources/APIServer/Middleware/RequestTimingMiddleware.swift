@@ -14,7 +14,7 @@ struct RequestTimingMiddleware: AsyncMiddleware {
                     request: request,
                     statusCode: Int(response.status.code),
                     startedAt: startDate,
-                    durationMs: milliseconds(from: start.duration(to: clock.now))
+                    durationMs: milliseconds(from: start.duration(to: clock.now) - request.heldPollWait)
                 ),
                 on: request.db,
                 logger: request.logger
@@ -27,7 +27,7 @@ struct RequestTimingMiddleware: AsyncMiddleware {
                     request: request,
                     statusCode: Int(statusCode),
                     startedAt: startDate,
-                    durationMs: milliseconds(from: start.duration(to: clock.now))
+                    durationMs: milliseconds(from: start.duration(to: clock.now) - request.heldPollWait)
                 ),
                 on: request.db,
                 logger: request.logger

@@ -1,0 +1,3 @@
+### Changed
+
+- **Grading starts as soon as a submission arrives.** A runner slot with no job now asks the server to hold its poll for up to 20 s, and the server answers the moment a submission is pending. An idle slot used to back off up to 30 s between polls, so a submission made in a quiet period could wait that long before any runner picked it up. Student submissions wake the held polls directly; a once-a-second count of pending rows, run only while a poll is held, covers retests, validation runs and the stuck-claim reaper. The poll route's timing in the admin metrics leaves the hold out. Shutdown releases every held poll first, so a deploy's drain is not held up. An older runner or an older server keeps the old behaviour.
