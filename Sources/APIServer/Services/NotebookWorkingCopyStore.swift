@@ -292,7 +292,12 @@ func ensureUserNotebookWorkingCopy(
         on: db, application: application, logger: logger)
 
     if let existingData = existingWorkingCopy {
-        if sameNotebookContent(existingData, processedData) {
+        // Outputs are not compared. The stored starter has none
+        // (`starterNotebookForStorage`), while the author's copy keeps the ones
+        // from their last run, so comparing them would rewrite the copy after
+        // every save and drop its in-browser edits. Every other field still
+        // counts, the kernelspec among them.
+        if sameNotebookContent(NotebookOutputs.stripped(existingData), NotebookOutputs.stripped(processedData)) {
             await createSupportFileSymlinks(setup: fallbackSetup, studentDir: workingCopyDir, application: application)
             await writeDatasetFiles(
                 setup: fallbackSetup, userID: userID, studentDir: workingCopyDir, on: db, application: application)

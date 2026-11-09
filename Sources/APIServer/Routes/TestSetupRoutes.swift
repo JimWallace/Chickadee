@@ -192,7 +192,7 @@ struct TestSetupRoutes: RouteCollection {
         if manifest.gradingMode == .browser {
             let notebookPath = setupsDir + "\(setupID).ipynb"
             if let data = await extractNotebookFromZip(zipPath: zipPath) {
-                let normalized = normalizeNotebookForJupyterLite(data)
+                let normalized = starterNotebookForStorage(data)
                 try await req.fileio.writeFile(.init(data: normalized), at: notebookPath)
                 setup.notebookPath = notebookPath
                 try await setup.save(on: req.db)
@@ -424,7 +424,7 @@ struct TestSetupRoutes: RouteCollection {
             notebookPath = req.application.testSetupsDirectory + "\(setupID).ipynb"
         }
 
-        let normalizedNotebook = normalizeNotebookForJupyterLite(notebookBytes)
+        let normalizedNotebook = starterNotebookForStorage(notebookBytes)
         try await req.fileio.writeFile(.init(data: normalizedNotebook), at: notebookPath)
 
         if setup.notebookPath == nil {

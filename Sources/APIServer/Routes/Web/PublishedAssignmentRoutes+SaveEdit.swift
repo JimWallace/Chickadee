@@ -483,7 +483,7 @@ extension PublishedAssignmentRoutes {
         uploadedFile: File?,
         hasUpload: Bool
     ) async throws {
-        let assignmentNotebook = normalizeNotebookForJupyterLite(assignmentNotebookRaw)
+        let assignmentNotebook = starterNotebookForStorage(assignmentNotebookRaw)
         let notebookPath: String = {
             if hasUpload {
                 let fallbackName =

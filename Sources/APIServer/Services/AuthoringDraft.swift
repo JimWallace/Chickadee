@@ -101,12 +101,11 @@ private func authoredNotebookContent(_ data: Data) -> [String: JSONValue]? {
     if let cells = notebook["cells"]?.arrayValue {
         notebook["cells"] = .array(
             cells.map { cell in
-                guard var fields = cell.objectValue else { return cell }
-                fields["outputs"] = nil
-                fields["execution_count"] = nil
-                if var cellMetadata = fields["metadata"]?.objectValue {
-                    cellMetadata["execution"] = nil
-                    fields["metadata"] = cellMetadata.isEmpty ? nil : .object(cellMetadata)
+                guard let original = cell.objectValue else { return cell }
+                // The same clearing the stored starter gets (`NotebookOutputs`).
+                var fields = NotebookOutputs.clearingRunState(original)
+                if fields["metadata"]?.objectValue?.isEmpty == true {
+                    fields["metadata"] = nil
                 }
                 return .object(fields)
             })

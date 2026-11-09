@@ -527,6 +527,30 @@ because line numbers go out of date.
     counts only when every element is a string. A change to one must go to
     the other.
 
+### A stored starter notebook holds no outputs: `NotebookOutputs`
+
+- **Invariant:** the starter notebook stored for a setup has no cell outputs,
+  execution counts or execution timing, so students run each cell themselves.
+  The author's own working copy and the solution notebook keep theirs.
+- **Writers:** every starter write clears them. `starterNotebookForStorage`
+  normalizes and clears; it is called by
+  `AssignmentAuthoringService.writeAssignmentNotebook` (the editor save, MCP
+  `update_notebook` and `create_assignment`), the new-assignment save, Save &
+  Validate (`persistAssignmentNotebook`), the draft upload, and both
+  `TestSetupRoutes` writes. Course bundle import and version restore call
+  `NotebookOutputs.stripped` directly. A starter read from the setup zip is
+  cleared in `resolveNotebook`. `StripStarterNotebookOutputs` cleaned the files
+  stored before this. A new starter write site must clear them too.
+- **Comparisons that must agree:** `sameDraftContent` (the server-drive draft
+  sync) clears each cell with `NotebookOutputs.clearingRunState`, and the
+  `refreshFromSeed` path of `ensureUserNotebookWorkingCopy` compares both sides
+  after `NotebookOutputs.stripped`. If either compared outputs, every save
+  would make the author's copy look stale and rewrite it under the open editor.
+- **Versioning:** the migration rewrites files without recording a version, and
+  a restore of a snapshot taken with outputs stores the cleared bytes. So
+  restoring that snapshot a second time is not `alreadyCurrent`; it records
+  another version.
+
 ### Grading and submission mode: `effectiveGradingMode`, `effectiveSubmissionMode`
 
 - **Rule:** every consumer reads the effective value, not the raw field. Only
