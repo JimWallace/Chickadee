@@ -86,6 +86,38 @@ struct GetAssignmentTool: ContentTool {
         /// The files that come from the course dataset library, with the
         /// version each one pins.
         let datasets: [AttachedDatasetDTO]
+        /// The GitHub submission setting (docs/github-submissions.md),
+        /// reported read-only. Turning it on sends students' code to GitHub,
+        /// which waits on a privacy review, so it is set by an instructor on
+        /// the edit page and by no MCP tool.
+        let githubSubmission: GitHubSubmissionOutput
+    }
+
+    /// The manifest's three GitHub submission fields.
+    struct GitHubSubmissionOutput: Encodable, Sendable, Equatable {
+        /// Whether students may submit from a GitHub repository.
+        let enabled: Bool
+        /// Whether each graded commit gets a commit status on GitHub.
+        let statusChecks: Bool
+        /// The template repository students start from, as `owner/name`, or
+        /// nil when none is set.
+        let starterRepository: String?
+
+        private enum CodingKeys: String, CodingKey { case enabled, statusChecks, starterRepository }
+
+        /// `starterRepository` is always present, explicitly null when unset.
+        func encode(to encoder: any Encoder) throws {
+            var c = encoder.container(keyedBy: CodingKeys.self)
+            try c.encode(enabled, forKey: .enabled)
+            try c.encode(statusChecks, forKey: .statusChecks)
+            try c.encode(starterRepository, forKey: .starterRepository)
+        }
+
+        init(manifest: TestProperties?) {
+            enabled = manifest?.githubSubmission == true
+            statusChecks = manifest?.githubStatusChecks == true
+            starterRepository = manifest?.githubStarterRepository
+        }
     }
 
     /// The activity block as reported: its kind, the leaderboard's visibility,
@@ -162,7 +194,11 @@ struct GetAssignmentTool: ContentTool {
         + "leaderboard path, the aggregation, the opponent source and file, and the live-session "
         + "window as opensAt and closesAt, null when unset) — which together decide what may be "
         + "authored here. datasets lists the files that come from the course dataset library, with the "
-        + "slug, the pinned version, the scope and the sample of each."
+        + "slug, the pinned version, the scope and the sample of each. githubSubmission reports whether "
+        + "students may submit from a GitHub repository (enabled), whether graded commits get a "
+        + "status on GitHub (statusChecks) and the template repository (starterRepository, null "
+        + "when none); it is read-only here, because turning it on sends students' code to GitHub, "
+        + "and an instructor sets it on the assignment's edit page."
     static let inputSchema: JSONValue = MCPSchema.assignmentPublicIDOnlyInput
     static let outputSchema: JSONValue? = .object([
         "type": .string("object"),
@@ -235,13 +271,25 @@ struct GetAssignmentTool: ContentTool {
                 ]),
             ]),
             "datasets": .object(["type": .string("array"), "items": DatasetToolSchema.attached]),
+            "githubSubmission": .object([
+                "type": .string("object"),
+                "description": .string("The GitHub submission setting, read-only."),
+                "properties": .object([
+                    "enabled": MCPSchema.boolean,
+                    "statusChecks": MCPSchema.boolean,
+                    "starterRepository": MCPSchema.nullableString,
+                ]),
+                "required": .array([
+                    .string("enabled"), .string("statusChecks"), .string("starterRepository"),
+                ]),
+            ]),
         ]),
         "required": .array([
             .string("publicID"), .string("title"), .string("slug"), .string("courseCode"),
             .string("courseKey"),
             .string("isOpen"), .string("visibility"), .string("deadlineOverrideActive"),
             .string("gradingMode"), .string("secretRevealEnabled"),
-            .string("solutionVisibility"), .string("submissionMode"),
+            .string("solutionVisibility"), .string("submissionMode"), .string("githubSubmission"),
         ]),
     ])
     static let requiredScopes: Set<ContentScope> = [.read]
@@ -307,7 +355,8 @@ struct GetAssignmentTool: ContentTool {
                     composite: activity.composite,
                     runsPerGroup: activity.isPerGroup)
             },
-            datasets: (manifest?.datasets ?? []).compactMap(AttachedDatasetDTO.init)
+            datasets: (manifest?.datasets ?? []).compactMap(AttachedDatasetDTO.init),
+            githubSubmission: GitHubSubmissionOutput(manifest: manifest)
         )
     }
 }

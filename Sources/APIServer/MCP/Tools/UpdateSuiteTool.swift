@@ -10,6 +10,11 @@
 // re-kicks validation. The agent never sends raw script content, so it can't
 // corrupt test bodies. Pattern-family / notebook-check metadata and reordering
 // are out of scope here (later phases).
+//
+// `anchor` pins a script to a notebook cell (docs/notebook-guide.md, "Pin to a
+// cell") through `SuiteAnchorPinning`, the rule the web pin route uses. Grading
+// never reads a pin, so a call whose every edit sets only `anchor` neither
+// closes, re-grades nor re-validates, as the web route does not.
 
 import Core
 import Fluent
@@ -33,6 +38,9 @@ struct UpdateSuiteTool: ContentTool {
         /// Student-facing failure detail (`FailureDetail` raw value). Sets the
         /// level; "" or "full" reverts to full; absent leaves it unchanged.
         let failureDetail: String?
+        /// The notebook cell name the script is pinned to: a name sets the
+        /// pin, "" clears it, absent leaves it unchanged.
+        let anchor: String?
 
         // Explicit init so `timeLimitSeconds` can default to nil — keeps the
         // older positional/labelled call sites (which predate the field)
@@ -41,7 +49,7 @@ struct UpdateSuiteTool: ContentTool {
             script: String, tier: String? = nil, points: Int? = nil,
             displayName: String? = nil, dependsOn: [String]? = nil,
             sectionID: String? = nil, timeLimitSeconds: Int? = nil,
-            failureDetail: String? = nil
+            failureDetail: String? = nil, anchor: String? = nil
         ) {
             self.script = script
             self.tier = tier
@@ -51,6 +59,15 @@ struct UpdateSuiteTool: ContentTool {
             self.sectionID = sectionID
             self.timeLimitSeconds = timeLimitSeconds
             self.failureDetail = failureDetail
+            self.anchor = anchor
+        }
+
+        /// True when the edit sets the pin and nothing that grading reads.
+        /// A new field must be added here, or an edit of it alone would skip
+        /// the close and the re-validation.
+        var changesOnlyAnchor: Bool {
+            anchor != nil && tier == nil && points == nil && displayName == nil && dependsOn == nil
+                && sectionID == nil && timeLimitSeconds == nil && failureDetail == nil
         }
     }
 
@@ -77,9 +94,14 @@ struct UpdateSuiteTool: ContentTool {
         + "(a per-test execution time limit override in seconds, \(mcpTimeLimitRangeText); 0 clears the override so the "
         + "script reverts to the assignment default set by set_time_limit), and failureDetail "
         + "(\(MCPFailureDetailProse.slashAlternatives) — how much of a failing run the student sees; "
-        + "\"full\" reverts to the default). Does NOT change "
-        + "script content or pattern families. Saving re-runs the assignment's validation and closes "
-        + "the assignment if it was open (re-open with update_assignment once validation passes)."
+        + "\"full\" reverts to the default), and anchor (the name of the notebook cell the test "
+        + "belongs to: a function or variable the cell defines, or a \"## \" section heading; "
+        + "\"\" clears the pin and the test is anchored automatically again). Does NOT change "
+        + "script content or pattern families; a generated test is anchored by its family or check "
+        + "and cannot be pinned. Saving re-runs the assignment's validation and closes "
+        + "the assignment if it was open (re-open with update_assignment once validation passes). "
+        + "Grading never reads a pin, so a call whose every edit sets only anchor saves the pin and "
+        + "nothing else: no validation, no regrade, no close. get_suite reports each script's pin."
     static let inputSchema: JSONValue = .object([
         "type": .string("object"),
         "properties": .object([
@@ -108,6 +130,13 @@ struct UpdateSuiteTool: ContentTool {
                             "Per-test time-limit override in seconds (\(mcpTimeLimitRangeText)); "
                                 + "0 clears the override (revert to the assignment default)."),
                         "failureDetail": MCPFailureDetailProse.schema(MCPFailureDetailProse.fieldDescription),
+                        "anchor": .object([
+                            "type": .string("string"),
+                            "description": .string(
+                                "Pin the test to the notebook cell that defines this name (or to a "
+                                    + "\"## \" section heading); \"\" clears the pin. Display only: "
+                                    + "the student guide and the workbench place the test by it."),
+                        ]),
                     ]),
                     "required": .array([.string("script")]),
                     "additionalProperties": .bool(false),
@@ -141,6 +170,27 @@ struct UpdateSuiteTool: ContentTool {
         }
         let (assignment, setup) = try await context.authorizedAssignmentAndSetupForWrite(
             publicID: input.assignmentPublicID, atLeast: .ta)
+        let pins = input.edits.compactMap { edit in
+            edit.anchor.map { SuiteAnchorPinning.Pin(script: edit.script, anchor: $0) }
+        }
+
+        // Refuse a bad pin before anything is written: the metadata save below
+        // and the pin write are two manifest edits, and a pin refused after the
+        // first would leave a changed suite that nothing closed or re-validated.
+        if let manifest = setup.decodedManifest(), let refusal = SuiteAnchorPinning.refusal(of: pins, in: manifest) {
+            throw MCPToolError.invalidArguments(detail: refusal.message)
+        }
+
+        // Pins only: grading never reads a pin, so nothing closes, re-grades
+        // or re-validates, as with the web pin route.
+        if input.edits.allSatisfy(\.changesOnlyAnchor) {
+            try await Self.applyPins(pins, setup: setup, context: context)
+            return Output(
+                assignmentPublicID: assignment.publicID,
+                updatedScripts: input.edits.map(\.script),
+                validationStatus: assignment.validationStatus,
+                assignmentClosed: false)
+        }
 
         // Load the full authored suite with script bodies preserved from the zip.
         var payload = await buildSuitePayload(fromManifest: setup.manifest, zipPath: setup.zipPath)
@@ -176,6 +226,7 @@ struct UpdateSuiteTool: ContentTool {
         }
 
         try await applySuiteEditMapped(setup: setup, body: payload, on: context.db)
+        try await Self.applyPins(pins, setup: setup, context: context)
         // Close, re-grade, and re-validate (matching the web Save button).
         let finalized = try await finalizeContentEdit(
             assignment: assignment, setup: setup, context: context, retest: true)
@@ -187,4 +238,15 @@ struct UpdateSuiteTool: ContentTool {
             assignmentClosed: finalized.assignmentClosed)
     }
 
+    /// Writes the pins, mapping a refused pin to an arguments error the agent
+    /// can fix.
+    private static func applyPins(
+        _ pins: [SuiteAnchorPinning.Pin], setup: APITestSetup, context: ToolContext
+    ) async throws {
+        do {
+            try await SuiteAnchorPinning.apply(pins, setup: setup, on: context.db)
+        } catch let error as SuiteAnchorPinning.PinError {
+            throw MCPToolError.invalidArguments(detail: error.message)
+        }
+    }
 }

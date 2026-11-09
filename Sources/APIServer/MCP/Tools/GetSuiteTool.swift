@@ -75,6 +75,11 @@ struct GetSuiteTool: ContentTool {
             /// the family default for a family row, the check's for a check.
             /// nil means full.
             let failureDetail: String?
+            /// The notebook cell name a hand-written script is pinned to
+            /// (`TestSuiteEntry.anchor`, set with `update_suite`), or nil when
+            /// it is anchored automatically. Always nil for a generated row:
+            /// its family or check names its cell.
+            var anchor: String?
             /// Full pattern-family spec — function, kind, paramNames, defaults
             /// (including the family `hint`), variables, and every case's
             /// args/expected/hint — for `kind == "family"` items. This is the
@@ -129,7 +134,8 @@ struct GetSuiteTool: ContentTool {
         + "reports the assignment's default per-test execution time limit (`timeLimitSeconds` at the "
         + "top level), any per-script override (`timeLimitSeconds` on a script item), each item's "
         + "student-facing `failureDetail` (\(MCPFailureDetailProse.slashAlternatives); null means full), "
-        + "and the optional "
+        + "the notebook cell a hand-written script is pinned to (`anchor`; absent when anchored "
+        + "automatically), and the optional "
         + "minimum native-runner version gate (`minimumRunnerVersion`, null when ungated), and the last "
         + "starter run (`starterRun`: each test's status on the starter notebook; a test worth points "
         + "that passes there earns them with no work; null before a run). Read-only — "
@@ -220,6 +226,12 @@ struct GetSuiteTool: ContentTool {
                         ]),
                         "failureDetail": MCPFailureDetailProse.schema(
                             "Student-facing failure detail set on this item; absent means full."),
+                        "anchor": .object([
+                            "type": .string("string"),
+                            "description": .string(
+                                "The notebook cell a hand-written script is pinned to (set with "
+                                    + "update_suite); absent when the test is anchored automatically."),
+                        ]),
                         "family": .object([
                             "type": .string("object"),
                             "description": .string(
@@ -280,6 +292,8 @@ struct GetSuiteTool: ContentTool {
         // their files in the order the runner walks them.
         var generatedByFamily: [String: [String]] = [:]
         var generatedByCheck: [String: [String]] = [:]
+        // The pin lives on the manifest entry, not on the suite-payload DTO.
+        var pins: [String: String] = [:]
         for entry in manifest?.testSuites ?? [] {
             switch entry.origin {
             case .family(let fid):
@@ -287,11 +301,14 @@ struct GetSuiteTool: ContentTool {
             case .check(let cid):
                 generatedByCheck[cid, default: []].append(entry.script)
             case .handWritten:
-                break
+                if let anchor = entry.anchor { pins[entry.script] = anchor }
             }
         }
-        let items = payload.items.map {
-            Self.item(from: $0, generatedByFamily: generatedByFamily, generatedByCheck: generatedByCheck)
+        let items = payload.items.map { dto in
+            var item = Self.item(
+                from: dto, generatedByFamily: generatedByFamily, generatedByCheck: generatedByCheck)
+            if item.kind == "script", let filename = item.filename { item.anchor = pins[filename] }
+            return item
         }
         // The assignment-wide default every override-less item inherits.
         // Falls back to the model default (10) for an undecodable manifest.

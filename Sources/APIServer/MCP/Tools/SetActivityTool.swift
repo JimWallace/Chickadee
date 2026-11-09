@@ -8,10 +8,15 @@
 // language; the leaderboard's visibility may change at any time. Both
 // surfaces (this tool and the web edit page) call `ActivityAuthoring`, so the
 // lock and the seeded defaults are enforced once.
+//
+// `prepareReference` queues the composite's reference renders after the save,
+// through `CompositeReferences.prepare`, the service behind the edit page's
+// "Prepare reference" button (docs/class-composite.md).
 
 import Core
 import Fluent
 import Foundation
+import Vapor
 
 struct SetActivityTool: ContentTool {
     struct Input: Decodable, Sendable {
@@ -39,6 +44,11 @@ struct SetActivityTool: ContentTool {
         /// its clock (docs/lab-groups.md). Absent keeps the stored value while
         /// the kind is unchanged, else false.
         var runsPerGroup: Bool?
+        /// True to queue the reference renders of a `classComposite` after
+        /// the save: one job per slot runs the reference solution, and
+        /// `emptySlots: reference` shows each slot's render, dimmed. A new
+        /// render replaces the old one. Absent or false queues nothing.
+        var prepareReference: Bool?
     }
 
     struct Output: Encodable, Sendable {
@@ -67,11 +77,14 @@ struct SetActivityTool: ContentTool {
         var composite: CompositeSpec?
         /// True when the stored activity runs once per lab group.
         var runsPerGroup: Bool = false
+        /// The reference jobs queued, one per slot, when `prepareReference`
+        /// was true; null when it was not asked for.
+        var referenceJobsQueued: Int?
 
         private enum CodingKeys: String, CodingKey {
             case assignmentPublicID, kind, leaderboardVisibility, leaderboardPath
             case recordAchievementSeeded, opponentSource, opponentFile, opensAt, closesAt, composite
-            case runsPerGroup
+            case runsPerGroup, referenceJobsQueued
         }
 
         /// The two opponent keys are always present — explicitly null when
@@ -93,6 +106,7 @@ struct SetActivityTool: ContentTool {
             try c.encode(closesAt, forKey: .closesAt)
             try c.encode(composite, forKey: .composite)
             try c.encode(runsPerGroup, forKey: .runsPerGroup)
+            try c.encode(referenceJobsQueued, forKey: .referenceJobsQueued)
         }
     }
 
@@ -133,7 +147,11 @@ struct SetActivityTool: ContentTool {
         + "pass the whole composite block (compositor, layout, contribution, and optionally dealOrder, "
         + "frameRate, showFailed, emptySlots); absent keeps the stored block, and a new composite "
         + "starts from a 6 by 8 grid of 8 by 8 RGB tiles. The compositor, layout, contribution and "
-        + "dealOrder lock once a student has submitted; the other three stay editable. A composite's "
+        + "dealOrder lock once a student has submitted; the other three stay editable. "
+        + "prepareReference true queues the reference renders after the save: one job per slot runs "
+        + "the reference solution (set one with update_solution first), and emptySlots \"reference\" "
+        + "shows each slot's render, dimmed, where no student's contribution passed. Run it again "
+        + "after the solution or the layout changes; a new render replaces the old. A composite's "
         + "leaderboard stays hidden from students: it is for the projector. runsPerGroup true "
         + "runs the activity once per lab group: each group's session, started by course staff on "
         + "the present page, replaces the window, so it needs the course's groups and no window. "
@@ -187,6 +205,13 @@ struct SetActivityTool: ContentTool {
                     "Run once per lab group, each group's session its clock. Absent keeps the stored "
                         + "value while the kind is unchanged, else false."),
             ]),
+            "prepareReference": .object([
+                "type": .string("boolean"),
+                "description": .string(
+                    "classComposite only: true queues one reference render per slot from the "
+                        + "reference solution after the save, replacing any earlier render. Needs a "
+                        + "reference solution."),
+            ]),
         ]),
         "required": .array([.string("assignmentPublicID"), .string("kind")]),
         "additionalProperties": .bool(false),
@@ -211,6 +236,7 @@ struct SetActivityTool: ContentTool {
                 "description": .string("The stored composite block; null for any other kind."),
             ]),
             "runsPerGroup": MCPSchema.boolean,
+            "referenceJobsQueued": MCPSchema.nullableInteger,
         ]),
         "required": .array([
             .string("assignmentPublicID"), .string("kind"), .string("recordAchievementSeeded"),
@@ -281,6 +307,12 @@ struct SetActivityTool: ContentTool {
             }
             activity = ClassActivity(kind: kind)
         }
+        // Refused before the save. The two refusals a caller can fix (another
+        // kind, no solution) are checked first, so such a call changes nothing;
+        // only a concurrent render is refused after the save.
+        if input.prepareReference == true, activity?.kind != .classComposite {
+            throw MCPToolError.invalidArguments(detail: Self.prepareReferenceMessage(.notComposite))
+        }
         // Read only for a kind: with "none" the field is ignored, as before.
         let requestedVisibility = try input.leaderboardVisibility.flatMap { token -> LeaderboardVisibility? in
             guard activity != nil else { return nil }
@@ -294,6 +326,9 @@ struct SetActivityTool: ContentTool {
         // A lifecycle setting — instructor-level, like set_submission_mode.
         let (assignment, setup) = try await context.authorizedAssignmentAndSetupForWrite(
             publicID: input.assignmentPublicID, atLeast: CourseRoleFloor.classActivity)
+        if input.prepareReference == true, assignment.validationSubmissionID == nil {
+            throw MCPToolError.invalidArguments(detail: Self.prepareReferenceMessage(.noSolution))
+        }
         let current = currentManifestActivity(setup.manifest)
         let requested = activity.map { block in
             block
@@ -325,6 +360,9 @@ struct SetActivityTool: ContentTool {
             // fixable message rather than a 400.
             throw MCPToolError.invalidArguments(detail: error.reason)
         }
+        let referenceJobsQueued =
+            input.prepareReference == true
+            ? try await Self.prepareReference(assignment: assignment, setup: setup, context: context) : nil
         let stored = setup.decodedManifest()
         return Output(
             assignmentPublicID: assignment.publicID,
@@ -339,7 +377,35 @@ struct SetActivityTool: ContentTool {
             opensAt: stored?.activity?.window?.opensAtISO,
             closesAt: stored?.activity?.window?.closesAtISO,
             composite: stored?.activity?.composite,
-            runsPerGroup: stored?.activity?.isPerGroup == true)
+            runsPerGroup: stored?.activity?.isPerGroup == true,
+            referenceJobsQueued: referenceJobsQueued)
+    }
+
+    /// Queues the composite's reference renders, as the edit page's "Prepare
+    /// reference" does. The owner pool: each render is a grading job row the
+    /// MCP role may not write. Returns the number of jobs queued.
+    static func prepareReference(
+        assignment: APIAssignment, setup: APITestSetup, context: ToolContext
+    ) async throws -> Int {
+        do {
+            return try await CompositeReferences.prepare(
+                assignment: assignment, setup: setup, app: context.request.application, on: context.mainDB)
+        } catch let error as CompositeReferences.PrepareError {
+            throw MCPToolError.invalidArguments(detail: prepareReferenceMessage(error))
+        }
+    }
+
+    /// The fixable reason a reference render was refused.
+    static func prepareReferenceMessage(_ error: CompositeReferences.PrepareError) -> String {
+        switch error {
+        case .notComposite:
+            return "prepareReference needs kind \"\(ActivityKind.classComposite.rawValue)\"."
+        case .noSolution:
+            return "The assignment has no reference solution to render. Set one with update_solution, "
+                + "then call set_activity with prepareReference again."
+        case .concurrentPrepare:
+            return "Another reference render started at the same time. Try again."
+        }
     }
 
     /// The visibility the call means: the given value, or, when absent, the

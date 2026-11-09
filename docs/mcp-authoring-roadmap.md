@@ -37,8 +37,8 @@ The catalog:
 | `get_server_info` | `content:read` | Deployed version + MCP mode/advertised scopes (liveness + capability probe) |
 | `list_assignments` | `content:read` | A course's assignments (id, title, slug, open/closed, due date) |
 | `list_course_sections` | `content:read` | A course's assignment groups (id, name, default grading mode, order) |
-| `get_assignment` | `content:read` | One assignment's full detail (incl. gradingMode + course section) |
-| `get_suite` | `content:read` | Full test-suite definition: items, tiers, points, deps, sections, plus each script's raw body, each family's full spec (cases' args/expected), and each notebook check's spec |
+| `get_assignment` | `content:read` | One assignment's full detail (incl. gradingMode + course section, and the GitHub submission setting, read-only) |
+| `get_suite` | `content:read` | Full test-suite definition: items, tiers, points, deps, sections, plus each script's raw body and cell pin (`anchor`), each family's full spec (cases' args/expected), and each notebook check's spec |
 | `get_notebook` | `content:read` | The starter notebook (.ipynb JSON) |
 | `get_solution` | `content:read` | The reference solution notebook (.ipynb JSON), resolved from the validation submission |
 | `get_support_files` | `content:read` | List the setup zip's non-graded helper/data files, or read one (UTF-8, byte-capped) |
@@ -68,9 +68,9 @@ The catalog:
 | `attach_dataset` | `content:write` | Attach a library dataset to an assignment (pinned version, scope, sample), or move an attached file to another version or scope; re-grades and re-validates, no close |
 | `detach_dataset` | `content:write` | End a library attachment, keeping the file and its sample unless `removeFile`; re-grades and re-validates, no close |
 | `set_minimum_runner_version` | `content:write` | Set (or clear) the minimum native-runner version that may grade the assignment (semver); server-side claim-time gate, worker path only; no regrade/close |
-| `set_activity` | `content:write` | Make the assignment a class activity (a leaderboard kind ranked on the footer's `metric`), change its leaderboard visibility, or clear it; the kind is locked once a student has submitted; no regrade/close |
+| `set_activity` | `content:write` | Make the assignment a class activity (a leaderboard kind ranked on the footer's `metric`), change its leaderboard visibility, or clear it; the kind is locked once a student has submitted; no regrade/close; `prepareReference` queues a class composite's reference renders |
 | `run_tournament` | `content:write` | Start a single-elimination or Swiss tournament on a tournament-kind activity: snapshots every student's latest complete submission as the entrants and enqueues the first round's match jobs; rounds advance as results land; a run in progress is superseded; never a grade of record |
-| `update_suite` | `content:write` | Script metadata: tier, points, displayName, dependsOn, section |
+| `update_suite` | `content:write` | Script metadata: tier, points, displayName, dependsOn, section, and the pin to a notebook cell (`anchor`; a pin-only edit does not close, re-grade or re-validate) |
 | `update_global_inputs` | `content:write` | Replace the assignment's global personalization variables/expressions |
 | `update_achievements` | `content:write` | Replace the assignment's composable awards (display-only; no regrade/close) |
 | `update_course_achievements` | `content:write` | Replace the course's achievements (TA and above; no regrade) |
