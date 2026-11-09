@@ -7,6 +7,7 @@
 // the anchoring (docs/notebook-guide.md, "Anchors"). A generated test is
 // anchored by its check or family, so it cannot be pinned. Grading never
 // reads a pin, so this does not close, re-validate or retest anything.
+// `SuiteAnchorPinning` holds the rule; MCP `update_suite` shares it.
 
 import Core
 import Fluent
@@ -27,20 +28,12 @@ extension PublishedAssignmentRoutes {
             throw AppError.invalidParameter(
                 name: "request body", reason: "Invalid anchor payload: \(error.localizedDescription)")
         }
-        let anchor = body.anchor?.trimmingCharacters(in: .whitespacesAndNewlines)
-        let effective = (anchor?.isEmpty == false) ? anchor : nil
-
-        try await mutateManifest(setup: setup, on: req.db) { props in
-            guard let index = props.testSuites.firstIndex(where: { $0.script == body.script }) else {
-                throw AppError.invalidParameter(
-                    name: "script", reason: "The suite has no test named '\(body.script)'.")
-            }
-            guard !props.testSuites[index].isGenerated else {
-                throw AppError.invalidParameter(
-                    name: "script",
-                    reason: "'\(body.script)' is generated, so its check or family names its cell.")
-            }
-            props.testSuites[index].anchor = effective
+        let effective = SuiteAnchorPinning.normalized(body.anchor)
+        do {
+            try await SuiteAnchorPinning.apply(
+                [SuiteAnchorPinning.Pin(script: body.script, anchor: effective)], setup: setup, on: req.db)
+        } catch let error as SuiteAnchorPinning.PinError {
+            throw AppError.invalidParameter(name: "script", reason: error.message)
         }
         return try await SuiteAnchorPayload(script: body.script, anchor: effective).encodeResponse(for: req)
     }

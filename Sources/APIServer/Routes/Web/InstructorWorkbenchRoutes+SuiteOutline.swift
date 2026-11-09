@@ -20,20 +20,11 @@ extension InstructorWorkbenchRoutes {
         }
         let language = AssignmentLanguage.resolve(manifest: manifest)
 
-        // The solution decides a script test's anchor. With no solution yet,
-        // the starter has the same headings and, usually, the same stubs.
-        let solutionData = try? await solutionNotebookData(
-            for: assignment, setup: setup, db: req.db,
+        // The solution decides a script test's anchor, or the starter when
+        // there is no solution yet (`SuiteAnchorResolution`, shared with MCP).
+        let notebook = await SuiteAnchorResolution.notebookScan(
+            assignment: assignment, setup: setup, language: language, db: req.db,
             testSetupsDirectory: req.application.testSetupsDirectory)
-        let anchorData: Data?
-        if let solutionData {
-            anchorData = solutionData
-        } else {
-            anchorData = try? await notebookData(for: setup)
-        }
-        let notebook =
-            anchorData.map { scanNotebookDefinitions($0, language: language) }
-            ?? NotebookDefinitionScan(definitions: [], sections: [], codeCellIndices: [])
 
         let scripts = await req.application.zipScriptTextCache.texts(
             zipPath: setup.zipPath, filenames: manifest.testSuites.map(\.script))

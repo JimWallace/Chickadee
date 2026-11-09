@@ -213,6 +213,36 @@ because line numbers go out of date.
   them shipped with no guard. Every route that serves solution content must
   call `requireSolutionVisible`.
 
+### A test's cell pin: `TestSuiteEntry.anchor`
+
+- **Writers:** `SuiteAnchorPinning.apply`
+  (`Services/SuiteAnchorPinning.swift`), called by the web
+  `PUT /instructor/:id/suite-anchor` route and by MCP `update_suite`.
+  `makeWorkerManifestJSON(preserving:)` carries a pin across a suite rewrite.
+- **Readers:**
+  - `NotebookTestAnchoring` (`Sources/Core/NotebookTestAnchoring.swift`),
+    rule 1 of the anchors.
+  - The staff suite outline (`InstructorSuiteOutlineBuilder`) and the
+    student guide.
+  - MCP `get_suite`, through `SuiteAnchorResolution`
+    (`Services/SuiteAnchorResolution.swift`), which the outline also calls,
+    so the two report the same cell.
+- **Parallel paths:** the student guide (`NotebookGuideBuilder`,
+  `WebRoutes+NotebookGuide.swift`) calls `NotebookTestAnchoring` itself and
+  reads the student's personalized starter when there is no solution, so its
+  cell can differ from the staff surfaces' before a solution exists. A change
+  to the rules goes in Core, which all three read.
+  - The `RunnerManifest` init removes it, so no runner receives it.
+- **Rules** (`docs/notebook-guide.md`, "Pin to a cell"):
+  - Only a hand-written entry can be pinned. A generated entry is anchored by
+    its family or check.
+  - Grading never reads a pin, so a pin alone does not close, re-grade or
+    re-validate. An MCP `update_suite` call that sets only pins stays out of
+    `finalizeContentEdit`.
+  - A caller that saves another edit before the pins checks the pins first
+    (`SuiteAnchorPinning.refusal`), so a refused pin cannot leave a changed
+    suite that nothing re-validated.
+
 ### Failure detail: `TestSuiteEntry.failureDetail`
 
 - **Writers:** the suite, family and notebook-check editors, and their MCP
@@ -360,6 +390,7 @@ because line numbers go out of date.
   - `SuiteEntryBuilder`.
   - `makeWorkerManifestJSON(preserving:)`.
   - A version restore.
+  - The cell pin only (`anchor`): `SuiteAnchorPinning`, below.
 - **Readers:**
   - The native suite mapping
     (`Sources/Worker/RunnerDaemon+SuiteExecution.swift`).
@@ -1522,7 +1553,8 @@ coordination, and each must see every edit.
   re-grade, version capture, the version tools and restore, the
   `set_activity` lock count, version v1 of `create_assignment` and
   `clone_assignment`, the copied reference solution of `clone_assignment`,
-  the starter run of `get_suite`, and the start of a `run_tournament` run.
+  the starter run of `get_suite`, the start of a `run_tournament` run, and
+  the reference render jobs of `set_activity` with `prepareReference`.
 - **Rules:**
   - A step that the `chickadee_mcp` role is denied runs on `mainDB`, not on
     `ToolContext.db`. A new MCP step on an ungranted table needs a choice:
