@@ -997,8 +997,18 @@ coordination, and each must see every edit.
     (`WorkingCopyProtectedFiles`, `JupyterLiteContentsProtectedFilesTests`).
     A new kind of delivered file must join `delivered`, or the drive can
     write over it.
-  - The write routes check ownership only, not `requireOpenStudentAssignment`
-    (open question for #469). Submission is gated separately.
+  - A student writes a working copy only while its assignment is open to
+    them: a save, a rename and a new folder pass `requireOpenStudentAssignment`
+    (#2927, `refuseClosedAssignment`), as the notebook reset does. Course
+    staff are not gated, so their authoring and practice copies of a closed
+    assignment still save (`JupyterLiteContentsAssignmentGateTests`).
+  - A save that grows a user's files is refused past the per-user quota
+    (#2926, `JupyterLiteContentsWriteLimits`). The quota counts only what the
+    write routes can write (`UserFolderUsage`): not symlinks, not the
+    delivered files, not the `view-`/`preview-` records. A new kind of file
+    the server writes into the tree must be left out of that count, or a
+    student near the limit through it cannot save
+    (`JupyterLiteContentsWriteLimitsTests`).
 
 ### The server drive and its opt-out: the `ck_server_drive` cookie
 
@@ -1349,8 +1359,10 @@ coordination, and each must see every edit.
 ### Rate-limit rows: `login_attempts`
 
 - **Writers:** the login rate limit (`LoginRateLimitMiddleware`: scopes `ip`
-  and `user_failure`) and `/join` (`ActivitySessionStore`: scope
-  `join_failure`, keyed by user id).
+  and `user_failure`), `/join` (`ActivitySessionStore`: scope
+  `join_failure`, keyed by user id) and the editor's contents write routes
+  (`JupyterLiteContentsWriteRateLimitMiddleware`: scope `contents_write`,
+  keyed by user id, #2926).
 - **Readers:** each writer reads its own scope only.
 - **Rules:**
   - Every reader filters by `scope`. A new scope is a new string constant in

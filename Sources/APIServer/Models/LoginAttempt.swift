@@ -20,6 +20,9 @@ final class LoginAttempt: Model, @unchecked Sendable {
         /// A wrong join code from a signed-in student, keyed by user id
         /// (`ActivitySessionStore.join`, docs/lab-groups.md).
         static let joinFailure = "join_failure"
+        /// A write to the editor's contents routes, keyed by user id
+        /// (`JupyterLiteContentsWriteRateLimitMiddleware`, #2926).
+        static let contentsWrite = "contents_write"
     }
 
     @ID(key: .id)

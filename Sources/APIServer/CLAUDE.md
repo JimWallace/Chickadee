@@ -63,7 +63,10 @@ POST /testsetups/:id/notebook/save      — Write the notebook open in JupyterLi
 # The server-backed editor drive (#469; the default, ck_server_drive=0 opts out)
 PUT|POST|PATCH|DELETE /jupyterlite/api/contents/** — Save, new untitled
                                           folder, rename, checkpoint stubs; the
-                                          caller's own users/<id>/ only
+                                          caller's own users/<id>/ only, a
+                                          student's only while the assignment
+                                          is open; per-user quota and rate
+                                          limit (JupyterLiteContentsWriteLimits)
 
 # The student guide beside each task in the editor (docs/notebook-guide.md)
 GET  /testsetups/:id/notebook-guide.json — The viewer's own guide: public

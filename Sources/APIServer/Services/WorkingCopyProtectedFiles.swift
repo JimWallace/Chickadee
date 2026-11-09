@@ -32,6 +32,22 @@ enum WorkingCopyProtectedFiles {
         return StudentWorkspaceFiles.delivered(zipEntries: entries, manifest: manifest)
     }
 
+    /// `paths(setupID:)` for several setups in one database read, keyed by
+    /// setup ID. A setup that does not exist or does not decode is absent.
+    static func paths(
+        setupIDs: [String], on db: any Database, application: Application
+    ) async throws -> [String: Set<String>] {
+        guard !setupIDs.isEmpty else { return [:] }
+        let setups = try await APITestSetup.query(on: db).filter(\.$id ~~ setupIDs).all()
+        var result: [String: Set<String>] = [:]
+        for setup in setups {
+            guard let id = setup.id, let manifest = decodeManifest(from: Data(setup.manifest.utf8)) else { continue }
+            let entries = await application.zipEntryListCache.entries(zipPath: setup.zipPath)
+            result[id] = StudentWorkspaceFiles.delivered(zipEntries: entries, manifest: manifest)
+        }
+        return result
+    }
+
     /// True when a write at `relativePath` (inside the setup folder) would
     /// touch a protected file: it names one, lies below one (a dataset turned
     /// into a folder) or holds one (a folder renamed away, or a file put where

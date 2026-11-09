@@ -1,0 +1,165 @@
+import Fluent
+import Foundation
+import Testing
+import Vapor
+import VaporTesting
+
+@testable import APIServer
+
+/// A student writes the working copy of an assignment only while it is open to
+/// them (#2927): a save, a rename and a new folder into a closed or not-yet-open
+/// assignment are refused, as the notebook reset is. Course staff keep writing
+/// their own copies of a closed assignment.
+@Suite(.serialized, .timeLimit(.minutes(2))) final class JupyterLiteContentsAssignmentGateTests {
+    /// Signs in the user the `X-Test-User` header names: "ta", else the student.
+    private struct InjectAuthMiddleware: AsyncMiddleware {
+        let student: APIUser
+        let ta: APIUser
+
+        func respond(to request: Request, chainingTo next: any AsyncResponder) async throws -> Response {
+            request.auth.login(request.headers.first(name: "X-Test-User") == "ta" ? ta : student)
+            return try await next.respond(to: request)
+        }
+    }
+
+    private static let setupID = "setup_gate"
+
+    private let student: APIUser
+    private let ta: APIUser
+    private let filesDir: String
+
+    let app: Application
+
+    init() async throws {
+        let tmpRoot =
+            FileManager.default.temporaryDirectory
+            .appendingPathComponent("chickadee-jlite-gate-\(UUID().uuidString)/")
+            .path
+        let student = APIUser(id: UUID(), username: "jlite-gate-student", passwordHash: "unused", role: "user")
+        let ta = APIUser(id: UUID(), username: "jlite-gate-ta", passwordHash: "unused", role: "user")
+        self.app = try await makeTestingApplication { app in
+            app.directory = DirectoryConfiguration(workingDirectory: tmpRoot)
+            app.middleware.use(InjectAuthMiddleware(student: student, ta: ta))
+            app.testDataDirectory = tmpRoot
+            try await configureTestDatabase(app)
+            try app.register(collection: JupyterLiteContentsRoutes())
+        }
+        self.student = student
+        self.ta = ta
+        self.filesDir = app.directory.publicDirectory + "jupyterlite/files/"
+    }
+
+    private func folder(of user: APIUser) throws -> String {
+        "users/\(try #require(user.id).uuidString.lowercased())/\(Self.setupID)"
+    }
+
+    /// The course, both enrollments and the assignment, in `visibility`.
+    private func seed(visibility: AssignmentVisibility, startsAt: Date? = nil) async throws {
+        try await student.save(on: app.db)
+        try await ta.save(on: app.db)
+        let course = APICourse(code: "GATE101", name: "Gate Course")
+        try await course.save(on: app.db)
+        let courseID = try course.requireID()
+        try await APICourseEnrollment(userID: try student.requireID(), courseID: courseID, role: .student)
+            .save(on: app.db)
+        try await APICourseEnrollment(userID: try ta.requireID(), courseID: courseID, role: .ta).save(on: app.db)
+        try await APIAssignment(
+            testSetupID: Self.setupID, title: "Gate", startsAt: startsAt, visibility: visibility,
+            courseID: courseID
+        ).save(on: app.db)
+        for user in [student, ta] {
+            let dir = filesDir + (try folder(of: user))
+            try FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
+            try Data("original".utf8).write(to: URL(fileURLWithPath: dir + "/assignment.ipynb"))
+        }
+    }
+
+    private func put(_ path: String, as who: String = "student") async throws -> HTTPStatus {
+        var status = HTTPStatus.ok
+        try await app.asyncTest(
+            .PUT, "/jupyterlite/api/contents/\(path)",
+            beforeRequest: { req in
+                req.headers.replaceOrAdd(name: "X-Test-User", value: who)
+                req.headers.contentType = .json
+                req.body = ByteBuffer(string: #"{"type":"file","format":"text","content":"changed"}"#)
+            },
+            afterResponse: { res in status = res.status })
+        return status
+    }
+
+    private func contents(_ path: String) throws -> String {
+        try String(contentsOfFile: filesDir + path, encoding: .utf8)
+    }
+
+    @Test func aStudentSavesIntoAnOpenAssignment() async throws {
+        try await withApp(app) { _ in
+            try await seed(visibility: .open)
+            let path = try folder(of: student) + "/assignment.ipynb"
+            #expect(try await put(path) == .ok)
+            #expect(try contents(path) == "changed")
+        }
+    }
+
+    @Test func aStudentCannotSaveIntoAClosedAssignment() async throws {
+        try await withApp(app) { _ in
+            try await seed(visibility: .closed)
+            let path = try folder(of: student) + "/assignment.ipynb"
+            #expect(try await put(path) == .forbidden)
+            #expect(try await put(try folder(of: student) + "/new.csv") == .forbidden)
+            #expect(try contents(path) == "original")
+        }
+    }
+
+    @Test func aStudentCannotSaveBeforeTheAssignmentOpens() async throws {
+        try await withApp(app) { _ in
+            try await seed(visibility: .open, startsAt: Date().addingTimeInterval(86_400))
+            let path = try folder(of: student) + "/assignment.ipynb"
+            #expect(try await put(path) == .forbidden)
+            #expect(try contents(path) == "original")
+        }
+    }
+
+    @Test func aStudentCannotRenameOrCreateAFolderInAClosedAssignment() async throws {
+        try await withApp(app) { _ in
+            try await seed(visibility: .closed)
+            let dir = try folder(of: student)
+            try await app.asyncTest(
+                .PATCH, "/jupyterlite/api/contents/\(dir)/assignment.ipynb",
+                beforeRequest: { req in
+                    req.headers.contentType = .json
+                    req.body = ByteBuffer(string: #"{"path":"\#(dir)/renamed.ipynb"}"#)
+                },
+                afterResponse: { res in #expect(res.status == .forbidden) })
+            try await app.asyncTest(
+                .POST, "/jupyterlite/api/contents/\(dir)",
+                beforeRequest: { req in
+                    req.headers.contentType = .json
+                    req.body = ByteBuffer(string: #"{"type":"directory"}"#)
+                },
+                afterResponse: { res in #expect(res.status == .forbidden) })
+            #expect(try contents(dir + "/assignment.ipynb") == "original")
+            #expect(!FileManager.default.fileExists(atPath: filesDir + dir + "/Untitled Folder"))
+        }
+    }
+
+    @Test func courseStaffStillSaveTheirCopyOfAClosedAssignment() async throws {
+        try await withApp(app) { _ in
+            try await seed(visibility: .closed)
+            let path = try folder(of: ta) + "/assignment.ipynb"
+            #expect(try await put(path, as: "ta") == .ok)
+            #expect(try contents(path) == "changed")
+        }
+    }
+
+    /// A folder that names no assignment (a student's own top-level folder)
+    /// is not gated.
+    @Test func aFolderThatNamesNoAssignmentIsNotGated() async throws {
+        try await withApp(app) { _ in
+            try await seed(visibility: .closed)
+            let root = "users/\(try #require(student.id).uuidString.lowercased())"
+            try FileManager.default.createDirectory(
+                atPath: filesDir + root + "/scratch", withIntermediateDirectories: true)
+            #expect(try await put(root + "/scratch/notes.txt") == .ok)
+        }
+    }
+}

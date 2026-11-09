@@ -31,6 +31,16 @@
 // read-only submission records are refused by name (WorkingCopyProtectedFiles):
 // a student's change to one would persist, and no reset would repair it.
 //
+// A student writes a working copy only while its assignment is open to them
+// (#2927): the same gate as the notebook reset. The page keeps a closed
+// assignment off this drive, but an editor opened before the close, or a
+// direct request, still reaches these routes. Course staff are not gated.
+//
+// Two limits bound the routes (#2926, JupyterLiteContentsWriteLimits): a
+// per-user rate limit (JupyterLiteContentsWriteRateLimitMiddleware) and a
+// per-user storage quota on a save that grows the user's files
+// (UserFolderUsage).
+//
 // Conflicts are JupyterLab's: before a save it compares the file's
 // `last_modified` with its own last save, so a reset done on the server since
 // then raises its "File changed" dialog. A save therefore answers with the
@@ -50,6 +60,7 @@ extension JupyterLiteContentsRoutes {
     static let checkpointID = "checkpoint"
 
     func bootWriteRoutes(_ routes: any RoutesBuilder) {
+        let routes = routes.grouped(JupyterLiteContentsWriteRateLimitMiddleware())
         routes.on(
             .PUT, "jupyterlite", "api", "contents", "**",
             body: .collect(maxSize: Self.maxSaveBodySize), use: saveContents)
@@ -66,7 +77,11 @@ extension JupyterLiteContentsRoutes {
         let relPath = req.parameters.getCatchall().joined(separator: "/")
         let target = try writableTarget(req: req, caller: caller, relativePath: relPath)
         try await refuseProtected(req: req, target, movingContents: false)
+        try await refuseClosedAssignment(req: req, caller: caller, target)
         let save = try Self.decodeSave(req.body.data)
+        if case .bytes(let data) = save {
+            try await enforceStorageQuota(req: req, caller: caller, target: target, incomingBytes: data.count)
+        }
 
         try await runBlocking {
             let fm = FileManager.default
@@ -122,6 +137,7 @@ extension JupyterLiteContentsRoutes {
         let parent = parentPath.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
         // The probe target only proves the parent is the caller's.
         let probe = try writableTarget(req: req, caller: caller, relativePath: parent + "/Untitled Folder")
+        try await refuseClosedAssignment(req: req, caller: caller, probe)
         let parentURL = probe.url.deletingLastPathComponent()
         let created: WritableTarget = try await runBlocking {
             let fm = FileManager.default
@@ -154,6 +170,8 @@ extension JupyterLiteContentsRoutes {
         let destination = try writableTarget(req: req, caller: caller, relativePath: newPath)
         try await refuseProtected(req: req, source, movingContents: true)
         try await refuseProtected(req: req, destination, movingContents: true)
+        try await refuseClosedAssignment(req: req, caller: caller, source)
+        try await refuseClosedAssignment(req: req, caller: caller, destination)
         let isDirectory: Bool = try await runBlocking {
             let fm = FileManager.default
             guard let attributes = try? fm.attributesOfItem(atPath: source.url.path) else {
@@ -223,6 +241,50 @@ extension JupyterLiteContentsRoutes {
         if WorkingCopyProtectedFiles.touchesProtected(parts[3], in: protected) {
             throw AppError.forbidden(action: "change a file the assignment provides (\(parts[3]))")
         }
+    }
+
+    /// Refuses a student's write into the working copy of an assignment that
+    /// is closed or not yet open to them (#2927), by the gate the notebook
+    /// reset uses (`requireOpenStudentAssignment`), which also refuses a
+    /// student not enrolled in the course. Course staff are not gated: they
+    /// keep writing their authoring and practice copies of a closed
+    /// assignment. A folder that names no assignment is not gated.
+    func refuseClosedAssignment(req: Request, caller: APIUser, _ target: WritableTarget) async throws {
+        // users/<id>/<setupID>[/<path inside the working copy>]
+        let parts = target.relativePath.split(separator: "/", maxSplits: 3).map(String.init)
+        guard parts.count >= 3 else { return }
+        let setupID = parts[2]
+        guard let assignment = try await assignmentByTestSetupID(setupID, on: req.db) else { return }
+        if try await req.cachedIsCourseStaff(caller, inCourse: assignment.courseID) { return }
+        _ = try await requireOpenStudentAssignment(for: setupID, user: caller, gate: .access, on: req)
+    }
+
+    /// Refuses a save that would take the caller's own files past the quota
+    /// (#2926). A save that does not grow the file always lands, so a user
+    /// over the limit can still save a smaller notebook.
+    func enforceStorageQuota(
+        req: Request, caller: APIUser, target: WritableTarget, incomingBytes: Int
+    ) async throws {
+        guard let userRoot = try userRootPath(for: caller, isStaff: false) else {
+            throw AppError.unauthenticated
+        }
+        let replaced = try await runBlocking { fileSizeBytes(at: target.url.path) }
+        guard incomingBytes > replaced else { return }
+        let quota = req.application.jupyterLiteContentsWriteLimits.maxUserFolderBytes
+        let used = try await UserFolderUsage.writableBytes(
+            userRootPath: req.application.directory.publicDirectory + "jupyterlite/files/" + userRoot,
+            on: req.db, application: req.application)
+        let projected = used - replaced + incomingBytes
+        guard projected > quota else { return }
+        req.logger.warning(
+            "jupyterlite_contents_quota_exceeded",
+            metadata: [
+                "user_id": .string(String(userRoot.dropFirst("users/".count))),
+                "used_bytes": .stringConvertible(used),
+                "incoming_bytes": .stringConvertible(incomingBytes),
+                "quota_bytes": .stringConvertible(quota),
+            ])
+        throw ContentsWriteLimitError.storageQuotaExceeded(quotaBytes: quota)
     }
 
     /// A path the caller may write, resolved under the JupyterLite files root.
