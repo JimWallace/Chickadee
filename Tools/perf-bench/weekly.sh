@@ -12,7 +12,7 @@ swift build -c release --product chickadee-loadtest
 cd "$HERE"
 ./setup.sh
 ./start-server.sh > "$WORK/server.log" 2>&1 &
-trap 'kill %1 2>/dev/null || true' EXIT
+trap 'kill %1 2>/dev/null && wait %1 2>/dev/null || true' EXIT
 for _ in $(seq 1 180); do curl -s -o /dev/null "$BASE/login" && break; sleep 1; done
 ./measure-all.sh > /dev/null
 ./bench.sh weekly

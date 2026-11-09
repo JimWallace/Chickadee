@@ -17,7 +17,7 @@ $PSQL -c "CREATE EXTENSION IF NOT EXISTS pg_stat_statements"
 mkdir -p "$WORK/setups" "$WORK/subs"
 
 ./start-server.sh > "$WORK/setup-server.log" 2>&1 &
-trap 'kill %1 2>/dev/null || true' EXIT
+trap 'kill %1 2>/dev/null && wait %1 2>/dev/null || true' EXIT
 for _ in $(seq 1 180); do curl -s -o /dev/null "$BASE/login" && break; sleep 1; done
 
 # The first account to register becomes the deployment admin.
