@@ -49,6 +49,11 @@ struct ContentItemDTO: Encodable, Sendable {
     let updatedLabel: String?
     let isPublished: Bool
     let sortOrder: Int
+    /// The public ID of the assignment the item is attached to: it shows on
+    /// that assignment's row, once the assignment opens, rather than as a row
+    /// of its own. Reported by list_content_items only (the create and update
+    /// outputs leave it out); absent for a standalone item.
+    var attachedAssignmentPublicID: String?
 }
 
 /// One attachment to fetch by URL and host, as accepted on input.
@@ -211,6 +216,7 @@ private let contentItemObjectSchema: JSONValue = .object([
         "updatedLabel": MCPSchema.string,
         "isPublished": MCPSchema.boolean,
         "sortOrder": MCPSchema.integer,
+        "attachedAssignmentPublicID": MCPSchema.string,
     ]),
     "required": .array([
         .string("contentItemID"), .string("courseSectionID"), .string("title"),
@@ -270,8 +276,12 @@ struct ListContentItemsTool: ContentTool {
         "List a course's ungraded content items (reference material like lecture slides, notebooks, "
         + "or links shown inside a course section), by course code, in display order. Returns each "
         + "item's id, its course section (courseSectionID, \"\" when ungrouped), title, kind, links, "
-        + "description, updated label, published flag, and sort order. These are ungraded materials — "
-        + "not assignments (use list_assignments) and not test-suite sections (use get_suite)."
+        + "description, updated label, published flag, and sort order. An item attached to an "
+        + "assignment carries attachedAssignmentPublicID: it shows as extra buttons on that "
+        + "assignment's row once the assignment opens, is not a row of its own, and is left out of "
+        + "reorder_section_items. Attaching is done on the instructor dashboard. These are ungraded "
+        + "materials — not assignments (use list_assignments) and not test-suite sections (use "
+        + "get_suite)."
     static let inputSchema: JSONValue = .object([
         "type": .string("object"),
         "properties": .object([
@@ -302,9 +312,17 @@ struct ListContentItemsTool: ContentTool {
             .filter(\.$courseID == courseID)
             .sort(\.$sortOrder)
             .all()
+        let publicIDByID = Dictionary(
+            try await APIAssignment.query(on: context.db).filter(\.$courseID == courseID).all()
+                .compactMap { assignment in assignment.id.map { ($0, assignment.publicID) } },
+            uniquingKeysWith: { first, _ in first })
         return Output(
             courseCode: course.code, courseKey: course.urlKey, courseTerm: course.term?.displayName,
-            contentItems: items.map(contentItemDTO(from:)))
+            contentItems: items.map { item in
+                var dto = contentItemDTO(from: item)
+                dto.attachedAssignmentPublicID = item.assignmentID.flatMap { publicIDByID[$0] }
+                return dto
+            })
     }
 }
 
@@ -465,7 +483,8 @@ struct UpdateContentItemTool: ContentTool {
         "Update an ungraded content item by id (from list_content_items). Any provided field is "
         + "changed; omitted fields are left unchanged. title/kind replace; links (when given, even "
         + "empty) replaces the whole link list; description/updatedLabel accept \"\" to clear; "
-        + "isPublished toggles student visibility; courseSectionID moves it (\"\"/\"none\" ungroups); "
+        + "isPublished toggles student visibility; courseSectionID moves it (\"\"/\"none\" ungroups; refused for an "
+        + "item attached to an assignment, which follows that assignment's section); "
         + "attachments fetches more files by URL and appends them (to remove a hosted file, use the "
         + "web editor). Ungraded material — no test setup, no re-validation, no re-grade."
     static let inputSchema: JSONValue = .object([

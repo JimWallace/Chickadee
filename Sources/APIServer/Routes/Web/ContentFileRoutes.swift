@@ -47,12 +47,20 @@ struct ContentFileRoutes: RouteCollection {
         // helper); mirrors downloadSupportFile.
         try await requireCourseEnrollment(caller: caller, courseID: item.courseID, db: req.db)
 
-        // A draft item's files are staff-only, matching the dashboard visibility
-        // rule (students never see an unpublished item, so they can't have its
-        // link — but gate the bytes directly rather than trusting that).
-        if !item.isPublished {
-            let isStaff = try await isCourseStaff(caller, inCourse: item.courseID, db: req.db)
-            guard isStaff else { throw AppError.notFound(resource: "Attachment") }
+        // A draft item's files are staff-only, and so are the files of an item
+        // attached to an assignment that has not opened yet: the dashboard
+        // visibility rule (`ContentItemVisibility`). Students never see such an
+        // item, so they can't have its link, but gate the bytes directly
+        // rather than trusting that.
+        if !item.isPublished || item.assignmentID != nil {
+            var assignment: APIAssignment?
+            if let assignmentID = item.assignmentID {
+                assignment = try await APIAssignment.find(assignmentID, on: req.db)
+            }
+            if !ContentItemVisibility.isVisibleToStudents(item, attachedTo: assignment) {
+                let isStaff = try await isCourseStaff(caller, inCourse: item.courseID, db: req.db)
+                guard isStaff else { throw AppError.notFound(resource: "Attachment") }
+            }
         }
 
         guard let attachment = item.attachments.first(where: { $0.id == attachmentID }) else {

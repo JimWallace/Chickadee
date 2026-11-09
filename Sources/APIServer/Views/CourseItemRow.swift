@@ -21,13 +21,16 @@ struct CourseItemRow: HTML {
     let csrfToken: String
     /// The instructor-only controls the viewer gets. Material rows need none.
     let controls: DashboardControls
+    /// The assignments a material's edit form offers under "Show on".
+    var attachTargets: [AssignmentAttachTarget] = []
 
     var body: some HTML {
         if item.isContent, let content = item.content {
-            CourseContentItemRow(content: content, csrfToken: csrfToken)
+            CourseContentItemRow(content: content, csrfToken: csrfToken, attachTargets: attachTargets)
         } else if let row = item.row {
             CourseAssignmentItemRow(
-                row: row, enrolledStudentCount: enrolledStudentCount, csrfToken: csrfToken, controls: controls)
+                row: row, enrolledStudentCount: enrolledStudentCount, csrfToken: csrfToken, controls: controls,
+                attachTargets: attachTargets)
         }
     }
 }
@@ -36,11 +39,7 @@ struct CourseItemRow: HTML {
 private struct CourseContentItemRow: HTML {
     let content: ContentItemRow
     let csrfToken: String
-
-    private static let kinds: [(value: String, label: String)] = [
-        ("link", "Link"), ("notebook", "Notebook"), ("document", "Document"), ("slides", "Slides"),
-        ("outline", "Outline"), ("heading", "Heading"),
-    ]
+    let attachTargets: [AssignmentAttachTarget]
 
     var body: some HTML {
         tr(.data("content-item-id", value: content.id)) {
@@ -80,7 +79,7 @@ private struct CourseContentItemRow: HTML {
                         }
                         .attributes(.target(.blank), .rel("noopener noreferrer"), when: action.opensNewTab)
                     }
-                    editPopover
+                    ContentItemEditPopover(content: content, csrfToken: csrfToken, attachTargets: attachTargets)
                     RowMenu(for: content.title) {
                         form(
                             .method(.post), .action("/instructor/content-items/\(content.id)/delete"),
@@ -118,13 +117,35 @@ private struct CourseContentItemRow: HTML {
             }
         }
     }
+}
 
-    private var editPopover: some HTML {
+/// A material's pencil button and edit form: on its own row, and on the
+/// assignment row it is attached to.
+private struct ContentItemEditPopover: HTML {
+    let content: ContentItemRow
+    let csrfToken: String
+    let attachTargets: [AssignmentAttachTarget]
+    /// On an assignment's row the button shows the material's kind icon, so
+    /// it is not a second pencil beside the assignment's own.
+    var showsKindIcon = false
+
+    private static let kinds: [(value: String, label: String)] = [
+        ("link", "Link"), ("notebook", "Notebook"), ("document", "Document"), ("slides", "Slides"),
+        ("outline", "Outline"), ("heading", "Heading"),
+    ]
+
+    var body: some HTML {
         details(.class("ext-details popup-anchor")) {
             summary(
-                .class("btn action-btn action-btn-icon ext-summary"), .title("Edit"),
-                .ariaLabel("Edit \(content.title)")
-            ) { Icon("i-pencil") }
+                .class("btn action-btn action-btn-icon ext-summary"),
+                .title(showsKindIcon ? "Edit \(content.title)" : "Edit"), .ariaLabel("Edit \(content.title)")
+            ) {
+                if showsKindIcon {
+                    SVG.svg(.class("icon"), .ariaHidden) { SVG.use(.href(content.iconHref)) {} }
+                } else {
+                    Icon("i-pencil")
+                }
+            }
             div(.class("popover-panel")) {
                 form(
                     .method(.post), .action("/instructor/content-items/\(content.id)/edit"),
@@ -145,6 +166,9 @@ private struct CourseContentItemRow: HTML {
                                     .attributes(.selected, when: content.kind == kind.value)
                             }
                         }
+                    }
+                    if !content.isHeading {
+                        showOnField
                     }
                     div(.class("content-item-link-fields")) {
                         for link in content.links {
@@ -185,6 +209,44 @@ private struct CourseContentItemRow: HTML {
                         }
                     }
                 }
+            }
+        }
+    }
+
+    /// Where the material shows: a row of its own, or on an assignment's row
+    /// beside the assignment's own actions, once the assignment opens.
+    private var showOnField: some HTML {
+        label(.class("form-label")) {
+            "Show on"
+            select(.class("form-input editor-input"), .name("assignmentID")) {
+                option(.value("")) { "Its own row" }
+                    .attributes(.selected, when: content.attachedAssignmentPublicID == nil)
+                for target in attachTargets {
+                    option(.value(target.publicID)) { target.title }
+                        .attributes(.selected, when: content.attachedAssignmentPublicID == target.publicID)
+                }
+            }
+            span(.class("field-note field-note--muted")) {
+                "On an assignment, students see it once the assignment opens."
+            }
+        }
+    }
+}
+
+/// A material attached to an assignment, as one details line inside the
+/// assignment's row: its kind, its title and when students see it. Its edit
+/// form (where "Show on" detaches it) is in the row's actions.
+private struct AttachedMaterialLine: HTML {
+    let material: ContentItemRow
+
+    var body: some HTML {
+        div(.class("item-details"), .data("attached-content-item-id", value: material.id)) {
+            span(.class("content-item-kind"), .data("kind", value: material.kind)) { material.kindLabel }
+            " · \(material.title) · "
+            if material.isPublished {
+                "Visible when open"
+            } else {
+                span(.class("text-muted")) { "Hidden" }
             }
         }
     }
@@ -241,6 +303,7 @@ private struct CourseAssignmentItemRow: HTML {
     let enrolledStudentCount: Int
     let csrfToken: String
     let controls: DashboardControls
+    let attachTargets: [AssignmentAttachTarget]
 
     private var statusClass: String {
         switch row.status {
@@ -327,6 +390,9 @@ private struct CourseAssignmentItemRow: HTML {
                 default:
                     ""
                 }
+            }
+            for material in row.attachedMaterials {
+                AttachedMaterialLine(material: material)
             }
         } else {
             div(.class("item-title text-muted")) { em { "Unpublished" } }
@@ -454,6 +520,10 @@ private struct CourseAssignmentItemRow: HTML {
                 .class("btn action-btn action-btn-icon"), .href("/instructor/\(assignmentID)/workbench"),
                 .title("Edit assignment"), .ariaLabel("Edit assignment")
             ) { Icon("i-pencil") }
+            for material in row.attachedMaterials {
+                ContentItemEditPopover(
+                    content: material, csrfToken: csrfToken, attachTargets: attachTargets, showsKindIcon: true)
+            }
             RowMenu(for: row.title ?? "") {
                 if let leaderboardURL = row.leaderboardURL {
                     a(.class("row-menu-item"), .href(leaderboardURL), .role("menuitem")) {

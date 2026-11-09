@@ -98,6 +98,14 @@ final class APICourseContentItem: Model, Content, @unchecked Sendable {
     @Field(key: "is_published")
     var isPublished: Bool
 
+    /// The assignment this item is attached to (nil = a row of its own). An
+    /// attached item renders as extra action buttons on that assignment's row
+    /// rather than as a row, and students see it only once the assignment has
+    /// opened (`ContentItemVisibility`). No foreign key (the column was added
+    /// to an existing table); `AssignmentDeletion` detaches on delete.
+    @OptionalField(key: "assignment_id")
+    var assignmentID: UUID?
+
     @Timestamp(key: "created_at", on: .create)
     var createdAt: Date?
 
@@ -114,7 +122,8 @@ final class APICourseContentItem: Model, Content, @unchecked Sendable {
         links: [ContentLink] = [],
         attachments: [ContentAttachment] = [],
         updatedLabel: String? = nil,
-        isPublished: Bool = true
+        isPublished: Bool = true,
+        assignmentID: UUID? = nil
     ) {
         self.id = id
         self.courseID = courseID
@@ -127,6 +136,7 @@ final class APICourseContentItem: Model, Content, @unchecked Sendable {
         self.attachmentsJSON = APICourseContentItem.encodeAttachments(attachments)
         self.updatedLabel = updatedLabel
         self.isPublished = isPublished
+        self.assignmentID = assignmentID
     }
 
     /// Serialize links to the stored JSON string, falling back to an empty

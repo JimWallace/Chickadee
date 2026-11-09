@@ -16,6 +16,12 @@ enum CourseContentError: Error, Sendable, Equatable, CustomStringConvertible {
     case linkMissingURL(label: String)
     /// A link URL is not http(s) or site-relative.
     case unsafeLinkURL(String)
+    /// The assignment to attach to is not in the item's course.
+    case assignmentNotInCourse
+    /// A heading has no actions, so it cannot sit on an assignment's row.
+    case headingCannotAttach
+    /// An attached item takes its assignment's section and is not moved alone.
+    case attachedItemCannotMove
 
     /// The input field the error is about.
     var field: String {
@@ -23,6 +29,8 @@ enum CourseContentError: Error, Sendable, Equatable, CustomStringConvertible {
         case .emptyTitle: return "title"
         case .unknownKind: return "kind"
         case .linkMissingURL, .unsafeLinkURL: return "links"
+        case .assignmentNotInCourse, .headingCannotAttach: return "assignmentID"
+        case .attachedItemCannotMove: return "courseSectionID"
         }
     }
 
@@ -37,6 +45,13 @@ enum CourseContentError: Error, Sendable, Equatable, CustomStringConvertible {
             return "The link labelled \"\(label)\" is missing a URL."
         case .unsafeLinkURL(let url):
             return "Link URL \"\(url)\" must be an http(s) or site-relative (/…) URL."
+        case .assignmentNotInCourse:
+            return "The assignment is not in this item's course."
+        case .headingCannotAttach:
+            return "A heading cannot be shown on an assignment."
+        case .attachedItemCannotMove:
+            return "This item is shown on an assignment's row and follows that assignment's section. "
+                + "Detach it on the instructor dashboard first."
         }
     }
 }

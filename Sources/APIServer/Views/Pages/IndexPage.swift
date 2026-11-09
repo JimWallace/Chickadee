@@ -164,15 +164,7 @@ private struct IndexContentRow: HTML {
                     div(.class("assignment-actions-cell")) {
                         for (position, action) in content.actions.enumerated() {
                             if position > 0 { " " }
-                            a(
-                                .class("btn action-btn action-btn-icon"), .href(action.href), .title(action.label),
-                                .ariaLabel(action.label)
-                            ) {
-                                " "
-                                SVG.svg(.class("icon"), .ariaHidden) { SVG.use(.href(action.iconHref)) {} }
-                                " "
-                            }
-                            .attributes(.target(.blank), .rel("noopener noreferrer"), when: action.opensNewTab)
+                            ContentActionLink(action: action)
                         }
                     }
                 }
@@ -267,6 +259,9 @@ private struct IndexAssignmentRow: HTML {
                     " · "
                     span(.class("grade-override-tag"), .title("Your grade was set by your instructor")) { "adjusted" }
                 }
+                for title in row.materialTitles {
+                    " · \(title)"
+                }
                 if let grade = row.latest.bestGradeText {
                     " "
                     span(.class("row-phone-meta")) { "Grade \(grade)" }
@@ -304,7 +299,7 @@ private struct IndexAssignmentActions: HTML {
 
     var body: some HTML {
         div(.class("assignment-actions-cell")) {
-            if !row.hasAnyAction {
+            if !row.hasAnyAction && row.materialActions.isEmpty {
                 span(.class("empty")) { "—" }
             }
             if row.showEditAction {
@@ -349,6 +344,11 @@ private struct IndexAssignmentActions: HTML {
                 " "
                 IndexIconLink(href: leaderboardURL, label: "Leaderboard", icon: "i-award")
             }
+            // The lab's attached material (its slides), after its own actions.
+            for action in row.materialActions {
+                " "
+                ContentActionLink(action: action)
+            }
         }
     }
 }
@@ -365,5 +365,23 @@ private struct IndexIconLink: HTML {
             Icon(icon)
             " "
         }
+    }
+}
+
+/// One content item button: a material row's, or an attached material's on
+/// its assignment's row. Leaf wrote each icon padded by a space.
+private struct ContentActionLink: HTML {
+    let action: ContentActionView
+
+    var body: some HTML {
+        a(
+            .class("btn action-btn action-btn-icon"), .href(action.href), .title(action.label),
+            .ariaLabel(action.label)
+        ) {
+            " "
+            SVG.svg(.class("icon"), .ariaHidden) { SVG.use(.href(action.iconHref)) {} }
+            " "
+        }
+        .attributes(.target(.blank), .rel("noopener noreferrer"), when: action.opensNewTab)
     }
 }
