@@ -7,4 +7,5 @@
   the stuck-submission reaper re-queued is refused with HTTP 410, and the
   runner drops it instead of retrying or reporting a failure. Before, such a
   report completed the re-queued row with the old suite's grade, so the
-  retest never ran, or it wrote a second result beside the retest's own.
+  retest never ran, or it wrote a second result beside the retest's own. The
+  runner's last report path that sent no claim token is removed.

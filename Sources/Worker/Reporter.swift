@@ -166,12 +166,6 @@ struct Reporter: Sendable {
 
 extension Reporter: Reporting {}
 
-extension Reporting {
-    func report(_ collection: TestOutcomeCollection) async throws(ReporterError) {
-        try await report(WorkerExecutionReport(collection: collection, diagnostics: nil))
-    }
-}
-
 private extension Reporter {
     static func attemptReport(
         session: URLSession, request: URLRequest, expectedStatus: Int
