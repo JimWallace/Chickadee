@@ -95,11 +95,18 @@ Modern specifics, all in `Transport/MCPModernTransport.swift` and
   required (a request missing either is `-32602` + HTTP 400); `clientInfo` and
   `logLevel` are optional. Results carry
   `_meta['io.modelcontextprotocol/serverInfo']`.
+- **Cacheable results carry `ttlMs` and `cacheScope`.** The schema makes
+  both REQUIRED on every `CacheableResult`: `server/discover`, `tools/list`,
+  `resources/list` and `resources/read`. Claude Code rejected `tools/list`
+  without them, so a signed-in agent got no tools. All four send `ttlMs: 0`
+  and `cacheScope: "private"`: each depends on the token (its scopes, its
+  enrolments, its course's guidance), and a change must show at once.
+  `MCPListCacheFieldsTests` pins them.
 - **`server/discover`** returns `supportedVersions` (newest first),
   `capabilities`, and `instructions` — the same surface description
   `initialize` gives a legacy client, including the caller's per-course
-  authoring guidance. Deliberately no `ttlMs`/`cacheScope`: an instructor can
-  change that guidance at any time.
+  authoring guidance. An instructor can change that guidance at any time,
+  which is why its `ttlMs` is 0.
 - **Mirrored headers.** `MCP-Protocol-Version`, `Mcp-Method`, and — for
   `tools/call` / `resources/read` / `prompts/get` — `Mcp-Name` must be present
   and agree with the body, with the `=?base64?…?=` sentinel decoded first.
