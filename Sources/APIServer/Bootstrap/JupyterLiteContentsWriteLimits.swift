@@ -23,7 +23,7 @@ struct JupyterLiteContentsWriteLimits: Sendable {
     let writesPerMinute: Int
 
     static let `default` = JupyterLiteContentsWriteLimits(
-        maxUserFolderBytes: 200 * 1024 * 1024,
+        maxUserFolderBytes: 10 * 1024 * 1024,
         writesPerMinute: 240
     )
 }
