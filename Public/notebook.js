@@ -1218,6 +1218,13 @@
         clearResults();
         setStatus('loading', 'Capturing notebook…');
         try {
+            // On the server drive the working copy is the editor's own draft
+            // (#2925). Saving it first makes the file hold what is on screen,
+            // so the server finds nothing to rewrite under the open editor and
+            // the next save raises no "File changed".
+            if (serverDriveActive()) {
+                await executeEditorCommand('docmanager:save');
+            }
             // Same capture chain the Submit button uses (live frame →
             // server snapshot → visible DOM → contents API), so a save
             // never silently stores stale bytes when the editor is slow.

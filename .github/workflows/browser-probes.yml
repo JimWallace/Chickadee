@@ -453,6 +453,27 @@ jobs:
           echo "::warning::FLAKE RETRY: webkit server drive e2e failed (rc=${rc}) — same flake class as the notebook-page e2e. Retrying once; a second failure fails the gate."
           SMOKE_BROWSER="$ENGINE" SMOKE_CHECK=notebook-server-drive-check.mjs Tools/editor-smoke-test/run-smoke.sh
 
+      # A staff authoring draft on the server drive (#2925): a saved edit
+      # survives a reload, Save to assignment raises no "File changed" on the
+      # next save, and a stored change made elsewhere opens the stored
+      # notebook with the unpublished edits kept in a named backup.
+      - name: Run authoring draft e2e (${{ matrix.browser }})
+        shell: bash
+        env:
+          ENGINE: ${{ matrix.browser }}
+        run: |
+          set -uo pipefail
+          if SMOKE_BROWSER="$ENGINE" SMOKE_CHECK=authoring-draft-check.mjs Tools/editor-smoke-test/run-smoke.sh; then
+            exit 0
+          else
+            rc=$?
+          fi
+          if [ "$ENGINE" != "webkit" ]; then
+            exit "$rc"
+          fi
+          echo "::warning::FLAKE RETRY: webkit authoring draft e2e failed (rc=${rc}) — same flake class as the notebook-page e2e. Retrying once; a second failure fails the gate."
+          SMOKE_BROWSER="$ENGINE" SMOKE_CHECK=authoring-draft-check.mjs Tools/editor-smoke-test/run-smoke.sh
+
       # The workbench shell (notebook views NB6): the rail lists the suite by
       # section and reveals an item's cell, a sheet opens and closes with focus
       # and Escape, a setting saved from a sheet keeps the kernel's names, and

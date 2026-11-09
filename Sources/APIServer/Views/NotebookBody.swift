@@ -59,6 +59,9 @@ struct NotebookBody: HTML {
     /// Whether the editor may use the server-backed drive (#469,
     /// `NotebookContext.serverDrive`).
     var serverDrive = false
+    /// A staff draft's unpublished edits, kept beside it when the stored
+    /// notebook changed elsewhere (#2925): the file's name and its download URL.
+    var draftBackup: (name: String, url: String)?
 
     var body: some HTML {
         // The `.main` override only when this body is the page.
@@ -164,6 +167,24 @@ struct NotebookBody: HTML {
             }
         }
         .attributes(.id("nb-slow-notice"), .hidden)
+        // A staff draft whose stored notebook changed elsewhere (#2925). The
+        // editor opened the stored version; the earlier edits are in a file
+        // beside it, which this links to.
+        if let draftBackup {
+            FlashBanner(.warning) {
+                div(.class("toolbar")) {
+                    span {
+                        strong { "Saved version opened." }
+                        " Your earlier edits are in "
+                        a(.href(draftBackup.url), .custom(name: "download", value: draftBackup.name)) {
+                            draftBackup.name
+                        }
+                        "."
+                    }
+                }
+            }
+            .attributes(.id("nb-draft-backup-notice"))
+        }
         div(.class("nb-smallscreen-notice standin-panel"), .role("note")) {
             h2(.class("standin-panel-title")) { "Open on a larger screen" }
             p(.class("standin-panel-text")) {
@@ -354,7 +375,10 @@ extension NotebookBody {
             csrfToken: csrfToken,
             definitionPatterns: context.definitionPatterns,
             previewGuideURL: context.previewGuideURL,
-            serverDrive: context.serverDrive
+            serverDrive: context.serverDrive,
+            draftBackup: context.draftBackupFileName.flatMap { name in
+                context.draftBackupURL.map { (name, $0) }
+            }
         )
     }
 }

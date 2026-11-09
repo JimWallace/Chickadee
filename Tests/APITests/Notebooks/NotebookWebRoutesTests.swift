@@ -676,10 +676,12 @@ import VaporTesting
         cookie: String,
         file: String? = nil,
         view: String? = nil,
+        extraCookie: String? = nil,
         body: String,
         afterResponse: (TestResponse) throws -> Void
     ) async throws {
-        let (csrf, sessionCookie) = try await csrfFields(for: "/account", cookie: cookie, on: app)
+        let (csrf, session) = try await csrfFields(for: "/account", cookie: cookie, on: app)
+        let sessionCookie = extraCookie.map { session + "; " + $0 } ?? session
         let params = [file.map { "file=\($0)" }, view.map { "view=\($0)" }].compactMap(\.self)
         let query = params.isEmpty ? "" : "?" + params.joined(separator: "&")
         try await app.asyncTest(
@@ -1256,19 +1258,26 @@ import VaporTesting
         }
     }
 
-    @Test func savingTheTemplateRefreshesTheRenderedView() async throws {
+    /// On the IndexedDB drive (`ck_server_drive=0`) the rendered copy is a
+    /// view and is dropped; on the server drive it is a draft (#2925), kept and
+    /// refreshed on its next fetch because it has no unpublished edits.
+    @Test(arguments: [false, true])
+    func savingTheTemplateRefreshesTheRenderedView(serverDrive: Bool) async throws {
         try await withApp(app) { _ in
             // The two views are separate files and an existing working copy is
             // returned untouched, so a template save has to invalidate the
             // rendered copy — otherwise switching views after a save shows the
             // notebook as it stood before it.
-            let cookie = try await staffCookie(username: "notebook_view_refresh")
+            let username = serverDrive ? "notebook_view_refresh_drive" : "notebook_view_refresh"
+            let session = try await staffCookie(username: username)
+            let optOut = serverDrive ? nil : "ck_server_drive=0"
+            let cookie = optOut.map { session + "; " + $0 } ?? session
             let staff = try #require(
                 try await APIUser.query(on: app.db)
-                    .filter(\.$username == "notebook_view_refresh").first())
+                    .filter(\.$username == username).first())
             let staffID = try staff.requireID()
 
-            let setupID = "setup_nb_view_refresh"
+            let setupID = serverDrive ? "setup_nb_view_refresh_drive" : "setup_nb_view_refresh"
             _ = try await insertSetup(
                 id: setupID,
                 notebookJSON: notebookJSON(code: "patients = {{patients}}"),
@@ -1287,7 +1296,7 @@ import VaporTesting
                 "source":["cohort = {{patients}}"]}]}
                 """
             try await postNotebookSave(
-                setupID: setupID, cookie: cookie, view: "template", body: authored
+                setupID: setupID, cookie: session, view: "template", extraCookie: optOut, body: authored
             ) { res in
                 #expect(res.status == .ok)
             }
@@ -1297,8 +1306,9 @@ import VaporTesting
                 + userNotebookWorkingCopyRelativePath(
                     setupID: setupID, userID: staffID, fileKind: .assignment, viewMode: .personalized)
             #expect(
-                FileManager.default.fileExists(atPath: renderedPath) == false,
-                "The stale rendered copy must be dropped so it reseeds from the saved template")
+                FileManager.default.fileExists(atPath: renderedPath) == serverDrive,
+                "On the IndexedDB drive the stale rendered copy is dropped; on the server drive it is a draft and stays"
+            )
 
             try await app.asyncTest(
                 .GET, "/testsetups/\(setupID)/notebook/source?view=personalized&edit=1",
@@ -1338,6 +1348,48 @@ import VaporTesting
                     #expect(res.body.string.contains("Second starter"))
                     #expect(res.body.string.contains("First starter") == false)
                 })
+        }
+    }
+
+    /// On the server drive a staff copy is a draft (#2925): when the stored
+    /// notebook changes elsewhere while the draft holds an unpublished edit,
+    /// the content fetch serves the stored notebook and the edit is kept in a
+    /// dated backup beside the draft.
+    @Test func aStaffDraftWithUnpublishedEditsIsKeptInABackup() async throws {
+        try await withApp(app) { _ in
+            let cookie = try await staffCookie(username: "notebook_staff_draft")
+            let setupID = "setup_nb_staff_draft"
+            let setup = try await insertSetup(id: setupID, notebookJSON: notebookJSON(markdown: "First starter"))
+            _ = try await insertAssignment(testSetupID: setupID, title: "Draft Lab", isOpen: false)
+
+            try await app.asyncTest(
+                .GET, "/testsetups/\(setupID)/notebook/source?edit=1",
+                beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
+                afterResponse: { res in #expect(res.body.string.contains("First starter")) })
+
+            let staff = try #require(
+                try await APIUser.query(on: app.db).filter(\.$username == "notebook_staff_draft").first())
+            let folder =
+                publicDir + "jupyterlite/files/users/\(try staff.requireID().uuidString.lowercased())/\(setupID)/"
+            let names = try FileManager.default.contentsOfDirectory(atPath: folder)
+            let draftName = try #require(names.first(where: { $0.hasSuffix(".ipynb") }))
+            try Data(notebookJSON(markdown: "My unpublished edit").utf8)
+                .write(to: URL(fileURLWithPath: folder + draftName))
+            try Data(notebookJSON(markdown: "Second starter").utf8)
+                .write(to: URL(fileURLWithPath: try #require(setup.notebookPath)))
+
+            try await app.asyncTest(
+                .GET, "/testsetups/\(setupID)/notebook/source?edit=1",
+                beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
+                afterResponse: { res in
+                    #expect(res.body.string.contains("Second starter"))
+                    #expect(res.body.string.contains("My unpublished edit") == false)
+                })
+            let backups = try FileManager.default.contentsOfDirectory(atPath: folder)
+                .filter { $0.contains("(unsaved draft ") }
+            #expect(backups.count == 1)
+            let backup = try String(contentsOfFile: folder + (backups.first ?? ""), encoding: .utf8)
+            #expect(backup.contains("My unpublished edit"))
         }
     }
 
