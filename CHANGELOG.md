@@ -9,6 +9,13 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.876] - 2026-11-09
+
+### Changed
+
+- **A runner claims a job in one statement, and lost races cost one statement each.** The claim was a transaction of five statements (BEGIN, a `FOR UPDATE SKIP LOCKED` lock, an UPDATE, a re-read, COMMIT), and a runner that lost the race to another paid all five again for its next candidate. It is now one `UPDATE … WHERE id = (SELECT … FOR UPDATE SKIP LOCKED) RETURNING *`. The walk also reads 10 fresh candidates first and the rest of the 50-row scan only when none of those can be claimed, and reads each candidate group's setups in one query. With a 20,000-job backlog and 100 runners, claim latency fell from p50 50 ms to 26 ms and server CPU from 210% to 135% of a core; with the backlog over twelve assignments, p50 fell from 1.4 s to 0.57 s and throughput rose from 67 to 98 claims a second.
+
+
 ## [0.5.875] - 2026-11-09
 
 ### Changed
