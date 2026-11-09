@@ -9,6 +9,14 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.884] - 2026-11-09
+
+### Added
+
+- **Statement budgets for the hot pages.** `StatementBudgetTests` counts the SQL statements that each hot page and the idle runner poll send, and holds each within a budget, so a pull request that adds a query fails; one that removes a query prints the new count to lower the budget to. It also measures each page on a small and a larger course, and fails on a count that grows with the data (an N+1). See `docs/performance-program.md`.
+- **The weekly performance task.** `Tools/perf-bench/weekly-task.md` is the procedure a scheduled task follows each week: a read-only production snapshot through the admin MCP, then `Tools/perf-bench/weekly.sh`. It finds the commit behind each regression, fixes it, merges the fix when CI is green, and checks that the deploy moved the number, reverting a fix that made production worse. A migration, a design decision or a large change stays an unmerged pull request with an issue. It logs the week in the new `docs/perf-log.md`. The plan also covers re-testing a whole assignment, the burst most likely to flood the runners.
+
+
 ## [0.5.883] - 2026-11-09
 
 ### Fixed
