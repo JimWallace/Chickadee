@@ -515,6 +515,10 @@ func registerMigrations(on app: Application) {
     // Course achievements (docs/achievement-rewards.md, S3): the list on the
     // course row.
     app.migrations.add(AddCourseAchievements())
+    // One-time cleanup: clears the cell outputs from every stored starter
+    // notebook (file side effect only, no schema change). Needs only
+    // `test_setups`.
+    app.migrations.add(StripStarterNotebookOutputs())
 
     // The `completed_at` index on job metrics and the `course_id` indexes on
     // course sections and content items (#2778). Index only; the tables are

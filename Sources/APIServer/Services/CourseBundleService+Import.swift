@@ -492,15 +492,20 @@ private func importBundledTestSetups(
         {
             let nbPath = setupsDir + "\(newSetupID).ipynb"
             tally.createdPaths.append(nbPath)
+            // Outputs cleared on import (`NotebookOutputs`; the kernel is still
+            // normalized on read, as before): a bundle from an
+            // older release or another server may carry the author's outputs,
+            // and the one-time migration ran before this import.
             try await runBlocking {
-                try FileManager.default.copyItem(at: srcNotebook, to: URL(fileURLWithPath: nbPath))
+                let bytes = try Data(contentsOf: srcNotebook)
+                try NotebookOutputs.stripped(bytes).write(to: URL(fileURLWithPath: nbPath))
             }
             notebookPath = nbPath
         } else if let nbData = await extractNotebookFromZip(zipPath: newZipPath) {
             let nbPath = setupsDir + "\(newSetupID).ipynb"
             tally.createdPaths.append(nbPath)
             try await runBlocking {
-                try nbData.write(to: URL(fileURLWithPath: nbPath))
+                try NotebookOutputs.stripped(nbData).write(to: URL(fileURLWithPath: nbPath))
             }
             notebookPath = nbPath
         }

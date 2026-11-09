@@ -221,7 +221,15 @@ struct RestoreAssignmentVersionTool: ContentTool {
         if let notebookHash = target.notebookHash {
             let path =
                 setup.notebookPath ?? (testSetupsDirectory + "\(setup.id ?? "unknown").ipynb")
-            try blobs.materialize(notebookHash, to: URL(fileURLWithPath: path))
+            let url = URL(fileURLWithPath: path)
+            try blobs.materialize(notebookHash, to: url)
+            // A snapshot taken before starter outputs were cleared on save
+            // still holds them; restoring it must not hand them to students.
+            let restored = try Data(contentsOf: url)
+            let cleared = NotebookOutputs.stripped(restored)
+            // The restore's own version row is recorded from the bytes on disk
+            // after this, so the cleared notebook is what that row holds.
+            if cleared != restored { try cleared.write(to: url, options: .atomic) }
             setup.notebookPath = path
         }
         // A snapshot with no notebook leaves the current one in place rather

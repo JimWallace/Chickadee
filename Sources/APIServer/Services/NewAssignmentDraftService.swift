@@ -162,7 +162,9 @@ struct NewAssignmentDraftService {
         let filename = notebookFilenameForStorage(
             uploadedName: file.filename, fallback: "assignment.ipynb")
         let path = dir + filename
-        try normalized.write(to: URL(fileURLWithPath: path))
+        // The stored starter loses its outputs; the author's working copy below
+        // keeps exactly what was uploaded, as an editor save does.
+        try starterNotebookForStorage(normalized).write(to: URL(fileURLWithPath: path))
         setup.notebookPath = path
         try await setup.save(on: db)
         _ = try await ensureUserNotebookWorkingCopy(

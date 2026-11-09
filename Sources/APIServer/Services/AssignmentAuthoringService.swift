@@ -455,8 +455,9 @@ enum AssignmentAuthoringService {
     }
 
     /// Replaces a test setup's flat starter notebook with `notebookData`,
-    /// applying the same JupyterLite kernel normalization + flat-file write the
-    /// web editor's no-upload Save path uses (`persistAssignmentNotebook`). The
+    /// applying the same JupyterLite kernel normalization, output clearing and
+    /// flat-file write the web editor's no-upload Save path uses
+    /// (`persistAssignmentNotebook`, `starterNotebookForStorage`). The
     /// setup's `notebookPath` is set (creating `<setupID>.ipynb` when absent)
     /// and the setup is saved.
     ///
@@ -471,7 +472,7 @@ enum AssignmentAuthoringService {
         setupsDirectory: String,
         on db: any Database
     ) async throws {
-        let normalized = normalizeNotebookForJupyterLite(notebookData)
+        let normalized = starterNotebookForStorage(notebookData)
         let path =
             setup.notebookPath ?? (setupsDirectory + "\((setup.id ?? "unknown")).ipynb")
         do {

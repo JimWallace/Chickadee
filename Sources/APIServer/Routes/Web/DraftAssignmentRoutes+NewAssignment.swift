@@ -454,7 +454,7 @@ extension DraftAssignmentRoutes {
         req: Request,
         validated: ValidatedSaveNewAssignment
     ) async throws -> NewAssignmentPaths {
-        let assignmentNotebook = normalizeNotebookForJupyterLite(validated.assignmentNotebookRaw)
+        let assignmentNotebook = starterNotebookForStorage(validated.assignmentNotebookRaw)
         let setupID = validated.draftSetup?.id ?? freshShortID(prefix: "setup")
         let setupsDir = req.application.testSetupsDirectory
         let notebookFilename = notebookFilenameForStorage(
