@@ -62,8 +62,13 @@ with the `Chickadee_Admin` MCP connected, as the weekly dead-code review does
    moved more than 25%.
 4. Opens a draft pull request with the log entry. The maintainer merges it, so
    the log is reviewed like any other change.
+5. For each confirmed regression, finds the commit that caused it and opens a
+   draft pull request with the smallest fix, at most two a week; larger work
+   becomes an issue labelled `performance`. In a week with no regression, it
+   makes one measured improvement in that week's layer.
 
-It never writes to production and never runs `chickadee-loadtest`.
+It never writes to production, never runs `chickadee-loadtest` against it, and
+never merges. The full procedure is `Tools/perf-bench/weekly-task.md`.
 
 These admin MCP calls answer the questions that matter for the week. Record
 each as a row (date, version from `get_deployment_info`, value):
