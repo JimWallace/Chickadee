@@ -55,8 +55,8 @@ struct HotPathStatementBudgetTests {
             try await makeTestAssignment(on: app, testSetupID: setupID, courseID: courseID)
             let cookie = try await loginAsStudent("budget_student", on: app)
             try await enrollInTestCourse(username: "budget_student", role: .student, on: app)
-            let student = try await #require(
-                try await APIUser.query(on: app.db).filter(\.$username == "budget_student").first())
+            let found = try await APIUser.query(on: app.db).filter(\.$username == "budget_student").first()
+            let student = try #require(found)
 
             let log = StatementLog()
             app.countStatements(into: log)
