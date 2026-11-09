@@ -74,12 +74,51 @@ import Vapor
 
             let suite = try await GetSuiteTool().execute(
                 GetSuiteTool.Input(assignmentPublicID: assignment.publicID), mcpContext(app))
-            #expect(suite.items.first { $0.filename == "test_b.sh" }?.anchor == "summary")
+            let pinned = try #require(suite.items.first { $0.filename == "test_b.sh" }?.anchor)
+            #expect(pinned.name == "summary")
+            #expect(pinned.source == "pinned")
             #expect(suite.items.first { $0.filename == "test_a.sh" }?.anchor == nil)
 
             _ = try await pin(assignment, [UpdateSuiteTool.ScriptEdit(script: "test_b.sh", anchor: "")], on: app)
             #expect(try await pins(assignment, on: app).isEmpty)
         }
+    }
+
+    @Test func getSuiteReportsTheAutomaticAnchorOfAGeneratedCheck() async throws {
+        try await withTestApp { app in
+            let manifest = """
+                {"schemaVersion":1,"testSuites":[{"tier":"public","script":"publiccheck_df.py",\
+                "generatedByCheck":"df"}],"notebookChecks":[{"id":"df","name":"DataFrame shape",\
+                "kind":"data_frame_shape","variable":"df","expectedRows":1,"expectedCols":1,"tier":"public",\
+                "points":1}],"timeLimitSeconds":10}
+                """
+            let assignment = try await seedMCPAssignment(on: app, setupID: "setup_auto", manifest: manifest)
+            let suite = try await GetSuiteTool().execute(
+                GetSuiteTool.Input(assignmentPublicID: assignment.publicID), mcpContext(app))
+            let anchor = try #require(suite.items.first { $0.kind == "check" }?.anchor)
+            #expect(anchor.name == "df")
+            #expect(anchor.source == "auto")
+            #expect(suite.items.first { $0.kind == "check" }?.fileAnchors == nil)
+        }
+    }
+
+    @Test func aGeneratedRowWhoseFilesLinkToDifferentCellsListsEachFile() {
+        let x = InstructorSuiteOutline.Anchor(kind: "variable", name: "x", source: "auto", ambiguous: false)
+        let y = InstructorSuiteOutline.Anchor(kind: "variable", name: "y", source: "auto", ambiguous: false)
+        let split = GetSuiteTool.anchorFields(
+            filename: nil, generatedFilenames: ["t_a.py", "t_b.py", "t_c.py"],
+            anchors: ["t_a.py": x, "t_b.py": y])
+        #expect(split.anchor == nil)
+        #expect(split.fileAnchors == ["t_a.py": x, "t_b.py": y])
+
+        let shared = GetSuiteTool.anchorFields(
+            filename: nil, generatedFilenames: ["t_a.py", "t_b.py"], anchors: ["t_a.py": x, "t_b.py": x])
+        #expect(shared.anchor == x)
+        #expect(shared.fileAnchors == nil)
+
+        let script = GetSuiteTool.anchorFields(filename: "t_a.py", generatedFilenames: [], anchors: ["t_a.py": y])
+        #expect(script.anchor == y)
+        #expect(script.fileAnchors == nil)
     }
 
     @Test func aPinBesideAMetadataEditTakesTheFullPath() async throws {

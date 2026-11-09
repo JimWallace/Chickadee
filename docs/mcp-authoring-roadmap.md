@@ -38,7 +38,7 @@ The catalog:
 | `list_assignments` | `content:read` | A course's assignments (id, title, slug, open/closed, due date) |
 | `list_course_sections` | `content:read` | A course's assignment groups (id, name, default grading mode, order) |
 | `get_assignment` | `content:read` | One assignment's full detail (incl. gradingMode + course section, and the GitHub submission setting, read-only) |
-| `get_suite` | `content:read` | Full test-suite definition: items, tiers, points, deps, sections, plus each script's raw body and cell pin (`anchor`), each family's full spec (cases' args/expected), and each notebook check's spec |
+| `get_suite` | `content:read` | Full test-suite definition: items, tiers, points, deps, sections, plus each script's raw body, each item's notebook cell (`anchor`, pinned or automatic), each family's full spec (cases' args/expected), and each notebook check's spec |
 | `get_notebook` | `content:read` | The starter notebook (.ipynb JSON) |
 | `get_solution` | `content:read` | The reference solution notebook (.ipynb JSON), resolved from the validation submission |
 | `get_support_files` | `content:read` | List the setup zip's non-graded helper/data files, or read one (UTF-8, byte-capped) |

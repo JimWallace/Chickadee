@@ -228,7 +228,9 @@ The route is for TAs and above.
 - The runner never receives the pin: the `RunnerManifest` init
   (`Sources/Core/RunnerManifest.swift`) removes it. Grading does not read it.
 - **MCP.** `update_suite` takes `anchor` on a script edit ("" clears it), and
-  `get_suite` reports each script's pin. Both doors write through
+  `get_suite` reports each item's anchor in the outline's shape (`kind`,
+  `name`, `source`, `ambiguous`), pinned or automatic, through
+  `SuiteAnchorResolution`, the code the outline uses. Both doors write through
   `SuiteAnchorPinning` (`Sources/APIServer/Services/SuiteAnchorPinning.swift`),
   so they refuse the same tests. A call whose every edit sets only `anchor`
   does not close, re-grade or re-validate, as the route does not.

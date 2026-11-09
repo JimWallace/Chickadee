@@ -101,7 +101,7 @@ struct UpdateSuiteTool: ContentTool {
         + "and cannot be pinned. Saving re-runs the assignment's validation and closes "
         + "the assignment if it was open (re-open with update_assignment once validation passes). "
         + "Grading never reads a pin, so a call whose every edit sets only anchor saves the pin and "
-        + "nothing else: no validation, no regrade, no close. get_suite reports each script's pin."
+        + "nothing else: no validation, no regrade, no close. get_suite reports each item's anchor, pinned or automatic; anchor here takes the cell name as a string."
     static let inputSchema: JSONValue = .object([
         "type": .string("object"),
         "properties": .object([

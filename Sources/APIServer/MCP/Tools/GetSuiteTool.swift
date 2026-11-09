@@ -75,11 +75,16 @@ struct GetSuiteTool: ContentTool {
             /// the family default for a family row, the check's for a check.
             /// nil means full.
             let failureDetail: String?
-            /// The notebook cell name a hand-written script is pinned to
-            /// (`TestSuiteEntry.anchor`, set with `update_suite`), or nil when
-            /// it is anchored automatically. Always nil for a generated row:
-            /// its family or check names its cell.
-            var anchor: String?
+            /// The notebook cell the item belongs to, as the workbench shows it
+            /// (`SuiteAnchorResolution`): `source` is `pinned` for a pin set
+            /// with `update_suite`, else `auto`. Nil when the item links to no
+            /// cell, or for a generated row whose files link to different
+            /// cells (then `fileAnchors` has each).
+            var anchor: InstructorSuiteOutline.Anchor?
+            /// Each generated file's anchor, only for a generated row whose
+            /// files do not all link to the same cell (a variable-equality
+            /// family reads one variable per case). Nil otherwise.
+            var fileAnchors: [String: InstructorSuiteOutline.Anchor]?
             /// Full pattern-family spec — function, kind, paramNames, defaults
             /// (including the family `hint`), variables, and every case's
             /// args/expected/hint — for `kind == "family"` items. This is the
@@ -134,14 +139,36 @@ struct GetSuiteTool: ContentTool {
         + "reports the assignment's default per-test execution time limit (`timeLimitSeconds` at the "
         + "top level), any per-script override (`timeLimitSeconds` on a script item), each item's "
         + "student-facing `failureDetail` (\(MCPFailureDetailProse.slashAlternatives); null means full), "
-        + "the notebook cell a hand-written script is pinned to (`anchor`; absent when anchored "
-        + "automatically), and the optional "
+        + "each item's notebook cell (`anchor`: kind — function, variable, name or section — name, "
+        + "source — \"pinned\" for a pin set with update_suite, else \"auto\" — and ambiguous when "
+        + "more than one cell matched; absent when the item links to no cell, and for a generated row "
+        + "whose files link to different cells `fileAnchors` maps each file to its anchor; the "
+        + "anchors read the solution notebook, or the starter before a solution exists), and the "
+        + "optional "
         + "minimum native-runner version gate (`minimumRunnerVersion`, null when ungated), and the last "
         + "starter run (`starterRun`: each test's status on the starter notebook; a test worth points "
         + "that passes there earns them with no work; null before a run). Read-only — "
         + "use this to inspect exactly what each test checks (e.g. to explain why a submission lost "
         + "points) before editing the suite."
     static let inputSchema: JSONValue = MCPSchema.assignmentPublicIDOnlyInput
+    /// One reported anchor (`InstructorSuiteOutline.Anchor`).
+    static let anchorSchema: JSONValue = .object([
+        "type": .string("object"),
+        "description": .string(
+            "The notebook cell the test belongs to; absent when it links to no cell."),
+        "properties": .object([
+            "kind": .object([
+                "type": .string("string"),
+                "description": .string("function, variable, name (a name the notebook does not define) or section."),
+            ]),
+            "name": MCPSchema.string,
+            "source": .object([
+                "type": .string("string"), "enum": .array([.string("pinned"), .string("auto")]),
+            ]),
+            "ambiguous": MCPSchema.boolean,
+        ]),
+        "required": .array([.string("kind"), .string("name"), .string("source"), .string("ambiguous")]),
+    ])
     static let outputSchema: JSONValue? = .object([
         "type": .string("object"),
         "properties": .object([
@@ -226,11 +253,12 @@ struct GetSuiteTool: ContentTool {
                         ]),
                         "failureDetail": MCPFailureDetailProse.schema(
                             "Student-facing failure detail set on this item; absent means full."),
-                        "anchor": .object([
-                            "type": .string("string"),
+                        "anchor": anchorSchema,
+                        "fileAnchors": .object([
+                            "type": .string("object"),
                             "description": .string(
-                                "The notebook cell a hand-written script is pinned to (set with "
-                                    + "update_suite); absent when the test is anchored automatically."),
+                                "Each generated file's anchor, when the row's files link to different cells."),
+                            "additionalProperties": anchorSchema,
                         ]),
                         "family": .object([
                             "type": .string("object"),
@@ -292,8 +320,6 @@ struct GetSuiteTool: ContentTool {
         // their files in the order the runner walks them.
         var generatedByFamily: [String: [String]] = [:]
         var generatedByCheck: [String: [String]] = [:]
-        // The pin lives on the manifest entry, not on the suite-payload DTO.
-        var pins: [String: String] = [:]
         for entry in manifest?.testSuites ?? [] {
             switch entry.origin {
             case .family(let fid):
@@ -301,13 +327,15 @@ struct GetSuiteTool: ContentTool {
             case .check(let cid):
                 generatedByCheck[cid, default: []].append(entry.script)
             case .handWritten:
-                if let anchor = entry.anchor { pins[entry.script] = anchor }
+                break
             }
         }
+        let anchors = await Self.anchorsByFile(
+            manifest: manifest, assignment: assignment, setup: setup, payload: payload, context: context)
         let items = payload.items.map { dto in
             var item = Self.item(
                 from: dto, generatedByFamily: generatedByFamily, generatedByCheck: generatedByCheck)
-            if item.kind == "script", let filename = item.filename { item.anchor = pins[filename] }
+            Self.attachAnchors(to: &item, anchors: anchors)
             return item
         }
         // The assignment-wide default every override-less item inherits.
@@ -318,6 +346,52 @@ struct GetSuiteTool: ContentTool {
             timeLimitSeconds: defaultTimeLimit,
             minimumRunnerVersion: manifest?.minimumRunnerVersion,
             starterRun: try await Self.starterRun(setupID: setup.requireID(), on: context.mainDB))
+    }
+
+    /// Each suite file's anchor, by filename, as the workbench reports it
+    /// (`SuiteAnchorResolution`). A file that links to no cell is absent.
+    /// Only anchor names leave here, never the notebook's source.
+    private static func anchorsByFile(
+        manifest: TestProperties?, assignment: APIAssignment, setup: APITestSetup, payload: SuitePayload,
+        context: ToolContext
+    ) async -> [String: InstructorSuiteOutline.Anchor] {
+        guard let manifest, !manifest.testSuites.isEmpty else { return [:] }
+        let notebook = await SuiteAnchorResolution.notebookScan(
+            assignment: assignment, setup: setup, language: AssignmentLanguage.resolve(manifest: manifest),
+            db: context.db, testSetupsDirectory: context.request.application.testSetupsDirectory)
+        // The payload already carries each hand-written script's body.
+        let sources = Dictionary(
+            payload.items.compactMap { item in item.script.flatMap { s in s.content.map { (s.script, $0) } } },
+            uniquingKeysWith: { first, _ in first })
+        var anchors: [String: InstructorSuiteOutline.Anchor] = [:]
+        for entry in manifest.testSuites {
+            anchors[entry.script] = SuiteAnchorResolution.anchor(
+                for: entry, in: manifest, notebook: notebook, scriptSource: sources[entry.script])
+        }
+        return anchors
+    }
+
+    /// Sets the item's `anchor`, and `fileAnchors` for a generated row whose
+    /// files do not share one.
+    private static func attachAnchors(to item: inout Output.Item, anchors: [String: InstructorSuiteOutline.Anchor]) {
+        (item.anchor, item.fileAnchors) = anchorFields(
+            filename: item.filename, generatedFilenames: item.generatedFilenames ?? [], anchors: anchors)
+    }
+
+    /// An item's `anchor` and `fileAnchors`: a script row's own anchor; a
+    /// generated row's shared anchor, or, when its files link to different
+    /// cells, no shared anchor and each file's in `fileAnchors`.
+    static func anchorFields(
+        filename: String?, generatedFilenames: [String], anchors: [String: InstructorSuiteOutline.Anchor]
+    ) -> (anchor: InstructorSuiteOutline.Anchor?, fileAnchors: [String: InstructorSuiteOutline.Anchor]?) {
+        if let filename { return (anchors[filename], nil) }
+        let perFile = generatedFilenames.map { anchors[$0] }
+        guard let first = perFile.first else { return (nil, nil) }
+        if perFile.allSatisfy({ $0 == first }) { return (first, nil) }
+        let mapped = Dictionary(
+            zip(generatedFilenames, perFile).compactMap { file, anchor in anchor.map { (file, $0) } },
+            uniquingKeysWith: { first, _ in first })
+        return (nil, mapped)
     }
 
     /// Read on the owner pool: the row-level security policy shows the

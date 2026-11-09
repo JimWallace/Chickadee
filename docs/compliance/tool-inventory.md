@@ -44,7 +44,7 @@ source of truth; a census re-count is required whenever either changes
 | `list_course_sections` | `CourseSectionTools.swift:38` | `courseCode` | course-enrol | `APICourse`, `APICourseSection` | section list |
 | `list_assignments` | `ListAssignmentsTool.swift:30` | `courseCode` | course-enrol (`:89`) | `APICourse`, `APIAssignment` | assignment list (id, title, state) |
 | `get_assignment` | `GetAssignmentTool.swift:39` | `assignmentPublicID` | course-enrol (`:87`) | `APIAssignment`, `APICourseSection`, `APITestSetup` manifest | metadata, grading mode, section, GitHub submission setting (read-only) |
-| `get_suite` | `GetSuiteTool.swift:79` | `assignmentPublicID` | course-enrol (`:187`) | `APITestSetup` manifest + zip | full suite: script bodies, cell pins, family specs, checks |
+| `get_suite` | `GetSuiteTool.swift:79` | `assignmentPublicID` | course-enrol (`:187`) | `APITestSetup` manifest + zip; the solution notebook's definition names (anchors only) | full suite: script bodies, notebook-cell anchors, family specs, checks |
 | `get_notebook` | `GetNotebookTool.swift:32` | `assignmentPublicID` | course-enrol (`:62`) | `APITestSetup` starter notebook | starter `.ipynb` |
 | `get_solution` | `GetSolutionTool.swift:34` | `assignmentPublicID` | course-enrol (`:68`) | validation/solution submission (`kind==.validation`) | **reference solution `.ipynb`** |
 | `get_support_files` | `GetSupportFilesTool.swift:53` | `assignmentPublicID` | course-enrol (`:111`) | `APITestSetup` zip helper files | support file bodies |
