@@ -9,6 +9,13 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.868] - 2026-11-09
+
+### Changed
+
+- **The notebook editor saves to the server by default (#469).** A student's work in progress on an open assignment is now kept on the server, not only in the browser, so it survives a device change or cleared site data. The `ck_server_drive=0` cookie switches one browser back to the browser-only drive. Staff authoring copies, closed assignments, submission records and previews stay on the browser drive. Files the editor may not write (a provided dataset or support file, a submission record, another user's copy) now open read-only.
+
+
 ## [0.5.867] - 2026-11-09
 
 ### Changed
