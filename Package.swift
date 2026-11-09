@@ -46,10 +46,10 @@ let package = Package(
         .package(url: "https://github.com/vapor/fluent-postgres-driver.git", from: "2.12.0"),
         // Every web page is an Elementary view (docs/elementary-spike.md).
         // Pre-1.0, so pinned to the minor.
-        .package(url: "https://github.com/elementary-swift/elementary.git", .upToNextMinor(from: "0.8.2")),
+        .package(url: "https://github.com/elementary-swift/elementary.git", .upToNextMinor(from: "0.9.0")),
         .package(url: "https://github.com/vapor/jwt.git", from: "5.1.2"),
         .package(url: "https://github.com/apple/swift-argument-parser.git", from: "1.8.2"),
-        .package(url: "https://github.com/apple/swift-crypto.git", from: "4.5.0"),
+        .package(url: "https://github.com/apple/swift-crypto.git", from: "5.0.3"),
         // Already in the resolved graph transitively via Vapor; declared
         // explicitly so the MCP support-file fetcher can build a dedicated,
         // no-redirect HTTPClient (the shared Vapor client follows redirects).
