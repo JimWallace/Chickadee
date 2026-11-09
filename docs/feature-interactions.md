@@ -917,12 +917,27 @@ coordination, and each must see every edit.
 - **Rules:**
   - The three readers must agree: only the value `0` opts out.
   - The page decides too: the editor frame carries `data-server-drive`
-    (`NotebookContext.serverDrive`), true only on a copy that holds the
-    viewer's own editable work. A staff authoring copy is rebuilt from the
-    stored notebook on every page load (`workingCopySeed` refresh) and
-    "Save to assignment" rewrites it, so it stays on the IndexedDB drive; so
-    do a closed assignment's locked copy, a submission record and a preview.
-    `serverDrive.ts` and `serverDriveActive` both require the attribute.
+    (`NotebookContext.serverDrive`), true on any editable copy: a student's
+    own work, or a staff authoring draft of a published assignment (#2925).
+    A closed assignment's locked copy, a new-assignment draft (no assignment
+    row: its working copy *is* its stored notebook, read by
+    `draftNotebookData`), a submission record and a preview stay on the
+    IndexedDB drive. `serverDrive.ts` and `serverDriveActive` both require
+    the attribute.
+  - A staff copy of a published assignment on the server drive is a draft,
+    not a view (`AuthoringDraftFiles`, `ensureAuthoringDraft`). The page load
+    and `/notebook/source` keep it while the stored notebook equals its base,
+    refresh it when it has no edits of its own, and keep unpublished edits in
+    a dated backup beside it when both moved; the page links the newest
+    backup for 14 days. "An edit" is authored content (`sameDraftContent`):
+    kernel metadata, outputs and execution counts do not count. "Save to
+    assignment" saves the editor first, rewrites the draft only when it
+    differs (keeping a backup first), records the new base, and does not drop
+    the other view's draft. A writer that replaces a staff draft without the
+    editor (`createSolutionFromAssignment`) must record its base, or the next
+    load backs the new draft up. On the IndexedDB drive (`ck_server_drive=0`)
+    the staff copy is still a view, rebuilt on every load, which replaces a
+    server-side draft without a backup.
   - A browser result writes the submitted notebook back to the student-view
     copy only on the IndexedDB drive. On the server drive the copy is already
     the student's work, and a rewrite under the open editor would raise
@@ -932,6 +947,20 @@ coordination, and each must see every edit.
     (`mayWrite` in `JupyterLiteContentsRoutes`), so JupyterLab opens a
     provided file, a record or another user's copy read-only and never
     autosaves into a refusal.
+
+### Authoring draft bases: `<testSetupsDirectory>/authoring-draft-bases/`
+
+- **Writers:** `ensureAuthoringDraft` (page load and `/notebook/source`) and
+  `recordAuthoringDraftBase` ("Save to assignment",
+  `createSolutionFromAssignment`).
+- **Readers:** `AuthoringDraftFiles.reconcile`.
+- **Rules:** one base per staff draft path, mirroring
+  `users/<id>/<setupID>/<file>.ipynb`, outside the working-copy tree so the
+  editor and the kernel cannot reach it. A base is the seed the draft was last
+  in sync with; a missing base makes the next load compare the draft with the
+  stored notebook directly. Nothing deletes a base when its setup or user goes
+  away; an orphan is harmless. The dated `… (unsaved draft …).ipynb` backups
+  sit beside the draft, in the owner's folder only, and nothing deletes them.
 
 ### Content versions and restore
 

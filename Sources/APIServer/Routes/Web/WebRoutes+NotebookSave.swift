@@ -143,22 +143,14 @@ extension WebRoutes {
         // in whichever view they were editing them: a template save leaves the
         // placeholders they typed on screen, a personalized save leaves the
         // rendering that actually runs.
-        _ = try await ensureUserNotebookWorkingCopy(
-            setupID: setupID,
-            userID: userID,
-            fallbackSetup: setup,
-            relativePath: userNotebookWorkingCopyRelativePath(
-                setupID: setupID, userID: userID, fileKind: fileKind, viewMode: viewMode),
-            overwriteWith: asEdited,
-            viewMode: viewMode,
-            on: req.db, application: req.application, logger: req.logger
-        )
-        // The counterpart view is now a rendering of superseded bytes, so drop
-        // it: switching views after a save must show the save, not the notebook
-        // as it stood before it.
-        await discardOtherNotebookViewCopy(
-            setupID: setupID, userID: userID, fileKind: fileKind, viewMode: viewMode, application: req.application,
-            logger: req.logger)
+        let workingCopyPath = userNotebookWorkingCopyRelativePath(
+            setupID: setupID, userID: userID, fileKind: fileKind, viewMode: viewMode)
+        // Not a new-assignment draft (no assignment row): its working copy is
+        // its stored notebook, and it stays on the IndexedDB drive.
+        let authoringDraft = assignment != nil && JupyterLiteConfigFlagMiddleware.serverDriveEnabled(req)
+        try await writeBackAuthorCopy(
+            req: req, setup: setup, userID: userID, edited: asEdited,
+            location: (fileKind, viewMode, workingCopyPath), authoringDraft: authoringDraft)
 
         let outcome =
             switch fileKind {
@@ -170,6 +162,15 @@ extension WebRoutes {
                     req: req, setup: setup, assignment: assignment, normalized: toStore,
                     submitterUserID: userID)
             }
+
+        // The draft is now in sync with what was just stored, so its next page
+        // load keeps it (#2925). Best-effort: a missing base only means that
+        // load compares the draft with the stored notebook directly.
+        if authoringDraft {
+            await recordDraftBaseAfterSave(
+                req: req, setup: setup, assignment: assignment, userID: userID,
+                location: (fileKind, viewMode, workingCopyPath))
+        }
 
         let validationLabel = outcome.validationStatus ?? "none"
         req.logger.info(
@@ -183,6 +184,66 @@ extension WebRoutes {
             validationStatus: outcome.validationStatus,
             message: outcome.message
         )
+    }
+
+    /// Writes the saved notebook back to the author's working copy.
+    ///
+    /// On the server drive the working copy is the editor's own draft (#2925),
+    /// which the page saved just before this request, so it is rewritten only
+    /// when it does not already hold these bytes: a rewrite would move its
+    /// mtime under the open editor and make the next save raise "File
+    /// changed". When it must be rewritten (a failed or late editor save, or a
+    /// capture from a fallback), the draft may hold newer autosaved edits than
+    /// the capture, so it is kept in a backup first.
+    ///
+    /// The counterpart view is a rendering of superseded bytes. A view copy
+    /// (the IndexedDB drive) is dropped, so switching views after a save shows
+    /// the save. A server-drive draft is not: it may hold its own unpublished
+    /// edits, and its next load refreshes it or keeps them in a backup.
+    private func writeBackAuthorCopy(
+        req: Request, setup: APITestSetup, userID: UUID, edited: Data,
+        location: (fileKind: NotebookFileKind, viewMode: NotebookViewMode, path: String), authoringDraft: Bool
+    ) async throws {
+        let setupID = try setup.requireID()
+        let alreadyHeld =
+            authoringDraft
+            ? try await workingCopyHolds(edited, relativePath: location.path, application: req.application)
+            : false
+        if !alreadyHeld {
+            if authoringDraft {
+                let backup = try await backUpAuthoringDraft(relativePath: location.path, application: req.application)
+                req.logger.info(
+                    "authoring_draft_rewritten_on_save setup=\(setupID) path=\(location.path) backup=\(backup ?? "none")"
+                )
+            }
+            _ = try await ensureUserNotebookWorkingCopy(
+                setupID: setupID, userID: userID, fallbackSetup: setup, relativePath: location.path,
+                overwriteWith: edited, viewMode: location.viewMode,
+                on: req.db, application: req.application, logger: req.logger)
+        }
+        if !authoringDraft {
+            await discardOtherNotebookViewCopy(
+                setupID: setupID, userID: userID, fileKind: location.fileKind, viewMode: location.viewMode,
+                application: req.application, logger: req.logger)
+        }
+    }
+
+    /// Records the author's draft as in sync with the notebook just stored.
+    private func recordDraftBaseAfterSave(
+        req: Request, setup: APITestSetup, assignment: APIAssignment?, userID: UUID,
+        location: (fileKind: NotebookFileKind, viewMode: NotebookViewMode, path: String)
+    ) async {
+        do {
+            let seed = try await workingCopySeed(
+                req: req, setup: setup, assignment: assignment, fileKind: location.fileKind, isStaff: true)
+            try await recordAuthoringDraftBase(
+                WorkingCopySeedSource(
+                    setupID: try setup.requireID(), userID: userID, setup: setup, defaultData: seed.data,
+                    viewMode: location.viewMode),
+                relativePath: location.path, on: req.db, application: req.application, logger: req.logger)
+        } catch {
+            req.logger.warning("authoring_draft_base_not_recorded setup=\(setup.id ?? "unknown") reason=\(error)")
+        }
     }
 
     /// The notebook currently stored for `fileKind` — the one still carrying

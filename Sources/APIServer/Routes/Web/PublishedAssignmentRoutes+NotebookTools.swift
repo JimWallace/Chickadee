@@ -190,11 +190,24 @@ extension PublishedAssignmentRoutes {
             testSetupsDirectory: req.application.testSetupsDirectory, setupID: assignment.testSetupID)
         try await req.fileio.writeFile(.init(data: normalized), at: draftPath)
 
+        let solutionDraftPath = userNotebookWorkingCopyRelativePath(
+            setupID: assignment.testSetupID, userID: userID, fileKind: .solution)
         _ = try await ensureUserNotebookWorkingCopy(
             setupID: assignment.testSetupID, userID: userID, fallbackSetup: setup,
-            relativePath: userNotebookWorkingCopyRelativePath(
-                setupID: assignment.testSetupID, userID: userID, fileKind: .solution),
+            relativePath: solutionDraftPath,
             overwriteWith: normalized, on: req.db, application: req.application, logger: req.logger)
+        // On the server drive the solution copy is a draft (#2925): record that
+        // it is in sync with the stored solution as it is now, so its next load
+        // keeps this new draft rather than backing it up as unpublished edits.
+        if JupyterLiteConfigFlagMiddleware.serverDriveEnabled(req) {
+            let seed = try await WebRoutes().workingCopySeed(
+                req: req, setup: setup, assignment: assignment, fileKind: .solution, isStaff: true)
+            try await recordAuthoringDraftBase(
+                WorkingCopySeedSource(
+                    setupID: assignment.testSetupID, userID: userID, setup: setup, defaultData: seed.data,
+                    viewMode: .personalized),
+                relativePath: solutionDraftPath, on: req.db, application: req.application, logger: req.logger)
+        }
 
         return req.redirect(
             to:
