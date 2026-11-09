@@ -321,8 +321,5 @@ Made:
 - The two runners are separate machines that the maintainer controls.
 - The production snapshot runs as a Claude Code scheduled task on the
   maintainer's work machine. It is set up after this plan lands.
-
-Open:
-
-- Whether `docs/perf-log.md` is the right home for the weekly numbers, or a
-  pinned issue updated each week. The plan assumes the file.
+- The weekly numbers live in `docs/perf-log.md`, one dated section per week,
+  added by the snapshot task's pull request.
