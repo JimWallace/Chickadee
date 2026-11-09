@@ -152,7 +152,9 @@ because line numbers go out of date.
 
 - **Rule:** a content item with `assignmentID` set is not a section item. It
   renders as extra buttons on that assignment's row, and a student sees it
-  only when the item is published and the assignment is visible by state
+  only when the item is published and either the student can complete the
+  assignment (`isAssignmentEffectivelyOpen`, an extension included; the
+  dashboard row's `isOpen`) or the assignment is visible by state
   (`assignmentVisibleToStudentByState`, no future `startsAt`). Staff always
   see it.
 - **Readers:**
@@ -169,8 +171,6 @@ because line numbers go out of date.
   assignment's section at that time, as a detach does. The course clone and
   the bundle export and import carry it. `CourseContentService.update`
   refuses to move an attached item to a section or make it a heading.
-- **Not covered:** a student who sees a closed assignment only through an
-  extension or earlier work does not see its attached material.
 
 ### The reveal moment: `postDeadlineRevealDeadline`
 

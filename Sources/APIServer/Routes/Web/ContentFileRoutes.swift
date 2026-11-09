@@ -57,7 +57,13 @@ struct ContentFileRoutes: RouteCollection {
             if let assignmentID = item.assignmentID {
                 assignment = try await APIAssignment.find(assignmentID, on: req.db)
             }
-            if !ContentItemVisibility.isVisibleToStudents(item, attachedTo: assignment) {
+            // A student who can complete the attached assignment (an extension
+            // included) gets its material, as on the dashboard.
+            var canSubmit = false
+            if let assignment, item.isPublished {
+                canSubmit = try await isAssignmentEffectivelyOpen(assignment, for: caller, on: req.db)
+            }
+            if !ContentItemVisibility.isVisibleToStudents(item, attachedTo: assignment, studentCanSubmit: canSubmit) {
                 let isStaff = try await isCourseStaff(caller, inCourse: item.courseID, db: req.db)
                 guard isStaff else { throw AppError.notFound(resource: "Attachment") }
             }

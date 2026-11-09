@@ -2,8 +2,8 @@
 //
 // When a student sees a content item attached to an assignment
 // (`ContentItemVisibility`): once the assignment has opened, and after a
-// deadline close, never while it is a draft, a staff-only preview or not yet
-// started. The student course page draws the item's buttons on the
+// deadline close, and whenever this student can complete it (an extension);
+// never while it is a draft, a staff-only preview or not yet started. The student course page draws the item's buttons on the
 // assignment's row and no row of its own, and the hosted file route applies
 // the same rule.
 
@@ -81,6 +81,22 @@ import VaporTesting
         let hidden = APICourseContentItem(courseID: UUID(), sortOrder: 1, title: "Notes", isPublished: false)
         #expect(ContentItemVisibility.isVisibleToStudents(published, attachedTo: nil))
         #expect(!ContentItemVisibility.isVisibleToStudents(hidden, attachedTo: nil))
+    }
+
+    @Test func studentWhoCanSubmitSeesTheMaterialOfAClosedLab() {
+        let now = Date()
+        let assignment = APIAssignment(
+            id: UUID(), testSetupID: "vis_ext", title: "Lab", dueAt: now.addingTimeInterval(3600),
+            visibility: .closed, courseID: UUID())
+        let item = APICourseContentItem(
+            courseID: assignment.courseID, sortOrder: 1, title: "Slides", isPublished: true,
+            assignmentID: assignment.id)
+        #expect(!ContentItemVisibility.isVisibleToStudents(item, attachedTo: assignment, now: now))
+        #expect(
+            ContentItemVisibility.isVisibleToStudents(item, attachedTo: assignment, studentCanSubmit: true, now: now))
+        item.isPublished = false
+        #expect(
+            !ContentItemVisibility.isVisibleToStudents(item, attachedTo: assignment, studentCanSubmit: true, now: now))
     }
 
     @Test func attachedItemWithoutItsAssignmentIsHidden() {
@@ -162,6 +178,34 @@ import VaporTesting
             try await app.asyncTest(
                 .GET, "/content-files/\(itemID)/\(attachmentID)",
                 beforeRequest: { req in req.headers.add(name: .cookie, value: staffCookie) },
+                afterResponse: { res in #expect(res.status == .ok) })
+        }
+    }
+
+    @Test func studentWithAnExtensionSeesTheSlidesOfAClosedLab() async throws {
+        try await withApp(app) { _ in
+            // Closed before its deadline: hidden by state, but this student
+            // holds an extension and can still complete the lab.
+            let (lab, item, attachmentID) = try await makeLabWithSlides(
+                code: "MV_EXT", setupID: "mv_ext", isOpen: false)
+            let cookie = try await loginUser(username: "mv_ext_student", password: "pw", role: "student", on: app)
+            let student = try #require(
+                try await APIUser.query(on: app.db).filter(\.$username == "mv_ext_student").first())
+            try await APIAssignmentExtension(
+                assignmentID: try lab.requireID(), userID: try student.requireID(),
+                extendedDueAt: Date().addingTimeInterval(3 * 86_400)
+            ).save(on: app.db)
+
+            try await app.asyncTest(
+                .GET, "/",
+                beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    #expect(res.body.string.contains("https://example.com/vis-slides.pdf"))
+                })
+            try await app.asyncTest(
+                .GET, "/content-files/\(try item.requireID())/\(attachmentID)",
+                beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
                 afterResponse: { res in #expect(res.status == .ok) })
         }
     }

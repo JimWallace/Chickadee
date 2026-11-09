@@ -227,7 +227,7 @@ private struct ContentItemEditPopover: HTML {
                 }
             }
             span(.class("field-note field-note--muted")) {
-                "On an assignment, students see it once the assignment opens."
+                "On an assignment, students see it once they can work on the assignment."
             }
         }
     }

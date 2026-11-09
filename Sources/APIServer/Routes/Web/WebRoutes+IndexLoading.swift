@@ -285,8 +285,7 @@ extension WebRoutes {
         now: Date = Date()
     ) -> [IndexDisplayGroup] {
         let materialsBySetupID = attachedMaterials(
-            contentItems: contentItems, allAssignments: allAssignments,
-            isActiveCourseStaff: isActiveCourseStaff, now: now)
+            contentItems: contentItems, allAssignments: allAssignments, now: now)
         // Lookup: testSetupID → section UUID.
         let sectionBySetupID: [String: UUID] = Dictionary(
             allAssignments.compactMap { a -> (String, UUID)? in
@@ -310,7 +309,11 @@ extension WebRoutes {
             let key =
                 setupKeyByID[row.id]
                 ?? SectionItemSortKey(sortOrder: nil, createdAt: nil, stableID: row.id)
-            let materials = materialsBySetupID[row.id] ?? []
+            // A student who can complete the assignment (`row.isOpen`, an
+            // extension included) sees its material; staff see all of it.
+            let materials = (materialsBySetupID[row.id] ?? [])
+                .filter { isActiveCourseStaff || row.isOpen || $0.visibleByState }
+                .map(\.row)
             row.materialActions = materials.flatMap(\.actions)
             row.materialTitles = materials.map(\.title)
             place(sectionBySetupID[row.id], (key, .assignment(row)))
@@ -337,25 +340,25 @@ extension WebRoutes {
         return displayGroups
     }
 
-    /// The attached content items this viewer may see, keyed by the test
-    /// setup of the assignment each is attached to, in the items' lane order.
+    /// The published attached content items, keyed by the test setup of the
+    /// assignment each is attached to, in the items' lane order, each with
+    /// whether a student sees it by the assignment's state alone. The caller
+    /// adds the per-student half (`TestSetupRow.isOpen`) and the staff bypass.
+    /// Students' items arrive filtered to published ones (the content query);
+    /// staff see hidden ones too.
     static func attachedMaterials(
-        contentItems: [APICourseContentItem], allAssignments: [APIAssignment],
-        isActiveCourseStaff: Bool, now: Date
-    ) -> [String: [ContentItemRow]] {
+        contentItems: [APICourseContentItem], allAssignments: [APIAssignment], now: Date
+    ) -> [String: [(row: ContentItemRow, visibleByState: Bool)]] {
         let assignmentByID = Dictionary(
             allAssignments.compactMap { assignment in assignment.id.map { ($0, assignment) } },
             uniquingKeysWith: { first, _ in first })
-        var materialsBySetupID: [String: [ContentItemRow]] = [:]
+        var materialsBySetupID: [String: [(row: ContentItemRow, visibleByState: Bool)]] = [:]
         for item in contentItems {
             guard let assignmentID = item.assignmentID, let assignment = assignmentByID[assignmentID] else {
                 continue
             }
-            let visible =
-                isActiveCourseStaff
-                || ContentItemVisibility.isVisibleToStudents(item, attachedTo: assignment, now: now)
-            guard visible else { continue }
-            materialsBySetupID[assignment.testSetupID, default: []].append(ContentItemRow(from: item))
+            let visibleByState = ContentItemVisibility.isVisibleToStudents(item, attachedTo: assignment, now: now)
+            materialsBySetupID[assignment.testSetupID, default: []].append((ContentItemRow(from: item), visibleByState))
         }
         return materialsBySetupID
     }
