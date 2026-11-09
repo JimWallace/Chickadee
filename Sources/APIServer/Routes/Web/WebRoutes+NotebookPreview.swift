@@ -78,7 +78,8 @@ extension WebRoutes {
             bootBird: NotebookBootFacts.bird(avatarSpecJSON: user.avatarSpecJSON, isStaff: true),
             dueLabel: assignment.dueAt.map(waterlooDateTimeText),
             definitionPatterns: NotebookBootFacts.definitionPatterns(manifestJSON: setup.manifest),
-            previewGuideURL: "/instructor/\(assignment.publicID)/preview-guide.json?as=\(student.token)"
+            previewGuideURL: "/instructor/\(assignment.publicID)/preview-guide.json?as=\(student.token)",
+            kernelAssetsJSON: NotebookBootFacts.kernelAssetsJSON(manifestJSON: setup.manifest, app: req.application)
         )
     }
 

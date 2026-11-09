@@ -191,6 +191,28 @@ extension WebRoutes {
         return hasNotebookBySetupID
     }
 
+    /// The kernels whose boot files the dashboard warms in the browser cache
+    /// (`Public/kernel-prewarm.js`): one per vendored kernel that an open
+    /// notebook assignment on the page boots in the editor. Browser-graded
+    /// or not, opening the notebook boots the editor's kernel, and that boot
+    /// is the download a class pays at once. Ordered by environment name.
+    static func kernelPrewarmLists(
+        rows: [TestSetupRow], setups: [APITestSetup], lists: KernelAssetLists?
+    ) -> [KernelAssetList] {
+        guard let lists else { return [] }
+        let warmable = Set(
+            rows.filter { $0.isOpen && $0.hasNotebook && $0.submissionMode == SubmissionMode.notebook.rawValue }
+                .map(\.id))
+        var byEnv: [String: KernelAssetList] = [:]
+        for setup in setups {
+            guard let id = setup.id, warmable.contains(id),
+                let list = lists.forManifest(json: setup.manifest)
+            else { continue }
+            byEnv[list.env] = list
+        }
+        return byEnv.values.sorted { $0.env < $1.env }
+    }
+
     /// Sections for the active course, used to group the dashboard rows.
     static func loadCourseSections(
         activeCourseUUID: UUID?,

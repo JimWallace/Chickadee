@@ -301,6 +301,43 @@
     let kernelDiagForwarded = 0;
     const KERNEL_DIAG_MAX = 24;   // the collector self-caps; this bounds POSTs
 
+    // --- Cold-load measurement (kernel-asset-telemetry.js) -------------
+    //
+    // How much of this page's kernel boot came over the network. The kernel
+    // fetches its files from a worker inside the iframe, whose resource
+    // timings this page cannot read, so the probe asks the HTTP cache: once
+    // before the iframe mounts, and again for the missing files once the
+    // kernel is idle. The iframe's collector sends the shell's own timings
+    // (`shell_assets`) just before kernel_idle. One `asset_load` breadcrumb
+    // per page load; nothing here can affect the editor.
+    let kernelAssetProbe = null;
+    let kernelAssetReported = false;
+    let editorShellEntries = null;
+
+    function startKernelAssetProbe() {
+        try {
+            const assets = window.ChickadeeKernelAssets;
+            if (kernelAssetProbe || !assets) return;
+            const list = assets.parseList(frame.dataset.kernelAssets || '');
+            if (!list) return;
+            kernelAssetProbe = assets.editorProbe(list, window.fetch.bind(window));
+        } catch (_) { /* telemetry must never break the page */ }
+    }
+
+    function reportKernelAssets(idleMessage) {
+        try {
+            const assets = window.ChickadeeKernelAssets;
+            if (!kernelAssetProbe || kernelAssetReported || !assets || !failures || !failures.reportEvent) return;
+            kernelAssetReported = true;
+            kernelAssetProbe.finish({
+                bootMs: assets.elapsedFrom(idleMessage),
+                shellEntries: editorShellEntries || [],
+            }).then(function (message) {
+                if (message) failures.reportEvent({ kind: 'asset_load', source: 'editor', message: message });
+            }).catch(function () { /* best-effort */ });
+        } catch (_) { /* telemetry must never break the page */ }
+    }
+
     // Validate + forward one postMessage from the in-iframe collector. Returns
     // true if it was forwarded (test seam). Accepts only same-origin messages
     // carrying our `ck` tag and one of the two expected kinds; event.source is
@@ -312,11 +349,18 @@
             if (!e || e.origin !== window.location.origin) return false;
             const d = e.data;
             if (!d || d.ck !== 'kernel-diag') return false;
+            // The shell's resource timings: kept for the cold-load
+            // breadcrumb, never forwarded on their own.
+            if (d.kind === 'shell_assets') {
+                if (Array.isArray(d.entries)) editorShellEntries = d.entries.slice(0, 3000);
+                return false;
+            }
             if (d.kind !== 'kernel_phase' && d.kind !== 'kernel_error') return false;
             // The kernel reached idle — the editor is usable. Cancel the WebKit
             // slow-boot notice if it is still pending.
             if (d.kind === 'kernel_phase' && d.source === 'kernel_idle') {
                 markKernelEverReady();
+                reportKernelAssets(d.message);
             }
             // Self-heal: a post-idle exec_hang means the kernel booted then wedged
             // on execute (the boot-failure watchdog doesn't cover it). Trigger the
@@ -590,6 +634,10 @@
         // healthy kernel (old Safari / low-RAM iPad), surface the upload path
         // after SLOW_BOOT_NOTICE_MS without hiding the still-loading editor.
         armSlowBootNotice();
+
+        // Before the iframe loads, so the probe sees the cache as the kernel
+        // will find it. Once per page load.
+        startKernelAssetProbe();
 
         // The template renders the same URL into the iframe's src, so the
         // editor is already loading by the time the preflight resolves.
@@ -2303,6 +2351,7 @@
         testHooks.exports = {
             handleKernelDiagMessage,
             ensureDriveParentDirectories,
+            startKernelAssetProbe,
         };
     }
 })();

@@ -67,6 +67,17 @@ func bootstrapAppServices(_ app: Application, appConfig: AppConfig) async throws
     // skipped rather than failing every write (see KernelEnvironment).
     app.kernelEnvironments = KernelEnvironments.load(
         publicDirectory: app.directory.publicDirectory)
+    // Each vendored kernel's boot files, for the cold-load telemetry and the
+    // dashboard's cache warm (KernelAssetList). Absent bytes mean no list,
+    // and the pages then render neither.
+    app.kernelAssetLists = KernelAssetLists.load(publicDirectory: app.directory.publicDirectory)
+    for language in AssignmentLanguage.allCases where app.kernelAssetLists?[language] == nil {
+        if case .notebookKernel = language.editorSupport {
+            app.logger.notice(
+                "No kernel boot file list for \(language.rawValue): its notebook pages measure no cold loads and warm no cache."
+            )
+        }
+    }
     for language in AssignmentLanguage.allCases where app.kernelEnvironments?[language] == nil {
         app.logger.notice(
             """

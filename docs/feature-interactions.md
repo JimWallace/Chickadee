@@ -1700,6 +1700,52 @@ coordination, and each must see every edit.
     `isSubmissionStaff(_:testSetupID:on:)`. The form that takes a submission
     delegates to it.
 
+### Browser telemetry rows: `client_diagnostics`
+
+- **Writer:** `ClientDiagnosticsRoutes`, behind `allowedKinds` and
+  `ClientDiagnosticsRateLimiter`, whose key (user, verified setup, kind,
+  source, plus the kernel environment for `asset_load`) decides what a count
+  means: the first event per key per hour.
+- **Readers:** `get_browser_diagnostics`, the instructor dashboard's Browser
+  Errors card (`InstructorCardSeries`, filtered to failure kinds), the
+  editor-unrecoverable health alert (`kernel_error` / `recover_failed`), and
+  the retention prune.
+- **Rule:** a new kind says which readers filter it out. Non-failure kinds
+  (`asset_load`, `kernel_phase`, `editor_ready`) must stay out of every
+  failure count.
+
+### A kernel's boot files: `KernelAssetList`
+
+- **Writers:** the vendored layout: `<env>/<kernel>/kernel.json` and
+  `empack_env_meta.json`, rewritten by a re-vendor.
+- **Readers:** `KernelAssetList` (the cold-load probe and the dashboard's
+  cache warm), the editor's `@jupyterlite/xeus-extension` worker and
+  `xeus-kernel-shared.js` (which build the same URLs),
+  `EditorAssetFastPathMiddleware.isImmutableKernelPackage` (which decides
+  their cache policy) and `KernelEnvironments` (`importable-modules.json`).
+- **Rule:** a change to the vendored layout changes all of them.
+  `KernelAssetListTests` fails when a listed file is missing or a package is
+  not listed.
+
+### The cache-warm marker: `ck-kernel-warm:<env>`
+
+- **Writer:** `kernel-prewarm.js`, through `kernel-asset-telemetry.js`, after
+  every file of one kernel arrived.
+- **Reader:** the same script, to skip a kernel warmed at its current version
+  in the last 7 days.
+- **Rule:** it records "warmed", not "still cached". Nothing else may read it
+  as a cache state.
+
+### The editor iframe's diagnostics messages: `kernel-diag`
+
+- **Writer:** `jl-kernel-diagnostics.js` inside the editor iframe.
+- **Reader:** `handleKernelDiagMessage` in `notebook.js`. It forwards
+  `kernel_phase` and `kernel_error`, acts on `kernel_idle`, `exec_hang` and
+  `wasm_crash`, and keeps `shell_assets` for the `asset_load` breadcrumb
+  without forwarding it.
+- **Rule:** a kind that is not forwarded returns before the forwarding cap,
+  so it cannot use up the page's breadcrumb budget.
+
 ### Browser isolation and the CSP
 
 - **Rules:**

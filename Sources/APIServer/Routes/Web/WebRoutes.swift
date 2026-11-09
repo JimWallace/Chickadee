@@ -212,6 +212,8 @@ struct WebRoutes: RouteCollection {
             slipDay: slipDayData
         )
         let rows = sortedSetups.map { Self.buildTestSetupRow(setup: $0, context: rowContext) }
+        let kernelPrewarm = Self.kernelPrewarmLists(
+            rows: rows, setups: sortedSetups, lists: req.application.kernelAssetLists)
 
         // Sections + content items for the active course (fetches started up
         // top) drive the grouped display. Bucketing both lanes by section and
@@ -231,7 +233,8 @@ struct WebRoutes: RouteCollection {
                 displayGroups: displayGroups,
                 hasAny: !displayGroups.isEmpty,
                 slipDaySummary: slipDayData.summaryLine,
-                dataPageHref: dataPageHref)
+                dataPageHref: dataPageHref,
+                kernelPrewarm: kernelPrewarm)
         }.encodeResponse(for: req)
     }
 
