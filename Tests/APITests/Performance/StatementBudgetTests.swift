@@ -14,15 +14,27 @@
 //   small course and on a larger one. A count that differs is a query per
 //   row: an N+1.
 //
-// What is counted: the statements that the route sends on `req.db`. The test
-// app keeps sessions in memory and does not install the request-metrics
-// middleware, so the session lookup and the metrics insert that production
-// adds to every request are not in these numbers. The per-page counts in
-// docs/database-performance.md come from pg_stat_statements on a production
-// build and include them.
+// What is counted: every statement that the route sends on `req.db`, with a
+// transaction's BEGIN and COMMIT counted as two, as pg_stat_statements counts
+// them. Three things are not counted:
+//
+// - A statement sent on `app.db` (or `req.application.db`) during the
+//   request. It logs to the app's logger, not the request's. A route that
+//   moves a query there escapes its budget, so keep request work on `req.db`.
+// - A statement sent after the response, from a detached task. The counts
+//   are stable run to run today; a budget that flickers means such work
+//   started reading the database.
+// - The session lookup and the request-metrics insert that production adds
+//   to each request. The test app keeps sessions in memory and does not
+//   install the metrics middleware. So a page here counts one or two fewer
+//   statements than the pg_stat_statements counts in
+//   docs/database-performance.md. The runner poll is signed, not session
+//   based, and matches them.
 
 import Fluent
 import Foundation
+import NIOCore
+import NIOFoundationCompat
 import Testing
 import Vapor
 import VaporTesting
@@ -38,16 +50,16 @@ struct StatementBudgetTests {
     /// When a count goes down, lower its budget here in the same pull request.
     /// When a count must go up, raise it with the reason in the pull request.
     static let budgets: [Page: Int] = [
-        .studentDashboard: 0,
-        .studentSubmission: 0,
-        .studentHistory: 0,
-        .statusPoll: 0,
-        .staffSubmission: 0,
-        .instructorSubmissions: 0,
-        .gradesCSV: 0,
-        .instructorList: 0,
-        .adminDashboard: 0,
-        .runnerPollIdle: 0,
+        .studentDashboard: 20,
+        .studentSubmission: 15,
+        .studentHistory: 8,
+        .statusPoll: 2,
+        .staffSubmission: 13,
+        .instructorSubmissions: 18,
+        .gradesCSV: 14,
+        .instructorList: 13,
+        .adminDashboard: 10,
+        .runnerPollIdle: 3,
     ]
 
     enum Page: String, CaseIterable, Sendable {
@@ -64,19 +76,24 @@ struct StatementBudgetTests {
     }
 
     /// The size of the course a measurement runs on.
+    ///
+    /// Both scales have at least two attempts per student. A page may skip a
+    /// query when no student has a second attempt (the student dashboard's
+    /// prior-attempt lookup does), and a scale that took that branch would read
+    /// as a query that grows with the data.
     struct Scale: Sendable {
         let students: Int
         let attempts: Int
 
-        static let small = Scale(students: 2, attempts: 1)
+        static let small = Scale(students: 2, attempts: 2)
         static let large = Scale(students: 8, attempts: 3)
     }
 
     @Test func eachPageSendsItsBudgetedStatements() async throws {
-        let counts = try await measureEveryPage(at: .small)
+        let statements = try await measureEveryPage(at: .small)
         for page in Page.allCases {
             let budget = try #require(Self.budgets[page], "\(page.rawValue) has no budget")
-            let count = try #require(counts[page])
+            let count = try #require(statements[page]).count
             #expect(
                 count == budget,
                 "\(page.rawValue): \(count) statements, budget \(budget). \(count < budget ? "Lower the budget to \(count)." : "Find the added statement.")"
@@ -91,10 +108,25 @@ struct StatementBudgetTests {
             let few = try #require(small[page])
             let many = try #require(large[page])
             #expect(
-                few == many,
-                "\(page.rawValue): \(few) statements for \(Scale.small.students) students, \(many) for \(Scale.large.students). A count that grows with the data is a query per row."
+                few.count == many.count,
+                "\(page.rawValue): \(few.count) statements for \(Scale.small.students) students, \(many.count) for \(Scale.large.students). A count that grows with the data is a query per row. Only in the larger course: \(Self.extra(in: many, over: few))"
             )
         }
+    }
+
+    /// The statements in `larger` beyond those in `smaller`, counted as a
+    /// multiset, so a statement that runs once more shows once.
+    static func extra(in larger: [String], over smaller: [String]) -> [String] {
+        var remaining = Dictionary(smaller.map { ($0, 1) }, uniquingKeysWith: +)
+        var extra: [String] = []
+        for statement in larger {
+            if let left = remaining[statement], left > 0 {
+                remaining[statement] = left - 1
+            } else {
+                extra.append(statement)
+            }
+        }
+        return extra
     }
 
     // MARK: - Measuring
@@ -102,8 +134,8 @@ struct StatementBudgetTests {
     private static let workerSecret = "statement-budget-secret"
 
     /// Builds a course at `scale` in a fresh app and measures each page once.
-    private func measureEveryPage(at scale: Scale) async throws -> [Page: Int] {
-        var counts: [Page: Int] = [:]
+    private func measureEveryPage(at scale: Scale) async throws -> [Page: [String]] {
+        var recorded: [Page: [String]] = [:]
         try await withTestApp(prefix: "chickadee-statements") { app in
             let recorder = StatementRecorder()
             app.middleware.use(StatementCountingMiddleware(recorder: recorder), at: .beginning)
@@ -119,10 +151,10 @@ struct StatementBudgetTests {
                 let statements = recorder.disarm()
                 #expect(
                     response.status.code < 400, "\(page.rawValue) answered \(response.status.code)")
-                counts[page] = statements.count
+                recorded[page] = statements
             }
         }
-        return counts
+        return recorded
     }
 
     private func send(

@@ -37,8 +37,9 @@ Run on Mondays, before the weekly digest (15:13 UTC).
    | `get_health_alerts` | the rules that are firing |
    | `get_storage_usage` | free disk |
 
-3. **Benchmark.** Run `Tools/perf-bench/weekly.sh` from the repository root.
-   It takes about 25 minutes. It needs a local Postgres with
+3. **Benchmark.** Run `Tools/perf-bench/weekly.sh` from the repository root,
+   in the background, and wait for it to finish: it takes about 25 minutes,
+   longer than a foreground command may run. It needs a local Postgres with
    `pg_stat_statements` loaded (docs/database-performance.md, "Re-run the
    measurements"). If it fails, keep the last 40 lines of its output for the
    log and skip to step 5.

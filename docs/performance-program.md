@@ -123,8 +123,8 @@ that regresses it fails before merge.
 
 | Ratchet | How it is measured | Where it runs |
 |---|---|---|
-| SQL statements per hot-path request | An APITests suite that wraps the database with a statement counter and drives each page of the baseline table in `database-performance.md` once against a few seeded rows, plus the runner poll (idle and claim). The statement counts there are the starting baselines | `swift-tests.yml` |
-| Statements that grow with the table | The same suite at two data sizes (10 rows and 1,000 rows); the count must be equal. A count that grows is an N+1 | `swift-tests.yml` |
+| SQL statements per hot-path request | **Done:** `StatementBudgetTests` counts the statements of each page of the baseline table in `database-performance.md`, plus the idle runner poll, and holds each at an exact budget. A test-only middleware counts PostgresKit's per-statement log on the request's logger. The claim path is still to add | `swift-tests.yml` |
+| Statements that grow with the table | **Done:** the same suite at two course sizes (2 students with 2 attempts each, 8 with 3); the counts must be equal, and a failure lists the extra statements. A count that grows is an N+1 | `swift-tests.yml` |
 | Rows hydrated per request | Same suite; the count of Fluent models decoded. Fluent hydration costs 40–60 µs per row on the event loop ([database-performance.md](database-performance.md)) | `swift-tests.yml` |
 | Foreign keys without an index | Exists: `ForeignKeyIndexCoverageTests` | — |
 | Runner wasm size | Exists: `scripts/check-runner-wasm-size.sh` gates on a generous ceiling (about 35% over today) and only prints the delta to `runner-size-baseline.txt`. Add a small allowance over the baseline instead, so growth needs a deliberate baseline edit | CI, as today |
@@ -384,7 +384,8 @@ lease) and that the table sizes are flat week over week.
    server host's cores and memory. Set `--max-jobs` on each runner from its
    cores, then its `pids_limit` and `mem_limit` (or `TasksMax=` and
    `MemoryMax=`) to match.
-2. Add the statement- and hydration-count suite with its baselines. This is
+2. Add the statement- and hydration-count suite with its baselines (the
+   statement half is done: `StatementBudgetTests`). This is
    the ratchet that pays for itself first: the weekly check finds a page
    that reads more a week later, and this suite stops it in the PR.
 3. Extend `Tools/perf-bench/` with the grading run, the status-poll load and
