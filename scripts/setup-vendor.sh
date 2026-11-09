@@ -73,6 +73,12 @@ npx esbuild iframe-commands-host-entry.js \
 # supplied, and r-grading-worker.js always supplies one — so the import is
 # dropped (--loader:.wasm=empty) and the wasm is vended explicitly instead,
 # under a name that says which subsystem owns it.
+#
+# From 5.4.1 the emscripten glue (lib/unpack.js) is built for node as well as
+# the web, so it carries `require("fs")`, `require("path")` and
+# `require("crypto")` inside ENVIRONMENT_IS_NODE branches. The grading worker
+# has no `process`, so those branches never run; the built-ins are left
+# external rather than bundled or polyfilled.
 echo "==> Bundling xeus kernel bootstrap via esbuild"
 npx esbuild xeus-bootstrap-entry.mjs \
     --bundle \
@@ -80,6 +86,9 @@ npx esbuild xeus-bootstrap-entry.mjs \
     --target=es2020 \
     --minify \
     --loader:.wasm=empty \
+    --external:fs \
+    --external:path \
+    --external:crypto \
     --outfile="$public_vendor/xeus-bootstrap.js"
 cp node_modules/@emscripten-forge/untarjs/lib/unpack.wasm \
    "$public_vendor/xeus-unpack.wasm"
