@@ -15,6 +15,7 @@
 
 import Core
 import Fluent
+import SQLKit
 import Vapor
 
 struct QueryAuditLogTool: DiagnosticTool {
@@ -64,21 +65,32 @@ struct QueryAuditLogTool: DiagnosticTool {
         let windowHours = Self.windowBound.resolve(input.windowHours)
         let since = Date().addingTimeInterval(Double(-windowHours) * 3600)
 
-        var query = APIAuditLogEntry.query(on: context.db)
-            .filter(\.$createdAt >= since)
-        if let action = input.action, !action.isEmpty {
-            query = query.filter(\.$action == action)
+        // Counted in the database, one row per action: the window can reach
+        // 90 days of the log, and the tool used to load an action string for
+        // every entry to count them. Only the action column is read — no
+        // actor, IP, or metadata is ever loaded into this tool, let alone
+        // returned.
+        guard let sql = context.db as? (any SQLDatabase) else {
+            throw MCPToolError.executionFailed(detail: "the audit log count needs a SQL database")
         }
-        // Project to the action column only — no actor, IP, or metadata is ever
-        // loaded into this tool, let alone returned.
-        let actions = try await query.all(\.$action)
+        var query = sql.select()
+            .column("action")
+            .column(SQLFunction("COUNT", args: SQLLiteral.all), as: "n")
+            .from(APIAuditLogEntry.schema)
+            .where("created_at", .greaterThanOrEqual, SQLBind(since))
+        if let action = input.action, !action.isEmpty {
+            query = query.where("action", .equal, SQLBind(action))
+        }
+        let counts = try await query.groupBy("action").all(decoding: ActionCount.self)
 
+        var total = 0
         var byActionRaw: [String: Int] = [:]
         var byCategoryRaw: [String: Int] = [:]
-        for raw in actions {
-            byActionRaw[raw, default: 0] += 1
-            let display = AuditActionDisplay.categoryLabel(forRaw: raw)
-            byCategoryRaw[display.category, default: 0] += 1
+        for row in counts {
+            total += row.n
+            byActionRaw[row.action, default: 0] += row.n
+            let display = AuditActionDisplay.categoryLabel(forRaw: row.action)
+            byCategoryRaw[display.category, default: 0] += row.n
         }
 
         let byAction = byActionRaw.map { raw, count in
@@ -92,6 +104,12 @@ struct QueryAuditLogTool: DiagnosticTool {
         .sorted { ($0.count, $1.key) > ($1.count, $0.key) }
 
         return Output(
-            windowHours: windowHours, total: actions.count, byAction: byAction, byCategory: byCategory)
+            windowHours: windowHours, total: total, byAction: byAction, byCategory: byCategory)
+    }
+
+    /// One action of the window and how many entries carry it.
+    private struct ActionCount: Decodable {
+        let action: String
+        let n: Int
     }
 }

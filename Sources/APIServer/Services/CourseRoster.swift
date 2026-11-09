@@ -15,7 +15,8 @@ enum CourseRoster {
     /// rule is the typed `role` accessor: a `student` row, a NULL row (a
     /// pre-migration student) and a row with a role string that no
     /// `CourseRole` case names are all students. Only a TA or instructor row
-    /// is not. Every student set reads this rule, never `roleRaw`.
+    /// is not. Every student set reads this rule, never `roleRaw`, except
+    /// `studentsOnly`, its SQL twin for a query that filters in the database.
     static func isStudent(_ enrollment: APICourseEnrollment) -> Bool {
         enrollment.role == .student
     }
@@ -23,10 +24,25 @@ enum CourseRoster {
     /// The enrollment rows of the students in `courseID`. Staff rows (a TA
     /// or instructor enrolled to see the course) are left out.
     static func studentEnrollments(in courseID: UUID, on db: any Database) async throws -> [APICourseEnrollment] {
-        try await APICourseEnrollment.query(on: db)
-            .filter(\.$course.$id == courseID)
-            .all()
-            .filter(isStudent)
+        try await studentsOnly(
+            APICourseEnrollment.query(on: db)
+                .filter(\.$course.$id == courseID)
+        )
+        .all()
+    }
+
+    /// `query` narrowed to student rows in the database, by the rule of
+    /// `isStudent`: a NULL role, or any role string that no staff role names.
+    /// For a count or a column read that should not load staff rows and then
+    /// drop them.
+    static func studentsOnly(
+        _ query: QueryBuilder<APICourseEnrollment>
+    ) -> QueryBuilder<APICourseEnrollment> {
+        let staffRoles = CourseRole.allCases.filter { $0 != .student }.map(\.rawValue)
+        return query.group(.or) { or in
+            or.filter(\.$roleRaw == nil)
+            or.filter(\.$roleRaw !~ staffRoles)
+        }
     }
 
     /// The user IDs of the students in `courseID`. Empty when the course has

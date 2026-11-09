@@ -15,6 +15,7 @@
 
 import Core
 import Fluent
+import SQLKit
 import Vapor
 
 struct GetRequestMetricsTool: DiagnosticTool {
@@ -81,53 +82,116 @@ struct GetRequestMetricsTool: DiagnosticTool {
         let limit = Self.limitBound.resolve(input.limit)
         let since = Date().addingTimeInterval(Double(-windowHours) * 3600)
 
-        var rows = try await APIRequestMetric.query(on: context.db)
-            .filter(\.$finishedAt >= since)
-            .all()
+        // Grouped in the database: identical (method, path, status, duration)
+        // rows arrive as one row with a count. The window holds every
+        // recorded request for up to 30 days, and loading each as a full row
+        // was the cost of this tool. The weights keep every percentile exact.
+        guard let sql = context.db as? (any SQLDatabase) else {
+            throw MCPToolError.executionFailed(detail: "request metrics need a SQL database")
+        }
+        var groups = try await sql.select()
+            .column("method").column("path").column("status_code").column("duration_ms")
+            .column(SQLFunction("COUNT", args: SQLLiteral.all), as: "n")
+            .from(APIRequestMetric.schema)
+            .where("finished_at", .greaterThanOrEqual, SQLBind(since))
+            .groupBy("method").groupBy("path").groupBy("status_code").groupBy("duration_ms")
+            .all(decoding: RequestGroup.self)
         // The prefix is normalized and matched against NORMALIZED routes, so a
         // concrete submission/setup id in the prefix collapses to ":id" and
         // cannot act as an existence probe for that id (compliance audit F-3).
         // The former DB-side substring narrowing matched raw paths and is
-        // dropped for the same reason; the no-prefix path always loaded the
-        // full window anyway, so worst-case cost is unchanged.
+        // dropped for the same reason.
         if let rawPrefix = input.pathPrefix, !rawPrefix.isEmpty {
             let prefix = Self.normalizePath(rawPrefix)
-            rows = rows.filter { Self.normalizePath($0.path).hasPrefix(prefix) }
+            groups = groups.filter { Self.normalizePath($0.path).hasPrefix(prefix) }
         }
 
+        // Durations are kept as (duration → count) per route, so memory
+        // grows with the distinct durations, not with the requests. A path
+        // that carries an id groups to one row per request in SQL; its
+        // durations still collapse here.
+        var total = 0
         var statusClasses: [String: Int] = [:]
-        var durationsByRoute: [String: [Int]] = [:]
+        var durationsByRoute: [String: WeightedDurations] = [:]
         var errorsByRoute: [String: Int] = [:]
-        var maxByRoute: [String: Int] = [:]
-        var allDurations: [Int] = []
-        for row in rows {
-            statusClasses[Self.statusClass(row.statusCode), default: 0] += 1
-            let route = "\(row.method) \(Self.normalizePath(row.path))"
-            durationsByRoute[route, default: []].append(row.durationMs)
-            maxByRoute[route] = max(maxByRoute[route] ?? 0, row.durationMs)
-            if row.statusCode >= 400 { errorsByRoute[route, default: 0] += 1 }
-            allDurations.append(row.durationMs)
+        var allDurations = WeightedDurations()
+        for group in groups {
+            total += group.n
+            statusClasses[Self.statusClass(group.statusCode), default: 0] += group.n
+            let route = "\(group.method) \(Self.normalizePath(group.path))"
+            durationsByRoute[route, default: WeightedDurations()].add(group.durationMs, count: group.n)
+            if group.statusCode >= 400 { errorsByRoute[route, default: 0] += group.n }
+            allDurations.add(group.durationMs, count: group.n)
         }
 
-        let diagnostics = context.request.application.diagnostics
         let slowestRoutes = durationsByRoute.map { route, durations in
             RouteStat(
                 route: route,
-                count: durations.count,
+                count: durations.total,
                 errorCount: errorsByRoute[route, default: 0],
-                p95Ms: diagnostics.durationSummary(for: durations).p95Ms,
-                maxMs: maxByRoute[route] ?? 0)
+                p95Ms: durations.percentile(0.95),
+                maxMs: durations.max ?? 0)
         }
         .sorted { ($0.p95Ms ?? 0, $0.maxMs) > ($1.p95Ms ?? 0, $1.maxMs) }
         .prefix(limit)
 
         return Output(
             windowHours: windowHours,
-            total: rows.count,
+            total: total,
             byStatusClass: statusClasses.map { StatusClassCount(statusClass: $0.key, count: $0.value) }
                 .sorted { $0.statusClass < $1.statusClass },
-            overall: diagnostics.durationSummary(for: allDurations),
+            overall: allDurations.summary(),
             slowestRoutes: Array(slowestRoutes))
+    }
+
+    /// A multiset of durations: each value with how many requests took it.
+    /// Its average and percentiles equal `durationSummary` over the expanded
+    /// list, with the same nearest-lower-rank rule
+    /// (`MetricBucketAccumulators.percentile`).
+    struct WeightedDurations {
+        private(set) var counts: [Int: Int] = [:]
+        private(set) var total = 0
+        private var sum = 0
+
+        mutating func add(_ durationMs: Int, count: Int) {
+            counts[durationMs, default: 0] += count
+            total += count
+            sum += durationMs * count
+        }
+
+        var max: Int? { counts.keys.max() }
+
+        func percentile(_ percentile: Double) -> Int? {
+            guard total > 0 else { return nil }
+            let rank = min(total - 1, Swift.max(0, Int(Double(total - 1) * percentile)))
+            var seen = 0
+            for durationMs in counts.keys.sorted() {
+                seen += counts[durationMs, default: 0]
+                if seen > rank { return durationMs }
+            }
+            return counts.keys.max()
+        }
+
+        func summary() -> DurationSummaryResponse {
+            DurationSummaryResponse(
+                averageMs: total > 0 ? sum / total : nil, p50Ms: percentile(0.50), p95Ms: percentile(0.95))
+        }
+    }
+
+    /// One (method, path, status, duration) group of the window, and how
+    /// many requests fell in it.
+    private struct RequestGroup: Decodable {
+        let method: String
+        let path: String
+        let statusCode: Int
+        let durationMs: Int
+        let n: Int
+
+        enum CodingKeys: String, CodingKey {
+            case method, path, n
+            case statusCode = "status_code"
+            case durationMs = "duration_ms"
+        }
     }
 
     /// "2xx" / "3xx" / "4xx" / "5xx" / "other" for a numeric status code.
