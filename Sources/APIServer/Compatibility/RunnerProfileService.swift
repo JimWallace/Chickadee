@@ -110,6 +110,15 @@ struct RunnerProfileService {
             .first()
     }
 
+    /// The stored profile of each runner in `runnerIDs` that has one, keyed
+    /// by runner ID: `profile(for:on:)` for many runners in one read.
+    func profiles(for runnerIDs: [String], on db: any Database) async throws -> [String: RunnerProfile] {
+        guard !runnerIDs.isEmpty else { return [:] }
+        return Dictionary(
+            try await RunnerProfile.query(on: db).filter(\.$runnerID ~~ runnerIDs).all().map { ($0.runnerID, $0) },
+            uniquingKeysWith: { first, _ in first })
+    }
+
     func refreshActiveFlags(activeWindowSeconds: TimeInterval, on db: any Database) async throws {
         let cutoff = Date().addingTimeInterval(-activeWindowSeconds)
         let profiles = try await RunnerProfile.query(on: db).all()

@@ -164,7 +164,8 @@ struct ToolContext {
     @discardableResult
     func authorizeCourseAccess(_ courseID: UUID) async throws -> APIUser {
         let user = try await requireEligibleSubject()
-        try await requireEnrollment(of: user, in: courseID)
+        // One read of the enrollment row answers both checks below.
+        let enrollment = try await requireEnrollment(of: user, in: courseID)
         // Eligibility is "staff in ANY course", so a TA in course A who is a
         // student in course B passes it. A human caller must be staff in THIS
         // course too, or the read tools (get_solution, get_suite,
@@ -173,10 +174,7 @@ struct ToolContext {
         // enrollment-only access. An admin bypasses per-course roles, as on
         // the write path, but still needs the enrollment checked above.
         if !user.isMCPAgent && !user.isAdmin {
-            guard let userID = user.id,
-                let role = try await courseRole(of: userID, inCourse: courseID, db: db),
-                role >= .ta
-            else {
+            guard enrollment.role >= .ta else {
                 throw MCPToolError.notAuthorized(
                     detail: "The MCP account is not course staff in the target course.")
             }
@@ -192,14 +190,16 @@ struct ToolContext {
         return try await userIsEnrolled(userID: userID, inCourse: courseID, db: db)
     }
 
-    /// Throws unless `user` holds an enrollment row in `courseID`.
-    private func requireEnrollment(of user: APIUser, in courseID: UUID) async throws {
+    /// The enrollment row of `user` in `courseID`; throws when there is none.
+    @discardableResult
+    private func requireEnrollment(of user: APIUser, in courseID: UUID) async throws -> APICourseEnrollment {
         guard let userID = user.id else {
             throw MCPToolError.notAuthorized(detail: "Token subject is not a valid user.")
         }
-        guard try await userIsEnrolled(userID: userID, inCourse: courseID, db: db) else {
+        guard let enrollment = try await CourseRoster.enrollment(of: userID, in: courseID, on: db) else {
             throw MCPToolError.notAuthorized(detail: "The MCP account is not enrolled in the target course.")
         }
+        return enrollment
     }
 
     // MARK: - Assignment resolution

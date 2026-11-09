@@ -428,16 +428,26 @@ func postLoginRedirect(for user: APIUser, req: Request) async throws -> Response
         .filter(\.$isArchived == false)
         .all()
 
-    // Auto-enroll in every .auto course the user is not already in.
-    let autoCourses = allCourses.filter { $0.enrollmentMode == .auto }
-    for course in autoCourses {
-        guard let courseID = course.id else { continue }
-        try await ensureSeededEnrollment(userID: userID, courseID: courseID, on: req.db)
+    // Auto-enroll in every .auto course the user is not already in. One read
+    // of the user's enrolled courses serves every auto course and the count
+    // below, rather than one check per auto course on every login.
+    let enrolledCourseIDs = Set(
+        try await APICourseEnrollment.query(on: req.db)
+            .filter(\.$userID == userID)
+            .all(\.$course.$id))
+    var createdCount = 0
+    for course in allCourses where course.enrollmentMode == .auto {
+        guard let courseID = course.id, !enrolledCourseIDs.contains(courseID) else { continue }
+        do {
+            try await saveSeededEnrollment(for: user, courseID: courseID, on: req.db)
+        } catch  where isInsertConflict(error) {
+            // A concurrent login (a second tab, an SSO retry) enrolled the
+            // user after the read above. The row exists, which is the goal.
+        }
+        createdCount += 1
     }
 
-    let enrollmentCount = try await APICourseEnrollment.query(on: req.db)
-        .filter(\.$userID == userID)
-        .count()
+    let enrollmentCount = enrolledCourseIDs.count + createdCount
 
     if enrollmentCount == 0 {
         let hasOpenCourses = allCourses.contains { $0.enrollmentMode == .open }

@@ -30,12 +30,22 @@ extension InstructorDashboardRoutes {
             .filter(\.$aiFeedbackEnabled == true)
             .sort(\.$title)
             .all()
+        // One read of the draft rows' assignment column for every assignment,
+        // not one count per assignment.
+        var draftCounts: [UUID: Int] = [:]
+        let assignmentIDs = assignments.compactMap(\.id)
+        if !assignmentIDs.isEmpty {
+            for assignmentID in try await APIReflectionFeedback.query(on: req.db)
+                .filter(\.$assignmentID ~~ assignmentIDs)
+                .filter(\.$stateRaw == APIReflectionFeedback.State.draft.rawValue)
+                .all(\.$assignmentID)
+            {
+                draftCounts[assignmentID, default: 0] += 1
+            }
+        }
         var rows: [AgentFeedbackAssignmentRow] = []
         for assignment in assignments {
-            let drafts = try await APIReflectionFeedback.query(on: req.db)
-                .filter(\.$assignmentID == assignment.requireID())
-                .filter(\.$stateRaw == APIReflectionFeedback.State.draft.rawValue)
-                .count()
+            let drafts = draftCounts[try assignment.requireID(), default: 0]
             rows.append(
                 AgentFeedbackAssignmentRow(
                     title: assignment.title,
