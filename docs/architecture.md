@@ -784,7 +784,8 @@ submissions when the graded suite actually changed.
 The transport is **dual-era**, resolved per request: a body whose `_meta`
 carries `io.modelcontextprotocol/protocolVersion` gets the 2026-07-28
 revision's semantics (mandatory `server/discover`, `resultType` + server
-`_meta`, mirrored protocol headers); anything else keeps the legacy
+`_meta`, the required `ttlMs` / `cacheScope` on cacheable results, mirrored
+protocol headers); anything else keeps the legacy
 `initialize` handshake behaviour. See
 [`mcp-2026-07-28-revision.md`](archive/mcp-2026-07-28-revision.md) and the tool index
 in [`mcp-authoring-roadmap.md`](mcp-authoring-roadmap.md).
