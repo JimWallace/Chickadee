@@ -149,6 +149,23 @@ import VaporTesting
         }
     }
 
+    /// JupyterLab opens a file whose model says `writable: false` read-only, so
+    /// no autosave reaches a route that would refuse it.
+    @Test(arguments: [
+        ("cases.csv", false), ("lib/helper.py", false), ("view-sub_1.ipynb", false),
+        ("assignment.ipynb", true),
+    ])
+    func aProvidedFileReadsAsReadOnly(inside: String, writable: Bool) async throws {
+        try await withApp(app) { _ in
+            try await seedSetup()
+            try await app.asyncTest(.GET, "/jupyterlite/api/contents/\(setupDir)/\(inside)") { res in
+                #expect(res.status == .ok)
+                let model = try JSONSerialization.jsonObject(with: Data(res.body.string.utf8)) as? [String: Any]
+                #expect(model?["writable"] as? Bool == writable, "\(inside)")
+            }
+        }
+    }
+
     @Test func theNotebookAndTheStudentsOwnFilesStayWritable() async throws {
         try await withApp(app) { _ in
             try await seedSetup()

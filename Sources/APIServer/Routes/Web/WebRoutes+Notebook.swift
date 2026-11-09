@@ -442,7 +442,12 @@ extension WebRoutes {
             kernelLanguage: NotebookBootFacts.kernelLanguage(manifestJSON: setup.manifest),
             bootBird: NotebookBootFacts.bird(avatarSpecJSON: args.user.avatarSpecJSON, isStaff: args.isAuthor),
             dueLabel: args.assignment?.dueAt.map(waterlooDateTimeText),
-            definitionPatterns: NotebookBootFacts.definitionPatterns(manifestJSON: setup.manifest)
+            definitionPatterns: NotebookBootFacts.definitionPatterns(manifestJSON: setup.manifest),
+            // The server drive (#469) only where the copy is the viewer's own,
+            // editable work: not a staff copy, which this page just rebuilt from
+            // the stored notebook and rebuilds on every load, and not a closed
+            // assignment's locked copy.
+            serverDrive: !seed.refresh && !isReadOnly
         )
     }
 

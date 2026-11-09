@@ -60,7 +60,7 @@ POST /testsetups/:id/notebook/save      — Write the notebook open in JupyterLi
                                           back to the assignment
                                           (?file=assignment|solution)
 
-# The server-backed editor drive (#469 spike, ck_server_drive cookie only)
+# The server-backed editor drive (#469; the default, ck_server_drive=0 opts out)
 PUT|POST|PATCH|DELETE /jupyterlite/api/contents/** — Save, new untitled
                                           folder, rename, checkpoint stubs; the
                                           caller's own users/<id>/ only

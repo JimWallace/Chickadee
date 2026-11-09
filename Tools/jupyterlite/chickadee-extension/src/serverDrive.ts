@@ -1,4 +1,4 @@
-// The server-backed drive (spike for #469).
+// The server-backed drive (#469).
 //
 // JupyterLite's default drive keeps every file in the browser's IndexedDB, so a
 // student's work in progress reaches the server only at Submit. This plugin
@@ -9,11 +9,11 @@
 // same contents manager, on both the SharedArrayBuffer and the service-worker
 // transport), then go to the server.
 //
-// It is off unless the served `jupyter-lite.json` carries
-// `chickadeeServerDrive: "true"`, which `JupyterLiteConfigFlagMiddleware`
-// adds only for a request with the `ck_server_drive=1` cookie. With the flag
-// off the plugin is not registered at all, so the lite default drive is used
-// exactly as before.
+// It is on when the served `jupyter-lite.json` carries
+// `chickadeeServerDrive: "true"`, which `JupyterLiteConfigFlagMiddleware` adds
+// for every request except one with the `ck_server_drive=0` cookie, and the
+// page's editor frame allows it (`serverDriveEnabled`). Otherwise the plugin is
+// not registered at all, so JupyterLite's IndexedDB drive is used as before.
 
 import { PageConfig } from '@jupyterlab/coreutils';
 import { Contents, Drive, IDefaultDrive, ServerConnection, ServiceManagerPlugin } from '@jupyterlab/services';
@@ -21,9 +21,24 @@ import { Contents, Drive, IDefaultDrive, ServerConnection, ServiceManagerPlugin 
 /** The page-config option that turns the server drive on. */
 export const SERVER_DRIVE_OPTION = 'chickadeeServerDrive';
 
-/** True when the served config asks for the server drive. */
+/**
+ * True when the server drive is on for this editor: the served config asks for
+ * it (every browser but one that opted out), and the page's editor frame allows
+ * it (`data-server-drive="true"`, which the server renders only on a copy that
+ * holds the viewer's own work; a staff authoring copy is rebuilt from the
+ * stored notebook on every load, so it stays on IndexedDB). An editor with no
+ * such frame, such as the standalone REPL, stays on IndexedDB.
+ */
 export function serverDriveEnabled(): boolean {
-  return PageConfig.getOption(SERVER_DRIVE_OPTION) === 'true';
+  if (PageConfig.getOption(SERVER_DRIVE_OPTION) !== 'true') {
+    return false;
+  }
+  try {
+    const frame = window.frameElement as HTMLElement | null;
+    return frame?.dataset.serverDrive === 'true';
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -42,7 +57,7 @@ function parentCsrfToken(): string {
 
 export const serverDrivePlugin: ServiceManagerPlugin<Contents.IDrive> = {
   id: '@chickadee/jupyterlite-extension:server-drive',
-  description: 'Saves notebooks to the Chickadee server instead of the browser (spike, #469).',
+  description: 'Saves notebooks to the Chickadee server instead of the browser (#469).',
   autoStart: true,
   provides: IDefaultDrive,
   activate: (): Contents.IDrive => {

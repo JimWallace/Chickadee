@@ -431,6 +431,28 @@ jobs:
           echo "::warning::FLAKE RETRY: webkit notebook graded e2e failed (rc=${rc}) — same flake class as the notebook-page e2e. Retrying once; a second failure fails the gate."
           SMOKE_BROWSER="$ENGINE" SMOKE_CHECK=notebook-graded-check.mjs Tools/editor-smoke-test/run-smoke.sh
 
+      # The server-backed editor drive (#469), the default: Ctrl+S saves to the
+      # server, kernel file I/O reaches it, a fresh browser sees the work, and a
+      # server reset raises JupyterLab's "File changed" instead of being
+      # overwritten. On WebKit the kernel's file transport is the service worker,
+      # so this is the run that covers that path.
+      - name: Run server drive e2e (${{ matrix.browser }})
+        shell: bash
+        env:
+          ENGINE: ${{ matrix.browser }}
+        run: |
+          set -uo pipefail
+          if SMOKE_BROWSER="$ENGINE" SMOKE_CHECK=notebook-server-drive-check.mjs Tools/editor-smoke-test/run-smoke.sh; then
+            exit 0
+          else
+            rc=$?
+          fi
+          if [ "$ENGINE" != "webkit" ]; then
+            exit "$rc"
+          fi
+          echo "::warning::FLAKE RETRY: webkit server drive e2e failed (rc=${rc}) — same flake class as the notebook-page e2e. Retrying once; a second failure fails the gate."
+          SMOKE_BROWSER="$ENGINE" SMOKE_CHECK=notebook-server-drive-check.mjs Tools/editor-smoke-test/run-smoke.sh
+
       # The workbench shell (notebook views NB6): the rail lists the suite by
       # section and reveals an item's cell, a sheet opens and closes with focus
       # and Escape, a setting saved from a sheet keeps the kernel's names, and

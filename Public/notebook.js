@@ -1540,13 +1540,17 @@
         }
     }
 
-    // True when this browser opted into the server-backed editor drive (#469
-    // spike: the ck_server_drive cookie, serverDrive.ts). The server is then the
-    // only copy, so there is no IndexedDB copy to reconcile, and every drive
-    // save moves the working copy's mtime, which the reset check below would
-    // read as a server reset on the next visit.
+    // True when the editor uses the server-backed drive (#469): on a frame the
+    // server marked data-server-drive="true" (a copy that holds the viewer's own
+    // work), unless this browser opted out with the ck_server_drive=0 cookie
+    // (JupyterLiteConfigFlagMiddleware.serverDriveEnabled reads it the same way;
+    // serverDrive.ts). The server is then the only copy, so there is no
+    // IndexedDB copy to reconcile, and every drive save moves the working
+    // copy's mtime, which the reset check below would read as a server reset
+    // on the next visit.
     function serverDriveActive() {
-        return /(?:^|;\s*)ck_server_drive=1(?:;|$)/.test(document.cookie || '');
+        if (!frame || frame.dataset.serverDrive !== 'true') return false;
+        return !/(?:^|;\s*)ck_server_drive=0(?:;|$)/.test(document.cookie || '');
     }
 
     async function syncNotebookFromServerSnapshot() {

@@ -145,7 +145,12 @@ struct BrowserResultRoutes: RouteCollection {
         // which contains the instructor's injected hidden-test cells.
         // Staff submit from the student view, so theirs goes to their
         // practice copy, never to the authoring copy that a save writes back.
-        if let userID = caller.id {
+        //
+        // Not when the editor saves to the server itself (the server drive,
+        // #469: the default for the student-view copy that Submit comes from).
+        // The copy is then already the student's work, and rewriting it under
+        // the open editor would make their next save raise "File changed".
+        if let userID = caller.id, !JupyterLiteConfigFlagMiddleware.serverDriveEnabled(req) {
             let isStaff = (try? await req.cachedIsCourseStaff(caller, inCourse: setup.courseID)) ?? false
             _ = try? await ensureUserNotebookWorkingCopy(
                 setupID: body.testSetupID,

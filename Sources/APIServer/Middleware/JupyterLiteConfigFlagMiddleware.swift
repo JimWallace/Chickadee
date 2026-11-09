@@ -34,11 +34,18 @@ struct JupyterLiteConfigFlagMiddleware: AsyncMiddleware {
     static let serviceWorkerManagerExtension =
         "@jupyterlite/application-extension:service-worker-manager"
 
-    /// The cookie that opts one browser into the server-backed drive (#469).
+    /// The cookie that opts one browser out of the server-backed drive (#469)
+    /// with the value `0`. Any other value, or no cookie, keeps the drive on.
     static let serverDriveCookie = "ck_server_drive"
 
     /// The PageConfig option the Chickadee extension reads (serverDrive.ts).
     static let serverDriveOption = "chickadeeServerDrive"
+
+    /// True unless this browser opted out with `ck_server_drive=0`.
+    /// `Public/notebook.js` (`serverDriveActive`) must read the cookie the same way.
+    static func serverDriveEnabled(_ request: Request) -> Bool {
+        request.cookies[serverDriveCookie]?.string != "0"
+    }
 
     private let publicDirectory: String
 
@@ -88,11 +95,12 @@ struct JupyterLiteConfigFlagMiddleware: AsyncMiddleware {
             changed = true
         }
 
-        // (3) Server-backed drive (spike for #469) — opt-in per browser with the
-        //     `ck_server_drive=1` cookie, so the trial runs on a deployment
-        //     without touching any other viewer. The extension registers its
-        //     drive only when this option is set (serverDrive.ts).
-        if request.cookies[Self.serverDriveCookie]?.string == "1" {
+        // (3) Server-backed drive (#469) — the default. One browser opts out
+        //     with the `ck_server_drive=0` cookie, which falls back to
+        //     JupyterLite's IndexedDB drive: a comparison and an escape hatch
+        //     while the drive is new. The extension registers its drive only
+        //     when this option is set (serverDrive.ts).
+        if Self.serverDriveEnabled(request) {
             configData[Self.serverDriveOption] = "true"
             changed = true
         }
