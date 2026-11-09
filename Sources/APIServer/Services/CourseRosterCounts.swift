@@ -27,38 +27,42 @@ import Foundation
 func enrolledStudentCountsByCourse(
     courseIDs: [UUID]? = nil, on db: any Database
 ) async throws -> [UUID: Int] {
-    let enrollmentQuery = APICourseEnrollment.query(on: db)
+    // Only the course column of each student row: the admin dashboard asks
+    // for every course, and loading whole rows to count them read both
+    // tables in full.
+    let enrollmentQuery = CourseRoster.studentsOnly(APICourseEnrollment.query(on: db))
     let preEnrollmentQuery = APIPreEnrollment.query(on: db)
     if let courseIDs {
         guard !courseIDs.isEmpty else { return [:] }
         _ = enrollmentQuery.filter(\.$course.$id ~~ courseIDs)
         _ = preEnrollmentQuery.filter(\.$course.$id ~~ courseIDs)
     }
-    async let enrollmentsFetch = enrollmentQuery.all()
-    async let preEnrollmentsFetch = preEnrollmentQuery.all()
-    let (enrollments, preEnrollments) = try await (enrollmentsFetch, preEnrollmentsFetch)
+    async let enrollmentsFetch = enrollmentQuery.all(\.$course.$id)
+    async let preEnrollmentsFetch = preEnrollmentQuery.all(\.$course.$id)
+    let (studentCourseIDs, preEnrollmentCourseIDs) = try await (enrollmentsFetch, preEnrollmentsFetch)
 
     var counts: [UUID: Int] = [:]
     // A student in a course is a `.student`-role enrollment; TA/instructor
     // enrollments (staff who joined to see the course) don't count (#417 G2).
-    for e in enrollments where CourseRoster.isStudent(e) {
-        counts[e.$course.id, default: 0] += 1
+    for courseID in studentCourseIDs {
+        counts[courseID, default: 0] += 1
     }
-    for p in preEnrollments {
-        counts[p.$course.id, default: 0] += 1
+    for courseID in preEnrollmentCourseIDs {
+        counts[courseID, default: 0] += 1
     }
     return counts
 }
 
 /// Single-course variant of `enrolledStudentCountsByCourse`.
 func enrolledStudentCount(forCourse courseID: UUID, on db: any Database) async throws -> Int {
-    async let enrollmentsFetch = APICourseEnrollment.query(on: db)
-        .filter(\.$course.$id == courseID)
-        .all()
+    async let studentCountFetch = CourseRoster.studentsOnly(
+        APICourseEnrollment.query(on: db)
+            .filter(\.$course.$id == courseID)
+    )
+    .count()
     async let preCountFetch = APIPreEnrollment.query(on: db)
         .filter(\.$course.$id == courseID)
         .count()
-    let (enrollments, preCount) = try await (enrollmentsFetch, preCountFetch)
-    let studentCount = enrollments.count(where: CourseRoster.isStudent)
+    let (studentCount, preCount) = try await (studentCountFetch, preCountFetch)
     return studentCount + preCount
 }
