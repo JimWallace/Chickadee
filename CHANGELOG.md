@@ -9,6 +9,13 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.879] - 2026-11-09
+
+### Fixed
+
+- **Staff editor: no "Directory not found" loop.** In the production image the editor drive's folder is a link to the data volume, and a staff listing of the drive root answered 404, so the file browser showed "Directory not found" on every poll. The contents routes now resolve the link first.
+
+
 ## [0.5.878] - 2026-11-09
 
 ### Changed
