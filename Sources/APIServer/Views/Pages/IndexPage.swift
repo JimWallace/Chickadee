@@ -18,6 +18,9 @@ struct IndexPage: HTML {
     let slipDaySummary: String?
     /// The course Data page, when the active course has a published dataset.
     var dataPageHref: String?
+    /// The kernels `kernel-prewarm.js` warms in the browser cache: those the
+    /// page's open notebook assignments boot. Empty renders no warm script.
+    var kernelPrewarm: [KernelAssetList] = []
 
     private var heading: String {
         if let activeCourse { "\(activeCourse.code) — \(activeCourse.name)" } else { "Assignments" }
@@ -54,6 +57,13 @@ struct IndexPage: HTML {
                 }
             }
             script(.src(page.asset("/list-filter.js"))) {}
+            if !kernelPrewarm.isEmpty {
+                script(.src(page.asset("/kernel-asset-telemetry.js"))) {}
+                script(
+                    .src(page.asset("/kernel-prewarm.js")),
+                    .data("kernel-assets", value: KernelAssetList.encode(kernelPrewarm))
+                ) {}
+            }
         }
     }
 }

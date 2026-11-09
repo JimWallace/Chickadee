@@ -205,17 +205,74 @@ imports, which is a real guard against a well-formed-but-broken env (the urllib3
 incident), and subsetting the boot would gut it. It is also authoring-time
 rather than on a student's critical path.
 
-### The editor: deliberately not in this slice
+### The editor: a measured design, not shipped
 
 The editor is the highest-traffic consumer and the hardest, because it boots
 through the vendored `@jupyterlite/xeus-extension` rather than our own code.
-Subsetting it means either patching that extension (another entry in the
-sha-cascade the build already manages) or installing a `sys.meta_path` finder in
-the kernel that calls back into JS on a miss — elegant, but an async fetch
-behind a synchronous import.
+It downloads and unpacks the whole environment on every boot. The cache warm
+and the cold-load measurement ([jupyterlite.md](jupyterlite.md) §"What a
+kernel boot downloads") therefore cover the whole environment too.
 
-Neither is a natural extension of the grading work, and the editor is where a
-wrong answer is most visible. It should be decided on its own.
+**What a subset would save.** Closures over `empack_env_meta.json`'s own
+`depends`, gzipped bytes, Python environment (48 packages, 47.8 MB):
+
+| an assignment that imports | packages | MB |
+|---|---|---|
+| nothing beyond the standard library | 28 | 5.2 |
+| `numpy` | 29 | 8.5 |
+| `pandas` | 33 | 14.3 |
+| `matplotlib` | 41 | 19.0 |
+| `pandas` and `matplotlib` | 42 | 24.2 |
+| `scipy` | 31 | 27.1 |
+| `statsmodels` | 38 | 38.0 |
+
+R saves far less: bare `xeus-r` is 28 of 51 packages and 36.1 MB of 58.4,
+because base R is most of the environment.
+
+So a typical pandas-and-plots activity would download half of today's bytes,
+and a standard-library one a ninth. The seeds would come from the same place
+the import guard reads (`importable-modules.json`, over the notebook's and the
+suite's imports), so they need no new inventory.
+
+**The lever exists; the fallback does not.** The extension reads the manifest
+from `empackEnvMetaLink` when the kernel spec gives one, so a server-filtered
+`empack_env_meta.json` per assignment would make the editor boot only that
+closure, with no change to vendored code. What it cannot do is the second half
+of the requirement: a student who imports a package outside the closure must
+still get it. The extension's only way to add a package to a live kernel is its
+`install` handler, which solves against the conda channels over the network.
+The CSP is `connect-src 'self'` and the channels are third-party, so that path
+is closed. Shipping the subset without a fallback turns a slower boot into an
+`ImportError` with no recovery, which is the failure the import guard exists
+to prevent.
+
+**Two designs would close it. Both change the vendored kernel path.**
+
+1. *Patch the extension's worker.* Add an offline install: given package
+   names, compute the closure from the full manifest (the same `closure()` as
+   `xeus-kernel-shared.js`) and pass the resulting lock to the extension's own
+   `_reloadPackagesInFS`, which already installs the difference between two
+   locks. (Whether it then fetches from `pkgRootUrl` or from the lock's channel
+   URLs was not traced, and is the first thing to check.) Then trigger it on `ModuleNotFoundError` the way
+   `runInstallingMissingPackages` does for grading, from the
+   `chickadee-extension` side, re-running the cell. The worker chunks are
+   content-hashed and patched by script (`scripts/patch-*.py`), so this is one
+   more entry in that cascade, for both the isolated and the comlink worker.
+2. *A `sys.meta_path` finder in the kernel* that, on a miss, fetches the
+   owning tarball synchronously (a synchronous XHR is allowed in a worker),
+   unpacks it into the emscripten filesystem and lets the import proceed.
+   Python-only, and it bypasses mambajs's bookkeeping of what is installed.
+
+**Why it stopped at a design here.** Both put new code on the path every
+student's editor boot takes, in vendored bytes, behind both stdin transports
+(isolated and WebKit), where the cost of a mistake is the editor failing for a
+whole class at once. The existing smoke (`Tools/browser-grading-smoke`) drives
+the grading workers, not the editor's worker. Doing this safely needs, first,
+an editor smoke that boots a subset, imports an excluded package and asserts
+it arrives on both engines. With the cold-load numbers now recorded, the
+saving can be measured against real class traffic before that work is
+scheduled: if the warm takes the cold share near zero, the editor subset is
+worth less than the table suggests.
 
 ## Caching
 

@@ -15,5 +15,7 @@ enum BrowserGradingScripts {
         "/octave-grading-shared.js",
         "/runner-support-sources.js",
         "/grading-executors.js",
+        // browser-runner.js reports a grading kernel's cold load through it.
+        "/kernel-asset-telemetry.js",
     ]
 }

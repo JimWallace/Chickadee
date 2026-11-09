@@ -561,6 +561,29 @@
         ];
     }
 
+    // This worker's resource timings of the kernel's own files, as plain
+    // objects (path and sizes only), for the cold-load breadcrumb the page
+    // sends (kernel-asset-telemetry.js). A worker's timings are visible only
+    // inside it, so it hands them over. Empty when the engine has none.
+    function kernelResourceEntries() {
+        var out = [];
+        try {
+            var list = (root.performance && root.performance.getEntriesByType)
+                ? root.performance.getEntriesByType('resource') : [];
+            for (var i = 0; i < list.length && out.length < 500; i++) {
+                var e = list[i];
+                var path;
+                try { path = new URL(e.name).pathname; } catch (_) { continue; }
+                if (path.indexOf('/jupyterlite/xeus/') !== 0) continue;
+                out.push({
+                    name: path, transferSize: e.transferSize,
+                    encodedBodySize: e.encodedBodySize, decodedBodySize: e.decodedBodySize,
+                });
+            }
+        } catch (_) { /* report what was gathered */ }
+        return out;
+    }
+
     function serveGradingWorker(config) {
         var workDir = null;
         serve({
@@ -570,6 +593,7 @@
                 api.reply({
                     type: 'phase', phase: config.phasePrefix + '_kernel_booted',
                     ms: Date.now() - t0,
+                    assets: kernelResourceEntries(),
                 });
                 var dir = '/chickadee_work_' + Date.now();
                 api.mountWorkspace(

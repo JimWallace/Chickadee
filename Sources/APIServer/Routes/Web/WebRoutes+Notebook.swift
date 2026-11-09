@@ -291,7 +291,8 @@ extension WebRoutes {
                 kernelLanguage: NotebookBootFacts.kernelLanguage(manifestJSON: setup.manifest),
                 bootBird: NotebookBootFacts.bird(avatarSpecJSON: args.user.avatarSpecJSON, isStaff: args.isAuthor),
                 dueLabel: args.assignment?.dueAt.map(waterlooDateTimeText),
-                definitionPatterns: NotebookBootFacts.definitionPatterns(manifestJSON: setup.manifest)
+                definitionPatterns: NotebookBootFacts.definitionPatterns(manifestJSON: setup.manifest),
+                kernelAssetsJSON: NotebookBootFacts.kernelAssetsJSON(manifestJSON: setup.manifest, app: req.application)
             ))
     }
 
@@ -449,7 +450,8 @@ extension WebRoutes {
                 let folder = FilePath(workingCopyPath).removingLastComponent().string
                 let path = "/jupyterlite/files/" + folder + "/" + name
                 return path.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? path
-            }
+            },
+            kernelAssetsJSON: NotebookBootFacts.kernelAssetsJSON(manifestJSON: setup.manifest, app: req.application)
         )
     }
 

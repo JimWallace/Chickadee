@@ -21,6 +21,16 @@ enum DayGrouper {
         TimeZone(identifier: "America/Toronto") ?? .current
     }
 
+    /// Formats a date as its "2026-11-09" day in `timeZone`, for grouping
+    /// keys that sort as text.
+    static func dayKeyFormatter(timeZone: TimeZone = displayTimeZone) -> DateFormatter {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = timeZone
+        formatter.dateFormat = "yyyy-MM-dd"
+        return formatter
+    }
+
     /// Groups `rows` (already newest first) by the day `occurredAt` falls on in
     /// `timeZone`. `now` is a parameter so the midnight boundary can be tested.
     static func group<Row: Encodable & Sendable>(

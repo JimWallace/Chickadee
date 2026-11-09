@@ -169,6 +169,84 @@ covered by a blocking `SMOKE_KERNEL=xpython` probe in the `smoke` job of
 both engines because the transports fail independently.
 
 
+## What a kernel boot downloads
+
+A student's first editor boot downloads about 50–60 MB for Python: the
+`kernel_packages/` tarballs (~48 MB gzipped, scipy, openblas, matplotlib-base,
+pandas and statsmodels the largest), `bin/xpython.wasm` (15 MB, 4.4 MB as
+brotli) and the JupyterLite shell. A class of 150 that opens notebooks at once
+pulls 8–9 GB. Every one of those files is cached afterwards (the tarballs
+immutably for a year), so the load falls on a course's first week, on a
+re-vendor (new names), on cache eviction (Safari evicts readily) and on lab
+machines that wipe profiles. A third-party CDN is ruled out (see "Vendored
+browser libraries" below).
+
+**`KernelAssetList` names the boot files, from the kernel's own metadata.**
+It reads `<kernel>/kernel.json` and `empack_env_meta.json` at server boot and
+lists the loader, the binary, each `metadata.shared` library and every package,
+as the URLs the kernel requests, with a version that changes when any file
+does. The pages below read it from a data attribute. A checkout without the
+vendored bytes has no list, and the pages then render neither feature.
+
+**Cold loads are measured, per page load (`asset_load` breadcrumbs).**
+`Public/kernel-asset-telemetry.js` sends one per boot through
+`/api/v1/client-diagnostics`, and `get_browser_diagnostics` reports
+`assetLoads` (per source) and `assetLoadsByDay`: loads, cold loads, the cold
+share, bytes over the network versus from the cache, and boot time p50 and p90.
+
+| source | context | how it knows |
+|---|---|---|
+| `editor` | notebook page | The kernel fetches from a worker inside the JupyterLite iframe, and resource timing entries stay in the context that fetched them, so the page cannot read them. It asks the HTTP cache instead: a `cache: 'only-if-cached'` request per file before the iframe mounts (never the network), and again for the missing files once the kernel is idle, which reads their size. The iframe collector sends the shell's own timings (`shell_assets`) just before `kernel_idle`. `boot_ms` is `kernel_idle`'s `elapsed_ms`. An engine that does not honour `only-if-cached` reports `probe=unsupported` and no `cold`. |
+| `grading` | browser grading worker | Chickadee's own worker reads its resource timings and returns them with the `<lang>_kernel_booted` phase. Submit path only. |
+| `prewarm` | dashboard | The warm below, from the page's own timings. |
+
+A load is cold when any kernel file came over the network. A revalidation (a
+304 for the `no-cache` binaries) counts as cached. The breadcrumbs share the
+endpoint's per-user, per-assignment, per-source hourly limit (for `asset_load`
+the kernel environment is part of the key too), so the numbers count the first
+load of each hour per assignment. That over-counts cold loads against a
+per-request rate, and is the load that matters for a class arriving at once.
+`asset_load` rows stay out of `bySource` and `recentSamples`, which are for
+failures.
+
+**The dashboard warms the cache before class (`Public/kernel-prewarm.js`).**
+When the student dashboard lists an open notebook assignment, it renders the
+kernel's list on the warm script. Browser-graded or not, opening the notebook
+boots the editor's kernel, and that boot is the download. After the page loads
+and goes idle, plus 5 seconds, the script fetches one file at a time at low
+priority, reads each body to the end and discards it. It skips a
+`saveData` or 2G connection and a kernel this browser already warmed at its
+current version in the last 7 days (`localStorage`, `ck-kernel-warm:<env>`,
+holding the version and the time). The marker records that the files arrived,
+not that the browser still has them, so it lapses: a re-warm of cached files
+downloads nothing for the immutable tarballs and costs a 304 for the rest. A failure leaves the
+version unmarked and the page unchanged; the kernel then downloads what it
+needs, as before. Leaving the page cancels the warm, so at most one file is
+fetched twice when a student opens a notebook mid-warm.
+
+The warm lands in the cache entry the kernel reads, and three things were
+checked to make it so:
+
+- **The same request.** Same URL, `GET`, `credentials: 'same-origin'` (the
+  mambajs `fetch` and emscripten's both send cookies), and the browser chooses
+  the same `Accept-Encoding`, so the brotli copy matches.
+- **The same cache partition.** Engines key the HTTP cache by top-level site;
+  the dashboard, the notebook page, its same-origin iframe and the kernel worker
+  all share one. Cross-origin isolation is not part of the key, and a
+  same-origin response passes `require-corp` without a CORP header (the
+  tarballs carry `same-origin` CORP from the fast path anyway), so a response
+  cached by the non-isolated dashboard is usable on the isolated page.
+- **The WebKit service worker passes through.** `JupyterLiteConfigFlagMiddleware`
+  turns the JupyterLite service worker on for WebKit, but
+  `enableServiceWorkerCache` is unset, so its fetch handler calls `fetch()`
+  and never answers from its own Cache Storage. The HTTP cache serves it.
+
+**Only what an assignment needs: grading does, the editor does not yet.**
+Browser grading already boots a bare kernel and adds packages on demand. The
+editor still loads the whole environment, so the warm warms the whole
+environment too. The measured design for the editor, and why it did not ship
+here, is in [kernel-boot-cost.md](kernel-boot-cost.md) §"The editor".
+
 ## Vendored browser libraries
 
 jszip and CodeMirror are vendored under `Public/` rather than pulled from

@@ -206,6 +206,18 @@
         } catch (_) { /* never let telemetry break grading */ }
     }
 
+    // Fire-and-forget cold-load breadcrumb for a grading worker's kernel boot:
+    // how many of the kernel's files came over the network, from the worker's
+    // own resource timings (kernel-asset-telemetry.js). Best-effort; never
+    // throws.
+    function recordKernelAssets(assets, setupID) {
+        try {
+            const K = window.ChickadeeKernelAssets;
+            if (!K || !assets || !Array.isArray(assets.entries)) return;
+            K.report('grading', K.gradingMessage(assets.entries, assets.bootMs), setupID);
+        } catch (_) { /* never let telemetry break grading */ }
+    }
+
     /**
      * Run all test scripts against the student's notebook and submit results.
      *
@@ -219,7 +231,10 @@
         try {
             const result = await runScripts(notebookBytes, setupID, {
                 filename: 'submission.ipynb',
-                reportPhase: function (phase, detail) { recordSubmitPhase(phase, setupID, detail); },
+                reportPhase: function (phase, detail, assets) {
+                    recordSubmitPhase(phase, setupID, detail);
+                    if (assets) recordKernelAssets(assets, setupID);
+                },
             });
 
             // Hide the loading-progress status bar — results are now in #nb-results.

@@ -75,7 +75,8 @@ each as a row (date, version from `get_deployment_info`, value):
 | Do students wait for a grade? | `get_metrics_snapshot` → `queueWait`, `execution` | queue wait p50 / p95; execution p50 / p95 |
 | Are the runners full? | `get_metrics_snapshot`, `list_runners` | `peakUtilizationPercent`, `maxQueueDepth`, active jobs per runner |
 | Does the setup cache work? | `get_runner_detail` | `cacheHitRatePercent` and `cacheHitSamples` per runner |
-| Does the browser grader boot? | `get_browser_diagnostics` → `kernelBootFunnel` | count reaching each kernel phase; the drop-off between phases. Boot **time** is not recorded today: add a duration to the `kernel_phase` breadcrumb so this row can carry p50 / p95 |
+| Does the browser grader boot? | `get_browser_diagnostics` → `kernelBootFunnel` | count reaching each kernel phase; the drop-off between phases |
+| How long does a kernel boot, and was it cold? | `get_browser_diagnostics` → `assetLoads`, `assetLoadsByDay` | per source (`editor`, `grading`, `prewarm`): cold share, bytes over the network versus from the cache, boot time p50 / p90. A spike in the cold share after a re-vendor or in a course's first week is expected; one in mid-term is cache eviction ([jupyterlite.md](jupyterlite.md) §"What a kernel boot downloads") |
 | Is anything degrading? | `get_health_alerts`, `get_storage_usage` | firing rules; free disk |
 
 The busiest hour of the week (a deadline) matters more than the average. Take

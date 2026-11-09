@@ -15,6 +15,7 @@
 
 import Core
 import Fluent
+import Foundation
 import Vapor
 
 struct GetBrowserDiagnosticsTool: DiagnosticTool {
@@ -80,6 +81,17 @@ struct GetBrowserDiagnosticsTool: DiagnosticTool {
         /// parent page could never see across the iframe boundary. Pair with the
         /// `kernel_error` rows in bySource/recentSamples for the WHY.
         let kernelBootFunnel: [CountEntry]
+        /// Cold kernel loads from the `asset_load` breadcrumbs
+        /// (Public/kernel-asset-telemetry.js), one entry per source:
+        /// `editor` (the notebook editor's kernel), `grading` (a browser
+        /// grading worker) and `prewarm` (the dashboard's idle cache warm).
+        /// Each carries loads, coldLoads, coldShare, the bytes that came over
+        /// the network versus from the HTTP cache, and the boot duration.
+        let assetLoads: [AssetLoadStats]
+        /// The same per day (America/Toronto) and source, keyed
+        /// "2026-11-09/editor", oldest first: the share of cold loads per
+        /// period, so a re-vendor or a class's first week shows as a spike.
+        let assetLoadsByDay: [AssetLoadStats]
         let recentSamples: [Sample]
     }
 
@@ -126,6 +138,10 @@ struct GetBrowserDiagnosticsTool: DiagnosticTool {
         + "track the editor's self-heal for that hang (auto-reload the kernel): recover_attempt fired the "
         + "reload, recover_failed means the rebooted kernel hung AGAIN — so success ≈ attempts − failures, "
         + "and both should drop toward zero once the underlying deadlock is fixed (the headline KPI for it). "
+        + "assetLoads: per source (editor / grading / prewarm), how many kernel boots were cold "
+        + "(any kernel file fetched over the network), the bytes fetched over the network versus read "
+        + "from the browser cache, and the boot duration (median, p90); assetLoadsByDay is the same "
+        + "per day and source. "
         + "Optionally filter by testSetupID. "
         + "Read-only; reports infrastructure breadcrumbs only and never includes a student identifier."
     static let inputSchema: JSONValue = .object([
@@ -162,7 +178,9 @@ struct GetBrowserDiagnosticsTool: DiagnosticTool {
             byKind[row.kind, default: 0] += 1
             byBrowser[Self.browserLabel(forUserAgent: row.userAgent), default: 0] += 1
             byAppVersion[row.appVersion ?? "unknown", default: 0] += 1
-            if let source = row.source { bySource[source, default: 0] += 1 }
+            // A cold-load breadcrumb's source (editor / grading / prewarm) is
+            // not an error origin; assetLoads reports those rows.
+            if let source = row.source, row.kind != "asset_load" { bySource[source, default: 0] += 1 }
             if let checks = row.failedChecks {
                 for check in checks.split(separator: ",") {
                     byCheck[String(check), default: 0] += 1
@@ -193,7 +211,18 @@ struct GetBrowserDiagnosticsTool: DiagnosticTool {
         let knownKernelPhases = Set(Self.kernelPhaseOrder)
         kernelBootFunnel += Self.sortedCounts(kernelPhaseCounts.filter { !knownKernelPhases.contains($0.key) })
 
-        let samples = rows.prefix(sampleLimit).map { row in
+        let assetRows = rows.filter { $0.kind == "asset_load" }
+        let assetLoads = AssetLoadStats.bySource(assetRows.map { (source: $0.source, message: $0.message) })
+        let dayFormatter = DayGrouper.dayKeyFormatter()
+        let assetLoadsByDay = AssetLoadStats.byDay(
+            assetRows.map { row in
+                let day = row.createdAt.map { dayFormatter.string(from: $0) } ?? "unknown"
+                return (day: "\(day)/\(row.source ?? "unknown")", message: row.message)
+            })
+
+        // Samples are for diagnosing failures: one cold-load row per page
+        // load would push the errors out of a short sample.
+        let samples = rows.filter { $0.kind != "asset_load" }.prefix(sampleLimit).map { row in
             Sample(
                 kind: row.kind,
                 source: row.source,
@@ -216,6 +245,8 @@ struct GetBrowserDiagnosticsTool: DiagnosticTool {
             byAppVersion: Self.sortedCounts(byAppVersion),
             submitFunnel: submitFunnel,
             kernelBootFunnel: kernelBootFunnel,
+            assetLoads: assetLoads,
+            assetLoadsByDay: assetLoadsByDay,
             recentSamples: Array(samples))
     }
 
