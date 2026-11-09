@@ -9,6 +9,13 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.882] - 2026-11-09
+
+### Removed
+
+- **Unused helpers.** Removed 13 declarations that no code used: two superseded overloads (`loadExistingSolution(req:assignment:)`, `PersonalizationSubstitution.gradingInputs` without seeds), three prose and key constants, the `Application.scanModeConfiguration` accessor, and other dead helpers found by the weekly Periphery scan.
+
+
 ## [0.5.881] - 2026-11-09
 
 ### Changed
