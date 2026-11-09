@@ -133,6 +133,25 @@ stopifnot(as.character(forcats::fct_rev(factor(c("a", "b")))[1]) == "a")
 stopifnot(readr::parse_number("42 items") == 42)
 passed("all declared packages attached and ran")
 `,
+            // EXPERIMENT: R calling Python through reticulate, timed per step.
+            'publictest_reticulate.R': `source("test_runtime.R")
+tm <- function(label, expr) {
+  t0 <- Sys.time(); v <- force(expr)
+  cat(label, "=", round(as.numeric(Sys.time() - t0, units = "secs"), 2), "s\\n"); v
+}
+tm("library(reticulate)", suppressPackageStartupMessages(library(reticulate)))
+tm("py_run_string", py_run_string("x = sum(range(10))"))
+stopifnot(py$x == 45)
+np <- tm("import numpy", import("numpy"))
+stopifnot(np$mean(c(1, 2, 3)) == 2)
+pd <- tm("import pandas", import("pandas"))
+df <- tm("pandas round trip", pd$DataFrame(data.frame(w = c(70, 80), h = c(175, 180))))
+py_run_string("import pandas as pd\\ndf2 = pd.DataFrame({'w': [70, 80], 'h': [175, 180]})\\ndf2['bmi'] = df2.w / (df2.h / 100) ** 2")
+bmi <- py$df2$bmi
+stopifnot(abs(bmi[1] - 22.857) < 0.01)
+cat("python", py_config()$version, "\\n")
+passed("reticulate ran Python, numpy and pandas")
+`,
             // The label exists only because the wrapper masks commandArgs();
             // the seed comes from the environment and the input from _ck_inputs.
             'publictest_context.R': `source("test_runtime.R")
@@ -1035,6 +1054,11 @@ if (language === 'r') {
         packages && packages.exitCode === 0,
         JSON.stringify(packages));
     console.log('  attach timings:', (packages?.stdout || '').replace(/\n/g, ' ').trim());
+
+    const reticulate = result.results['publictest_reticulate.R'];
+    check('EXPERIMENT: reticulate runs Python, numpy and pandas from R',
+        reticulate && reticulate.exitCode === 0, JSON.stringify(reticulate));
+    console.log('  reticulate timings:', (reticulate?.stdout || '').replace(/\n/g, ' ').trim());
 
     const noPackage = result.results['publictest_nopackage.R'];
     check('a package the environment lacks still fails normally',
