@@ -14,6 +14,7 @@
 // is named in `keptOnPurpose` with the reason.
 
 import ChickadeeTestSupport
+import Core
 import Fluent
 import Foundation
 import SQLKit
@@ -54,14 +55,13 @@ struct StudentWorkDeletionCoverageTests {
                     "assignment_versions": "content history, removed with the course",
                     // A grade push log is history (CreateBrightSpaceSyncLog).
                     "brightspace_sync_log": "grade push history",
-                    // The admin audit trail records the delete itself.
-                    "audit_log": "audit trail",
                 ]
             case .course:
                 return [
                     // Kept even after a course purge
                     // (docs/operational-diagnostics.md, BrightSpace sync log).
                     "brightspace_sync_log": "grade push history",
+                    // The admin audit trail records the delete itself.
                     "audit_log": "audit trail",
                 ]
             }
@@ -84,6 +84,19 @@ struct StudentWorkDeletionCoverageTests {
             case "assignment_id": return "'\(try assignment.requireID().uuidString)'"
             case "course_id": return "'\(try course.requireID().uuidString)'"
             default: return nil
+            }
+        }
+
+        /// Tables keyed by something other than a key column, and the values
+        /// that key a seeded row the way the server keys a real one. The award
+        /// ledger names its owner by level: an assignment-level award's
+        /// owner is the setup (`AchievementAwardStore`).
+        func ownerLiterals(for table: String) -> [String: String] {
+            switch table {
+            case "achievement_awards":
+                return ["level": "'\(AchievementLevel.assignment.rawValue)'", "owner_id": "'\(setupID)'"]
+            default:
+                return [:]
             }
         }
     }
@@ -203,6 +216,8 @@ struct StudentWorkDeletionCoverageTests {
             let value: String
             if let key = try fixture.keyLiteral(for: column.name) {
                 value = key
+            } else if let owner = fixture.ownerLiterals(for: table)[column.name] {
+                value = owner
             } else if column.isNullable || column.hasDefault {
                 continue
             } else if let target = catalog.foreignKey(on: table, column: column.name)?.referencedTable {

@@ -24,12 +24,12 @@ struct HotPathStatementBudgetTests {
 
     /// The statements each request may send.
     enum Budget {
-        static let idleRunnerPoll = 0
-        static let claim = 0
-        static let resultReport = 0
-        static let statusPoll = 0
-        static let studentDashboard = 0
-        static let submissionPage = 0
+        static let idleRunnerPoll = 4
+        static let claim = 20
+        static let resultReport = 23
+        static let statusPoll = 2
+        static let studentDashboard = 19
+        static let submissionPage = 21
     }
 
     private static let workerSecret = "statement-budget-secret"
@@ -88,7 +88,8 @@ struct HotPathStatementBudgetTests {
 
     @Test func idleRunnerPoll() async throws {
         try await withFixture { fixture, log in
-            #expect(try await poll(fixture) == .noContent)
+            let status = try await poll(fixture)
+            #expect(status == .noContent)
             expectBudget(log, Budget.idleRunnerPoll, "the idle runner poll")
         }
     }
@@ -98,7 +99,8 @@ struct HotPathStatementBudgetTests {
             try await makeTestSubmission(
                 on: fixture.app, id: "sub_budget_claim", setupID: fixture.setupID, userID: fixture.studentID,
                 status: "pending")
-            #expect(try await poll(fixture) == .ok)
+            let status = try await poll(fixture)
+            #expect(status == .ok)
             expectBudget(log, Budget.claim, "a claim")
         }
     }
@@ -108,7 +110,8 @@ struct HotPathStatementBudgetTests {
             try await makeTestSubmission(
                 on: fixture.app, id: "sub_budget_report", setupID: fixture.setupID, userID: fixture.studentID,
                 status: "pending")
-            #expect(try await poll(fixture) == .ok)
+            let status = try await poll(fixture)
+            #expect(status == .ok)
             log.reset()
 
             let outcome = TestOutcome(

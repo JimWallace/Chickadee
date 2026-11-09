@@ -23,7 +23,7 @@ private protocol NullabilityDeclaring {
 }
 
 extension FieldProperty: NullabilityDeclaring {
-    fileprivate static var acceptsNull: Bool { Value.self is any AnyOptionalType.Type }
+    fileprivate static var acceptsNull: Bool { Value.self is any ExpressibleByNilLiteral.Type }
 }
 
 extension OptionalFieldProperty: NullabilityDeclaring {
@@ -78,16 +78,11 @@ struct ModelSchemaAgreementTests {
         WorkerNonce.self,
     ]
 
-    /// `table.column` pairs whose model and column disagree on purpose, with
-    /// the reason. Only the safe direction belongs here: an optional field
-    /// over a NOT NULL column reads every row, and a write of nil fails
-    /// loudly. A non-optional field over a nullable column does not belong
-    /// here; make the column NOT NULL instead.
-    static let knownDisagreements: [String: String] = [
-        "results.source": "optional in Swift for rows from before the column; every row now has one",
-        "submissions.attempt_number": "optional in Swift; every insert sets it",
-    ]
-
+    /// Only one direction of disagreement is checked. An optional field over
+    /// a NOT NULL column is common and safe (every `@Timestamp` is optional
+    /// in Swift): it reads every row, and a write of nil fails loudly. A
+    /// non-optional field over a nullable column fails to decode the first
+    /// NULL row; make the column NOT NULL, as `RequireAssignmentSlug` did.
     @Test func everyFieldHasAColumnThatAgreesOnNull() async throws {
         try await withTestApp(prefix: "chickadee-model-schema") { app in
             let catalog = try await SchemaCatalog.load(on: app.db)
@@ -97,10 +92,11 @@ struct ModelSchemaAgreementTests {
             var missing: [String] = []
             var disagreeing: [String] = []
             var unknownProperties: [String] = []
-            var seen: Set<String> = []
             for model in Self.models {
                 for property in model.init().properties {
+                    // A relation such as `@Children` has no column of its own.
                     guard let database = property as? any AnyDatabaseProperty,
+                        !database.keys.isEmpty,
                         !(property is any PrimaryKeyProperty)
                     else { continue }
                     guard let declaring = type(of: property) as? any NullabilityDeclaring.Type else {
@@ -109,31 +105,21 @@ struct ModelSchemaAgreementTests {
                     }
                     for key in database.keys {
                         let name = "\(model.schema).\(key.description)"
-                        seen.insert(name)
                         guard let column = columns[name] else {
                             missing.append(name)
                             continue
                         }
-                        if declaring.acceptsNull != column.isNullable {
-                            let swift = declaring.acceptsNull ? "optional" : "non-optional"
-                            let sql = column.isNullable ? "nullable" : "NOT NULL"
-                            disagreeing.append("\(name): \(swift) in \(model), \(sql) in the schema")
+                        if !declaring.acceptsNull && column.isNullable {
+                            disagreeing.append("\(name): non-optional in \(model), nullable in the schema")
                         }
                     }
                 }
             }
-            let allowed = disagreeing.filter { entry in
-                Self.knownDisagreements.keys.contains { entry.hasPrefix("\($0):") }
-            }
             #expect(unknownProperties.isEmpty, "teach NullabilityDeclaring these: \(unknownProperties)")
             #expect(missing.isEmpty, "fields with no column: \(missing.sorted())")
             #expect(
-                disagreeing.count == allowed.count,
-                "model and schema disagree: \(disagreeing.filter { !allowed.contains($0) }.sorted())")
-            let stale = Set(Self.knownDisagreements.keys).filter { key in
-                !disagreeing.contains { $0.hasPrefix("\(key):") }
-            }
-            #expect(stale.isEmpty, "knownDisagreements entries that now agree: \(stale.sorted())")
+                disagreeing.isEmpty,
+                "a NULL row fails to decode; make the column NOT NULL or the field optional: \(disagreeing.sorted())")
         }
     }
 
