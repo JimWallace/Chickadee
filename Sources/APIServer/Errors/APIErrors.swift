@@ -52,6 +52,10 @@ enum WorkerJobError: AbortError, CustomStringConvertible {
     case unprocessableBody(reason: String)
     /// A required resource was absent or in an unexpected state.
     case internalInconsistency(reason: String)
+    /// A result report that no longer answers the submission's current claim
+    /// (`ResultClaimCheck`). Maps to HTTP 410: the runner drops the job and
+    /// does not retry (`ReporterError.claimSuperseded`).
+    case staleClaim(submissionID: String, reason: StaleClaimReason)
 
     var status: HTTPResponseStatus {
         switch self {
@@ -59,6 +63,7 @@ enum WorkerJobError: AbortError, CustomStringConvertible {
         case .invalidBody: return .badRequest
         case .unprocessableBody: return .unprocessableEntity
         case .internalInconsistency: return .internalServerError
+        case .staleClaim: return .gone
         }
     }
 
@@ -74,6 +79,8 @@ enum WorkerJobError: AbortError, CustomStringConvertible {
             return "Unprocessable request body: \(reason)"
         case .internalInconsistency(let reason):
             return "Internal error: \(reason)"
+        case .staleClaim(_, let reason):
+            return "Result refused: the claim is no longer current (\(reason.rawValue))"
         }
     }
 }

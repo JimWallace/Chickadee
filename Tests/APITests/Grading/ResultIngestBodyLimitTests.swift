@@ -61,6 +61,7 @@ struct ResultIngestBodyLimitTests {
                 id: "sub_big", testSetupID: "setup_big", zipPath: app.resultsDirectory + "sub_big.zip",
                 attemptNumber: 1
             ).save(on: app.db)
+            try await markClaimedForResultReport("sub_big", on: app.db)
 
             let body = reportBody(submissionID: "sub_big", longResultBytes: 12_000_000)
             let result = try await status(app, body: body)

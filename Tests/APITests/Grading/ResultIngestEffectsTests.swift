@@ -96,6 +96,7 @@ struct ResultIngestEffectsTests {
         try await withAssignmentRoutesApp { app in
             app.workerSecretStore = WorkerSecretStore(initialOverride: Self.workerSecret)
             let (setupID, submission) = try await fixture("rie_worker", on: app)
+            try await markClaimedForResultReport(try submission.requireID(), on: app.db)
             let encoder = JSONEncoder()
             encoder.dateEncodingStrategy = .iso8601
             let body = ByteBuffer(

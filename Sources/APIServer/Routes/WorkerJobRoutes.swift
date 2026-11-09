@@ -354,7 +354,8 @@ struct WorkerJobRoutes: RouteCollection {
             personalizedFiles: personalizedFiles,
             language: language,
             opponent: opponentSet.opponent,
-            opponents: opponentSet.opponents
+            opponents: opponentSet.opponents,
+            claimToken: submission.assignedAt.map(WorkerClaimToken.token(assignedAt:))
         )
     }
 

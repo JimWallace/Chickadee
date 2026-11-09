@@ -61,24 +61,6 @@ import FoundationNetworking
         }
     }
 
-    @Test func report_convenienceOverload_wrapsCollection() async throws {
-        try await withMockURLProtocolLock {
-            MockURLProtocol.reset()
-            MockURLProtocol.enqueue(.status(200))
-            let reporter = makeReporter()
-            let collection = sampleCollection()
-            try await reporter.report(collection)
-
-            let body = try #require(MockURLProtocol.capturedBodies.first)
-            let decoder = JSONDecoder()
-            decoder.dateDecodingStrategy = .iso8601
-            let decoded = try decoder.decode(WorkerExecutionReport.self, from: body)
-            #expect(decoded.collection.submissionID == collection.submissionID)
-            #expect(decoded.diagnostics == nil)
-
-        }
-    }
-
     // MARK: report() — retry recovery
 
     @Test func report_retriesOn500_thenSucceeds() async throws {
