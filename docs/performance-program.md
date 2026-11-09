@@ -9,7 +9,8 @@ tune the production setup. Production is one host for the server (blue-green)
 and Postgres, and two runner machines of their own, which the maintainer
 controls. It builds on
 what exists: `chickadee-loadtest` ([load-testing.md](load-testing.md)), the
-course-scale profile in [database-performance.md](database-performance.md),
+course-scale baseline and the bench kit `Tools/perf-bench/`
+([database-performance.md](database-performance.md)),
 `/admin/metrics` and the admin MCP tools
 ([operational-diagnostics.md](operational-diagnostics.md),
 [admin-mcp.md](admin-mcp.md)), and the shrink-only ratchets described in
@@ -44,8 +45,8 @@ Monday, so it lands in the same week as the weekly digest
 | Step | What | Who runs it | Output |
 |---|---|---|---|
 | 1. Production snapshot | Read the week's production numbers through the admin MCP | Claude Code scheduled task on the maintainer's work machine (CI runs no model) | One row per metric appended to `docs/perf-log.md` |
-| 2. Benchmark run | Release build, seeded course-scale database, fixed `chickadee-loadtest` profile, grading benchmark | New workflow `perf-weekly.yml` | JSON artifact; counts compared to baselines |
-| 3. Digest | The benchmark's deltas and the production snapshot | `weekly-digest-render.sh`, one new section | Lines in the weekly digest issue |
+| 2. Benchmark run | `Tools/perf-bench/weekly.sh`: release build, the seeded course-scale database, every baseline page, the claim scenarios | The same scheduled task, on the same machine each week | Its summary, compared with the baseline in `database-performance.md`, in the same `docs/perf-log.md` section |
+| 3. Digest | The newest `docs/perf-log.md` section | `weekly-digest-render.sh`, one new section that reads the file | Lines in the weekly digest issue |
 | 4. Layer review | Profile and clean one layer (rotation below) | Maintainer with a Claude Code session | One PR per week that tightens at least one baseline or removes code |
 
 ### Step 1: the production snapshot
@@ -83,39 +84,33 @@ the p95 from the window that contains the week's largest `maxQueueDepth`.
 `get_query_stats` reads `pg_stat_statements`, which accumulates since the last
 reset. Record the deltas week over week, not the totals.
 
-### Step 2: the benchmark run (`perf-weekly.yml`)
+### Step 2: the benchmark run (`Tools/perf-bench/weekly.sh`)
 
-A new workflow, scheduled Mondays before the digest, with
-`workflow_dispatch` and a `pull_request` trigger limited to its own files so a
-change to it can prove itself (the pattern of `dead-code.yml`).
-A report, never a gate, for its latency numbers; the counts it measures are
-gated in the ordinary test lanes (see "Ratchets" below), not here.
+The kit exists (#2937). `weekly.sh` builds the release server and the load
+tool, rebuilds the `chickadee_perf` database from `sql/seed.sql` (one course,
+300 students, 12 assignments, about 18,000 submissions), measures each page in
+the baseline table, runs the four claim scenarios and prints one summary.
+It takes about 25 minutes. [database-performance.md](database-performance.md)
+holds the baseline and says what counts as a regression ("The weekly check").
 
-1. Build `chickadee-server`, `chickadee-runner` and `chickadee-loadtest` in
-   release mode.
-2. Start Postgres 16 with the production settings from `docker-compose.yml`.
-3. Seed the course-scale dataset. **This is missing today.** The 2026-11-09
-   profile used one course with 300 students, 12 assignments, about 18,000
-   submissions and log tables of 150,000–400,000 rows, but the seeder is not
-   in the repository. Check in a `chickadee-loadtest seed` subcommand that
-   writes that dataset deterministically (fixed random seed), so every week
-   measures the same data.
-4. Run three fixed profiles, each 120 s, each twice:
-   - deadline poll: 50 runner slots at 1 s, 300 status pollers;
-   - claim storm: 20,000 pending jobs, 100 runner slots;
-   - instructor reads: grades CSV, assignment submissions page, student
-     dashboard (a small scripted loop, added to the load tool).
-5. Grading benchmark: one real `chickadee-runner --sandbox --max-jobs 2`
-   grades a fixed batch per language (a small checked-in suite and submission for each of the seven languages; `Tests/Fixtures/generated-source/` has a starting point), cold
-   cache then warm cache. Record per-job execution time and the time the
-   runner spends outside the scripts (download, unzip, normalize, sandbox
-   start, upload).
-6. Write one JSON file: per route p50 / p95 / p99, statements per request
-   (from `pg_stat_statements` before and after), server CPU seconds per 1,000
-   requests (from `/proc` of the server process), per-language grading time.
-7. Compare with the previous week's artifact and print the deltas. A delta
-   larger than 25% on p95 that repeats on the second run is flagged in the
-   digest.
+The scheduled task runs it after the production snapshot, on the
+maintainer's work machine. The numbers depend on the hardware, so it runs on
+that machine every week and not in CI. The task copies the summary and every
+regression into the week's `docs/perf-log.md` section.
+
+The kit does not yet cover three things that this plan needs:
+
+1. **Grading.** Add a grading run: one real `chickadee-runner --sandbox
+   --max-jobs 2` grades a fixed batch per language (a small checked-in suite
+   and submission for each of the seven languages;
+   `Tests/Fixtures/generated-source/` has a starting point), cold cache then
+   warm cache. Record per-job execution time and the time the runner spends
+   outside the scripts (download, unzip, normalize, sandbox start, upload).
+2. **Status-poll load.** `bench.sh` runs only claims. Add the deadline poll
+   (50 runner slots at 1 s, 300 status pollers) from
+   [load-testing.md](load-testing.md).
+3. **CPU per request.** Report server CPU seconds per 1,000 requests for each
+   scenario, beside the CPU percentage that `bench.sh` prints now.
 
 Server CPU per 1,000 requests is the most useful time number: it is far less
 sensitive to a noisy neighbour than latency, and it is what saturates first
@@ -128,7 +123,7 @@ that regresses it fails before merge.
 
 | Ratchet | How it is measured | Where it runs |
 |---|---|---|
-| SQL statements per hot-path request | An APITests suite that wraps the database with a statement counter and drives each hot route once against seeded rows: runner poll (idle and claim), status poll, student dashboard, submission page, assignment submissions page, grades CSV | `swift-tests.yml` |
+| SQL statements per hot-path request | An APITests suite that wraps the database with a statement counter and drives each page of the baseline table in `database-performance.md` once against a few seeded rows, plus the runner poll (idle and claim). The statement counts there are the starting baselines | `swift-tests.yml` |
 | Statements that grow with the table | The same suite at two data sizes (10 rows and 1,000 rows); the count must be equal. A count that grows is an N+1 | `swift-tests.yml` |
 | Rows hydrated per request | Same suite; the count of Fluent models decoded. Fluent hydration costs 40–60 µs per row on the event loop ([database-performance.md](database-performance.md)) | `swift-tests.yml` |
 | Foreign keys without an index | Exists: `ForeignKeyIndexCoverageTests` | — |
@@ -304,15 +299,16 @@ lease) and that the table sizes are flat week over week.
    cores, then its `pids_limit` and `mem_limit` (or `TasksMax=` and
    `MemoryMax=`) to match.
 2. Add the statement- and hydration-count suite with its baselines. This is
-   the ratchet that pays for itself first.
-3. Check in the deterministic seeder.
-4. Add `perf-weekly.yml` and the digest section.
-5. Apply the Postgres settings one at a time, a week apart, and read each
+   the ratchet that pays for itself first: the weekly check finds a page
+   that reads more a week later, and this suite stops it in the PR.
+3. Extend `Tools/perf-bench/` with the grading run, the status-poll load and
+   CPU per request, and add the digest section.
+4. Apply the Postgres settings one at a time, a week apart, and read each
    result in the production snapshot.
-6. Set up the production snapshot as a scheduled task on the maintainer's
-   work machine.
-7. Start the layer rotation.
-8. Make the remaining ratchets shrink-only as each one's first clean-up lands.
+5. Set up the scheduled task on the maintainer's work machine: the
+   production snapshot, then `weekly.sh`.
+6. Start the layer rotation.
+7. Make the remaining ratchets shrink-only as each one's first clean-up lands.
 
 ## Decisions
 

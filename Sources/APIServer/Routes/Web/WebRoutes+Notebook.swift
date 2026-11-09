@@ -10,6 +10,7 @@ import Core
 import Elementary
 import Fluent
 import Foundation
+import SystemPackage
 import Vapor
 
 extension WebRoutes {
@@ -342,16 +343,11 @@ extension WebRoutes {
                 setupID: setupID, userID: userID, fileKind: fileKind, isStaff: args.isPractice)
         let seed = try await workingCopySeed(
             req: req, setup: setup, assignment: assignment, fileKind: fileKind, isStaff: args.isAuthor)
-        _ = try await ensureUserNotebookWorkingCopy(
-            setupID: setupID,
-            userID: userID,
-            fallbackSetup: setup,
-            relativePath: workingCopyPath,
-            defaultData: seed.data,
-            refreshFromSeed: seed.refresh,
-            viewMode: viewMode,
-            on: req.db, application: req.application, logger: req.logger
-        )
+        let draftBackupFileName = try await openWorkingCopy(
+            req: req,
+            source: WorkingCopySeedSource(
+                setupID: setupID, userID: userID, setup: setup, defaultData: seed.data, viewMode: viewMode),
+            relativePath: workingCopyPath, refresh: seed.refresh, hasAssignment: assignment != nil)
         let jupyterLiteNotebookPath = workingCopyPath
         let encodedPath =
             jupyterLiteNotebookPath.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed)
@@ -443,11 +439,17 @@ extension WebRoutes {
             bootBird: NotebookBootFacts.bird(avatarSpecJSON: args.user.avatarSpecJSON, isStaff: args.isAuthor),
             dueLabel: args.assignment?.dueAt.map(waterlooDateTimeText),
             definitionPatterns: NotebookBootFacts.definitionPatterns(manifestJSON: setup.manifest),
-            // The server drive (#469) only where the copy is the viewer's own,
-            // editable work: not a staff copy, which this page just rebuilt from
-            // the stored notebook and rebuilds on every load, and not a closed
-            // assignment's locked copy.
-            serverDrive: !seed.refresh && !isReadOnly
+            // The server drive (#469) on any editable copy: the viewer's own
+            // work, or a staff draft (#2925). Not a closed assignment's locked
+            // copy, and not a new-assignment draft, whose working copy is its
+            // stored notebook.
+            serverDrive: !isReadOnly && !(args.isAuthor && assignment == nil),
+            draftBackupFileName: draftBackupFileName,
+            draftBackupURL: draftBackupFileName.map { name in
+                let folder = FilePath(workingCopyPath).removingLastComponent().string
+                let path = "/jupyterlite/files/" + folder + "/" + name
+                return path.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? path
+            }
         )
     }
 
@@ -607,6 +609,40 @@ extension WebRoutes {
         return notebookViewMode(from: requested) ?? .template
     }
 
+    /// Opens the viewer's working copy for the page and returns the name of a
+    /// staff draft's backup to link, if any.
+    ///
+    /// A staff copy on the server drive is a draft (#2925): it keeps
+    /// unpublished edits across loads, and is refreshed from the stored
+    /// notebook only when that changed elsewhere (`AuthoringDraftFiles`). A
+    /// new-assignment draft (no assignment row yet) is not: its working copy
+    /// *is* the stored notebook (`draftNotebookData`), so it stays a view on
+    /// the IndexedDB drive, as does every staff copy behind the
+    /// `ck_server_drive=0` opt-out: rebuilt from the stored notebook on load.
+    private func openWorkingCopy(
+        req: Request, source: WorkingCopySeedSource, relativePath: String, refresh: Bool, hasAssignment: Bool
+    ) async throws -> String? {
+        guard refresh, hasAssignment, JupyterLiteConfigFlagMiddleware.serverDriveEnabled(req) else {
+            _ = try await ensureUserNotebookWorkingCopy(
+                setupID: source.setupID,
+                userID: source.userID,
+                fallbackSetup: source.setup,
+                relativePath: relativePath,
+                defaultData: source.defaultData,
+                refreshFromSeed: refresh,
+                viewMode: source.viewMode,
+                on: req.db, application: req.application, logger: req.logger
+            )
+            return nil
+        }
+        let outcome = try await ensureAuthoringDraft(
+            source, relativePath: relativePath, on: req.db, application: req.application, logger: req.logger)
+        if case .backedUp(let fileName) = outcome { return fileName }
+        // A backup made by an earlier load or a save stays linked for a while,
+        // so a reload does not lose the only pointer to it.
+        return await recentAuthoringDraftBackup(relativePath: relativePath, application: req.application)
+    }
+
     /// What a working copy of `fileKind` is seeded from, and whether an existing
     /// copy is refreshed from it. The page and `/notebook/source` both resolve
     /// it here, so the editor's frame and its content fetch never disagree.
@@ -618,7 +654,7 @@ extension WebRoutes {
     /// A student's copy holds their own work, so it is never refreshed; the
     /// solution, when revealed, still seeds it, and the starter comes from
     /// their latest submission inside `ensureUserNotebookWorkingCopy`.
-    private func workingCopySeed(
+    func workingCopySeed(
         req: Request,
         setup: APITestSetup,
         assignment: APIAssignment?,
@@ -756,21 +792,36 @@ extension WebRoutes {
             fileKind: fileKind, isStaff: isAuthor, requested: query.view)
         let seed = try await workingCopySeed(
             req: req, setup: setup, assignment: assignment, fileKind: fileKind, isStaff: isAuthor)
+        let relativePath =
+            isAuthor
+            ? userNotebookWorkingCopyRelativePath(
+                setupID: setupID, userID: userID, fileKind: fileKind, viewMode: viewMode)
+            : studentViewWorkingCopyRelativePath(
+                setupID: setupID, userID: userID, fileKind: fileKind, isStaff: isStaff)
 
-        let payload = try await ensureUserNotebookWorkingCopy(
-            setupID: setupID,
-            userID: userID,
-            fallbackSetup: setup,
-            relativePath: isAuthor
-                ? userNotebookWorkingCopyRelativePath(
-                    setupID: setupID, userID: userID, fileKind: fileKind, viewMode: viewMode)
-                : studentViewWorkingCopyRelativePath(
-                    setupID: setupID, userID: userID, fileKind: fileKind, isStaff: isStaff),
-            defaultData: seed.data,
-            refreshFromSeed: seed.refresh,
-            viewMode: viewMode,
-            on: req.db, application: req.application, logger: req.logger
-        )
+        let payload: Data
+        if seed.refresh && assignment != nil && JupyterLiteConfigFlagMiddleware.serverDriveEnabled(req) {
+            // A staff draft on the server drive follows the same rule as its
+            // page (#2925): it keeps unpublished edits, follows a stored change
+            // when it has none, and keeps them in a backup when both moved.
+            _ = try await ensureAuthoringDraft(
+                WorkingCopySeedSource(
+                    setupID: setupID, userID: userID, setup: setup, defaultData: seed.data, viewMode: viewMode),
+                relativePath: relativePath, on: req.db, application: req.application, logger: req.logger)
+            let draftPath = req.application.directory.publicDirectory + "jupyterlite/files/" + relativePath
+            payload = try await runBlocking { try Data(contentsOf: URL(fileURLWithPath: draftPath)) }
+        } else {
+            payload = try await ensureUserNotebookWorkingCopy(
+                setupID: setupID,
+                userID: userID,
+                fallbackSetup: setup,
+                relativePath: relativePath,
+                defaultData: seed.data,
+                refreshFromSeed: seed.refresh,
+                viewMode: viewMode,
+                on: req.db, application: req.application, logger: req.logger
+            )
+        }
 
         var headers = HTTPHeaders()
         headers.replaceOrAdd(name: .contentType, value: "application/json; charset=utf-8")

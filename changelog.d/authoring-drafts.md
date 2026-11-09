@@ -1,0 +1,3 @@
+### Changed
+
+- **Staff edits to a starter or solution notebook are kept on the server (#2925).** The authoring editor now uses the server drive too: an edit is saved as a draft and survives a reload or a switch of device, and only "Save to assignment" publishes it. When the stored notebook changes elsewhere (an MCP edit, another author's save, a version restore) while a draft holds unpublished edits, the editor opens the stored version and keeps the earlier edits in a dated notebook beside it, which the page links to. The `ck_server_drive=0` cookie returns one browser to the previous behaviour.

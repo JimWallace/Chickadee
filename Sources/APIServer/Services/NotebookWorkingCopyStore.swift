@@ -219,7 +219,7 @@ func workingCopyMtimeEpoch(absolutePath: String) -> Int {
 /// order, so an unchanged notebook can come back as different bytes. The two
 /// sides are compared as decoded `JSONValue` objects. Anything that is not a
 /// JSON object compares unequal, which means a refresh: the safe direction.
-private func sameNotebookContent(_ lhs: Data, _ rhs: Data) -> Bool {
+func sameNotebookContent(_ lhs: Data, _ rhs: Data) -> Bool {
     if lhs == rhs { return true }
     guard let left = JSONValue.object(from: lhs), let right = JSONValue.object(from: rhs) else { return false }
     return left == right
@@ -286,6 +286,48 @@ func ensureUserNotebookWorkingCopy(
         return existingData
     }
 
+    let processedData = try await workingCopySeedData(
+        WorkingCopySeedSource(
+            setupID: setupID, userID: userID, setup: fallbackSetup, defaultData: defaultData, viewMode: viewMode),
+        on: db, application: application, logger: logger)
+
+    if let existingData = existingWorkingCopy {
+        if sameNotebookContent(existingData, processedData) {
+            await createSupportFileSymlinks(setup: fallbackSetup, studentDir: workingCopyDir, application: application)
+            await writeDatasetFiles(
+                setup: fallbackSetup, userID: userID, studentDir: workingCopyDir, on: db, application: application)
+            return existingData
+        }
+        logger.info("working_copy_refreshed setup=\(setupID) user=\(userID.uuidString) path=\(resolvedRelativePath)")
+    }
+
+    try await runBlocking {
+        try FileManager.default.createDirectory(atPath: workingCopyDir, withIntermediateDirectories: true)
+        try processedData.write(to: URL(fileURLWithPath: workingCopyPath))
+    }
+    await createSupportFileSymlinks(setup: fallbackSetup, studentDir: workingCopyDir, application: application)
+    await writeDatasetFiles(
+        setup: fallbackSetup, userID: userID, studentDir: workingCopyDir, on: db, application: application)
+
+    return processedData
+}
+
+/// What a working copy at this seed is rebuilt from: the seed (`defaultData`,
+/// the stored starter for a template view, or the viewer's latest submission),
+/// with the viewer's `{{name}}` values substituted in a personalized view. The
+/// working-copy refresh and the authoring draft (`ensureAuthoringDraft`) both
+/// compare against exactly this.
+func workingCopySeedData(
+    _ source: WorkingCopySeedSource,
+    on db: any Database,
+    application: Application,
+    logger: Logger
+) async throws -> Data {
+    let setupID = source.setupID
+    let userID = source.userID
+    let fallbackSetup = source.setup
+    let defaultData = source.defaultData
+    let viewMode = source.viewMode
     let seedData: Data
     if let defaultData {
         seedData = defaultData
@@ -318,40 +360,22 @@ func ensureUserNotebookWorkingCopy(
     // A `.template` copy skips this by definition: leaving the placeholders
     // standing is the whole point of that view, and it is what lets an author
     // edit them (see `NotebookViewMode`).
-    let processedData =
-        switch viewMode {
-        case .personalized:
-            await applyNotebookSubstitutionsIfNeeded(
-                seedData: seedData,
-                setup: fallbackSetup,
-                userID: userID,
-                db: db,
-                supportFilesDirectory: application.testSetupsDirectory + "shared/\(setupID)/",
-                logger: logger
-            )
-        case .template:
-            seedData
-        }
-
-    if let existingData = existingWorkingCopy {
-        if sameNotebookContent(existingData, processedData) {
-            await createSupportFileSymlinks(setup: fallbackSetup, studentDir: workingCopyDir, application: application)
-            await writeDatasetFiles(
-                setup: fallbackSetup, userID: userID, studentDir: workingCopyDir, on: db, application: application)
-            return existingData
-        }
-        logger.info("working_copy_refreshed setup=\(setupID) user=\(userID.uuidString) path=\(resolvedRelativePath)")
+    return
+        switch viewMode
+    {
+    case .personalized:
+        await applyNotebookSubstitutionsIfNeeded(
+            seedData: seedData,
+            setup: fallbackSetup,
+            userID: userID,
+            db: db,
+            supportFilesDirectory: application.testSetupsDirectory + "shared/\(setupID)/",
+            logger: logger
+        )
+    case .template:
+        seedData
     }
 
-    try await runBlocking {
-        try FileManager.default.createDirectory(atPath: workingCopyDir, withIntermediateDirectories: true)
-        try processedData.write(to: URL(fileURLWithPath: workingCopyPath))
-    }
-    await createSupportFileSymlinks(setup: fallbackSetup, studentDir: workingCopyDir, application: application)
-    await writeDatasetFiles(
-        setup: fallbackSetup, userID: userID, studentDir: workingCopyDir, on: db, application: application)
-
-    return processedData
 }
 
 /// Discards `userID`'s working copy of `fileKind` in the view *other* than

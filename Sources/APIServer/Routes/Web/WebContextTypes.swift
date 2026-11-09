@@ -371,6 +371,12 @@ struct NotebookContext: Encodable {
     /// for a submission record or a preview. Rendered as
     /// `data-server-drive`; `serverDrive.ts` and `notebook.js` read it.
     var serverDrive = false
+    /// The file that kept a staff member's unpublished draft edits when the
+    /// stored notebook had changed elsewhere since (#2925), or nil. The page
+    /// names it, so the author can find and compare it.
+    var draftBackupFileName: String?
+    /// Where the author downloads that file: its URL under `/jupyterlite/files/`.
+    var draftBackupURL: String?
 }
 
 // MARK: - Submission history page
