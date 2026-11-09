@@ -40,14 +40,14 @@
         for (var i = 0; i < plan.length; i++) {
             var list = plan[i];
             var started = performance.now();
-            var ok = false;
+            var ok;
             try {
                 ok = await K.warmList(list, window.fetch.bind(window), storage);
             } catch (_) {
                 ok = false;
             }
             if (!ok) return;
-            var entries = [];
+            var entries;
             try { entries = performance.getEntriesByType('resource'); } catch (_) { entries = []; }
             K.report('prewarm', K.prewarmMessage(list, entries, performance.now() - started), null);
         }
