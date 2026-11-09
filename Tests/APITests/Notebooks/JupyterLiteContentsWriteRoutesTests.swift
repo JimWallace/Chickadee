@@ -149,6 +149,33 @@ import VaporTesting
         }
     }
 
+    /// `os.listdir('/drive')` on the server drive reads the root: it lists only
+    /// `users`, which lists only the caller's own folder.
+    @Test func theRootListsOnlyUsers() async throws {
+        try await withApp(app) { _ in
+            try await app.asyncTest(.GET, "/jupyterlite/api/contents?content=1") { res in
+                #expect(res.status == .ok)
+                let model = try self.object(res)
+                #expect(model["type"] as? String == "directory")
+                let children = try #require(model["content"] as? [[String: Any]])
+                #expect(children.map { $0["path"] as? String } == ["users"])
+            }
+        }
+    }
+
+    /// The IndexedDB drive reads the root as `all.json`, which still answers
+    /// with the caller's own folder.
+    @Test func theRootAllJSONStillListsTheCallersOwnFolder() async throws {
+        try await withApp(app) { _ in
+            try await app.asyncTest(.GET, "/jupyterlite/api/contents/all.json") { res in
+                #expect(res.status == .ok)
+                let children = try #require(try self.object(res)["content"] as? [[String: Any]])
+                let paths = children.compactMap { $0["path"] as? String }
+                #expect(paths.contains("\(self.userRoot)/setup_a"))
+            }
+        }
+    }
+
     @Test func checkpointsAreStubs() async throws {
         try await withApp(app) { _ in
             let path = "\(userRoot)/setup_a/assignment.ipynb"

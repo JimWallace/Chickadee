@@ -68,12 +68,22 @@ struct JupyterLiteContentsRoutes: RouteCollection {
         // time, so it reads `users` before `users/<id>`. A student who may not
         // read the tree gets a `users` that lists only their own folder; a 403
         // here leaves the kernel's working directory at the drive root (#469).
-        if !isStaff, let userRoot = try userRootPath(for: caller, isStaff: false),
-            relativePath.trimmingCharacters(in: CharacterSet(charactersIn: "/")) == "users"
-        {
-            return try ownUsersDirectoryResponse(
-                baseURL: baseURL, userRoot: userRoot, fileManager: fm,
-                includeContent: req.query[String.self, at: "content"] == "1")
+        //
+        // The drive root is read the same way, by `os.listdir('/drive')`: a
+        // student gets a root whose one child is `users`. (The IndexedDB drive
+        // reads the root as `all.json`, which still answers with the student's
+        // own folder below.)
+        if !isStaff, let userRoot = try userRootPath(for: caller, isStaff: false) {
+            let requested = relativePath.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+            let includeContent = req.query[String.self, at: "content"] == "1"
+            if requested == "users" {
+                return try ownUsersDirectoryResponse(
+                    baseURL: baseURL, userRoot: userRoot, fileManager: fm, includeContent: includeContent)
+            }
+            if requested.isEmpty {
+                return try studentRootDirectoryResponse(
+                    baseURL: baseURL, userRoot: userRoot, fileManager: fm, includeContent: includeContent)
+            }
         }
 
         let cleanRel = try scopedRelativePath(for: caller, requested: relativePath, isStaff: isStaff)
@@ -276,6 +286,27 @@ struct JupyterLiteContentsRoutes: RouteCollection {
             JupyterContentsModel(
                 name: "users", path: "users", lastModified: modified, created: created,
                 content: includeContent ? .children([own]) : .none, format: "json",
+                mimetype: "application/json", size: 0, writable: false, type: "directory"))
+    }
+
+    /// The drive root as a student sees it: a directory whose one child is
+    /// `users`, which in turn lists only their own folder.
+    private func studentRootDirectoryResponse(
+        baseURL: URL, userRoot: String, fileManager: FileManager, includeContent: Bool
+    ) throws -> Response {
+        let rootURL = baseURL.appendingPathComponent(userRoot, isDirectory: true)
+        try fileManager.createDirectory(at: rootURL, withIntermediateDirectories: true)
+        let attributes = attributesForItem(url: rootURL, fileManager: fileManager)
+        let modified = isoDate(asDate(attributes[.modificationDate]))
+        let created = isoDate(asDate(attributes[.creationDate]))
+        let users = JupyterContentsModel(
+            name: "users", path: "users", lastModified: modified, created: created,
+            content: .none, format: "json", mimetype: "application/json", size: 0, writable: false,
+            type: "directory")
+        return try jsonResponse(
+            JupyterContentsModel(
+                name: "", path: "", lastModified: modified, created: created,
+                content: includeContent ? .children([users]) : .none, format: "json",
                 mimetype: "application/json", size: 0, writable: false, type: "directory"))
     }
 

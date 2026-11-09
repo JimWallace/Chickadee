@@ -877,6 +877,13 @@ coordination, and each must see every edit.
   - A write route writes only under the caller's own `users/<id>/`, staff
     included, and never over or through a symlink (a support file or a shared
     dataset directory). `JupyterLiteContentsWriteRoutesTests` pins it.
+  - A student reads one tree three ways, and the three must agree. The
+    server drive reads the root `""` as `[users]`, `users` as
+    `[users/<id>]`, then `users/<id>` as the real folder (the kernel walks it
+    one level at a time); the IndexedDB drive reads the root only as
+    `all.json`, which answers with the student's own folder. A change to one
+    listing in `JupyterLiteContentsRoutes` must keep the other two consistent
+    (`JupyterLiteContentsWriteRoutesTests`).
   - The file's mtime is the only reset signal. JupyterLab's save compares it
     with its last save and raises "File changed". The page's IndexedDB reseed
     reads it too, so it is skipped when the server drive is on: a drive save
