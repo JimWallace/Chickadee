@@ -24,7 +24,7 @@ of server CPU to database time is what carries over to production.
 | Path | Cost at this scale | Cause | State |
 |---|---|---|---|
 | Delete of a submission | 34 ms per row; one assignment (about 1,500 submissions) about 50 s | `request_metrics.submission_id` had no index | Fixed (`CreateForeignKeyIndexes`): 3.5 ms per row |
-| Runner claim with 20,000 pending jobs | 28–63 statements and 18–31 ms of server CPU per claim; p50 1.6–2.7 s at 200 runners | 50 full candidate rows per poll, Fluent query building, lost lock races | Open |
+| Runner claim with 20,000 pending jobs | 28–63 statements and 18–31 ms of server CPU per claim; p50 1.6–2.7 s at 200 runners | 50 full candidate rows per poll, Fluent query building, lost lock races | Improved: one-statement claim, a 10-row first page, one setup query per group. 100 runners on one assignment: p50 50 → 26 ms, CPU 210% → 135%; on twelve: p50 1.4 s → 0.57 s. Still saturates the 4-vCPU test machine at 200 runners |
 | Grades CSV export | 2.6 s, of which 49 ms is the database | 44,000 rows hydrated as Fluent models | Fixed (`bestGradePercentByStudentAndSetup`): one SQL fold, about 25 ms |
 | Instructor assignment submissions page | about 300 ms, of which 31 ms is the database | 5,100 rows hydrated | Fixed: grade summaries and timestamps decode as plain rows (SQLKit), and the other reads take only the columns shown. Not re-measured |
 | A student's submission page | 16% of its CPU | the avatar-wardrobe unlock check (`WardrobeUnlockStore.grantNew`) re-reads the student's whole grade history on each view | Fixed (`WardrobeGrantChecks`): the history is read only when a result or an assignment's due date or concept has changed |

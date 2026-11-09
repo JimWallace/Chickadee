@@ -167,7 +167,7 @@ struct WorkerJobRoutes: RouteCollection {
             id: submissionID, workerID: body.workerID, db: req.db)
     }
 
-    /// Records "job assigned" diagnostics outside the claim transaction so
+    /// Records "job assigned" diagnostics after the claim statement, so
     /// `req.application` is safely accessible.
     private func recordJobAssignmentDiagnostics(
         req: Request, body: WorkerActivityPayload, claimed: ClaimedJob

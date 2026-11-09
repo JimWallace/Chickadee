@@ -31,6 +31,11 @@ typealias ClaimCandidate = (APISubmission, APITestSetup, TestProperties)
 /// queue more reference jobs than the scan limit.
 enum ClaimCandidateGroup: CaseIterable {
     case freshStudent
+    /// The rest of the fresh scan, past `ClaimCandidateLoader.firstPageSize`.
+    /// Read only when nothing in the first page could be claimed. It reads
+    /// where `freshStudent` stopped, so load it right after that group, as
+    /// `allCases` order does; loaded alone, it returns nothing.
+    case freshStudentRest
     case retestStudent
     case tournamentMatch
     case solutionValidation
@@ -40,14 +45,14 @@ enum ClaimCandidateGroup: CaseIterable {
     case compositeReference
 }
 
-/// Loads the claim candidates one group at a time (plain reads, outside the
-/// serialized claim section — the compare-and-set claim re-checks pending).
+/// Loads the claim candidates one group at a time (plain reads; the claim
+/// statement re-checks pending).
 /// Within each group, oldest submittedAt wins.
 ///
 /// The claim walk loads a group only when every earlier group had nothing
 /// this runner could claim. During a deadline backlog the first fresh student
 /// job is nearly always the one claimed, so a poll reads one group, not all
-/// eight, and resolves only that group's setups.
+/// nine, and resolves only that group's setups.
 struct ClaimCandidateLoader {
     /// Cap the scan: a poll claims exactly one job, so walking the entire
     /// pending queue (potentially tens of thousands of rows after a retest
@@ -62,6 +67,13 @@ struct ClaimCandidateLoader {
     /// re-sort.
     static let scanLimit = 50
 
+    /// The fresh pass reads this many first, and the rest of the scan cap only
+    /// when none of them can be claimed. In a backlog the first few fresh jobs
+    /// nearly always include one this runner can claim, and turning each row
+    /// into a model was a fifth of the claim's CPU at 50 rows
+    /// (docs/database-performance.md).
+    static let firstPageSize = 10
+
     let db: any Database
 
     /// Many pending submissions often target the same test setup (e.g. a
@@ -69,7 +81,12 @@ struct ClaimCandidateLoader {
     /// setup + decoded manifest once and reuse it, rather than re-querying the
     /// row and re-decoding the identical manifest JSON for every candidate.
     private var resolvedBySetupID: [String: (APITestSetup, TestProperties)] = [:]
+    /// Setup rows read by `preloadSetups`, before their manifests decode.
+    private var loadedSetups: [String: APITestSetup] = [:]
     private var freshStudentCount = 0
+    /// The fresh first page, when it was full: where the rest of the scan
+    /// starts.
+    private var freshFirstPage: [APISubmission]?
 
     init(db: any Database) {
         self.db = db
@@ -81,8 +98,9 @@ struct ClaimCandidateLoader {
     mutating func load(_ group: ClaimCandidateGroup) async throws -> [ClaimCandidate] {
         switch group {
         case .freshStudent:
-            let fresh = try await pending(kind: APISubmission.Kind.student, retested: false, limit: Self.scanLimit)
+            let fresh = try await pending(kind: APISubmission.Kind.student, retested: false, limit: Self.firstPageSize)
             freshStudentCount = fresh.count
+            freshFirstPage = fresh.count == Self.firstPageSize ? fresh : nil
             // Accept both worker-mode and browser-mode pending submissions.
             // Browser-mode submissions become pending when the client-side
             // runner fails or freezes (the `browser-failover` endpoint
@@ -90,6 +108,19 @@ struct ClaimCandidateLoader {
             // as a backstop that runs the .py test scripts natively via
             // python3.
             return try await resolveLeniently(fresh)
+        case .freshStudentRest:
+            guard let firstPage = freshFirstPage else { return [] }
+            // Keyset, not OFFSET: the same index range from the last row's
+            // time on, less the first page's rows, so equal times are neither
+            // skipped nor read twice. The range starts a millisecond early: a
+            // time that rounds on its way through the driver must not drop a
+            // row that ties with the last one, and the excluded ids keep the
+            // first page out.
+            let rest = try await pending(
+                kind: APISubmission.Kind.student, retested: false, limit: Self.scanLimit - firstPage.count,
+                after: (firstPage.last?.submittedAt.map { $0.addingTimeInterval(-0.001) }, firstPage.compactMap(\.id)))
+            freshStudentCount += rest.count
+            return try await resolveLeniently(rest)
         case .retestStudent:
             let remaining = Self.scanLimit - freshStudentCount
             guard remaining > 0 else { return [] }
@@ -124,11 +155,27 @@ struct ClaimCandidateLoader {
     /// retest pass reads `idx_submissions_pending_retest_submitted_at`
     /// (CreatePendingRetestIndex.swift).
     private func pending(
-        kind: String, retested: Bool? = nil, limit: Int? = nil
+        kind: String, retested: Bool? = nil, limit: Int? = nil,
+        after: (submittedAt: Date?, excludedIDs: [String])? = nil
     ) async throws -> [APISubmission] {
         var query = APISubmission.query(on: db)
             .filter(\.$status == SubmissionStatus.pending.rawValue)
             .filter(\.$kind == kind)
+        if let after {
+            // A NULL time sorts last, so it always belongs to the rest of the
+            // scan; the first page's own NULL rows are among the excluded ids.
+            // The range stays on `idx_submissions_claim_priority`: the id
+            // exclusion only filters within it.
+            if let since = after.submittedAt {
+                query = query.group(.or) { or in
+                    or.filter(\.$submittedAt >= since)
+                    or.filter(\.$submittedAt == nil)
+                }
+            } else {
+                query = query.filter(\.$submittedAt == nil)
+            }
+            if !after.excludedIDs.isEmpty { query = query.filter(\.$id !~ after.excludedIDs) }
+        }
         switch retested {
         case .some(false): query = query.filter(\.$retestedAt == nil).sort(\.$retestedAt, .ascending)
         case .some(true): query = query.filter(\.$retestedAt != nil)
@@ -140,6 +187,7 @@ struct ClaimCandidateLoader {
     /// Pairs each submission with its setup and manifest, skipping one whose
     /// setup is gone or whose manifest does not decode.
     private mutating func resolveLeniently(_ submissions: [APISubmission]) async throws -> [ClaimCandidate] {
+        try await preloadSetups(of: submissions)
         var candidates: [ClaimCandidate] = []
         candidates.reserveCapacity(submissions.count)
         for submission in submissions {
@@ -147,7 +195,7 @@ struct ClaimCandidateLoader {
                 candidates.append((submission, cached.0, cached.1))
                 continue
             }
-            guard let setup = try await APITestSetup.find(submission.testSetupID, on: db) else { continue }
+            guard let setup = loadedSetups[submission.testSetupID] else { continue }
             guard let manifest = decodeManifest(from: Data(setup.manifest.utf8)) else { continue }
             resolvedBySetupID[submission.testSetupID] = (setup, manifest)
             candidates.append((submission, setup, manifest))
@@ -159,6 +207,7 @@ struct ClaimCandidateLoader {
     /// instructor is waiting on a validation run, so a missing setup or an
     /// undecodable manifest is an error, not a skip.
     private mutating func resolveStrictly(_ submissions: [APISubmission]) async throws -> [ClaimCandidate] {
+        try await preloadSetups(of: submissions)
         var candidates: [ClaimCandidate] = []
         candidates.reserveCapacity(submissions.count)
         for submission in submissions {
@@ -166,7 +215,7 @@ struct ClaimCandidateLoader {
                 candidates.append((submission, cached.0, cached.1))
                 continue
             }
-            guard let setup = try await APITestSetup.find(submission.testSetupID, on: db) else {
+            guard let setup = loadedSetups[submission.testSetupID] else {
                 throw WorkerJobError.testSetupNotFound(id: submission.testSetupID)
             }
             let manifest = try ManifestCodec.decoder.decode(TestProperties.self, from: Data(setup.manifest.utf8))
@@ -174,5 +223,16 @@ struct ClaimCandidateLoader {
             candidates.append((submission, setup, manifest))
         }
         return candidates
+    }
+
+    /// Reads, in one query, every setup of `submissions` not read before in
+    /// this poll, rather than one query per setup.
+    private mutating func preloadSetups(of submissions: [APISubmission]) async throws {
+        let missing = Set(submissions.map(\.testSetupID)).subtracting(resolvedBySetupID.keys)
+            .subtracting(loadedSetups.keys)
+        guard !missing.isEmpty else { return }
+        for setup in try await APITestSetup.query(on: db).filter(\.$id ~~ Array(missing)).all() {
+            if let id = setup.id { loadedSetups[id] = setup }
+        }
     }
 }

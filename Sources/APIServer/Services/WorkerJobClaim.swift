@@ -9,6 +9,7 @@
 
 import Core
 import Fluent
+import FluentSQL
 import Foundation
 import SQLKit
 import Vapor
@@ -133,14 +134,19 @@ enum WorkerJobClaim {
 
     /// Atomically claims one submission (#1172). It claims only the
     /// already-evaluated candidate id — ordering and the requirement-
-    /// compatibility walk stay in `evaluateAndClaimCandidate` — and returns
-    /// nil on a lost race so the walk moves to the next candidate.
+    /// compatibility walk stay in `ClaimWalk` — and returns nil on a lost race
+    /// so the walk moves to the next candidate.
     ///
-    /// A short transaction takes a row lock with `SELECT … FOR UPDATE SKIP
-    /// LOCKED` and updates the locked row. SKIP LOCKED means a row another
-    /// claimer holds is skipped (nil) instead of waited on, so concurrent
-    /// claims from any number of processes scale natively — no in-process
-    /// serialization at all.
+    /// One statement: an UPDATE whose target is a `SELECT … FOR UPDATE SKIP
+    /// LOCKED` of the row while it is still pending, returning the claimed
+    /// row. SKIP LOCKED means a row another claimer holds is skipped instead of
+    /// waited on, and a row another claimer already moved out of pending
+    /// matches nothing, so the loser gets no row at once and walks on.
+    /// Concurrent claims from any number of processes scale with no in-process
+    /// serialization. The statement is atomic on its own, so it needs no
+    /// transaction: the claim used to be BEGIN, a lock, an UPDATE, a re-read
+    /// and COMMIT, and a runner that lost races paid all five for each one
+    /// (docs/database-performance.md).
     ///
     /// Internal (not private) so the claim semantics are directly testable —
     /// the lost-race path can't be triggered deterministically through the
@@ -149,37 +155,41 @@ enum WorkerJobClaim {
     static func claimSubmission(
         id submissionID: String, workerID: String, db: any Database
     ) async throws -> APISubmission? {
-        try await db.transaction { db in
-            guard let sql = db as? (any SQLDatabase) else {
-                throw WorkerJobError.internalInconsistency(
-                    reason: "Claim transaction did not expose SQLDatabase")
-            }
-            // SKIP LOCKED: a concurrently-locked row is skipped, not waited
-            // on — the loser sees zero rows immediately and walks on to its
-            // next candidate instead of queueing behind the winner.
-            let locked = try await sql.raw(
-                """
-                SELECT id FROM submissions
+        guard let sql = db as? (any SQLDatabase) else {
+            throw WorkerJobError.internalInconsistency(reason: "The claim needs a SQL database")
+        }
+        let row = try await sql.raw(
+            """
+            UPDATE \(unsafeRaw: APISubmission.schema)
+            SET status = \(bind: SubmissionStatus.assigned.rawValue),
+                worker_id = \(bind: workerID),
+                assigned_at = \(bind: Date())
+            WHERE id = (
+                SELECT id FROM \(unsafeRaw: APISubmission.schema)
                 WHERE id = \(bind: submissionID)
                   AND status = \(bind: SubmissionStatus.pending.rawValue)
                 FOR UPDATE SKIP LOCKED
+            )
+            RETURNING *
+            """
+        ).first()
+        guard let row else { return nil }
+        do {
+            return try row.decode(fluentModel: APISubmission.self)
+        } catch {
+            // The UPDATE has committed, so a row that does not decode would
+            // stay assigned to a runner that never receives it until the
+            // stale-claim sweep. Hand it back to the queue first.
+            try await sql.raw(
                 """
-            ).first()
-            guard locked != nil else { return nil }
-
-            try await APISubmission.query(on: db)
-                .filter(\.$id == submissionID)
-                .set(\.$status, to: SubmissionStatus.assigned.rawValue)
-                .set(\.$workerID, to: workerID)
-                .set(\.$assignedAt, to: Date())
-                .update()
-
-            guard
-                let fresh = try await APISubmission.find(submissionID, on: db),
-                fresh.status == SubmissionStatus.assigned.rawValue,
-                fresh.workerID == workerID
-            else { return nil }
-            return fresh
+                UPDATE \(unsafeRaw: APISubmission.schema)
+                SET status = \(bind: SubmissionStatus.pending.rawValue), worker_id = NULL, assigned_at = NULL
+                WHERE id = \(bind: submissionID)
+                  AND status = \(bind: SubmissionStatus.assigned.rawValue)
+                  AND worker_id = \(bind: workerID)
+                """
+            ).run()
+            throw error
         }
     }
 }
