@@ -1159,6 +1159,21 @@ coordination, and each must see every edit.
   - No row has a foreign key, so a deleted user's rows stay until the sweep
     (`docs/operational-diagnostics.md`).
 
+### Foreign-key indexes: `ForeignKeyIndexCoverageTests`
+
+- **Writers:** every migration that adds a foreign key.
+- **Readers:** the `ON DELETE` action of each foreign key, which reads the
+  referencing table once per deleted row.
+- **Rules:**
+  - A new foreign key needs an index that leads with its column, or an
+    entry in the test's `unindexedOnPurpose` list under the group that gives
+    its reason. A later migration that indexes a listed key removes it from
+    the list, or the test fails on the stale entry.
+  - Index the keys whose referenced rows are deleted in bulk: submissions,
+    setups, assignments. A key to a user or a course on a table that takes
+    a row per request or per job stays unindexed (`CreateForeignKeyIndexes`,
+    `docs/database-performance.md`).
+
 ### Notebook-check kind support
 
 - **Parallel paths:** `notebookCheckKindIsSupported` and

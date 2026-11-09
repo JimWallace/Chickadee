@@ -1,0 +1,3 @@
+### Fixed
+
+- **Deleting submissions, setups and assignments no longer scans the log and diagnostics tables.** Six foreign keys had no index, so each deleted row scanned the referencing table. At one course's scale, `request_metrics.submission_id` alone cost 34 ms per deleted submission, so an assignment with about 1,500 submissions took about 50 s to delete; a submission delete now takes 3.5 ms. The indexes are partial where the column is mostly NULL. A new guard test fails on any later foreign key without an index unless the key is listed with its reason. `docs/database-performance.md` records the measurements.

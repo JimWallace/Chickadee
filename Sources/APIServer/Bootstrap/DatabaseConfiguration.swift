@@ -535,6 +535,10 @@ func registerMigrations(on app: Application) {
     // created far above.
     app.migrations.add(CreateAuditAndValidationIndexes())
 
+    // Indexes for foreign keys that had none, on tables that grow: every
+    // delete of a referenced row scanned the referencing table. Index only.
+    app.migrations.add(CreateForeignKeyIndexes())
+
     // ---------------------------------------------------------------------
     // DATA MIGRATIONS. Keep these at the end, and add every new schema
     // migration ABOVE this block (#1805).
