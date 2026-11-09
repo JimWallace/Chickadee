@@ -25,9 +25,9 @@ of server CPU to database time is what carries over to production.
 |---|---|---|---|
 | Delete of a submission | 34 ms per row; one assignment (about 1,500 submissions) about 50 s | `request_metrics.submission_id` had no index | Fixed (`CreateForeignKeyIndexes`): 3.5 ms per row |
 | Runner claim with 20,000 pending jobs | 28–63 statements and 18–31 ms of server CPU per claim; p50 1.6–2.7 s at 200 runners | 50 full candidate rows per poll, Fluent query building, lost lock races | Open |
-| Grades CSV export | 2.6 s, of which 49 ms is the database | 44,000 rows hydrated as Fluent models | Open |
+| Grades CSV export | 2.6 s, of which 49 ms is the database | 44,000 rows hydrated as Fluent models | Fixed (`bestGradePercentByStudentAndSetup`): one SQL fold, about 25 ms |
 | Instructor assignment submissions page | about 300 ms, of which 31 ms is the database | 5,100 rows hydrated | Open |
-| A student's submission page | 16% of its CPU | the avatar-wardrobe unlock check (`WardrobeUnlockStore.grantNew`) re-reads the student's whole grade history on each view | Open |
+| A student's submission page | 16% of its CPU | the avatar-wardrobe unlock check (`WardrobeUnlockStore.grantNew`) re-reads the student's whole grade history on each view | Fixed (`WardrobeGrantChecks`): the history is read only when a result or an assignment's due date or concept has changed |
 | Student dashboard | 33–47 ms | | Fine |
 | Status poll (`GET /api/v1/submissions/:id`) | 3 statements, 5–10 ms | | Fine |
 | Idle runner poll | 3 statements, 2.4 ms of CPU | | Fine |
