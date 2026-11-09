@@ -178,8 +178,13 @@
 
         // Forward a diagnostic breadcrumb to the submit-phase telemetry. Best
         // effort: never let telemetry break grading.
-        _report(phase, detail) {
-            try { this.reportPhase(phase, detail); } catch (_) { /* telemetry is best-effort */ }
+        // `assets`, when the worker sent its kernel-file timings with the
+        // phase, is { entries, bootMs } for the cold-load breadcrumb.
+        _report(phase, detail, assets) {
+            try {
+                if (assets) this.reportPhase(phase, detail, assets);
+                else this.reportPhase(phase, detail);
+            } catch (_) { /* telemetry is best-effort */ }
         }
 
         scriptExists(name) {
@@ -204,7 +209,8 @@
                     } else if (this._runDeadline && /_package_install_end$/.test(msg.phase)) {
                         this._runDeadline.resume();
                     }
-                    this._report(msg.phase, phaseDetail(msg));
+                    this._report(msg.phase, phaseDetail(msg),
+                        Array.isArray(msg.assets) ? { entries: msg.assets, bootMs: msg.ms } : undefined);
                     return;
                 }
                 const entry = this._pending.get(msg.id);

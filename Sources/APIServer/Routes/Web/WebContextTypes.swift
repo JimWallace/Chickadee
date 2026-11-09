@@ -377,6 +377,10 @@ struct NotebookContext: Encodable {
     var draftBackupFileName: String?
     /// Where the author downloads that file: its URL under `/jupyterlite/files/`.
     var draftBackupURL: String?
+    /// The declared language's kernel boot files as JSON (`KernelAssetList`),
+    /// for the cold-load measurement in `kernel-asset-telemetry.js`. Empty
+    /// when the language has no vendored kernel.
+    var kernelAssetsJSON = ""
 }
 
 // MARK: - Submission history page

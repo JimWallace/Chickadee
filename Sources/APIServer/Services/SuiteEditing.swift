@@ -119,19 +119,6 @@ func applySuiteEdit(
     )
 }
 
-/// Encodes an `Encodable` payload as a sorted-keys JSON response with
-/// `Content-Type: application/json` and the given status.  Used by the
-/// PUT endpoints to echo their applied state back to the client.
-func jsonResponse<T: Encodable>(_ value: T, status: HTTPResponseStatus = .ok) throws -> Response {
-    let encoder = JSONEncoder()
-    encoder.outputFormatting = [.sortedKeys]
-    let data = try encoder.encode(value)
-    return Response(
-        status: status,
-        headers: ["Content-Type": "application/json"],
-        body: .init(data: data))
-}
-
 /// Reads a persisted manifest and builds the author-facing view of the
 /// suite list, collapsing fully-expanded family filename sets back into
 /// `family:<id>` tokens so the editor sees intent, not plumbing.

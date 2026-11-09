@@ -110,8 +110,10 @@ extension InstructorDashboardRoutes {
     // assignment's test setup.  The manual sibling of the auto-retest
     // trigger in `saveEditedAssignment`.  Always runs with `force = true`
     // so an instructor click re-enqueues even the submissions currently
-    // being worked on (the queue can safely collapse duplicates at claim
-    // time; we'd rather over-trigger than silently skip on a retry).
+    // being worked on. The runner grading such a row under the old
+    // manifest still reports, and result ingest refuses that report because
+    // its claim is gone (`ResultClaimCheck`), so the row is graded once,
+    // by the retest.
     //
     // Bumps `setup.lastRetestedManifestHash` on success so a subsequent
     // cosmetic Save doesn't duplicate the work.

@@ -7,6 +7,7 @@
 import { request as pwRequest } from "playwright";
 import JSZip from "jszip";
 import { createHash, createHmac, randomUUID } from "node:crypto";
+import { execFileSync } from "node:child_process";
 
 export const INSTRUCTOR = { username: "vis_instructor", password: "vis-instructor-pass-1" };
 export const STUDENT = { username: "vis_student", password: "vis-student-pass-1" };
@@ -300,14 +301,50 @@ function workerCollection(submissionID, attemptNumber, collection) {
   };
 }
 
+// Marks the submission claimed, as the claim statement would, and returns
+// its claim token. Result ingest takes a report only for a current claim
+// (Sources/APIServer/Services/ResultClaimCheck.swift). A real claim polls
+// /api/v1/worker/request, which registers the runner on the admin dashboard
+// baseline, so the seed claims the row in the scratch database instead (the
+// run script exports DATABASE_* for the server, scripts/lib/scratch-database.sh)
+// and leaves worker_id empty. assigned_at is the submission time, so the
+// queue wait the admin dashboard reports is a fixed 0 rather than however
+// long the seed took. The token is assigned_at in microseconds
+// (WorkerClaimToken), read back from the row the UPDATE wrote.
+function claimInScratchDatabase(submissionID) {
+  const env = process.env;
+  for (const name of ["DATABASE_HOST", "DATABASE_PORT", "DATABASE_NAME", "DATABASE_USER"]) {
+    if (!env[name]) {
+      throw new Error(`${name} is not set: the run script exports the scratch database for the server and the seed`);
+    }
+  }
+  const sql =
+    "UPDATE submissions SET status = 'assigned', assigned_at = COALESCE(submitted_at, now()) WHERE id = :'sid' " +
+    "RETURNING (extract(epoch FROM assigned_at) * 1000000)::bigint";
+  const out = execFileSync(
+    "psql",
+    [
+      "-h", env.DATABASE_HOST, "-p", env.DATABASE_PORT, "-U", env.DATABASE_USER, "-d", env.DATABASE_NAME,
+      "-v", "ON_ERROR_STOP=1", "-v", `sid=${submissionID}`, "-q", "-X", "-t", "-A",
+    ],
+    { input: sql, env: { ...env, PGPASSWORD: env.DATABASE_PASSWORD ?? "" }, encoding: "utf8" }
+  );
+  const token = out.trim().split("\n")[0];
+  if (!/^\d+$/.test(token)) {
+    throw new Error(`claim ${submissionID}: no claim token from psql: ${out}`);
+  }
+  return token;
+}
+
 // Posts a runner's result report, HMAC-signed as WorkerRequestSigner signs
-// it (Sources/Core/WorkerHMACSigning.swift).
+// it (Sources/Core/WorkerHMACSigning.swift), for a row the seed claims first.
 async function postWorkerResult(baseURL, collection) {
   if (!RUNNER_SECRET) {
     throw new Error("RUNNER_SHARED_SECRET is not set: the run script exports it for the server and the seed");
   }
+  const claimToken = claimInScratchDatabase(collection.submissionID);
   const path = "/api/v1/worker/results";
-  const body = JSON.stringify({ collection, diagnostics: null });
+  const body = JSON.stringify({ collection, diagnostics: null, claimToken });
   const bodyHash = createHash("sha256").update(body).digest("hex");
   const timestamp = String(Math.floor(Date.now() / 1000));
   const nonce = randomUUID();
@@ -323,7 +360,8 @@ async function postWorkerResult(baseURL, collection) {
       "x-worker-body-sha256": bodyHash,
       "x-worker-signature": signature,
       // No x-worker-id: the middleware would record the id as an active
-      // runner, and the admin dashboard baseline shows no runner.
+      // runner, and the admin dashboard baseline shows no runner. With no id,
+      // ingest checks the claim token alone.
     },
     body,
   });

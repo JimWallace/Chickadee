@@ -49,10 +49,6 @@ struct DraftRequirementSuggestions {
     let capabilities: [String]
 }
 
-func loadExistingSolution(req: Request, assignment: APIAssignment) async throws -> ExistingSolution? {
-    try await loadExistingSolution(assignment: assignment, on: req.db)
-}
-
 /// The solution a validation run uses: the linked validation submission, or
 /// failing that the newest one for the setup. Never a student submission, and
 /// never the unvalidated draft (`SolutionSource.validationRuns`).

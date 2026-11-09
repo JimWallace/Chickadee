@@ -62,6 +62,10 @@ struct NotebookBody: HTML {
     /// A staff draft's unpublished edits, kept beside it when the stored
     /// notebook changed elsewhere (#2925): the file's name and its download URL.
     var draftBackup: (name: String, url: String)?
+    /// The kernel's boot files as JSON (`KernelAssetList`), read by
+    /// `kernel-asset-telemetry.js` to measure how much of the boot came over
+    /// the network. Empty renders no measurement.
+    var kernelAssetsJSON = ""
 
     var body: some HTML {
         // The `.main` override only when this body is the page.
@@ -258,6 +262,7 @@ struct NotebookBody: HTML {
             .data("read-only", value: String(isReadOnly)),
             .data("definition-patterns", value: definitionPatternsJSON),
             .data("guide-url", value: guideURL),
+            .data("kernel-assets", value: kernelAssetsJSON),
             .src("about:blank"),
             .custom(name: "loading", value: "eager")
         ) {}
@@ -275,6 +280,7 @@ struct NotebookBody: HTML {
         "/octave-grading-shared.js",
         "/runner-support-sources.js",
         "/grading-executors.js",
+        "/kernel-asset-telemetry.js",
         "/notebook-core.js",
         "/notebook.js",
         "/notebook-toolbar.js",
@@ -378,7 +384,8 @@ extension NotebookBody {
             serverDrive: context.serverDrive,
             draftBackup: context.draftBackupFileName.flatMap { name in
                 context.draftBackupURL.map { (name, $0) }
-            }
+            },
+            kernelAssetsJSON: context.kernelAssetsJSON
         )
     }
 }

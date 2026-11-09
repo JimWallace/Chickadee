@@ -91,14 +91,6 @@ enum SlipDayStore {
         return counts
     }
 
-    /// The student's remaining balance.  Can go negative when staff claw back
-    /// more days than remain unspent; display sites clamp at 0.
-    static func balance(
-        policy: SlipDayPolicy, adjustment: Int, unrefundedCount: Int
-    ) -> Int {
-        policy.daysPerStudent + adjustment - unrefundedCount
-    }
-
     /// Every ledger row in the course (refunded included), newest first —
     /// the instructor roster ledger.
     static func courseLedger(

@@ -676,6 +676,39 @@ coordination, and each must see every edit.
     `submissions` on every poll. Check a new candidate query with
     `EXPLAIN` under statistics taken during a backlog.
 
+### A submission's claim and the result it takes: `worker_id`, `assigned_at`, `ResultClaimCheck`
+
+- **Writers:** the claim statement (`WorkerJobClaim.claimSubmission`) sets
+  `status = assigned`, `worker_id` and `assigned_at`. Three paths re-queue a
+  row and clear both: a forced retest
+  (`bulkFlipStudentSubmissionsToPending(force: true)`), the stuck-submission
+  reaper (`reapStuckAssignedSubmissions`) and the claim's own decode-failure
+  rollback.
+- **Readers:** result ingest (`ResultRoutes.reportResults`) accepts a report
+  only when `ResultClaimCheck.lockCurrentClaim` finds the row `assigned` to
+  the reporting runner (the signed `X-Worker-Id`), or `complete` under its
+  claim (a replay), and, when the report echoes `claimToken`, only for the
+  claim whose `assigned_at` that token names (`WorkerClaimToken`). A report
+  with no `X-Worker-Id` is checked by its token alone. Anything else is HTTP
+  410, and the runner drops the job (`ReporterError.claimSuperseded`).
+- **Rules:**
+  - A new path that re-queues an `assigned` row must clear `worker_id` and
+    `assigned_at`, or the old claim's report still completes it.
+  - A new path that posts a worker result must claim the row first. Tests
+    that seed a row directly call `markClaimedForResultReport`. The
+    visual-regression seed (`Tools/visual-regression/seed.mjs`) claims each
+    row in its scratch database with `assigned_at = submitted_at` and posts
+    the token with no runner id, so the `/admin` baseline shows no runner
+    and a fixed queue wait.
+  - A replay that passes the gate runs the whole ingest again: a second
+    result row and the effects again, as before the gate (a replayed
+    tournament report finishes an advance that failed, #2184).
+  - The browser result (`BrowserResultRoutes`) is not gated: it creates its
+    own `complete` row in the same request, so no claim can go stale.
+- **Trap:** a forced "Retest all" re-queued rows mid-grade, and the old
+  claim's report completed the row with the old suite's grade, so the retest
+  never ran, or added a second result beside the retest's own.
+
 ### Held runner polls: `PendingWorkSignal`, `WorkerLongPoll`
 
 - **Writers:** `SubmissionIntake.accept` calls `notify()` once a `pending`
@@ -1682,6 +1715,52 @@ coordination, and each must see every edit.
   - The per-course staff gate for a submission has one body,
     `isSubmissionStaff(_:testSetupID:on:)`. The form that takes a submission
     delegates to it.
+
+### Browser telemetry rows: `client_diagnostics`
+
+- **Writer:** `ClientDiagnosticsRoutes`, behind `allowedKinds` and
+  `ClientDiagnosticsRateLimiter`, whose key (user, verified setup, kind,
+  source, plus the kernel environment for `asset_load`) decides what a count
+  means: the first event per key per hour.
+- **Readers:** `get_browser_diagnostics`, the instructor dashboard's Browser
+  Errors card (`InstructorCardSeries`, filtered to failure kinds), the
+  editor-unrecoverable health alert (`kernel_error` / `recover_failed`), and
+  the retention prune.
+- **Rule:** a new kind says which readers filter it out. Non-failure kinds
+  (`asset_load`, `kernel_phase`, `editor_ready`) must stay out of every
+  failure count.
+
+### A kernel's boot files: `KernelAssetList`
+
+- **Writers:** the vendored layout: `<env>/<kernel>/kernel.json` and
+  `empack_env_meta.json`, rewritten by a re-vendor.
+- **Readers:** `KernelAssetList` (the cold-load probe and the dashboard's
+  cache warm), the editor's `@jupyterlite/xeus-extension` worker and
+  `xeus-kernel-shared.js` (which build the same URLs),
+  `EditorAssetFastPathMiddleware.isImmutableKernelPackage` (which decides
+  their cache policy) and `KernelEnvironments` (`importable-modules.json`).
+- **Rule:** a change to the vendored layout changes all of them.
+  `KernelAssetListTests` fails when a listed file is missing or a package is
+  not listed.
+
+### The cache-warm marker: `ck-kernel-warm:<env>`
+
+- **Writer:** `kernel-prewarm.js`, through `kernel-asset-telemetry.js`, after
+  every file of one kernel arrived.
+- **Reader:** the same script, to skip a kernel warmed at its current version
+  in the last 7 days.
+- **Rule:** it records "warmed", not "still cached". Nothing else may read it
+  as a cache state.
+
+### The editor iframe's diagnostics messages: `kernel-diag`
+
+- **Writer:** `jl-kernel-diagnostics.js` inside the editor iframe.
+- **Reader:** `handleKernelDiagMessage` in `notebook.js`. It forwards
+  `kernel_phase` and `kernel_error`, acts on `kernel_idle`, `exec_hang` and
+  `wasm_crash`, and keeps `shell_assets` for the `asset_load` breadcrumb
+  without forwarding it.
+- **Rule:** a kind that is not forwarded returns before the forwarding cap,
+  so it cannot use up the page's breadcrumb budget.
 
 ### Browser isolation and the CSP
 

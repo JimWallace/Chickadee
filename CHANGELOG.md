@@ -9,6 +9,48 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.885] - 2026-11-09
+
+### Added
+
+- **Kernel cold-load measurement.** Each editor boot, browser grading boot and dashboard cache warm now sends one `asset_load` breadcrumb: whether any kernel file came over the network, the bytes fetched versus read from the browser cache, and the boot time. `get_browser_diagnostics` reports them per source and per day (`assetLoads`, `assetLoadsByDay`). See `docs/jupyterlite.md`, "What a kernel boot downloads".
+- **The student dashboard warms the kernel cache before class.** When it lists an open notebook assignment, it fetches that kernel's files at idle time and low priority, once per kernel version per browser, and not on a data-saving or 2G connection, so a class's first session does not download every student's kernel at once.
+
+### Changed
+
+- **The design for loading only an assignment's packages in the editor is recorded, not shipped.** Grading already boots a bare kernel and adds packages on demand; the editor still loads the whole environment. `docs/kernel-boot-cost.md` §"The editor" has the measured savings and the reason it needs a change to the vendored kernel path first.
+
+
+## [0.5.884] - 2026-11-09
+
+### Added
+
+- **Statement budgets for the hot pages.** `StatementBudgetTests` counts the SQL statements that each hot page and the idle runner poll send, and holds each within a budget, so a pull request that adds a query fails; one that removes a query prints the new count to lower the budget to. It also measures each page on a small and a larger course, and fails on a count that grows with the data (an N+1). See `docs/performance-program.md`.
+- **The weekly performance task.** `Tools/perf-bench/weekly-task.md` is the procedure a scheduled task follows each week: a read-only production snapshot through the admin MCP, then `Tools/perf-bench/weekly.sh`. It finds the commit behind each regression, fixes it, merges the fix when CI is green, and checks that the deploy moved the number, reverting a fix that made production worse. A migration, a design decision or a large change stays an unmerged pull request with an issue. It logs the week in the new `docs/perf-log.md`. The plan also covers re-testing a whole assignment, the burst most likely to flood the runners.
+
+
+## [0.5.883] - 2026-11-09
+
+### Fixed
+
+- **A forced "Retest all" is no longer undone by an in-flight job.** Result
+  ingest now accepts a runner's report only for the claim that runner still
+  holds: the row must be assigned to it, and the report echoes a claim token
+  that names the current claim. A report from a claim that a forced retest or
+  the stuck-submission reaper re-queued is refused with HTTP 410, and the
+  runner drops it instead of retrying or reporting a failure. Before, such a
+  report completed the re-queued row with the old suite's grade, so the
+  retest never ran, or it wrote a second result beside the retest's own. The
+  runner's last report path that sent no claim token is removed.
+
+
+## [0.5.882] - 2026-11-09
+
+### Removed
+
+- **Unused helpers.** Removed 13 declarations that no code used: two superseded overloads (`loadExistingSolution(req:assignment:)`, `PersonalizationSubstitution.gradingInputs` without seeds), three prose and key constants, the `Application.scanModeConfiguration` accessor, and other dead helpers found by the weekly Periphery scan.
+
+
 ## [0.5.881] - 2026-11-09
 
 ### Changed
