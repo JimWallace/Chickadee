@@ -55,7 +55,9 @@ extension WorkerDaemon {
             // A closure does not infer its thrown type, so it names it.
             try await withTaskCancellationShield { () async throws(ReporterError) in
                 try await reporter.report(
-                    WorkerExecutionReport(collection: collection, diagnostics: diagnostics, matches: matches))
+                    WorkerExecutionReport(
+                        collection: collection, diagnostics: diagnostics, matches: matches,
+                        claimToken: job.claimToken))
             }
             stageTimings.record(
                 "result_report",
@@ -67,6 +69,18 @@ extension WorkerDaemon {
                     "runner_id": workerID,
                     "submission_id": job.submissionID,
                     "status": Self.inferredCollectionStatus(collection).rawValue,
+                ])
+        } catch .claimSuperseded(let body) {
+            // The submission was re-queued after this claim (a forced retest
+            // or the stuck-submission reaper), so the result belongs to no
+            // current claim. Dropped: another claim grades the row, and a
+            // failure report would be refused the same way.
+            writeStructuredRunnerLog(
+                event: "result_discarded_stale_claim",
+                fields: [
+                    "runner_id": workerID,
+                    "submission_id": job.submissionID,
+                    "error_message_summary": body,
                 ])
         } catch {
             writeStructuredRunnerLog(

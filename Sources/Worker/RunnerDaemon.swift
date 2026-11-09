@@ -446,7 +446,8 @@ actor WorkerDaemon {
             runnerVersion: ChickadeeVersion.current,
             timestamp: Date()
         )
-        try await reporter.report(collection)
+        try await reporter.report(
+            WorkerExecutionReport(collection: collection, diagnostics: nil, claimToken: job.claimToken))
     }
 
     func sendHeartbeat() async throws(ReporterError) {

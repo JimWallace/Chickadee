@@ -84,6 +84,8 @@ import VaporTesting
             )
             try await submission.save(on: app.db)
         }
+        // A report answers a claim only (`ResultClaimCheck`).
+        try await markClaimedForResultReport(submissionID, on: app.db)
     }
 
     // MARK: - Tests

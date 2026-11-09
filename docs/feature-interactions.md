@@ -652,6 +652,39 @@ coordination, and each must see every edit.
     `submissions` on every poll. Check a new candidate query with
     `EXPLAIN` under statistics taken during a backlog.
 
+### A submission's claim and the result it takes: `worker_id`, `assigned_at`, `ResultClaimCheck`
+
+- **Writers:** the claim statement (`WorkerJobClaim.claimSubmission`) sets
+  `status = assigned`, `worker_id` and `assigned_at`. Three paths re-queue a
+  row and clear both: a forced retest
+  (`bulkFlipStudentSubmissionsToPending(force: true)`), the stuck-submission
+  reaper (`reapStuckAssignedSubmissions`) and the claim's own decode-failure
+  rollback.
+- **Readers:** result ingest (`ResultRoutes.reportResults`) accepts a report
+  only when `ResultClaimCheck.lockCurrentClaim` finds the row `assigned` to
+  the reporting runner (the signed `X-Worker-Id`), or `complete` under its
+  claim (a replay), and, when the report echoes `claimToken`, only for the
+  claim whose `assigned_at` that token names (`WorkerClaimToken`). A report
+  with no `X-Worker-Id` is checked by its token alone. Anything else is HTTP
+  410, and the runner drops the job (`ReporterError.claimSuperseded`).
+- **Rules:**
+  - A new path that re-queues an `assigned` row must clear `worker_id` and
+    `assigned_at`, or the old claim's report still completes it.
+  - A new path that posts a worker result must claim the row first. Tests
+    that seed a row directly call `markClaimedForResultReport`. The
+    visual-regression seed (`Tools/visual-regression/seed.mjs`) claims each
+    row in its scratch database with `assigned_at = submitted_at` and posts
+    the token with no runner id, so the `/admin` baseline shows no runner
+    and a fixed queue wait.
+  - A replay that passes the gate runs the whole ingest again: a second
+    result row and the effects again, as before the gate (a replayed
+    tournament report finishes an advance that failed, #2184).
+  - The browser result (`BrowserResultRoutes`) is not gated: it creates its
+    own `complete` row in the same request, so no claim can go stale.
+- **Trap:** a forced "Retest all" re-queued rows mid-grade, and the old
+  claim's report completed the row with the old suite's grade, so the retest
+  never ran, or added a second result beside the retest's own.
+
 ### Held runner polls: `PendingWorkSignal`, `WorkerLongPoll`
 
 - **Writers:** `SubmissionIntake.accept` calls `notify()` once a `pending`
