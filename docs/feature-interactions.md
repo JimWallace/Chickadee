@@ -624,7 +624,11 @@ coordination, and each must see every edit.
     stops at the first claim. `collectClaimCandidates` is the eager form for
     callers that need the whole order.
   - Fresh and retest student work share one 50-row scan cap: retests fill
-    what fresh work leaves.
+    what fresh work leaves. Fresh work is read in two pages: the first 10,
+    then the rest only when none of the 10 can be claimed
+    (`ClaimCandidateGroup.freshStudentRest`, keyset from the last row's
+    time). A change to the fresh pass's order or filter must change both
+    pages.
   - The validation groups throw on a missing setup or an undecodable
     manifest. The other groups skip the candidate.
   - A new submission kind that a runner grades needs a group here, or no

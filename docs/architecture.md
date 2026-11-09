@@ -331,10 +331,11 @@ from reverse proxies.
 
 Concurrent runner instances poll `/worker/request` simultaneously. To prevent
 two runners from claiming the same job, `WorkerJobClaim.claimSubmission`
-(`Services/WorkerJobClaim.swift`) claims in a short transaction that locks the
-pending row with `SELECT … FOR UPDATE SKIP LOCKED` (#1172). A row another
-claimer holds is skipped rather than waited on, so the loser moves to its next
-candidate. This holds across any number of server processes, with no
+(`Services/WorkerJobClaim.swift`) claims in one statement: an UPDATE whose
+target is a `SELECT … FOR UPDATE SKIP LOCKED` of the row while it is still
+pending (#1172). A row another claimer holds is skipped rather than waited on,
+so the loser gets no row at once and moves to its next candidate, at the cost
+of one statement. This holds across any number of server processes, with no
 in-process serialisation.
 
 ### Held polls
