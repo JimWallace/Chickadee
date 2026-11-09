@@ -13,7 +13,8 @@
 //
 // A click on an item selects it: the editor reveals its cell and opens its
 // card (`chickadee:select-item`). The rail draws again after a save, because
-// a save re-validates.
+// a save re-validates, and it asks again while the validation is pending, so
+// the pill moves off "Validating…" when the runner reports.
 //
 // It also hands the outline to the editor (`chickadee:set-suite`), which
 // draws the test cards beside the cells (NB7), and answers the cards: Edit
@@ -87,6 +88,52 @@
         };
     }
 
+    /// The chip's wording and tone for the states `pillState` leaves to the
+    /// server: failed with no outline issue, no runner, and not validated.
+    /// It mirrors `pillText` and `pillClass` in
+    /// `Sources/APIServer/Views/WorkbenchAppBar.swift`. The page renders that
+    /// wording once, and a poll that sees the status move must redraw it.
+    /// workbench-poll.test.mjs checks that this and `pillState` agree with
+    /// the Swift. Pure.
+    function chipState(validation) {
+        var status = validation && validation.status;
+        if (status === 'failed') return { text: '✗ Validation failed', tone: 'err' };
+        if (status === 'no-runner') return { text: 'No runner', tone: 'err' };
+        return { text: 'Not validated', tone: '' };
+    }
+
+    // How long the rail keeps asking for a result. A runner claims a
+    // validation in seconds when one is free, so the first half-minute asks
+    // often; a queue behind student work can take minutes, so it then asks
+    // less often, and it stops after ten minutes. A save starts it again.
+    var POLL_FAST_MS = 2000;
+    var POLL_SLOW_MS = 5000;
+    var POLL_FAST_FOR_MS = 30000;
+    var POLL_LIMIT_MS = 10 * 60 * 1000;
+    // After the solution run, the starter run (NB8) still has to land. With
+    // no notebook there is no starter run, so this wait is short, and only a
+    // save starts it: a page load does not wait for a starter run.
+    var STARTER_POLLS = 12;
+
+    /// True when the solution run has a result and the starter run has not
+    /// caught up with it. Pure.
+    function starterBehind(validation) {
+        if (!validation || !validation.solutionRunAt) return false;
+        if (validation.status !== 'passed' && validation.status !== 'failed') return false;
+        if (!validation.starterRunAt) return true;
+        return Date.parse(validation.starterRunAt) < Date.parse(validation.solutionRunAt);
+    }
+
+    /// The milliseconds until the rail asks again, or null to stop. `elapsed`
+    /// is the time since the save; `starterPolls` counts the polls made while
+    /// waiting for the starter run alone. Pure.
+    function pollDelay(validation, elapsed, starterPolls) {
+        if (!validation || elapsed >= POLL_LIMIT_MS) return null;
+        if (validation.status === 'pending') return elapsed < POLL_FAST_FOR_MS ? POLL_FAST_MS : POLL_SLOW_MS;
+        if (starterBehind(validation) && starterPolls < STARTER_POLLS) return POLL_SLOW_MS;
+        return null;
+    }
+
     /// A reason cut to one short phrase: its first 60 characters. Pure.
     function clip(text) {
         var line = String(text);
@@ -129,6 +176,7 @@
 
     var api = {
         itemState: itemState, glyph: glyph, totalsText: totalsText, pillState: pillState, clip: clip,
+        chipState: chipState, starterBehind: starterBehind, pollDelay: pollDelay,
         sectionCaption: sectionCaption, revealTarget: revealTarget, findItem: findItem, cssEscape: cssEscape,
     };
 
@@ -204,8 +252,15 @@
             var chip = document.getElementById('wb-validation');
             var button = document.getElementById('wb-issues');
             var note = document.getElementById('wb-validation-note');
-            var state = pillState(outline && outline.validation);
-            if (!chip || !button || !state) return;
+            var validation = outline && outline.validation;
+            if (!chip || !button || !validation) return;
+            // The states the outline cannot improve keep the server's
+            // wording, redrawn here because a poll can see the status move.
+            var state = pillState(validation);
+            if (!state) {
+                var server = chipState(validation);
+                state = { text: server.text, note: '', tone: server.tone, issues: [] };
+            }
             issueIDs = state.issues;
             nextIssue = 0;
             button.hidden = !issueIDs.length;
@@ -217,7 +272,7 @@
             } else {
                 chip.textContent = state.text;
                 chip.classList.toggle('chip-ok', state.tone === 'ok');
-                chip.classList.remove('chip-err');
+                chip.classList.toggle('chip-err', state.tone === 'err');
             }
             if (note) {
                 note.textContent = state.note;
@@ -251,19 +306,68 @@
             }
         };
 
-        var refresh = function () {
+        // A save queues a validation that a runner grades later, so one
+        // fetch after the save sees only "pending". While the outline says
+        // pending, or the starter run has not caught up, the rail asks again
+        // (`pollDelay`). One timer at a time: each fetch replaces it.
+        var pollTimer = null;
+        var pollElapsed = 0;
+        var starterPolls = 0;
+        // Each fetch takes a number. A response to an older fetch than the
+        // newest is dropped, so a slow poll cannot draw over a save.
+        var fetchSeq = 0;
+        var canPoll = typeof setTimeout === 'function' && typeof clearTimeout === 'function';
+
+        var schedulePoll = function (validation) {
+            if (!canPoll) return;
+            if (pollTimer !== null) clearTimeout(pollTimer);
+            pollTimer = null;
+            var delay = pollDelay(validation, pollElapsed, starterPolls);
+            if (delay === null) return;
+            if (validation.status !== 'pending') starterPolls += 1;
+            pollTimer = setTimeout(function () {
+                pollTimer = null;
+                pollElapsed += delay;
+                void fetchOutline('poll');
+            }, delay);
+        };
+
+        /// `cause` is `load`, `save` or `poll`.
+        var fetchOutline = function (cause) {
             var shell = document.getElementById('wb-shell');
             var url = shell && shell.getAttribute('data-suite-url');
             if (!url) return Promise.resolve(null);
+            var fromPoll = cause === 'poll';
+            if (!fromPoll) {
+                pollElapsed = 0;
+                starterPolls = cause === 'save' ? 0 : STARTER_POLLS;
+            }
+            var seq = ++fetchSeq;
+            var keepPolling = function () {
+                // A poll that failed asks again, up to the limit: one dropped
+                // request must not leave the pill on "Validating…".
+                if (seq === fetchSeq) schedulePoll(outline && outline.validation);
+                return null;
+            };
             return fetch(url, { credentials: 'same-origin', headers: { Accept: 'application/json' } })
                 .then(function (res) { return res.ok ? res.json() : null; })
                 .then(function (fresh) {
-                    draw(fresh);
-                    sendSuite();
+                    if (seq !== fetchSeq) return null;
+                    if (fromPoll && !fresh) return keepPolling();
+                    // A poll that finds nothing new leaves the rail and the
+                    // editor's cards alone.
+                    var changed = !fromPoll || JSON.stringify(fresh) !== JSON.stringify(outline);
+                    if (changed) {
+                        draw(fresh);
+                        sendSuite();
+                    }
+                    schedulePoll(fresh && fresh.validation);
                     return fresh;
                 })
-                .catch(function () { return null; });
+                .catch(function () { return fromPoll ? keepPolling() : null; });
         };
+
+        var refresh = function () { return fetchOutline('save'); };
 
         // A save re-validates, and a suite edit changes the items.
         window.addEventListener('chickadee:workbench', function () { void refresh(); });
@@ -379,7 +483,7 @@
         if (issuesButton) issuesButton.addEventListener('click', stepIssue);
 
         global.ChickadeeWorkbenchRail = { refresh: refresh };
-        void refresh();
+        void fetchOutline('load');
     }
 
     // Node export for the .mjs unit tests (Tests/BrowserRunnerJSTests).
