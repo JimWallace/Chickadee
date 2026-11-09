@@ -62,8 +62,16 @@ with the `Chickadee_Admin` MCP connected, as the weekly dead-code review does
    moved more than 25%.
 4. Opens a draft pull request with the log entry. The maintainer merges it, so
    the log is reviewed like any other change.
+5. For each confirmed regression, finds the commit that caused it, fixes it
+   in a pull request, merges it when CI is green, and checks that the deploy
+   is healthy and the number moved, reverting if production got worse. A
+   migration, a design decision or a large change stays an unmerged pull
+   request with an issue. In a week with no regression, it makes one
+   measured improvement in that week's layer.
 
-It never writes to production and never runs `chickadee-loadtest`.
+It changes production only through merges to `main` and never runs
+`chickadee-loadtest` against it. The full procedure is
+`Tools/perf-bench/weekly-task.md`.
 
 These admin MCP calls answer the questions that matter for the week. Record
 each as a row (date, version from `get_deployment_info`, value):
@@ -123,8 +131,8 @@ that regresses it fails before merge.
 
 | Ratchet | How it is measured | Where it runs |
 |---|---|---|
-| SQL statements per hot-path request | An APITests suite that wraps the database with a statement counter and drives each page of the baseline table in `database-performance.md` once against a few seeded rows, plus the runner poll (idle and claim). The statement counts there are the starting baselines | `swift-tests.yml` |
-| Statements that grow with the table | The same suite at two data sizes (10 rows and 1,000 rows); the count must be equal. A count that grows is an N+1 | `swift-tests.yml` |
+| SQL statements per hot-path request | **Done:** `StatementBudgetTests` counts the statements of each page of the baseline table in `database-performance.md`, plus the idle runner poll, and holds each within a budget: more statements fail, fewer print the new count to lower the budget to. A test-only middleware counts PostgresKit's per-statement log on the request's logger. The claim path is still to add | `swift-tests.yml` |
+| Statements that grow with the table | **Done:** the same suite at two course sizes (2 students with 2 attempts each, 8 with 3); the counts must be equal, and a failure lists the extra statements. A count that grows is an N+1 | `swift-tests.yml` |
 | Rows hydrated per request | Same suite; the count of Fluent models decoded. Fluent hydration costs 40–60 µs per row on the event loop ([database-performance.md](database-performance.md)) | `swift-tests.yml` |
 | Foreign keys without an index | Exists: `ForeignKeyIndexCoverageTests` | — |
 | Runner wasm size | Exists: `scripts/check-runner-wasm-size.sh` gates on a generous ceiling (about 35% over today) and only prints the delta to `runner-size-baseline.txt`. Add a small allowance over the baseline instead, so growth needs a deliberate baseline edit | CI, as today |
@@ -138,6 +146,92 @@ The first three are one test suite, and they are the core of the program: they
 turn every finding in [database-performance.md](database-performance.md) into a
 number that cannot quietly come back. Each new guard gets a fixture that shows
 it failing (`scripts/check-guards.sh`, `scripts/check-guard-coverage.sh`).
+
+## Scenario: re-test a whole assignment
+
+An instructor finds an error in a test suite during the term, fixes it, and
+every submission to that assignment is graded again. This is the largest
+burst of work the runners see, larger than a deadline: a deadline adds one
+job per student who submits, and a re-test adds one job for every attempt
+every student has made. It is the scenario most likely to flood the runners.
+
+### What happens today
+
+Read from the code on 2026-11-09:
+
+- **Trigger.** A grade-affecting suite edit, on the web or through MCP,
+  re-queues automatically when the manifest hash changed
+  (`retestSubmissionsIfManifestChanged`). "Retest all" on the instructor page
+  re-queues with `force: true`.
+- **Enqueue.** `bulkFlipStudentSubmissionsToPending` runs one `COUNT` and
+  one `UPDATE` for the whole assignment. It sets `status = pending` and
+  `retested_at`, and adds no rows. This part is already efficient.
+- **Scope.** Every attempt of every student is re-graded, not only the
+  attempt that counts for the grade. 300 students with 5 attempts each is
+  1,500 jobs for one assignment.
+- **Priority.** A fresh student submission is claimed before any re-test
+  (`ClaimCandidateLoader`: `freshStudent`, then `retestStudent`). A runner
+  does not stop a running job, so a fresh job waits at most for one slot
+  to free up. Re-tests run oldest `submitted_at` first, so the newest
+  attempts, the ones most likely to count, are graded last.
+- **Validation waits.** The solution validation queued after the edit is in
+  a group after `retestStudent`, so it waits until every re-test is claimed.
+- **Runner work per job.** Each job downloads its submission and copies the
+  whole prepared setup directory into a fresh workspace. The edited suite
+  has a new cache key, so each runner downloads and prepares the setup once.
+- **Results.** Each re-graded attempt adds a result row and flags a
+  BrightSpace grade push.
+- **A known defect.** With `force: true`, a row that a runner is still
+  grading is re-queued, and that runner's result, graded with the old suite,
+  still marks the row complete. The re-test of that row is lost. This needs
+  its own fix; result ingest should accept a report only from the runner
+  that holds the job.
+
+### What to measure
+
+| Number | Where | Why |
+|---|---|---|
+| Time to re-queue | the `POST .../retest` request on the bench course (about 1,500 rows per assignment) | the enqueue is one statement; it should stay well under a second |
+| Drain time | from the re-test to the last result, with the two real runners | what the instructor waits for; the number to drive down |
+| Jobs per minute per runner | `get_metrics_snapshot` `execution`, and the grading run in the bench kit | sets the drain time; the per-job overhead outside the scripts is the part Chickadee controls |
+| Fresh-job queue wait during a drain | queue wait p95 of fresh student jobs only, during the drain | the student-facing cost; should equal the wait with no re-test in the queue |
+| Claim cost with a re-test backlog | `bench.sh` with the backlog marked `retested_at` (a new `sql/backlog-retest.sql`) | the claim query must stay flat with 20,000 pending re-tests |
+
+Add the re-test to the weekly benchmark as a scenario: queue a re-test of
+one bench assignment, run the two real runners until it drains, and record
+the drain time, jobs per minute and the fresh-job wait while a trickle of
+fresh submissions arrives. In production, record the same numbers after each
+real re-test in `docs/perf-log.md`.
+
+A Swift test should pin the priority: with a re-test backlog pending, a fresh
+submission is the next job claimed.
+
+### Ways to make it cheaper, largest first
+
+1. **Re-grade the attempt that counts first.** Queue each student's
+   best or latest attempt (whichever the grade uses) ahead of their other
+   attempts. With 5 attempts per student that brings the grade-relevant
+   drain down to about a fifth. Older attempts can follow at a lower
+   priority, or only on request.
+2. **Newest first within the re-tests.** Order the `retestStudent` group by
+   `submitted_at` descending.
+3. **Validation ahead of re-tests.** Move solution validation ahead of
+   `retestStudent`, so the instructor learns that the fixed suite passes the
+   solution before 1,500 jobs run on it.
+4. **Fix the stale-result defect** above before tuning anything else, because
+   it makes the drain look shorter than it is.
+5. **Keep a slot for fresh work.** No preemption means that a runner whose
+   slots are all on re-tests delays a fresh job by up to one job's length.
+   A runner flag (for example `--reserve-fresh-slots 1`; a CLI flag, not a
+   variable) that keeps one slot for fresh jobs bounds that delay.
+6. **Cut the per-job overhead.** Measure the setup-directory copy and the
+   submission download in the grading run. If the copy dominates, a
+   read-only bind into the sandbox or a hard-link copy replaces it.
+7. **Coalesce repeated edits.** Two quick fixes to the same suite re-grade
+   everything twice once the first pass has completed. A short delay before an
+   automatic re-test, reset by each grade-affecting edit, sends one pass.
+8. **Batch the grade push.** One BrightSpace push per assignment after the
+   drain, not one flag per re-graded attempt.
 
 ## Layer rotation
 
@@ -298,11 +392,14 @@ lease) and that the table sizes are flat week over week.
    server host's cores and memory. Set `--max-jobs` on each runner from its
    cores, then its `pids_limit` and `mem_limit` (or `TasksMax=` and
    `MemoryMax=`) to match.
-2. Add the statement- and hydration-count suite with its baselines. This is
+2. Add the statement- and hydration-count suite with its baselines (the
+   statement half is done: `StatementBudgetTests`). This is
    the ratchet that pays for itself first: the weekly check finds a page
    that reads more a week later, and this suite stops it in the PR.
 3. Extend `Tools/perf-bench/` with the grading run, the status-poll load and
    CPU per request, and add the digest section.
+   Add the re-test scenario to it, and a test that pins fresh-before-re-test
+   priority. Fix the stale-result defect.
 4. Apply the Postgres settings one at a time, a week apart, and read each
    result in the production snapshot.
 5. Set up the scheduled task on the maintainer's work machine: the
