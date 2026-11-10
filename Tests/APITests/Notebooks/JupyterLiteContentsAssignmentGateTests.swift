@@ -178,4 +178,42 @@ import VaporTesting
             try await put(root + "/scratch/notes.txt", expecting: .ok)
         }
     }
+
+    /// A file in a copy the gate would refuse reads as read-only, so the
+    /// editor opens it without autosave.
+    @Test(arguments: [
+        (AssignmentVisibility.open, "student", true),
+        (.closed, "student", false),
+        (.closed, "ta", true),
+    ])
+    func aFileReadsAsWritableOnlyWhereASaveWouldLand(
+        visibility: AssignmentVisibility, who: String, writable: Bool
+    )
+        async throws
+    {
+        try await withApp(app) { _ in
+            try await seed(visibility: visibility)
+            let path = try folder(of: who == "ta" ? ta : student) + "/assignment.ipynb"
+            try await app.asyncTest(
+                .GET, "/jupyterlite/api/contents/\(path)",
+                beforeRequest: { req in req.headers.replaceOrAdd(name: "X-Test-User", value: who) },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    let model = try JSONSerialization.jsonObject(with: Data(res.body.string.utf8)) as? [String: Any]
+                    #expect(model?["writable"] as? Bool == writable)
+                })
+        }
+    }
+
+    /// Course staff are not under the storage quota: their copies keep outputs.
+    @Test func courseStaffAreNotUnderTheStorageQuota() async throws {
+        try await withApp(app) { _ in
+            try await seed(visibility: .open)
+            app.jupyterLiteContentsWriteLimits = JupyterLiteContentsWriteLimits(
+                maxUserFolderBytes: 1, writesPerMinute: 1_000)
+            // New files, so each save grows the folder.
+            try await put(try folder(of: ta) + "/notes.txt", as: "ta", expecting: .ok)
+            try await put(try folder(of: student) + "/notes.txt", expecting: .payloadTooLarge)
+        }
+    }
 }

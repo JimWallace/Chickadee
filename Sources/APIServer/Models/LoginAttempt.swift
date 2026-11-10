@@ -21,7 +21,7 @@ final class LoginAttempt: Model, @unchecked Sendable {
         /// (`ActivitySessionStore.join`, docs/lab-groups.md).
         static let joinFailure = "join_failure"
         /// A write to the editor's contents routes, keyed by user id
-        /// (`JupyterLiteContentsWriteRateLimitMiddleware`, #2926).
+        /// (`ContentsWriteRateLimitMiddleware`, #2926).
         static let contentsWrite = "contents_write"
     }
 

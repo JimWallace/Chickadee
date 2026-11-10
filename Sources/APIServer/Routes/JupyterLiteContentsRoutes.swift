@@ -184,12 +184,27 @@ struct JupyterLiteContentsRoutes: RouteCollection {
     /// save of it from this caller. JupyterLab opens a file it may not write
     /// read-only, so a staff member reading a student's copy, a support file, a
     /// dataset or a `view-`/`preview-` record gets no autosave that the server
-    /// would refuse (#469).
+    /// would refuse (#469). A student's copy of an assignment that is closed
+    /// or not yet open to them reads as read-only too, so an editor left open
+    /// past the close does not autosave into the gate's refusal (#2927).
     private func mayWrite(req: Request, caller: APIUser, relativePath: String, url: URL) async throws -> Bool {
         guard !isSymlink(url: url), let userRoot = try userRootPath(for: caller, isStaff: false),
             relativePath.hasPrefix(userRoot + "/")
         else { return false }
         let parts = relativePath.split(separator: "/", maxSplits: 3).map(String.init)
+        if parts.count >= 3 {
+            let target = WritableTarget(relativePath: relativePath, url: url)
+            do {
+                try await gateStudentWrite(req: req, caller: caller, target)
+            } catch is AssignmentSubmissionGateError {
+                return false
+            } catch let error as AppError {
+                // An unenrolled student: the write routes refuse them too.
+                if case .notFound = error { return false }
+                if case .forbidden = error { return false }
+                throw error
+            }
+        }
         guard parts.count == 4 else { return true }
         let protected = try await WorkingCopyProtectedFiles.paths(
             setupID: parts[2], on: req.db, application: req.application)

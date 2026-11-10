@@ -1,4 +1,4 @@
-// APIServer/Middleware/JupyterLiteContentsWriteRateLimitMiddleware.swift
+// APIServer/Middleware/ContentsWriteRateLimitMiddleware.swift
 //
 // Per-user sliding-window rate limit on the editor's contents write routes
 // (#2926, JupyterLiteContentsRoutes+Write.swift). Reuses the
@@ -14,7 +14,7 @@ import Fluent
 import Foundation
 import Vapor
 
-struct JupyterLiteContentsWriteRateLimitMiddleware: AsyncMiddleware {
+struct ContentsWriteRateLimitMiddleware: AsyncMiddleware {
     func respond(to request: Request, chainingTo next: any AsyncResponder) async throws -> Response {
         guard let userID = request.auth.get(APIUser.self)?.id else {
             return try await next.respond(to: request)

@@ -21,7 +21,7 @@ enum ContentsWriteLimitError: AbortError, Equatable {
         case .storageQuotaExceeded(let quotaBytes):
             let megabytes = quotaBytes / (1024 * 1024)
             return "This save would take your files past the \(megabytes) MB storage limit. "
-                + "Clear large cell outputs and save again, or ask your instructor for help."
+                + "Make the file smaller, or ask your instructor to free space in your folder."
         }
     }
 }

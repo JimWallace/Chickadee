@@ -44,9 +44,9 @@
 // because the assignment and the solution are saved from them.
 //
 // Two limits bound the routes (#2926, JupyterLiteContentsWriteLimits): a
-// per-user rate limit (JupyterLiteContentsWriteRateLimitMiddleware) and a
-// per-user storage quota on a save that grows the user's files
-// (UserFolderUsage).
+// per-user rate limit (ContentsWriteRateLimitMiddleware) and a
+// per-user storage quota on a save that grows a student's files
+// (UserFolderUsage). Course staff are not under the quota.
 //
 // Conflicts are JupyterLab's: before a save it compares the file's
 // `last_modified` with its own last save, so a reset done on the server since
@@ -67,7 +67,7 @@ extension JupyterLiteContentsRoutes {
     static let checkpointID = "checkpoint"
 
     func bootWriteRoutes(_ routes: any RoutesBuilder) {
-        let routes = routes.grouped(JupyterLiteContentsWriteRateLimitMiddleware())
+        let routes = routes.grouped(ContentsWriteRateLimitMiddleware())
         routes.on(
             .PUT, "jupyterlite", "api", "contents", "**",
             body: .collect(maxSize: Self.maxSaveBodySize), use: saveContents)
@@ -280,12 +280,18 @@ extension JupyterLiteContentsRoutes {
     /// Refuses a save that would take the caller's own files past the quota
     /// (#2926). A save that does not grow the file always lands, so a user
     /// over the limit can still save a smaller notebook.
+    ///
+    /// Course staff are not limited. Their authoring copies keep outputs, and
+    /// the server adds an `(unsaved draft …)` backup beside a diverged draft
+    /// that no route can delete, so a quota would in time refuse every staff
+    /// autosave. The quota bounds what students store.
     func enforceStorageQuota(
         req: Request, caller: APIUser, target: WritableTarget, incomingBytes: Int
     ) async throws {
         guard let userRoot = try userRootPath(for: caller, isStaff: false) else {
             throw AppError.unauthenticated
         }
+        if try await isStaffAnywhere(caller, includingArchived: false, db: req.db) { return }
         let replaced = try await runBlocking { fileSizeBytes(at: target.url.path) }
         guard incomingBytes > replaced else { return }
         let quota = req.application.jupyterLiteContentsWriteLimits.maxUserFolderBytes
