@@ -285,9 +285,14 @@ private func evaluateRunnerOffline(
 /// reporting e.g. `"runner/1.0"`) are skipped, never counted as behind —
 /// mirroring `RunnerVersionGate`'s tolerance so the fleet's odd one out can't
 /// page.
+///
+/// The summary names each runner that is behind, its version, and how many
+/// releases behind it is. Until Nov 2026 it gave only a count ("1 runner(s)
+/// behind"), and it paged every 30 minutes for four days while `Sparrow` could
+/// not reach the image registry, without saying which runner to look at.
 func decideRunnerVersionSkew(
     serverVersion: String,
-    runnerVersions: [String],
+    runners: [RunnerVersionReport],
     serverUptimeSeconds: TimeInterval,
     graceSeconds: TimeInterval
 ) -> RuleEvaluation {
@@ -298,28 +303,80 @@ func decideRunnerVersionSkew(
     // so this is purely defensive.
     guard comparator.canParse(serverVersion) else { return .ok }
 
-    let behind = runnerVersions.filter {
-        comparator.compare($0, serverVersion) == .orderedAscending
+    let behind = runners.filter {
+        comparator.compare($0.version, serverVersion) == .orderedAscending
     }
-    guard !behind.isEmpty else { return .ok }
+    guard let first = behind.first else { return .ok }
 
     let oldest =
-        behind.min { (comparator.compare($0, $1) ?? .orderedSame) == .orderedAscending } ?? behind[0]
-    let distinctBehind = Set(behind).sorted()
+        behind.map(\.version)
+        .min { (comparator.compare($0, $1) ?? .orderedSame) == .orderedAscending } ?? first.version
+    let distinctBehind = Set(behind.map(\.version)).sorted()
+    let named = behind.filter { !$0.runnerID.isEmpty }
+    // At most `runnerVersionSkewNamedLimit` runners in the summary, so a whole
+    // fleet behind cannot outgrow a webhook's message limit (Pushover: ~1024).
+    var described = behind.prefix(runnerVersionSkewNamedLimit).map {
+        describeRunnerBehind($0, serverVersion: serverVersion, comparator: comparator)
+    }
+    if behind.count > runnerVersionSkewNamedLimit {
+        described.append("and \(behind.count - runnerVersionSkewNamedLimit) more")
+    }
+    let heading = behind.count == 1 ? "Runner behind" : "\(behind.count) runners behind"
+    var details: [String: String] = [
+        "server_version": serverVersion,
+        "behind_count": String(behind.count),
+        "behind_versions": distinctBehind.joined(separator: ","),
+        "oldest_runner_version": oldest,
+        "grace_seconds": String(Int(graceSeconds)),
+    ]
+    if !named.isEmpty {
+        details["behind_runners"] = named.map(\.runnerID).joined(separator: ", ")
+    }
     return RuleEvaluation(
         isFiring: true,
         summary:
-            "\(behind.count) runner(s) behind server v\(serverVersion) (oldest v\(oldest)) — "
+            "\(heading) server v\(serverVersion): \(described.joined(separator: ", ")) — "
             + "past the update window; check that runner's update job and its log",
-        details: [
-            "server_version": serverVersion,
-            "behind_count": String(behind.count),
-            "behind_versions": distinctBehind.joined(separator: ","),
-            "oldest_runner_version": oldest,
-            "grace_seconds": String(Int(graceSeconds)),
-        ]
+        details: details
     )
 }
+
+/// The version-only form. Production passes runner IDs; this form remains for
+/// the existing `ServerHealthAlertTests` cases, which assert the firing logic
+/// and the detail keys. Each runner is described as "a runner at vX".
+func decideRunnerVersionSkew(
+    serverVersion: String,
+    runnerVersions: [String],
+    serverUptimeSeconds: TimeInterval,
+    graceSeconds: TimeInterval
+) -> RuleEvaluation {
+    decideRunnerVersionSkew(
+        serverVersion: serverVersion,
+        runners: runnerVersions.map { RunnerVersionReport(runnerID: "", version: $0) },
+        serverUptimeSeconds: serverUptimeSeconds,
+        graceSeconds: graceSeconds
+    )
+}
+
+/// "Sparrow at v0.5.878 (14 releases behind)". The count is given only when
+/// both versions are `major.minor.patch` with the same major and minor, where
+/// the patch difference is the number of releases between them; a minor bump
+/// resets the patch number, so across one the count would mean nothing.
+private func describeRunnerBehind(
+    _ runner: RunnerVersionReport,
+    serverVersion: String,
+    comparator: VersionComparator
+) -> String {
+    let name = runner.runnerID.isEmpty ? "a runner" : runner.runnerID
+    var text = "\(name) at v\(runner.version)"
+    if let count = comparator.releasesBehind(runner.version, serverVersion) {
+        text += count == 1 ? " (1 release behind)" : " (\(count) releases behind)"
+    }
+    return text
+}
+
+/// How many runners the runner-version-skew summary names before "and N more".
+let runnerVersionSkewNamedLimit = 5
 
 private func evaluateRunnerVersionSkew(
     on application: Application,
@@ -327,13 +384,13 @@ private func evaluateRunnerVersionSkew(
     now: Date
 ) async -> RuleEvaluation {
     let uptime = now.timeIntervalSince(application.serverStartedAt)
-    let versions = await application.workerActivityStore.knownRunnerVersions(
+    let runners = await application.workerActivityStore.knownRunnerVersionsByID(
         rememberSeconds: runnerPresenceRememberSeconds,
         now: now
     )
     return decideRunnerVersionSkew(
         serverVersion: ChickadeeVersion.current,
-        runnerVersions: versions,
+        runners: runners,
         serverUptimeSeconds: uptime,
         graceSeconds: configuration.runnerVersionSkewGraceSeconds
     )
