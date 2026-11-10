@@ -21,7 +21,7 @@ extension ElementaryPageFixtures {
                 targetID: targetID, metadata: metadata, remoteAddr: "10.0.0.1", outcome: "ok",
                 outcomeTier: AuditOutcome.ok.tierClass,
                 occurredAt: Date(timeIntervalSince1970: 1_790_000_000 - Double(day) * 86_400),
-                clockText: "10:00:00", categoryKey: "auth", tileKind: "slides", iconHref: "#i-key")
+                clockText: "10:00:00", categoryKey: "auth", tileKind: "slides", iconHref: "#i-log-in")
         }
         let rows = [
             row(1, targetType: "course", targetID: "c1", metadata: "{\"code\": \"CS135\"}"),

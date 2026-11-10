@@ -149,7 +149,7 @@ private struct LTIPlatformRow: HTML {
     var body: some HTML {
         tr {
             td(.class("item-tile-cell")) {
-                span(.class("item-tile")) { Icon("i-link") }
+                span(.class("item-tile")) { Icon("i-plug") }
             }
             td(.class("item-main")) {
                 div(.class("item-title")) { platform.displayName }
