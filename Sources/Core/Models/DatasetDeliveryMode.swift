@@ -9,10 +9,14 @@
 ///
 /// - `shared`: every student receives the source bytes unchanged, so the
 ///   working copy links to the setup's one extracted copy.
-/// - `perStudent`: the bytes depend on the student (a sample, a part or a
-///   transform), so the working copy holds a file of its own.
+/// - `perPart`: a partition with no transforms. Each part is the same for
+///   every student dealt it, so each part is stored once and the working copy
+///   links to the student's part.
+/// - `perStudent`: the bytes depend on the student (a sample or a transform),
+///   so the working copy holds a file of its own.
 public enum DatasetDeliveryMode: String, Codable, Sendable, Equatable, CaseIterable {
     case shared
+    case perPart
     case perStudent
 
     /// The mode for a spec with these settings. This is the one statement of
@@ -24,14 +28,25 @@ public enum DatasetDeliveryMode: String, Codable, Sendable, Equatable, CaseItera
     /// it still classifies as `perStudent`: the rule reads only the spec, and
     /// a wrong `perStudent` costs storage where a wrong `shared` would hand
     /// one student's rows to every student.
-    public init(isPartition: Bool, sampleSize: Int?, hasTransforms: Bool) {
-        self = !isPartition && sampleSize == nil && !hasTransforms ? .shared : .perStudent
+    ///
+    /// `perPart` needs a partition with a usable part count and no
+    /// transforms. A transform varies the cells per student, so a transformed
+    /// partition is `perStudent`; so is a partition with no part count, which
+    /// authoring refuses and which the materializer would deliver whole.
+    public init(isPartition: Bool, partCount: Int?, sampleSize: Int?, hasTransforms: Bool) {
+        if isPartition {
+            self = !hasTransforms && (partCount ?? 0) > 0 ? .perPart : .perStudent
+        } else {
+            self = sampleSize == nil && !hasTransforms ? .shared : .perStudent
+        }
     }
 }
 
 extension DatasetSpec {
     /// How this file is stored in a student's working copy.
     public var deliveryMode: DatasetDeliveryMode {
-        DatasetDeliveryMode(isPartition: kind == .partition, sampleSize: sampleSize, hasTransforms: !transforms.isEmpty)
+        DatasetDeliveryMode(
+            isPartition: kind == .partition, partCount: partCount, sampleSize: sampleSize,
+            hasTransforms: !transforms.isEmpty)
     }
 }

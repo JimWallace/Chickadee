@@ -805,6 +805,10 @@ func writeDatasetFiles(
     }
 
     let sharedDir = application.testSetupsDirectory + "shared/\(setupID)/"
+    let targets = DatasetLinkTargets(
+        sharedDir: sharedDir, partsRoot: DatasetPartStore.root(testSetupsDirectory: application.testSetupsDirectory),
+        setupID: setupID, dealNumber: dealNumber,
+        holdsNoPartYet: DatasetDeals.holdsNoPartYet(manifest: props, dealNumber: dealNumber))
 
     // Skip the slice + write when nothing that determines the bytes has
     // changed since the last materialization and every target file is still
@@ -815,7 +819,7 @@ func writeDatasetFiles(
                 props: props, seeds: [seedHex, courseSeedHex ?? "-", dealNumber.map(String.init) ?? "-"],
                 sharedDir: sharedDir),
             targetsPresent: props.datasets.allSatisfy {
-                datasetTargetIsCurrent(spec: $0, studentDir: studentDir, sharedDir: sharedDir)
+                datasetTargetIsCurrent(spec: $0, studentDir: studentDir, targets: targets)
             }
         )
     }
@@ -831,14 +835,14 @@ func writeDatasetFiles(
     // pool (#1156). A failed write is not a success (#2776): caching the
     // fingerprint after one left the student with a stale dataset until a
     // restart, so a failure skips the record and the next visit retries.
-    // A shared file is linked, never read: its bytes are the source's, so only
+    // A linked file (a shared one, or a stored part) is never read here: only
     // the per-student specs go through the resolver.
     let perStudent = {
         var manifest = props
         manifest.datasets = props.datasets.filter { $0.deliveryMode == .perStudent }
         return manifest
     }()
-    let sharedFiles = props.datasets.filter { $0.deliveryMode == .shared }.map(\.file)
+    let linkedSpecs = props.datasets.filter { $0.deliveryMode != .perStudent }
 
     let wrote: Bool
     do {
@@ -846,15 +850,15 @@ func writeDatasetFiles(
             // Every file is attempted, as before; the first failure is
             // thrown after the loop.
             var firstFailure: (any Error)?
-            for filename in sharedFiles {
+            // The parts a sweep keeps: every partition's current fingerprint.
+            let keeping = linkedSpecs.isEmpty ? [] : targets.currentFingerprints(of: props.datasets)
+            for spec in linkedSpecs {
                 // Defense-in-depth (#1104): never join an unvetted name onto
                 // the student dir. A source the extraction does not hold yet
                 // is skipped, as the resolver skips it, and not linked.
-                guard FilenameSafety.bareFilename(filename) != nil,
-                    FileManager.default.fileExists(atPath: sharedDir + filename)
-                else { continue }
+                guard FilenameSafety.bareFilename(spec.file) != nil else { continue }
                 do {
-                    try DatasetWorkingCopyPlacement.link(studentDir + "/" + filename, to: sharedDir + filename)
+                    try targets.placeLink(for: spec, in: studentDir, keeping: keeping)
                 } catch {
                     firstFailure = firstFailure ?? error
                 }
@@ -895,22 +899,24 @@ func writeDatasetFiles(
     }
 }
 
-/// True when the student's copy of `spec.file` is in the form its delivery mode
-/// names: a live link to the shared extraction for `shared`, a real file for
-/// `perStudent`. A working copy written before shared delivery holds a real
-/// file for a `shared` spec, and this is what turns it into a link on the
-/// next visit even when the fingerprint is current. A shared source the
-/// extraction does not hold yet is never linked, so it reads as not current and
-/// the pass runs again on each visit; that pass reads no file, and stops once
-/// the source appears.
-private func datasetTargetIsCurrent(spec: DatasetSpec, studentDir: String, sharedDir: String) -> Bool {
+/// True when the student's copy of `spec.file` is where `DatasetLinkTargets`
+/// says it belongs: a live link to the right target for a shared dataset or a
+/// stored part, a real file for a per-student one. A working copy written
+/// before a mode change holds the old form, and this is what moves it on the
+/// next visit even when the fingerprint is current. A linked dataset whose
+/// source the extraction does not hold yet is `.unavailable`, so it reads as
+/// not current and the pass runs again on each visit; that pass reads no file,
+/// and stops once the source appears.
+private func datasetTargetIsCurrent(spec: DatasetSpec, studentDir: String, targets: DatasetLinkTargets) -> Bool {
     let path = studentDir + "/" + spec.file
     let linkTarget = DatasetWorkingCopyPlacement.linkTarget(of: path)
-    switch spec.deliveryMode {
-    case .shared:
-        return linkTarget == sharedDir + spec.file && FileManager.default.fileExists(atPath: path)
-    case .perStudent:
+    switch targets.target(for: spec) {
+    case .realFile:
         return linkTarget == nil && FileManager.default.fileExists(atPath: path)
+    case .link(let target, _):
+        return linkTarget == target && FileManager.default.fileExists(atPath: path)
+    case .unavailable:
+        return false
     }
 }
 

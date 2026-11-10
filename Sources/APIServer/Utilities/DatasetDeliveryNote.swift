@@ -15,7 +15,7 @@ enum DatasetDeliveryNote {
         guard !isPartition else { return nil }
         switch mode {
         case .shared: return "One shared copy."
-        case .perStudent: return "One copy per student."
+        case .perPart, .perStudent: return "One copy per student."
         }
     }
 }
