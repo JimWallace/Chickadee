@@ -999,9 +999,14 @@ coordination, and each must see every edit.
     write over it.
   - A student writes a working copy only while its assignment is open to
     them: a save, a rename and a new folder pass `requireOpenStudentAssignment`
-    (#2927, `refuseClosedAssignment`), as the notebook reset does. Course
+    (#2927, `gateStudentWrite`), as the notebook reset does. Course
     staff are not gated, so their authoring and practice copies of a closed
     assignment still save (`JupyterLiteContentsAssignmentGateTests`).
+  - A student's notebook save is stored without outputs
+    (`NotebookOutputs.stripped`). Nothing on the server may read a student's
+    outputs from the working copy: a submission carries its own notebook from
+    the editor. Staff copies keep outputs, because the assignment and the
+    solution are saved from them (`JupyterLiteContentsOutputStrippingTests`).
   - A save that grows a user's files is refused past the per-user quota
     (#2926, `JupyterLiteContentsWriteLimits`). The quota counts only what the
     write routes can write (`UserFolderUsage`): not symlinks, not the

@@ -14,9 +14,13 @@
 // The solution notebook is NOT passed through this. It is staff-facing, and
 // how a revealed solution reaches students is its own question.
 //
+// A student's save to their working copy through the editor's server drive
+// passes through it too (`JupyterLiteContentsRoutes+Write.swift`): the copy is
+// stored as code only, which keeps it small. The editor keeps the outputs on
+// screen, and a submission sends the notebook from the editor, outputs and all.
+//
 // Kept apart from `normalizeNotebookForJupyterLite` on purpose: that function
-// also runs when a student's own working copy is read back, and stripping
-// there would delete the student's outputs.
+// also runs when a student's own working copy is read back.
 
 import Core
 import Foundation

@@ -36,6 +36,13 @@
 // assignment off this drive, but an editor opened before the close, or a
 // direct request, still reaches these routes. Course staff are not gated.
 //
+// A student's notebook is stored as code only: a save to their copy of an
+// assignment clears every code cell's outputs (`NotebookOutputs.stripped`).
+// The editor keeps the outputs on screen; a reload shows the code, to be run
+// again, as a restarted kernel needs anyway. A submission is unaffected: it
+// sends the notebook from the open editor. Staff copies keep their outputs,
+// because the assignment and the solution are saved from them.
+//
 // Two limits bound the routes (#2926, JupyterLiteContentsWriteLimits): a
 // per-user rate limit (JupyterLiteContentsWriteRateLimitMiddleware) and a
 // per-user storage quota on a save that grows the user's files
@@ -77,8 +84,14 @@ extension JupyterLiteContentsRoutes {
         let relPath = req.parameters.getCatchall().joined(separator: "/")
         let target = try writableTarget(req: req, caller: caller, relativePath: relPath)
         try await refuseProtected(req: req, target, movingContents: false)
-        try await refuseClosedAssignment(req: req, caller: caller, target)
-        let save = try Self.decodeSave(req.body.data)
+        let isStudentCopy = try await gateStudentWrite(req: req, caller: caller, target)
+        let decoded = try Self.decodeSave(req.body.data)
+        let save: SaveBody =
+            if isStudentCopy, case .bytes(let data) = decoded, target.url.pathExtension.lowercased() == "ipynb" {
+                .bytes(NotebookOutputs.stripped(data))
+            } else {
+                decoded
+            }
         if case .bytes(let data) = save {
             try await enforceStorageQuota(req: req, caller: caller, target: target, incomingBytes: data.count)
         }
@@ -137,7 +150,7 @@ extension JupyterLiteContentsRoutes {
         let parent = parentPath.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
         // The probe target only proves the parent is the caller's.
         let probe = try writableTarget(req: req, caller: caller, relativePath: parent + "/Untitled Folder")
-        try await refuseClosedAssignment(req: req, caller: caller, probe)
+        try await gateStudentWrite(req: req, caller: caller, probe)
         let parentURL = probe.url.deletingLastPathComponent()
         let created: WritableTarget = try await runBlocking {
             let fm = FileManager.default
@@ -170,8 +183,8 @@ extension JupyterLiteContentsRoutes {
         let destination = try writableTarget(req: req, caller: caller, relativePath: newPath)
         try await refuseProtected(req: req, source, movingContents: true)
         try await refuseProtected(req: req, destination, movingContents: true)
-        try await refuseClosedAssignment(req: req, caller: caller, source)
-        try await refuseClosedAssignment(req: req, caller: caller, destination)
+        try await gateStudentWrite(req: req, caller: caller, source)
+        try await gateStudentWrite(req: req, caller: caller, destination)
         let isDirectory: Bool = try await runBlocking {
             let fm = FileManager.default
             guard let attributes = try? fm.attributesOfItem(atPath: source.url.path) else {
@@ -249,14 +262,19 @@ extension JupyterLiteContentsRoutes {
     /// student not enrolled in the course. Course staff are not gated: they
     /// keep writing their authoring and practice copies of a closed
     /// assignment. A folder that names no assignment is not gated.
-    func refuseClosedAssignment(req: Request, caller: APIUser, _ target: WritableTarget) async throws {
+    ///
+    /// Returns true when the gate applied: the target is a student's copy of
+    /// an assignment, whose notebooks are stored without outputs.
+    @discardableResult
+    func gateStudentWrite(req: Request, caller: APIUser, _ target: WritableTarget) async throws -> Bool {
         // users/<id>/<setupID>[/<path inside the working copy>]
         let parts = target.relativePath.split(separator: "/", maxSplits: 3).map(String.init)
-        guard parts.count >= 3 else { return }
+        guard parts.count >= 3 else { return false }
         let setupID = parts[2]
-        guard let assignment = try await assignmentByTestSetupID(setupID, on: req.db) else { return }
-        if try await req.cachedIsCourseStaff(caller, inCourse: assignment.courseID) { return }
+        guard let assignment = try await assignmentByTestSetupID(setupID, on: req.db) else { return false }
+        if try await req.cachedIsCourseStaff(caller, inCourse: assignment.courseID) { return false }
         _ = try await requireOpenStudentAssignment(for: setupID, user: caller, gate: .access, on: req)
+        return true
     }
 
     /// Refuses a save that would take the caller's own files past the quota
