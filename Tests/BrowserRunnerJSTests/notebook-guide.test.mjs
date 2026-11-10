@@ -203,7 +203,7 @@ test('a row click reveals its task in the editor', async () => {
   assert.equal(JSON.stringify(reveal[1]), '{"section":"Mean"}');
 });
 
-test('once the editor has placed a task, a row click reveals the cell its header is on', async () => {
+test('once the editor has placed a task, a row click reveals the cell it sends', async () => {
   const page = await loadPage();
   page.message({ ck: 'ck:tasks', tasks: [{ sectionID: 's1', status: 'pass' }, { sectionID: 's2', status: 'fail', title: 'Part 2', cell: 7 }] });
   page.rows()[1].listeners.click.forEach((fn) => fn());

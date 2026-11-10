@@ -137,8 +137,8 @@ own. Two rules keep the tasks apart:
   anchored cell, under the suite's name for it. With no heading at all, the
   header goes above the first anchored cell, under the suite's name.
 
-The editor sends each title, and the cell its header is on, to the outline in
-`ck:tasks`. A row click reveals that cell. The section label before a colon
+The editor sends each title to the outline in `ck:tasks`, with the cell a row
+click reveals: the task's first anchored cell, else its header cell. The section label before a colon
 (`label`) no longer replaces the title anywhere: the header shows the whole
 heading, and the chip is the part before its colon.
 

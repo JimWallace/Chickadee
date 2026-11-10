@@ -14,8 +14,8 @@
 //   - Follows the extension: `ck:tasks` updates each row's status (the
 //     extension works out "still the starter code") and its title (the
 //     notebook heading the task sits under, the same text as the editor's
-//     task header) and the cell that header is on, which a row click
-//     reveals, and `ck:active-cell`
+//     task header) and the cell a row click reveals (its first code
+//     cell, else its header), and `ck:active-cell`
 //     marks the task under the cursor. A row click reveals the task's cell.
 //
 // It reads results that already exist and runs nothing. Without the
@@ -149,9 +149,9 @@
                 row.appendChild(el('span', 'outline-wide outline-meta', task.points + (task.points === 1 ? ' pt' : ' pts')));
                 if (statusWord(status)) row.appendChild(el('span', 'visually-hidden', ', ' + statusWord(status)));
                 row.addEventListener('click', function () {
-                    // The cell the editor drew the header on, which is where
-                    // the title points; the guide's own target needs a heading
-                    // or a name that the notebook may not have.
+                    // The task's first code cell as the editor placed it; the
+                    // guide's own target needs a heading or a name that the
+                    // notebook may not have.
                     var target = typeof cells[index] === 'number' ? { index: cells[index] } : revealTarget(task);
                     if (target) void execute('chickadee:reveal', target);
                 });

@@ -280,8 +280,9 @@ because line numbers go out of date.
     out (notebook heading, else the section name as written, else the
     server's name); the page only falls back to the last two when no
     extension has sent one.
-  - A row click reveals the cell the header is on, so the click and the
-    title point at the same place.
+  - A row click reveals the cell the editor placed the task at (its first
+    anchored cell, else its header cell), not a heading or name the notebook
+    may lack.
   - An ambiguous anchor does not place a task that has another, and does not
     decide `starter` or "edited since".
 

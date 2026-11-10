@@ -49,6 +49,8 @@ export interface DrawnTask {
   headerCell: number | null;
   /** The title the header shows, which the outline shows too. */
   title: string;
+  /** The cell an outline row click reveals. */
+  revealCell: number | null;
 }
 
 export class GuideView {
@@ -172,7 +174,9 @@ export class GuideView {
         sectionID: task.sectionID ?? null,
         status,
         headerCell: placement.headerCell,
-        title: placement.title
+        title: placement.title,
+        // Where a row click goes: the task's first code cell, else its header.
+        revealCell: placement.found.length ? Math.min(...placement.found) : placement.headerCell
       };
     });
     const tags = (guide.reflections ?? []).map(r => r.tag);
@@ -188,7 +192,7 @@ export class GuideView {
         sectionID: t.sectionID,
         status: t.status,
         title: t.title,
-        cell: t.headerCell
+        cell: t.revealCell
       })),
       reflections: tags.map(tag => ({ tag, status: reflectionStatus(tag, tagged) }))
     });
