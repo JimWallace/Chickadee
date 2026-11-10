@@ -223,7 +223,8 @@ struct RunnerPresenceState: Sendable {
 func decideRunnerOffline(
     pending: PendingQueueState,
     presence: RunnerPresenceState,
-    offlineSeconds: TimeInterval
+    offlineSeconds: TimeInterval,
+    quietRunners: [String] = []
 ) -> RuleEvaluation {
     guard presence.anyKnownRunner, !presence.recentWithinOffline else { return .ok }
     var details: [String: String] = [
@@ -233,10 +234,21 @@ func decideRunnerOffline(
     if let age = pending.oldestPendingAge {
         details["oldest_pending_age_seconds"] = String(Int(age))
     }
-    let pendingNote = pending.pendingCount > 0 ? "; \(pending.pendingCount) submission(s) pending" : ""
+    let lastSeen = quietRunners.isEmpty ? "" : " (last seen: \(quietRunners.joined(separator: ", ")))"
+    if !quietRunners.isEmpty {
+        details["quiet_runners"] = quietRunners.joined(separator: ", ")
+    }
+    let pendingNote =
+        switch pending.pendingCount {
+        case 0: ""
+        case 1: "; 1 submission is waiting to be graded"
+        default: "; \(pending.pendingCount) submissions are waiting to be graded"
+        }
     return RuleEvaluation(
         isFiring: true,
-        summary: "No runner heartbeat in \(Int(offlineSeconds))s\(pendingNote)",
+        summary:
+            "No runner has checked in for \(formatQuietDuration(offlineSeconds))\(lastSeen)\(pendingNote). "
+            + "Nothing is grading. Check the runner hosts and their logs.",
         details: details
     )
 }
@@ -256,10 +268,15 @@ private func evaluateRunnerOffline(
         recentWithinOffline: presence.anyRecent,
         anyKnownRunner: presence.anyKnown
     )
+    let quietRunners = await application.workerActivityStore.activeRunners(
+        withinSeconds: runnerPresenceRememberSeconds,
+        now: now
+    ).map(\.workerID)
     return decideRunnerOffline(
         pending: pending,
         presence: state,
-        offlineSeconds: offlineThreshold
+        offlineSeconds: offlineThreshold,
+        quietRunners: Array(quietRunners.prefix(runnerVersionSkewNamedLimit))
     )
 }
 
@@ -375,7 +392,10 @@ private func describeRunnerBehind(
     return text
 }
 
-/// How many runners the runner-version-skew summary names before "and N more".
+/// How many names an alert summary lists before "and N more": runners in the
+/// runner-version-skew and runner-offline summaries, assignments in the
+/// BrightSpace one. It keeps a long list from outgrowing a webhook's message
+/// limit; the full list stays in `details`.
 let runnerVersionSkewNamedLimit = 5
 
 private func evaluateRunnerVersionSkew(
@@ -418,7 +438,9 @@ func evaluateQueueBackedUp(
 
     return RuleEvaluation(
         isFiring: true,
-        summary: "Queue backed up: \(reasons.joined(separator: "; "))",
+        summary:
+            "Queue backed up: \(reasons.joined(separator: "; ")). "
+            + "Check that the runners are claiming jobs (get_queue_state).",
         details: [
             "pending_count": String(pending.pendingCount),
             "queue_depth_threshold": String(depthThreshold),
@@ -458,7 +480,9 @@ private func evaluateErrorRateSpike(
     let percent = Int((ratio * 100).rounded())
     return RuleEvaluation(
         isFiring: true,
-        summary: "\(bad)/\(recent.count) recent jobs failed at the system level (\(percent)%)",
+        summary:
+            "\(bad) of the last \(recent.count) grading jobs (\(percent)%) failed in the runner, not in "
+            + "student code: a crash, or a job timed out before it finished. Check the runner logs.",
         details: [
             "system_failure_count": String(bad),
             "sample_size": String(recent.count),
@@ -483,8 +507,9 @@ func decideEditorKernelUnrecoverable(
     return RuleEvaluation(
         isFiring: true,
         summary:
-            "\(failedCount) student(s) could not recover after an editor kernel reboot "
-            + "in the last \(windowMinutes)m (recover_failed; threshold \(threshold))",
+            "\(failedCount == 1 ? "1 student" : "\(failedCount) students") in the last \(windowMinutes) min "
+            + "could not use the notebook editor: the kernel hung again after an automatic restart. "
+            + "Check get_browser_diagnostics.",
         details: [
             "recover_failed_count": String(failedCount),
             "window_minutes": String(windowMinutes),
@@ -550,7 +575,8 @@ func decideBrightspaceSyncFailing(
     errorCount: Int,
     threshold: Int,
     windowMinutes: Int,
-    lastDetail: String?
+    lastDetail: String?,
+    assignmentTitles: [String] = []
 ) -> RuleEvaluation {
     guard threshold > 0, errorCount >= threshold else { return .ok }
     var details: [String: String] = [
@@ -559,12 +585,20 @@ func decideBrightspaceSyncFailing(
         "threshold": String(threshold),
     ]
     if let lastDetail, !lastDetail.isEmpty { details["last_error"] = lastDetail }
-    let suffix = (lastDetail?.isEmpty == false) ? " (latest: \(lastDetail ?? ""))" : ""
+    let named = Array(assignmentTitles.prefix(runnerVersionSkewNamedLimit))
+    var forAssignments = ""
+    if !named.isEmpty {
+        let more = assignmentTitles.count > named.count ? " and \(assignmentTitles.count - named.count) more" : ""
+        forAssignments = " for \(named.joined(separator: ", "))\(more)"
+        details["assignments"] = assignmentTitles.joined(separator: ", ")
+    }
+    let latest = (lastDetail?.isEmpty == false) ? " The latest error: \(lastDetail ?? "")." : ""
+    let pushes = errorCount == 1 ? "1 grade push" : "\(errorCount) grade pushes"
     return RuleEvaluation(
         isFiring: true,
         summary:
-            "\(errorCount) BrightSpace grade push(es) failed in the last \(windowMinutes)m "
-            + "(threshold \(threshold))\(suffix)",
+            "\(pushes) to BrightSpace failed in the last \(windowMinutes) min\(forAssignments), "
+            + "so those grades are not in LEARN.\(latest) Check the course's BrightSpace page.",
         details: details
     )
 }
@@ -584,7 +618,12 @@ private func evaluateBrightspaceSyncFailing(
         errorCount: errored.count,
         threshold: configuration.brightspaceSyncFailureThreshold,
         windowMinutes: configuration.brightspaceSyncFailureWindowMinutes,
-        lastDetail: errored.first?.detail
+        lastDetail: errored.first?.detail,
+        assignmentTitles: errored.reduce(into: [String]()) { titles, row in
+            if !row.assignmentTitle.isEmpty, !titles.contains(row.assignmentTitle) {
+                titles.append(row.assignmentTitle)
+            }
+        }
     )
 }
 
@@ -602,7 +641,9 @@ private func evaluateDatabaseUnreachable(on application: Application) async -> R
     } catch {
         return RuleEvaluation(
             isFiring: true,
-            summary: "Database unreachable: \(error.localizedDescription)",
+            summary:
+                "The server cannot reach its database, so pages and grading fail: "
+                + "\(error.localizedDescription). Check the Postgres container on the host.",
             details: ["error": String(describing: error)]
         )
     }

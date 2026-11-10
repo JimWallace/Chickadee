@@ -97,7 +97,7 @@ func evaluateRunnerMissing(
 }
 
 /// "45m", "3h 20m", "5d 13h": short enough for an alert summary line.
-private func formatQuietDuration(_ seconds: TimeInterval) -> String {
+func formatQuietDuration(_ seconds: TimeInterval) -> String {
     let minutes = Int(seconds) / 60
     let hours = minutes / 60
     let days = hours / 24
