@@ -9,6 +9,15 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.900] - 2026-11-10
+
+### Changed
+
+- **Re-grant secret-reveal token is a ticket.** The button used the padlock,
+  which also marks the locked avatar rings. The padlock now means only "locked".
+  The re-grant button shows a ticket, because the student spends the token once.
+
+
 ## [0.5.899] - 2026-11-10
 
 ### Added
