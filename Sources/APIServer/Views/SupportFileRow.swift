@@ -112,6 +112,12 @@ struct SupportFileRow: HTML {
                 " parts, dealt to students in turn — edit it with set_dataset."
             }
             " "
+            // Always rendered, so the panel can show it when a file becomes a
+            // dataset after the page loads. The panel repaints the text.
+            span(attributes: [.class("dataset-note js-dataset-delivery")] + hiddenUnlessDataset) {
+                file.datasetDeliveryNoteText
+            }
+            " "
             if file.datasetPartCount == nil, !file.datasetTransformsEditable {
                 span(.class("dataset-note")) {
                     "Derivation steps authored by an agent — edit them with set_dataset."

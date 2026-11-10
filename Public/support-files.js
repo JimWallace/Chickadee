@@ -128,7 +128,8 @@
 
         // Paints every row from the server's specs, so a row the edit didn't
         // name still ends up showing what the manifest holds.
-        function render(specs) {
+        function render(specs, deliveryNotes) {
+            var notes = deliveryNotes || {};
             var byFile = {};
             (specs || []).forEach(function (spec) { byFile[spec.file] = spec; });
             rows().forEach(function (row) {
@@ -157,6 +158,13 @@
                 if (partitionNote) partitionNote.hidden = !partitioned;
                 var partCount = row.querySelector('.js-dataset-part-count');
                 if (partCount && partitioned) partCount.textContent = String(spec.partCount);
+                // The server words the note (DatasetDeliveryNote); this only paints it.
+                var delivery = row.querySelector('.js-dataset-delivery');
+                if (delivery) {
+                    var note = spec ? notes[spec.file] : '';
+                    delivery.textContent = note || '';
+                    delivery.hidden = !note;
+                }
 
                 var blankField = row.querySelector('.js-dataset-blank-field');
                 if (blankField) blankField.hidden = !sampled;
@@ -260,7 +268,7 @@
 
         // Paints controls and estimates together, from one server response.
         function renderState(body) {
-            render((body && body.datasets) || []);
+            render((body && body.datasets) || [], (body && body.deliveryNotes) || {});
             renderDiagnostics((body && body.diagnostics) || []);
         }
 
@@ -339,6 +347,8 @@
                     if (blankField) blankField.hidden = true;
                     var estimates = /** @type {HTMLElement | null} */ (row.querySelector('.js-dataset-estimates'));
                     if (estimates) estimates.hidden = true;
+                    var delivery = /** @type {HTMLElement | null} */ (row.querySelector('.js-dataset-delivery'));
+                    if (delivery) delivery.hidden = true;
                     commit(filename, null, row);
                     return;
                 }

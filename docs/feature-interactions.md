@@ -860,6 +860,17 @@ coordination, and each must see every edit.
     (`docs/datasets.md`).
   - `variesPerStudent` is not a wider `hasPersonalization`. Each predicate
     has its own readers. Do not use one in place of the other.
+  - Whether a dataset is the same for every student is
+    `DatasetDeliveryMode.init`, and nothing else states it. Four features
+    read it: the working-copy writer (`writeDatasetFiles`), `isShared` (the
+    ranked activities), the Files panel note (`DatasetDeliveryNote`) and MCP
+    `datasetDelivery`. A `shared` dataset is a link to the shared extraction
+    in the working copy; a `perStudent` one is a real file
+    (`docs/dataset-shared-delivery.md`).
+  - A write never goes through a dataset link:
+    `DatasetWorkingCopyPlacement.write` removes the link first. A change of
+    mode is reconciled on the next visit by `datasetTargetIsCurrent`, which
+    asks for each target's form, not only its presence.
 
 ### Dataset transform kinds: `DatasetTransform.Kind`
 
@@ -1209,8 +1220,8 @@ coordination, and each must see every edit.
     so that both read it.
   - What a student's working copy holds is `StudentWorkspaceFiles`: the
     support files it links, minus suite scripts, reserved notebooks,
-    grader-only files and datasets, plus the datasets, which are written
-    whatever their grader-only mark. `createSupportFileSymlinks` and
+    grader-only files and datasets, plus the datasets, which
+    `writeDatasetFiles` places whatever their grader-only mark. `createSupportFileSymlinks` and
     `files.missing` both call it. `linkSupportFiles` makes the links, with
     the parent folders of a file in a subfolder, so a nested entry that
     `files.missing` counts as delivered is in the working copy. The browser runner's zip filter and the

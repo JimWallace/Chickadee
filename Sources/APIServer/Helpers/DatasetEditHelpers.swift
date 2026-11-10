@@ -30,6 +30,20 @@ struct DatasetsBody: Content {
 struct DatasetsResponse: Content {
     var datasets: [DatasetSpec]
     var diagnostics: [DatasetFileDiagnostics]
+    /// Each dataset's delivery note (`DatasetDeliveryNote`), keyed by file, so
+    /// the panel repaints it from the server's words after every edit.
+    var deliveryNotes: [String: String]
+
+    init(datasets: [DatasetSpec], diagnostics: [DatasetFileDiagnostics]) {
+        self.datasets = datasets
+        self.diagnostics = diagnostics
+        self.deliveryNotes = Dictionary(
+            datasets.compactMap { spec in
+                DatasetDeliveryNote.text(for: spec.deliveryMode, isPartition: spec.kind == .partition)
+                    .map { (spec.file, $0) }
+            },
+            uniquingKeysWith: { first, _ in first })
+    }
 }
 
 /// One dataset's estimate chips: two concise numbers the row shows inline —
