@@ -479,7 +479,7 @@ private struct InstructorBrightspaceRosterRow: HTML {
                         .href("/instructor/students?highlight=\(student.userID)"),
                         .title("Match this student's LEARN ID"), .ariaLabel("Match \(student.displayName)'s LEARN ID")
                     ) {
-                        Icon("i-link")
+                        Icon("i-id-card")
                     }
                     RowMenu(for: student.displayName) {
                         form(

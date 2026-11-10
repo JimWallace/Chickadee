@@ -68,9 +68,8 @@
         <symbol id="i-lock" viewBox="0 0 24 24">
             <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 9.9-1"/>
         </symbol>
-        <!-- The answer key (revealed reference solution), and the keys a
-             credential form replaces. Not a person: adding staff is
-             i-user-plus. -->
+        <!-- The answer key (revealed reference solution), and only that. A
+             credential is i-credential; a sign-in is i-log-in. -->
         <symbol id="i-key" viewBox="0 0 24 24">
             <path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/>
         </symbol>
@@ -141,5 +140,17 @@
         <symbol id="i-file-dashed" viewBox="0 0 24 24"><path d="M6 22a2 2 0 0 1-2-2"/><line x1="4" y1="14" x2="4" y2="16"/><line x1="4" y1="8" x2="4" y2="10"/><path d="M4 4a2 2 0 0 1 2-2"/><path d="M10 2h4l6 6v4"/><path d="M20 16v4a2 2 0 0 1-2 2"/><line x1="10" y1="22" x2="14" y2="22"/><polyline points="14 2 14 8 20 8"/></symbol>
         <symbol id="i-notebook" viewBox="0 0 24 24"><line x1="2" y1="6" x2="6" y2="6"/><line x1="2" y1="10" x2="6" y2="10"/><line x1="2" y1="14" x2="6" y2="14"/><line x1="2" y1="18" x2="6" y2="18"/><rect x="4" y="2" width="16" height="20" rx="2"/><line x1="16" y1="2" x2="16" y2="22"/></symbol>
         <symbol id="i-graduation-cap" viewBox="0 0 24 24"><path d="M22 10v6"/><path d="M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c3 3 9 3 12 0v-5"/></symbol>
+        <!-- Credentials and sign-ins (#2963). A stored secret such as the
+             LEARN user key is a password field, not the answer key. A sign-in
+             is the door that i-log-out leaves by. -->
+        <symbol id="i-credential" viewBox="0 0 24 24"><rect x="2" y="6" width="20" height="12" rx="2"/><line x1="7" y1="12" x2="7.01" y2="12"/><line x1="12" y1="12" x2="12.01" y2="12"/><line x1="17" y1="12" x2="17.01" y2="12"/></symbol>
+        <symbol id="i-log-in" viewBox="0 0 24 24"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></symbol>
+        <!-- i-link is the link material kind only (#2964). An LTI platform is
+             a connected system (plug). An activity entry with no category of
+             its own is a neutral event (activity). Matching a student's LEARN
+             ID sets an ID (id-card). -->
+        <symbol id="i-plug" viewBox="0 0 24 24"><path d="M12 22v-5"/><path d="M9 8V2"/><path d="M15 8V2"/><path d="M18 8v5a4 4 0 0 1-4 4h-4a4 4 0 0 1-4-4V8Z"/></symbol>
+        <symbol id="i-activity" viewBox="0 0 24 24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></symbol>
+        <symbol id="i-id-card" viewBox="0 0 24 24"><rect x="2" y="5" width="20" height="14" rx="2"/><circle cx="9" cy="11" r="2"/><path d="M6.17 15a3 3 0 0 1 5.66 0"/><line x1="16" y1="10" x2="18" y2="10"/><line x1="16" y1="14" x2="18" y2="14"/></symbol>
     </defs>
 </svg>

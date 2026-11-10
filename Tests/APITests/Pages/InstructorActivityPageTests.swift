@@ -76,8 +76,8 @@ import VaporTesting
         ("Users & roles", "roster", "outline", "#i-list"),
         ("Grading", "grade", "graded", "#i-clipboard-check"),
         ("Submissions", "grade", "graded", "#i-clipboard-check"),
-        ("Courses", "other", "link", "#i-link"),
-        ("Something new", "other", "link", "#i-link"),
+        ("Courses", "other", "link", "#i-activity"),
+        ("Something new", "other", "link", "#i-activity"),
     ])
     func categoriesMapToTiles(category: String, key: String, kind: String, icon: String) {
         let tile = TimelineCategoryTile.tile(forCategory: category)
