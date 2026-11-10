@@ -167,7 +167,10 @@ because line numbers go out of date.
   - `list_content_items` (`attachedAssignmentPublicID`).
 - **Writers:** the material edit form's "Show on" select
   (`CourseContentService.attach`), which also moves the item to the
-  assignment's section. `AssignmentDeletion` detaches it into the
+  assignment's section. `CourseSectionService.moveAssignment` (the
+  dashboard move and MCP `set_assignment_course_section`) moves it with its
+  assignment in the same transaction, leaving its `sortOrder`.
+  `AssignmentDeletion` detaches it into the
   assignment's section at that time, as a detach does. The course clone and
   the bundle export and import carry it. `CourseContentService.update`
   refuses to move an attached item to a section or make it a heading.
