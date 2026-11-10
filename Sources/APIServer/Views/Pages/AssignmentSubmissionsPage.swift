@@ -276,7 +276,7 @@ private struct AssignmentSubmissionsRow: HTML {
                         "Re-grant this student’s secret-reveal token? Secret test results will be hidden from them again until they spend it.",
                     returnTo: returnTo, buttonClass: "btn action-btn action-btn-icon",
                     label: "Re-grant secret-reveal token",
-                    title: "Re-grant secret-reveal token (student spent theirs)", icon: "i-lock",
+                    title: "Re-grant secret-reveal token (student spent theirs)", icon: "i-ticket",
                     csrfToken: csrfToken)
             }
         }
