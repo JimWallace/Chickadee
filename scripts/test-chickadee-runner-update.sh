@@ -270,6 +270,19 @@ expect_calls "docker" 0
 release_lock
 
 # ---------------------------------------------------------------------------
+start_case "--image-repo moves an arm64 runner to that image's release build"
+LOCK_DIR="$WORK/lock-image-repo"
+ARM="ghcr.io/jimwallace/chickadee-runner"
+OUTPUT="$(main --image-repo "$ARM" 2>&1)"
+STATUS=$?
+expect_status 0
+expect_calls "docker pull -q $ARM:sha-b485699" 1
+expect_calls "docker tag $ARM:sha-b485699 $ARM:latest" 1
+expect_calls "docker pull -q $IMAGE:" 0
+expect_calls "docker compose .* up -d --no-deps runner" 1
+[ ! -e "$LOCK_DIR" ] || fail "main left the lock behind"
+
+# ---------------------------------------------------------------------------
 if [ "$FAILURES" -gt 0 ]; then
   printf 'runner-update tests: %s failure(s)\n' "$FAILURES"
   exit 1

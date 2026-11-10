@@ -28,7 +28,12 @@
 # Usage (all flags are optional):
 #
 #   chickadee-runner-update.sh [--health-url URL] [--compose-dir DIR]
-#                              [--service NAME]
+#                              [--service NAME] [--image-repo REPO]
+#
+# --image-repo names the image the runner service uses, without a tag. The
+# default is the production image. An Apple Silicon host passes
+# ghcr.io/jimwallace/chickadee-runner, the arm64 build that
+# .github/workflows/runner-arm64-image.yml publishes (docs/mac-runner.md).
 #
 # Exit status: 0 when the runner runs the server's release (already, or after
 # this run), 1 when it could not be updated or does not stay up. It prints
@@ -203,7 +208,8 @@ main() {
       --health-url)  HEALTH_URL="$2"; shift 2 ;;
       --compose-dir) COMPOSE_DIR="$2"; shift 2 ;;
       --service)     SERVICE="$2"; shift 2 ;;
-      *) echo "usage: $0 [--health-url URL] [--compose-dir DIR] [--service NAME]" >&2; return 2 ;;
+      --image-repo)  IMAGE_REPO="$2"; shift 2 ;;
+      *) echo "usage: $0 [--health-url URL] [--compose-dir DIR] [--service NAME] [--image-repo REPO]" >&2; return 2 ;;
     esac
   done
   update_runner

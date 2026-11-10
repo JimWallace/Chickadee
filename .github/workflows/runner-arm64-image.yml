@@ -1,0 +1,249 @@
+name: Runner arm64 image (spike)
+
+# Builds a linux/arm64 image for a runner on Apple Silicon, for example a
+# "bonus" runner under Docker Desktop on a Mac (docs/mac-runner.md). It is
+# published as its own package, ghcr.io/jimwallace/chickadee-runner, and not
+# under the production image's tags: production's deploy pulls
+# ghcr.io/jimwallace/chickadee and must never see this build.
+#
+# This workflow is separate from docker-build.yml on purpose. A failure here
+# blocks no deploy, and nothing in the production pipeline changes.
+#
+# It runs no test suite. swift-tests.yml tests the code once; this job only
+# compiles it for another architecture and proves the runner starts there.
+#
+# It builds on release tags, so the arm64 runner tracks the version that
+# production runs, and on demand. On a pull request it runs when a file that
+# can break the image or the runner container changes (the list of
+# docker-build.yml, which this mirrors), and it pushes nothing.
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - "Dockerfile"
+      - "Package.swift"
+      - "Package.resolved"
+      - "docker-compose.yml"
+      - "deploy/**"
+      - ".dockerignore"
+      - ".github/actions/swift-test-setup/**"
+      - "scripts/restore-asset-mtimes.py"
+      - "scripts/ci-runner-cgroup-probe.sh"
+      - ".github/workflows/runner-arm64-image.yml"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  IMAGE: ghcr.io/jimwallace/chickadee-runner
+
+jobs:
+  # ── Compile the release binaries on arm64 ─────────────────────────────────
+  # The Dockerfile's runtime stage copies both binaries, so both are built,
+  # though a runner host uses only chickadee-runner. Building the server too
+  # keeps this image identical in layout to production and the Dockerfile
+  # unchanged. The flags match build-release in docker-build.yml.
+  build-release-arm64:
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 45
+    container:
+      image: ghcr.io/jimwallace/chickadee/swift:6.4-resolute
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Resolve toolchain cache key
+        id: setup
+        uses: ./.github/actions/swift-test-setup
+        with:
+          build-cache: none
+
+      # Exact match only, as in docker-build.yml (no restore-keys). The key
+      # names the architecture, so it can never restore an amd64 .build/.
+      - name: Restore release build artifacts
+        id: build-cache
+        uses: actions/cache/restore@v6
+        with:
+          path: .build
+          key: ${{ runner.os }}-${{ runner.arch }}-release-${{ steps.setup.outputs.toolchain-key }}-${{ hashFiles('Package.resolved', 'Package.swift', 'Sources/**') }}
+
+      - name: Build release products
+        if: steps.build-cache.outputs.cache-hit != 'true'
+        run: |
+          swift build -c release --static-swift-stdlib --build-system native --product chickadee-server
+          swift build -c release --static-swift-stdlib --build-system native --product chickadee-runner
+
+      - name: Save release build artifacts
+        if: github.event_name != 'pull_request' && steps.build-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: .build
+          key: ${{ steps.build-cache.outputs.cache-primary-key }}
+
+      - name: Stage binaries for the image build
+        run: |
+          mkdir -p artifacts
+          for bin in chickadee-server chickadee-runner; do
+            strip --strip-all -o "artifacts/$bin" ".build/release/$bin"
+          done
+          ls -lh artifacts/
+
+      - name: Upload release binaries
+        uses: actions/upload-artifact@v7
+        with:
+          name: release-binaries-arm64
+          path: artifacts/
+          retention-days: 1
+          if-no-files-found: error
+
+  # ── Package, smoke-test the runner, push ──────────────────────────────────
+  build-and-push-arm64:
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 45
+    needs: build-release-arm64
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          filter: blob:none
+
+      # The image carries Public/ like the production image does. A runner
+      # serves none of it, but the same mtimes keep the layers comparable.
+      - name: Set Public file times to their last commit
+        run: scripts/restore-asset-mtimes.py Public
+
+      - name: Free up runner disk space
+        run: |
+          echo "Before cleanup:"; df -h /
+          sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc \
+            /usr/local/.ghcup /opt/hostedtoolcache/CodeQL /usr/local/share/boost || true
+          sudo docker image prune -af || true
+          echo "After cleanup:"; df -h /
+
+      - name: Download release binaries
+        uses: actions/download-artifact@v8
+        with:
+          name: release-binaries-arm64
+          path: artifacts
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Log in to GitHub Container Registry
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # :latest follows release tags only, so a manual run of a branch cannot
+      # move what a runner host pulls.
+      - name: Compute image tags and labels
+        id: meta
+        uses: docker/metadata-action@v6
+        with:
+          images: ${{ env.IMAGE }}
+          tags: |
+            type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/v') }}
+            type=sha,prefix=sha-
+            type=semver,pattern={{version}}
+
+      - name: Build and load the image
+        id: build
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          platforms: linux/arm64
+          build-args: |
+            BINARIES=prebuilt
+          load: true
+          push: false
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=runner-arm64
+          cache-to: ${{ github.event_name != 'pull_request' && 'type=gha,mode=max,scope=runner-arm64' || '' }}
+
+      # The checks of the runner step of docker-build.yml, through the Compose
+      # runner service, so its user, capabilities and security options are
+      # the ones a host runs, plus the arm64 profile. This image runs student
+      # code on someone's Mac, so the capability check matters as much here.
+      # There is no server: the runner fails to poll, which is expected, and
+      # the checks read its startup log and its process.
+      - name: "Runner container: job cgroups, uid 999, no capability, languages"
+        run: |
+          set -euo pipefail
+          IMAGE='${{ fromJSON(steps.meta.outputs.json).tags[0] }}'
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 || true
+          # For Compose only: the runner service names the production image.
+          # This tag stays on this job's Docker; nothing pushes it.
+          docker tag "$IMAGE" ghcr.io/jimwallace/chickadee:latest
+          export RUNNER_SHARED_SECRET=ci-placeholder-secret
+
+          echo "----- the pre-step, with a probe as the command -----"
+          docker compose run --rm --no-deps \
+            -v "$PWD/scripts/ci-runner-cgroup-probe.sh:/probe.sh:ro" \
+            runner "exec /bin/sh /probe.sh"
+
+          run_uid="$(docker compose run --rm --no-deps runner "id -u" 2>/dev/null | tail -n 1)"
+          echo "uid: $run_uid"
+          [ "$run_uid" = "999" ] \
+            || { echo "::error::A runner command runs as uid $run_uid, not 999."; exit 1; }
+
+          docker compose up -d --no-deps runner
+          sleep 15
+          cid="$(docker compose ps -a -q runner)"
+          state="$(docker inspect -f '{{.State.Status}} {{.RestartCount}}' "$cid")"
+          runner_log="$(docker compose logs runner 2>&1)"
+          printf '%s\n' "$runner_log" | sed -n 1,12p
+          if [ "$state" != "running 0" ]; then
+            echo "::error::The runner does not stay up (state: $state)."
+            exit 1
+          fi
+          printf '%s\n' "$runner_log" | grep "job cgroups delegated at /sandbox/jobs" >/dev/null \
+            || { echo "::error::The pre-step did not delegate the job cgroups."; exit 1; }
+          printf '%s\n' "$runner_log" | grep '"job_cgroups":"enabled"' >/dev/null \
+            || { echo "::error::The runner does not use job cgroups."; exit 1; }
+          pid="$(docker inspect -f '{{.State.Pid}}' "$cid")"
+          status="$(sudo grep -E '^(Uid|CapEff|CapBnd):' "/proc/$pid/status")"
+          cgroup="$(sudo cat "/proc/$pid/cgroup")"
+          echo "$status"; echo "cgroup (host view): $cgroup"
+          echo "$status" | grep -qE '^Uid:[[:space:]]+999[[:space:]]+999[[:space:]]+999[[:space:]]+999' \
+            || { echo "::error::The runner does not run as uid 999."; exit 1; }
+          [ "$(echo "$status" | grep -c '0000000000000000$')" = "2" ] \
+            || { echo "::error::The runner holds a capability."; exit 1; }
+          case "$cgroup" in
+            0::*/sandbox/runner) ;;
+            *) echo "::error::The runner is in $cgroup, not /sandbox/runner."; exit 1 ;;
+          esac
+          profile="$(printf '%s\n' "$runner_log" | grep runner_profile_detected)" \
+            || { echo "::error::The runner logged no capability profile."; exit 1; }
+          echo "$profile" | grep '"architecture":"arm64"' >/dev/null \
+            || { echo "::error::The runner does not report arm64."; exit 1; }
+          for lang in cpp java lua octave python r racket; do
+            echo "$profile" | grep -E "\"${lang}=" >/dev/null \
+              || { echo "::error::The runner does not detect ${lang}."; exit 1; }
+          done
+          echo "all seven languages detected on arm64"
+          docker compose down
+
+      - name: Push the tested image
+        if: github.event_name != 'pull_request'
+        env:
+          TAGS: ${{ steps.meta.outputs.tags }}
+        run: |
+          set -euo pipefail
+          while IFS= read -r tag; do
+            [ -n "$tag" ] || continue
+            docker push "$tag"
+          done <<< "$TAGS"
