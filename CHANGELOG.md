@@ -9,6 +9,26 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.893] - 2026-11-10
+
+### Security
+
+- **The editor's write routes refuse a closed assignment (#2927).** A student's save, rename or new folder in the working copy of a closed or not-yet-open assignment is refused, by the same gate as the notebook reset. An editor left open past the deadline no longer keeps saving. Course staff are not gated. A file in such a copy reads as read-only, so the editor opens it without autosave.
+- **Storage quota and rate limit on the editor's write routes (#2926).** A save that would take a student's own files past 25 MB is refused with a 413, and more than 240 write requests a minute from one user answer 429. The quota counts only files the student wrote, not delivered datasets, support files or submission records. Each refusal logs a structured line (`jupyterlite_contents_quota_exceeded`, `jupyterlite_contents_write_rate_limited`).
+- **A student's notebook is saved as code only.** The editor's server drive clears cell outputs when it saves a student's copy of an assignment notebook, which keeps each copy to tens of kilobytes. The outputs stay on screen while the student works; after a reload the cells run again. Submissions still carry their outputs, and staff copies keep theirs.
+
+### Changed
+
+- **The key and the chain link each mean one thing.** The key icon now means
+  only the answer key, and the chain link means only a link material. The other
+  uses get their own icons:
+  - Sign-in activity: a door with an inward arrow, the pair of the leave icon.
+  - The stored LEARN user key: a password field.
+  - An LTI platform: a plug.
+  - An activity entry with no category of its own: a neutral event line.
+  - Match a student's LEARN ID: an ID card.
+
+
 ## [0.5.892] - 2026-11-10
 
 ### Changed
