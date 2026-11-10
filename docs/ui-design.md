@@ -917,7 +917,9 @@ duplicate.
 - **`.icon`** — every inline stroked SVG icon, referencing a `<symbol>` in
   `Resources/Sprites/icons.svg` by `<use href="#i-…">`.  Geometry may appear
   in exactly two files: that sprite, and `Resources/Sprites/avatar-sprite.svg`
-  for the avatar parts.
+  for the avatar parts.  One glyph has one meaning (#2960, #2965).  Before you
+  use a symbol for a new action or a new row tile, read its comment in the
+  sprite.  If it already means something else, add a symbol.
 - **`.textarea-mono`**, `.form-stack` — a monospace textarea and
   the stacked form column that usually holds one.
 
