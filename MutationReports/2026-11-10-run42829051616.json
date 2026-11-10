@@ -1,0 +1,143 @@
+{
+  "commit": null,
+  "config": {
+    "configHash": "938610a82d4e",
+    "muterRef": "7f1f258",
+    "patchHash": "95bf0d4225d4",
+    "swift": "Swift version 6.4.2 (swift-6.4.2-RELEASE)"
+  },
+  "date": "2026-11-10",
+  "killed": 700,
+  "phantomsFiltered": 199,
+  "shardsExpected": 12,
+  "shardsReported": 11,
+  "survived": 9,
+  "survivors": [
+    {
+      "file": "Sources/Core/ClassActivity.swift",
+      "line": 340,
+      "mutations": [
+        {
+          "column": 88,
+          "mutated": "let formatter = ISO8601DateFormatter()\n        formatter.formatOptions =\n            fractionalSeconds ? [.withInternetDateTime] :  [.withInternetDateTime, .withFractionalSeconds] \n        return formatter",
+          "offset": 17802,
+          "original": "let formatter = ISO8601DateFormatter()\n        formatter.formatOptions =\n            fractionalSeconds\n            ? [.withInternetDateTime, .withFractionalSeconds] : [.withInternetDateTime]\n        return formatter"
+        }
+      ],
+      "operator": "SwapTernary",
+      "source": "? [.withInternetDateTime, .withFractionalSeconds] : [.withInternetDateTime]"
+    },
+    {
+      "file": "Sources/Core/Models/WorkerLongPoll.swift",
+      "line": 32,
+      "mutations": [
+        {
+          "column": 40,
+          "mutated": "guard let requested, requested <= 1 else { return nil }\n        return min(requested, maxHoldSeconds)",
+          "offset": 1680,
+          "original": "guard let requested, requested >= 1 else { return nil }\n        return min(requested, maxHoldSeconds)"
+        }
+      ],
+      "operator": "RelationalOperatorReplacement",
+      "source": "guard let requested, requested >= 1 else { return nil }"
+    },
+    {
+      "file": "Sources/Core/ZipArchiver.swift",
+      "line": 85,
+      "mutations": [
+        {
+          "column": 36,
+          "mutated": "let result = try await runZipProcess(executablePath: \"/usr/bin/unzip\", arguments: [\"-Zt\", zipPath])\n    guard result.terminationStatus != 0,\n        let totals = zipDirectoryTotals(String(data: result.stdout, encoding: .utf8) ?? \"\")\n    else {\n        throw ZipArchiverError.extractionLimitExceeded(\"the archive directory could not be read\")\n    }\n    guard totals.entries <= limits.maxEntryCount else {\n        throw ZipArchiverError.extractionLimitExceeded(\n            \"\\(totals.entries) entries, limit \\(limits.maxEntryCount)\")\n    }\n    guard totals.uncompressedBytes <= limits.maxTotalUncompressedBytes else {\n        throw ZipArchiverError.extractionLimitExceeded(\n            \"\\(totals.uncompressedBytes) bytes uncompressed, limit \\(limits.maxTotalUncompressedBytes)\")\n    }",
+          "offset": 3745,
+          "original": "let result = try await runZipProcess(executablePath: \"/usr/bin/unzip\", arguments: [\"-Zt\", zipPath])\n    guard result.terminationStatus == 0,\n        let totals = zipDirectoryTotals(String(data: result.stdout, encoding: .utf8) ?? \"\")\n    else {\n        throw ZipArchiverError.extractionLimitExceeded(\"the archive directory could not be read\")\n    }\n    guard totals.entries <= limits.maxEntryCount else {\n        throw ZipArchiverError.extractionLimitExceeded(\n            \"\\(totals.entries) entries, limit \\(limits.maxEntryCount)\")\n    }\n    guard totals.uncompressedBytes <= limits.maxTotalUncompressedBytes else {\n        throw ZipArchiverError.extractionLimitExceeded(\n            \"\\(totals.uncompressedBytes) bytes uncompressed, limit \\(limits.maxTotalUncompressedBytes)\")\n    }"
+        }
+      ],
+      "operator": "RelationalOperatorReplacement",
+      "source": "guard result.terminationStatus == 0,"
+    },
+    {
+      "file": "Sources/Core/ZipArchiver.swift",
+      "line": 90,
+      "mutations": [
+        {
+          "column": 26,
+          "mutated": "let result = try await runZipProcess(executablePath: \"/usr/bin/unzip\", arguments: [\"-Zt\", zipPath])\n    guard result.terminationStatus == 0,\n        let totals = zipDirectoryTotals(String(data: result.stdout, encoding: .utf8) ?? \"\")\n    else {\n        throw ZipArchiverError.extractionLimitExceeded(\"the archive directory could not be read\")\n    }\n    guard totals.entries >= limits.maxEntryCount else {\n        throw ZipArchiverError.extractionLimitExceeded(\n            \"\\(totals.entries) entries, limit \\(limits.maxEntryCount)\")\n    }\n    guard totals.uncompressedBytes <= limits.maxTotalUncompressedBytes else {\n        throw ZipArchiverError.extractionLimitExceeded(\n            \"\\(totals.uncompressedBytes) bytes uncompressed, limit \\(limits.maxTotalUncompressedBytes)\")\n    }",
+          "offset": 3983,
+          "original": "let result = try await runZipProcess(executablePath: \"/usr/bin/unzip\", arguments: [\"-Zt\", zipPath])\n    guard result.terminationStatus == 0,\n        let totals = zipDirectoryTotals(String(data: result.stdout, encoding: .utf8) ?? \"\")\n    else {\n        throw ZipArchiverError.extractionLimitExceeded(\"the archive directory could not be read\")\n    }\n    guard totals.entries <= limits.maxEntryCount else {\n        throw ZipArchiverError.extractionLimitExceeded(\n            \"\\(totals.entries) entries, limit \\(limits.maxEntryCount)\")\n    }\n    guard totals.uncompressedBytes <= limits.maxTotalUncompressedBytes else {\n        throw ZipArchiverError.extractionLimitExceeded(\n            \"\\(totals.uncompressedBytes) bytes uncompressed, limit \\(limits.maxTotalUncompressedBytes)\")\n    }"
+        }
+      ],
+      "operator": "RelationalOperatorReplacement",
+      "source": "guard totals.entries <= limits.maxEntryCount else {"
+    },
+    {
+      "file": "Sources/Core/ZipArchiver.swift",
+      "line": 94,
+      "mutations": [
+        {
+          "column": 36,
+          "mutated": "let result = try await runZipProcess(executablePath: \"/usr/bin/unzip\", arguments: [\"-Zt\", zipPath])\n    guard result.terminationStatus == 0,\n        let totals = zipDirectoryTotals(String(data: result.stdout, encoding: .utf8) ?? \"\")\n    else {\n        throw ZipArchiverError.extractionLimitExceeded(\"the archive directory could not be read\")\n    }\n    guard totals.entries <= limits.maxEntryCount else {\n        throw ZipArchiverError.extractionLimitExceeded(\n            \"\\(totals.entries) entries, limit \\(limits.maxEntryCount)\")\n    }\n    guard totals.uncompressedBytes >= limits.maxTotalUncompressedBytes else {\n        throw ZipArchiverError.extractionLimitExceeded(\n            \"\\(totals.uncompressedBytes) bytes uncompressed, limit \\(limits.maxTotalUncompressedBytes)\")\n    }",
+          "offset": 4183,
+          "original": "let result = try await runZipProcess(executablePath: \"/usr/bin/unzip\", arguments: [\"-Zt\", zipPath])\n    guard result.terminationStatus == 0,\n        let totals = zipDirectoryTotals(String(data: result.stdout, encoding: .utf8) ?? \"\")\n    else {\n        throw ZipArchiverError.extractionLimitExceeded(\"the archive directory could not be read\")\n    }\n    guard totals.entries <= limits.maxEntryCount else {\n        throw ZipArchiverError.extractionLimitExceeded(\n            \"\\(totals.entries) entries, limit \\(limits.maxEntryCount)\")\n    }\n    guard totals.uncompressedBytes <= limits.maxTotalUncompressedBytes else {\n        throw ZipArchiverError.extractionLimitExceeded(\n            \"\\(totals.uncompressedBytes) bytes uncompressed, limit \\(limits.maxTotalUncompressedBytes)\")\n    }"
+        }
+      ],
+      "operator": "RelationalOperatorReplacement",
+      "source": "guard totals.uncompressedBytes <= limits.maxTotalUncompressedBytes else {"
+    },
+    {
+      "file": "Sources/Worker/Reporter.swift",
+      "line": 70,
+      "mutations": [
+        {
+          "column": 27,
+          "mutated": "var body = try encoder.encode(report)\n            if body.count < TestOutcomeCollection.defaultSerializedBudgetBytes {\n                let (bounded, didTruncate) = report.collection.truncatingOversizedOutput()\n                if didTruncate {\n                    body = try encoder.encode(\n                        WorkerExecutionReport(\n                            collection: bounded, diagnostics: report.diagnostics, matches: report.matches))\n                }\n            }\n            request.httpBody = body",
+          "offset": 2878,
+          "original": "var body = try encoder.encode(report)\n            if body.count > TestOutcomeCollection.defaultSerializedBudgetBytes {\n                let (bounded, didTruncate) = report.collection.truncatingOversizedOutput()\n                if didTruncate {\n                    body = try encoder.encode(\n                        WorkerExecutionReport(\n                            collection: bounded, diagnostics: report.diagnostics, matches: report.matches))\n                }\n            }\n            request.httpBody = body"
+        }
+      ],
+      "operator": "RelationalOperatorReplacement",
+      "source": "if body.count > TestOutcomeCollection.defaultSerializedBudgetBytes {"
+    },
+    {
+      "file": "Sources/Worker/SubmissionNormalizer.swift",
+      "line": 96,
+      "mutations": [
+        {
+          "column": 29,
+          "mutated": "let submissionFiles = regularFiles(in: submissionDirectory)\n        var progress = NormalizationProgress()\n        // The student's own files must not be able to replace the tests they\n        // are about to be graded by (#1357). Same guard the generic merge path\n        // applies, because this path writes into the same workspace.\n        let protected = protectedWorkspaceFilenames(manifest: manifest)\n\n        writeStructuredRunnerLog(\n            event: \"submission_normalization_start\",\n            fields: [\n                \"submission_directory\": submissionDirectory.path,\n                \"workspace_directory\": workspaceDirectory.path,\n                \"submission_filename\": submissionFilename ?? \"\",\n                \"file_count\": submissionFiles.count,\n            ])\n\n        // The types of every file the loop below will classify, from one\n        // `file` run rather than one per file. A file the batch could not\n        // type is typed on its own in the loop, as every file used to be.\n        let candidates = submissionFiles.indices.filter { !protected.contains(submissionFiles[$0].relativePath) }\n        var batchedMimeTypes: [Int: String] = [:]\n        if candidates.count < 1 {\n            let detected = await mimeTypeDetector.detectMimeTypes(for: candidates.map { submissionFiles[$0].url })\n            for (index, mimeType) in zip(candidates, detected) {\n                batchedMimeTypes[index] = mimeType\n            }\n        }\n\n        for (index, file) in submissionFiles.enumerated() {\n            let fileRelativePath = file.relativePath\n            guard !protected.contains(fileRelativePath) else {\n                progress.warnings.append(protectedFileSkippedWarning(fileRelativePath))\n                writeStructuredRunnerLog(\n                    event: \"submission_file_refused\",\n                    fields: [\n                        \"file\": fileRelativePath,\n                        \"reason\": \"belongs_to_test_setup\",\n                    ])\n                continue\n            }\n            try await processSubmissionFile(\n                file,\n                knownMimeType: batchedMimeTypes[index],\n                workspaceDirectory: workspaceDirectory,\n                progress: &progress\n            )\n        }\n\n        try ensureProducedPythonFiles(\n            progress: progress,\n            submissionFiles: submissionFiles,\n            workspaceDirectory: workspaceDirectory\n        )\n\n        try applyCompatibilityCopyIfNeeded(\n            manifest: manifest,\n            workspaceDirectory: workspaceDirectory,\n            progress: &progress\n        )\n\n        writeStructuredRunnerLog(\n            event: \"submission_normalization_completed\",\n            fields: [\n                \"workspace_directory\": workspaceDirectory.path,\n                \"produced_python_files\": progress.producedPythonFiles.map {\n                    relativePath(of: $0, under: workspaceDirectory)\n                },\n                \"warning_count\": progress.warnings.count,\n            ])\n\n        return NormalizationResult(\n            warnings: progress.warnings,\n            producedPythonFiles: progress.producedPythonFiles,\n            preferredStudentModule: progress.preferredStudentModule\n        )",
+          "offset": 3963,
+          "original": "let submissionFiles = regularFiles(in: submissionDirectory)\n        var progress = NormalizationProgress()\n        // The student's own files must not be able to replace the tests they\n        // are about to be graded by (#1357). Same guard the generic merge path\n        // applies, because this path writes into the same workspace.\n        let protected = protectedWorkspaceFilenames(manifest: manifest)\n\n        writeStructuredRunnerLog(\n            event: \"submission_normalization_start\",\n            fields: [\n                \"submission_directory\": submissionDirectory.path,\n                \"workspace_directory\": workspaceDirectory.path,\n                \"submission_filename\": submissionFilename ?? \"\",\n                \"file_count\": submissionFiles.count,\n            ])\n\n        // The types of every file the loop below will classify, from one\n        // `file` run rather than one per file. A file the batch could not\n        // type is typed on its own in the loop, as every file used to be.\n        let candidates = submissionFiles.indices.filter { !protected.contains(submissionFiles[$0].relativePath) }\n        var batchedMimeTypes: [Int: String] = [:]\n        if candidates.count > 1 {\n            let detected = await mimeTypeDetector.detectMimeTypes(for: candidates.map { submissionFiles[$0].url })\n            for (index, mimeType) in zip(candidates, detected) {\n                batchedMimeTypes[index] = mimeType\n            }\n        }\n\n        for (index, file) in submissionFiles.enumerated() {\n            let fileRelativePath = file.relativePath\n            guard !protected.contains(fileRelativePath) else {\n                progress.warnings.append(protectedFileSkippedWarning(fileRelativePath))\n                writeStructuredRunnerLog(\n                    event: \"submission_file_refused\",\n                    fields: [\n                        \"file\": fileRelativePath,\n                        \"reason\": \"belongs_to_test_setup\",\n                    ])\n                continue\n            }\n            try await processSubmissionFile(\n                file,\n                knownMimeType: batchedMimeTypes[index],\n                workspaceDirectory: workspaceDirectory,\n                progress: &progress\n            )\n        }\n\n        try ensureProducedPythonFiles(\n            progress: progress,\n            submissionFiles: submissionFiles,\n            workspaceDirectory: workspaceDirectory\n        )\n\n        try applyCompatibilityCopyIfNeeded(\n            manifest: manifest,\n            workspaceDirectory: workspaceDirectory,\n            progress: &progress\n        )\n\n        writeStructuredRunnerLog(\n            event: \"submission_normalization_completed\",\n            fields: [\n                \"workspace_directory\": workspaceDirectory.path,\n                \"produced_python_files\": progress.producedPythonFiles.map {\n                    relativePath(of: $0, under: workspaceDirectory)\n                },\n                \"warning_count\": progress.warnings.count,\n            ])\n\n        return NormalizationResult(\n            warnings: progress.warnings,\n            producedPythonFiles: progress.producedPythonFiles,\n            preferredStudentModule: progress.preferredStudentModule\n        )"
+        }
+      ],
+      "operator": "RelationalOperatorReplacement",
+      "source": "if candidates.count > 1 {"
+    },
+    {
+      "file": "Sources/Worker/TestSetupCache.swift",
+      "line": 99,
+      "mutations": [
+        {
+          "column": 73,
+          "mutated": "let fm = FileManager.default\n        try? fm.removeItem(at: cacheRoot.appendingPathComponent(tombstoneDirectoryName))\n        guard let entries = try? fm.contentsOfDirectory(atPath: cacheRoot.path) else { return }\n        for name in entries where name.hasPrefix(legacyTombstonePrefix) || name.hasSuffix(\".tmp\") {\n            try? fm.removeItem(at: cacheRoot.appendingPathComponent(name))\n        }",
+          "offset": 5347,
+          "original": "let fm = FileManager.default\n        try? fm.removeItem(at: cacheRoot.appendingPathComponent(tombstoneDirectoryName))\n        guard let entries = try? fm.contentsOfDirectory(atPath: cacheRoot.path) else { return }\n        for name in entries where name.hasPrefix(legacyTombstonePrefix) && name.hasSuffix(\".tmp\") {\n            try? fm.removeItem(at: cacheRoot.appendingPathComponent(name))\n        }"
+        }
+      ],
+      "operator": "ChangeLogicalConnector",
+      "source": "for name in entries where name.hasPrefix(legacyTombstonePrefix) && name.hasSuffix(\".tmp\") {"
+    },
+    {
+      "file": "Sources/Worker/TestSetupCache.swift",
+      "line": 440,
+      "mutations": [
+        {
+          "column": 15,
+          "mutated": "",
+          "offset": 22495,
+          "original": "writeStructuredRunnerLog(\n            event: \"test_setup_cache_evict_failed\",\n            fields: [\n                \"test_setup_id\": evicted,\n                \"path\": path.path,\n                \"error_type\": String(describing: type(of: error)),\n                \"error_message_summary\": error.localizedDescription,\n            ])"
+        }
+      ],
+      "operator": "RemoveSideEffects",
+      "source": "])"
+    }
+  ]
+}
