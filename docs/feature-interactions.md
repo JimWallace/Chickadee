@@ -247,16 +247,13 @@ because line numbers go out of date.
 - **Readers:**
   - `NotebookTestAnchoring` (`Sources/Core/NotebookTestAnchoring.swift`),
     rule 1 of the anchors.
-  - The staff suite outline (`InstructorSuiteOutlineBuilder`) and the
-    student guide.
-  - MCP `get_suite`, through `SuiteAnchorResolution`
-    (`Services/SuiteAnchorResolution.swift`), which the outline also calls,
-    so the two report the same cell.
-- **Parallel paths:** the student guide (`NotebookGuideBuilder`,
-  `WebRoutes+NotebookGuide.swift`) calls `NotebookTestAnchoring` itself and
-  reads the student's personalized starter when there is no solution, so its
-  cell can differ from the staff surfaces' before a solution exists. A change
-  to the rules goes in Core, which all three read.
+  - The staff suite outline (`InstructorSuiteOutlineBuilder`), the student
+    guide (`NotebookGuideBuilder`) and MCP `get_suite`, all through
+    `SuiteAnchorResolution` (`Services/SuiteAnchorResolution.swift`). All
+    three read the solution, or the template starter before a solution
+    exists, so they agree on a test's cell. A change to the rules goes in
+    Core; a change to the notebook choice or the reported form goes in
+    `SuiteAnchorResolution`.
   - The `RunnerManifest` init removes it, so no runner receives it.
 - **Rules** (`docs/notebook-guide.md`, "Pin to a cell"):
   - Only a hand-written entry can be pinned. A generated entry is anchored by
