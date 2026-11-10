@@ -61,7 +61,9 @@ enum DatasetPartStore {
         guard let attrs = try? fm.attributesOfItem(atPath: sourcePath) else { return nil }
         let mtime = (attrs[.modificationDate] as? Date)?.timeIntervalSince1970 ?? -1
         let size = (attrs[.size] as? Int) ?? -1
-        let fileNumber = (attrs[.systemFileNumber] as? Int) ?? -1
+        // Interpolated rather than cast: its numeric type differs between
+        // Foundation on macOS and on Linux.
+        let fileNumber = attrs[.systemFileNumber].map { "\($0)" } ?? "-"
         guard let encoded = try? ManifestCodec.stableEncoder.encode(spec),
             let specText = String(bytes: encoded, encoding: .utf8)
         else { return nil }
@@ -137,7 +139,7 @@ enum DatasetPartStore {
             let ageSource = entry.hasPrefix(".tmp-") ? path : marker
             guard let since = (try? fm.attributesOfItem(atPath: ageSource))?[.modificationDate] as? Date else {
                 // Not marked yet: retention starts now.
-                fm.createFile(atPath: marker, contents: nil)
+                _ = fm.createFile(atPath: marker, contents: nil)
                 continue
             }
             guard now.timeIntervalSince(since) > staleRetention else { continue }
