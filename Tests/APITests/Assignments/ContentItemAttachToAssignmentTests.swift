@@ -249,17 +249,19 @@ import VaporTesting
         }
     }
 
-    @Test func bundleItemCarriesItsAssignmentAndOldBundlesDecode() throws {
-        let item = BundledContentItem(
-            sectionBundleID: nil, title: "Lab 0 slides", kind: "slides", description: nil, links: [],
-            updatedLabel: nil, isPublished: true, sortOrder: 1, assignmentBundleID: "assign_1")
-        let decoded = try JSONDecoder().decode(BundledContentItem.self, from: try JSONEncoder().encode(item))
-        #expect(decoded.assignmentBundleID == "assign_1")
+    @Test func bundleItemCarriesItsAssignmentAndOldBundlesDecode() async throws {
+        try await withApp(app) { _ in
+            let item = BundledContentItem(
+                sectionBundleID: nil, title: "Lab 0 slides", kind: "slides", description: nil, links: [],
+                updatedLabel: nil, isPublished: true, sortOrder: 1, assignmentBundleID: "assign_1")
+            let decoded = try JSONDecoder().decode(BundledContentItem.self, from: try JSONEncoder().encode(item))
+            #expect(decoded.assignmentBundleID == "assign_1")
 
-        // A bundle exported before the field existed has no key.
-        let old = Data(
-            #"{"title":"Old","kind":"link","links":[],"isPublished":true,"sortOrder":1}"#.utf8)
-        #expect(try JSONDecoder().decode(BundledContentItem.self, from: old).assignmentBundleID == nil)
+            // A bundle exported before the field existed has no key.
+            let old = Data(
+                #"{"title":"Old","kind":"link","links":[],"isPublished":true,"sortOrder":1}"#.utf8)
+            #expect(try JSONDecoder().decode(BundledContentItem.self, from: old).assignmentBundleID == nil)
+        }
     }
 
     // MARK: - Instructor dashboard

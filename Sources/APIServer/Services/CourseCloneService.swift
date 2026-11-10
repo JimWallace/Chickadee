@@ -136,8 +136,10 @@ enum CourseCloneService {
             for item in contentItems {
                 try await copyContentItem(
                     item, toCourse: newCourseID,
-                    sectionID: item.sectionID.flatMap { sectionIDMap[$0] },
-                    assignmentID: item.assignmentID.flatMap { assignmentIDMap[$0] },
+                    parents: (
+                        section: item.sectionID.flatMap { sectionIDMap[$0] },
+                        assignment: item.assignmentID.flatMap { assignmentIDMap[$0] }
+                    ),
                     contentFilesDirectory: contentFilesDirectory,
                     createdPaths: &createdPaths, on: db)
             }
@@ -155,16 +157,18 @@ enum CourseCloneService {
     /// the new item id needs no rewrite of the metadata. The copied
     /// directory is appended to `createdPaths` before the copy, so a failure
     /// in the copy or in the row save leaves it for the caller's cleanup
-    /// (#2168).
+    /// (#2168). `parents` holds the new course's section and assignment ids
+    /// for the item, already remapped from the source course.
     private static func copyContentItem(
-        _ item: APICourseContentItem, toCourse courseID: UUID, sectionID: UUID?, assignmentID: UUID?,
+        _ item: APICourseContentItem, toCourse courseID: UUID,
+        parents: (section: UUID?, assignment: UUID?),
         contentFilesDirectory: String, createdPaths: inout [String], on db: any Database
     ) async throws {
         let copy = APICourseContentItem(
-            id: UUID(), courseID: courseID, sectionID: sectionID, sortOrder: item.sortOrder,
+            id: UUID(), courseID: courseID, sectionID: parents.section, sortOrder: item.sortOrder,
             title: item.title, kind: item.kind, itemDescription: item.itemDescription,
             links: item.links, attachments: item.attachments, updatedLabel: item.updatedLabel,
-            isPublished: item.isPublished, assignmentID: assignmentID)
+            isPublished: item.isPublished, assignmentID: parents.assignment)
         let fm = FileManager.default
         if let oldID = item.id, let newID = copy.id, !item.attachments.isEmpty {
             let sourceDir = contentFilesDirectory + oldID.uuidString

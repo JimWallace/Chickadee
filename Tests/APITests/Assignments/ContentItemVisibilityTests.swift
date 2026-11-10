@@ -60,49 +60,60 @@ import VaporTesting
             itemPublished: false, visible: false),
     ]
 
-    @Test(arguments: cases) func attachedMaterialFollowsItsAssignment(_ testCase: Case) {
-        let now = Date()
-        let courseID = UUID()
-        let assignment = APIAssignment(
-            testSetupID: "vis_setup", title: "Lab", slug: "lab",
-            dueAt: testCase.dueOffset.map { now.addingTimeInterval($0) },
-            startsAt: testCase.startsOffset.map { now.addingTimeInterval($0) },
-            visibility: testCase.visibility, sortOrder: 1, validationStatus: "passed", sectionID: nil,
-            courseID: courseID)
-        assignment.id = UUID()
-        let item = APICourseContentItem(
-            courseID: courseID, sortOrder: 1, title: "Slides", kind: .slides, isPublished: testCase.itemPublished,
-            assignmentID: assignment.id)
-        #expect(ContentItemVisibility.isVisibleToStudents(item, attachedTo: assignment, now: now) == testCase.visible)
+    @Test(arguments: cases) func attachedMaterialFollowsItsAssignment(_ testCase: Case) async throws {
+        try await withApp(app) { _ in
+            let now = Date()
+            let courseID = UUID()
+            let assignment = APIAssignment(
+                testSetupID: "vis_setup", title: "Lab", slug: "lab",
+                dueAt: testCase.dueOffset.map { now.addingTimeInterval($0) },
+                startsAt: testCase.startsOffset.map { now.addingTimeInterval($0) },
+                visibility: testCase.visibility, sortOrder: 1, validationStatus: "passed", sectionID: nil,
+                courseID: courseID)
+            assignment.id = UUID()
+            let item = APICourseContentItem(
+                courseID: courseID, sortOrder: 1, title: "Slides", kind: .slides, isPublished: testCase.itemPublished,
+                assignmentID: assignment.id)
+            #expect(
+                ContentItemVisibility.isVisibleToStudents(item, attachedTo: assignment, now: now) == testCase.visible)
+        }
     }
 
-    @Test func standaloneItemFollowsOnlyItsOwnFlag() {
-        let published = APICourseContentItem(courseID: UUID(), sortOrder: 1, title: "Notes", isPublished: true)
-        let hidden = APICourseContentItem(courseID: UUID(), sortOrder: 1, title: "Notes", isPublished: false)
-        #expect(ContentItemVisibility.isVisibleToStudents(published, attachedTo: nil))
-        #expect(!ContentItemVisibility.isVisibleToStudents(hidden, attachedTo: nil))
+    @Test func standaloneItemFollowsOnlyItsOwnFlag() async throws {
+        try await withApp(app) { _ in
+            let published = APICourseContentItem(courseID: UUID(), sortOrder: 1, title: "Notes", isPublished: true)
+            let hidden = APICourseContentItem(courseID: UUID(), sortOrder: 1, title: "Notes", isPublished: false)
+            #expect(ContentItemVisibility.isVisibleToStudents(published, attachedTo: nil))
+            #expect(!ContentItemVisibility.isVisibleToStudents(hidden, attachedTo: nil))
+        }
     }
 
-    @Test func studentWhoCanSubmitSeesTheMaterialOfAClosedLab() {
-        let now = Date()
-        let assignment = APIAssignment(
-            id: UUID(), testSetupID: "vis_ext", title: "Lab", dueAt: now.addingTimeInterval(3600),
-            visibility: .closed, courseID: UUID())
-        let item = APICourseContentItem(
-            courseID: assignment.courseID, sortOrder: 1, title: "Slides", isPublished: true,
-            assignmentID: assignment.id)
-        #expect(!ContentItemVisibility.isVisibleToStudents(item, attachedTo: assignment, now: now))
-        #expect(
-            ContentItemVisibility.isVisibleToStudents(item, attachedTo: assignment, studentCanSubmit: true, now: now))
-        item.isPublished = false
-        #expect(
-            !ContentItemVisibility.isVisibleToStudents(item, attachedTo: assignment, studentCanSubmit: true, now: now))
+    @Test func studentWhoCanSubmitSeesTheMaterialOfAClosedLab() async throws {
+        try await withApp(app) { _ in
+            let now = Date()
+            let assignment = APIAssignment(
+                id: UUID(), testSetupID: "vis_ext", title: "Lab", dueAt: now.addingTimeInterval(3600),
+                visibility: .closed, courseID: UUID())
+            let item = APICourseContentItem(
+                courseID: assignment.courseID, sortOrder: 1, title: "Slides", isPublished: true,
+                assignmentID: assignment.id)
+            #expect(!ContentItemVisibility.isVisibleToStudents(item, attachedTo: assignment, now: now))
+            #expect(
+                ContentItemVisibility.isVisibleToStudents(
+                    item, attachedTo: assignment, studentCanSubmit: true, now: now))
+            item.isPublished = false
+            #expect(
+                !ContentItemVisibility.isVisibleToStudents(
+                    item, attachedTo: assignment, studentCanSubmit: true, now: now))
+        }
     }
 
-    @Test func attachedItemWithoutItsAssignmentIsHidden() {
-        let item = APICourseContentItem(
-            courseID: UUID(), sortOrder: 1, title: "Slides", isPublished: true, assignmentID: UUID())
-        #expect(!ContentItemVisibility.isVisibleToStudents(item, attachedTo: nil))
+    @Test func attachedItemWithoutItsAssignmentIsHidden() async throws {
+        try await withApp(app) { _ in
+            let item = APICourseContentItem(
+                courseID: UUID(), sortOrder: 1, title: "Slides", isPublished: true, assignmentID: UUID())
+            #expect(!ContentItemVisibility.isVisibleToStudents(item, attachedTo: nil))
+        }
     }
 
     // MARK: - The student course page and the file route
