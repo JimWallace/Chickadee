@@ -483,7 +483,8 @@ extension WebRoutes {
             slipDayActionLabel: slipDayLabel ?? "",
             solutionAvailable: solutionAvailable,
             solutionURL: dashboardSolutionURL(setupID: setupID, props: props),
-            leaderboardURL: leaderboardURL
+            leaderboardURL: leaderboardURL,
+            assignmentType: assignment?.assignmentType ?? .assignment
         )
     }
 

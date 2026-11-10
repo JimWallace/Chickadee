@@ -80,6 +80,10 @@ struct GetAssignmentTool: ContentTool {
         /// full marks earn, or nil when untagged. Set via
         /// set_assignment_concept.
         let concept: String?
+        /// The declared `AssignmentType` raw value (docs/assignment-types.md).
+        /// Set via the assignment-update tool (a read tool's prose never names
+        /// a write tool: read-only `tools/list` must not mention one).
+        let assignmentType: String
         /// The class-activity block, or nil for an ordinary assignment. Set via
         /// the activity tool (same naming caveat as `secretRevealEnabled`).
         let activity: ActivityOutput?
@@ -184,7 +188,10 @@ struct GetAssignmentTool: ContentTool {
         + "advisory best-grade percentage that marks a student as passing on the instructor "
         + "submissions page, null when off; set via the assignment-update tool), concept (the lab "
         + "concept whose wardrobe ring full marks earn, null when untagged; set via "
-        + "set_assignment_concept), minimumRunnerVersion "
+        + "set_assignment_concept), assignmentType (\(MCPEnumProse<AssignmentType>.slashAlternatives): "
+        + "the declared kind of graded work, an assignment for marks, a lab graded in the browser for "
+        + "participation, or an ungraded live class activity; set via the assignment-update tool), "
+        + "minimumRunnerVersion "
         + "(the optional minimum native-runner version required to grade it, null when ungated), "
         + "submissionMode (\"notebook\" = embedded editor plus upload form, \"uploadOnly\" = upload "
         + "only), and language (\(MCPLanguageProse.quotedTokenAlternatives), null for a plain "
@@ -229,6 +236,10 @@ struct GetAssignmentTool: ContentTool {
             ]),
             "passingThresholdPercent": MCPSchema.nullableInteger,
             "concept": MCPSchema.nullableString,
+            "assignmentType": .object([
+                "type": .string("string"),
+                "enum": MCPEnumProse<AssignmentType>.jsonEnum,
+            ]),
             "submissionMode": MCPSchema.string,
             "language": MCPSchema.string,
             "activity": .object([
@@ -289,7 +300,8 @@ struct GetAssignmentTool: ContentTool {
             .string("courseKey"),
             .string("isOpen"), .string("visibility"), .string("deadlineOverrideActive"),
             .string("gradingMode"), .string("secretRevealEnabled"),
-            .string("solutionVisibility"), .string("submissionMode"), .string("githubSubmission"),
+            .string("solutionVisibility"), .string("assignmentType"), .string("submissionMode"),
+            .string("githubSubmission"),
         ]),
     ])
     static let requiredScopes: Set<ContentScope> = [.read]
@@ -341,6 +353,7 @@ struct GetAssignmentTool: ContentTool {
             solutionVisibility: assignment.solutionVisibility.rawValue,
             passingThresholdPercent: assignment.passingThresholdPercent,
             concept: assignment.concept?.rawValue,
+            assignmentType: assignment.assignmentType.rawValue,
             activity: manifest?.activity.map { activity in
                 ActivityOutput(
                     kind: activity.kind.rawValue,

@@ -148,6 +148,8 @@ struct BrightspaceAssignmentRow: Encodable {
     /// latest attempt errored, or "Not synced yet".
     var syncDetailText = ""
     var hasSyncError = false
+    /// The declared type, which picks the row tile (docs/assignment-types.md).
+    var assignmentType: AssignmentType = .assignment
 }
 
 /// Headline counts shown as cards atop the panel.

@@ -328,7 +328,7 @@ private struct InstructorBrightspaceMappingRow: HTML {
     var body: some HTML {
         tr {
             td(.class("item-tile-cell")) {
-                span(.class("item-tile"), .data("kind", value: "graded")) { Icon("i-clipboard-check") }
+                AssignmentTypeTile(type: row.assignmentType)
             }
             td(.class("item-main")) {
                 div(.class("item-title")) { row.title }

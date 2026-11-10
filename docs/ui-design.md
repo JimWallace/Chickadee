@@ -619,8 +619,14 @@ duplicate.
   row each fill only the cells that apply.  The `thead` is `.visually-hidden`,
   not removed.  Each row leads with an `.item-tile` (in an `.item-tile-cell`),
   a square glyph coloured by `data-kind` (`slides`, `notebook`, `document`,
-  `link`, `outline`, `graded`) from the `--kind-*` token pairs — one component
-  with an attribute, not six classes.  A course library dataset is reference
+  `link`, `outline`, `graded`, `lab`, `activity`) from the `--kind-*` token
+  pairs — one component with an attribute, not eight classes.  A published
+  assignment's tile follows its declared type (`AssignmentTypeTile`,
+  docs/assignment-types.md): an Assignment is `graded` with `i-clipboard-check`,
+  a Lab is `lab` with `i-flask`, and a Class activity is `activity` with
+  `i-users`. The graded kinds are solid tiles with a white glyph; the content
+  kinds are pale tints. The type's name is the tile's visually hidden text.
+  A course library dataset is reference
   material, so it takes `document` with the `i-list` glyph.  The name cell is an `.item-title` over an
   `.item-details` line; `.item-grade` right-aligns the grade.  A material's
   buttons are `.action-btn-icon`, the same fixed square as an assignment's.

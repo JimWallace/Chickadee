@@ -51,7 +51,10 @@ struct AssignmentEditBody: HTML {
                 EditActivityBlock(assignmentID: edit.assignmentID, activity: edit.activity, csrfToken: csrfToken)
             }
         }
-        div(.data("wb-block", value: "options")) { EditStudentOptionsBlock(edit: edit, csrfToken: csrfToken) }
+        div(.data("wb-block", value: "options")) {
+            EditAssignmentTypeBlock(edit: edit, csrfToken: csrfToken)
+            EditStudentOptionsBlock(edit: edit, csrfToken: csrfToken)
+        }
         div(.data("wb-block", value: "inputs")) {
             EditGlobalInputsBlock(assignmentID: edit.assignmentID, rows: edit.globalVariableRows)
         }

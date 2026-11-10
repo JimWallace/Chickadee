@@ -138,7 +138,7 @@ import Testing
                 visibility: "open", dueAt: "2026-01-01T00:00:00Z",
                 startsAt: "2026-01-01T00:00:00Z", validationStatus: "passed",
                 secretRevealEnabled: false, solutionVisibility: "hidden",
-                passingThresholdPercent: 60)
+                passingThresholdPercent: 60, assignmentType: "lab")
         ),
     ]
 

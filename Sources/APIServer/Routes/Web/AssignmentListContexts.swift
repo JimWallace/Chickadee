@@ -33,6 +33,9 @@ struct AssignmentRow: Encodable {
     let submittedStudentCount: Int?  // nil if unpublished; unique enrolled students who submitted at least once
     let vanityURL: String?  // e.g. "/CS101/lab-1-intro"; nil if unpublished or no active course
     let leaderboardURL: String?  // the class activity's board; nil when not an activity
+    /// The declared type, which picks the row tile (docs/assignment-types.md).
+    /// Ignored for an unpublished setup, which has no assignment row.
+    var assignmentType: AssignmentType = .assignment
     /// The content items attached to this assignment (a lab's slides), in lane
     /// order. They render inside this row, not as rows of their own.
     var attachedMaterials: [ContentItemRow] = []

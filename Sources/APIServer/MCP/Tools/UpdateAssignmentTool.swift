@@ -24,13 +24,16 @@ struct UpdateAssignmentTool: ContentTool {
         /// 1...100 sets the advisory passing threshold; 0 clears it. Absent
         /// = no change.
         let passingThresholdPercent: Int?
+        /// The declared `AssignmentType` raw value. Absent = no change.
+        let assignmentType: String?
 
         init(
             assignmentPublicID: String, title: String? = nil, dueAt: String? = nil,
             startsAt: String? = nil, isOpen: Bool? = nil, visibility: String? = nil,
             secretRevealEnabled: Bool? = nil, solutionVisibility: String? = nil,
-            passingThresholdPercent: Int? = nil
+            passingThresholdPercent: Int? = nil, assignmentType: String? = nil
         ) {
+            self.assignmentType = assignmentType
             self.assignmentPublicID = assignmentPublicID
             self.title = title
             self.dueAt = dueAt
@@ -59,6 +62,8 @@ struct UpdateAssignmentTool: ContentTool {
         let solutionVisibility: String
         /// The advisory passing threshold (1...100), or null when off.
         let passingThresholdPercent: Int?
+        /// The declared `AssignmentType` raw value.
+        let assignmentType: String
     }
 
     /// "hidden" or "afterDue" — derived from `allCases` so a new policy value
@@ -87,7 +92,10 @@ struct UpdateAssignmentTool: ContentTool {
         + "refused while the assignment has no solution on file. Display-only — grades are "
         + "unaffected. passingThresholdPercent (integer 1 to 100, or 0 to turn it off) is the "
         + "advisory best-grade percentage at or above which the instructor submissions page marks "
-        + "a student as passing; it labels and counts, and never changes a grade. Does not change "
+        + "a student as passing; it labels and counts, and never changes a grade. assignmentType "
+        + "(\(MCPEnumProse<AssignmentType>.quotedOrList)) declares the kind of graded work: an "
+        + "assignment for marks, graded by the worker; a lab graded in the student browser for "
+        + "participation; or a live class activity that is not worth a grade. Does not change "
         + "test content, so it never triggers a regrade."
     static let inputSchema: JSONValue = .object([
         "type": .string("object"),
@@ -148,6 +156,14 @@ struct UpdateAssignmentTool: ContentTool {
                         + "the student as passing on the instructor submissions page. 1 to 100 "
                         + "sets it; 0 turns it off. Display-only — grades are unaffected."),
             ]),
+            "assignmentType": .object([
+                "type": .string("string"),
+                "enum": MCPEnumProse<AssignmentType>.jsonEnum,
+                "description": .string(
+                    "The declared kind of graded work: \"assignment\" (for marks, worker-graded), "
+                        + "\"lab\" (browser-graded, a participation grade) or \"classActivity\" "
+                        + "(live, not worth a grade)."),
+            ]),
         ]),
         "required": .array([.string("assignmentPublicID")]),
         "additionalProperties": .bool(false),
@@ -172,10 +188,15 @@ struct UpdateAssignmentTool: ContentTool {
                 "enum": MCPEnumProse<SolutionVisibility>.jsonEnum,
             ]),
             "passingThresholdPercent": MCPSchema.nullableInteger,
+            "assignmentType": .object([
+                "type": .string("string"),
+                "enum": MCPEnumProse<AssignmentType>.jsonEnum,
+            ]),
         ]),
         "required": .array([
             .string("publicID"), .string("title"), .string("slug"), .string("isOpen"),
             .string("visibility"), .string("secretRevealEnabled"), .string("solutionVisibility"),
+            .string("assignmentType"),
         ]),
     ])
     static let annotations: MCPToolAnnotations? = MCPToolAnnotations(
@@ -189,15 +210,17 @@ struct UpdateAssignmentTool: ContentTool {
         let visibilityUpdate = try Self.resolveVisibility(input.visibility)
         let solutionVisibilityUpdate = try Self.resolveSolutionVisibility(input.solutionVisibility)
         let thresholdUpdate = try Self.resolvePassingThreshold(input.passingThresholdPercent)
+        let typeUpdate = try MCPEnumProse<AssignmentType>.parseOptional(
+            input.assignmentType, field: "assignmentType")
         guard
             newTitle != nil || input.isOpen != nil || visibilityUpdate != nil
                 || dueUpdate != .unchanged || startsUpdate != .unchanged
                 || input.secretRevealEnabled != nil || solutionVisibilityUpdate != nil
-                || thresholdUpdate != .unchanged
+                || thresholdUpdate != .unchanged || typeUpdate != nil
         else {
             throw MCPToolError.invalidArguments(
                 detail: "Specify at least one of: title, dueAt, startsAt, isOpen, visibility, "
-                    + "secretRevealEnabled, solutionVisibility, passingThresholdPercent.")
+                    + "secretRevealEnabled, solutionVisibility, passingThresholdPercent, assignmentType.")
         }
 
         // Title / due date / open state are lifecycle — instructor-level (#417).
@@ -231,6 +254,12 @@ struct UpdateAssignmentTool: ContentTool {
                 try await AssignmentAuthoringService.setVisibility(
                     assignment, visibilityUpdate, audit: .mcp(context), on: context.db)
             }
+            // The declared type is a column only: no manifest change, no
+            // regrade (docs/assignment-types.md).
+            if let typeUpdate, typeUpdate != assignment.assignmentType {
+                assignment.assignmentType = typeUpdate
+                try await assignment.save(on: context.db)
+            }
         } catch AssignmentAuthoringError.validationNotPassed {
             throw MCPToolError.invalidArguments(
                 detail: "The assignment cannot be opened until its runner validation has passed.")
@@ -261,7 +290,8 @@ struct UpdateAssignmentTool: ContentTool {
             validationStatus: assignment.validationStatus,
             secretRevealEnabled: assignment.secretRevealEnabled == true,
             solutionVisibility: assignment.solutionVisibility.rawValue,
-            passingThresholdPercent: assignment.passingThresholdPercent
+            passingThresholdPercent: assignment.passingThresholdPercent,
+            assignmentType: assignment.assignmentType.rawValue
         )
     }
 

@@ -320,7 +320,8 @@ enum CourseBundleService {
                 brightspaceSyncExcluded: a.brightspaceSyncExcluded,
                 deadlineOverrideActive: a.deadlineOverrideActive,
                 requirement: data.requirementByAssignmentID[aid],
-                concept: a.concept?.rawValue
+                concept: a.concept?.rawValue,
+                assignmentType: a.assignmentType.rawValue
             )
         }
 

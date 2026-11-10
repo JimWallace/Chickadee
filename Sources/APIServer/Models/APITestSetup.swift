@@ -66,6 +66,13 @@ extension APITestSetup {
     func decodedManifest() -> TestProperties? {
         decodeManifest(from: Data(manifest.utf8))
     }
+
+    /// The type an assignment created from this setup declares when its
+    /// creator names none (`AssignmentType.derivedDeclaration`). A manifest
+    /// that does not decode gives `.assignment`, the safe direction.
+    var derivedAssignmentType: AssignmentType {
+        decodedManifest().map(AssignmentType.derivedDeclaration(manifest:)) ?? .assignment
+    }
 }
 
 /// Free helper for the sites that already have raw `Data` bytes (HTTP

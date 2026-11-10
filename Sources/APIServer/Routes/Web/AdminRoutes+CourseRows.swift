@@ -96,7 +96,8 @@ extension AdminRoutes {
                 title: a.title,
                 dueAt: a.dueAt.map { df.string(from: $0) },
                 isOpen: a.isOpen,
-                visibility: a.visibility.rawValue
+                visibility: a.visibility.rawValue,
+                assignmentType: a.assignmentType
             )
         }
     }

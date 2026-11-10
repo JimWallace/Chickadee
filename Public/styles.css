@@ -61,6 +61,12 @@
     --kind-outline-fg: #5B3F8C;
     --kind-graded-bg: var(--health-teal);
     --kind-graded-fg: #FFFFFF;
+    /* The declared assignment type (docs/assignment-types.md): a Lab is
+       indigo and a Class activity magenta, beside the teal Assignment. */
+    --kind-lab-bg: #4C5BC4;
+    --kind-lab-fg: #FFFFFF;
+    --kind-activity-bg: #B03A7E;
+    --kind-activity-fg: #FFFFFF;
     --state-amber: #D69E2E;  /* state dot: preview / TA — pairs with the select text */
     --amber-bg: #FFFBEB;    /* pale amber — hint / warning callouts */
     --warning-bg: #FFF8E1;  /* warm amber tint — submission warning callout */
@@ -446,6 +452,10 @@
         --kind-outline-fg: #CDB9F0;
         --kind-graded-bg: #007C87;
         --kind-graded-fg: #FFFFFF;
+        --kind-lab-bg: #4C5BC4;
+        --kind-lab-fg: #FFFFFF;
+        --kind-activity-bg: #A3346F;
+        --kind-activity-fg: #FFFFFF;
         --state-amber: #ECC94B;
         --avatar-back-pebble: #32332F;
         --avatar-staff-ring: #E5E7EB;
@@ -528,6 +538,10 @@
     --kind-outline-fg: #CDB9F0;
     --kind-graded-bg: #007C87;
     --kind-graded-fg: #FFFFFF;
+    --kind-lab-bg: #4C5BC4;
+    --kind-lab-fg: #FFFFFF;
+    --kind-activity-bg: #A3346F;
+    --kind-activity-fg: #FFFFFF;
     --state-amber: #ECC94B;
     --avatar-back-pebble: #32332F;
     --avatar-staff-ring: #E5E7EB;
@@ -2548,6 +2562,8 @@ body:has(.notebook-header .nb-title-block) .nav {
 .item-tile[data-kind="document"] { background: var(--kind-document-bg); color: var(--kind-document-fg); }
 .item-tile[data-kind="outline"] { background: var(--kind-outline-bg); color: var(--kind-outline-fg); }
 .item-tile[data-kind="graded"] { background: var(--kind-graded-bg); color: var(--kind-graded-fg); }
+.item-tile[data-kind="lab"] { background: var(--kind-lab-bg); color: var(--kind-lab-fg); }
+.item-tile[data-kind="activity"] { background: var(--kind-activity-bg); color: var(--kind-activity-fg); }
 .item-tile[data-kind="ok"] { background: var(--open-bg); color: var(--open-fg); }
 .item-tile[data-kind="alert"] { background: var(--danger-bg); color: var(--danger-fg); }
 

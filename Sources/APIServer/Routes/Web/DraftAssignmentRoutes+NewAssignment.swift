@@ -391,7 +391,7 @@ extension DraftAssignmentRoutes {
             validated: validated,
             courseID: courseID,
             sectionID: resolvedSectionID,
-            setupID: paths.setupID,
+            setup: setup,
             shouldQueueValidation: shouldQueueValidation
         )
 
@@ -621,14 +621,15 @@ extension DraftAssignmentRoutes {
         validated: ValidatedSaveNewAssignment,
         courseID: UUID,
         sectionID: UUID?,
-        setupID: String,
+        setup: APITestSetup,
         shouldQueueValidation: Bool
     ) async throws -> APIAssignment {
         let assignment = try await createAssignmentWithUniquePublicID(
             NewAssignmentFields(
-                testSetupID: setupID,
+                testSetupID: try setup.requireID(),
                 title: validated.title,
                 courseID: courseID,
+                assignmentType: setup.derivedAssignmentType,
                 visibility: .closed,
                 dueAt: validated.dueAt,
                 startsAt: validated.startsAt,
@@ -785,6 +786,7 @@ extension DraftAssignmentRoutes {
                 testSetupID: body.testSetupID,
                 title: body.title.isEmpty ? body.testSetupID : body.title,
                 courseID: courseID,
+                assignmentType: setup.derivedAssignmentType,
                 visibility: .closed,  // stays closed until instructor validates + opens
                 dueAt: due,
                 // Quick-publish creates an ungrouped assignment (no section picker),
