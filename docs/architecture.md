@@ -878,7 +878,9 @@ version 2 course bundle carry the library. See
 ### Docker Compose (recommended)
 
 Multi-stage `Dockerfile` compiles both binaries with `--static-swift-stdlib`
-so no Swift toolchain is needed on the host. Each binary goes into the image
+so no Swift toolchain is needed on the host. Its `runner` target
+(`--target runner`) builds a runner-only image with no server and no `Public/`,
+for a runner host such as a Mac (`docs/mac-runner.md`). Each binary goes into the image
 without its debug data. The CI image build also removes the symbol table
 (`strip --strip-all`); a tag build keeps the debug data and the symbols as a
 `debug-symbols-<tag>` workflow artifact for 90 days. A local `Dockerfile` build

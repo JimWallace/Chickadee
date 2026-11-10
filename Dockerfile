@@ -17,9 +17,16 @@
 # Global ARG — must be declared before the first FROM so it can be used in
 # the `FROM ${BINARIES}` stage-selector below.
 ARG BINARIES=compile
+# The binary source of the runner-only image (`--target runner`):
+#   RUNNER_BINARIES=compile-runner  (default) — compile only chickadee-runner.
+#   RUNNER_BINARIES=prebuilt-runner — copy ./artifacts/chickadee-runner, as
+#       .github/workflows/runner-arm64-image.yml does.
+# It is a second selector, not a duplicate of BINARIES: BINARIES=prebuilt
+# requires artifacts/chickadee-server too, which a runner-only build lacks.
+ARG RUNNER_BINARIES=compile-runner
 
 # ── Compile from source ─────────────────────────────────────
-FROM swift:6.4-resolute AS compile
+FROM swift:6.4-resolute AS compile-runner
 
 WORKDIR /build
 
@@ -54,7 +61,6 @@ COPY Tools/runner-support ./Tools/runner-support
 # swift_ucasemap_*. Only the static release link is affected — the debug build
 # and the whole test suite are clean on the default engine. `native` is
 # deprecated and warns; drop this flag once the default engine links statically.
-RUN swift build -c release --static-swift-stdlib --build-system native --product chickadee-server
 RUN swift build -c release --static-swift-stdlib --build-system native --product chickadee-runner
 # A release build links with -g. Measured in CI on 6.4, --strip-debug takes
 # the server from 301 MB to 171 MB and the runner from 98 MB to 80 MB. It keeps
@@ -63,8 +69,13 @@ RUN swift build -c release --static-swift-stdlib --build-system native --product
 # docker-build.yml builds the production images. It saves the debug data and
 # the symbols to a separate file, so it can remove both (--strip-all).
 RUN mkdir -p /out \
-    && strip --strip-debug -o /out/chickadee-server .build/release/chickadee-server \
     && strip --strip-debug -o /out/chickadee-runner .build/release/chickadee-runner
+
+# The server image compiles the server on top of the runner build, so the two
+# share the dependency and runner layers. The runner-only image stops above.
+FROM compile-runner AS compile
+RUN swift build -c release --static-swift-stdlib --build-system native --product chickadee-server
+RUN strip --strip-debug -o /out/chickadee-server .build/release/chickadee-server
 
 # ── Prebuilt binaries from the build context ────────────────
 # Only built when BINARIES=prebuilt; its COPY paths are not evaluated
@@ -82,6 +93,19 @@ FROM ${BINARIES} AS binaries
 
 # Verify both binaries are present — fail fast with a clear message if not.
 RUN ls -lh /out/chickadee-server /out/chickadee-runner
+
+# ── The runner-only binary source ───────────────────────────
+# Only built for `--target runner`. BuildKit builds only the stages a target
+# reaches, so the server image never evaluates these, and the runner image
+# never compiles or copies the server.
+FROM ubuntu:26.04 AS prebuilt-runner
+
+WORKDIR /out
+COPY artifacts/chickadee-runner /out/
+RUN chmod +x /out/chickadee-runner
+
+FROM ${RUNNER_BINARIES} AS runner-binaries
+RUN ls -lh /out/chickadee-runner
 
 # ── Brotli copies of the large kernel files ─────────────────
 # PrecompressedAssetMiddleware serves `<file>.br` to a browser that accepts br,
@@ -111,8 +135,14 @@ RUN cd /src \
 # ============================================================
 # Stage 2 — Runtime
 # Must use the same Ubuntu version as the build stage (resolute).
+#
+# runtime-base holds what both images need: the pinned application user and
+# the language toolchains. The runner-only image (`--target runner`) adds the
+# runner and its entrypoint. The server image, the LAST stage and so the
+# default target, adds everything else. Keep it last: production and
+# `docker build .` build the default target.
 # ============================================================
-FROM ubuntu:26.04
+FROM ubuntu:26.04 AS runtime-base
 
 ENV DEBIAN_FRONTEND=noninteractive
 
@@ -238,6 +268,26 @@ RUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-reco
 # plotly toolkit is built in).
 
 WORKDIR /app
+
+# ── The runner-only image ───────────────────────────────────
+# For a runner host that runs no server, for example a Mac
+# (docs/mac-runner.md). No server, no Public/, Resources/ or docs/: the runner
+# reads none of them. It has no HEALTHCHECK, because the runner serves no HTTP
+# (the comment on the runner service in docker-compose.yml). The entrypoint is
+# the one the Compose runner service sets, and Compose still sets it. There is
+# no CMD: Compose gives the runner command (its flags are per host).
+FROM runtime-base AS runner
+
+COPY --from=runner-binaries /out/chickadee-runner ./chickadee-runner
+COPY deploy/runner-entrypoint.sh ./runner-entrypoint.sh
+RUN chmod +x ./runner-entrypoint.sh
+
+USER chickadee
+
+ENTRYPOINT ["/app/runner-entrypoint.sh", "/bin/sh", "-lc"]
+
+# ── The server image (default target) ───────────────────────
+FROM runtime-base
 
 # Compiled binaries (from whichever binary source was selected above).
 COPY --from=binaries /out/chickadee-server  ./chickadee-server

@@ -512,7 +512,9 @@ does not run. After a rollback on the server, the runner follows it back.
 The script uses the Compose file in the clone that holds it, with the
 `runner` service. The flags `--compose-dir`, `--service` and `--health-url`
 change these. The service must use the image
-`ghcr.io/jimwallace/chickadee:latest`, as the bundled Compose file does. Run it
+`ghcr.io/jimwallace/chickadee:latest`, as the bundled Compose file does, or the
+image that `--image-repo` names: an Apple Silicon host uses
+`ghcr.io/jimwallace/chickadee-runner` (`docs/mac-runner.md`). Run it
 as root, or as a user in the `docker` group, every 10 minutes:
 
 ```bash
