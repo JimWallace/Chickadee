@@ -119,19 +119,8 @@ struct InstructorSuiteOutlineBuilder {
     }
 
     private func anchor(for entry: TestSuiteEntry) -> InstructorSuiteOutline.Anchor? {
-        let request = NotebookTestAnchoring.request(
-            for: entry, in: manifest, scriptSource: scriptSources[entry.script])
-        let resolved = NotebookTestAnchoring.resolve(request, solution: notebook)
-        guard let name = resolved.name else { return nil }
-        let kind: String
-        switch resolved.kind {
-        case .name: kind = notebook.definition(of: name)?.kind.rawValue ?? "name"
-        case .section: kind = "section"
-        case .unlinked: return nil
-        }
-        return InstructorSuiteOutline.Anchor(
-            kind: kind, name: name, source: resolved.rule == .pinned ? "pinned" : "auto",
-            ambiguous: resolved.ambiguous)
+        SuiteAnchorResolution.anchor(
+            for: entry, in: manifest, notebook: notebook, scriptSource: scriptSources[entry.script])
     }
 
     private func runResult(_ outcome: TestOutcome) -> InstructorSuiteOutline.RunResult {

@@ -9,6 +9,27 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.889] - 2026-11-09
+
+### Fixed
+
+- **The vendor build accepts untarjs 5.4.1.** From 5.4.1 the untarjs
+  emscripten glue also targets Node, so it carries `require` calls for `fs`,
+  `path` and `crypto` behind a Node-only branch, and `scripts/setup-vendor.sh`
+  failed to bundle the xeus bootstrap. The three built-ins are now marked
+  external; the branch never runs in the grading worker. Unblocks Dependabot
+  #2918 (#2920).
+
+
+## [0.5.888] - 2026-11-09
+
+### Added
+
+- **MCP: pin a test to a notebook cell.** `update_suite` takes `anchor` on a script edit, and `get_suite` reports each item's notebook cell, pinned or automatic, as the workbench outline does (`SuiteAnchorResolution`, shared by both). The web pin route and the tool share `SuiteAnchorPinning`. A call that only sets pins does not close, re-grade or re-validate the assignment, as the web route does not.
+- **MCP: prepare a class composite's reference renders.** `set_activity` takes `prepareReference: true`, which queues one reference render per slot through the service behind the edit page's "Prepare reference" button, and reports `referenceJobsQueued`.
+- **MCP: `get_assignment` reports the GitHub submission setting** (`enabled`, `statusChecks`, `starterRepository`), read-only. Turning it on sends students' code to GitHub, so it stays an instructor's choice on the edit page.
+
+
 ## [0.5.887] - 2026-11-09
 
 ### Fixed
