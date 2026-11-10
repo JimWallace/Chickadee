@@ -25,6 +25,8 @@ import {
   normalizedSource,
   pillText,
   placeTask,
+  placeTasks,
+  placingAnchors,
   reflectionStatus,
   resultGlyph,
   starterKey,
@@ -45,6 +47,10 @@ export interface DrawnTask {
   sectionID: string | null;
   status: string | null;
   headerCell: number | null;
+  /** The title the header shows, which the outline shows too. */
+  title: string;
+  /** The cell an outline row click reveals. */
+  revealCell: number | null;
 }
 
 export class GuideView {
@@ -150,17 +156,15 @@ export class GuideView {
       return;
     }
     const editedSince = this.editedSince(guide, cells);
-    this.drawn = guide.tasks.map((task, number) => {
-      const placement = placeTask(task, cells, this.patterns);
+    const placements = placeTasks(guide.tasks, cells, this.patterns);
+    this.drawn = guide.tasks.map((task, i) => {
+      const placement = placements[i];
       const status = taskStatus(task, placement, cells, guide.starterSources);
       const edited = editedSince.has(task.sectionID ?? '') && (status === 'pass' || status === 'fail');
       if (placement.headerCell !== null) {
         const cell = widgets[placement.headerCell];
-        this.attachTo(
-          cell,
-          header(cell),
-          taskHeader(task, number, status, pillText(status, task, guide.attempt, edited))
-        );
+        const pill = pillText(status, task, guide.attempt, edited);
+        this.attachTo(cell, header(cell), taskHeader(task, placement.title, status, pill));
       }
       if (placement.checksCell !== null) {
         const cell = widgets[placement.checksCell];
@@ -169,7 +173,10 @@ export class GuideView {
       return {
         sectionID: task.sectionID ?? null,
         status,
-        headerCell: placement.headerCell
+        headerCell: placement.headerCell,
+        title: placement.title,
+        // Where a row click goes: the task's first code cell, else its header.
+        revealCell: placement.found.length ? Math.min(...placement.found) : placement.headerCell
       };
     });
     const tags = (guide.reflections ?? []).map(r => r.tag);
@@ -183,7 +190,9 @@ export class GuideView {
       ck: 'ck:tasks',
       tasks: this.drawn.map(t => ({
         sectionID: t.sectionID,
-        status: t.status
+        status: t.status,
+        title: t.title,
+        cell: t.revealCell
       })),
       reflections: tags.map(tag => ({ tag, status: reflectionStatus(tag, tagged) }))
     });
@@ -203,12 +212,12 @@ export class GuideView {
     const current: { [key: string]: string } = {};
     for (const task of guide.tasks) {
       const placement = placeTask(task, cells, this.patterns);
-      task.anchors.forEach((anchor, i) => {
+      for (const i of placingAnchors(task)) {
         const cell = placement.anchorCells[i];
         if (cell !== null) {
-          current[`${task.sectionID ?? ''}|${starterKey(anchor)}`] = normalizedSource(cells[cell].source);
+          current[`${task.sectionID ?? ''}|${starterKey(task.anchors[i])}`] = normalizedSource(cells[cell].source);
         }
-      });
+      }
     }
     const key = `ck-attempt-sources:${location.pathname}${location.search}:${attempt.number}`;
     let stored: { [key: string]: string } | null = null;
@@ -285,11 +294,12 @@ function withCode(className: string, text: string): HTMLElement {
   return node;
 }
 
-function taskHeader(task: GuideTask, number: number, status: string | null, pill: string | null): HTMLElement {
+function taskHeader(task: GuideTask, title: string, status: string | null, pill: string | null): HTMLElement {
   const row = el('div', `${MARK} ck-task-header`);
   row.dataset.status = status ?? 'none';
   row.appendChild(el('span', 'ck-glyph', statusGlyph(status))).setAttribute('aria-hidden', 'true');
-  row.appendChild(el('span', 'ck-task-label', task.label ?? `Task ${number + 1}`));
+  // The same title as the page's outline row (Public/notebook-guide.js).
+  row.appendChild(el('span', 'ck-task-label', title));
   row.appendChild(el('span', 'ck-task-points', `${task.points} ${task.points === 1 ? 'pt' : 'pts'}`));
   row.appendChild(el('span', 'ck-spacer'));
   if (pill) {

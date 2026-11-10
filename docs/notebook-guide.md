@@ -98,7 +98,11 @@ These rules keep the guide safe:
 The notebook page (NB4, design frame 18a) shows the guide in two places.
 
 **The outline** (`Public/notebook-guide.js`) is beside the editor. It shows the
-attempt card and one row for each task: a glyph, the name and the points. A row
+attempt card and one row for each task: a glyph, the title and the points. The
+title is the one the editor's task header shows (see "Which heading, and the
+title" below), sent in `ck:tasks`. Without the extension it is the section name
+as written. Rows are not numbered, and a chip shows the part of the title
+before a colon. A row
 click reveals the task in the editor (`chickadee:reveal`). The row of the task
 under the cursor has `aria-current`. Below 1100px the outline is a row of chips
 under the toolbar. Below 640px it is hidden. Only a student who can submit sees
@@ -108,12 +112,35 @@ it, and not in the embedded workbench.
 two rows for each task:
 
 - A **task header** above the `## ` heading of the task, in the header widget
-  of that cell. It has the status glyph, the label, the points and a pill. With
-  no heading, the header goes above the first anchored cell.
+  of that cell. It has the status glyph, the title, the points and a pill.
 - A **checks line** under the last anchored code cell, in the footer widget of
   that cell. It has "Checked in attempt N" (or "Checked when you submit"), a
   chip for each public check, and the count of hidden tests. Each failure shows
   its detail and the hint of the instructor, two at most.
+
+**Which heading, and the title.** A task sits under its own `## ` heading when
+the notebook has one with the section's name. Otherwise it sits under the
+nearest `## ` heading above its first anchored cell, so a suite section named
+"Question 1" over a notebook that says "## 1. Warm Up I: BMI Calculator", or
+the checks in no section ("Other checks"), still sit where the notebook puts
+them. That heading is the task's **title**, and the header and the outline
+show the same text, so the student sees one name per task, the notebook's
+own. Two rules keep the tasks apart:
+
+- An `ambiguous` anchor does not place a task when the task has another. It is
+  a helper that several tasks' tests call (`bmi` in a test of `bmi_category`),
+  so it would pull every header up to that helper's cell. It does not decide
+  `starter` either. A task placed only by ambiguous anchors takes no heading.
+- A heading found above the anchors goes to the task whose first anchored cell
+  comes first under it, in notebook order. A task's own heading is never given
+  away. Any other task that finds the same heading sits above its own first
+  anchored cell, under the suite's name for it. With no heading at all, the
+  header goes above the first anchored cell, under the suite's name.
+
+The editor sends each title to the outline in `ck:tasks`, with the cell a row
+click reveals: the task's first anchored cell, else its header cell. The section label before a colon
+(`label`) no longer replaces the title anywhere: the header shows the whole
+heading, and the chip is the part before its colon.
 
 The pill gives the status:
 
