@@ -9,6 +9,23 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.906] - 2026-11-10
+
+### Added
+
+- **An arm64 runner image for a bonus runner on a Mac (spike).** A new
+  workflow, `runner-arm64-image.yml`, builds
+  `ghcr.io/jimwallace/chickadee-runner` for `linux/arm64` on each release tag,
+  from a new runner-only Dockerfile target (`--target runner`) that carries no
+  server and none of `Public/`. The server image is unchanged.
+  It checks that the runner starts in its sandbox with job cgroups, as uid 999
+  with no capability, and detects every language. It is separate from the
+  production image and blocks no deploy. `deploy/chickadee-runner-update.sh`
+  takes a new `--image-repo` flag, so an Apple Silicon host follows the
+  server's release with that image. `docs/mac-runner.md` covers sizing under
+  Docker Desktop.
+
+
 ## [0.5.905] - 2026-11-10
 
 ### Added
