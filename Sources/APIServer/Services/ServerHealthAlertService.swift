@@ -313,7 +313,14 @@ func decideRunnerVersionSkew(
         .min { (comparator.compare($0, $1) ?? .orderedSame) == .orderedAscending } ?? first.version
     let distinctBehind = Set(behind.map(\.version)).sorted()
     let named = behind.filter { !$0.runnerID.isEmpty }
-    let described = behind.map { describeRunnerBehind($0, serverVersion: serverVersion) }
+    // At most `runnerVersionSkewNamedLimit` runners in the summary, so a whole
+    // fleet behind cannot outgrow a webhook's message limit (Pushover: ~1024).
+    var described = behind.prefix(runnerVersionSkewNamedLimit).map {
+        describeRunnerBehind($0, serverVersion: serverVersion, comparator: comparator)
+    }
+    if behind.count > runnerVersionSkewNamedLimit {
+        described.append("and \(behind.count - runnerVersionSkewNamedLimit) more")
+    }
     let heading = behind.count == 1 ? "Runner behind" : "\(behind.count) runners behind"
     var details: [String: String] = [
         "server_version": serverVersion,
@@ -334,8 +341,9 @@ func decideRunnerVersionSkew(
     )
 }
 
-/// The version-only form, for a caller that has no runner IDs. Each runner is
-/// described by its version alone.
+/// The version-only form. Production passes runner IDs; this form remains for
+/// the existing `ServerHealthAlertTests` cases, which assert the firing logic
+/// and the detail keys. Each runner is described as "a runner at vX".
 func decideRunnerVersionSkew(
     serverVersion: String,
     runnerVersions: [String],
@@ -354,24 +362,21 @@ func decideRunnerVersionSkew(
 /// both versions are `major.minor.patch` with the same major and minor, where
 /// the patch difference is the number of releases between them; a minor bump
 /// resets the patch number, so across one the count would mean nothing.
-private func describeRunnerBehind(_ runner: RunnerVersionReport, serverVersion: String) -> String {
+private func describeRunnerBehind(
+    _ runner: RunnerVersionReport,
+    serverVersion: String,
+    comparator: VersionComparator
+) -> String {
     let name = runner.runnerID.isEmpty ? "a runner" : runner.runnerID
     var text = "\(name) at v\(runner.version)"
-    if let count = releasesBehind(runnerVersion: runner.version, serverVersion: serverVersion) {
+    if let count = comparator.releasesBehind(runner.version, serverVersion) {
         text += count == 1 ? " (1 release behind)" : " (\(count) releases behind)"
     }
     return text
 }
 
-private func releasesBehind(runnerVersion: String, serverVersion: String) -> Int? {
-    let runnerParts = runnerVersion.split(separator: ".").compactMap { Int($0) }
-    let serverParts = serverVersion.split(separator: ".").compactMap { Int($0) }
-    guard runnerParts.count == 3, serverParts.count == 3,
-        runnerParts[0] == serverParts[0], runnerParts[1] == serverParts[1],
-        serverParts[2] > runnerParts[2]
-    else { return nil }
-    return serverParts[2] - runnerParts[2]
-}
+/// How many runners the runner-version-skew summary names before "and N more".
+let runnerVersionSkewNamedLimit = 5
 
 private func evaluateRunnerVersionSkew(
     on application: Application,

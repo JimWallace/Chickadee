@@ -20,6 +20,18 @@ struct VersionComparator {
         parse(raw) != nil
     }
 
+    /// How many releases `older` is behind `newer`, when both are
+    /// `major.minor.patch` in the same major and minor series and `older` is
+    /// behind; nil otherwise. A minor bump restarts the patch number, so across
+    /// one the difference is not a count of releases.
+    func releasesBehind(_ older: String, _ newer: String) -> Int? {
+        guard let old = parse(older), let new = parse(newer),
+            old.count == 3, new.count == 3,
+            old[0] == new[0], old[1] == new[1], new[2] > old[2]
+        else { return nil }
+        return new[2] - old[2]
+    }
+
     private func parse(_ raw: String) -> [Int]? {
         let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return nil }
