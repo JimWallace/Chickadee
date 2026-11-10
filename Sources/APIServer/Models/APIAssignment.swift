@@ -155,6 +155,21 @@ final class APIAssignment: Model, Content, @unchecked Sendable {
         set { conceptRaw = newValue?.rawValue }
     }
 
+    /// The kind of graded work, stored as the raw `AssignmentType` string
+    /// (docs/assignment-types.md). Every row creator records one, and the
+    /// `BackfillAssignmentType` migration recorded one for each row that
+    /// existed before the column. Use the typed `assignmentType` accessor.
+    @OptionalField(key: "assignment_type")
+    var assignmentTypeRaw: String?
+
+    /// Typed accessor for `assignmentTypeRaw`. A missing or unrecognised value
+    /// reads as `.assignment`, the type whose secret tests stay on the worker:
+    /// the safe direction.
+    var assignmentType: AssignmentType {
+        get { assignmentTypeRaw.flatMap(AssignmentType.init(rawValue:)) ?? .assignment }
+        set { assignmentTypeRaw = newValue.rawValue }
+    }
+
     /// The course this assignment belongs to.
     @Field(key: "course_id")
     var courseID: UUID

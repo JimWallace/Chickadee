@@ -140,11 +140,16 @@
         <symbol id="i-unlink" viewBox="0 0 24 24"><path d="m18.84 12.25 1.72-1.71a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="m5.17 11.75-1.71 1.71a5 5 0 0 0 7.07 7.07l1.71-1.71"/><line x1="8" y1="2" x2="8" y2="5"/><line x1="2" y1="8" x2="5" y2="8"/><line x1="16" y1="19" x2="16" y2="22"/><line x1="19" y1="16" x2="22" y2="16"/></symbol>
         <!-- Row tiles name a kind of thing and are never also an action.
              A graded assignment is a clipboard with a tick; the calendar with
-             a tick stays the deadline extension. An unpublished setup is a
+             a tick stays the deadline extension. The declared assignment type
+             (docs/assignment-types.md) picks one of three: the clipboard for
+             an Assignment, the Lucide conical flask for a Lab, and the group
+             of people for a Class activity. An unpublished setup is a
              dashed page (the upload arrow is Import). A notebook is a
              notebook, and a course is the cap; the book that once meant both
              is gone. -->
         <symbol id="i-clipboard-check" viewBox="0 0 24 24"><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><polyline points="9 14 11 16 15 12"/></symbol>
+        <symbol id="i-flask" viewBox="0 0 24 24"><path d="M10 2v7.527a2 2 0 0 1-.211.896L4.72 20.55a1 1 0 0 0 .9 1.45h12.76a1 1 0 0 0 .9-1.45l-5.069-10.127A2 2 0 0 1 14 9.527V2"/><path d="M8.5 2h7"/><path d="M7 16h10"/></symbol>
+        <symbol id="i-users" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></symbol>
         <symbol id="i-file-dashed" viewBox="0 0 24 24"><path d="M6 22a2 2 0 0 1-2-2"/><line x1="4" y1="14" x2="4" y2="16"/><line x1="4" y1="8" x2="4" y2="10"/><path d="M4 4a2 2 0 0 1 2-2"/><path d="M10 2h4l6 6v4"/><path d="M20 16v4a2 2 0 0 1-2 2"/><line x1="10" y1="22" x2="14" y2="22"/><polyline points="14 2 14 8 20 8"/></symbol>
         <symbol id="i-notebook" viewBox="0 0 24 24"><line x1="2" y1="6" x2="6" y2="6"/><line x1="2" y1="10" x2="6" y2="10"/><line x1="2" y1="14" x2="6" y2="14"/><line x1="2" y1="18" x2="6" y2="18"/><rect x="4" y="2" width="16" height="20" rx="2"/><line x1="16" y1="2" x2="16" y2="22"/></symbol>
         <symbol id="i-graduation-cap" viewBox="0 0 24 24"><path d="M22 10v6"/><path d="M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c3 3 9 3 12 0v-5"/></symbol>

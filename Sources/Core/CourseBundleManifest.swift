@@ -340,6 +340,11 @@ public struct BundledAssignment: Codable, Sendable {
     /// concept this instance does not know imports as no concept, rather than
     /// failing the whole bundle.
     public let concept: String?
+    /// The declared `AssignmentType` raw value (docs/assignment-types.md). Nil
+    /// in a bundle written before it was carried; the import then derives it
+    /// from the imported manifest, as the backfill did. Kept as a string for
+    /// the same reason as `concept`.
+    public let assignmentType: String?
 
     public init(
         bundleID: String, title: String, dueAt: Date?, startsAt: Date? = nil, isOpen: Bool? = nil,
@@ -352,7 +357,8 @@ public struct BundledAssignment: Codable, Sendable {
         brightspaceSyncExcluded: Bool? = nil,
         deadlineOverrideActive: Bool? = nil,
         requirement: AssignmentRequirementSpec? = nil,
-        concept: String? = nil
+        concept: String? = nil,
+        assignmentType: String? = nil
     ) {
         self.bundleID = bundleID
         self.title = title
@@ -370,6 +376,7 @@ public struct BundledAssignment: Codable, Sendable {
         self.deadlineOverrideActive = deadlineOverrideActive
         self.requirement = requirement
         self.concept = concept
+        self.assignmentType = assignmentType
     }
 }
 

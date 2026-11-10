@@ -647,6 +647,32 @@ because line numbers go out of date.
   but `requireBrowserRunnerAccess` refuses a student. The runner then fails
   with a visible error and fails over to the worker. Nothing leaks.
 
+### The declared assignment type: `assignments.assignment_type`
+
+- **Rule:** the type is declared, never inferred from a title.
+  `AssignmentType.derivedDeclaration` (effective grading mode, then the
+  `activity` block) runs only where a row is created and in the one-time
+  `BackfillAssignmentType`, and each records the result at once
+  (docs/assignment-types.md).
+- **Writers:** every creator through `NewAssignmentFields.assignmentType`
+  (no default), the clone (copies the source), the bundle import (the bundled
+  value or the derivation), the edit page's Type select and MCP
+  `update_assignment`.
+- **Readers:** the row tile on the instructor dashboard, the student course
+  page and the admin course page (`AssignmentTypeTile`), MCP `get_assignment`
+  and the bundle export.
+- **Intersection:** `derivedDeclaration` reads the effective grading mode (the
+  row above) and the `activity` block. After creation, the writers of those
+  fields (`setGradingMode`, `set_grading_mode`, `applyLanguageDeclaration`,
+  a section move's `adoptSectionGradingMode`, `set_activity`) do not touch the
+  type, so a Lab can become worker-graded and keep its Lab tile. That is the
+  declared-not-inferred rule, not a bug, while the type is display-only.
+- **Fact:** in phase 1 the type changes no grading, grade push or slip-day
+  behaviour, and its writes carry no audit record. Phase 2 makes the coherence
+  rules, the LEARN push and slip days read it; at that point the writers above
+  must refuse a mode the type does not allow, the type writes need an audit
+  record, and each new reader belongs in this row.
+
 ### What a runner receives: `RunnerManifest` and the cache key
 
 - **Rules:**

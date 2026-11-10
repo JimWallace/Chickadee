@@ -88,6 +88,7 @@ struct InstructorDashboardRoutes: RouteCollection {
         r.post(":assignmentID", "brightspace", use: saveBrightSpaceGradeObjectID)
         r.post(":assignmentID", "secret-reveal", use: saveSecretRevealSetting)
         r.post(":assignmentID", "concept", use: saveConceptSetting)
+        r.post(":assignmentID", "assignment-type", use: saveAssignmentType)
         r.post(":assignmentID", "ai-feedback", use: saveAIFeedbackSetting)
         r.get(":assignmentID", "feedback", use: feedbackReviewPage)
         r.post(":assignmentID", "feedback", use: saveFeedbackReview)
@@ -620,6 +621,9 @@ struct InstructorDashboardRoutes: RouteCollection {
                     SelectOption(value: $0.rawValue, label: $0.displayName, selected: assignment.concept == $0)
                 },
             conceptRingPhrase: assignment.concept?.ringPhrase,
+            assignmentTypeOptions: AssignmentType.allCases.map {
+                SelectOption(value: $0.rawValue, label: $0.displayName, selected: assignment.assignmentType == $0)
+            },
             aiFeedback: try await APICourse.find(assignment.courseID, on: req.db)?.aiFeedbackEnabled == true
                 ? AIFeedbackSetting(enabled: assignment.aiFeedbackEnabled == true) : nil,
             timeLimitSeconds: manifest?.timeLimitSeconds ?? 10,

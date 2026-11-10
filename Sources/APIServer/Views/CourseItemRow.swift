@@ -323,7 +323,7 @@ private struct CourseAssignmentItemRow: HTML {
             }
             td(.class("item-tile-cell")) {
                 if row.assignmentID != nil {
-                    span(.class("item-tile"), .data("kind", value: "graded")) { Icon("i-clipboard-check") }
+                    AssignmentTypeTile(type: row.assignmentType)
                 } else {
                     span(.class("item-tile")) { Icon("i-file-dashed") }
                 }

@@ -130,6 +130,8 @@ struct EditAssignmentContext: Encodable {
     /// The ring the chosen concept earns, as a sentence names it ("the
     /// Ouroboros ring"); nil when the assignment has no concept.
     var conceptRingPhrase: String?
+    /// Each `AssignmentType`, for the "Type" select (docs/assignment-types.md).
+    var assignmentTypeOptions: [SelectOption] = []
     /// The assignment gate for AI-assisted feedback
     /// (docs/ai-assisted-feedback.md). Nil while the course gate is off, so
     /// the "Student Options" control does not render at all.

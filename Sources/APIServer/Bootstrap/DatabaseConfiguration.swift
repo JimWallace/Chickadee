@@ -520,6 +520,14 @@ func registerMigrations(on app: Application) {
     // `test_setups`.
     app.migrations.add(StripStarterNotebookOutputs())
 
+    registerLateSchemaMigrations(on: app)
+    registerDataMigrations(on: app)
+}
+
+/// The newest schema migrations, registered after the ones above and before
+/// the data migrations. A separate function only to keep `registerMigrations`
+/// under the body-length limit; the order is still one list, in file order.
+private func registerLateSchemaMigrations(on app: Application) {
     // The `completed_at` index on job metrics and the `course_id` indexes on
     // course sections and content items (#2778). Index only; the tables are
     // created far above.
@@ -548,6 +556,17 @@ func registerMigrations(on app: Application) {
     // (CreateCourseContentItems, far above); no data change.
     app.migrations.add(AddContentItemAssignment())
 
+    // The declared assignment type (docs/assignment-types.md). Adds a
+    // nullable column to `assignments` (CreateAssignments, far above);
+    // `BackfillAssignmentType` below fills it.
+    app.migrations.add(AddAssignmentType())
+}
+
+/// The data migrations, registered after every schema migration (#1805).
+/// A separate function only to keep `registerMigrations` under the body-length
+/// limit; it is called last, so the order is one list. `MigrationOrderTests`
+/// reads every registration from `registerMigrations` to the end of this file.
+private func registerDataMigrations(on app: Application) {
     // ---------------------------------------------------------------------
     // DATA MIGRATIONS. Keep these at the end, and add every new schema
     // migration ABOVE this block (#1805).
@@ -564,4 +583,9 @@ func registerMigrations(on app: Application) {
     // Lab groups, slice 6: a course's LEARN section category becomes a
     // synced group set.
     app.migrations.add(MoveLearnSectionCategoryToGroupSet())
+
+    // Records a declared assignment type for every assignment that existed
+    // before the column, from its manifest (docs/assignment-types.md). Reads
+    // `assignments` and `test_setups`, so it follows `AddAssignmentType`.
+    app.migrations.add(BackfillAssignmentType())
 }

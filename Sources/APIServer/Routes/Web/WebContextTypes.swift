@@ -97,6 +97,8 @@ struct TestSetupRow: Encodable {
     /// The class activity's leaderboard when this viewer may open it
     /// (`ClassActivity.leaderboardPath`); nil hides the action.
     let leaderboardURL: String?
+    /// The declared type, which picks the row tile (docs/assignment-types.md).
+    var assignmentType: AssignmentType = .assignment
     /// The buttons of the content items attached to this assignment (a lab's
     /// slides), drawn after the assignment's own actions. Filled by
     /// `buildIndexDisplayGroups`, and only with the items this viewer may see

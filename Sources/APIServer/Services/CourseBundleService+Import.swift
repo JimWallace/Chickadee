@@ -692,6 +692,15 @@ private func importBundledAssignments(
         // The lab concept for the wardrobe's concept rings. One this instance
         // does not know imports as no concept.
         newAssign.concept = bundledAssign.concept.flatMap(AssignmentConcept.init(rawValue:))
+        // The declared type. A bundle written before it was carried, or one
+        // naming a type this instance does not know, derives it from the
+        // imported manifest, as the backfill did (docs/assignment-types.md).
+        if let bundledType = bundledAssign.assignmentType.flatMap(AssignmentType.init(rawValue:)) {
+            newAssign.assignmentType = bundledType
+        } else {
+            newAssign.assignmentType =
+                try await APITestSetup.find(setupID, on: db)?.derivedAssignmentType ?? .assignment
+        }
         // The deadline override travels with the open state it protects
         // (#2166): without it the next sweep closes an imported assignment
         // whose due date has passed.

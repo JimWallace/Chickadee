@@ -259,6 +259,9 @@ enum AssignmentAuthoringService {
                     testSetupID: newSetupID,
                     title: newTitle,
                     courseID: targetCourseID,
+                    // The declared type travels with the clone, like the
+                    // per-assignment policies below.
+                    assignmentType: source.assignmentType,
                     visibility: .closed,
                     // Ungrouped, after the items already there (#2490). The
                     // course clone sets its own section and order next.
@@ -434,14 +437,18 @@ enum AssignmentAuthoringService {
             try await setup.save(on: db)
             try await writeAssignmentNotebook(
                 setup: setup, notebookData: notebookData, setupsDirectory: setupsDirectory, on: db)
+            // The language first: an upload-only language moves grading to the
+            // worker, and the type below is derived from the manifest as the
+            // language leaves it (a Lab, or an Assignment for such a language).
+            try await declareManifestLanguage(setup: setup, to: language, on: db)
             let assignment = try await createAssignmentWithUniquePublicID(
                 NewAssignmentFields(
-                    testSetupID: setupID, title: title, courseID: courseID, visibility: .closed,
+                    testSetupID: setupID, title: title, courseID: courseID,
+                    assignmentType: setup.derivedAssignmentType, visibility: .closed,
                     // Ungrouped, after the items already there (#2490).
                     sortOrder: try await nextSectionItemSortOrder(
                         courseID: courseID, sectionID: nil, db: db)),
                 on: db)
-            try await declareManifestLanguage(setup: setup, to: language, on: db)
             await AssignmentVersionStore.seedInitialVersion(
                 setup: setup, origin: AssignmentVersionOrigin.create,
                 testSetupsDirectory: setupsDirectory, on: ownerDB ?? db)

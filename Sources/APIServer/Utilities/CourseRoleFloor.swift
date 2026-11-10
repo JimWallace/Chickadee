@@ -19,8 +19,9 @@ enum CourseRoleFloor {
     /// quick publish of an unpublished setup, duplicate, and the MCP
     /// `create_assignment` and `clone_assignment` tools.
     static let createAssignment: CourseRole = .instructor
-    /// Change an assignment's status, or delete an assignment or an
-    /// unpublished setup.
+    /// Change an assignment's status or its declared type
+    /// (docs/assignment-types.md), or delete an assignment or an unpublished
+    /// setup.
     static let assignmentLifecycle: CourseRole = .instructor
     /// Create, rename or delete a course section, or move an assignment to
     /// another section, on the web and through MCP. Section reorder is
