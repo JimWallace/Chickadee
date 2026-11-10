@@ -97,7 +97,7 @@ source of truth; a census re-count is required whenever either changes
 | `create_content_item` | `CourseContentItemTools.swift` | `courseCode` | course-enrol (`resolveCourseForWrite`, TA+) | new `APICourseContentItem` |
 | `update_content_item` | `CourseContentItemTools.swift` | content-item id | course-enrol (`authorizeCourseWriteAccess`, TA+) | `APICourseContentItem` |
 | `delete_content_item` | `CourseContentItemTools.swift` | content-item id | course-enrol (`authorizeCourseWriteAccess`, TA+) | `APICourseContentItem` |
-| `attach_content_item` | `AttachContentItemTool.swift` | content-item id + `assignmentPublicID` | course-enrol (`authorizeCourseWriteAccess`, TA+); assignment looked up in the item's course only | `APICourseContentItem` (`assignment_id`, `section_id`) |
+| `attach_content_item` | `CourseContentItemTools.swift` | content-item id + `assignmentPublicID` | course-enrol (`authorizeCourseWriteAccess`, TA+); assignment looked up in the item's course only | `APICourseContentItem` (`assignment_id`, `section_id`) |
 | `reorder_content_items` | `CourseContentItemTools.swift` | `courseCode` | course-enrol (`resolveCourseForWrite`, TA+) | `APICourseContentItem` order (`sort_order`) |
 
 ## Escape-hatch / general-capability audit
