@@ -472,7 +472,9 @@ like `solution.py`):
    filename, **skip** the read-only shared symlink and instead write the
    materialized sample as a real file at notebook open (next to the existing
    `applyNotebookSubstitutionsIfNeeded` resolution, `:200`). Re-materialize
-   when seed/source/params change.
+   when seed/source/params change. A dataset with no sample, partition or
+   transform is now linked to the shared copy instead
+   ([dataset-shared-delivery.md](dataset-shared-delivery.md)).
 2. **Worker** (`materializePersonalizedFiles` in `RunnerDaemon+JobPreparation.swift`): right where
    `_ck_inputs.py` is written into the **per-job scratch** workspace, also
    write the per-student dataset files (overwriting the source copied from the

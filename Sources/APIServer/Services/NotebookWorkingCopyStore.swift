@@ -756,9 +756,11 @@ func createSupportFileSymlinks(setup: APITestSetup, studentDir: String, applicat
     }
 }
 
-/// Materializes per-student dataset slices into the student's JupyterLite working
-/// directory. Dataset files are written as real files (not symlinks) so each student
-/// sees only their own rows. Idempotent — safe to call on every visit; a spec
+/// Puts each dataset file into the student's JupyterLite working directory, in
+/// the form its `DatasetDeliveryMode` names (docs/dataset-shared-delivery.md):
+/// a `shared` file, which every student receives unchanged, is a link to the
+/// setup's shared extraction; a `perStudent` file is a real file holding the
+/// student's own rows. Idempotent — safe to call on every visit; a spec
 /// change, a re-uploaded source, or a staff re-seed is picked up automatically
 /// because each changes the materialization fingerprint (#1382 item 3 — this
 /// used to re-slice and overwrite on every visit; now an unchanged
@@ -813,7 +815,7 @@ func writeDatasetFiles(
                 props: props, seeds: [seedHex, courseSeedHex ?? "-", dealNumber.map(String.init) ?? "-"],
                 sharedDir: sharedDir),
             targetsPresent: props.datasets.allSatisfy {
-                FileManager.default.fileExists(atPath: studentDir + "/" + $0.file)
+                datasetTargetIsCurrent(spec: $0, studentDir: studentDir, sharedDir: sharedDir)
             }
         )
     }
@@ -829,29 +831,52 @@ func writeDatasetFiles(
     // pool (#1156). A failed write is not a success (#2776): caching the
     // fingerprint after one left the student with a stale dataset until a
     // restart, so a failure skips the record and the next visit retries.
+    // A shared file is linked, never read: its bytes are the source's, so only
+    // the per-student specs go through the resolver.
+    let perStudent = {
+        var manifest = props
+        manifest.datasets = props.datasets.filter { $0.deliveryMode == .perStudent }
+        return manifest
+    }()
+    let sharedFiles = props.datasets.filter { $0.deliveryMode == .shared }.map(\.file)
+
     let wrote: Bool
     do {
         wrote = try await runBlocking {
-            guard
-                let files = DatasetDeals.withholdingUndealtParts(
-                    DatasetResolver.resolve(
-                        manifest: props, seedHex: seedHex, courseSeedHex: courseSeedHex, dealNumber: dealNumber,
-                        sourceDirectory: sharedDir),
-                    manifest: props, dealNumber: dealNumber)
-            else { return false }
-
             // Every file is attempted, as before; the first failure is
             // thrown after the loop.
             var firstFailure: (any Error)?
-            for (filename, content) in files {
-                // Defense-in-depth (#1104): resolver keys are validated bare
-                // filenames, but never join an unvetted name onto the student dir.
-                guard FilenameSafety.bareFilename(filename) != nil else { continue }
-                let dest = studentDir + "/" + filename
+            for filename in sharedFiles {
+                // Defense-in-depth (#1104): never join an unvetted name onto
+                // the student dir. A source the extraction does not hold yet
+                // is skipped, as the resolver skips it, and not linked.
+                guard FilenameSafety.bareFilename(filename) != nil,
+                    FileManager.default.fileExists(atPath: sharedDir + filename)
+                else { continue }
                 do {
-                    try content.write(toFile: dest, atomically: true, encoding: .utf8)
+                    try DatasetWorkingCopyPlacement.link(studentDir + "/" + filename, to: sharedDir + filename)
                 } catch {
                     firstFailure = firstFailure ?? error
+                }
+            }
+
+            if !perStudent.datasets.isEmpty {
+                guard
+                    let files = DatasetDeals.withholdingUndealtParts(
+                        DatasetResolver.resolve(
+                            manifest: perStudent, seedHex: seedHex, courseSeedHex: courseSeedHex,
+                            dealNumber: dealNumber, sourceDirectory: sharedDir),
+                        manifest: perStudent, dealNumber: dealNumber)
+                else { return false }
+                for (filename, content) in files {
+                    // Defense-in-depth (#1104): resolver keys are validated bare
+                    // filenames, but never join an unvetted name onto the student dir.
+                    guard FilenameSafety.bareFilename(filename) != nil else { continue }
+                    do {
+                        try DatasetWorkingCopyPlacement.write(content, to: studentDir + "/" + filename)
+                    } catch {
+                        firstFailure = firstFailure ?? error
+                    }
                 }
             }
             if let firstFailure { throw firstFailure }
@@ -867,6 +892,25 @@ func writeDatasetFiles(
 
     if wrote, let state {
         await cache.record(userID: userID, setupID: setupID, fingerprint: state.fingerprint)
+    }
+}
+
+/// True when the student's copy of `spec.file` is in the form its delivery mode
+/// names: a live link to the shared extraction for `shared`, a real file for
+/// `perStudent`. A working copy written before shared delivery holds a real
+/// file for a `shared` spec, and this is what turns it into a link on the
+/// next visit even when the fingerprint is current. A shared source the
+/// extraction does not hold yet is never linked, so it reads as not current and
+/// the pass runs again on each visit; that pass reads no file, and stops once
+/// the source appears.
+private func datasetTargetIsCurrent(spec: DatasetSpec, studentDir: String, sharedDir: String) -> Bool {
+    let path = studentDir + "/" + spec.file
+    let linkTarget = DatasetWorkingCopyPlacement.linkTarget(of: path)
+    switch spec.deliveryMode {
+    case .shared:
+        return linkTarget == sharedDir + spec.file && FileManager.default.fileExists(atPath: path)
+    case .perStudent:
+        return linkTarget == nil && FileManager.default.fileExists(atPath: path)
     }
 }
 

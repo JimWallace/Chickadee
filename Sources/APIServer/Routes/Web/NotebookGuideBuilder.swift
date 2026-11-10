@@ -24,7 +24,10 @@ struct NotebookGuideBuilder {
     }
 
     let manifest: TestProperties
-    /// The solution's definitions, which decide a script test's anchor.
+    /// The definitions that decide the anchors: the solution's, or the
+    /// template starter's before a solution exists
+    /// (`SuiteAnchorResolution.notebookScan`). Never this student's
+    /// personalized copy, so every student gets the same cells.
     let solution: NotebookDefinitionScan
     /// This student's personalized starter notebook, or nil when the
     /// assignment has none.
@@ -106,20 +109,15 @@ struct NotebookGuideBuilder {
         var seen: Set<String> = []
         var anchors: [NotebookGuide.Anchor] = []
         for entry in entries {
-            let request = NotebookTestAnchoring.request(
-                for: entry, in: manifest, scriptSource: scriptSources[entry.script])
-            let anchor = NotebookTestAnchoring.resolve(request, solution: solution)
-            guard let name = anchor.name else { continue }
-            let kind: String
-            switch anchor.kind {
-            // `name` when the solution does not define it (a pinned name, or
-            // a check written before the code): its kind is unknown.
-            case .name: kind = solution.definition(of: name)?.kind.rawValue ?? "name"
-            case .section: kind = "section"
-            case .unlinked: continue
-            }
-            guard seen.insert("\(kind):\(name)").inserted else { continue }
-            anchors.append(NotebookGuide.Anchor(kind: kind, name: name, ambiguous: anchor.ambiguous ? true : nil))
+            // The mapping the staff surfaces use (`SuiteAnchorResolution`), so
+            // a student and the workbench see a test on the same cell.
+            guard
+                let anchor = SuiteAnchorResolution.anchor(
+                    for: entry, in: manifest, notebook: solution, scriptSource: scriptSources[entry.script])
+            else { continue }
+            guard seen.insert("\(anchor.kind):\(anchor.name)").inserted else { continue }
+            anchors.append(
+                NotebookGuide.Anchor(kind: anchor.kind, name: anchor.name, ambiguous: anchor.ambiguous ? true : nil))
         }
         if anchors.isEmpty, let heading, solution.sections.contains(where: { $0.name == heading }) {
             anchors.append(NotebookGuide.Anchor(kind: "section", name: heading))

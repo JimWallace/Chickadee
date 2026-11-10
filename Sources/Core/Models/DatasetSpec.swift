@@ -127,9 +127,9 @@ public struct DatasetSpec: Codable, Equatable, Sendable {
     /// transforms and no partition. The "shared" mode of
     /// docs/datasets-course-library.md §4.11, and the only mode an activity
     /// that compares students accepts.
-    public var isShared: Bool {
-        sampleSize == nil && transforms.isEmpty && kind != .partition
-    }
+    /// The rule itself is `DatasetDeliveryMode.init`, so this and the editor
+    /// working copy's storage form cannot disagree.
+    public var isShared: Bool { deliveryMode == .shared }
 
     private enum CodingKeys: String, CodingKey {
         case file, kind, sampleSize, stratumColumn, transforms, source, scope, partCount

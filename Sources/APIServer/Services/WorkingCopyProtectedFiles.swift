@@ -6,9 +6,9 @@
 // paths:
 //
 // - every file the setup delivers (`StudentWorkspaceFiles.delivered`): the
-//   per-student dataset files and the support files. A dataset is a real file
-//   that the materialization pass does not rewrite while its fingerprint is
-//   current, and a support-file name is never relinked over a real file, so a
+//   per-student dataset files and the support files. A per-student dataset is
+//   a real file that the materialization pass does not rewrite while its
+//   fingerprint is current (a shared one is a link, like a support file), and a support-file name is never relinked over a real file, so a
 //   student's write to either would persist and no reset would repair it;
 // - the records the server writes for viewing: `view-<submissionID>.ipynb` and
 //   staff `preview-<token>.ipynb`.

@@ -88,24 +88,16 @@ extension WebRoutes {
         let language = AssignmentLanguage.resolve(manifest: manifest)
         let assignment = try await assignmentByTestSetupID(setup.id ?? "", on: req.db)
         // Server-side only: the solution decides which name a script test is
-        // anchored to, and no byte of it reaches the response.
-        var solutionData: Data?
-        do {
-            solutionData = try await solutionNotebookData(
-                for: assignment, setup: setup, db: req.db,
-                testSetupsDirectory: req.application.testSetupsDirectory)
-        } catch {
-            req.logger.debug("notebook_guide no_solution setup=\(setup.id ?? "-"): \(error)")
-        }
+        // anchored to, and no byte of it reaches the response. With no
+        // solution yet, the assignment's starter gives the anchors. The staff
+        // outline and MCP `get_suite` read the same notebook
+        // (`SuiteAnchorResolution`), so all three agree on a test's cell.
+        let solution = await SuiteAnchorResolution.notebookScan(
+            assignment: assignment, setup: setup, language: language, db: req.db,
+            testSetupsDirectory: req.application.testSetupsDirectory)
+        // This student's own starter: the guide shows its code beside each task.
         let starter = await personalizedStarterNotebook(
             setup: setup, userID: userID, on: req.db, application: req.application, logger: req.logger)
-        // No solution yet: the starter has the same headings and, usually, the
-        // same function stubs, so it gives the anchors instead. With neither,
-        // every test is unlinked.
-        let anchorSource = solutionData ?? starter
-        let solution =
-            anchorSource.map { scanNotebookDefinitions($0, language: language) }
-            ?? NotebookDefinitionScan(definitions: [], sections: [], codeCellIndices: [])
         // The scripts depend only on the zip, so every student reads them from
         // one cached copy rather than one `unzip` per script per guide.
         let scripts = await req.application.zipScriptTextCache.texts(

@@ -247,16 +247,13 @@ because line numbers go out of date.
 - **Readers:**
   - `NotebookTestAnchoring` (`Sources/Core/NotebookTestAnchoring.swift`),
     rule 1 of the anchors.
-  - The staff suite outline (`InstructorSuiteOutlineBuilder`) and the
-    student guide.
-  - MCP `get_suite`, through `SuiteAnchorResolution`
-    (`Services/SuiteAnchorResolution.swift`), which the outline also calls,
-    so the two report the same cell.
-- **Parallel paths:** the student guide (`NotebookGuideBuilder`,
-  `WebRoutes+NotebookGuide.swift`) calls `NotebookTestAnchoring` itself and
-  reads the student's personalized starter when there is no solution, so its
-  cell can differ from the staff surfaces' before a solution exists. A change
-  to the rules goes in Core, which all three read.
+  - The staff suite outline (`InstructorSuiteOutlineBuilder`), the student
+    guide (`NotebookGuideBuilder`) and MCP `get_suite`, all through
+    `SuiteAnchorResolution` (`Services/SuiteAnchorResolution.swift`). All
+    three read the solution, or the template starter before a solution
+    exists, so they agree on a test's cell. A change to the rules goes in
+    Core; a change to the notebook choice or the reported form goes in
+    `SuiteAnchorResolution`.
   - The `RunnerManifest` init removes it, so no runner receives it.
 - **Rules** (`docs/notebook-guide.md`, "Pin to a cell"):
   - Only a hand-written entry can be pinned. A generated entry is anchored by
@@ -860,6 +857,17 @@ coordination, and each must see every edit.
     (`docs/datasets.md`).
   - `variesPerStudent` is not a wider `hasPersonalization`. Each predicate
     has its own readers. Do not use one in place of the other.
+  - Whether a dataset is the same for every student is
+    `DatasetDeliveryMode.init`, and nothing else states it. Four features
+    read it: the working-copy writer (`writeDatasetFiles`), `isShared` (the
+    ranked activities), the Files panel note (`DatasetDeliveryNote`) and MCP
+    `datasetDelivery`. A `shared` dataset is a link to the shared extraction
+    in the working copy; a `perStudent` one is a real file
+    (`docs/dataset-shared-delivery.md`).
+  - A write never goes through a dataset link:
+    `DatasetWorkingCopyPlacement.write` removes the link first. A change of
+    mode is reconciled on the next visit by `datasetTargetIsCurrent`, which
+    asks for each target's form, not only its presence.
 
 ### Dataset transform kinds: `DatasetTransform.Kind`
 
@@ -1209,8 +1217,8 @@ coordination, and each must see every edit.
     so that both read it.
   - What a student's working copy holds is `StudentWorkspaceFiles`: the
     support files it links, minus suite scripts, reserved notebooks,
-    grader-only files and datasets, plus the datasets, which are written
-    whatever their grader-only mark. `createSupportFileSymlinks` and
+    grader-only files and datasets, plus the datasets, which
+    `writeDatasetFiles` places whatever their grader-only mark. `createSupportFileSymlinks` and
     `files.missing` both call it. `linkSupportFiles` makes the links, with
     the parent folders of a file in a subfolder, so a nested entry that
     `files.missing` counts as delivered is in the working copy. The browser runner's zip filter and the
