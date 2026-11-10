@@ -33,7 +33,7 @@ import VaporTesting
     @Test func pdfAttachmentOpensInANewTab() throws {
         let row = ContentItemRow(from: item(attachments: [attachment("lecture-08.pdf")]))
         let action = try #require(row.actions.first)
-        #expect(action.iconHref == "#i-eye")
+        #expect(action.iconHref == "#i-file-text")
         #expect(action.href.hasSuffix("/view"))
         #expect(action.opensNewTab)
         #expect(action.label.hasPrefix("Open lecture-08.pdf in a new tab ("))
@@ -59,7 +59,7 @@ import VaporTesting
         let link = ContentLink(label: "Cheat sheet", url: "https://example.com/a")
         let row = ContentItemRow(
             from: item(links: [link], attachments: [attachment("a.pdf")]))
-        #expect(row.actions.map(\.iconHref) == ["#i-eye", "#i-external"])
+        #expect(row.actions.map(\.iconHref) == ["#i-file-text", "#i-external"])
         #expect(row.actions.last?.label == "Open Cheat sheet")
 
         let notebook = ContentItemRow(from: item(kind: .notebook, links: [link]))
@@ -73,7 +73,25 @@ import VaporTesting
             ContentLink(label: "Jupyter Notebook", url: "https://example.com/a"),
         ]
         let row = ContentItemRow(from: item(kind: .slides, links: links))
-        #expect(row.actions.map(\.iconHref) == ["#i-external", "#i-notebook"])
+        #expect(row.actions.map(\.iconHref) == ["#i-file-text", "#i-notebook"])
+    }
+
+    @Test(arguments: [
+        ("PDF", "https://example.com/a", true),
+        ("Lecture notes", "https://example.com/files/notes.PDF?v=2", true),
+        ("Slides (pdf)", "https://example.com/view?id=7", true),
+        ("Course website", "https://example.com/pdf-guide", false),
+        ("Why PDFs are hard", "https://example.com/essay", false),
+        ("Download", "https://example.com/get?id=7", false),
+    ])
+    func linkIsAPDFByItsPathOrItsLabel(label: String, url: String, isPDF: Bool) {
+        #expect(ContentItemRow.isPDFLink(ContentLink(label: label, url: url)) == isPDF)
+    }
+
+    @Test func pdfLinkOnANotebookItemIsStillADocument() {
+        let link = ContentLink(label: "PDF", url: "https://example.com/a.pdf")
+        let row = ContentItemRow(from: item(kind: .notebook, links: [link]))
+        #expect(row.actions.first?.iconHref == "#i-file-text")
     }
 
     @Test func linkLabelStartingWithOpenIsNotDoubled() {
@@ -196,7 +214,7 @@ import VaporTesting
             #expect(html.contains("data-kind=\"slides\""))
             #expect(html.contains("#i-slides"))
             #expect(html.contains("href=\"/content-files/\(itemID.uuidString)/\(attachmentID.uuidString)/view\""))
-            #expect(html.contains("#i-eye"))
+            #expect(html.contains("#i-file-text"))
             #expect(html.contains("#i-download"))
             #expect(html.contains("#i-external"))
             #expect(html.contains("target=\"_blank\" rel=\"noopener noreferrer\""))

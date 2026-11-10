@@ -624,6 +624,10 @@ duplicate.
   material, so it takes `document` with the `i-list` glyph.  The name cell is an `.item-title` over an
   `.item-details` line; `.item-grade` right-aligns the grade.  A material's
   buttons are `.action-btn-icon`, the same fixed square as an assignment's.
+  Each button shows what it opens. A PDF, hosted or linked, is `i-file-text`,
+  the document tile's glyph, because both mean "a document". A notebook is
+  `i-notebook`, any other uploaded file is `i-download`, and a link to another
+  website is `i-external` (`ContentItemRow.action`).
   A section filter appears only at `IndexDisplayGroup.filterThreshold` (8) rows
   or more, and never on the ungrouped bucket.
 - **`.section-items--manage`** (with `.section-items-handle`,
