@@ -2,8 +2,8 @@
 //
 // `DatasetDeliveryMode` (docs/dataset-shared-delivery.md): a dataset is
 // `shared`, linked once for every student, only when it gives every student
-// the source bytes unchanged. Any partition, sample size or transform makes it
-// `perStudent`.
+// the source bytes unchanged. A partition with no transform is `perPart`, each
+// part stored once. A sample size or a transform makes it `perStudent`.
 
 import Testing
 
@@ -21,7 +21,9 @@ import Testing
             (DatasetSpec(file: "a.csv", scope: .course), .shared),
             (DatasetSpec(file: "a.csv", sampleSize: 50), .perStudent),
             (DatasetSpec(file: "a.csv", kind: .stratifiedSample, sampleSize: 50, stratumColumn: "SEX"), .perStudent),
-            (DatasetSpec(file: "a.csv", kind: .partition, partCount: 4), .perStudent),
+            (DatasetSpec(file: "a.csv", kind: .partition, partCount: 4), .perPart),
+            (DatasetSpec(file: "a.csv", kind: .partition, transforms: [blank], partCount: 4), .perStudent),
+            (DatasetSpec(file: "a.csv", kind: .partition), .perStudent),
             (DatasetSpec(file: "a.csv", transforms: [blank]), .perStudent),
         ])
     func modeFollowsSpec(spec: DatasetSpec, expected: DatasetDeliveryMode) {

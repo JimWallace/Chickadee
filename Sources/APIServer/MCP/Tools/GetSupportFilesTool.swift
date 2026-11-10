@@ -55,8 +55,9 @@ struct GetSupportFilesTool: ContentTool {
         var datasetScope: String?
         /// The number of parts of a partition dataset; nil otherwise.
         var datasetPartCount: Int?
-        /// "shared" or "perStudent" for a dataset: whether every student's
-        /// editor reads one linked copy or holds a copy of their own
+        /// "shared", "perPart" or "perStudent" for a dataset: whether every
+        /// student's editor reads one linked copy, a linked copy of their
+        /// partition part, or a copy of their own
         /// (docs/dataset-shared-delivery.md). Nil otherwise.
         var datasetDelivery: String?
     }
@@ -85,6 +86,7 @@ struct GetSupportFilesTool: ContentTool {
         + "larger — so a big dataset returns a useful head. Listed entries report per-student "
         + "dataset marks (isDataset / datasetSampleSize / datasetKind / datasetStratumColumn / "
         + "datasetPartCount, plus datasetDelivery: \"shared\" when every student reads one linked copy, "
+        + "\"perPart\" when a partition stores each part once and links each student to theirs, "
         + "\"perStudent\" when each holds their own — set "
         + "them with set_dataset), and for a file attached from the course dataset library its "
         + "datasetSource ({slug, version}) and datasetScope. Write "

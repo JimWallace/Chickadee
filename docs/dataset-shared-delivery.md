@@ -5,7 +5,7 @@ Status:
 | Step | State |
 |---|---|
 | 1. `shared`: a whole file is linked | **built** |
-| 2. `perPart`: each partition part is stored once and linked | proposed |
+| 2. `perPart`: each partition part is stored once and linked | **built** |
 
 ## The problem
 
@@ -50,7 +50,7 @@ Classify each `DatasetSpec` into one of three delivery modes:
 | Mode | When | Stored once per | Student's file |
 |---|---|---|---|
 | `shared` | not a partition, `sampleSize` is nil and `transforms` is empty | setup | a link to `shared/<setupID>/<file>` |
-| `perPart` | `kind == .partition` and `transforms` is empty | setup and part | a link to that part's file |
+| `perPart` | `kind == .partition`, a part count above zero, and `transforms` is empty | setup, source and part | a link to that part's file |
 | `perStudent` | everything else: a real sample, or any transform | student | a real file, as today |
 
 The two cases that link are exactly the cases where a large file costs the
@@ -66,9 +66,10 @@ only. That is one more shared file per partition: a link to the header file.
 ### Where the classification lives
 
 `DatasetDeliveryMode` in `Sources/Core/Models/DatasetDeliveryMode.swift`, read
-as `DatasetSpec.deliveryMode`. Step 1 has two cases, `shared` and
-`perStudent`; step 2 adds `perPart`, and until then a partition is
-`perStudent`.
+as `DatasetSpec.deliveryMode`. A transformed partition is `perStudent`,
+because a transform varies the cells per student. So is a partition with no
+part count, which authoring refuses and which the materializer would deliver
+whole.
 
 **Decision: only an empty sample size is `shared`.** A sample size at or above
 the row count also gives the whole file, but it classifies as `perStudent`.
@@ -83,32 +84,48 @@ the bytes are. The mode only decides whether they can be stored once.
 **`shared`.** The link target is the existing extraction,
 `shared/<setupID>/<file>`. No new file is written.
 
-**`perPart`.** Parts are written once, to a directory that the setup-save wipe
-does not touch:
+**`perPart`.** Parts are written once (`DatasetPartStore`,
+`Sources/APIServer/Utilities/`), to a directory that the setup-save wipe does
+not touch:
 
 ```
-{testSetupsDirectory}dataset-parts/<setupID>/<fingerprint>/<file>/header.csv
-{testSetupsDirectory}dataset-parts/<setupID>/<fingerprint>/<file>/part-<k>.csv
+{testSetupsDirectory}dataset-parts/<setupID>/<fingerprint>/header.csv
+{testSetupsDirectory}dataset-parts/<setupID>/<fingerprint>/part-<k>.csv
 ```
 
-- `fingerprint` hashes the source bytes and the spec, as
-  `datasetMaterializationFingerprint` does today without the student's seeds.
-  A fingerprint directory is immutable once written. A new source or a new
-  `partCount` writes a new directory, so a link never points at a part that is
-  being rewritten.
-- Parts are written with `DatasetMaterializer.materialize` for each part
-  number, so the bytes are the ones grading uses.
-- Each part is written to a temporary name in the same directory and then
-  renamed into place, so two students who open at the same moment cannot read
-  a half-written part.
+- `fingerprint` hashes the whole spec (which names the file) and the source's
+  modification time, size and file number. A setup save re-extracts the source
+  as a new file, so an edit that kept the size and the time still gets a new
+  fingerprint, and stored parts are never served stale. A fingerprint directory is never written again once it is
+  published. A new source or a new `partCount` writes a new directory, so a
+  link never points at a part that is being rewritten. A setup save
+  re-extracts the source, which changes its modification time, so each save
+  writes the parts once more.
+- The parts come from `DatasetMaterializer.allParts`, which splits the file in
+  one pass. `DatasetAllPartsTests` pins each part to what `materialize` gives
+  that part, so the bytes are the ones grading uses.
+- The whole directory is written under a temporary name (`.tmp-<uuid>`) and
+  renamed into place. Two students who open at the same moment cannot read a
+  half-written part. If two visits publish the same fingerprint at once, the
+  second rename fails, and the second visit uses the first one's parts, which
+  are the same bytes.
 - Why not under `shared/<setupID>/`: `extractSupportFilesToSharedDirectory`
   removes that directory on every setup save. Parts kept there would vanish on
   each save, and `DatasetOverlayDirectory` would also link a parts directory
   into every personalization overlay, because it lists the shared directory.
-- Old fingerprint directories are removed once no working copy links to them.
-  The simplest safe policy is a sweep that keeps the current fingerprint and
-  deletes any directory older than a day. A link to a removed part dangles,
-  and the next visit repairs it (see "Repair").
+- **The sweep** runs after each new publish. The first time it finds a
+  directory that is not a current fingerprint of one of the setup's
+  partitions, it writes a `.superseded` marker into it. It removes the
+  directory once that marker is more than a day old
+  (`DatasetPartStore.staleRetention`). Retention therefore starts when the
+  parts stop being current, not when they were written, and a student linked
+  to them has a day to revisit and be relinked. A directory that is current
+  again loses its marker. A staging directory left by a failed write is
+  removed a day after it was made. A student still linked to a removed part
+  has a dangling link, and the next visit repairs it (see "Repair"). A deleted
+  assignment's parts stay, as its `shared/<setupID>/` extraction does.
+- `DiskUsage` counts `dataset-parts/<setupID>/` with the setup, beside
+  `shared/` and `notebooks/`.
 
 ## The working-copy pass
 
@@ -120,6 +137,14 @@ it computes the mode, then:
 | `shared` | make it a link to `shared/<setupID>/<file>` |
 | `perPart` | make it a link to the student's part, or to `header.csv` while no part is dealt |
 | `perStudent` | make it a real file holding the student's slice |
+
+Where each file belongs is `DatasetLinkTargets.placement`
+(`Sources/APIServer/Utilities/`): a link to a named path, a real file, or
+`unavailable` when the source is not extracted yet. The writer places from it
+and the skip check compares against it, so the two cannot disagree. A
+partition student with no deal number outside a class composite would
+receive the whole file, so that case links to the source. A source that is
+not UTF-8 text is skipped, as `DatasetResolver` skips it.
 
 "Make it" means replace whatever is there (`DatasetWorkingCopyPlacement`,
 `Sources/APIServer/Utilities/`). Every transition is one step:
@@ -141,9 +166,9 @@ moment while it is replaced. Support files already behave this way on a setup
 save. Two visits by the same student can race on a link: the loser succeeds
 when the winner made the same link.
 
-A `shared` file is never read by this pass. Only the `perStudent` specs go
-through `DatasetResolver`, so a large shared file costs a link and nothing
-else.
+A `shared` file is never read by this pass. A partition's source is read
+only when its fingerprint has no stored parts yet. Only the `perStudent`
+specs go through `DatasetResolver`.
 
 `linkSupportFiles` does not change. `StudentWorkspaceFiles.linkedSupportFiles`
 still leaves datasets out, so the support-file pass never makes a link the
@@ -151,12 +176,13 @@ dataset pass did not choose.
 
 **The fingerprint** already folds in the whole spec, and the mode is derived
 from the spec, so a change of mode changes the fingerprint. The skip check
-also asks whether each target is in its mode's form (`datasetTargetIsCurrent`
-in `NotebookWorkingCopyStore.swift`): a live link to the shared copy for
-`shared`, a real file for `perStudent`. A working copy written before this
-change holds a real file for a `shared` spec, so it is relinked on the next
-visit even while the in-memory fingerprint cache is warm. Step 2 adds the part
-number and the parts fingerprint.
+also asks whether each target is where `DatasetLinkTargets` places it
+(`datasetTargetIsCurrent` in `NotebookWorkingCopyStore.swift`): a live link to
+the right path, or a real file. The editor copy's fingerprint folds in the
+deal number, and the part path folds in the parts fingerprint, so a new deal
+or a new source moves the link. A working copy written before a change holds
+the old form, so it is moved on the next visit even while the in-memory
+fingerprint cache is warm.
 
 ## Repair
 
@@ -188,9 +214,12 @@ Support files already behave this way.
    Files panel and `datasetDelivery` in MCP `get_support_files`, and the
    tests. This covers HLTH 230 Assignment 0 and every whole-file library
    attachment.
-2. **`perPart`.** The parts directory, its writer and its sweep.
+2. **`perPart` (built).** `DatasetPartStore` (the parts directory, its
+   publish and its sweep), `DatasetLinkTargets`, `DatasetMaterializer.allParts`,
+   `perPart` in `datasetDelivery`, and the tests. No HLTH 230 assignment uses
+   a partition yet; it is to be tried later in the Winter 2027 term.
 
-Each step is one PR with one `changelog.d/` fragment. Step 1 needs no
+Each step is one PR with one `changelog.d/` fragment. Neither needs a
 migration: the first visit after deploy turns each student's real copy into a
 link.
 
@@ -213,8 +242,26 @@ Step 1:
   - a dangling link is replaced;
   - linking twice is a no-op.
 
-Step 2 adds a row to `docs/feature-interactions.md` for `dataset-parts/`,
-which is a new shared object.
+Step 2:
+
+- `DatasetDeliveryModeTests` gains a partition (`perPart`), a transformed
+  partition and a partition with no part count (both `perStudent`).
+- `DatasetAllPartsTests` (`Core`, parameterized over files and part counts):
+  each part from `allParts` equals `materialize` for that part and for a deal
+  one round later.
+- `DatasetPartStoreTests` (APIServer), on a temporary directory: the stored
+  parts and header match the materializer; a published fingerprint is not
+  written again; a new part count is a new directory with no staging left;
+  retention starts when a sweep first marks a fingerprint superseded, not when
+  it was written; a marked fingerprint goes once the mark is past retention
+  while a current one stays; a fingerprint that is current again loses its
+  mark; a missing source has no fingerprint.
+- `DatasetPartDeliveryTests` (APIServer): through `writeDatasetFiles`, two
+  students in a two-part partition each get a link into `dataset-parts/`, to
+  different parts, holding exactly what `DatasetResolver` grades for their
+  deal, and a real file from before the change becomes the link.
+
+`docs/feature-interactions.md` has a row for `dataset-parts/`.
 
 ## Decisions
 
@@ -225,4 +272,5 @@ which is a new shared object.
   note already says each student is dealt a part. The words live once, in
   `DatasetDeliveryNote`, and are sent on the datasets panel response
   (`deliveryNotes`) so the panel repaints it after every edit. MCP
-  `get_support_files` reports `datasetDelivery`: `shared` or `perStudent`.
+  `get_support_files` reports `datasetDelivery`: `shared`, `perPart` or
+  `perStudent`.

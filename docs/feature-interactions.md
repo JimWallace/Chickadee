@@ -883,8 +883,8 @@ coordination, and each must see every edit.
   - `variesPerStudent` is not a wider `hasPersonalization`. Each predicate
     has its own readers. Do not use one in place of the other.
   - Whether a dataset is the same for every student is
-    `DatasetDeliveryMode.init`, and nothing else states it. Four features
-    read it: the working-copy writer (`writeDatasetFiles`), `isShared` (the
+    `DatasetDeliveryMode.init`, and nothing else states it. Its modes are
+    `shared`, `perPart` and `perStudent`. Four features read it: the working-copy writer (`writeDatasetFiles`), `isShared` (the
     ranked activities), the Files panel note (`DatasetDeliveryNote`) and MCP
     `datasetDelivery`. A `shared` dataset is a link to the shared extraction
     in the working copy; a `perStudent` one is a real file
@@ -893,6 +893,20 @@ coordination, and each must see every edit.
     `DatasetWorkingCopyPlacement.write` removes the link first. A change of
     mode is reconciled on the next visit by `datasetTargetIsCurrent`, which
     asks for each target's form, not only its presence.
+  - A partition's parts are stored once per fingerprint under
+    `{testSetupsDirectory}dataset-parts/<setupID>/` (`DatasetPartStore`), and
+    each student's working copy links to their part. Three features meet
+    there: the working-copy writer publishes and sweeps it, the links of
+    every student in the assignment read it, and `DiskUsage` counts it with
+    the setup. Rules: a published fingerprint directory is never written
+    again; the bytes come from `DatasetMaterializer.allParts`, pinned to what
+    grading materializes; a sweep keeps every current fingerprint and removes
+    a superseded one a day after it first marks it. The part a student is
+    dealt is `DatasetSpec.part(forDeal:)` for the materializer, the stored
+    part names and `DatasetLinkTargets` alike, so a change to that rule moves
+    all three. Where a student's copy belongs is
+    `DatasetLinkTargets.placement`, which both the writer and the skip check
+    read.
 
 ### Dataset transform kinds: `DatasetTransform.Kind`
 

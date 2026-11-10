@@ -89,7 +89,8 @@ struct EditableSuiteRow: Encodable {
         guard isDataset else { return "" }
         let isPartition = datasetPartCount != nil
         let mode = DatasetDeliveryMode(
-            isPartition: isPartition, sampleSize: datasetSampleSize, hasTransforms: !datasetTransforms.isEmpty)
+            isPartition: isPartition, partCount: datasetPartCount, sampleSize: datasetSampleSize,
+            hasTransforms: !datasetTransforms.isEmpty)
         return DatasetDeliveryNote.text(for: mode, isPartition: isPartition) ?? ""
     }
 
