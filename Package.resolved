@@ -1,5 +1,5 @@
 {
-  "originHash" : "d1fbabe93713f8b8cb4011239d7e7e1d125df40bc3d4ff053a2a276476554d1f",
+  "originHash" : "68c3da3fd95a1a880f72cc74dfcc676b43083731775ce45192a8d6e8ed082a84",
   "pins" : [
     {
       "identity" : "async-http-client",
@@ -105,8 +105,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/vapor/postgres-nio.git",
       "state" : {
-        "revision" : "649adba966158859f4fb1767e4d11802966d3fb4",
-        "version" : "1.33.2"
+        "revision" : "c7320acff7ba4034d8eb7acac2daf200855996d3",
+        "version" : "1.33.3"
       }
     },
     {
@@ -204,8 +204,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/apple/swift-crypto.git",
       "state" : {
-        "revision" : "c2cbadd7263439d8015189668f96ff5b5be565ce",
-        "version" : "5.0.3"
+        "revision" : "f8fad2f95ad67b45f6340c0960e2396094d67e07",
+        "version" : "5.1.1"
       }
     },
     {
@@ -213,8 +213,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/apple/swift-distributed-tracing.git",
       "state" : {
-        "revision" : "789663680a3a4767e698be46bc154a3bc5c64fef",
-        "version" : "1.7.3"
+        "revision" : "9f982a7ec8dd815bf57024e39de592813ca14399",
+        "version" : "1.7.4"
       }
     },
     {
@@ -249,8 +249,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/apple/swift-log.git",
       "state" : {
-        "revision" : "c9c6bb9d275ec0d95c3ad16391f3f045dc623104",
-        "version" : "1.16.2"
+        "revision" : "e3da04078777e6a1b72ce19981fbd6539b0847d8",
+        "version" : "1.17.0"
       }
     },
     {
@@ -328,7 +328,7 @@
     {
       "identity" : "swift-service-lifecycle",
       "kind" : "remoteSourceControl",
-      "location" : "https://github.com/swift-server/swift-service-lifecycle.git",
+      "location" : "https://github.com/swift-server/swift-service-lifecycle",
       "state" : {
         "revision" : "a18ee16b8039866fd919bdb4e8e906882d4ecc75",
         "version" : "2.13.0"
