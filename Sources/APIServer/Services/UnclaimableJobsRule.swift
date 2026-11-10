@@ -27,6 +27,10 @@ struct WaitingJobGroup: Sendable {
     let requirements: AssignmentRequirementSpec?
     let jobCount: Int
     let oldestWaitSeconds: TimeInterval
+    /// The title of each assignment that uses the setup, joined with " / ",
+    /// for the summary. Nil when no assignment row names the setup; the
+    /// summary then lists the setup by its ID.
+    var assignmentTitle: String?
 }
 
 /// How long a job waits before the rule looks at it. A runner claims a job it
@@ -62,16 +66,21 @@ func decideUnclaimableJobs(groups: [WaitingJobGroup], runners: [OnlineRunner]) -
     let jobCount = blocked.reduce(0) { $0 + $1.group.jobCount }
     let oldestMinutes = Int((blocked.map(\.group.oldestWaitSeconds).max() ?? 0) / 60)
     let reasons = blocked.first?.reasons.joined(separator: "; ") ?? ""
+    // A setup no assignment row names is listed by its ID, so every blocked
+    // setup appears once and the count after "and N more" is exact.
+    let names = blocked.map { $0.group.assignmentTitle ?? "test setup \($0.group.testSetupID)" }
+    let jobs = jobCount == 1 ? "1 submission" : "\(jobCount) submissions"
     return RuleEvaluation(
         isFiring: true,
         summary:
-            "\(jobCount) job(s) for \(blocked.count) test setup(s) wait with no online runner that can grade them "
-            + "(oldest \(oldestMinutes) min): \(reasons)",
+            "\(jobs) for \(alertNamedList(names)) wait with no online runner that can grade them "
+            + "(oldest \(oldestMinutes) min): \(reasons). Update or add a runner that meets the requirement.",
         details: [
             "blocked_jobs": String(jobCount),
             "blocked_test_setups": blocked.map(\.group.testSetupID).joined(separator: ","),
             "online_runners": runners.map(\.workerID).joined(separator: ","),
             "reasons": reasons,
+            "assignments": names.joined(separator: "; "),
         ]
     )
 }
@@ -108,6 +117,14 @@ func evaluateUnclaimableJobs(on application: Application, now: Date) async throw
             try await APITestSetup.query(on: application.db).filter(\.$id ~~ setupIDs).all()
                 .compactMap { setup in setup.id.map { ($0, setup) } },
             uniquingKeysWith: { first, _ in first })
+    // One read for the titles too: the summary names the assignments.
+    let titlesBySetup: [String: String] =
+        setupIDs.isEmpty
+        ? [:]
+        : Dictionary(
+            try await APIAssignment.query(on: application.db).filter(\.$testSetupID ~~ setupIDs).all()
+                .map { ($0.testSetupID, $0.title) },
+            uniquingKeysWith: { "\($0) / \($1)" })
     var groups: [WaitingJobGroup] = []
     for (testSetupID, jobs) in jobsBySetup {
         guard let first = jobs.first,
@@ -121,7 +138,8 @@ func evaluateUnclaimableJobs(on application: Application, now: Date) async throw
             WaitingJobGroup(
                 testSetupID: testSetupID, manifest: manifest,
                 requirements: requirement.requirement?.requirementSpec,
-                jobCount: jobs.count, oldestWaitSeconds: now.timeIntervalSince(oldest)))
+                jobCount: jobs.count, oldestWaitSeconds: now.timeIntervalSince(oldest),
+                assignmentTitle: titlesBySetup[testSetupID]))
     }
     return decideUnclaimableJobs(groups: groups.sorted { $0.testSetupID < $1.testSetupID }, runners: runners)
 }
