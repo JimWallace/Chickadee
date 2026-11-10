@@ -97,6 +97,14 @@ struct TestSetupRow: Encodable {
     /// The class activity's leaderboard when this viewer may open it
     /// (`ClassActivity.leaderboardPath`); nil hides the action.
     let leaderboardURL: String?
+    /// The buttons of the content items attached to this assignment (a lab's
+    /// slides), drawn after the assignment's own actions. Filled by
+    /// `buildIndexDisplayGroups`, and only with the items this viewer may see
+    /// (`ContentItemVisibility`).
+    var materialActions: [ContentActionView] = []
+    /// The titles of those same items, for the row's details line, so a
+    /// button is not the only place the material is named.
+    var materialTitles: [String] = []
 }
 
 struct LatestSubmissionItem: Encodable {
@@ -153,6 +161,10 @@ struct ContentItemRow: Encodable {
     let detailsText: String
     /// Icon buttons for the Actions cell: attachments first, then links.
     let actions: [ContentActionView]
+    /// The public ID of the assignment this item is attached to, for the
+    /// instructor edit form; nil for a standalone item. Set by the instructor
+    /// dashboard builder, which holds the id map; the student page leaves it.
+    var attachedAssignmentPublicID: String?
 
     init(from item: APICourseContentItem) {
         let itemID = item.id?.uuidString ?? ""

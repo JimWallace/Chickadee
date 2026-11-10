@@ -430,7 +430,8 @@ enum CourseBundleService {
                 attachments: attachments.isEmpty ? nil : attachments,
                 updatedLabel: item.updatedLabel,
                 isPublished: item.isPublished,
-                sortOrder: item.sortOrder
+                sortOrder: item.sortOrder,
+                assignmentBundleID: item.assignmentID.flatMap { bundleIDs.assignBundleIDByID[$0] }
             )
         }
     }

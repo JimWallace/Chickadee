@@ -222,7 +222,8 @@ struct WebRoutes: RouteCollection {
         let contentItems = try await contentItemsFetch
         let displayGroups = Self.buildIndexDisplayGroups(
             rows: rows, setupKeyByID: setupKeyByID, contentItems: contentItems,
-            allAssignments: allAssignments, allSections: allSections)
+            allAssignments: allAssignments, allSections: allSections,
+            isActiveCourseStaff: isActiveCourseStaff)
 
         let page = try await PageRequestContext.courseAware(req)
         let dataPageHref = try await Self.courseDataPageHref(courseState: courseState, on: req.db)

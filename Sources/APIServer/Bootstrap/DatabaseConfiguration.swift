@@ -543,6 +543,11 @@ func registerMigrations(on app: Application) {
     // delete of a referenced row scanned the referencing table. Index only.
     app.migrations.add(CreateForeignKeyIndexes())
 
+    // A content item attached to an assignment renders on that assignment's
+    // row. Adds a nullable column to `course_content_items`
+    // (CreateCourseContentItems, far above); no data change.
+    app.migrations.add(AddContentItemAssignment())
+
     // ---------------------------------------------------------------------
     // DATA MIGRATIONS. Keep these at the end, and add every new schema
     // migration ABOVE this block (#1805).

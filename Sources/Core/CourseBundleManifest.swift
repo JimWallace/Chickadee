@@ -253,7 +253,8 @@ public struct BundledAttachment: Codable, Sendable {
 
 /// An ungraded course content item (reference material) carried in a bundle.
 /// No own `bundleID`: nothing references a content item; its hosted file
-/// attachments are nested (`attachments`) and copied by the import loop.
+/// attachments are nested (`attachments`) and copied by the import loop. An
+/// item attached to an assignment names it by `assignmentBundleID`.
 public struct BundledContentItem: Codable, Sendable {
     /// References BundledSection.bundleID (nil = ungrouped, or a bundle
     /// exported before sections were carried).
@@ -269,11 +270,15 @@ public struct BundledContentItem: Codable, Sendable {
     public let updatedLabel: String?
     public let isPublished: Bool
     public let sortOrder: Int
+    /// References BundledAssignment.bundleID when the item is attached to that
+    /// assignment's row. Absent in bundles exported before attaching existed
+    /// (decodes as nil, imported as a standalone item).
+    public let assignmentBundleID: String?
 
     public init(
         sectionBundleID: String?, title: String, kind: String, description: String?,
         links: [ContentLink], attachments: [BundledAttachment]? = nil, updatedLabel: String?,
-        isPublished: Bool, sortOrder: Int
+        isPublished: Bool, sortOrder: Int, assignmentBundleID: String? = nil
     ) {
         self.sectionBundleID = sectionBundleID
         self.title = title
@@ -284,6 +289,7 @@ public struct BundledContentItem: Codable, Sendable {
         self.updatedLabel = updatedLabel
         self.isPublished = isPublished
         self.sortOrder = sortOrder
+        self.assignmentBundleID = assignmentBundleID
     }
 }
 

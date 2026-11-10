@@ -179,9 +179,13 @@ struct InstructorDashboardRoutes: RouteCollection {
         )
         // Merge each section's assignment + content lanes into one interleaved,
         // drag-orderable item list (unpublished drafts trail the ungrouped bucket).
+        let assignmentPublicIDByID: [UUID: String] = Dictionary(
+            allAssignments.compactMap { a in a.id.map { ($0, a.publicID) } },
+            uniquingKeysWith: { first, _ in first })
         let (sectionContexts, ungroupedItems) = buildInstructorSectionItems(
             assignmentRows: unsortedRows,
             contentItems: allContentItems,
+            assignmentPublicIDByID: assignmentPublicIDByID,
             allSections: allSections,
             sectionByPublicID: sectionByPublicID,
             setupByID: setupByID,
@@ -199,8 +203,20 @@ struct InstructorDashboardRoutes: RouteCollection {
                 hasSections: hasSections,
                 showUngroupedBlock: hasUngrouped || !hasSections,
                 showEmptyMessage: !hasSections && !hasUngrouped,
-                enrolledStudentCount: roster.enrolledStudentCount)
+                enrolledStudentCount: roster.enrolledStudentCount,
+                attachTargets: Self.attachTargets(sections: sectionContexts, ungroupedItems: ungroupedItems))
         }.encodeResponse(for: req)
+    }
+
+    /// The published assignments a material can be attached to, in the order
+    /// the dashboard lists them.
+    static func attachTargets(
+        sections: [CourseSectionRow], ungroupedItems: [InstructorSectionItem]
+    ) -> [AssignmentAttachTarget] {
+        (sections.flatMap(\.items) + ungroupedItems).compactMap { item in
+            guard let row = item.row, let publicID = row.assignmentID else { return nil }
+            return AssignmentAttachTarget(publicID: publicID, title: row.title ?? publicID)
+        }
     }
 
     // MARK: - POST /instructor/:assignmentID/open

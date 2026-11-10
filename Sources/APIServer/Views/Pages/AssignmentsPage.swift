@@ -22,6 +22,8 @@ struct AssignmentsPage: HTML {
     /// True only when the course has nothing to list in any lane.
     let showEmptyMessage: Bool
     let enrolledStudentCount: Int
+    /// The published assignments a material's edit form offers under "Show on".
+    var attachTargets: [AssignmentAttachTarget] = []
 
     /// The staff dashboard also serves a TA, who is not offered a control
     /// that the server refuses.
@@ -72,7 +74,7 @@ struct AssignmentsPage: HTML {
                         for section in sections {
                             SectionBlock(
                                 section: section, enrolledStudentCount: enrolledStudentCount, csrfToken: page.csrfToken,
-                                controls: controls)
+                                controls: controls, attachTargets: attachTargets)
                         }
                     }
                 }
@@ -151,7 +153,7 @@ struct AssignmentsPage: HTML {
                     for item in ungroupedItems {
                         CourseItemRow(
                             item: item, enrolledStudentCount: enrolledStudentCount, csrfToken: page.csrfToken,
-                            controls: controls)
+                            controls: controls, attachTargets: attachTargets)
                     }
                 }
             }
@@ -166,6 +168,7 @@ private struct SectionBlock: HTML {
     let enrolledStudentCount: Int
     let csrfToken: String
     let controls: DashboardControls
+    let attachTargets: [AssignmentAttachTarget]
 
     private var isWorker: Bool { section.defaultGradingMode == "worker" }
 
@@ -208,7 +211,7 @@ private struct SectionBlock: HTML {
                     for item in section.items {
                         CourseItemRow(
                             item: item, enrolledStudentCount: enrolledStudentCount, csrfToken: csrfToken,
-                            controls: controls)
+                            controls: controls, attachTargets: attachTargets)
                     }
                 }
             }

@@ -146,6 +146,31 @@ because line numbers go out of date.
   - `studentMayViewClosedAssignment` in `NotebookWorkingCopyStore`. It serves
     the closed-assignment gate and the dataset downloads.
   - `solutionVisibleToStudent`.
+  - `ContentItemVisibility`, for the material attached to the assignment.
+
+### Material attached to an assignment: `course_content_items.assignment_id`
+
+- **Rule:** a content item with `assignmentID` set is not a section item. It
+  renders as extra buttons on that assignment's row, and a student sees it
+  only when the item is published and either the student can complete the
+  assignment (`isAssignmentEffectivelyOpen`, an extension included; the
+  dashboard row's `isOpen`) or the assignment is visible by state
+  (`assignmentVisibleToStudentByState`, no future `startsAt`). Staff always
+  see it.
+- **Readers:**
+  - The student dashboard (`buildIndexDisplayGroups`) and the instructor
+    dashboard (`buildInstructorSectionItems`), which draw it in the row.
+  - `ContentFileRoutes`, which hides its hosted files from a student until
+    then.
+  - `SortOrderRenumbering`, which leaves it out of a section's item count and
+    refuses its id.
+  - `list_content_items` (`attachedAssignmentPublicID`).
+- **Writers:** the material edit form's "Show on" select
+  (`CourseContentService.attach`), which also moves the item to the
+  assignment's section. `AssignmentDeletion` detaches it into the
+  assignment's section at that time, as a detach does. The course clone and
+  the bundle export and import carry it. `CourseContentService.update`
+  refuses to move an attached item to a section or make it a heading.
 
 ### The reveal moment: `postDeadlineRevealDeadline`
 

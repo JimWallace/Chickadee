@@ -448,9 +448,15 @@ extension InstructorDashboardRoutes {
     /// unpublished drafts (in setup-creation order) so drafts stay at the bottom.
     /// Every section is emitted even when empty, so a content-only section still
     /// renders.
+    ///
+    /// A content item attached to an assignment (`assignmentPublicIDByID` names
+    /// it) is not a section item: it goes into that assignment's row
+    /// (`AssignmentRow.attachedMaterials`), so it moves with the row when the
+    /// row is dragged. An item whose assignment is gone stays a row of its own.
     func buildInstructorSectionItems(
         assignmentRows: [AssignmentRow],
         contentItems: [APICourseContentItem],
+        assignmentPublicIDByID: [UUID: String] = [:],
         allSections: [APICourseSection],
         sectionByPublicID: [String: UUID],
         setupByID: [String: APITestSetup],
@@ -468,7 +474,24 @@ extension InstructorDashboardRoutes {
                 createdAt: setupByID[row.setupID]?.createdAt,
                 stableID: row.setupID)
         }
-        for row in assignmentRows {
+        // Only an assignment that has a row here can hold a material; any
+        // other attached item stays a row of its own, so it can be detached.
+        let rowPublicIDs = Set(assignmentRows.compactMap(\.assignmentID))
+        var materialsByPublicID: [String: [ContentItemRow]] = [:]
+        var standaloneItems: [APICourseContentItem] = []
+        for item in contentItems {
+            guard let assignmentID = item.assignmentID, let publicID = assignmentPublicIDByID[assignmentID],
+                rowPublicIDs.contains(publicID)
+            else {
+                standaloneItems.append(item)
+                continue
+            }
+            var material = ContentItemRow(from: item)
+            material.attachedAssignmentPublicID = publicID
+            materialsByPublicID[publicID, default: []].append(material)
+        }
+        for var row in assignmentRows {
+            if let aID = row.assignmentID { row.attachedMaterials = materialsByPublicID[aID] ?? [] }
             if let aID = row.assignmentID, let sID = sectionByPublicID[aID], liveSectionIDs.contains(sID) {
                 keyedBySectionID[sID, default: []].append((assignmentKey(row), .assignment(row)))
             } else if row.assignmentID != nil {
@@ -479,7 +502,7 @@ extension InstructorDashboardRoutes {
                 ungroupedUnpublished.append((setupIndexByID[row.setupID] ?? Int.max, row))
             }
         }
-        for item in contentItems {
+        for item in standaloneItems {
             let keyed: Keyed = (
                 SectionItemSortKey(
                     sortOrder: item.sortOrder, createdAt: item.createdAt,

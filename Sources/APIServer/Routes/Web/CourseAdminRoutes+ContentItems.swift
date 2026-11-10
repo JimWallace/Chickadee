@@ -35,6 +35,9 @@ extension CourseAdminRoutes {
         var isPublished: String?
         var linkLabels: [String]?
         var linkURLs: [String]?
+        /// The edit form's "Show on" select: an assignment's public ID, or ""
+        /// for a row of its own. Absent (the create form) leaves it as is.
+        var assignmentID: String?
         /// Uploaded file attachments (one bare `File` or a repeated `File[]`);
         /// empty parts (untouched inputs) are ignored.
         var attachmentFiles: MultipartFileList?
@@ -82,13 +85,45 @@ extension CourseAdminRoutes {
             links: Self.contentLinkInputs(labels: body.linkLabels ?? [], urls: body.linkURLs ?? []),
             description: body.description ?? "", updatedLabel: body.updatedLabel ?? "",
             isPublished: body.isPublished != "false")
+        let attachTo = try await resolveAttachTarget(body.assignmentID, for: item, db: req.db)
         do {
-            try await CourseContentService.update(item, with: edit, on: req.db)
+            // One transaction, so a refused attach (a heading) leaves the edit
+            // unsaved too.
+            try await req.db.transaction { tx in
+                // Detach first and attach last, so an edit that also turns the
+                // item into a heading is refused only when it stays attached.
+                if case .some(.none) = attachTo {
+                    try await CourseContentService.attach(item, toAssignment: nil, on: tx)
+                }
+                try await CourseContentService.update(item, with: edit, on: tx)
+                if case .some(.some(let assignmentID)) = attachTo {
+                    try await CourseContentService.attach(item, toAssignment: assignmentID, on: tx)
+                }
+            }
         } catch let error as CourseContentError {
             throw Self.webError(error)
         }
         try await storeUploadedAttachments(body.attachmentFiles, for: item, req: req)
         return req.redirect(to: "/instructor")
+    }
+
+    /// The "Show on" field as an attachment change: nil when the form did not
+    /// post it (no change), `.some(nil)` for a row of its own, or the
+    /// assignment's id. A public ID that names no assignment in the item's
+    /// course is refused.
+    private func resolveAttachTarget(
+        _ raw: String?, for item: APICourseContentItem, db: any Database
+    ) async throws -> UUID?? {
+        guard let raw else { return nil }
+        let publicID = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !publicID.isEmpty else { return .some(nil) }
+        guard
+            let assignment = try await APIAssignment.query(on: db)
+                .filter(\.$publicID == publicID)
+                .filter(\.$courseID == item.courseID)
+                .first()
+        else { throw Self.webError(.assignmentNotInCourse) }
+        return .some(try assignment.requireID())
     }
 
     // MARK: - POST /instructor/content-items/:id/visibility
