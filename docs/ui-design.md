@@ -857,7 +857,9 @@ duplicate.
   (an `.outline-caption`, the `.outline-figure` percent, an `.outline-meta` line
   and a link to the results), a second `.outline-caption`, and an
   `.outline-tasks` list of `.outline-row` buttons.  Each row has an
-  `.outline-glyph`, an `.outline-name` and its points; `data-status` colours the
+  `.outline-glyph`, an `.outline-name` and its points.  The name is the same
+  title as the editor's task header, the notebook heading the task sits under,
+  and the page adds no number to it; `data-status` colours the
   glyph, and the glyph character and the editor's pill always say the status
   too.  The `starter` glyph ("Still the starter code") reuses the amber
   `--preview-bg` / `--preview-fg` pair on purpose: it is the one "attention,

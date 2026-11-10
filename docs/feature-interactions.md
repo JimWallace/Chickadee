@@ -265,6 +265,26 @@ because line numbers go out of date.
     (`SuiteAnchorPinning.refusal`), so a refused pin cannot leave a changed
     suite that nothing re-validated.
 
+### A guide task's title and header cell: `ck:tasks`
+
+- **Writer:** `placeTasks` in the editor extension
+  (`Tools/jupyterlite/chickadee-extension/src/guide.ts`), which `GuideView`
+  posts in `ck:tasks` after each redraw as `title` and `cell`.
+- **Readers:**
+  - The editor's task header (`taskHeader` in `guideView.ts`) and
+    `GuideView.taskOf`, which drives `ck:active-cell`.
+  - The page outline (`rowLabels` and the row click in
+    `Public/notebook-guide.js`).
+- **Rules** (`docs/notebook-guide.md`, "Which heading, and the title"):
+  - The header and the outline row show the same text. The extension works it
+    out (notebook heading, else the section name as written, else the
+    server's name); the page only falls back to the last two when no
+    extension has sent one.
+  - A row click reveals the cell the header is on, so the click and the
+    title point at the same place.
+  - An ambiguous anchor does not place a task that has another, and does not
+    decide `starter` or "edited since".
+
 ### Failure detail: `TestSuiteEntry.failureDetail`
 
 - **Writers:** the suite, family and notebook-check editors, and their MCP

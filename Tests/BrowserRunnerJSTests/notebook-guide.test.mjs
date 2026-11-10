@@ -59,11 +59,16 @@ test('the attempt card before a submission, while grading, and after', () => {
   assert.equal(graded.short, 'Attempt 2 · 75%');
 });
 
-test('a row has a numbered wide label and a short chip label', () => {
+test('a row shows the editor\'s title, else the section name as written, unnumbered', () => {
+  const task = { heading: 'Question 1', name: 'Question 1', label: null };
   assert.deepEqual(
-    JSON.parse(JSON.stringify(Guide.rowLabels({ name: 'Average heart rate', label: null }, 1))),
-    { wide: '2. Average heart rate', short: 'Task 2' });
-  assert.equal(Guide.rowLabels({ name: 'x', label: 'Part A' }, 0).short, 'Part A');
+    JSON.parse(JSON.stringify(Guide.rowLabels(task, '1. Warm Up I: BMI Calculator'))),
+    { wide: '1. Warm Up I: BMI Calculator', short: '1. Warm Up I' });
+  assert.deepEqual(JSON.parse(JSON.stringify(Guide.rowLabels(task))), { wide: 'Question 1', short: 'Question 1' });
+  assert.deepEqual(
+    JSON.parse(JSON.stringify(Guide.rowLabels({ heading: null, name: 'Other checks', label: null }))),
+    { wide: 'Other checks', short: 'Other checks' });
+  assert.equal(Guide.rowLabels({ heading: 'Task 2: Average heart rate', name: 'Average heart rate', label: 'Task 2' }).short, 'Task 2');
 });
 
 test('a row reveals its heading, else its first anchor, else nothing', () => {
@@ -147,7 +152,10 @@ test('the guide is fetched, drawn as one row per task, and sent to the editor', 
   assert.equal(rows.length, 2);
   assert.equal(rows[0].getAttribute('data-status'), 'pass');
   assert.equal(rows[1].getAttribute('data-status'), 'fail');
-  assert.match(rows[1].textContent, /2\. Mean heart rate/);
+  // The section name as written (`heading`), unnumbered, until the editor
+  // sends the title its header shows.
+  assert.match(rows[1].textContent, /^✗Mean/);
+  assert.doesNotMatch(rows[1].textContent, /2\./);
   assert.match(page.nav.textContent, /Attempt 1/);
   const sent = page.executed.filter(([c]) => c === 'chickadee:set-guide');
   assert.equal(sent.length, 1);
@@ -161,6 +169,20 @@ test('ck:tasks from the extension updates a row status', async () => {
   const rows = page.rows();
   assert.equal(rows[0].getAttribute('data-status'), 'pass');
   assert.equal(rows[1].getAttribute('data-status'), 'starter');
+});
+
+test('ck:tasks from the extension gives each row the title the editor header shows', async () => {
+  const page = await loadPage();
+  page.message({
+    ck: 'ck:tasks',
+    tasks: [
+      { sectionID: 's1', status: 'pass', title: 'Part 1: Load the data' },
+      { sectionID: 's2', status: 'fail' },
+    ],
+  });
+  const rows = page.rows();
+  assert.match(rows[0].textContent, /Part 1: Load the data/);
+  assert.match(rows[1].textContent, /^✗Mean/);
 });
 
 test('ck:active-cell marks the task under the cursor, and only that task', async () => {
@@ -179,6 +201,14 @@ test('a row click reveals its task in the editor', async () => {
   page.rows()[1].listeners.click.forEach((fn) => fn());
   const reveal = page.executed.find(([c]) => c === 'chickadee:reveal');
   assert.equal(JSON.stringify(reveal[1]), '{"section":"Mean"}');
+});
+
+test('once the editor has placed a task, a row click reveals the cell its header is on', async () => {
+  const page = await loadPage();
+  page.message({ ck: 'ck:tasks', tasks: [{ sectionID: 's1', status: 'pass' }, { sectionID: 's2', status: 'fail', title: 'Part 2', cell: 7 }] });
+  page.rows()[1].listeners.click.forEach((fn) => fn());
+  const reveal = page.executed.find(([c]) => c === 'chickadee:reveal');
+  assert.equal(JSON.stringify(reveal[1]), '{"index":7}');
 });
 
 test('a new editor document gets the guide again on its first ck:kernel', async () => {

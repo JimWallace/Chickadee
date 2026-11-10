@@ -53,7 +53,7 @@ Each event is a `postMessage` to the parent window, for this origin only. The
 | `ck:kernel` | `status`: `starting`, `idle`, `busy` or `dead` | The kernel chip, and the loading panel (idle or busy closes it). |
 | `ck:notebook-open` | none | The loading panel closes. The cells are drawn, and the kernel can still be starting: a cell run before the kernel is ready waits for it, and the kernel chip shows the kernel state. |
 | `ck:active-cell` | `cellId`, `index`, `names`, `task` | The outline. `names` are the names that the cell defines. `task` is the `sectionID` of the task that holds the cell, or null. |
-| `ck:tasks` | `tasks`: `[{sectionID, status}]`, `reflections`: `[{tag, status}]` | The outline. Sent after each redraw of the guide, in the guide's task order, with the status that the editor shows (`starter` included). A reflection is `written` or `empty`. |
+| `ck:tasks` | `tasks`: `[{sectionID, status, title, cell}]`, `reflections`: `[{tag, status}]` | The outline. Sent after each redraw of the guide, in the guide's task order, with the status that the editor shows (`starter` included) the title its task header shows, and the index of the cell that header is on, which a row click reveals (docs/notebook-guide.md). A reflection is `written` or `empty`. |
 | `ck:cell-ran` | `cellId`, `status`: `ok` or `error` | NB4 (the "ran without errors" signal). |
 | `ck:saved` | `state`: `started`, `completed` or `failed` | The save state in the toolbar. |
 | `ck:item-selected` | `itemID` (null when a card closes) | The workbench rail marks the row. |

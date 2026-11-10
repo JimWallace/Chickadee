@@ -154,7 +154,7 @@ async function main() {
     });
     const labels = await headers().locator(".ck-task-label").allTextContents();
     console.log(`headers: ${labels.join(" | ")}; pills: ${(await pills()).join(" | ")}`);
-    if (labels.join("|") !== "Task 1|Task 2|Reflection") return fail(`header labels ${labels}`);
+    if (labels.join("|") !== "Task 1: Count|Task 2: Total|Reflection") return fail(`header labels ${labels}`);
     // The header sits in the heading cell's own header widget.
     const inHeading = await editor().locator(".jp-MarkdownCell .jp-CellHeader .ck-task-header").count();
     if (inHeading !== 3) return fail(`${inHeading} headers sit in a markdown cell header, not 3`);

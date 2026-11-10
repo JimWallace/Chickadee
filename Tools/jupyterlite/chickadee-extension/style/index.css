@@ -220,6 +220,19 @@ body[data-ck-theme] .ck-task-label {
   text-transform: uppercase;
   color: var(--jp-ui-font-color1);
 }
+/* A student task header shows the notebook heading the task sits under, in
+   the same case as the page's outline row, so the two read the same. Long
+   headings truncate, as the outline row does. */
+body[data-ck-theme] .ck-task-header .ck-task-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.85rem;
+  font-weight: 600;
+  letter-spacing: normal;
+  text-transform: none;
+}
 body[data-ck-theme] .ck-spacer { flex: 1; }
 body[data-ck-theme] .ck-glyph {
   display: inline-grid;
