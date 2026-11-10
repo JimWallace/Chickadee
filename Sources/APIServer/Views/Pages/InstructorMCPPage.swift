@@ -122,7 +122,7 @@ struct InstructorMCPPage: HTML {
                 for row in agentAccess.feedbackAssignments {
                     tr {
                         td(.class("item-tile-cell")) {
-                            span(.class("item-tile"), .data("kind", value: "graded")) { Icon("i-calendar-check") }
+                            span(.class("item-tile"), .data("kind", value: "graded")) { Icon("i-clipboard-check") }
                         }
                         td(.class("item-main")) { div(.class("item-title")) { a(.href(row.reviewURL)) { row.title } } }
                         td(.class("item-status")) { span(.class("chip")) { "\(row.draftCount) to review" } }

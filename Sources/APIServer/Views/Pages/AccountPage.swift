@@ -362,12 +362,12 @@ private struct AccountHatchControl: HTML {
         div(.class("bird-card-hatch")) {
             if hatch.canHatch {
                 a(.class("btn"), .href("/account?hatch=confirm#bird")) {
-                    Icon("i-refresh")
+                    Icon("i-shuffle")
                     " Hatch a new bird"
                 }
             } else {
                 button(.class("btn"), .type(.button), .disabled) {
-                    Icon("i-refresh")
+                    Icon("i-shuffle")
                     " Hatch a new bird"
                 }
             }
@@ -644,7 +644,7 @@ private struct AccountGitHubBlock: HTML {
                                     .data("confirm", value: "Unlink the GitHub account \(login)?")
                                 ) {
                                     " "
-                                    Icon("i-trash")
+                                    Icon("i-unlink")
                                     "Unlink"
                                 }
                             }
@@ -679,7 +679,7 @@ private struct AccountEnrolledCourseRow: HTML {
     var body: some HTML {
         tr {
             td(.class("item-tile-cell")) {
-                span(.class("item-tile"), .data("kind", value: "outline")) { Icon("i-book") }
+                span(.class("item-tile"), .data("kind", value: "outline")) { Icon("i-graduation-cap") }
             }
             td(.class("item-main")) {
                 div(.class("item-title")) {
@@ -727,7 +727,7 @@ private struct AccountEnrolledCourseRow: HTML {
                     .data("confirm", value: "Leave \(course.code)?")
                 ) {
                     " "
-                    Icon("i-trash")
+                    Icon("i-log-out")
                     "Leave course"
                 }
             }
@@ -743,7 +743,7 @@ private struct AccountAvailableCourseRow: HTML {
     var body: some HTML {
         tr {
             td(.class("item-tile-cell")) {
-                span(.class("item-tile"), .data("kind", value: "outline")) { Icon("i-book") }
+                span(.class("item-tile"), .data("kind", value: "outline")) { Icon("i-graduation-cap") }
             }
             td(.class("item-main")) {
                 div(.class("item-title")) {

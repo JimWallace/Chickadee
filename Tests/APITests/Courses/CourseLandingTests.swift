@@ -63,17 +63,17 @@ import VaporTesting
         #expect(row.actions.last?.label == "Open Cheat sheet")
 
         let notebook = ContentItemRow(from: item(kind: .notebook, links: [link]))
-        #expect(notebook.actions.first?.iconHref == "#i-book")
+        #expect(notebook.actions.first?.iconHref == "#i-notebook")
         #expect(notebook.actions.first?.opensNewTab == true)
     }
 
-    @Test func notebookLinkOnANonNotebookItemGetsTheBookIcon() {
+    @Test func notebookLinkOnANonNotebookItemGetsTheNotebookIcon() {
         let links = [
             ContentLink(label: "PDF", url: "https://example.com/a.pdf"),
             ContentLink(label: "Jupyter Notebook", url: "https://example.com/a"),
         ]
         let row = ContentItemRow(from: item(kind: .slides, links: links))
-        #expect(row.actions.map(\.iconHref) == ["#i-external", "#i-book"])
+        #expect(row.actions.map(\.iconHref) == ["#i-external", "#i-notebook"])
     }
 
     @Test func linkLabelStartingWithOpenIsNotDoubled() {
@@ -83,7 +83,7 @@ import VaporTesting
     }
 
     @Test(arguments: [
-        (ContentItemKind.slides, "#i-slides"), (.notebook, "#i-book"),
+        (ContentItemKind.slides, "#i-slides"), (.notebook, "#i-notebook"),
         (.document, "#i-file-text"), (.link, "#i-link"), (.outline, "#i-list"),
         (.heading, ""),
     ])

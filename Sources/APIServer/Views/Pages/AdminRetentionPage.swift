@@ -98,7 +98,7 @@ private struct AdminRetentionCourseRow: HTML {
                                 value: "Restore \(row.code)? Students regain access immediately. "
                                     + "Its submissions are kept and the retention clock stops.")
                         ) {
-                            Icon("i-rewind")
+                            Icon("i-archive-restore")
                         }
                     }
                     a(
