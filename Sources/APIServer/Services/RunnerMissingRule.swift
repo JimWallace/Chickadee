@@ -96,16 +96,6 @@ func evaluateRunnerMissing(
     }
 }
 
-/// "45m", "3h 20m", "5d 13h": short enough for an alert summary line.
-func formatQuietDuration(_ seconds: TimeInterval) -> String {
-    let minutes = Int(seconds) / 60
-    let hours = minutes / 60
-    let days = hours / 24
-    if days > 0 { return "\(days)d \(hours % 24)h" }
-    if hours > 0 { return "\(hours)h \(minutes % 60)m" }
-    return "\(minutes)m"
-}
-
 /// The newest `runner_snapshots.recorded_at` per runner, for runners with a
 /// row inside the remember window. Empty when diagnostics are disabled (no
 /// rows are written), which keeps the rule green rather than guessing.

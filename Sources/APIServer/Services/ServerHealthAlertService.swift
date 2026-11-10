@@ -234,7 +234,7 @@ func decideRunnerOffline(
     if let age = pending.oldestPendingAge {
         details["oldest_pending_age_seconds"] = String(Int(age))
     }
-    let lastSeen = quietRunners.isEmpty ? "" : " (last seen: \(quietRunners.joined(separator: ", ")))"
+    let lastSeen = quietRunners.isEmpty ? "" : " (last seen: \(alertNamedList(quietRunners)))"
     if !quietRunners.isEmpty {
         details["quiet_runners"] = quietRunners.joined(separator: ", ")
     }
@@ -276,7 +276,7 @@ private func evaluateRunnerOffline(
         pending: pending,
         presence: state,
         offlineSeconds: offlineThreshold,
-        quietRunners: Array(quietRunners.prefix(runnerVersionSkewNamedLimit))
+        quietRunners: quietRunners
     )
 }
 
@@ -330,14 +330,8 @@ func decideRunnerVersionSkew(
         .min { (comparator.compare($0, $1) ?? .orderedSame) == .orderedAscending } ?? first.version
     let distinctBehind = Set(behind.map(\.version)).sorted()
     let named = behind.filter { !$0.runnerID.isEmpty }
-    // At most `runnerVersionSkewNamedLimit` runners in the summary, so a whole
-    // fleet behind cannot outgrow a webhook's message limit (Pushover: ~1024).
-    var described = behind.prefix(runnerVersionSkewNamedLimit).map {
-        describeRunnerBehind($0, serverVersion: serverVersion, comparator: comparator)
-    }
-    if behind.count > runnerVersionSkewNamedLimit {
-        described.append("and \(behind.count - runnerVersionSkewNamedLimit) more")
-    }
+    let described = alertNamedList(
+        behind.map { describeRunnerBehind($0, serverVersion: serverVersion, comparator: comparator) })
     let heading = behind.count == 1 ? "Runner behind" : "\(behind.count) runners behind"
     var details: [String: String] = [
         "server_version": serverVersion,
@@ -352,7 +346,7 @@ func decideRunnerVersionSkew(
     return RuleEvaluation(
         isFiring: true,
         summary:
-            "\(heading) server v\(serverVersion): \(described.joined(separator: ", ")) — "
+            "\(heading) server v\(serverVersion): \(described) — "
             + "past the update window; check that runner's update job and its log",
         details: details
     )
@@ -391,12 +385,6 @@ private func describeRunnerBehind(
     }
     return text
 }
-
-/// How many names an alert summary lists before "and N more": runners in the
-/// runner-version-skew and runner-offline summaries, assignments in the
-/// BrightSpace one. It keeps a long list from outgrowing a webhook's message
-/// limit; the full list stays in `details`.
-let runnerVersionSkewNamedLimit = 5
 
 private func evaluateRunnerVersionSkew(
     on application: Application,
@@ -585,11 +573,9 @@ func decideBrightspaceSyncFailing(
         "threshold": String(threshold),
     ]
     if let lastDetail, !lastDetail.isEmpty { details["last_error"] = lastDetail }
-    let named = Array(assignmentTitles.prefix(runnerVersionSkewNamedLimit))
     var forAssignments = ""
-    if !named.isEmpty {
-        let more = assignmentTitles.count > named.count ? " and \(assignmentTitles.count - named.count) more" : ""
-        forAssignments = " for \(named.joined(separator: ", "))\(more)"
+    if !assignmentTitles.isEmpty {
+        forAssignments = " for \(alertNamedList(assignmentTitles))"
         details["assignments"] = assignmentTitles.joined(separator: ", ")
     }
     let latest = (lastDetail?.isEmpty == false) ? " The latest error: \(lastDetail ?? "")." : ""
