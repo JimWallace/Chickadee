@@ -135,7 +135,7 @@ struct ContentAttachmentView: Encodable {
 /// dashboard lines up.
 struct ContentActionView: Encodable {
     let href: String
-    let iconHref: String  // "#i-eye" | "#i-download" | "#i-notebook" | "#i-external"
+    let iconHref: String  // "#i-file-text" | "#i-download" | "#i-notebook" | "#i-external"
     let label: String  // title + aria-label
     let opensNewTab: Bool  // true → target="_blank" rel="noopener noreferrer"
 }
@@ -176,8 +176,7 @@ struct ContentItemRow: Encodable {
         self.links = item.links
         let attachmentViews = item.attachments.map { attachment in
             let downloadURL = "/content-files/\(itemID)/\(attachment.id.uuidString)"
-            let isPDF =
-                (FilePath(attachment.originalName).extension ?? "").lowercased() == "pdf"
+            let isPDF = ContentItemRow.hasPDFExtension(attachment.originalName)
             return ContentAttachmentView(
                 id: attachment.id.uuidString,
                 displayName: attachment.displayName,
@@ -203,7 +202,7 @@ struct ContentItemRow: Encodable {
         switch kind {
         case .slides: return "#i-slides"
         case .notebook: return "#i-notebook"
-        case .document: return "#i-file-text"
+        case .document: return documentIconHref
         case .link: return "#i-link"
         case .outline: return "#i-list"
         case .heading: return ""
@@ -220,10 +219,24 @@ struct ContentItemRow: Encodable {
         return parts.joined(separator: " · ")
     }
 
+    /// The document page: the document kind tile, and the button that opens a
+    /// PDF. Both mean "a document", so they share one constant.
+    static let documentIconHref = "#i-file-text"
+
+    /// The glyph for a PDF, hosted or linked. Where the file is stored does
+    /// not change what it is, so a hosted PDF and a linked PDF look the same,
+    /// and a PDF never borrows `#i-external`, which means "another website".
+    static let pdfIconHref = documentIconHref
+
+    /// True when a file name or URL path ends in `.pdf`, in any case.
+    static func hasPDFExtension(_ path: String) -> Bool {
+        (FilePath(path).extension ?? "").lowercased() == "pdf"
+    }
+
     private static func action(for attachment: ContentAttachmentView) -> ContentActionView {
         if let viewURL = attachment.viewURL {
             return ContentActionView(
-                href: viewURL, iconHref: "#i-eye",
+                href: viewURL, iconHref: pdfIconHref,
                 label: "Open \(attachment.displayName) in a new tab (\(attachment.sizeLabel))",
                 opensNewTab: true)
         }
@@ -237,13 +250,28 @@ struct ContentItemRow: Encodable {
         // Do not double the verb: "Open in JupyterHub" stays as written.
         let label =
             link.label.lowercased().hasPrefix("open") ? link.label : "Open \(link.label)"
-        // A notebook link gets the book whatever the item's kind: a slides
-        // item often carries "PDF" and "Jupyter Notebook" side by side, and
-        // two identical arrows leave the reader guessing which is which.
-        let isNotebook = kind == .notebook || link.label.lowercased().contains("notebook")
-        return ContentActionView(
-            href: link.url, iconHref: isNotebook ? "#i-notebook" : "#i-external",
-            label: label, opensNewTab: true)
+        // A slides item often carries "PDF" and "Jupyter Notebook" side by
+        // side, so each link says what it opens. A PDF is checked first: a
+        // notebook item's "PDF" link is still a PDF.
+        let iconHref: String
+        if isPDFLink(link) {
+            iconHref = pdfIconHref
+        } else if kind == .notebook || link.label.lowercased().contains("notebook") {
+            iconHref = "#i-notebook"
+        } else {
+            iconHref = "#i-external"
+        }
+        return ContentActionView(href: link.url, iconHref: iconHref, label: label, opensNewTab: true)
+    }
+
+    /// A link is a PDF when its URL path ends in `.pdf` or its label has the
+    /// word "PDF" ("Slides (PDF)", not "Why PDFs are hard"). A link only gives
+    /// these two signals: a PDF behind a download URL with another label keeps
+    /// `#i-external`.
+    static func isPDFLink(_ link: ContentLink) -> Bool {
+        if link.label.contains(/\bpdf\b/.ignoresCase()) { return true }
+        guard let path = URLComponents(string: link.url)?.path else { return false }
+        return hasPDFExtension(path)
     }
 
     static func label(for kind: ContentItemKind) -> String {
