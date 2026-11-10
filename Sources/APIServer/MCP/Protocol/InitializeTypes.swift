@@ -172,7 +172,8 @@ enum MCPServerInstructions {
         test setup, so creating or editing one never validates, re-grades, or closes anything. List with \
         list_content_items, create with create_content_item (optionally into a course section via \
         courseSectionID; isPublished:false hides it from students as a draft), edit or move with \
-        update_content_item, remove with delete_content_item, and order it among the section's items \
+        update_content_item, remove with delete_content_item, show it on an assignment's row (or give \
+        it a row of its own again) with attach_content_item, and order it among the section's items \
         (interleaved with assignments) with reorder_section_items, or reorder_content_items for a \
         content-only section. It can also host files: pass attachments:[{sourceUrl}] (an https URL \
         the server fetches under the SSRF guard) to create_content_item / update_content_item, and \

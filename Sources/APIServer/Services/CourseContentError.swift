@@ -51,7 +51,7 @@ enum CourseContentError: Error, Sendable, Equatable, CustomStringConvertible {
             return "A heading cannot be shown on an assignment."
         case .attachedItemCannotMove:
             return "This item is shown on an assignment's row and follows that assignment's section. "
-                + "Detach it on the instructor dashboard first."
+                + "Detach it from its assignment first."
         }
     }
 }

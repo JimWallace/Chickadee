@@ -164,10 +164,14 @@ because line numbers go out of date.
     then.
   - `SortOrderRenumbering`, which leaves it out of a section's item count and
     refuses its id.
-  - `list_content_items` (`attachedAssignmentPublicID`).
-- **Writers:** the material edit form's "Show on" select
-  (`CourseContentService.attach`), which also moves the item to the
-  assignment's section. `AssignmentDeletion` detaches it into the
+  - `list_content_items` and `attach_content_item`
+    (`attachedAssignmentPublicID`).
+- **Writers:** the material edit form's "Show on" select and MCP
+  `attach_content_item`. Both resolve the target with
+  `CourseContentService.attachTarget` and write with
+  `CourseContentService.attach`, which also moves the item to the
+  assignment's section. A new door calls those two; it does not set
+  `assignmentID` itself. `AssignmentDeletion` detaches it into the
   assignment's section at that time, as a detach does. The course clone and
   the bundle export and import carry it. `CourseContentService.update`
   refuses to move an attached item to a section or make it a heading.
