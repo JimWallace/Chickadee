@@ -51,8 +51,8 @@ struct ContentItemDTO: Encodable, Sendable {
     let sortOrder: Int
     /// The public ID of the assignment the item is attached to: it shows on
     /// that assignment's row, once the assignment opens, rather than as a row
-    /// of its own. Reported by list_content_items only (the create and update
-    /// outputs leave it out); absent for a standalone item.
+    /// of its own. Reported by list_content_items and attach_content_item (the
+    /// create and update outputs leave it out); absent for a standalone item.
     var attachedAssignmentPublicID: String?
 }
 
@@ -279,7 +279,7 @@ struct ListContentItemsTool: ContentTool {
         + "description, updated label, published flag, and sort order. An item attached to an "
         + "assignment carries attachedAssignmentPublicID: it shows as extra buttons on that "
         + "assignment's row once the assignment opens, is not a row of its own, and is left out of "
-        + "reorder_section_items. Attaching is done on the instructor dashboard. These are ungraded "
+        + "reorder_section_items. attach_content_item attaches and detaches. These are ungraded "
         + "materials — not assignments (use list_assignments) and not test-suite sections (use "
         + "get_suite)."
     static let inputSchema: JSONValue = .object([
@@ -484,7 +484,8 @@ struct UpdateContentItemTool: ContentTool {
         + "changed; omitted fields are left unchanged. title/kind replace; links (when given, even "
         + "empty) replaces the whole link list; description/updatedLabel accept \"\" to clear; "
         + "isPublished toggles student visibility; courseSectionID moves it (\"\"/\"none\" ungroups; refused for an "
-        + "item attached to an assignment, which follows that assignment's section); "
+        + "item attached to an assignment, which follows that assignment's section: detach it first with "
+        + "attach_content_item); "
         + "attachments fetches more files by URL and appends them (to remove a hosted file, use the "
         + "web editor). Ungraded material — no test setup, no re-validation, no re-grade."
     static let inputSchema: JSONValue = .object([

@@ -115,15 +115,11 @@ extension CourseAdminRoutes {
         _ raw: String?, for item: APICourseContentItem, db: any Database
     ) async throws -> UUID?? {
         guard let raw else { return nil }
-        let publicID = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !publicID.isEmpty else { return .some(nil) }
-        guard
-            let assignment = try await APIAssignment.query(on: db)
-                .filter(\.$publicID == publicID)
-                .filter(\.$courseID == item.courseID)
-                .first()
-        else { throw Self.webError(.assignmentNotInCourse) }
-        return .some(try assignment.requireID())
+        do {
+            return .some(try await CourseContentService.attachTarget(publicID: raw, for: item, on: db))
+        } catch let error as CourseContentError {
+            throw Self.webError(error)
+        }
     }
 
     // MARK: - POST /instructor/content-items/:id/visibility

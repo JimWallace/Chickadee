@@ -47,7 +47,8 @@ GRANT USAGE ON SCHEMA public TO chickadee_mcp;
 --    (attachments_json; the attachment bytes are files on disk, not rows). It
 --    holds no student data. The content-item tools (list_content_items,
 --    create_content_item, update_content_item, delete_content_item,
---    reorder_content_items, reorder_section_items) read and write it, and
+--    attach_content_item, reorder_content_items, reorder_section_items) read
+--    and write it, and
 --    create_assignment, clone_assignment and set_assignment_course_section read
 --    it to place the new item after the section's last one
 --    (nextSectionItemSortOrder). Deployments that applied this file before the

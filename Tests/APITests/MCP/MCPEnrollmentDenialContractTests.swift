@@ -129,6 +129,7 @@ struct MCPEnrollmentDenialContractTests {
             #"{"courseCode":"CS246","title":"Reading","links":[{"label":"Notes","url":"https://example.com/notes"}]}"#),
         "update_content_item": Sample(#"{"contentItemID":"$C","title":"Renamed"}"#),
         "delete_content_item": Sample(#"{"contentItemID":"$C"}"#, .answersAsUnknownID),
+        "attach_content_item": Sample(#"{"contentItemID":"$C","assignmentPublicID":"$A"}"#),
         "reorder_content_items": Sample(#"{"courseCode":"CS246","orderedContentItemIDs":["$C"]}"#),
         "reorder_assignments": Sample(#"{"courseCode":"CS246","orderedAssignmentPublicIDs":["$A"]}"#),
         "reorder_section_items": Sample(

@@ -96,6 +96,7 @@ The catalog:
 | `create_content_item` | `content:write` | Create an ungraded content item (link/notebook/slides/document/outline/heading) in a course, optionally in a section; no test setup, no regrade/close |
 | `update_content_item` | `content:write` | Edit or move a content item (title/kind/links/description/updatedLabel/isPublished/section); no regrade/close |
 | `delete_content_item` | `content:write` | Delete an ungraded content item (idempotent); never touches an assignment or section |
+| `attach_content_item` | `content:write` | Show a content item on an assignment's row in the same course, or detach it (`""`); reports student visibility before and after; refuses a heading; no regrade/close |
 | `reorder_content_items` | `content:write` | Set the display order of a section's content items (content-only); no regrade/close |
 | `reorder_section_items` | `content:write` | Set a section's interleaved order — assignments + content items renumbered together (primary ordering tool); no regrade/close |
 | `reorder_assignments` | `content:write` | Set the display order of a section's assignments (single-type section); no regrade/close |
