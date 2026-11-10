@@ -55,7 +55,10 @@ import VaporTesting
         try FileManager.default.createDirectory(atPath: filesDir + setupDir, withIntermediateDirectories: true)
     }
 
-    private func put(_ inside: String, bytes: Int) async throws -> HTTPStatus {
+    private func put(
+        _ inside: String, bytes: Int, expecting expected: HTTPStatus,
+        sourceLocation: SourceLocation = #_sourceLocation
+    ) async throws {
         var status = HTTPStatus.ok
         let content = String(repeating: "x", count: bytes)
         try await app.asyncTest(
@@ -65,7 +68,7 @@ import VaporTesting
                 req.body = ByteBuffer(string: #"{"type":"file","format":"text","content":"\#(content)"}"#)
             },
             afterResponse: { res in status = res.status })
-        return status
+        #expect(status == expected, sourceLocation: sourceLocation)
     }
 
     private func limit(quota: Int = 1_000_000, perMinute: Int = 1_000) {
@@ -76,21 +79,21 @@ import VaporTesting
     @Test func refusesASaveThatWouldPassTheQuota() async throws {
         try await withApp(app) { _ in
             limit(quota: 100)
-            #expect(try await put("a.txt", bytes: 60) == .ok)
-            #expect(try await put("b.txt", bytes: 50) == .payloadTooLarge)
+            try await put("a.txt", bytes: 60, expecting: .ok)
+            try await put("b.txt", bytes: 50, expecting: .payloadTooLarge)
             #expect(!FileManager.default.fileExists(atPath: filesDir + setupDir + "/b.txt"))
             // Rewriting a file counts its new size in place of its old one.
-            #expect(try await put("a.txt", bytes: 90) == .ok)
+            try await put("a.txt", bytes: 90, expecting: .ok)
         }
     }
 
     @Test func aSaveThatDoesNotGrowAFileLandsEvenOverTheQuota() async throws {
         try await withApp(app) { _ in
             limit(quota: 100)
-            #expect(try await put("big.txt", bytes: 90) == .ok)
+            try await put("big.txt", bytes: 90, expecting: .ok)
             limit(quota: 10)
-            #expect(try await put("big.txt", bytes: 40) == .ok)
-            #expect(try await put("other.txt", bytes: 1) == .payloadTooLarge)
+            try await put("big.txt", bytes: 40, expecting: .ok)
+            try await put("other.txt", bytes: 1, expecting: .payloadTooLarge)
         }
     }
 
@@ -113,20 +116,20 @@ import VaporTesting
                 atPath: filesDir + setupDir + "/shared.csv", withDestinationPath: tmpRoot + "shared.csv")
 
             limit(quota: 100)
-            #expect(try await put("assignment.ipynb", bytes: 80) == .ok)
+            try await put("assignment.ipynb", bytes: 80, expecting: .ok)
             // The student's own file in another folder does count.
             try FileManager.default.createDirectory(
                 atPath: filesDir + userRoot + "/scratch", withIntermediateDirectories: true)
             try Data(repeating: 0x61, count: 30).write(to: URL(fileURLWithPath: filesDir + userRoot + "/scratch/x"))
-            #expect(try await put("more.txt", bytes: 1) == .payloadTooLarge)
+            try await put("more.txt", bytes: 1, expecting: .payloadTooLarge)
         }
     }
 
     @Test func rateLimitsWritesPerUser() async throws {
         try await withApp(app) { _ in
             limit(perMinute: 2)
-            #expect(try await put("a.txt", bytes: 1) == .ok)
-            #expect(try await put("a.txt", bytes: 1) == .ok)
+            try await put("a.txt", bytes: 1, expecting: .ok)
+            try await put("a.txt", bytes: 1, expecting: .ok)
             try await app.asyncTest(
                 .PUT, "/jupyterlite/api/contents/\(setupDir)/a.txt",
                 beforeRequest: { req in
@@ -143,7 +146,7 @@ import VaporTesting
     @Test func readsAreNotRateLimited() async throws {
         try await withApp(app) { _ in
             limit(perMinute: 1)
-            #expect(try await put("a.txt", bytes: 1) == .ok)
+            try await put("a.txt", bytes: 1, expecting: .ok)
             for _ in 0..<3 {
                 try await app.asyncTest(.GET, "/jupyterlite/api/contents/\(setupDir)/a.txt") { res in
                     #expect(res.status == .ok)

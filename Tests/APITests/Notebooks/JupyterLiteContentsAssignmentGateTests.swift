@@ -1,3 +1,4 @@
+import Core
 import Fluent
 import Foundation
 import Testing
@@ -24,9 +25,15 @@ import VaporTesting
 
     private static let setupID = "setup_gate"
 
+    private static let manifest = """
+        {"schemaVersion":1,"gradingMode":"browser","requiredFiles":[],\
+        "testSuites":[{"tier":"public","script":"tests.py"}],"timeLimitSeconds":10,"makefile":null}
+        """
+
     private let student: APIUser
     private let ta: APIUser
     private let filesDir: String
+    private let setupZipPath: String
 
     let app: Application
 
@@ -47,6 +54,8 @@ import VaporTesting
         self.student = student
         self.ta = ta
         self.filesDir = app.directory.publicDirectory + "jupyterlite/files/"
+        self.setupZipPath = tmpRoot + "setup.zip"
+        try await writeZipFixture(at: setupZipPath, entries: [("tests.py", "pass\n")])
     }
 
     private func folder(of user: APIUser) throws -> String {
@@ -60,6 +69,10 @@ import VaporTesting
         let course = APICourse(code: "GATE101", name: "Gate Course")
         try await course.save(on: app.db)
         let courseID = try course.requireID()
+        // The assignment row references its setup row.
+        try await APITestSetup(
+            id: Self.setupID, manifest: Self.manifest, zipPath: setupZipPath, courseID: courseID
+        ).save(on: app.db)
         try await APICourseEnrollment(userID: try student.requireID(), courseID: courseID, role: .student)
             .save(on: app.db)
         try await APICourseEnrollment(userID: try ta.requireID(), courseID: courseID, role: .ta).save(on: app.db)
@@ -74,7 +87,10 @@ import VaporTesting
         }
     }
 
-    private func put(_ path: String, as who: String = "student") async throws -> HTTPStatus {
+    private func put(
+        _ path: String, as who: String = "student", expecting expected: HTTPStatus,
+        sourceLocation: SourceLocation = #_sourceLocation
+    ) async throws {
         var status = HTTPStatus.ok
         try await app.asyncTest(
             .PUT, "/jupyterlite/api/contents/\(path)",
@@ -84,7 +100,7 @@ import VaporTesting
                 req.body = ByteBuffer(string: #"{"type":"file","format":"text","content":"changed"}"#)
             },
             afterResponse: { res in status = res.status })
-        return status
+        #expect(status == expected, sourceLocation: sourceLocation)
     }
 
     private func contents(_ path: String) throws -> String {
@@ -95,7 +111,7 @@ import VaporTesting
         try await withApp(app) { _ in
             try await seed(visibility: .open)
             let path = try folder(of: student) + "/assignment.ipynb"
-            #expect(try await put(path) == .ok)
+            try await put(path, expecting: .ok)
             #expect(try contents(path) == "changed")
         }
     }
@@ -104,8 +120,8 @@ import VaporTesting
         try await withApp(app) { _ in
             try await seed(visibility: .closed)
             let path = try folder(of: student) + "/assignment.ipynb"
-            #expect(try await put(path) == .forbidden)
-            #expect(try await put(try folder(of: student) + "/new.csv") == .forbidden)
+            try await put(path, expecting: .forbidden)
+            try await put(try folder(of: student) + "/new.csv", expecting: .forbidden)
             #expect(try contents(path) == "original")
         }
     }
@@ -114,7 +130,7 @@ import VaporTesting
         try await withApp(app) { _ in
             try await seed(visibility: .open, startsAt: Date().addingTimeInterval(86_400))
             let path = try folder(of: student) + "/assignment.ipynb"
-            #expect(try await put(path) == .forbidden)
+            try await put(path, expecting: .forbidden)
             #expect(try contents(path) == "original")
         }
     }
@@ -146,7 +162,7 @@ import VaporTesting
         try await withApp(app) { _ in
             try await seed(visibility: .closed)
             let path = try folder(of: ta) + "/assignment.ipynb"
-            #expect(try await put(path, as: "ta") == .ok)
+            try await put(path, as: "ta", expecting: .ok)
             #expect(try contents(path) == "changed")
         }
     }
@@ -159,7 +175,7 @@ import VaporTesting
             let root = "users/\(try #require(student.id).uuidString.lowercased())"
             try FileManager.default.createDirectory(
                 atPath: filesDir + root + "/scratch", withIntermediateDirectories: true)
-            #expect(try await put(root + "/scratch/notes.txt") == .ok)
+            try await put(root + "/scratch/notes.txt", expecting: .ok)
         }
     }
 }

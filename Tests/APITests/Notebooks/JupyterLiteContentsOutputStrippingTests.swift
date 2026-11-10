@@ -34,9 +34,15 @@ import VaporTesting
          "attachments":{"a.png":{"image/png":"iVBORw0KGgo="}}}]}}
         """#
 
+    private static let manifest = """
+        {"schemaVersion":1,"gradingMode":"browser","requiredFiles":[],\
+        "testSuites":[{"tier":"public","script":"tests.py"}],"timeLimitSeconds":10,"makefile":null}
+        """
+
     private let student: APIUser
     private let ta: APIUser
     private let filesDir: String
+    private let setupZipPath: String
 
     let app: Application
 
@@ -57,6 +63,8 @@ import VaporTesting
         self.student = student
         self.ta = ta
         self.filesDir = app.directory.publicDirectory + "jupyterlite/files/"
+        self.setupZipPath = tmpRoot + "setup.zip"
+        try await writeZipFixture(at: setupZipPath, entries: [("tests.py", "pass\n")])
     }
 
     private func root(of user: APIUser) throws -> String {
@@ -69,6 +77,10 @@ import VaporTesting
         let course = APICourse(code: "STRIP101", name: "Strip Course")
         try await course.save(on: app.db)
         let courseID = try course.requireID()
+        // The assignment row references its setup row.
+        try await APITestSetup(
+            id: Self.setupID, manifest: Self.manifest, zipPath: setupZipPath, courseID: courseID
+        ).save(on: app.db)
         try await APICourseEnrollment(userID: try student.requireID(), courseID: courseID, role: .student)
             .save(on: app.db)
         try await APICourseEnrollment(userID: try ta.requireID(), courseID: courseID, role: .ta).save(on: app.db)
