@@ -9,6 +9,13 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.892] - 2026-11-10
+
+### Changed
+
+- **Weekly Swift dependency update.** postgres-nio 1.33.2 to 1.33.3, swift-crypto 5.0.3 to 5.1.1, swift-distributed-tracing 1.7.3 to 1.7.4, swift-log 1.16.2 to 1.17.0.
+
+
 ## [0.5.891] - 2026-11-10
 
 ### Changed
