@@ -98,7 +98,10 @@ extension AccountRoutes {
 /// items not earned yet reads as a list of failures (docs/student-wardrobe.md,
 /// E1 to E3). The one exception is a seasonal ring out of its term, which
 /// every student gets: it is listed apart, as "Not open yet".
-struct AvatarPickerContext: Encodable {
+/// A class, not a struct: it is about 1 KB of values, and the bird card's
+/// views each hold it, so a debug build's nested builder closures copied it
+/// until the stack ran out (docs/elementary-spike.md, "Keep view fields small").
+final class AvatarPickerContext: Encodable {
     /// The student's bird at the podium size, the card's hero and the live
     /// preview's target.
     let hero: AvatarPresentation

@@ -165,6 +165,29 @@ and the compiler found every site.
 7. **Opaque helpers.** A `private func row(...) -> some HTML` used inside a
    `for` in a builder did not infer under the module-emitting build. A small
    `HTML` struct (`EnrolledCourseRow`) did. Prefer structs for repeated parts.
+8. **Large view fields overflow the stack in a debug build.** At `-Onone`,
+   Elementary's generic `_render` frames are not specialised, so each one
+   allocates a stack copy of its subtree's value. Stack use grows with the
+   depth of the tree multiplied by the bytes of every field the views in it
+   store. Swift Testing runs tests on secondary threads, which have a 512 KB
+   stack on macOS. When `PageRequestContext` (1,120 bytes) and
+   `AvatarPickerContext` (1,096 bytes) were stored inline, rendering the
+   account page needed 524 KB. The test host died with SIGBUS ("Could not
+   determine thread index for stack guard region") on macOS, while Linux CI
+   stayed green.
+
+   **Keep view fields small.** A context that many views hold, or one that is
+   larger than a few hundred bytes, belongs behind a reference:
+   `PageRequestContext` keeps its values in an immutable `final class
+   Storage`, and `AvatarPickerContext` and `AvatarHatchContext` are
+   `final class` types. With that change the account page needs 365 KB. In
+   November 2026 the deepest fixture groups measured as follows: the
+   workbench pages 390 KB, the student pages 365 KB, and the leaderboard and
+   group pages about 350 KB. The largest single frames are the builder
+   getters of `LeaderboardPresentBody` (134 KB), `EditActivityBlock`
+   (107 KB) and `AssignmentEditBody` (103 KB). Splitting such a body into
+   smaller `HTML` structs also reduces its frame. Do not fix an overflow by
+   raising the test thread's stack size.
 
 ## Guards
 
