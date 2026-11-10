@@ -29,7 +29,6 @@ on:
       - "deploy/**"
       - ".dockerignore"
       - ".github/actions/swift-test-setup/**"
-      - "scripts/restore-asset-mtimes.py"
       - "scripts/ci-runner-cgroup-probe.sh"
       - ".github/workflows/runner-arm64-image.yml"
 
@@ -41,11 +40,9 @@ env:
   IMAGE: ghcr.io/jimwallace/chickadee-runner
 
 jobs:
-  # ── Compile the release binaries on arm64 ─────────────────────────────────
-  # The Dockerfile's runtime stage copies both binaries, so both are built,
-  # though a runner host uses only chickadee-runner. Building the server too
-  # keeps this image identical in layout to production and the Dockerfile
-  # unchanged. The flags match build-release in docker-build.yml.
+  # ── Compile the runner on arm64 ───────────────────────────────────────────
+  # Only chickadee-runner: the image is the Dockerfile's `runner` target, which
+  # carries no server. The flags match build-release in docker-build.yml.
   build-release-arm64:
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 45
@@ -71,13 +68,11 @@ jobs:
         uses: actions/cache/restore@v6
         with:
           path: .build
-          key: ${{ runner.os }}-${{ runner.arch }}-release-${{ steps.setup.outputs.toolchain-key }}-${{ hashFiles('Package.resolved', 'Package.swift', 'Sources/**') }}
+          key: ${{ runner.os }}-${{ runner.arch }}-runner-release-${{ steps.setup.outputs.toolchain-key }}-${{ hashFiles('Package.resolved', 'Package.swift', 'Sources/**') }}
 
-      - name: Build release products
+      - name: Build the runner
         if: steps.build-cache.outputs.cache-hit != 'true'
-        run: |
-          swift build -c release --static-swift-stdlib --build-system native --product chickadee-server
-          swift build -c release --static-swift-stdlib --build-system native --product chickadee-runner
+        run: swift build -c release --static-swift-stdlib --build-system native --product chickadee-runner
 
       - name: Save release build artifacts
         if: github.event_name != 'pull_request' && steps.build-cache.outputs.cache-hit != 'true'
@@ -86,18 +81,16 @@ jobs:
           path: .build
           key: ${{ steps.build-cache.outputs.cache-primary-key }}
 
-      - name: Stage binaries for the image build
+      - name: Stage the runner for the image build
         run: |
           mkdir -p artifacts
-          for bin in chickadee-server chickadee-runner; do
-            strip --strip-all -o "artifacts/$bin" ".build/release/$bin"
-          done
+          strip --strip-all -o artifacts/chickadee-runner .build/release/chickadee-runner
           ls -lh artifacts/
 
       - name: Upload release binaries
         uses: actions/upload-artifact@v7
         with:
-          name: release-binaries-arm64
+          name: runner-binary-arm64
           path: artifacts/
           retention-days: 1
           if-no-files-found: error
@@ -113,14 +106,6 @@ jobs:
 
     steps:
       - uses: actions/checkout@v7
-        with:
-          fetch-depth: 0
-          filter: blob:none
-
-      # The image carries Public/ like the production image does. A runner
-      # serves none of it, but the same mtimes keep the layers comparable.
-      - name: Set Public file times to their last commit
-        run: scripts/restore-asset-mtimes.py Public
 
       - name: Free up runner disk space
         run: |
@@ -133,7 +118,7 @@ jobs:
       - name: Download release binaries
         uses: actions/download-artifact@v8
         with:
-          name: release-binaries-arm64
+          name: runner-binary-arm64
           path: artifacts
 
       - name: Set up Docker Buildx
@@ -165,8 +150,9 @@ jobs:
         with:
           context: .
           platforms: linux/arm64
+          target: runner
           build-args: |
-            BINARIES=prebuilt
+            RUNNER_BINARIES=prebuilt-runner
           load: true
           push: false
           tags: ${{ steps.meta.outputs.tags }}

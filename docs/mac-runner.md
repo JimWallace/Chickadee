@@ -24,7 +24,9 @@ targeted validation run correctly in 2026-11.
 ## The image
 
 `.github/workflows/runner-arm64-image.yml` builds
-`ghcr.io/jimwallace/chickadee-runner` for `linux/arm64` on each release tag, so
+`ghcr.io/jimwallace/chickadee-runner` for `linux/arm64` on each release tag
+from the Dockerfile's `runner` target: the language toolchains, the runner and
+its entrypoint, with no server and none of `Public/`. It follows release tags, so
 the image follows the version that production runs. Tags: `latest` (the newest
 release), `sha-<commit>` and the release version. It is a separate package from
 the production image `ghcr.io/jimwallace/chickadee`, and a failure there blocks
@@ -141,9 +143,3 @@ runner keeps its current image, and the next run tries again.
 
 `restart: unless-stopped` brings the runner back when Docker Desktop starts,
 unless it was stopped by hand.
-
-## Follow-ups
-
-- The image carries all of `Public/` (the JupyterLite kernels), which a runner
-  never serves. A runner-only Dockerfile target would make the pull much
-  smaller.

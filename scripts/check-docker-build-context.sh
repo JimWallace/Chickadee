@@ -93,10 +93,12 @@ required=$(printf '%s\n%s\n' "$manifest_paths" "$plugin_paths" \
     | grep -v '^$' | sort -u)
 
 # ── What the compile stage copies ───────────────────────────
-# COPY sources between `FROM ... AS compile` and the next FROM. The last
+# COPY sources between `FROM ... AS compile-runner` (or `AS compile`) and the
+# next FROM. The sources are copied in `compile-runner`; `compile` extends it
+# with the server. Both names are matched on purpose, not by prefix. The last
 # argument of a COPY is its destination.
 copied=$(awk '
-    /^FROM .* AS compile/ { in_compile = 1; next }
+    /^FROM .* AS compile(-runner)?$/ { in_compile = 1; next }
     /^FROM / { in_compile = 0 }
     in_compile && /^COPY / {
         for (i = 2; i < NF; i++) print $i

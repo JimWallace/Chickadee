@@ -2,7 +2,9 @@
 
 - **An arm64 runner image for a bonus runner on a Mac (spike).** A new
   workflow, `runner-arm64-image.yml`, builds
-  `ghcr.io/jimwallace/chickadee-runner` for `linux/arm64` on each release tag.
+  `ghcr.io/jimwallace/chickadee-runner` for `linux/arm64` on each release tag,
+  from a new runner-only Dockerfile target (`--target runner`) that carries no
+  server and none of `Public/`. The server image is unchanged.
   It checks that the runner starts in its sandbox with job cgroups, as uid 999
   with no capability, and detects every language. It is separate from the
   production image and blocks no deploy. `deploy/chickadee-runner-update.sh`
