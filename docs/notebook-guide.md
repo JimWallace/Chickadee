@@ -13,6 +13,14 @@ suite item an **anchor**. An anchor is a name that a code cell defines, or a
 starter, in the solution and in the working copy of a student, even when the
 cells move.
 
+The anchors are read from notebooks that no student's personalization has
+touched: the solution, or the template starter before a solution exists. The
+`starterSources` of a student are then found by name in that student's
+personalized starter. So an anchor name, a defined function or variable name
+or a `## ` heading, must not contain a `{{placeholder}}`. A name that
+personalization changes is not found in the student's copy, and its task loses
+the "Still the starter code" comparison.
+
 The resolver uses the first rule that applies:
 
 | Rule | Anchor |
@@ -63,7 +71,7 @@ submission (`NotebookGuideCache`, 120 seconds).
 | `tasks[].status` | `fresh` before the first attempt. After it, `pass` or `fail` from the public checks. It is `null` during grading, when the task has no public check, or when a public check has no result. The editor changes it to `starter` when the cell is the same as the starter. |
 | `tasks[].checks` | Public checks only. Each check has its `name`, a `kind` (`check`, `family` or `script`) and a `result`. A failure also has a `detail` and a `hint`. |
 | `tasks[].hiddenCount` | The release and secret tests of the task. |
-| `starterSources` | The source of each anchor in the personalized starter of this student. The key is the anchor name, or `section:<heading>`. Trailing whitespace and CRLF are removed. |
+| `starterSources` | The source of each anchor in the personalized starter of this student. The key is the anchor name, or `section:<heading>`, which must also exist in that starter ("Anchors" below). Trailing whitespace and CRLF are removed. |
 | `reflections` | The cells with the tag `reflection`, which AI-assisted feedback reads. |
 
 These rules keep the guide safe:
@@ -78,8 +86,12 @@ These rules keep the guide safe:
 - `hint` is the hint of the check. The guide sends it only for a failure.
 - The guide reads the solution on the server to resolve rule 4. No part of the
   solution goes into the response.
-- With no solution notebook yet, the starter of the student gives the anchors.
-  The starter has the same headings and, usually, the same function stubs.
+- With no solution notebook yet, the assignment's starter gives the anchors.
+  The starter has the same headings and, usually, the same function stubs. It
+  is the template, not the student's personalized copy, so every student gets
+  the same cells. The staff outline and MCP `get_suite` read the same notebook
+  through the same code (`SuiteAnchorResolution`), so the three agree on a
+  test's cell. The student's own starter still gives `starterSources`.
 
 ## In the editor
 

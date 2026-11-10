@@ -2,7 +2,9 @@
 //
 // Which of a setup's files a student's notebook working copy holds. The
 // working-copy pass (`createSupportFileSymlinks`) links the support files, and
-// `writeDatasetFiles` writes each attached dataset as a file of its own. The
+// `writeDatasetFiles` places each dataset: a link for one every student
+// receives whole, a file of the student's own otherwise
+// (docs/dataset-shared-delivery.md). The
 // `files.missing` authoring check (#2747) asks the same question, so the rule
 // is stated once, here.
 
@@ -11,8 +13,9 @@ import Core
 enum StudentWorkspaceFiles {
     /// The zip entries the working copy links: every entry except a suite
     /// script, a reserved notebook, a grader-only file (withheld from every
-    /// student-facing path, docs/datasets.md option B) and a dataset (written
-    /// as a real per-student file, so a link must not shadow it).
+    /// student-facing path, docs/datasets.md option B) and a dataset (placed
+    /// by `writeDatasetFiles`, which owns its form, so this pass must not
+    /// shadow it).
     static func linkedSupportFiles(zipEntries: [String], manifest: TestProperties) -> [String] {
         let scripts = Set(manifest.testSuites.map(\.script))
         let graderOnly = manifest.graderOnlyFileSet
