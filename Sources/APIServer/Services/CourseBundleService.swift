@@ -320,7 +320,8 @@ enum CourseBundleService {
                 brightspaceSyncExcluded: a.brightspaceSyncExcluded,
                 deadlineOverrideActive: a.deadlineOverrideActive,
                 requirement: data.requirementByAssignmentID[aid],
-                concept: a.concept?.rawValue
+                concept: a.concept?.rawValue,
+                assignmentType: a.assignmentType.rawValue
             )
         }
 
@@ -402,7 +403,9 @@ enum CourseBundleService {
             return BundledSection(
                 bundleID: bid,
                 name: sec.name,
-                defaultGradingMode: sec.defaultGradingMode,
+                defaultAssignmentType: sec.defaultAssignmentType?.rawValue,
+                // For an older importer, which still requires the field.
+                defaultGradingMode: (sec.defaultAssignmentType?.defaultGradingMode ?? .worker).rawValue,
                 sortOrder: sec.sortOrder
             )
         }

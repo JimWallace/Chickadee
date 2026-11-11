@@ -51,8 +51,8 @@ struct ContentItemDTO: Encodable, Sendable {
     let sortOrder: Int
     /// The public ID of the assignment the item is attached to: it shows on
     /// that assignment's row, once the assignment opens, rather than as a row
-    /// of its own. Reported by list_content_items only (the create and update
-    /// outputs leave it out); absent for a standalone item.
+    /// of its own. Reported by list_content_items and attach_content_item (the
+    /// create and update outputs leave it out); absent for a standalone item.
     var attachedAssignmentPublicID: String?
 }
 
@@ -279,7 +279,7 @@ struct ListContentItemsTool: ContentTool {
         + "description, updated label, published flag, and sort order. An item attached to an "
         + "assignment carries attachedAssignmentPublicID: it shows as extra buttons on that "
         + "assignment's row once the assignment opens, is not a row of its own, and is left out of "
-        + "reorder_section_items. Attaching is done on the instructor dashboard. These are ungraded "
+        + "reorder_section_items. attach_content_item attaches and detaches. These are ungraded "
         + "materials — not assignments (use list_assignments) and not test-suite sections (use "
         + "get_suite)."
     static let inputSchema: JSONValue = .object([
@@ -484,7 +484,8 @@ struct UpdateContentItemTool: ContentTool {
         + "changed; omitted fields are left unchanged. title/kind replace; links (when given, even "
         + "empty) replaces the whole link list; description/updatedLabel accept \"\" to clear; "
         + "isPublished toggles student visibility; courseSectionID moves it (\"\"/\"none\" ungroups; refused for an "
-        + "item attached to an assignment, which follows that assignment's section); "
+        + "item attached to an assignment, which follows that assignment's section: detach it first with "
+        + "attach_content_item); "
         + "attachments fetches more files by URL and appends them (to remove a hosted file, use the "
         + "web editor). Ungraded material — no test setup, no re-validation, no re-grade."
     static let inputSchema: JSONValue = .object([
@@ -685,5 +686,108 @@ struct ReorderContentItemsTool: ContentTool {
         return Output(
             courseCode: course.code, courseKey: course.urlKey, courseTerm: course.term?.displayName,
             contentItems: ordered)
+    }
+}
+
+// MARK: - attach_content_item
+
+// The MCP door to the material edit form's "Show on" select. It shares
+// `CourseContentService.attachTarget` and `CourseContentService.attach` with
+// the web handler. An attached item reaches students only when its assignment
+// does (`ContentItemVisibility`), so the output reports whether a student with
+// no extension sees the item before and after: an attach can hide material.
+struct AttachContentItemTool: ContentTool {
+    struct Input: Decodable, Sendable {
+        let contentItemID: String
+        /// The assignment's public ID; "" detaches.
+        let assignmentPublicID: String
+    }
+
+    struct Output: Encodable, Sendable {
+        let contentItem: ContentItemDTO
+        /// Whether a student without an extension saw the item before the call.
+        let wasVisibleToStudents: Bool
+        /// Whether a student without an extension sees the item now.
+        let isVisibleToStudents: Bool
+    }
+
+    static let name = "attach_content_item"
+    static let description =
+        "Attach an ungraded content item (from list_content_items) to an assignment in the same "
+        + "course, by the assignment's public ID, or detach it with assignmentPublicID \"\". An attached item shows as extra buttons on that assignment's row instead of as "
+        + "a row of its own, takes the assignment's section, and is left out of "
+        + "reorder_section_items; a detached item returns as a row at the end of the assignment's "
+        + "current section. A heading cannot attach. Students see an attached item only when they "
+        + "can complete its assignment (an extension included) or after the assignment closes at its "
+        + "deadline, so an attach can hide material that was visible: the output reports "
+        + "wasVisibleToStudents and isVisibleToStudents for a student with no extension. Attaching "
+        + "an item to the assignment it is already on changes nothing. Ungraded material only: no "
+        + "re-validation, no re-grade, no close."
+    static let inputSchema: JSONValue = .object([
+        "type": .string("object"),
+        "properties": .object([
+            "contentItemID": .object([
+                "type": .string("string"),
+                "description": .string("Content-item id (from list_content_items)."),
+            ]),
+            "assignmentPublicID": .object([
+                "type": .string("string"),
+                "description": .string(
+                    "The 6-character public ID of an assignment in the item's course, or \"\" to "
+                        + "detach the item and give it a row of its own."),
+            ]),
+        ]),
+        "required": .array([.string("contentItemID"), .string("assignmentPublicID")]),
+        "additionalProperties": .bool(false),
+    ])
+    static let outputSchema: JSONValue? = .object([
+        "type": .string("object"),
+        "properties": .object([
+            "contentItem": .object([
+                "type": .string("object"),
+                "description": .string(
+                    "The item after the change, in the list_content_items shape, with "
+                        + "attachedAssignmentPublicID absent when detached."),
+            ]),
+            "wasVisibleToStudents": MCPSchema.boolean,
+            "isVisibleToStudents": MCPSchema.boolean,
+        ]),
+        "required": .array([
+            .string("contentItem"), .string("wasVisibleToStudents"), .string("isVisibleToStudents"),
+        ]),
+    ])
+    static let annotations: MCPToolAnnotations? = MCPToolAnnotations(
+        readOnlyHint: false, destructiveHint: false, idempotentHint: true)
+    static let requiredScopes: Set<ContentScope> = [.write]
+
+    func execute(_ input: Input, _ context: ToolContext) async throws -> Output {
+        let item = try await resolveContentItemForWrite(
+            contentItemID: input.contentItemID, context: context,
+            atLeast: CourseRoleFloor.manageContentItems)
+        let before = try await Self.attachedAssignment(of: item, on: context.db)
+        let wasVisible = ContentItemVisibility.isVisibleToStudents(item, attachedTo: before)
+
+        do {
+            let targetID = try await CourseContentService.attachTarget(
+                publicID: input.assignmentPublicID, for: item, on: context.db)
+            try await CourseContentService.attach(item, toAssignment: targetID, on: context.db)
+        } catch let error as CourseContentError {
+            throw mcpToolError(error)
+        }
+
+        let after = try await Self.attachedAssignment(of: item, on: context.db)
+        var dto = contentItemDTO(from: item)
+        dto.attachedAssignmentPublicID = after?.publicID
+        return Output(
+            contentItem: dto, wasVisibleToStudents: wasVisible,
+            isVisibleToStudents: ContentItemVisibility.isVisibleToStudents(item, attachedTo: after))
+    }
+
+    /// The assignment the item is attached to now, if any.
+    private static func attachedAssignment(
+        of item: APICourseContentItem, on db: any Database
+    ) async throws -> APIAssignment? {
+        guard let assignmentID = item.assignmentID else { return nil }
+        return try await APIAssignment.find(assignmentID, on: db)
     }
 }

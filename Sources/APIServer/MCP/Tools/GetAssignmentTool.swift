@@ -80,6 +80,10 @@ struct GetAssignmentTool: ContentTool {
         /// full marks earn, or nil when untagged. Set via
         /// set_assignment_concept.
         let concept: String?
+        /// The declared `AssignmentType` raw value (docs/assignment-types.md).
+        /// Set via the assignment-update tool (a read tool's prose never names
+        /// a write tool: read-only `tools/list` must not mention one).
+        let assignmentType: String
         /// The class-activity block, or nil for an ordinary assignment. Set via
         /// the activity tool (same naming caveat as `secretRevealEnabled`).
         let activity: ActivityOutput?
@@ -143,10 +147,13 @@ struct GetAssignmentTool: ContentTool {
         var composite: CompositeSpec?
         /// True when the activity runs once per lab group (docs/lab-groups.md).
         var runsPerGroup: Bool = false
+        /// The bug-hunt block `set_activity` accepts; nil for any kind but
+        /// `bugHunt`.
+        var bugHunt: BugHuntSpec?
 
         private enum CodingKeys: String, CodingKey {
             case kind, kindDisplayName, leaderboardVisibility, leaderboardPath, aggregation
-            case opponentSource, opponentFile, opensAt, closesAt, composite, runsPerGroup
+            case opponentSource, opponentFile, opensAt, closesAt, composite, runsPerGroup, bugHunt
         }
 
         /// The three nullable keys are always present, explicitly null when
@@ -166,6 +173,7 @@ struct GetAssignmentTool: ContentTool {
             try c.encode(closesAt, forKey: .closesAt)
             try c.encode(composite, forKey: .composite)
             try c.encode(runsPerGroup, forKey: .runsPerGroup)
+            try c.encode(bugHunt, forKey: .bugHunt)
         }
     }
 
@@ -184,7 +192,10 @@ struct GetAssignmentTool: ContentTool {
         + "advisory best-grade percentage that marks a student as passing on the instructor "
         + "submissions page, null when off; set via the assignment-update tool), concept (the lab "
         + "concept whose wardrobe ring full marks earn, null when untagged; set via "
-        + "set_assignment_concept), minimumRunnerVersion "
+        + "set_assignment_concept), assignmentType (\(MCPEnumProse<AssignmentType>.slashAlternatives): "
+        + "the declared kind of graded work, an assignment for marks, a lab graded in the browser for "
+        + "participation, or an ungraded live class activity; set via the assignment-update tool), "
+        + "minimumRunnerVersion "
         + "(the optional minimum native-runner version required to grade it, null when ungated), "
         + "submissionMode (\"notebook\" = embedded editor plus upload form, \"uploadOnly\" = upload "
         + "only), and language (\(MCPLanguageProse.quotedTokenAlternatives), null for a plain "
@@ -229,6 +240,10 @@ struct GetAssignmentTool: ContentTool {
             ]),
             "passingThresholdPercent": MCPSchema.nullableInteger,
             "concept": MCPSchema.nullableString,
+            "assignmentType": .object([
+                "type": .string("string"),
+                "enum": MCPEnumProse<AssignmentType>.jsonEnum,
+            ]),
             "submissionMode": MCPSchema.string,
             "language": MCPSchema.string,
             "activity": .object([
@@ -264,6 +279,11 @@ struct GetAssignmentTool: ContentTool {
                             "The composite block, in set_activity's shape; null for any other kind."),
                     ]),
                     "runsPerGroup": MCPSchema.boolean,
+                    "bugHunt": .object([
+                        "type": .array([.string("object"), .string("null")]),
+                        "description": .string(
+                            "The bug-hunt block, in set_activity's shape; null for any other kind."),
+                    ]),
                 ]),
                 "required": .array([
                     .string("kind"), .string("kindDisplayName"), .string("leaderboardVisibility"),
@@ -289,7 +309,8 @@ struct GetAssignmentTool: ContentTool {
             .string("courseKey"),
             .string("isOpen"), .string("visibility"), .string("deadlineOverrideActive"),
             .string("gradingMode"), .string("secretRevealEnabled"),
-            .string("solutionVisibility"), .string("submissionMode"), .string("githubSubmission"),
+            .string("solutionVisibility"), .string("assignmentType"), .string("submissionMode"),
+            .string("githubSubmission"),
         ]),
     ])
     static let requiredScopes: Set<ContentScope> = [.read]
@@ -341,6 +362,7 @@ struct GetAssignmentTool: ContentTool {
             solutionVisibility: assignment.solutionVisibility.rawValue,
             passingThresholdPercent: assignment.passingThresholdPercent,
             concept: assignment.concept?.rawValue,
+            assignmentType: assignment.assignmentType.rawValue,
             activity: manifest?.activity.map { activity in
                 ActivityOutput(
                     kind: activity.kind.rawValue,
@@ -353,7 +375,8 @@ struct GetAssignmentTool: ContentTool {
                     opensAt: activity.window?.opensAtISO,
                     closesAt: activity.window?.closesAtISO,
                     composite: activity.composite,
-                    runsPerGroup: activity.isPerGroup)
+                    runsPerGroup: activity.isPerGroup,
+                    bugHunt: activity.bugHunt)
             },
             datasets: (manifest?.datasets ?? []).compactMap(AttachedDatasetDTO.init),
             githubSubmission: GitHubSubmissionOutput(manifest: manifest)

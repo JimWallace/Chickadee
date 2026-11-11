@@ -55,6 +55,11 @@ struct GetSupportFilesTool: ContentTool {
         var datasetScope: String?
         /// The number of parts of a partition dataset; nil otherwise.
         var datasetPartCount: Int?
+        /// "shared", "perPart" or "perStudent" for a dataset: whether every
+        /// student's editor reads one linked copy, a linked copy of their
+        /// partition part, or a copy of their own
+        /// (docs/dataset-shared-delivery.md). Nil otherwise.
+        var datasetDelivery: String?
     }
 
     struct Output: Encodable, Sendable {
@@ -80,7 +85,9 @@ struct GetSupportFilesTool: ContentTool {
         + "UTF-8 content, capped at maxBytes (default \(MCPContentByteCap.defaultBytes)) with truncated:true when the file is "
         + "larger — so a big dataset returns a useful head. Listed entries report per-student "
         + "dataset marks (isDataset / datasetSampleSize / datasetKind / datasetStratumColumn / "
-        + "datasetPartCount — set "
+        + "datasetPartCount, plus datasetDelivery: \"shared\" when every student reads one linked copy, "
+        + "\"perPart\" when a partition stores each part once and links each student to theirs, "
+        + "\"perStudent\" when each holds their own — set "
         + "them with set_dataset), and for a file attached from the course dataset library its "
         + "datasetSource ({slug, version}) and datasetScope. Write "
         + "support files with "
@@ -157,7 +164,8 @@ struct GetSupportFilesTool: ContentTool {
                         datasetStratumColumn: datasetSpecs[name]?.stratumColumn,
                         datasetSource: datasetSpecs[name]?.source,
                         datasetScope: datasetSpecs[name]?.scope.rawValue,
-                        datasetPartCount: datasetSpecs[name]?.partCount))
+                        datasetPartCount: datasetSpecs[name]?.partCount,
+                        datasetDelivery: datasetSpecs[name]?.deliveryMode.rawValue))
             }
             return Output(
                 assignmentPublicID: assignment.publicID,

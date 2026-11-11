@@ -15,8 +15,8 @@ assignment.
 
 Every part of issue #1508 is shipped. These activity kinds exist:
 `beatTheInstructor`, `bestMetric`, `kingOfTheHill`, `roundRobin`,
-`elimination`, `testsVersusImplementations` and `classComposite`. The
-`bugHunt` kind is in the same family. Browser-graded bot challenges, the
+`elimination`, `testsVersusImplementations`, `classComposite` and `bugHunt`
+(`docs/bug-hunt-code-map.md`). Browser-graded bot challenges, the
 live-session window, the class corpus run and the projector arena are shipped
 too.
 
@@ -45,9 +45,14 @@ describes it now.
 ## Design decisions
 
 1. **An activity is an assignment, not a new content type.** Content items are
-   ungraded. An activity needs grading, achievements, freeze and the LEARN push,
-   and all of that hangs off an assignment. The manifest gains an optional
-   `activity` block; `nil` means ordinary assignment behaviour at every branch.
+   ungraded. An activity needs grading, achievements and freeze, and all of
+   that hangs off an assignment. The manifest gains an optional `activity`
+   block; `nil` means ordinary assignment behaviour at every branch. The
+   assignment's declared type decides the rest (docs/assignment-types.md): a
+   Class activity must carry the block, and its points stay in Chickadee for
+   the leaderboard and achievements, with no LEARN or LTI push and no slip
+   days. A Lab may carry an activity too (HLTH 230 Lab 4b) and keeps a Lab's
+   push and slip days.
 2. **Two orthogonal axes, hidden behind named kinds.** Internally an activity is
    an *opponent source* (what else is in the workspace when the script runs, and
    how many times it runs) plus a *class aggregation* (how the class's results
@@ -86,7 +91,7 @@ describes it now.
 | `kingOfTheHill` | `champion` (whoever holds the hill; the bundled bot until a student does) | `leaderboard` | `record` on `highestMetric`, `record` on `champion` |
 | `roundRobin` | `classmates` (every classmate's latest submission; the bundled bot until one exists) | `standings` | `record` on `tournamentWinner`; `standing` / `matchesWon` badges are authored |
 | `elimination` | `paired` (the one entrant a schedule pairs the job with; the bot for a student's own submission) | `bracket` | `record` on `tournamentWinner` |
-| `bugHunt` | `variants` (instructor's seeded variants) | `union` | see `docs/collaborative-class-assignments.md` |
+| `bugHunt` | `none` (each seeded variant is an ordinary suite entry) | `coverage` — the share of the listed items the class's tests cover, with an optional code map | nothing; the projector's board is the reward surface (see `docs/bug-hunt-code-map.md`) |
 | `testsVersusImplementations` | `classmates` (the same matrix a round robin plays) | `union` — every match read twice, as a kill and as a fault | nothing; the page is the reward surface |
 | `classComposite` | `none` | `composite` — one image from each dealt slot's contribution | nothing; the composed image is the reward surface (see `docs/class-composite.md`) |
 

@@ -216,13 +216,23 @@ public struct BundledSection: Codable, Sendable {
     /// Stable cross-reference within this bundle (e.g. "section_1").
     public let bundleID: String
     public let name: String
-    /// "browser" | "worker"
-    public let defaultGradingMode: String
+    /// The section's default `AssignmentType` raw value; nil = no default, or
+    /// a bundle written before sections carried a type.
+    public let defaultAssignmentType: String?
+    /// "browser" | "worker": the grading-mode default sections carried before
+    /// the type replaced it (docs/assignment-types.md, phase 3). Still
+    /// written, derived from the type, so an older Chickadee can import a
+    /// newer bundle, and read only when `defaultAssignmentType` is absent.
+    public let defaultGradingMode: String?
     public let sortOrder: Int
 
-    public init(bundleID: String, name: String, defaultGradingMode: String, sortOrder: Int) {
+    public init(
+        bundleID: String, name: String, defaultAssignmentType: String?, defaultGradingMode: String?,
+        sortOrder: Int
+    ) {
         self.bundleID = bundleID
         self.name = name
+        self.defaultAssignmentType = defaultAssignmentType
         self.defaultGradingMode = defaultGradingMode
         self.sortOrder = sortOrder
     }
@@ -340,6 +350,11 @@ public struct BundledAssignment: Codable, Sendable {
     /// concept this instance does not know imports as no concept, rather than
     /// failing the whole bundle.
     public let concept: String?
+    /// The declared `AssignmentType` raw value (docs/assignment-types.md). Nil
+    /// in a bundle written before it was carried; the import then derives it
+    /// from the imported manifest, as the backfill did. Kept as a string for
+    /// the same reason as `concept`.
+    public let assignmentType: String?
 
     public init(
         bundleID: String, title: String, dueAt: Date?, startsAt: Date? = nil, isOpen: Bool? = nil,
@@ -352,7 +367,8 @@ public struct BundledAssignment: Codable, Sendable {
         brightspaceSyncExcluded: Bool? = nil,
         deadlineOverrideActive: Bool? = nil,
         requirement: AssignmentRequirementSpec? = nil,
-        concept: String? = nil
+        concept: String? = nil,
+        assignmentType: String? = nil
     ) {
         self.bundleID = bundleID
         self.title = title
@@ -370,6 +386,7 @@ public struct BundledAssignment: Codable, Sendable {
         self.deadlineOverrideActive = deadlineOverrideActive
         self.requirement = requirement
         self.concept = concept
+        self.assignmentType = assignmentType
     }
 }
 

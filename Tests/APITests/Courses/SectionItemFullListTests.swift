@@ -41,7 +41,7 @@ import VaporTesting
         let code = "FULLLIST"
         let course = try await makeTestCourse(on: app, code: code, mode: .closed)
         let courseID = try course.requireID()
-        let section = APICourseSection(name: "A", defaultGradingMode: "worker", sortOrder: 1, courseID: courseID)
+        let section = APICourseSection(name: "A", defaultAssignmentType: nil, sortOrder: 1, courseID: courseID)
         try await section.save(on: app.db)
         let labOne = try await lab("fl_one", courseID: courseID, sectionID: try section.requireID(), order: 1)
         let labTwo = try await lab("fl_two", courseID: courseID, sectionID: try section.requireID(), order: 2)

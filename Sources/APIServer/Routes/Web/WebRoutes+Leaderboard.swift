@@ -115,6 +115,9 @@ extension WebRoutes {
                 hasUnion: union != nil,
                 union: union,
                 showsComposite: showsComposite,
+                showsBugHunt: activity.kind.aggregation == .coverage,
+                bugHunt: try await BugHuntPresentation.build(
+                    setup: setup, activity: activity, app: req.application, on: req.db),
                 // The composite is for the projector: only staff read its board.
                 compositeBoard: isStaff
                     ? try await CompositeBoardPresentation.build(
@@ -458,7 +461,7 @@ extension WebRoutes {
             let standings = try await buildStandingsBoard(
                 setup: setup, reader: reader, showAll: showAll, scope: scope, on: req.db)
             return (.empty, standings, scope)
-        case .bracket, .union, .composite:
+        case .bracket, .union, .composite, .coverage:
             return (.empty, .empty, scope)
         }
     }

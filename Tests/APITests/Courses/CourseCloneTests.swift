@@ -57,9 +57,9 @@ import VaporTesting
         try await course.save(on: app.db)
         let courseID = try course.requireID()
 
-        let labs = APICourseSection(name: "Labs", defaultGradingMode: "browser", sortOrder: 1, courseID: courseID)
+        let labs = APICourseSection(name: "Labs", defaultAssignmentType: .lab, sortOrder: 1, courseID: courseID)
         try await labs.save(on: app.db)
-        let exams = APICourseSection(name: "Exams", defaultGradingMode: "worker", sortOrder: 2, courseID: courseID)
+        let exams = APICourseSection(name: "Exams", defaultAssignmentType: nil, sortOrder: 2, courseID: courseID)
         try await exams.save(on: app.db)
 
         try await makeTestSetup(on: app, id: "setup_clsrc1", courseID: courseID)

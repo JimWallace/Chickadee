@@ -756,9 +756,11 @@ func createSupportFileSymlinks(setup: APITestSetup, studentDir: String, applicat
     }
 }
 
-/// Materializes per-student dataset slices into the student's JupyterLite working
-/// directory. Dataset files are written as real files (not symlinks) so each student
-/// sees only their own rows. Idempotent — safe to call on every visit; a spec
+/// Puts each dataset file into the student's JupyterLite working directory, in
+/// the form its `DatasetDeliveryMode` names (docs/dataset-shared-delivery.md):
+/// a `shared` file, which every student receives unchanged, is a link to the
+/// setup's shared extraction; a `perStudent` file is a real file holding the
+/// student's own rows. Idempotent — safe to call on every visit; a spec
 /// change, a re-uploaded source, or a staff re-seed is picked up automatically
 /// because each changes the materialization fingerprint (#1382 item 3 — this
 /// used to re-slice and overwrite on every visit; now an unchanged
@@ -803,6 +805,10 @@ func writeDatasetFiles(
     }
 
     let sharedDir = application.testSetupsDirectory + "shared/\(setupID)/"
+    let targets = DatasetLinkTargets(
+        sharedDir: sharedDir, partsRoot: DatasetPartStore.root(testSetupsDirectory: application.testSetupsDirectory),
+        setupID: setupID, dealNumber: dealNumber,
+        holdsNoPartYet: DatasetDeals.holdsNoPartYet(manifest: props, dealNumber: dealNumber))
 
     // Skip the slice + write when nothing that determines the bytes has
     // changed since the last materialization and every target file is still
@@ -813,7 +819,7 @@ func writeDatasetFiles(
                 props: props, seeds: [seedHex, courseSeedHex ?? "-", dealNumber.map(String.init) ?? "-"],
                 sharedDir: sharedDir),
             targetsPresent: props.datasets.allSatisfy {
-                FileManager.default.fileExists(atPath: studentDir + "/" + $0.file)
+                datasetTargetIsCurrent(spec: $0, studentDir: studentDir, targets: targets)
             }
         )
     }
@@ -829,29 +835,52 @@ func writeDatasetFiles(
     // pool (#1156). A failed write is not a success (#2776): caching the
     // fingerprint after one left the student with a stale dataset until a
     // restart, so a failure skips the record and the next visit retries.
+    // A linked file (a shared one, or a stored part) is never read here: only
+    // the per-student specs go through the resolver.
+    let perStudent = {
+        var manifest = props
+        manifest.datasets = props.datasets.filter { $0.deliveryMode == .perStudent }
+        return manifest
+    }()
+    let linkedSpecs = props.datasets.filter { $0.deliveryMode != .perStudent }
+
     let wrote: Bool
     do {
         wrote = try await runBlocking {
-            guard
-                let files = DatasetDeals.withholdingUndealtParts(
-                    DatasetResolver.resolve(
-                        manifest: props, seedHex: seedHex, courseSeedHex: courseSeedHex, dealNumber: dealNumber,
-                        sourceDirectory: sharedDir),
-                    manifest: props, dealNumber: dealNumber)
-            else { return false }
-
             // Every file is attempted, as before; the first failure is
             // thrown after the loop.
             var firstFailure: (any Error)?
-            for (filename, content) in files {
-                // Defense-in-depth (#1104): resolver keys are validated bare
-                // filenames, but never join an unvetted name onto the student dir.
-                guard FilenameSafety.bareFilename(filename) != nil else { continue }
-                let dest = studentDir + "/" + filename
+            // The parts a sweep keeps: every partition's current fingerprint.
+            let keeping = linkedSpecs.isEmpty ? [] : targets.currentFingerprints(of: props.datasets)
+            for spec in linkedSpecs {
+                // Defense-in-depth (#1104): never join an unvetted name onto
+                // the student dir. A source the extraction does not hold yet
+                // is skipped, as the resolver skips it, and not linked.
+                guard FilenameSafety.bareFilename(spec.file) != nil else { continue }
                 do {
-                    try content.write(toFile: dest, atomically: true, encoding: .utf8)
+                    try targets.placeLink(for: spec, in: studentDir, keeping: keeping)
                 } catch {
                     firstFailure = firstFailure ?? error
+                }
+            }
+
+            if !perStudent.datasets.isEmpty {
+                guard
+                    let files = DatasetDeals.withholdingUndealtParts(
+                        DatasetResolver.resolve(
+                            manifest: perStudent, seedHex: seedHex, courseSeedHex: courseSeedHex,
+                            dealNumber: dealNumber, sourceDirectory: sharedDir),
+                        manifest: perStudent, dealNumber: dealNumber)
+                else { return false }
+                for (filename, content) in files {
+                    // Defense-in-depth (#1104): resolver keys are validated bare
+                    // filenames, but never join an unvetted name onto the student dir.
+                    guard FilenameSafety.bareFilename(filename) != nil else { continue }
+                    do {
+                        try DatasetWorkingCopyPlacement.write(content, to: studentDir + "/" + filename)
+                    } catch {
+                        firstFailure = firstFailure ?? error
+                    }
                 }
             }
             if let firstFailure { throw firstFailure }
@@ -867,6 +896,27 @@ func writeDatasetFiles(
 
     if wrote, let state {
         await cache.record(userID: userID, setupID: setupID, fingerprint: state.fingerprint)
+    }
+}
+
+/// True when the student's copy of `spec.file` is where `DatasetLinkTargets`
+/// says it belongs: a live link to the right target for a shared dataset or a
+/// stored part, a real file for a per-student one. A working copy written
+/// before a mode change holds the old form, and this is what moves it on the
+/// next visit even when the fingerprint is current. A linked dataset whose
+/// source the extraction does not hold yet is `.unavailable`, so it reads as
+/// not current and the pass runs again on each visit; that pass reads no file,
+/// and stops once the source appears.
+private func datasetTargetIsCurrent(spec: DatasetSpec, studentDir: String, targets: DatasetLinkTargets) -> Bool {
+    let path = studentDir + "/" + spec.file
+    let linkTarget = DatasetWorkingCopyPlacement.linkTarget(of: path)
+    switch targets.target(for: spec) {
+    case .realFile:
+        return linkTarget == nil && FileManager.default.fileExists(atPath: path)
+    case .link(let target, _):
+        return linkTarget == target && FileManager.default.fileExists(atPath: path)
+    case .unavailable:
+        return false
     }
 }
 

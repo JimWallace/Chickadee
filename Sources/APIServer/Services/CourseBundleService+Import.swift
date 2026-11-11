@@ -136,7 +136,7 @@ extension CourseBundleService {
     // ── 4b. Validate the enum-valued fields ───────────────────────────
 
     /// A bundle from a newer server can name a content item kind or a
-    /// section grading mode this server does not know. The import refuses
+    /// legacy section grading mode this server does not know. The import refuses
     /// it here and names the item, instead of importing the item as a link
     /// in silence (#2172).
     private static func validateBundleKinds(manifest: CourseBundleManifest) throws {
@@ -144,7 +144,7 @@ extension CourseBundleService {
             _ = try bundledContentItemKind(item)
         }
         for section in manifest.sections ?? [] {
-            _ = try bundledSectionGradingMode(section)
+            _ = try bundledSectionDefaultType(section)
         }
     }
 
@@ -581,7 +581,7 @@ private func importBundledSections(
     for bundledSection in manifest.sections ?? [] {
         let newSection = APICourseSection(
             name: bundledSection.name,
-            defaultGradingMode: try bundledSectionGradingMode(bundledSection).rawValue,
+            defaultAssignmentType: try bundledSectionDefaultType(bundledSection),
             sortOrder: bundledSection.sortOrder,
             courseID: courseID
         )
@@ -692,6 +692,16 @@ private func importBundledAssignments(
         // The lab concept for the wardrobe's concept rings. One this instance
         // does not know imports as no concept.
         newAssign.concept = bundledAssign.concept.flatMap(AssignmentConcept.init(rawValue:))
+        // The declared type. A bundle written before it was carried, or one
+        // naming a type this instance does not know, derives it from the
+        // imported manifest, as the backfill did (docs/assignment-types.md).
+        // A bundled Assignment that the imported manifest grades in the
+        // browser also derives it, so an import never creates an Assignment
+        // whose secret tests reach the browser (`admissibleAssignmentType`).
+        let importedSetup = try await APITestSetup.find(setupID, on: db)
+        newAssign.assignmentType = admissibleAssignmentType(
+            bundledAssign.assignmentType.flatMap(AssignmentType.init(rawValue:)),
+            manifest: importedSetup?.decodedManifest())
         // The deadline override travels with the open state it protects
         // (#2166): without it the next sweep closes an imported assignment
         // whose due date has passed.
@@ -838,14 +848,23 @@ private func bundledContentItemKind(_ item: BundledContentItem) throws -> Conten
     return kind
 }
 
-/// The grading mode a bundled section names, or a `badRequest` that names
-/// the section and the mode (#2172).
-private func bundledSectionGradingMode(_ section: BundledSection) throws -> GradingMode {
-    guard let mode = GradingMode(rawValue: section.defaultGradingMode) else {
-        throw AppError.badRequest(
-            reason: "Bundle section \"\(section.name)\" has an unknown grading mode: \(section.defaultGradingMode)")
+/// The default type a bundled section names. A type this instance does not
+/// know imports as no default, as an assignment's type does. A bundle written
+/// before sections carried a type names a grading mode instead: "browser"
+/// becomes a Lab default, the browser grading a new item there got, and
+/// "worker" no default (docs/assignment-types.md, phase 3). An unknown
+/// grading mode is still a `badRequest` that names the section and the mode
+/// (#2172).
+private func bundledSectionDefaultType(_ section: BundledSection) throws -> AssignmentType? {
+    if let raw = section.defaultAssignmentType {
+        return AssignmentType(rawValue: raw)
     }
-    return mode
+    guard let legacy = section.defaultGradingMode else { return nil }
+    guard let mode = GradingMode(rawValue: legacy) else {
+        throw AppError.badRequest(
+            reason: "Bundle section \"\(section.name)\" has an unknown grading mode: \(legacy)")
+    }
+    return mode == .browser ? .lab : nil
 }
 
 /// Resolves a test setup or submission path from a bundle manifest to a file

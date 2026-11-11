@@ -51,7 +51,10 @@ struct AssignmentEditBody: HTML {
                 EditActivityBlock(assignmentID: edit.assignmentID, activity: edit.activity, csrfToken: csrfToken)
             }
         }
-        div(.data("wb-block", value: "options")) { EditStudentOptionsBlock(edit: edit, csrfToken: csrfToken) }
+        div(.data("wb-block", value: "options")) {
+            EditAssignmentTypeBlock(edit: edit, csrfToken: csrfToken)
+            EditStudentOptionsBlock(edit: edit, csrfToken: csrfToken)
+        }
         div(.data("wb-block", value: "inputs")) {
             EditGlobalInputsBlock(assignmentID: edit.assignmentID, rows: edit.globalVariableRows)
         }
@@ -255,28 +258,29 @@ private struct EditHeaderFields: HTML {
     }
 }
 
-/// The Files table: the two notebooks and the support files.
+/// The Files table: the two notebooks and the support files, then the
+/// datasets attached from the course library in a table of their own.
 private struct EditFilesBlock: HTML {
     let edit: EditAssignmentContext
     let csrfToken: String
 
     var body: some HTML {
+        filesBlock
+        if !edit.datasetLibraryOptions.isEmpty || !datasetRows.isEmpty {
+            EditDatasetsBlock(options: edit.datasetLibraryOptions, rows: datasetRows)
+        }
+    }
+
+    /// The files the assignment owns.
+    private var supportRows: [EditableSuiteRow] { edit.supportFileRows.filter { $0.library?.attachment == nil } }
+    /// The files linked from the course dataset library.
+    private var datasetRows: [EditableSuiteRow] { edit.supportFileRows.filter { $0.library?.attachment != nil } }
+
+    private var filesBlock: some HTML {
         div(.class("editor-block")) {
             div(.class("editor-block-head")) {
                 h2 { "Files" }
                 div(.class("toolbar toolbar--end")) {
-                    if !edit.datasetLibraryOptions.isEmpty {
-                        select(
-                            .class("form-input select-xs js-library-attach-select"),
-                            .ariaLabel("Dataset to attach from the course library")
-                        ) {
-                            for dataset in edit.datasetLibraryOptions {
-                                option(.value(dataset.slug)) { dataset.label }
-                            }
-                        }
-                        button(.class("btn action-btn js-library-attach"), .type(.button)) { "Attach" }
-                        " "
-                    }
                     button(
                         .class("btn action-btn"), .type(.button), .id("add-support-file-btn"),
                         .title("Upload a data file (CSV, JSON, etc.) bundled with the assignment")
@@ -314,7 +318,7 @@ private struct EditFilesBlock: HTML {
                         }
                     }
                     solutionRow
-                    for file in edit.supportFileRows {
+                    for file in supportRows {
                         SupportFileRow(file: file)
                     }
                 }
@@ -349,6 +353,53 @@ private struct EditFilesBlock: HTML {
                             .class("btn action-btn"), .type(.submit),
                             .title("Copy the assignment notebook as a starting point for the solution")
                         ) { "Create solution" }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// The Datasets table: the files attached from the course dataset library,
+/// with the attach control. A dataset is the library's file, linked into the
+/// working copy, so its row offers the library's actions, not a plain delete.
+private struct EditDatasetsBlock: HTML {
+    let options: [DatasetLibraryOption]
+    let rows: [EditableSuiteRow]
+
+    var body: some HTML {
+        div(.class("editor-block"), .id("assignment-datasets")) {
+            div(.class("editor-block-head")) {
+                h2 { "Datasets" }
+                if !options.isEmpty {
+                    div(.class("toolbar toolbar--end")) {
+                        select(
+                            .class("form-input select-xs js-library-attach-select"),
+                            .ariaLabel("Dataset to attach from the course library")
+                        ) {
+                            for dataset in options {
+                                option(.value(dataset.slug)) { dataset.label }
+                            }
+                        }
+                        button(.class("btn action-btn js-library-attach"), .type(.button)) { "Attach" }
+                    }
+                }
+            }
+            if rows.isEmpty {
+                p(.class("empty")) { "No datasets attached." }
+            } else {
+                table(.class("results-table"), .id("assignment-datasets-table")) {
+                    thead {
+                        tr {
+                            th { "Dataset" }
+                            th { "File" }
+                            th(.class("time")) { "Action" }
+                        }
+                    }
+                    tbody {
+                        for file in rows {
+                            SupportFileRow(file: file)
+                        }
                     }
                 }
             }

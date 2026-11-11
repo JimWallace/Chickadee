@@ -107,6 +107,16 @@ stays secret. Work where the grade must be correct already has a choice: an
 assignment declares `gradingMode` as `browser` or `worker`, and a
 worker-graded assignment is graded on a native runner only.
 
+**The browser guard for Assignments (2026-11-10).** The declared type now
+enforces that choice (docs/assignment-types.md, decision 1). An assignment of
+type Assignment refuses browser grading at every door: the grading-mode edit,
+a submission-mode or language edit that would make browser grading effective,
+a version restore and a change of type. A course section no longer carries a
+grading mode, so moving an Assignment into a section of browser-graded labs
+leaves it on the worker; before, the move adopted the section's browser
+default and shipped the Assignment's release and secret tests to every
+student. A browser-graded piece of work is a Lab.
+
 **Two facts from the code** (2026-11-05):
 
 - The server checks that the student is enrolled, that the assignment is open,

@@ -124,6 +124,24 @@ public enum DatasetMaterializer {
         return hadTrailingNewline ? result + "\n" : result
     }
 
+    /// Every part of `csv` split `partCount` ways, in one pass: element `k` is
+    /// exactly `partitionRows(csv:partCount:part: k)`. The editor's part store
+    /// writes each part once from this (docs/dataset-shared-delivery.md), so
+    /// a file in many parts is read once rather than once per part.
+    public static func allParts(csv: String, partCount: Int) -> [String] {
+        guard partCount > 0 else { return [] }
+        let (lines, hadTrailingNewline) = normalizedLines(of: csv)
+        guard lines.count > 1, partCount > 1 else { return Array(repeating: csv, count: partCount) }
+        var buckets: [[Substring]] = Array(repeating: [lines[0]], count: partCount)
+        for index in 1..<lines.count {
+            buckets[(index - 1) % partCount].append(lines[index])
+        }
+        return buckets.map { rows in
+            let result = rows.joined(separator: "\n")
+            return hadTrailingNewline ? result + "\n" : result
+        }
+    }
+
     /// Deterministically sample `sampleSize` data rows apportioned across the
     /// distinct values of `column`, so every category in the pool survives into
     /// the student's slice.

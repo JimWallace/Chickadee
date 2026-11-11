@@ -12,6 +12,8 @@ struct ManifestCoherenceCheck: AuthoringCheck {
     static let severity = AuthoringFinding.Severity.error
 
     func findings(in snapshot: AuthoringSnapshot) -> [AuthoringFinding] {
-        ManifestCoherence.violations(in: snapshot.manifest).map { finding(at: .assignment, $0) }
+        ManifestCoherence.violations(for: snapshot.assignmentType, in: snapshot.manifest).map {
+            finding(at: .assignment, $0)
+        }
     }
 }

@@ -36,7 +36,7 @@ The catalog:
 | `list_courses` | `content:read` | Courses the subject may act on |
 | `get_server_info` | `content:read` | Deployed version + MCP mode/advertised scopes (liveness + capability probe) |
 | `list_assignments` | `content:read` | A course's assignments (id, title, slug, open/closed, due date) |
-| `list_course_sections` | `content:read` | A course's assignment groups (id, name, default grading mode, order) |
+| `list_course_sections` | `content:read` | A course's assignment groups (id, name, default assignment type, order) |
 | `get_assignment` | `content:read` | One assignment's full detail (incl. gradingMode + course section, and the GitHub submission setting, read-only) |
 | `get_suite` | `content:read` | Full test-suite definition: items, tiers, points, deps, sections, plus each script's raw body, each item's notebook cell (`anchor`, pinned or automatic), each family's full spec (cases' args/expected), and each notebook check's spec |
 | `get_notebook` | `content:read` | The starter notebook (.ipynb JSON) |
@@ -87,8 +87,8 @@ The catalog:
 | `author_script` | `content:write` | Escape hatch: create/replace a hand-written test (prefer a pattern family / notebook check) or a non-graded support file |
 | `update_notebook` | `content:write` | Replace the starter notebook |
 | `update_solution` | `content:write` | Replace the reference solution and re-validate |
-| `create_course_section` | `content:write` | Create a course section (assignment group) with a default grading mode |
-| `rename_course_section` | `content:write` | Rename a course section and/or change its default grading mode |
+| `create_course_section` | `content:write` | Create a course section (assignment group) with an optional default assignment type |
+| `rename_course_section` | `content:write` | Rename a course section and/or change its default assignment type |
 | `delete_course_section` | `content:write` | Delete a course section (assignments in it are ungrouped, not deleted) |
 | `reorder_course_sections` | `content:write` | Set the display order of a course's sections |
 | `set_assignment_course_section` | `content:write` | Place an assignment into a course section (adopts its grading mode), or ungroup it |
@@ -96,6 +96,7 @@ The catalog:
 | `create_content_item` | `content:write` | Create an ungraded content item (link/notebook/slides/document/outline/heading) in a course, optionally in a section; no test setup, no regrade/close |
 | `update_content_item` | `content:write` | Edit or move a content item (title/kind/links/description/updatedLabel/isPublished/section); no regrade/close |
 | `delete_content_item` | `content:write` | Delete an ungraded content item (idempotent); never touches an assignment or section |
+| `attach_content_item` | `content:write` | Show a content item on an assignment's row in the same course, or detach it (`""`); reports student visibility before and after; refuses a heading; no regrade/close |
 | `reorder_content_items` | `content:write` | Set the display order of a section's content items (content-only); no regrade/close |
 | `reorder_section_items` | `content:write` | Set a section's interleaved order — assignments + content items renumbered together (primary ordering tool); no regrade/close |
 | `reorder_assignments` | `content:write` | Set the display order of a section's assignments (single-type section); no regrade/close |

@@ -39,7 +39,7 @@ import Vapor
         try await withTestApp { app in
             let (_, hidden) = try await fixture(on: app)
             let section = APICourseSection(
-                name: "Theirs", defaultGradingMode: "browser", sortOrder: 0, courseID: hidden)
+                name: "Theirs", defaultAssignmentType: .lab, sortOrder: 0, courseID: hidden)
             try await section.save(on: app.db)
             let sectionID = try section.requireID()
 
@@ -56,7 +56,7 @@ import Vapor
             let student = try await makeTestUser(on: app, username: "stu", role: "mcp")
             try await makeTestEnrollment(on: app, userID: student.requireID(), courseID: visible)
             let section = APICourseSection(
-                name: "Labs", defaultGradingMode: "browser", sortOrder: 0, courseID: visible)
+                name: "Labs", defaultAssignmentType: .lab, sortOrder: 0, courseID: visible)
             try await section.save(on: app.db)
 
             await #expect(throws: MCPToolError.self) {

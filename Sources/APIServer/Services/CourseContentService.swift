@@ -221,6 +221,25 @@ enum CourseContentService {
         try await item.save(on: db)
     }
 
+    /// The id of the assignment that `publicID` names in `item`'s course, as an
+    /// attach target: nil for a blank value (a detach). Shared by the web
+    /// "Show on" field and MCP `attach_content_item`. A public ID that names
+    /// no assignment in the course is refused without saying whether it
+    /// exists in another course.
+    static func attachTarget(
+        publicID raw: String, for item: APICourseContentItem, on db: any Database
+    ) async throws -> UUID? {
+        let publicID = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !publicID.isEmpty else { return nil }
+        guard
+            let assignment = try await APIAssignment.query(on: db)
+                .filter(\.$publicID == publicID)
+                .filter(\.$courseID == item.courseID)
+                .first()
+        else { throw CourseContentError.assignmentNotInCourse }
+        return try assignment.requireID()
+    }
+
     /// Deletes the item and its hosted attachment files.
     static func delete(
         _ item: APICourseContentItem, application: Application, on db: any Database

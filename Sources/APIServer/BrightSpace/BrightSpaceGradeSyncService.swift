@@ -14,6 +14,7 @@
 // window (default 90 s).  If BrightSpace is unreachable the error is recorded
 // on the row and the push retries on the next sweep — no work is lost.
 
+import Core
 import Fluent
 import Foundation
 import Vapor
@@ -151,6 +152,9 @@ func flagResultForBrightSpaceSync(
     guard application.brightSpaceAppCredentials != nil else { return }
     guard
         let assignment,
+        // A Class activity's points stay in Chickadee
+        // (docs/assignment-types.md), so its results are never flagged.
+        assignment.assignmentType.pushesGradesToLMS,
         let gradeObjectID = assignment.brightspaceGradeObjectID,
         !gradeObjectID.isEmpty,
         let course,

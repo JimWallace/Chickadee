@@ -88,6 +88,7 @@ struct InstructorDashboardRoutes: RouteCollection {
         r.post(":assignmentID", "brightspace", use: saveBrightSpaceGradeObjectID)
         r.post(":assignmentID", "secret-reveal", use: saveSecretRevealSetting)
         r.post(":assignmentID", "concept", use: saveConceptSetting)
+        r.post(":assignmentID", "assignment-type", use: saveAssignmentType)
         r.post(":assignmentID", "ai-feedback", use: saveAIFeedbackSetting)
         r.get(":assignmentID", "feedback", use: feedbackReviewPage)
         r.post(":assignmentID", "feedback", use: saveFeedbackReview)
@@ -204,7 +205,8 @@ struct InstructorDashboardRoutes: RouteCollection {
                 showUngroupedBlock: hasUngrouped || !hasSections,
                 showEmptyMessage: !hasSections && !hasUngrouped,
                 enrolledStudentCount: roster.enrolledStudentCount,
-                attachTargets: Self.attachTargets(sections: sectionContexts, ungroupedItems: ungroupedItems))
+                attachTargets: Self.attachTargets(sections: sectionContexts, ungroupedItems: ungroupedItems),
+                flash: FlashMessages(notice: req.query[String.self, at: "notice"]))
         }.encodeResponse(for: req)
     }
 
@@ -620,6 +622,8 @@ struct InstructorDashboardRoutes: RouteCollection {
                     SelectOption(value: $0.rawValue, label: $0.displayName, selected: assignment.concept == $0)
                 },
             conceptRingPhrase: assignment.concept?.ringPhrase,
+            assignmentTypeOptions: AssignmentTypeRules.options(selected: assignment.assignmentType),
+            assignmentTypeRules: AssignmentTypeRules.summary(for: assignment.assignmentType),
             aiFeedback: try await APICourse.find(assignment.courseID, on: req.db)?.aiFeedbackEnabled == true
                 ? AIFeedbackSetting(enabled: assignment.aiFeedbackEnabled == true) : nil,
             timeLimitSeconds: manifest?.timeLimitSeconds ?? 10,

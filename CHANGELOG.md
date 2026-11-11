@@ -9,6 +9,148 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.910] - 2026-11-11
+
+### Changed
+
+- **Hold back untarjs 5.4.0.** Dependabot ignores `@emscripten-forge/untarjs` 5.4.0. That version has no `lib/unpack.js`, so the vendor build fails.
+
+
+## [0.5.909] - 2026-11-11
+
+### Added
+
+- A bug-hunt class activity (`bugHunt`). The projector shows the share of the bug hunt's items that the class's tests have covered together, and, when the activity carries the code, the code with each item's lines lit once the class covers it. Set it up with MCP `set_activity`. See `docs/bug-hunt-code-map.md`.
+
+
+## [0.5.908] - 2026-11-11
+
+### Changed
+
+- **The declared assignment type now has rules (docs/assignment-types.md, phases 2 and 3).** An Assignment refuses browser grading at every door, so its secret tests never reach the browser. A Class activity must carry an activity, and its points stay in Chickadee: no BrightSpace or LTI push and no slip days. A change of type checks these rules and is recorded in the audit log. The new-assignment page and MCP `create_assignment` take a type, which sets the grading mode (Lab: browser; Assignment and Class activity: worker), and `get_server_info` lists each type's rules.
+- **A course section names an optional default type instead of a grading mode.** The "tested in Student Browser / tested in Chickadee" label is gone from the `/instructor` section headers. Moving an assignment between sections no longer changes its grading mode; the move reports a section default that differs from the assignment's type. The migration gives every browser-default section a Lab default and changes no assignment.
+
+
+## [0.5.907] - 2026-11-11
+
+### Changed
+
+- **The Mac runner runbook schedules updates with launchd, not cron.** On
+  macOS, installing a crontab waits for a permission dialog that an
+  unattended session never answers. `docs/mac-runner.md` now gives a launchd
+  agent and says to run `deploy/chickadee-runner-update.sh` from a clone,
+  because a copy of the script on its own cannot load its helper.
+
+
+## [0.5.906] - 2026-11-10
+
+### Added
+
+- **An arm64 runner image for a bonus runner on a Mac (spike).** A new
+  workflow, `runner-arm64-image.yml`, builds
+  `ghcr.io/jimwallace/chickadee-runner` for `linux/arm64` on each release tag,
+  from a new runner-only Dockerfile target (`--target runner`) that carries no
+  server and none of `Public/`. The server image is unchanged.
+  It checks that the runner starts in its sandbox with job cgroups, as uid 999
+  with no capability, and detects every language. It is separate from the
+  production image and blocks no deploy. `deploy/chickadee-runner-update.sh`
+  takes a new `--image-repo` flag, so an Apple Silicon host follows the
+  server's release with that image. `docs/mac-runner.md` covers sizing under
+  Docker Desktop.
+
+
+## [0.5.905] - 2026-11-10
+
+### Added
+
+- **Assignment types.** Every assignment now declares one of three types:
+  Assignment, Lab or Class activity (docs/assignment-types.md). A one-time
+  migration records the type of each existing assignment from its manifest.
+  Browser grading means a Lab; otherwise an activity block means a Class
+  activity; otherwise it is an Assignment. Instructors change the type with
+  the Type select on the assignment edit page, and agents through
+  `update_assignment`; `get_assignment` reports it. Bundles and clones carry
+  it.
+- **A row icon and colour for each type.** On the instructor dashboard, the
+  student course page, the admin course page and the LEARN and AI agents
+  tabs, an Assignment keeps the teal
+  clipboard, a Lab shows an indigo flask and a Class activity a magenta group,
+  in light and dark themes. The type changes no grading behaviour yet.
+
+
+## [0.5.904] - 2026-11-10
+
+### Fixed
+
+- **A new runner's first polls no longer fail with HTTP 500.** A runner polls
+  from every job slot at once, so its first check-ins each found no profile row
+  and each tried to insert one; all but one hit the unique constraint on
+  `runner_profiles.runner_id`. A check-in that loses the race now reads the
+  winner's row and updates it.
+
+
+## [0.5.903] - 2026-11-10
+
+### Changed
+
+- **A partitioned dataset is linked to a stored part, not copied per student.** Each part of a partition with no transforms is now written once per assignment and source, under `dataset-parts/`, and each student's editor copy links to their own part. A class-composite student with no slot yet links to the header row. Existing copies become links on the student's next visit. Parts no longer current are swept after a day. MCP `get_support_files` reports `datasetDelivery: "perPart"` for such a file. See `docs/dataset-shared-delivery.md`.
+
+
+## [0.5.902] - 2026-11-10
+
+### Changed
+
+- **A PDF shows the document icon.** A material's PDF button used the eye for
+  an uploaded PDF, and the external-link arrow for a linked one. The arrow is
+  the same icon as a link to any website. Every PDF now shows the document
+  page, the same icon as the document tile. A link counts as a PDF when its URL
+  ends in `.pdf` or its label contains "PDF".
+
+
+## [0.5.901] - 2026-11-10
+
+### Fixed
+
+- **Task headers sit with the cells they test, under one name.** In the notebook editor, a task's header now sits above the notebook heading its functions are under, instead of every header stacking above a helper (such as `bmi`) that several tasks' tests call. The header and the outline beside the editor now show the same title, the notebook's own `## ` heading, in place of a mix of "Task N", the suite section name and a numbered "1. Question 1".
+
+
+## [0.5.900] - 2026-11-10
+
+### Changed
+
+- **Re-grant secret-reveal token is a ticket.** The button used the padlock,
+  which also marks the locked avatar rings. The padlock now means only "locked".
+  The re-grant button shows a ticket, because the student spends the token once.
+
+
+## [0.5.899] - 2026-11-10
+
+### Added
+
+- **MCP `attach_content_item`.** An agent can now show a content item on an assignment's row, or give it a row of its own again, as the material edit form's "Show on" field does. It shares `CourseContentService.attach` with the web form, so it refuses a heading and an assignment in another course. Because an attached item reaches students only with its assignment, the result reports whether a student with no extension saw the item before the change and sees it after.
+
+
+## [0.5.898] - 2026-11-10
+
+### Fixed
+
+- **The page render tests no longer crash the test host on macOS.** A debug build copies each view's stored fields through Elementary's nested render frames. `PageRequestContext` and the account page's avatar picker were each about 1 KB, so rendering the account page needed 524 KB and overflowed a test thread’s 512 KB stack. Both now keep their values behind a shared reference. The account page now needs 365 KB, and the deepest page (the workbench) needs 390 KB. `docs/elementary-spike.md` (trap 8) records the measurements and the rule.
+
+
+## [0.5.897] - 2026-11-10
+
+### Changed
+
+- **The student guide reads anchors through the shared anchor service.** `NotebookGuideBuilder` now calls `SuiteAnchorResolution`, as the workbench outline and MCP `get_suite` do. Before a solution exists, the guide takes anchors from the assignment's template starter rather than the student's personalized copy, so every student, the workbench and MCP see a test on the same cell. The guide still shows each student's own starter code beside a task.
+
+
+## [0.5.896] - 2026-11-10
+
+### Changed
+
+- **A dataset given whole to every student is linked, not copied.** A dataset file with no sample size, no partition and no transforms now reaches each student's editor as a link to the assignment's one shared copy, as an ordinary support file does, instead of a copy per student. Existing copies become links on the student's next visit. The Files panel and MCP `get_support_files` (`datasetDelivery`) show whether each dataset is shared or per student. See `docs/dataset-shared-delivery.md`.
+
+
 ## [0.5.895] - 2026-11-10
 
 ### Changed

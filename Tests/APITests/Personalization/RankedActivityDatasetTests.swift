@@ -27,8 +27,8 @@ import Vapor
     private let sample = DatasetSpec(file: "cases.csv", sampleSize: 3)
     private let shared = DatasetSpec(file: "cases.csv")
 
-    @Test func onlyAClassCompositeDoesNotCompareStudents() {
-        #expect(ActivityKind.allCases.filter { !$0.comparesStudents } == [.classComposite])
+    @Test func onlyTheCompositeAndTheBugHuntDoNotCompareStudents() {
+        #expect(ActivityKind.allCases.filter { !$0.comparesStudents } == [.classComposite, .bugHunt])
     }
 
     @Test func aSpecIsSharedOnlyWithNoSampleAndNoTransforms() {
@@ -42,14 +42,15 @@ import Vapor
     @Test(arguments: ActivityKind.allCases.filter(\.comparesStudents))
     func aRankedActivityRefusesPersonalData(kind: ActivityKind) {
         #expect(
-            ManifestCoherence.violations(in: manifest(activity: kind, datasets: [sample]))
+            ManifestCoherence.violations(for: nil, in: manifest(activity: kind, datasets: [sample]))
                 == [ActivityAuthoring.personalDataMessage(file: "cases.csv")])
-        #expect(ManifestCoherence.violations(in: manifest(activity: kind, datasets: [shared])).isEmpty)
+        #expect(ManifestCoherence.violations(for: nil, in: manifest(activity: kind, datasets: [shared])).isEmpty)
     }
 
     @Test func aCompositeOrAnAssignmentWithNoActivityAcceptsPersonalData() {
-        #expect(ManifestCoherence.violations(in: manifest(activity: .classComposite, datasets: [sample])).isEmpty)
-        #expect(ManifestCoherence.violations(in: manifest(activity: nil, datasets: [sample])).isEmpty)
+        #expect(
+            ManifestCoherence.violations(for: nil, in: manifest(activity: .classComposite, datasets: [sample])).isEmpty)
+        #expect(ManifestCoherence.violations(for: nil, in: manifest(activity: nil, datasets: [sample])).isEmpty)
     }
 
     /// A plain file with no sample is not a valid spec, so the message names
@@ -70,12 +71,14 @@ import Vapor
             String(data: JSONEncoder().encode(manifest(activity: .bestMetric, datasets: [sample])), encoding: .utf8))
         #expect(
             ManifestCoherence.violation(
-                introducedBy: { $0.datasets.append(DatasetSpec(file: "wards.csv", sampleSize: 2)) }, in: stored)
+                for: nil, introducedBy: { $0.datasets.append(DatasetSpec(file: "wards.csv", sampleSize: 2)) },
+                in: stored)
                 == ActivityAuthoring.personalDataMessage(file: "wards.csv"))
         #expect(
-            ManifestCoherence.violation(introducedBy: { $0.activity = ClassActivity(kind: .roundRobin) }, in: stored)
+            ManifestCoherence.violation(
+                for: nil, introducedBy: { $0.activity = ClassActivity(kind: .roundRobin) }, in: stored)
                 == nil)
-        #expect(ManifestCoherence.violation(introducedBy: { $0.datasets = [shared] }, in: stored) == nil)
+        #expect(ManifestCoherence.violation(for: nil, introducedBy: { $0.datasets = [shared] }, in: stored) == nil)
     }
 }
 

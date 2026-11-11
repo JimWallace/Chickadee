@@ -14,8 +14,12 @@ struct SupportFileLibraryState: Encodable, Sendable {
     /// What an attached file shows. Nil for a file that is not attached, which
     /// the panel offers to move into the library.
     struct Attachment: Encodable, Sendable {
-        /// "VitalDB cases (v2)"
-        let sourceText: String
+        /// The library dataset's slug, for the link to its page.
+        let slug: String
+        /// "VitalDB cases", or the slug when the dataset is gone from the library.
+        let name: String
+        /// The version the file pins.
+        let version: Int
         /// The newest version, when the file pins an older one.
         let newerVersion: Int?
         let isCourseScoped: Bool
@@ -49,7 +53,7 @@ func withLibraryStates(
             let behind = dataset.map { CourseDatasetService.attachmentIsBehind(spec, dataset: $0) } ?? false
             row.library = SupportFileLibraryState(
                 attachment: .init(
-                    sourceText: "\(dataset?.name ?? source.slug) (v\(source.version))",
+                    slug: source.slug, name: dataset?.name ?? source.slug, version: source.version,
                     newerVersion: behind ? dataset?.currentVersion : nil,
                     isCourseScoped: spec.scope == .course))
         } else if row.name.lowercased().hasSuffix(".csv"), !graderOnly.contains(row.name) {

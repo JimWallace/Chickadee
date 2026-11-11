@@ -49,6 +49,10 @@ struct SetActivityTool: ContentTool {
         /// `emptySlots: reference` shows each slot's render, dimmed. A new
         /// render replaces the old one. Absent or false queues nothing.
         var prepareReference: Bool?
+        /// For a `bugHunt` kind: the whole bug-hunt block. Absent keeps the
+        /// stored block while the kind is unchanged, else seeds the suite
+        /// entries that no other entry depends on. Refused on any other kind.
+        var bugHunt: BugHuntSpec?
     }
 
     struct Output: Encodable, Sendable {
@@ -80,11 +84,13 @@ struct SetActivityTool: ContentTool {
         /// The reference jobs queued, one per slot, when `prepareReference`
         /// was true; null when it was not asked for.
         var referenceJobsQueued: Int?
+        /// The stored bug-hunt block; null for any kind but `bugHunt`.
+        var bugHunt: BugHuntSpec?
 
         private enum CodingKeys: String, CodingKey {
             case assignmentPublicID, kind, leaderboardVisibility, leaderboardPath
             case recordAchievementSeeded, opponentSource, opponentFile, opensAt, closesAt, composite
-            case runsPerGroup, referenceJobsQueued
+            case runsPerGroup, referenceJobsQueued, bugHunt
         }
 
         /// The two opponent keys are always present — explicitly null when
@@ -107,6 +113,7 @@ struct SetActivityTool: ContentTool {
             try c.encode(composite, forKey: .composite)
             try c.encode(runsPerGroup, forKey: .runsPerGroup)
             try c.encode(referenceJobsQueued, forKey: .referenceJobsQueued)
+            try c.encode(bugHunt, forKey: .bugHunt)
         }
     }
 
@@ -159,7 +166,14 @@ struct SetActivityTool: ContentTool {
         + "run_tournament refuses one. "
         + "Absent keeps the stored value while the kind is unchanged, else false. Each test "
         + "script reports its rendering as the footer's `composite` object, which never changes a "
-        + "grade. No regrade or close. Read "
+        + "grade. A \"coverage\" aggregation (a bug hunt) needs a starter notebook with contribution "
+        + "slots: pass the bugHunt block, whose items are the suite scripts the class covers "
+        + "together (by script filename, as get_suite lists them); absent keeps the stored block, "
+        + "and a new bug hunt lists every suite entry that no other entry depends on. Its optional "
+        + "code is shown on the projector with each region's lines (\"7\" or \"12-18\", 1-based) "
+        + "lit once the region's item is covered; with no code the projector shows the share "
+        + "covered alone. A bug hunt's leaderboard stays hidden from students. No regrade or close. "
+        + "Read "
         + "the current state from get_assignment; get_server_info lists the kinds with their "
         + "opponent sources."
     static let inputSchema: JSONValue = .object([
@@ -205,6 +219,7 @@ struct SetActivityTool: ContentTool {
                     "Run once per lab group, each group's session its clock. Absent keeps the stored "
                         + "value while the kind is unchanged, else false."),
             ]),
+            "bugHunt": bugHuntSchema,
             "prepareReference": .object([
                 "type": .string("boolean"),
                 "description": .string(
@@ -237,11 +252,52 @@ struct SetActivityTool: ContentTool {
             ]),
             "runsPerGroup": MCPSchema.boolean,
             "referenceJobsQueued": MCPSchema.nullableInteger,
+            "bugHunt": .object([
+                "type": .array([.string("object"), .string("null")]),
+                "description": .string("The stored bug-hunt block; null for any other kind."),
+            ]),
         ]),
         "required": .array([
             .string("assignmentPublicID"), .string("kind"), .string("recordAchievementSeeded"),
         ]),
     ])
+    /// The bug-hunt block's input schema (docs/bug-hunt-code-map.md).
+    static let bugHuntSchema: JSONValue = .object([
+        "type": .string("object"),
+        "description": .string(
+            "For kind \"bugHunt\" only: the items the class covers and the optional code map."),
+        "properties": .object([
+            "items": .object([
+                "type": .string("array"),
+                "items": .object(["type": .string("string")]),
+                "description": .string("Suite script filenames, each one item the class covers."),
+            ]),
+            "code": .object([
+                "type": .string("string"),
+                "description": .string(
+                    "The code shown on the projector. Omit it to show only the share covered."),
+            ]),
+            "regions": .object([
+                "type": .string("array"),
+                "description": .string("Which lines of the code each item stands for. Needs code."),
+                "items": .object([
+                    "type": .string("object"),
+                    "properties": .object([
+                        "item": MCPSchema.string,
+                        "lines": .object([
+                            "type": .string("string"),
+                            "description": .string("A line or an inclusive range, 1-based: \"7\" or \"12-18\"."),
+                        ]),
+                    ]),
+                    "required": .array([.string("item"), .string("lines")]),
+                    "additionalProperties": .bool(false),
+                ]),
+            ]),
+        ]),
+        "required": .array([.string("items")]),
+        "additionalProperties": .bool(false),
+    ])
+
     /// The composite block's input schema. Every enum derives from its
     /// `CaseIterable` owner, so a new compositor needs no edit here.
     static let compositeSchema: JSONValue = .object([
@@ -347,6 +403,8 @@ struct SetActivityTool: ContentTool {
                 // Absent: `ActivityAuthoring` keeps the stored block while
                 // the kind is unchanged and seeds the starter otherwise.
                 .withComposite(input.composite)
+                // Absent: kept while the kind is unchanged, else seeded.
+                .withBugHunt(input.bugHunt)
                 .withRunsPerGroup(
                     input.runsPerGroup
                         ?? (current?.kind == block.kind && block.kind.canRunPerGroup
@@ -378,7 +436,8 @@ struct SetActivityTool: ContentTool {
             closesAt: stored?.activity?.window?.closesAtISO,
             composite: stored?.activity?.composite,
             runsPerGroup: stored?.activity?.isPerGroup == true,
-            referenceJobsQueued: referenceJobsQueued)
+            referenceJobsQueued: referenceJobsQueued,
+            bugHunt: stored?.activity?.bugHunt)
     }
 
     /// Queues the composite's reference renders, as the edit page's "Prepare

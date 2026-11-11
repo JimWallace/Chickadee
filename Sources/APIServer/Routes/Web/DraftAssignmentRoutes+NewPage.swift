@@ -210,7 +210,7 @@ extension DraftAssignmentRoutes {
                 CourseSectionRow(
                     sectionID: s.id?.uuidString ?? "",
                     name: s.name,
-                    defaultGradingMode: s.defaultGradingMode,
+                    defaultAssignmentType: s.defaultAssignmentType,
                     sortOrder: s.sortOrder,
                     items: []
                 )

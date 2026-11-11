@@ -38,6 +38,8 @@ struct LeaderboardPresentBody: HTML {
         if board.compositeStage != nil {
             // The page draws the composite outside this polled region, so a
             // refresh does not replace its canvas.
+        } else if let hunt = board.bugHunt {
+            div(.class("present-bug-hunt")) { BugHuntBoard(hunt: hunt) }
         } else if board.showsBracket {
             if board.hasWinner, let avatar = board.winnerAvatar {
                 PresentCard(label: "Winner", kicker: "Winner", handle: board.winnerHandle, avatar: avatar)
@@ -89,7 +91,9 @@ struct PresentFooter: HTML {
 
     var body: some HTML {
         footer(.class("present-footer")) {
-            if board.compositeStage == nil {
+            if board.bugHunt != nil {
+                span { "A test counts for the class once it catches a bug" }
+            } else if board.compositeStage == nil {
                 strong { "\(board.showsBracket ? board.entrantCount : board.rankedCount) on the board" }
                 " "
                 span { "Find yourself by your bird and handle on your own Leaderboard page" }

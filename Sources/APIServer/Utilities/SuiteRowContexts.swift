@@ -82,6 +82,18 @@ struct EditableSuiteRow: Encodable {
     /// The stratum column as an input-ready string — empty when there is none.
     var datasetStratumColumnOrEmpty: String { datasetStratumColumn ?? "" }
 
+    /// The delivery note for a dataset row (`DatasetDeliveryNote`), empty on
+    /// every other row and on a partition. A row carries a partition as its
+    /// part count.
+    var datasetDeliveryNoteText: String {
+        guard isDataset else { return "" }
+        let isPartition = datasetPartCount != nil
+        let mode = DatasetDeliveryMode(
+            isPartition: isPartition, partCount: datasetPartCount, sampleSize: datasetSampleSize,
+            hasTransforms: !datasetTransforms.isEmpty)
+        return DatasetDeliveryNote.text(for: mode, isPartition: isPartition) ?? ""
+    }
+
     /// Whether the Files panel can represent this spec's transforms.
     ///
     /// The panel edits exactly one shape: no transforms, or a single

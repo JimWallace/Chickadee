@@ -139,19 +139,33 @@
         dueAtInput.addEventListener('change', function () { ChickadeeUI.checkUWDates(dueAtInput.value, warning); });
     })();
 
-    // ── Grading mode hint ───────────────────────────────────────────────────
+    // ── Assignment type ─────────────────────────────────────────────────────
+    // The Type select follows the section's default type until the author
+    // picks one; the hint shows the selected type's rules, which the server
+    // put on each option (docs/assignment-types.md).
     (function () {
+        var typeSelect = /** @type {HTMLSelectElement} */ (document.getElementById('assignmentTypeSelect'));
+        var hint = document.getElementById('assignment-type-hint');
+        if (!typeSelect || !hint) return;
         var sectionSelect = /** @type {HTMLSelectElement} */ (document.getElementById('sectionID'));
-        var hint = document.getElementById('grading-mode-hint');
-        if (!sectionSelect || !hint) return;
+        var chosen = typeSelect.getAttribute('data-chosen') === 'true';
         function updateHint() {
-            var selected = sectionSelect.options[sectionSelect.selectedIndex];
-            var mode = selected ? selected.getAttribute('data-grading-mode') : null;
-            if (mode === 'browser') { hint.textContent = 'ⓘ This section uses Student Browser grading by default (participation grade).'; hint.style.display = ''; }
-            else if (mode === 'worker') { hint.textContent = 'ⓘ This section uses Chickadee grading by default.'; hint.style.display = ''; }
-            else { hint.style.display = 'none'; }
+            var selected = typeSelect.options[typeSelect.selectedIndex];
+            hint.textContent = selected ? (selected.getAttribute('data-hint') || '') : '';
         }
-        sectionSelect.addEventListener('change', updateHint);
+        typeSelect.addEventListener('change', function () {
+            chosen = true;
+            updateHint();
+        });
+        if (sectionSelect) {
+            sectionSelect.addEventListener('change', function () {
+                if (chosen) return;
+                var section = sectionSelect.options[sectionSelect.selectedIndex];
+                var type = (section && section.getAttribute('data-assignment-type')) || 'assignment';
+                typeSelect.value = type;
+                updateHint();
+            });
+        }
         updateHint();
     })();
 

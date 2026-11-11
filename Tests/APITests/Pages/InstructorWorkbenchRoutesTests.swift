@@ -253,6 +253,7 @@ import VaporTesting
                         "\(base)/solution-visibility",
                         "\(base)/passing-threshold",
                         "\(base)/concept",
+                        "\(base)/assignment-type",
                         "\(base)/suite-sections",
                         "\(base)/suite-sections/sec1/rename",
                     ]

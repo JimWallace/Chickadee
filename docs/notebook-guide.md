@@ -13,6 +13,14 @@ suite item an **anchor**. An anchor is a name that a code cell defines, or a
 starter, in the solution and in the working copy of a student, even when the
 cells move.
 
+The anchors are read from notebooks that no student's personalization has
+touched: the solution, or the template starter before a solution exists. The
+`starterSources` of a student are then found by name in that student's
+personalized starter. So an anchor name, a defined function or variable name
+or a `## ` heading, must not contain a `{{placeholder}}`. A name that
+personalization changes is not found in the student's copy, and its task loses
+the "Still the starter code" comparison.
+
 The resolver uses the first rule that applies:
 
 | Rule | Anchor |
@@ -63,7 +71,7 @@ submission (`NotebookGuideCache`, 120 seconds).
 | `tasks[].status` | `fresh` before the first attempt. After it, `pass` or `fail` from the public checks. It is `null` during grading, when the task has no public check, or when a public check has no result. The editor changes it to `starter` when the cell is the same as the starter. |
 | `tasks[].checks` | Public checks only. Each check has its `name`, a `kind` (`check`, `family` or `script`) and a `result`. A failure also has a `detail` and a `hint`. |
 | `tasks[].hiddenCount` | The release and secret tests of the task. |
-| `starterSources` | The source of each anchor in the personalized starter of this student. The key is the anchor name, or `section:<heading>`. Trailing whitespace and CRLF are removed. |
+| `starterSources` | The source of each anchor in the personalized starter of this student. The key is the anchor name, or `section:<heading>`, which must also exist in that starter ("Anchors" below). Trailing whitespace and CRLF are removed. |
 | `reflections` | The cells with the tag `reflection`, which AI-assisted feedback reads. |
 
 These rules keep the guide safe:
@@ -78,15 +86,23 @@ These rules keep the guide safe:
 - `hint` is the hint of the check. The guide sends it only for a failure.
 - The guide reads the solution on the server to resolve rule 4. No part of the
   solution goes into the response.
-- With no solution notebook yet, the starter of the student gives the anchors.
-  The starter has the same headings and, usually, the same function stubs.
+- With no solution notebook yet, the assignment's starter gives the anchors.
+  The starter has the same headings and, usually, the same function stubs. It
+  is the template, not the student's personalized copy, so every student gets
+  the same cells. The staff outline and MCP `get_suite` read the same notebook
+  through the same code (`SuiteAnchorResolution`), so the three agree on a
+  test's cell. The student's own starter still gives `starterSources`.
 
 ## In the editor
 
 The notebook page (NB4, design frame 18a) shows the guide in two places.
 
 **The outline** (`Public/notebook-guide.js`) is beside the editor. It shows the
-attempt card and one row for each task: a glyph, the name and the points. A row
+attempt card and one row for each task: a glyph, the title and the points. The
+title is the one the editor's task header shows (see "Which heading, and the
+title" below), sent in `ck:tasks`. Without the extension it is the section name
+as written. Rows are not numbered, and a chip shows the part of the title
+before a colon. A row
 click reveals the task in the editor (`chickadee:reveal`). The row of the task
 under the cursor has `aria-current`. Below 1100px the outline is a row of chips
 under the toolbar. Below 640px it is hidden. Only a student who can submit sees
@@ -96,12 +112,35 @@ it, and not in the embedded workbench.
 two rows for each task:
 
 - A **task header** above the `## ` heading of the task, in the header widget
-  of that cell. It has the status glyph, the label, the points and a pill. With
-  no heading, the header goes above the first anchored cell.
+  of that cell. It has the status glyph, the title, the points and a pill.
 - A **checks line** under the last anchored code cell, in the footer widget of
   that cell. It has "Checked in attempt N" (or "Checked when you submit"), a
   chip for each public check, and the count of hidden tests. Each failure shows
   its detail and the hint of the instructor, two at most.
+
+**Which heading, and the title.** A task sits under its own `## ` heading when
+the notebook has one with the section's name. Otherwise it sits under the
+nearest `## ` heading above its first anchored cell, so a suite section named
+"Question 1" over a notebook that says "## 1. Warm Up I: BMI Calculator", or
+the checks in no section ("Other checks"), still sit where the notebook puts
+them. That heading is the task's **title**, and the header and the outline
+show the same text, so the student sees one name per task, the notebook's
+own. Two rules keep the tasks apart:
+
+- An `ambiguous` anchor does not place a task when the task has another. It is
+  a helper that several tasks' tests call (`bmi` in a test of `bmi_category`),
+  so it would pull every header up to that helper's cell. It does not decide
+  `starter` either. A task placed only by ambiguous anchors takes no heading.
+- A heading found above the anchors goes to the task whose first anchored cell
+  comes first under it, in notebook order. A task's own heading is never given
+  away. Any other task that finds the same heading sits above its own first
+  anchored cell, under the suite's name for it. With no heading at all, the
+  header goes above the first anchored cell, under the suite's name.
+
+The editor sends each title to the outline in `ck:tasks`, with the cell a row
+click reveals: the task's first anchored cell, else its header cell. The section label before a colon
+(`label`) no longer replaces the title anywhere: the header shows the whole
+heading, and the chip is the part before its colon.
 
 The pill gives the status:
 

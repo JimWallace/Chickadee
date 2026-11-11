@@ -152,6 +152,9 @@ extension WebRoutes {
         }
         let policy = course.slipDayPolicy
         guard policy.enabled else { return nil }
+        // A Class activity's live window replaces a deadline
+        // (docs/assignment-types.md, decision 2).
+        guard assignment.assignmentType.allowsSlipDays else { return nil }
 
         // Staff never spend slip days (their access doesn't depend on the
         // deadline), and students can't spend on a staff-only preview.

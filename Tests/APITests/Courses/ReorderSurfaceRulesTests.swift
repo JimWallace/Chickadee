@@ -47,9 +47,9 @@ import VaporTesting
         let code = "REORDER"
         let course = try await makeTestCourse(on: app, code: code, mode: .closed)
         let courseID = try course.requireID()
-        let sectionA = APICourseSection(name: "A", defaultGradingMode: "worker", sortOrder: 1, courseID: courseID)
+        let sectionA = APICourseSection(name: "A", defaultAssignmentType: nil, sortOrder: 1, courseID: courseID)
         try await sectionA.save(on: app.db)
-        let sectionB = APICourseSection(name: "B", defaultGradingMode: "worker", sortOrder: 2, courseID: courseID)
+        let sectionB = APICourseSection(name: "B", defaultAssignmentType: nil, sortOrder: 2, courseID: courseID)
         try await sectionB.save(on: app.db)
         let labOne = try await lab("ro_one", courseID: courseID, section: sectionA, order: 1)
         let labTwo = try await lab("ro_two", courseID: courseID, section: sectionA, order: 2)

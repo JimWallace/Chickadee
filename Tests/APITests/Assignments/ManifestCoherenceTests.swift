@@ -26,24 +26,24 @@ import Testing
     }
 
     @Test func aCoherentManifestBreaksNoRule() {
-        #expect(ManifestCoherence.violations(in: manifest()).isEmpty)
-        #expect(ManifestCoherence.violation(in: manifest(gradingMode: .browser)) == nil)
-        #expect(ManifestCoherence.violation(in: manifest(submissionMode: .uploadOnly, language: .cpp)) == nil)
+        #expect(ManifestCoherence.violations(for: nil, in: manifest()).isEmpty)
+        #expect(ManifestCoherence.violation(for: nil, in: manifest(gradingMode: .browser)) == nil)
+        #expect(ManifestCoherence.violation(for: nil, in: manifest(submissionMode: .uploadOnly, language: .cpp)) == nil)
     }
 
     @Test func eachRuleReportsItsDoorsSentence() {
         #expect(
-            ManifestCoherence.violation(in: manifest(gradingMode: .browser, submissionMode: .uploadOnly))
+            ManifestCoherence.violation(for: nil, in: manifest(gradingMode: .browser, submissionMode: .uploadOnly))
                 == uploadModeGradingConflictMessage)
         #expect(
-            ManifestCoherence.violation(in: manifest(gradingMode: .browser, graderOnlyFiles: ["key.txt"]))
+            ManifestCoherence.violation(for: nil, in: manifest(gradingMode: .browser, graderOnlyFiles: ["key.txt"]))
                 == graderOnlyGradingConflictMessage)
         #expect(
             ManifestCoherence.violation(
-                in: manifest(gradingMode: .browser, activity: ClassActivity(kind: .kingOfTheHill)))
+                for: nil, in: manifest(gradingMode: .browser, activity: ClassActivity(kind: .kingOfTheHill)))
                 == activityOpponentGradingConflictMessage)
         #expect(
-            ManifestCoherence.violation(in: manifest(submissionMode: .notebook, language: .cpp))
+            ManifestCoherence.violation(for: nil, in: manifest(submissionMode: .notebook, language: .cpp))
                 == requiresUploadOnlyMessage(.cpp))
     }
 
@@ -54,12 +54,14 @@ import Testing
         for kind in [ActivityKind.beatTheInstructor, .elimination] {
             #expect(
                 ManifestCoherence.violation(
+                    for: nil,
                     in: manifest(gradingMode: .browser, activity: ClassActivity(kind: kind, opponentFile: "bot.py")))
                     == nil)
         }
         for kind in [ActivityKind.kingOfTheHill, .roundRobin, .testsVersusImplementations] {
             #expect(
-                ManifestCoherence.violation(in: manifest(gradingMode: .browser, activity: ClassActivity(kind: kind)))
+                ManifestCoherence.violation(
+                    for: nil, in: manifest(gradingMode: .browser, activity: ClassActivity(kind: kind)))
                     == activityOpponentGradingConflictMessage)
         }
     }
@@ -69,7 +71,7 @@ import Testing
             gradingMode: .browser, submissionMode: .notebook, graderOnlyFiles: ["key.txt"],
             activity: ClassActivity(kind: .kingOfTheHill), language: .java)
         #expect(
-            ManifestCoherence.violations(in: broken) == [
+            ManifestCoherence.violations(for: nil, in: broken) == [
                 graderOnlyGradingConflictMessage, activityOpponentGradingConflictMessage,
                 requiresUploadOnlyMessage(.java),
             ])
@@ -78,17 +80,18 @@ import Testing
     @Test func anEditIsRefusedForTheIncoherenceItIntroduces() throws {
         let stored = try json(manifest(submissionMode: .uploadOnly))
         #expect(
-            ManifestCoherence.violation(introducedBy: { $0.gradingMode = .browser }, in: stored)
+            ManifestCoherence.violation(for: nil, introducedBy: { $0.gradingMode = .browser }, in: stored)
                 == uploadModeGradingConflictMessage)
-        #expect(ManifestCoherence.violation(introducedBy: { $0.gradingMode = .worker }, in: stored) == nil)
+        #expect(ManifestCoherence.violation(for: nil, introducedBy: { $0.gradingMode = .worker }, in: stored) == nil)
     }
 
     @Test func anEditIsNotRefusedForAnIncoherenceItInherits() throws {
         // A legacy manifest that already breaks the language rule can still
         // change its grading mode, and can be edited toward coherence.
         let stored = try json(manifest(submissionMode: .notebook, language: .cpp))
-        #expect(ManifestCoherence.violation(introducedBy: { $0.gradingMode = .browser }, in: stored) == nil)
-        #expect(ManifestCoherence.violation(introducedBy: { $0.submissionMode = .uploadOnly }, in: stored) == nil)
-        #expect(ManifestCoherence.violation(introducedBy: { _ in }, in: "not json") == nil)
+        #expect(ManifestCoherence.violation(for: nil, introducedBy: { $0.gradingMode = .browser }, in: stored) == nil)
+        #expect(
+            ManifestCoherence.violation(for: nil, introducedBy: { $0.submissionMode = .uploadOnly }, in: stored) == nil)
+        #expect(ManifestCoherence.violation(for: nil, introducedBy: { _ in }, in: "not json") == nil)
     }
 }

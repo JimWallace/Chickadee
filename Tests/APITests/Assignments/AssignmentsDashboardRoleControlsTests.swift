@@ -35,7 +35,7 @@ import VaporTesting
     private func makeCourse(_ code: String) async throws -> Course {
         let courseID = try await makeTestCourse(on: app, code: code, mode: .closed).requireID()
         let section = APICourseSection(
-            name: "Labs", defaultGradingMode: "worker", sortOrder: 1, courseID: courseID)
+            name: "Labs", defaultAssignmentType: nil, sortOrder: 1, courseID: courseID)
         try await section.save(on: app.db)
         let setupID = "\(code.lowercased())_setup"
         try await makeTestSetup(on: app, id: setupID, courseID: courseID)

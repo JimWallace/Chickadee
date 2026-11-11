@@ -517,6 +517,15 @@ duplicate.
   the lab's name and progress, and gives each stage's range its own id. In the
   strip, passed is `--green` and failed is `--red`, the test-status pair, and
   reference is `--gray-300`, between empty and passed in both themes.
+- **`.bug-hunt`** (the `bug-hunt-*` family) — a bug hunt's board
+  (docs/bug-hunt-code-map.md). A `.bug-hunt-share` line holds the share
+  covered in the `.score-figure` and a `.bug-hunt-count`. The optional code map
+  is the `.diff-table` listing with one gutter. A row in an item's region is
+  `.diff-uncovered` until the class covers it, `.diff-partial` while only some
+  of the items on the line are covered, and `.diff-added` after. A visually
+  hidden word in the gutter says the state. It renders inside the polled
+  region, so it needs no script. Present mode wraps it in `.present-bug-hunt`,
+  which sets the room's sizes.
 - **`.fieldset-plain`** — the unstyled `<fieldset>` + bold `<legend>` that
   wraps a group of radio or checkbox choices (enroll, the LTI grade
   transport, LTI deep linking, the bird picker).  Use it for any group
@@ -603,12 +612,16 @@ duplicate.
   figure a student opens that page to read, at `2.4em`.  The only display-size
   type in the product: the `--text-*` scale tops out at 1.4rem for page
   headings and deliberately does not carry display sizes, so this is `em`
-  against its container rather than a new scale step.  One per page.
+  against its container rather than a new scale step.  One per page.  A bug
+  hunt's board uses it for the share covered, at the room's size in present
+  mode.
 - **`.diff-table`** — the one unified diff listing (the instructor's
   starter-to-submission page).  Rows are `.diff-added` / `.diff-removed` /
   `.diff-context`, or `.diff-fold` standing in for a run of unchanged lines;
   cells are two `.diff-gutter` line-number columns and one `.diff-line`;
-  `.diff-marker` is a notebook cell boundary.  A second comparison view
+  `.diff-marker` is a notebook cell boundary.  A bug hunt's code map uses it
+  with one gutter and two more row states, `.diff-uncovered` and
+  `.diff-partial` (see `.bug-hunt`).  A second comparison view
   (two attempts, two students) reuses this rather than minting a twin.
 - **`.text-muted`**, `.card-meta`, `.fine-print` — muted text.
 - **`.section-items`** — the student dashboard's section list: one
@@ -619,11 +632,21 @@ duplicate.
   row each fill only the cells that apply.  The `thead` is `.visually-hidden`,
   not removed.  Each row leads with an `.item-tile` (in an `.item-tile-cell`),
   a square glyph coloured by `data-kind` (`slides`, `notebook`, `document`,
-  `link`, `outline`, `graded`) from the `--kind-*` token pairs — one component
-  with an attribute, not six classes.  A course library dataset is reference
+  `link`, `outline`, `graded`, `lab`, `activity`) from the `--kind-*` token
+  pairs — one component with an attribute, not eight classes.  A published
+  assignment's tile follows its declared type (`AssignmentTypeTile`,
+  docs/assignment-types.md): an Assignment is `graded` with `i-clipboard-check`,
+  a Lab is `lab` with `i-flask`, and a Class activity is `activity` with
+  `i-users`. The graded kinds are solid tiles with a white glyph; the content
+  kinds are pale tints. The type's name is the tile's visually hidden text.
+  A course library dataset is reference
   material, so it takes `document` with the `i-list` glyph.  The name cell is an `.item-title` over an
   `.item-details` line; `.item-grade` right-aligns the grade.  A material's
   buttons are `.action-btn-icon`, the same fixed square as an assignment's.
+  Each button shows what it opens. A PDF, hosted or linked, is `i-file-text`,
+  the document tile's glyph, because both mean "a document". A notebook is
+  `i-notebook`, any other uploaded file is `i-download`, and a link to another
+  website is `i-external` (`ContentItemRow.action`).
   A section filter appears only at `IndexDisplayGroup.filterThreshold` (8) rows
   or more, and never on the ungrouped bucket.
 - **`.section-items--manage`** (with `.section-items-handle`,
@@ -857,7 +880,9 @@ duplicate.
   (an `.outline-caption`, the `.outline-figure` percent, an `.outline-meta` line
   and a link to the results), a second `.outline-caption`, and an
   `.outline-tasks` list of `.outline-row` buttons.  Each row has an
-  `.outline-glyph`, an `.outline-name` and its points; `data-status` colours the
+  `.outline-glyph`, an `.outline-name` and its points.  The name is the same
+  title as the editor's task header, the notebook heading the task sits under,
+  and the page adds no number to it; `data-status` colours the
   glyph, and the glyph character and the editor's pill always say the status
   too.  The `starter` glyph ("Still the starter code") reuses the amber
   `--preview-bg` / `--preview-fg` pair on purpose: it is the one "attention,
@@ -917,7 +942,9 @@ duplicate.
 - **`.icon`** — every inline stroked SVG icon, referencing a `<symbol>` in
   `Resources/Sprites/icons.svg` by `<use href="#i-…">`.  Geometry may appear
   in exactly two files: that sprite, and `Resources/Sprites/avatar-sprite.svg`
-  for the avatar parts.
+  for the avatar parts.  One glyph has one meaning (#2960, #2965).  Before you
+  use a symbol for a new action or a new row tile, read its comment in the
+  sprite.  If it already means something else, add a symbol.
 - **`.textarea-mono`**, `.form-stack` — a monospace textarea and
   the stacked form column that usually holds one.
 

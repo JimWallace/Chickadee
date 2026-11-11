@@ -96,8 +96,9 @@ struct TestSetupRoutes: RouteCollection {
 
         // The rules every authoring door enforces (`ManifestCoherence`),
         // checked here so a zip-borne manifest cannot smuggle a combination
-        // in that no editor would accept.
-        if let violation = ManifestCoherence.violation(in: manifest) {
+        // in that no editor would accept. A new setup has no assignment row
+        // yet, so no declared type applies (type: nil).
+        if let violation = ManifestCoherence.violation(for: nil, in: manifest) {
             throw AppError.unprocessable(reason: violation)
         }
 

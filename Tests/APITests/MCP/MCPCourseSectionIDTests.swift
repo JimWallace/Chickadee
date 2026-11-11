@@ -25,7 +25,7 @@ import Vapor
         try await withTestApp { app in
             let course = try await makeTestCourse(on: app, code: "CS246", name: "OOP")
             let section = APICourseSection(
-                name: "Labs", defaultGradingMode: "browser", sortOrder: 0, courseID: try course.requireID())
+                name: "Labs", defaultAssignmentType: .lab, sortOrder: 0, courseID: try course.requireID())
             try await section.save(on: app.db)
             let id = try await resolveCourseSectionID(
                 " \(try section.requireID().uuidString) ", inCourse: try course.requireID(),
@@ -39,7 +39,7 @@ import Vapor
             let mine = try await makeTestCourse(on: app, code: "CS246", name: "OOP")
             let other = try await makeTestCourse(on: app, code: "CS136", name: "Intro")
             let section = APICourseSection(
-                name: "Labs", defaultGradingMode: "browser", sortOrder: 0, courseID: try other.requireID())
+                name: "Labs", defaultAssignmentType: .lab, sortOrder: 0, courseID: try other.requireID())
             try await section.save(on: app.db)
             let raw = try section.requireID().uuidString
             await #expect(

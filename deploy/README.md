@@ -512,7 +512,9 @@ does not run. After a rollback on the server, the runner follows it back.
 The script uses the Compose file in the clone that holds it, with the
 `runner` service. The flags `--compose-dir`, `--service` and `--health-url`
 change these. The service must use the image
-`ghcr.io/jimwallace/chickadee:latest`, as the bundled Compose file does. Run it
+`ghcr.io/jimwallace/chickadee:latest`, as the bundled Compose file does, or the
+image that `--image-repo` names: an Apple Silicon host uses
+`ghcr.io/jimwallace/chickadee-runner` (`docs/mac-runner.md`). Run it
 as root, or as a user in the `docker` group, every 10 minutes:
 
 ```bash
@@ -528,14 +530,14 @@ Add this line, with the path to your clone:
 Cron sends mail only when the script prints a line, which is when it updates
 the runner or when it fails.
 
-On macOS with Docker Desktop, use the crontab of the user who runs Docker
-Desktop, not the root crontab, and write the log to a file that the user owns.
-The script needs no python3, flock or newer bash, and it finds `docker` in the
-directories where Docker Desktop and Homebrew install it:
-
-```
-*/10 * * * * /Users/NAME/Chickadee/deploy/chickadee-runner-update.sh --compose-dir DIR --service NAME >> /Users/NAME/Library/Logs/chickadee-runner-update.log 2>&1
-```
+On macOS with Docker Desktop, schedule the script with a launchd agent of the
+user who runs Docker Desktop, not with cron: installing a crontab on macOS
+waits for a permission dialog that an unattended session never answers. The
+agent, and the commands to load and stop it, are in `docs/mac-runner.md`
+("Keep it current"). The script needs no python3, flock or newer bash, and it
+finds `docker` in the directories where Docker Desktop and Homebrew install
+it. Run it from a clone of the repository, because it loads
+`scripts/lib/deployment-target.sh` from beside it.
 
 Docker Desktop runs the containers in a Linux VM. A service's `cpus` and
 `memory` limits cannot be larger than the CPUs and memory that Settings →

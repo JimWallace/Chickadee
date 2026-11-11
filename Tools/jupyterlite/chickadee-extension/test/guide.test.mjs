@@ -5,7 +5,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { compilePatterns } from '../lib/definitions.js';
 import {
-  checksPrefix, inlineCodeParts, normalizedSource, pillText, placeTask, reflectionStatus, taskOfCell, taskStatus,
+  checksPrefix, inlineCodeParts, normalizedSource, pillText, placeTask, placeTasks, reflectionStatus, taskOfCell,
+  taskStatus,
 } from '../lib/guide.js';
 
 const python = compilePatterns([
@@ -37,9 +38,98 @@ test('the header sits above the heading and the checks line under the last ancho
   assert.deepEqual([...placement.missing], []);
 });
 
-test('with no heading in the notebook, the header sits above the first anchor', () => {
-  const placement = placeTask(task({ heading: 'Not in this notebook' }), cells, python);
-  assert.equal(placement.headerCell, 3);
+test('the header sits above its own heading, and the title is that heading', () => {
+  const placement = placeTask(task(), cells, python);
+  assert.equal(placement.headingCell, 2);
+  assert.equal(placement.title, 'Task 2: Average heart rate');
+});
+
+test('a suite name the notebook lacks gives way to the heading above the first anchor', () => {
+  const placement = placeTask(task({ heading: 'Question 2', label: null, name: 'Question 2' }), cells, python);
+  assert.equal(placement.headingCell, 2);
+  assert.equal(placement.headerCell, 2);
+  assert.equal(placement.title, 'Task 2: Average heart rate');
+});
+
+test('the checks in no section take the heading above their first anchor', () => {
+  const placement = placeTask(task({ sectionID: null, heading: null, label: null, name: 'Other checks' }), cells, python);
+  assert.equal(placement.title, 'Task 2: Average heart rate');
+});
+
+test('with no heading above the first anchor, the header sits on it under the suite name', () => {
+  const bare = cells.slice(3);
+  const placement = placeTask(task({ heading: 'Question 2', label: null, name: 'Question 2' }), bare, python);
+  assert.equal(placement.headingCell, null);
+  assert.equal(placement.headerCell, 0);
+  assert.equal(placement.title, 'Question 2');
+});
+
+// A1 in HLTH 230: every task's tests also call bmi(), so each task has an
+// ambiguous anchor on it. Each header must still sit with its own functions.
+const bmiCells = [
+  { type: 'markdown', source: '# Python Functions' },
+  { type: 'markdown', source: '## 1. Warm Up I: BMI Calculator' },
+  { type: 'code', source: 'def bmi(w, h):\n    pass' },
+  { type: 'code', source: 'def bmi_category(b):\n    pass' },
+  { type: 'markdown', source: '## 2. Warm Up II: BMI Category' },
+  { type: 'code', source: 'def is_underweight(b):\n    pass' },
+  { type: 'code', source: 'def is_obese(b):\n    pass' },
+];
+const shared = { kind: 'function', name: 'bmi', ambiguous: true };
+const question = (n, anchors) => task({ sectionID: `q${n}`, heading: `Question ${n}`, label: null, name: `Question ${n}`, anchors });
+
+test('a shared helper does not pull every header up to its cell', () => {
+  const tasks = [
+    question(1, [{ kind: 'function', name: 'bmi' }, shared, { kind: 'function', name: 'bmi_category' }]),
+    question(2, [{ kind: 'function', name: 'is_underweight' }, shared, { kind: 'function', name: 'is_obese' }]),
+  ];
+  const [one, two] = placeTasks(tasks, bmiCells, python);
+  assert.equal(one.headerCell, 1);
+  assert.equal(one.checksCell, 3);
+  assert.equal(one.title, '1. Warm Up I: BMI Calculator');
+  assert.equal(two.headerCell, 4);
+  assert.equal(two.checksCell, 6);
+  assert.equal(two.title, '2. Warm Up II: BMI Category');
+});
+
+test('a task placed only by a shared helper takes no heading', () => {
+  const placement = placeTask(question(4, [shared]), bmiCells, python);
+  assert.equal(placement.headingCell, null);
+  assert.equal(placement.headerCell, 2);
+  assert.equal(placement.title, 'Question 4');
+});
+
+test('a heading found above the anchors goes to the task that comes first under it', () => {
+  // Suite order is the reverse of notebook order: the notebook decides.
+  const tasks = [
+    question(2, [{ kind: 'function', name: 'bmi_category' }]),
+    question(1, [{ kind: 'function', name: 'bmi' }]),
+  ];
+  const [two, one] = placeTasks(tasks, bmiCells, python);
+  assert.equal(one.headerCell, 1);
+  assert.equal(one.title, '1. Warm Up I: BMI Calculator');
+  assert.equal(two.headerCell, 3);
+  assert.equal(two.title, 'Question 2');
+});
+
+test('a task\'s own heading is never taken by a task that finds it above its anchors', () => {
+  const tasks = [
+    question(9, [{ kind: 'function', name: 'bmi' }]),
+    task({ sectionID: 'w', heading: '1. Warm Up I: BMI Calculator', label: '1. Warm Up I', name: 'BMI Calculator',
+      anchors: [{ kind: 'function', name: 'bmi_category' }] }),
+  ];
+  const [other, own] = placeTasks(tasks, bmiCells, python);
+  assert.equal(own.headerCell, 1);
+  assert.equal(other.headerCell, 2);
+  assert.equal(other.title, 'Question 9');
+});
+
+test('a finished shared helper does not end the starter status of a task', () => {
+  const t = question(2, [{ kind: 'function', name: 'is_underweight' }, shared]);
+  const edited = bmiCells.map((c, i) => (i === 2 ? { ...c, source: 'def bmi(w, h):\n    return w / (h / 100) ** 2' } : c));
+  const placement = placeTask(t, edited, python);
+  const starter = { is_underweight: 'def is_underweight(b):\n    pass', bmi: 'def bmi(w, h):\n    pass' };
+  assert.equal(taskStatus(t, placement, edited, starter), 'starter');
 });
 
 test('a renamed function is missing, and the checks line falls back to the heading', () => {

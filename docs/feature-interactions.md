@@ -164,10 +164,14 @@ because line numbers go out of date.
     then.
   - `SortOrderRenumbering`, which leaves it out of a section's item count and
     refuses its id.
-  - `list_content_items` (`attachedAssignmentPublicID`).
-- **Writers:** the material edit form's "Show on" select
-  (`CourseContentService.attach`), which also moves the item to the
-  assignment's section. `CourseSectionService.moveAssignment` (the
+  - `list_content_items` and `attach_content_item`
+    (`attachedAssignmentPublicID`).
+- **Writers:** the material edit form's "Show on" select and MCP
+  `attach_content_item`. Both resolve the target with
+  `CourseContentService.attachTarget` and write with
+  `CourseContentService.attach`, which also moves the item to the
+  assignment's section. A new door calls those two; it does not set
+  `assignmentID` itself. `CourseSectionService.moveAssignment` (the
   dashboard move and MCP `set_assignment_course_section`) moves it with its
   assignment in the same transaction, leaving its `sortOrder`.
   `AssignmentDeletion` detaches it into the
@@ -250,16 +254,13 @@ because line numbers go out of date.
 - **Readers:**
   - `NotebookTestAnchoring` (`Sources/Core/NotebookTestAnchoring.swift`),
     rule 1 of the anchors.
-  - The staff suite outline (`InstructorSuiteOutlineBuilder`) and the
-    student guide.
-  - MCP `get_suite`, through `SuiteAnchorResolution`
-    (`Services/SuiteAnchorResolution.swift`), which the outline also calls,
-    so the two report the same cell.
-- **Parallel paths:** the student guide (`NotebookGuideBuilder`,
-  `WebRoutes+NotebookGuide.swift`) calls `NotebookTestAnchoring` itself and
-  reads the student's personalized starter when there is no solution, so its
-  cell can differ from the staff surfaces' before a solution exists. A change
-  to the rules goes in Core, which all three read.
+  - The staff suite outline (`InstructorSuiteOutlineBuilder`), the student
+    guide (`NotebookGuideBuilder`) and MCP `get_suite`, all through
+    `SuiteAnchorResolution` (`Services/SuiteAnchorResolution.swift`). All
+    three read the solution, or the template starter before a solution
+    exists, so they agree on a test's cell. A change to the rules goes in
+    Core; a change to the notebook choice or the reported form goes in
+    `SuiteAnchorResolution`.
   - The `RunnerManifest` init removes it, so no runner receives it.
 - **Rules** (`docs/notebook-guide.md`, "Pin to a cell"):
   - Only a hand-written entry can be pinned. A generated entry is anchored by
@@ -270,6 +271,27 @@ because line numbers go out of date.
   - A caller that saves another edit before the pins checks the pins first
     (`SuiteAnchorPinning.refusal`), so a refused pin cannot leave a changed
     suite that nothing re-validated.
+
+### A guide task's title and header cell: `ck:tasks`
+
+- **Writer:** `placeTasks` in the editor extension
+  (`Tools/jupyterlite/chickadee-extension/src/guide.ts`), which `GuideView`
+  posts in `ck:tasks` after each redraw as `title` and `cell`.
+- **Readers:**
+  - The editor's task header (`taskHeader` in `guideView.ts`) and
+    `GuideView.taskOf`, which drives `ck:active-cell`.
+  - The page outline (`rowLabels` and the row click in
+    `Public/notebook-guide.js`).
+- **Rules** (`docs/notebook-guide.md`, "Which heading, and the title"):
+  - The header and the outline row show the same text. The extension works it
+    out (notebook heading, else the section name as written, else the
+    server's name); the page only falls back to the last two when no
+    extension has sent one.
+  - A row click reveals the cell the editor placed the task at (its first
+    anchored cell, else its header cell), not a heading or name the notebook
+    may lack.
+  - An ambiguous anchor does not place a task that has another, and does not
+    decide `starter` or "edited since".
 
 ### Failure detail: `TestSuiteEntry.failureDetail`
 
@@ -319,11 +341,25 @@ because line numbers go out of date.
   - On an activity that runs per lab group, no writer writes
     `class_item_coverage`. A new writer of item coverage branches on the
     lab the same way.
-  - The whole class's `class_item_coverage` has two readers: the sweep's
-    whole-class branch and the instructor's coverage section
-    (`buildAssignmentCoverageRows`). That section treats no rows as "not a
-    contribution assignment", so it is empty on a per-group activity; it
-    has no lab reader yet.
+  - The whole class's `class_item_coverage` has three readers: the sweep's
+    whole-class branch, the instructor's coverage section
+    (`buildAssignmentCoverageRows`), and a bug hunt's board
+    (`BugHuntCoverage.read`, `docs/bug-hunt-code-map.md`). The coverage
+    section treats no rows as "not a contribution assignment", so it is
+    empty on a per-group activity; it has no lab reader yet. A bug hunt
+    cannot run per lab group, so its board reads the whole class only.
+  - A bug hunt's board looks items up by the runner's outcome name of each
+    listed script (`runnerOutcomeTestName`). Renaming a listed entry's
+    display name after the class has covered it leaves the old row under
+    the old name, and the board reads that item as uncovered.
+  - A bug hunt's `items` name suite scripts, and only `set_activity` checks
+    them (`ActivityAuthoring.validateBugHunt`). A suite edit that removes or
+    renames a listed script leaves an item that no result can cover, so the
+    board stops short of 100%. Call `set_activity` with the new list after
+    such an edit.
+  - Only a contribution assignment writes these rows (a starter with slot
+    cells). A bug hunt whose starter has none saves, and its board says so
+    (`BugHuntPresentation.recordsCoverage`).
   - Turning `runsPerGroup` off leaves the lab coverage unread: the item
     goal counts from `class_item_coverage` again.
   - Course delete removes it (`LabGoalGroups.deleteClassGoalData`).
@@ -628,6 +664,72 @@ because line numbers go out of date.
   but `requireBrowserRunnerAccess` refuses a student. The runner then fails
   with a visible error and fails over to the worker. Nothing leaks.
 
+### The declared assignment type: `assignments.assignment_type`
+
+- **Rule:** the type is declared, never inferred from a title.
+  `AssignmentType.derivedDeclaration` (effective grading mode, then the
+  `activity` block) runs only where a row is created and in the one-time
+  `BackfillAssignmentType`, and each records the result at once
+  (docs/assignment-types.md).
+- **Rules the type carries** (phase 2): an Assignment refuses browser grading
+  (read as the effective mode), and a Class activity needs an `activity`
+  block. Both live in `ManifestCoherence.typeViolations`, so every door that
+  checks the manifest rules checks them, and an edit is refused only for a
+  rule it introduces (`violation(for:introducedBy:in:)`), never for one the
+  row inherits. A row that stores no type (`declaredAssignmentType` nil, test
+  fixtures only) gets no type rule.
+- **Writers of the type:** every creator through
+  `NewAssignmentFields.assignmentType` (no default): the new-assignment page
+  (its Type select, else the section's default type, else Assignment), MCP
+  `create_assignment` (its `assignmentType`, else the derivation), quick
+  publish (the derivation). The clone and the bundle import carry the type
+  through `admissibleAssignmentType`, which turns a browser-graded Assignment
+  into a Lab and copies anything else as it is. A change of type goes through
+  `AssignmentTypeChange.apply` (the edit page's Type select and MCP
+  `update_assignment`): it checks `ManifestCoherence.violation(declaring:over:in:)`
+  and writes an `assignment.type_changed` audit record.
+- **Writers that must check the type:** every writer of the grading mode, the
+  submission mode, the language or the activity: `setManifestGradingMode`,
+  `setManifestSubmissionMode`, `changeDeclaredLanguage`,
+  `ActivityAuthoring.setActivity` (each reads `declaredAssignmentType(of:)`),
+  MCP `set_grading_mode`, `set_submission_mode` and
+  `restore_assignment_version`. A new writer of one of those fields passes
+  the type to `ManifestCoherence`; nil is right only where no assignment row
+  exists yet (the zip upload) or the edit cannot change a type rule (a
+  dataset edit).
+- **Readers:** the row tile on the instructor dashboard, the student course
+  page and the admin course page (`AssignmentTypeTile`), MCP `get_assignment`,
+  `check_assignment` (the type rules are `manifest.incoherent` findings), the
+  bundle export, the BrightSpace sweep and the frozen class-goal requeue
+  (`APIAssignment.isExcludedFromGradePush`), the LTI AGS sweep, the
+  BrightSpace result flag (`flagResultForBrightSpaceSync`) and the BrightSpace
+  grade-clear sweep (`AssignmentType.pushesGradesToLMS`), and the slip-day offer, the claim
+  state and the dashboard's slip-day action (`AssignmentType.allowsSlipDays`).
+- **Parallel path that differs on purpose:** the LTI sweep reads only the type,
+  because it never read the BrightSpace "Do not sync" flag.
+- **Known gap:** the BrightSpace page (`BrightSpacePagePresenter`) still shows a
+  Class activity's mapped grade item rather than "Do not sync", and "Push all"
+  can still queue its rows, which the sweeps then drop without sending.
+- **Fact:** a section has no grading mode (phase 3). A section move changes
+  neither the type nor the grading mode; `CourseSectionService.typeNote`
+  reports a section default type that differs from the moved assignment's.
+
+### A course section's default type: `course_sections.default_assignment_type`
+
+- **Rule:** the default only seeds creation. The new-assignment page selects it
+  until the author picks a type (`newAssignmentDeclaredType`), and nothing
+  else reads it for grading.
+- **Writers:** `CourseSectionService.create` and `.update` (the web section
+  forms and MCP `create_course_section` / `rename_course_section`), the
+  course clone, the bundle import (the bundled type, or "lab" from a legacy
+  "browser" grading mode) and the migration `AddSectionDefaultAssignmentType`.
+- **Readers:** the new-assignment page and its draft service, the `/instructor`
+  section header, MCP `list_course_sections`, the bundle export, and a move's
+  type note.
+- **Fact:** the old `default_grading_mode` column stays in the table with a
+  database default of "worker" so the old color of a blue-green deploy can
+  read it; the model no longer maps it. A later release drops it.
+
 ### What a runner receives: `RunnerManifest` and the cache key
 
 - **Rules:**
@@ -863,6 +965,31 @@ coordination, and each must see every edit.
     (`docs/datasets.md`).
   - `variesPerStudent` is not a wider `hasPersonalization`. Each predicate
     has its own readers. Do not use one in place of the other.
+  - Whether a dataset is the same for every student is
+    `DatasetDeliveryMode.init`, and nothing else states it. Its modes are
+    `shared`, `perPart` and `perStudent`. Four features read it: the working-copy writer (`writeDatasetFiles`), `isShared` (the
+    ranked activities), the Files panel note (`DatasetDeliveryNote`) and MCP
+    `datasetDelivery`. A `shared` dataset is a link to the shared extraction
+    in the working copy; a `perStudent` one is a real file
+    (`docs/dataset-shared-delivery.md`).
+  - A write never goes through a dataset link:
+    `DatasetWorkingCopyPlacement.write` removes the link first. A change of
+    mode is reconciled on the next visit by `datasetTargetIsCurrent`, which
+    asks for each target's form, not only its presence.
+  - A partition's parts are stored once per fingerprint under
+    `{testSetupsDirectory}dataset-parts/<setupID>/` (`DatasetPartStore`), and
+    each student's working copy links to their part. Three features meet
+    there: the working-copy writer publishes and sweeps it, the links of
+    every student in the assignment read it, and `DiskUsage` counts it with
+    the setup. Rules: a published fingerprint directory is never written
+    again; the bytes come from `DatasetMaterializer.allParts`, pinned to what
+    grading materializes; a sweep keeps every current fingerprint and removes
+    a superseded one a day after it first marks it. The part a student is
+    dealt is `DatasetSpec.part(forDeal:)` for the materializer, the stored
+    part names and `DatasetLinkTargets` alike, so a change to that rule moves
+    all three. Where a student's copy belongs is
+    `DatasetLinkTargets.placement`, which both the writer and the skip check
+    read.
 
 ### Dataset transform kinds: `DatasetTransform.Kind`
 
@@ -939,6 +1066,13 @@ coordination, and each must see every edit.
     `subject_user_id` metadata key, so `AuditLogger.recordDatasetWrite` sets
     `title` to the dataset name. A new course-scoped audit action must set one
     of those keys, or its row shows a bare UUID.
+  - The edit page's Files panel, and the workbench's Files sheet, list an
+    attached file (`SupportFileLibraryState.attachment != nil`) in the
+    Datasets table, apart from the support files (`EditDatasetsBlock`), with
+    the library's actions only, because the delete door refuses an attached
+    file. A new action on a `SupportFileRow` must say which of the two kinds
+    it applies to. `Public/support-files.js` finds rows by
+    `tr[data-support-file]` in either table.
 
 ### The result: `TestOutcomeCollection` counts and the grade
 
@@ -1212,8 +1346,8 @@ coordination, and each must see every edit.
     so that both read it.
   - What a student's working copy holds is `StudentWorkspaceFiles`: the
     support files it links, minus suite scripts, reserved notebooks,
-    grader-only files and datasets, plus the datasets, which are written
-    whatever their grader-only mark. `createSupportFileSymlinks` and
+    grader-only files and datasets, plus the datasets, which
+    `writeDatasetFiles` places whatever their grader-only mark. `createSupportFileSymlinks` and
     `files.missing` both call it. `linkSupportFiles` makes the links, with
     the parent folders of a file in a subfolder, so a nested entry that
     `files.missing` counts as delivered is in the working copy. The browser runner's zip filter and the
@@ -1304,7 +1438,7 @@ coordination, and each must see every edit.
   - An activity whose kind compares students (`ActivityKind.comparesStudents`)
     accepts only shared data (`DatasetSpec.isShared`). The rule is in
     `ManifestCoherence`. A new door that writes an activity or a dataset spec
-    must call `ManifestCoherence.violation(introducedBy:in:)`
+    must call `ManifestCoherence.violation(for:introducedBy:in:)`
     (`docs/datasets-course-library.md` §4.11). The web `PUT /datasets`
     routes and MCP `set_dataset` call it through `applyDatasetsEdit`
     (`Services/DatasetsChange.swift`), the one dataset-spec edit (#2771). The bundle import, the

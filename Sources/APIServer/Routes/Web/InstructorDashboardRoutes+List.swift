@@ -434,7 +434,8 @@ extension InstructorDashboardRoutes {
                 vanityURL: vanityURL,
                 // Staff always reach the board; a draft has no students to rank.
                 leaderboardURL: assignment == nil
-                    ? nil : props?.activity?.leaderboardPath(testSetupID: setupID, viewerIsStaff: true)
+                    ? nil : props?.activity?.leaderboardPath(testSetupID: setupID, viewerIsStaff: true),
+                assignmentType: assignment?.assignmentType ?? .assignment
             )
         }
     }
@@ -521,7 +522,7 @@ extension InstructorDashboardRoutes {
             return CourseSectionRow(
                 sectionID: sID.uuidString,
                 name: section.name,
-                defaultGradingMode: section.defaultGradingMode,
+                defaultAssignmentType: section.defaultAssignmentType,
                 sortOrder: section.sortOrder,
                 items: mergedBySectionItemOrder(keyedBySectionID[sID] ?? [])
             )

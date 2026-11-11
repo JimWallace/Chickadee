@@ -1,14 +1,12 @@
 // APIServer/Services/SuiteAnchorResolution.swift
 //
 // The notebook cell each suite item belongs to (docs/notebook-guide.md,
-// "Anchors"), as the staff surfaces report it: the workbench outline
-// (`InstructorSuiteOutlineBuilder`) and MCP `get_suite`. One place picks the
-// notebook that decides the anchors and maps a resolved `NotebookAnchor` to
-// its reported form, so those two staff surfaces cannot disagree about a
-// test's cell. The rules themselves are `NotebookTestAnchoring` in Core. The
-// student guide (`NotebookGuideBuilder`) applies the same rules to the
-// student's own personalized starter, so before a solution exists its cell
-// can differ from the one reported here.
+// "Anchors"), for every surface that reports one: the workbench outline
+// (`InstructorSuiteOutlineBuilder`), the student guide (`NotebookGuideBuilder`)
+// and MCP `get_suite`. One place picks the notebook that decides the anchors
+// and maps a resolved `NotebookAnchor` to its reported form, so the three
+// cannot disagree about a test's cell. The rules themselves are
+// `NotebookTestAnchoring` in Core.
 
 import Core
 import Fluent
@@ -16,11 +14,14 @@ import Foundation
 
 enum SuiteAnchorResolution {
     /// The definitions that decide the anchors: the solution's, or the
-    /// starter's when there is no solution yet (the starter has the same
-    /// headings and, usually, the same stubs). An empty scan when neither
-    /// can be read, which leaves only pins and generator targets.
+    /// assignment's starter when there is no solution yet (the starter has the
+    /// same headings and, usually, the same stubs). The starter is the
+    /// template, never a student's personalized copy, so every student and
+    /// every staff surface gets the same cells. An empty scan when neither
+    /// can be read, which leaves only pins and generator targets. No byte of
+    /// either notebook leaves here, only the scan.
     static func notebookScan(
-        assignment: APIAssignment, setup: APITestSetup, language: AssignmentLanguage?,
+        assignment: APIAssignment?, setup: APITestSetup, language: AssignmentLanguage?,
         db: any Database, testSetupsDirectory: String
     ) async -> NotebookDefinitionScan {
         let solutionData = try? await solutionNotebookData(

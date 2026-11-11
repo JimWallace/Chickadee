@@ -263,6 +263,8 @@ struct AdminCourseAssignmentRow: Encodable {
     let dueAt: String?
     let isOpen: Bool
     let visibility: String  // "closed" | "preview" | "open"
+    /// The declared type, which picks the row tile (docs/assignment-types.md).
+    var assignmentType: AssignmentType = .assignment
 }
 
 struct AdminAlertsRuleRow: Encodable {

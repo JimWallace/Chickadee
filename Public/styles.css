@@ -61,6 +61,12 @@
     --kind-outline-fg: #5B3F8C;
     --kind-graded-bg: var(--health-teal);
     --kind-graded-fg: #FFFFFF;
+    /* The declared assignment type (docs/assignment-types.md): a Lab is
+       indigo and a Class activity magenta, beside the teal Assignment. */
+    --kind-lab-bg: #4C5BC4;
+    --kind-lab-fg: #FFFFFF;
+    --kind-activity-bg: #B03A7E;
+    --kind-activity-fg: #FFFFFF;
     --state-amber: #D69E2E;  /* state dot: preview / TA — pairs with the select text */
     --amber-bg: #FFFBEB;    /* pale amber — hint / warning callouts */
     --warning-bg: #FFF8E1;  /* warm amber tint — submission warning callout */
@@ -446,6 +452,10 @@
         --kind-outline-fg: #CDB9F0;
         --kind-graded-bg: #007C87;
         --kind-graded-fg: #FFFFFF;
+        --kind-lab-bg: #4C5BC4;
+        --kind-lab-fg: #FFFFFF;
+        --kind-activity-bg: #A3346F;
+        --kind-activity-fg: #FFFFFF;
         --state-amber: #ECC94B;
         --avatar-back-pebble: #32332F;
         --avatar-staff-ring: #E5E7EB;
@@ -528,6 +538,10 @@
     --kind-outline-fg: #CDB9F0;
     --kind-graded-bg: #007C87;
     --kind-graded-fg: #FFFFFF;
+    --kind-lab-bg: #4C5BC4;
+    --kind-lab-fg: #FFFFFF;
+    --kind-activity-bg: #A3346F;
+    --kind-activity-fg: #FFFFFF;
     --state-amber: #ECC94B;
     --avatar-back-pebble: #32332F;
     --avatar-staff-ring: #E5E7EB;
@@ -2437,6 +2451,10 @@ body:has(.notebook-header .nb-title-block) .nav {
 .diff-context { color: inherit; }
 .diff-added { background: var(--success-bg); color: var(--success-fg); }
 .diff-removed { background: var(--danger-bg); color: var(--danger-fg); }
+/* A bug hunt's code map: a line the class has not covered yet, and one where
+   only some of the items on it are covered. */
+.diff-uncovered { background: var(--gray-100); color: var(--gray-600); }
+.diff-partial { background: var(--warning-bg); }
 .diff-fold td {
     padding: .2rem .75rem;
     background: var(--gray-50);
@@ -2548,6 +2566,8 @@ body:has(.notebook-header .nb-title-block) .nav {
 .item-tile[data-kind="document"] { background: var(--kind-document-bg); color: var(--kind-document-fg); }
 .item-tile[data-kind="outline"] { background: var(--kind-outline-bg); color: var(--kind-outline-fg); }
 .item-tile[data-kind="graded"] { background: var(--kind-graded-bg); color: var(--kind-graded-fg); }
+.item-tile[data-kind="lab"] { background: var(--kind-lab-bg); color: var(--kind-lab-fg); }
+.item-tile[data-kind="activity"] { background: var(--kind-activity-bg); color: var(--kind-activity-fg); }
 .item-tile[data-kind="ok"] { background: var(--open-bg); color: var(--open-fg); }
 .item-tile[data-kind="alert"] { background: var(--danger-bg); color: var(--danger-fg); }
 
@@ -2912,6 +2932,17 @@ body:has(.notebook-header .nb-title-block) .nav {
 .composite-tile .composite-frame { max-width: 16rem; }
 /* Every lab's image, side by side, under a per-group composite's staff board. */
 .composite-labs { display: grid; grid-template-columns: repeat(auto-fill, minmax(16rem, 1fr)); gap: 1.5rem; }
+
+/* Bug hunt (docs/bug-hunt-code-map.md): the share the class has covered in
+   the score figure, and the code in the diff listing (.diff-uncovered and
+   .diff-partial sit with the listing's row states). */
+.bug-hunt { display: flex; flex-direction: column; gap: 1rem; }
+.bug-hunt-share { display: flex; align-items: baseline; gap: .75rem; }
+.bug-hunt-count { font-size: var(--text-lg); color: var(--gray-600); }
+/* The projector shows the share and the code at the room's size. */
+.present-bug-hunt { flex: 1; }
+.present-bug-hunt .score-figure { font-size: 6em; }
+.present-bug-hunt .diff-table { font-size: var(--text-lg); }
 .composite-labs-item { display: flex; flex-direction: column; gap: .5rem; }
 .composite-labs-item > h3, .composite-labs-item > p { margin: 0; }
 @media (prefers-reduced-motion: reduce) {
@@ -3488,8 +3519,8 @@ body:has(.notebook-header .nb-title-block) .nav {
 /* JS-shown proximity warning by the due-date field (palette amber, was a
    hardcoded #c05000); display stays inline (toggled to '' by script). */
 .date-warning { color: var(--amber); margin-top: .4rem; }
-/* JS-shown grading-mode hint under the section picker (display toggled inline). */
-.grading-mode-hint { margin-top: .3rem; }
+/* The selected assignment type's one-sentence hint under the new-assignment titlebar row. */
+.assignment-type-hint { margin-top: .3rem; }
 /* Runner-requirements row + its two grow-to-fill labelled inputs. */
 .runner-req-row { display: flex; gap: 1rem; flex-wrap: wrap; margin: .5rem 0 1.25rem; }
 .req-field { display: flex; align-items: center; gap: .4rem; font-size: var(--text-base); flex: 1; min-width: 12rem; }
@@ -3872,9 +3903,9 @@ td.pf-var-locked-value { font-family: var(--font-mono); font-size: var(--text-sm
     background: transparent;
     color: var(--muted);
 }
-.section-mode-note { font-size: var(--text-sm); color: var(--gray-500); }
+.section-type-note { font-size: var(--text-sm); color: var(--gray-500); }
 .section-action--push { margin-left: auto; }
-.grading-mode-select { font-size: var(--text-base); padding: .25rem .45rem; }
+.section-type-select { font-size: var(--text-base); padding: .25rem .45rem; }
 /* Tight row of icon/action buttons in an assignment-row Actions cell. It sets
    no white-space and no button padding: the extension and grade-override
    popover forms open inside the cell and would inherit both. */

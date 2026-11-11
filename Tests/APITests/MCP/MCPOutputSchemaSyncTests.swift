@@ -108,7 +108,8 @@ import Testing
                 version: "0.0.0", mcpMode: "read_write",
                 advertisedScopes: ["content:read"], writeEnabled: true,
                 languages: MCPLanguageCapability.all,
-                activityKinds: MCPActivityKindCapability.all)
+                activityKinds: MCPActivityKindCapability.all,
+                assignmentTypes: MCPAssignmentTypeCapability.all)
         ),
         (
             SetActivityTool.name, SetActivityTool.outputSchema,
@@ -129,7 +130,7 @@ import Testing
             CreateAssignmentTool.Output(
                 publicID: "abc123", title: "T", slug: "t", courseCode: "CS136",
                 courseKey: "CS136-F26", courseTerm: "Fall 2026",
-                cellCount: 2, isOpen: false)
+                cellCount: 2, isOpen: false, assignmentType: "assignment", gradingMode: "worker")
         ),
         (
             UpdateAssignmentTool.name, UpdateAssignmentTool.outputSchema,
@@ -138,7 +139,7 @@ import Testing
                 visibility: "open", dueAt: "2026-01-01T00:00:00Z",
                 startsAt: "2026-01-01T00:00:00Z", validationStatus: "passed",
                 secretRevealEnabled: false, solutionVisibility: "hidden",
-                passingThresholdPercent: 60)
+                passingThresholdPercent: 60, assignmentType: "lab")
         ),
     ]
 

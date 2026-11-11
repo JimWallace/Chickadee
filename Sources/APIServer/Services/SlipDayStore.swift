@@ -431,7 +431,7 @@ func slipDayClaimWindowCeiling(
 /// policy, the student's course-wide balance, and their unrefunded spends on
 /// this assignment. Nil when no claim can be reachable: the course is
 /// missing, archived, or has slip days off; the assignment is a staff-only
-/// preview; or the viewer is not enrolled. The caller is always the student
+/// preview or a Class activity; or the viewer is not enrolled. The caller is always the student
 /// viewer — staff bypass reveal gates before this is consulted.
 func slipDayClaimState(
     for assignment: APIAssignment,
@@ -455,6 +455,8 @@ func slipDayClaimState(
 ) async throws -> SlipDayClaimState? {
     guard let userID = user.id, let assignmentID = assignment.id else { return nil }
     guard assignment.visibility != .preview else { return nil }
+    // A Class activity takes no slip days (docs/assignment-types.md).
+    guard assignment.assignmentType.allowsSlipDays else { return nil }
     guard let course, !course.isArchived else { return nil }
     let policy = course.slipDayPolicy
     guard policy.enabled else { return nil }

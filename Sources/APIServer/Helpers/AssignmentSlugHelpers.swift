@@ -76,6 +76,9 @@ struct NewAssignmentFields {
     var testSetupID: String
     var title: String
     var courseID: UUID
+    /// The declared type (docs/assignment-types.md). No default: each caller
+    /// declares one, from its own source or `AssignmentType.derivedDeclaration`.
+    var assignmentType: AssignmentType
     var visibility: AssignmentVisibility = .closed
     var dueAt: Date?
     var startsAt: Date?
@@ -111,6 +114,7 @@ func createAssignmentWithUniquePublicID(
             sectionID: fields.sectionID,
             courseID: fields.courseID
         )
+        assignment.assignmentType = fields.assignmentType
         do {
             try await assignment.save(on: db)
         } catch {

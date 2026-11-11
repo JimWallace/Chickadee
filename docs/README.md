@@ -13,6 +13,7 @@ not exist.
 
 - [architecture.md](architecture.md) — system architecture: targets, grading pipeline, auth, sandboxing, MCP, deployment
 - [grading-integrity.md](grading-integrity.md) — what a submission can do to its own grade today, the decisions, and the four-phase plan (#2223)
+- [assignment-types.md](assignment-types.md) — a declared Assignment / Lab / Class activity type: what it controls, the rules each type carries, section default types, and the rows that break a rule (phases 1 to 3 shipped)
 - [failure-detail.md](failure-detail.md) — how much of a failing test a student sees: `full`, `actualOnly` and `verdictOnly`
 - [manifest-format-v2.md](manifest-format-v2.md) — proposed: the manifest (`TestProperties`) review, the v2 envelope and its phased rollout
 - [runner-capability-profiles.md](runner-capability-profiles.md) — runner capability matching, the language gate, `minimumRunnerVersion`
@@ -61,6 +62,7 @@ not exist.
 - [personalization-drift-prevention-plan.md](personalization-drift-prevention-plan.md) — the plan that prevents drift between personalization and the solution
 - [datasets.md](datasets.md) — per-student datasets (#1083)
 - [datasets-course-library.md](datasets-course-library.md) — the per-course dataset library: versions and dictionary, attachments, the course cohort seed, the student Data page, the MCP tools, clone and bundle, `formatNoise`, the ranked-activity refusal and the dealt partition; opens with a Status table
+- [dataset-shared-delivery.md](dataset-shared-delivery.md) — link a dataset that is the same for many students into the editor working copy instead of writing a copy per student: a whole file to the shared extraction (step 1), a partition part to a part stored once (step 2)
 - [examples/r-lab9-trial/](examples/r-lab9-trial/) — a worked R lab: starter, solution, data and test scripts for each tier
 
 ## Courses, roles and students
@@ -79,6 +81,7 @@ not exist.
 - [collaborative-class-assignments.md](collaborative-class-assignments.md) — shipped: contribution assignments and class goals
 - [class-activities.md](class-activities.md) — shipped: leaderboards, bots, round robins, hills and brackets (#1508)
 - [class-composite.md](class-composite.md) — shipped: each student renders one slot of a shared image, composed live on the projector
+- [bug-hunt-code-map.md](bug-hunt-code-map.md) — shipped: a bug hunt's reference code on the projector, lit part by part as the class covers it
 - [lab-groups.md](lab-groups.md) — shipped: lab groups and in-lab sessions: a session per (activity, group), a join code for the room, every class activity run once per group
 
 ## Achievements and avatars
@@ -107,6 +110,7 @@ not exist.
 
 - [release-process.md](release-process.md) — versions at merge time, `changelog.d/` fragments, and cutting a minor release
 - [zero-downtime-deploy.md](zero-downtime-deploy.md) — blue-green deploys, the `chickadee-deployer` daemon, read-only deploy oversight
+- [mac-runner.md](mac-runner.md) — a bonus runner on an Apple Silicon Mac under Docker Desktop: the arm64 runner image, sizing, the launchd updater
 - [operational-diagnostics.md](operational-diagnostics.md) — observability tables, log events, metrics endpoint, ops runbook
 - [load-testing.md](load-testing.md) — `chickadee-loadtest`: simulated deadline traffic on the runner poll and the status poll
 - [database-performance.md](database-performance.md) — query counts, load and plans measured at one course's scale; the rules that came out of them; the baseline and the weekly check (`Tools/perf-bench/`)

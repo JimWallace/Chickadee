@@ -104,7 +104,7 @@ enum CourseCloneService {
         for section in sections {
             guard let oldID = section.id else { continue }
             let copy = APICourseSection(
-                name: section.name, defaultGradingMode: section.defaultGradingMode,
+                name: section.name, defaultAssignmentType: section.defaultAssignmentType,
                 sortOrder: section.sortOrder, courseID: newCourseID)
             try await copy.save(on: db)
             sectionIDMap[oldID] = try copy.requireID()
