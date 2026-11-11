@@ -17,6 +17,63 @@ import Vapor
 
 extension WebRoutes {
 
+    /// The ranked places, the board's title and, for a bracket, the
+    /// tournament, by the activity's aggregation.
+    private func presentPlaces(
+        req: Request, user: APIUser, setup: APITestSetup, aggregation: ActivityAggregation, groupID: UUID?
+    ) async throws -> (places: [PresentPlace], title: String, tournament: TournamentPresentation?) {
+        // Nameless like a student view, locking no handle like a staff one.
+        // Staff decide what they project and when, and opening the page to
+        // check it must not spend every student's one change (#1757).
+        let reader = LeaderboardReader.presenting(as: user)
+        var places: [PresentPlace] = []
+        let title: String
+        var tournament: TournamentPresentation?
+        switch aggregation {
+        case .standings:
+            let board = try await buildStandingsBoard(
+                setup: setup, reader: reader, showAll: true, groupID: groupID, on: req.db)
+            places = board.rows.map {
+                PresentPlace(
+                    rank: $0.rank, rankText: $0.rankText, rankTier: $0.rankTier, handle: $0.handle,
+                    valueText: $0.valueText, avatar: $0.avatar)
+            }
+            title = "Standings · highest average"
+        case .union:
+            let union = try await buildUnionPresentation(
+                setup: setup, reader: reader, showAll: true, allURL: "", on: req.db)
+            places = (union?.kills ?? []).map {
+                PresentPlace(
+                    rank: $0.rank, rankText: $0.rankText, rankTier: $0.rankTier, handle: $0.handle,
+                    valueText: $0.valueText, avatar: $0.avatar)
+            }
+            title = "Tests · most faults found"
+        case .bracket:
+            tournament = try await buildTournamentPresentation(
+                setup: setup, viewerID: nil, includeNames: false, groupID: groupID, on: req.db)
+            // A title is a noun phrase; where the run stands goes in the clock's place.
+            title = tournament.map { "Tournament · \($0.scheduleName.lowercased())" } ?? "Tournament"
+        case .composite:
+            // A composite ranks nobody: the composed image takes the
+            // podium's place (docs/class-composite.md).
+            title = "Class composite"
+        case .coverage:
+            title = "Bug hunt"
+        case .leaderboard:
+            // Named rather than left to a catch-all arm, so a fifth
+            // aggregation does not render the metric board silently (#1745).
+            let board = try await buildLeaderboard(
+                setup: setup, reader: reader, showAll: true, groupID: groupID, on: req.db)
+            places = board.rows.map {
+                PresentPlace(
+                    rank: $0.rank, rankText: $0.rankText, rankTier: $0.rankTier, handle: $0.handle,
+                    valueText: $0.metricText, avatar: $0.avatar)
+            }
+            title = "Leaderboard · highest metric"
+        }
+        return (places, title, tournament)
+    }
+
     /// Renders Present mode. The caller has already checked that the viewer is
     /// course staff and that the setup has a leaderboard activity.
     func leaderboardPresentPage(
@@ -100,63 +157,6 @@ extension WebRoutes {
         // The fragment refreshes the board only; the session panel sits
         // outside it, so the code on the wall does not flicker.
         return Response.pollFragment(html: html, for: req)
-    }
-
-    /// The ranked places, the board's title and, for a bracket, the
-    /// tournament, by the activity's aggregation.
-    private func presentPlaces(
-        req: Request, user: APIUser, setup: APITestSetup, aggregation: ActivityAggregation, groupID: UUID?
-    ) async throws -> (places: [PresentPlace], title: String, tournament: TournamentPresentation?) {
-        // Nameless like a student view, locking no handle like a staff one.
-        // Staff decide what they project and when, and opening the page to
-        // check it must not spend every student's one change (#1757).
-        let reader = LeaderboardReader.presenting(as: user)
-        var places: [PresentPlace] = []
-        let title: String
-        var tournament: TournamentPresentation?
-        switch aggregation {
-        case .standings:
-            let board = try await buildStandingsBoard(
-                setup: setup, reader: reader, showAll: true, groupID: groupID, on: req.db)
-            places = board.rows.map {
-                PresentPlace(
-                    rank: $0.rank, rankText: $0.rankText, rankTier: $0.rankTier, handle: $0.handle,
-                    valueText: $0.valueText, avatar: $0.avatar)
-            }
-            title = "Standings · highest average"
-        case .union:
-            let union = try await buildUnionPresentation(
-                setup: setup, reader: reader, showAll: true, allURL: "", on: req.db)
-            places = (union?.kills ?? []).map {
-                PresentPlace(
-                    rank: $0.rank, rankText: $0.rankText, rankTier: $0.rankTier, handle: $0.handle,
-                    valueText: $0.valueText, avatar: $0.avatar)
-            }
-            title = "Tests · most faults found"
-        case .bracket:
-            tournament = try await buildTournamentPresentation(
-                setup: setup, viewerID: nil, includeNames: false, groupID: groupID, on: req.db)
-            // A title is a noun phrase; where the run stands goes in the clock's place.
-            title = tournament.map { "Tournament · \($0.scheduleName.lowercased())" } ?? "Tournament"
-        case .composite:
-            // A composite ranks nobody: the composed image takes the
-            // podium's place (docs/class-composite.md).
-            title = "Class composite"
-        case .coverage:
-            title = "Bug hunt"
-        case .leaderboard:
-            // Named rather than left to a catch-all arm, so a fifth
-            // aggregation does not render the metric board silently (#1745).
-            let board = try await buildLeaderboard(
-                setup: setup, reader: reader, showAll: true, groupID: groupID, on: req.db)
-            places = board.rows.map {
-                PresentPlace(
-                    rank: $0.rank, rankText: $0.rankText, rankTier: $0.rankTier, handle: $0.handle,
-                    valueText: $0.metricText, avatar: $0.avatar)
-            }
-            title = "Leaderboard · highest metric"
-        }
-        return (places, title, tournament)
     }
 
     /// Present mode: the join code box for `&fragment=join`, else the page or
