@@ -137,10 +137,12 @@ struct TestSetupRoutes: RouteCollection {
         // A spec that claims a library version must name one this course has,
         // and the file must be its bytes (docs/datasets-course-library.md).
         for spec in manifest.datasets {
-            let issue: String?
+            var issue: String?
             do {
                 issue = try await CourseDatasetService.sourceIssue(
                     for: spec, courseID: upload.courseID, zipPath: zipPath, on: req.db)
+                // The format's checks too (docs/fhir-datasets-plan.md §6).
+                if issue == nil { issue = await datasetFormatRefusal(spec, zipPath: zipPath) }
             } catch {
                 try? FileManager.default.removeItem(atPath: zipPath)
                 throw error

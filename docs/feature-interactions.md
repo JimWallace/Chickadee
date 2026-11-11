@@ -986,6 +986,37 @@ coordination, and each must see every edit.
     `DatasetLinkTargets.placement`, which both the writer and the skip check
     read.
 
+### Dataset format: `DatasetFormat`
+
+- **Objects:** `DatasetSpec.format` (`csv` or `fhirNdjson`), decoded as `csv`
+  and encoded only when it is not, so a stored manifest keeps its bytes
+  (`docs/fhir-datasets-plan.md`).
+- **Readers that branch on the format:**
+  - `DatasetMaterializer.materialize`: a format without `supportsSelection`
+    is delivered as the source bytes, whatever the spec selects.
+  - `DatasetDeliveryMode.init`: such a format is always `shared`. The Files
+    panel row carries `datasetFormat` so its note reads the same rule.
+  - `DatasetSpec.part(forDeal:)`, `TestProperties.hasPartitionedDatasets` and
+    `DatasetDeals.withholdingUndealtParts`: a FHIR spec is never a partition.
+  - `DatasetSpecValidation.issue`: a FHIR spec refuses a sample, a partition,
+    a stratum and transforms, needs a `.ndjson` name and a file that passes
+    `FHIRNdjsonProfile`; a CSV spec refuses a `.ndjson` name.
+  - `datasetSpecRefusal` reads the file for every FHIR spec, and the zip
+    upload runs the same format checks (`datasetFormatRefusal`). Bundle
+    import, clone and restore copy the manifest as it is, as for every other
+    spec rule.
+  - `datasetDiagnosticsReports` skips a FHIR spec: there is nothing to
+    estimate when every student gets the whole file.
+  - Not yet format-aware (P3): the student download route (`mine.csv`, served
+    as `text/csv`) and the upload page's dataset line.
+- **Rules:**
+  - A line of a FHIR file is never re-encoded on any delivery path.
+  - Every rebuild of a `DatasetSpec` carries `format`, as it carries the
+    library fields and `partCount`.
+  - Only the library attach path sets the format
+    (`DatasetSpecValidation.libraryFieldIssue`).
+  - A new format updates every reader above, or says why it does not.
+
 ### Dataset transform kinds: `DatasetTransform.Kind`
 
 - **Objects:** the kind of each step in a spec's `transforms`, and the bytes

@@ -70,7 +70,7 @@ enum DatasetDeals {
         _ files: [String: String]?, manifest: TestProperties, dealNumber: Int?
     ) -> [String: String]? {
         guard var files, holdsNoPartYet(manifest: manifest, dealNumber: dealNumber) else { return files }
-        for spec in manifest.datasets where spec.kind == .partition {
+        for spec in manifest.datasets where spec.kind == .partition && spec.format.supportsSelection {
             files[spec.file] = files[spec.file].map(DatasetMaterializer.headerOnly)
         }
         return files

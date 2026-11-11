@@ -258,7 +258,10 @@ struct SetDatasetTool: ContentTool {
             // attach path writes them, and every other door carries them.
             source: existing?.source,
             scope: existing?.scope ?? .assignment,
-            partCount: partCount)
+            partCount: partCount,
+            // The format is the library attach path's to set, like the
+            // library fields above; this door carries it.
+            format: existing?.format ?? .csv)
     }
 
     /// Maps the wire shape to the model. An unrecognised kind is dropped rather

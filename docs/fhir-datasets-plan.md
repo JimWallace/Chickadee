@@ -4,8 +4,10 @@ The plan to extend the course dataset library
 ([datasets-course-library.md](datasets-course-library.md)) beyond CSV to FHIR
 JSON, and to give a course a simulated live clinical data source.
 
-Status: **plan, decisions made.** Nothing here is built. The recommendations
-are in §1, and the maintainer's decisions of 2026-11-11 are in §11. The first
+Status: **P1 built; P2 onward planned.** The recommendations are in §1, and
+the maintainer's decisions of 2026-11-11 are in §11. P1 adds the format to the
+spec, the structural check, the summary and the pretty-printer in Core; no
+door writes a FHIR spec until P2 gives the library a format. The first
 release is **shared only**: every student gets the whole FHIR file. Sampling by
 patient (§4) is designed here but built later (P5).
 

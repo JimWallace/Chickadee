@@ -149,7 +149,7 @@ extension CourseDatasetService {
             file: filename, kind: attached.kind, sampleSize: attached.sampleSize,
             stratumColumn: attached.stratumColumn, transforms: attached.transforms,
             source: DatasetSource(slug: dataset.slug, version: version.version), scope: attached.scope,
-            partCount: attached.partCount)
+            partCount: attached.partCount, format: attached.format)
         try requireValid(spec, bytes: bytes)
 
         guard let previous = await extractZipEntry(zipPath: setup.zipPath, entryName: filename) else {
@@ -228,7 +228,7 @@ extension CourseDatasetService {
         let spec = DatasetSpec(
             file: filename, kind: existing?.kind ?? .rowSample, sampleSize: existing?.sampleSize,
             stratumColumn: existing?.stratumColumn, transforms: existing?.transforms ?? [], source: source,
-            scope: .assignment, partCount: existing?.partCount)
+            scope: .assignment, partCount: existing?.partCount, format: existing?.format ?? .csv)
         try await mutateManifest(setup: setup, on: db) { props in
             props.datasets.removeAll { $0.file == filename }
             props.datasets.append(spec)
