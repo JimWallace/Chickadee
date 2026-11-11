@@ -9,6 +9,13 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.916] - 2026-11-11
+
+### Fixed
+
+- **"Create Blank" works again on the new-assignment page.** The multipart form interceptor resent each submit with `new FormData(form)`, which leaves out the submit button, so the hidden draft-action buttons' `draftAction` never reached the server. "Create Blank", "Create from Assignment" and "Clear" saved the draft and did nothing else. The interceptor now sends the submitter's name and value, as a native submit does.
+
+
 ## [0.5.915] - 2026-11-11
 
 ### Fixed
