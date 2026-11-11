@@ -73,22 +73,28 @@
         var moveURL = d.type === 'assignment'
             ? '/instructor/' + d.id + '/section'
             : '/instructor/content-items/' + d.id + '/section';
-        var note = '';
+        var notePromise = null;
         postJSON(moveURL, { sectionID: sectionID })
             .then(function (res) {
-                if (d.type !== 'assignment' || !res.ok) return null;
-                return res.json().then(function (body) {
-                    note = (body && typeof body.note === 'string') ? body.note : '';
-                }, function () { note = ''; });
-            })
-            .then(function () {
+                if (d.type === 'assignment') notePromise = readNote(res);
                 return postJSON('/instructor/section-items/reorder', {
                     sectionID: sectionID,
                     items: currentItems(destTbody)
                 });
             })
-            .then(function () { reloadWithNotice(note); })
+            .then(function () {
+                if (!notePromise) { window.location.reload(); return; }
+                return notePromise.then(reloadWithNotice);
+            })
             .catch(function () { window.location.reload(); });
+    }
+
+    // The move's optional note, or null when the response has none to read.
+    function readNote(res) {
+        if (!res || !res.ok || typeof res.json !== 'function') return null;
+        return Promise.resolve().then(function () { return res.json(); }).then(
+            function (body) { return (body && typeof body.note === 'string') ? body.note : ''; },
+            function () { return ''; });
     }
 
     function reloadWithNotice(note) {
