@@ -2,7 +2,7 @@
 //
 // Section lookups shared by the course-admin routes, the new-assignment
 // route and `NewAssignmentDraftService`: validate a posted section ID
-// against a course, and read a section's default grading mode. Both were
+// against a course, and resolve the type a new assignment declares. Both were
 // file-scope functions in route files until #2142; the service calls them,
 // so they live below the routes.
 
@@ -26,19 +26,30 @@ func resolveSectionID(_ raw: String?, courseID: UUID, db: any Database) async th
     return uuid
 }
 
-/// Resolves the default grading mode for the section identified by
-/// `sectionIDRaw` within `courseID`.  Falls back to `"worker"` when
-/// the section can't be resolved (e.g., the form's "Ungrouped"
-/// pseudo-section, or a missing section row).
-func newAssignmentSectionGradingMode(
+/// The type a new assignment declares on the create page: the type the author
+/// chose, else the default type of the section it goes into, else Assignment,
+/// the type whose secret tests stay on the worker (docs/assignment-types.md).
+/// An empty `requestedRaw` means no choice; an unknown one is refused.
+func newAssignmentDeclaredType(
+    requestedRaw: String?,
     courseID: UUID,
     sectionIDRaw: String,
     on db: any Database
-) async throws -> String {
-    guard let sid = try await resolveSectionID(sectionIDRaw, courseID: courseID, db: db),
-        let sec = try await APICourseSection.find(sid, on: db)
-    else {
-        return "worker"
+) async throws -> AssignmentType {
+    let requested = requestedRaw?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+    if !requested.isEmpty {
+        guard let type = AssignmentType(rawValue: requested) else {
+            throw AppError.invalidParameter(
+                name: "assignmentType",
+                reason: "Unknown assignment type \"\(requested)\". Known types: "
+                    + AssignmentType.allCases.map(\.rawValue).joined(separator: ", ") + ".")
+        }
+        return type
     }
-    return sec.defaultGradingMode
+    guard let sid = try await resolveSectionID(sectionIDRaw, courseID: courseID, db: db),
+        let section = try await APICourseSection.find(sid, on: db)
+    else {
+        return .assignment
+    }
+    return section.defaultAssignmentType ?? .assignment
 }

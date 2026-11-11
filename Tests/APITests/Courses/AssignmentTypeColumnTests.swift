@@ -75,12 +75,12 @@ import Vapor
 
             let output = try await UpdateAssignmentTool().execute(
                 UpdateAssignmentTool.Input(
-                    assignmentPublicID: assignment.publicID, assignmentType: "classActivity"),
+                    assignmentPublicID: assignment.publicID, assignmentType: "lab"),
                 mcpContext(app))
-            #expect(output.assignmentType == "classActivity")
+            #expect(output.assignmentType == "lab")
             let read = try await GetAssignmentTool().execute(
                 GetAssignmentTool.Input(assignmentPublicID: assignment.publicID), mcpContext(app))
-            #expect(read.assignmentType == "classActivity")
+            #expect(read.assignmentType == "lab")
 
             await #expect(throws: MCPToolError.self) {
                 _ = try await UpdateAssignmentTool().execute(

@@ -41,7 +41,8 @@ extension CourseAdminRoutes {
     func createSection(req: Request) async throws -> Response {
         struct CreateSectionBody: Content {
             var name: String
-            var defaultGradingMode: String
+            /// An `AssignmentType` raw value, or "" (or absent) for no default.
+            var defaultAssignmentType: String?
         }
         let user = try req.auth.require(APIUser.self)
         let courseID = try await req.requireActiveCourseForWrite(
@@ -50,7 +51,7 @@ extension CourseAdminRoutes {
         let body = try await req.decodeContent(CreateSectionBody.self)
         let draft: CourseSectionDraft
         do {
-            draft = try CourseSectionDraft(name: body.name, defaultGradingMode: body.defaultGradingMode)
+            draft = try CourseSectionDraft(name: body.name, defaultAssignmentType: body.defaultAssignmentType)
         } catch {
             throw Self.webError(error)
         }
@@ -89,7 +90,8 @@ extension CourseAdminRoutes {
     func renameSection(req: Request) async throws -> Response {
         struct RenameSectionBody: Content {
             var name: String
-            var defaultGradingMode: String
+            /// An `AssignmentType` raw value, "" to clear, or absent to keep.
+            var defaultAssignmentType: String?
         }
         let user = try req.auth.require(APIUser.self)
         let courseID = try await req.requireActiveCourseID(for: user, action: "managing sections")
@@ -98,7 +100,7 @@ extension CourseAdminRoutes {
         let body = try await req.decodeContent(RenameSectionBody.self)
         let edit: CourseSectionEdit
         do {
-            edit = try CourseSectionEdit(name: body.name, defaultGradingMode: body.defaultGradingMode)
+            edit = try CourseSectionEdit(name: body.name, defaultAssignmentType: body.defaultAssignmentType)
         } catch {
             throw Self.webError(error)
         }
@@ -121,8 +123,11 @@ extension CourseAdminRoutes {
 
     // MARK: - POST /instructor/:assignmentID/section
 
+    /// Returns `{"note": …}`: the sentence a move reports when the section's
+    /// default type differs from the assignment's declared type, or no note.
+    /// The drag-and-drop client shows it after the page reloads.
     @Sendable
-    func moveToSection(req: Request) async throws -> HTTPStatus {
+    func moveToSection(req: Request) async throws -> MoveSectionResponse {
         struct MoveBody: Content {
             var sectionID: String?  // UUID string, or "" / absent = ungrouped
         }
@@ -140,11 +145,15 @@ extension CourseAdminRoutes {
         let body = (try? await req.decodeContent(MoveBody.self))
         let newSectionID: UUID? = try await resolveSectionID(body?.sectionID, courseID: courseID, db: req.db)
         // Appends to the destination lane (the DnD client follows with a
-        // reorder to place it exactly) and adopts a named section's default
-        // grading mode where the manifest allows it. Ungrouping leaves the
-        // grading mode unchanged.
-        try await CourseSectionService.moveAssignment(assignment, toSection: newSectionID, on: req.db)
-        return .ok
+        // reorder to place it exactly). The type and the grading mode stay as
+        // they were (docs/assignment-types.md).
+        let moved = try await CourseSectionService.moveAssignment(assignment, toSection: newSectionID, on: req.db)
+        return MoveSectionResponse(note: moved.typeNote)
+    }
+
+    /// The body of `POST /instructor/:assignmentID/section`.
+    struct MoveSectionResponse: Content {
+        let note: String?
     }
 
     /// The form error for a refused course section.

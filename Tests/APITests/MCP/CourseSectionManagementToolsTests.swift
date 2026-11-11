@@ -19,30 +19,30 @@ import Vapor
 
     @discardableResult
     private func makeSection(
-        on app: Application, name: String, mode: String, order: Int, courseID: UUID
+        on app: Application, name: String, type: AssignmentType?, order: Int, courseID: UUID
     ) async throws -> APICourseSection {
         let section = APICourseSection(
-            name: name, defaultGradingMode: mode, sortOrder: order, courseID: courseID)
+            name: name, defaultAssignmentType: type, sortOrder: order, courseID: courseID)
         try await section.save(on: app.db)
         return section
     }
 
-    @Test func renamesAndChangesGradingMode() async throws {
+    @Test func renamesAndClearsTheDefaultType() async throws {
         try await withTestApp { app in
             let course = try await fixture(on: app)
             let section = try await makeSection(
-                on: app, name: "Labs", mode: "browser", order: 1, courseID: course.requireID())
+                on: app, name: "Labs", type: .lab, order: 1, courseID: course.requireID())
             let out = try await RenameCourseSectionTool().execute(
                 .init(
                     courseSectionID: section.requireID().uuidString, name: "Assignments",
-                    defaultGradingMode: "worker"),
+                    defaultAssignmentType: ""),
                 mcpContext(app))
             #expect(out.name == "Assignments")
-            #expect(out.defaultGradingMode == "worker")
+            #expect(out.defaultAssignmentType == nil)
 
             let saved = try #require(try await APICourseSection.find(section.id, on: app.db))
             #expect(saved.name == "Assignments")
-            #expect(saved.defaultGradingMode == "worker")
+            #expect(saved.defaultAssignmentType == nil)
         }
     }
 
@@ -50,10 +50,10 @@ import Vapor
         try await withTestApp { app in
             let course = try await fixture(on: app)
             let section = try await makeSection(
-                on: app, name: "Labs", mode: "browser", order: 1, courseID: course.requireID())
+                on: app, name: "Labs", type: .lab, order: 1, courseID: course.requireID())
             await #expect(throws: MCPToolError.self) {
                 _ = try await RenameCourseSectionTool().execute(
-                    .init(courseSectionID: section.requireID().uuidString, name: nil, defaultGradingMode: nil),
+                    .init(courseSectionID: section.requireID().uuidString, name: nil, defaultAssignmentType: nil),
                     mcpContext(app))
             }
         }
@@ -64,7 +64,7 @@ import Vapor
             let course = try await fixture(on: app)
             let courseID = try course.requireID()
             let section = try await makeSection(
-                on: app, name: "Labs", mode: "browser", order: 1, courseID: courseID)
+                on: app, name: "Labs", type: .lab, order: 1, courseID: courseID)
             let sectionID = try section.requireID()
             try await makeTestSetup(on: app, id: "setup_csm", courseID: courseID)
             let assignment = try await makeTestAssignment(
@@ -97,9 +97,9 @@ import Vapor
         try await withTestApp { app in
             let course = try await fixture(on: app)
             let courseID = try course.requireID()
-            let a = try await makeSection(on: app, name: "A", mode: "browser", order: 1, courseID: courseID)
-            let b = try await makeSection(on: app, name: "B", mode: "browser", order: 2, courseID: courseID)
-            let c = try await makeSection(on: app, name: "C", mode: "browser", order: 3, courseID: courseID)
+            let a = try await makeSection(on: app, name: "A", type: .lab, order: 1, courseID: courseID)
+            let b = try await makeSection(on: app, name: "B", type: .lab, order: 2, courseID: courseID)
+            let c = try await makeSection(on: app, name: "C", type: .lab, order: 3, courseID: courseID)
 
             let out = try await ReorderCourseSectionsTool().execute(
                 .init(
@@ -121,8 +121,8 @@ import Vapor
         try await withTestApp { app in
             let course = try await fixture(on: app)
             let courseID = try course.requireID()
-            let a = try await makeSection(on: app, name: "A", mode: "browser", order: 1, courseID: courseID)
-            _ = try await makeSection(on: app, name: "B", mode: "browser", order: 2, courseID: courseID)
+            let a = try await makeSection(on: app, name: "A", type: .lab, order: 1, courseID: courseID)
+            _ = try await makeSection(on: app, name: "B", type: .lab, order: 2, courseID: courseID)
             await #expect(throws: MCPToolError.self) {
                 _ = try await ReorderCourseSectionsTool().execute(
                     .init(courseCode: "CS246", orderedSectionIDs: [try a.requireID().uuidString]),
@@ -136,10 +136,10 @@ import Vapor
             _ = try await fixture(on: app)  // tester enrolled only in CS246
             let other = try await makeTestCourse(on: app, code: "CS999", name: "Other")
             let foreign = try await makeSection(
-                on: app, name: "X", mode: "browser", order: 1, courseID: other.requireID())
+                on: app, name: "X", type: .lab, order: 1, courseID: other.requireID())
             await #expect(throws: MCPToolError.self) {
                 _ = try await RenameCourseSectionTool().execute(
-                    .init(courseSectionID: foreign.requireID().uuidString, name: "Y", defaultGradingMode: nil),
+                    .init(courseSectionID: foreign.requireID().uuidString, name: "Y", defaultAssignmentType: nil),
                     mcpContext(app))
             }
         }

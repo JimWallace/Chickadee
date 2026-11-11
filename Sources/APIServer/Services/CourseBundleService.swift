@@ -403,7 +403,9 @@ enum CourseBundleService {
             return BundledSection(
                 bundleID: bid,
                 name: sec.name,
-                defaultGradingMode: sec.defaultGradingMode,
+                defaultAssignmentType: sec.defaultAssignmentType?.rawValue,
+                // For an older importer, which still requires the field.
+                defaultGradingMode: (sec.defaultAssignmentType?.defaultGradingMode ?? .worker).rawValue,
                 sortOrder: sec.sortOrder
             )
         }

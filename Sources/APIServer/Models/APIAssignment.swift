@@ -170,6 +170,24 @@ final class APIAssignment: Model, Content, @unchecked Sendable {
         set { assignmentTypeRaw = newValue.rawValue }
     }
 
+    /// The type this row declares, or nil when it stores none. Every row
+    /// creator records one and the backfill recorded one for every older row,
+    /// so nil is a row written outside those doors (a test fixture). The type
+    /// rules (`ManifestCoherence`) apply to a declared type only; the
+    /// `assignmentType` accessor's `.assignment` fallback is for display and
+    /// for the grade-push and slip-day policies.
+    var declaredAssignmentType: AssignmentType? {
+        assignmentTypeRaw.flatMap(AssignmentType.init(rawValue:))
+    }
+
+    /// True when no grade of this assignment goes to BrightSpace Valence: the
+    /// instructor chose "Do not sync", or the type keeps its points in
+    /// Chickadee (a Class activity, docs/assignment-types.md decision 2). The
+    /// LTI AGS sweep reads the type alone, as it never read "Do not sync".
+    var isExcludedFromGradePush: Bool {
+        brightspaceSyncExcluded == true || !assignmentType.pushesGradesToLMS
+    }
+
     /// The course this assignment belongs to.
     @Field(key: "course_id")
     var courseID: UUID

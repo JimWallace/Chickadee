@@ -521,7 +521,7 @@ func requeueFrozenClassGoalBonusPushes(
     on db: any Database,
     logger: Logger
 ) async throws {
-    guard assignment.brightspaceSyncExcluded != true,
+    guard !assignment.isExcludedFromGradePush,
         let gradeObjectID = assignment.brightspaceGradeObjectID,
         !gradeObjectID.isEmpty,
         let course = try await APICourse.find(assignment.courseID, on: db),

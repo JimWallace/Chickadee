@@ -183,6 +183,9 @@ enum AuditAction: String, Sendable, CaseIterable {
     case assignmentDeleted = "assignment.deleted"
     case assignmentVisibilityChanged = "assignment.visibility_changed"
     case assignmentDueDateChanged = "assignment.due_date_changed"
+    /// The declared assignment type changed (docs/assignment-types.md). The
+    /// `previous`, `current` and `via` metadata keys say how.
+    case assignmentTypeChanged = "assignment.type_changed"
 
     // Submissions
     case submissionsPurged = "submission.retention_purged"
@@ -300,7 +303,7 @@ enum AuditAction: String, Sendable, CaseIterable {
             .enrollmentGroupsChanged:
             return .enrollment
         case .assignmentCreated, .assignmentCloned, .assignmentDeleted,
-            .assignmentVisibilityChanged, .assignmentDueDateChanged:
+            .assignmentVisibilityChanged, .assignmentDueDateChanged, .assignmentTypeChanged:
             return .assignments
         case .submissionsPurged, .submissionRetestAll, .submissionRetestForStudent,
             .submissionsBulkDownloaded:
@@ -356,7 +359,7 @@ enum AuditAction: String, Sendable, CaseIterable {
             .datasetVisibilityChanged, .datasetDeleted,
             .enrollmentBulkAdded, .enrollmentRemoved, .enrollmentRoleChanged, .enrollmentHandleChanged,
             .enrollmentGroupsChanged, .assignmentCreated, .assignmentCloned, .assignmentDeleted,
-            .assignmentVisibilityChanged, .assignmentDueDateChanged, .submissionsPurged,
+            .assignmentVisibilityChanged, .assignmentDueDateChanged, .assignmentTypeChanged, .submissionsPurged,
             .submissionRetestAll, .submissionRetestForStudent, .submissionsBulkDownloaded,
             .extensionGranted,
             .extensionRevoked, .gradeOverrideSet, .gradeOverrideCleared,
@@ -424,6 +427,7 @@ enum AuditAction: String, Sendable, CaseIterable {
         case .assignmentDeleted: return "Assignment deleted"
         case .assignmentVisibilityChanged: return "Assignment visibility changed"
         case .assignmentDueDateChanged: return "Assignment due date changed"
+        case .assignmentTypeChanged: return "Assignment type changed"
         case .submissionsPurged: return "Submissions purged"
         case .submissionRetestAll: return "Retest all submissions"
         case .submissionsBulkDownloaded: return "Submissions downloaded in bulk"

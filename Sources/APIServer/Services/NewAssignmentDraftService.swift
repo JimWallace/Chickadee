@@ -321,11 +321,9 @@ struct NewAssignmentDraftService {
             suiteConfigJSON: payload.suiteConfigRaw,
             zipPath: setup.zipPath
         )
-        let sectionGradingMode = try await newAssignmentSectionGradingMode(
-            courseID: courseID,
-            sectionIDRaw: payload.sectionIDRaw,
-            on: db
-        )
+        let gradingMode = try await newAssignmentDeclaredType(
+            requestedRaw: payload.assignmentType, courseID: courseID, sectionIDRaw: payload.sectionIDRaw, on: db
+        ).defaultGradingMode.rawValue
         let starterNotebook =
             setup.notebookPath.map { URL(fileURLWithPath: $0).lastPathComponent }
             ?? "assignment.ipynb"
@@ -336,7 +334,7 @@ struct NewAssignmentDraftService {
             setup.decodedManifest(),
             testSuites: setupPackage.testSuites,
             includeMakefile: setupPackage.hasMakefile,
-            sectionGradingMode: sectionGradingMode,
+            gradingMode: gradingMode,
             starterNotebook: starterNotebook
         )
         // The zip was rebuilt from the upload, so a library source may no
@@ -363,8 +361,10 @@ struct NewAssignmentDraftService {
             setup.decodedManifest(),
             testSuites: [],
             includeMakefile: false,
-            sectionGradingMode: try await newAssignmentSectionGradingMode(
-                courseID: courseID, sectionIDRaw: payload.sectionIDRaw, on: db),
+            gradingMode: try await newAssignmentDeclaredType(
+                requestedRaw: payload.assignmentType, courseID: courseID, sectionIDRaw: payload.sectionIDRaw,
+                on: db
+            ).defaultGradingMode.rawValue,
             starterNotebook: starterNotebook
         )
         setup.manifest = try await CourseDatasetService.reconciledManifestText(

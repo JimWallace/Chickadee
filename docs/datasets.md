@@ -305,8 +305,8 @@ Therefore, secret-answer mystery assignments must use one of:
   already moved attempt-number / first-pass reconciliation server-side for
   browser results — same spirit.)
 
-Set the default grading mode for these assignments to `worker` and document
-why. A purely browser-graded mystery with the answer in the workspace is not
+Declare these assignments as the Assignment type, which refuses browser
+grading (docs/assignment-types.md), and document why. A purely browser-graded mystery with the answer in the workspace is not
 secure.
 
 A second, smaller concern: the seed itself reaches the browser (it must, for

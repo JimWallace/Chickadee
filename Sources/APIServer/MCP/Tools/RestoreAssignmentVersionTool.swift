@@ -135,6 +135,17 @@ struct RestoreAssignmentVersionTool: ContentTool {
                 titleAtVersion: nil)
         }
 
+        // An older version may predate the declared type: browser grading on
+        // what is now an Assignment, or no activity on what is now a Class
+        // activity. Refused before anything is written, like every other door
+        // (docs/assignment-types.md). Only a rule the restore introduces.
+        if let restored = decodeManifest(fromJSON: target.manifest),
+            let violation = ManifestCoherence.violation(
+                for: assignment.declaredAssignmentType, introducedBy: { $0 = restored }, in: setup.manifest)
+        {
+            throw MCPToolError.invalidArguments(detail: violation)
+        }
+
         try await Self.materialize(
             target: target, fileMap: fileMap, setup: setup, blobs: blobs,
             testSetupsDirectory: directory)

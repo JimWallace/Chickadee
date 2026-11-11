@@ -1236,13 +1236,13 @@ private struct PassthroughResponder: AsyncResponder {
             let course = try await makeCourse(code: "CPSECT")
             let courseID = try course.requireID()
 
-            // Two sections with distinct grading modes.
+            // Two sections with distinct default types.
             let browserSec = APICourseSection(
-                name: "Browser Labs", defaultGradingMode: "browser",
+                name: "Browser Labs", defaultAssignmentType: .lab,
                 sortOrder: 1, courseID: courseID)
             try await browserSec.save(on: app.db)
             let workerSec = APICourseSection(
-                name: "Worker Labs", defaultGradingMode: "worker",
+                name: "Worker Labs", defaultAssignmentType: nil,
                 sortOrder: 2, courseID: courseID)
             try await workerSec.save(on: app.db)
 
@@ -1277,16 +1277,16 @@ private struct PassthroughResponder: AsyncResponder {
                 "Copied course not found")
             let copiedID = try copied.requireID()
 
-            // Sections should be recreated with matching names and modes.
+            // Sections should be recreated with matching names and default types.
             let copiedSections = try await APICourseSection.query(on: app.db)
                 .filter(\.$courseID == copiedID)
                 .sort(\.$sortOrder)
                 .all()
             #expect(copiedSections.count == 2, "Copy should have 2 sections")
             #expect(copiedSections.first?.name == "Browser Labs")
-            #expect(copiedSections.first?.defaultGradingMode == "browser")
+            #expect(copiedSections.first?.defaultAssignmentType == .lab)
             #expect(copiedSections.last?.name == "Worker Labs")
-            #expect(copiedSections.last?.defaultGradingMode == "worker")
+            #expect(copiedSections.last?.defaultAssignmentType == nil)
 
             // Every copied assignment should land in the right new section.
             let copiedAssignments = try await APIAssignment.query(on: app.db)
@@ -1298,13 +1298,13 @@ private struct PassthroughResponder: AsyncResponder {
                 "All copied assignments should have a sectionID")
 
             let copiedBrowserSec = try #require(
-                copiedSections.first(where: { $0.defaultGradingMode == "browser" }))
+                copiedSections.first(where: { $0.defaultAssignmentType == .lab }))
             let browserLab = try #require(
                 copiedAssignments.first(where: { $0.title == "Browser Lab" }))
             #expect(browserLab.sectionID == (try copiedBrowserSec.requireID()))
 
             let copiedWorkerSec = try #require(
-                copiedSections.first(where: { $0.defaultGradingMode == "worker" }))
+                copiedSections.first(where: { $0.defaultAssignmentType == nil }))
             let workerLab = try #require(
                 copiedAssignments.first(where: { $0.title == "Worker Lab" }))
             #expect(workerLab.sectionID == (try copiedWorkerSec.requireID()))

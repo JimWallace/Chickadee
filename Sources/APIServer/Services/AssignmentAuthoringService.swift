@@ -260,8 +260,11 @@ enum AssignmentAuthoringService {
                     title: newTitle,
                     courseID: targetCourseID,
                     // The declared type travels with the clone, like the
-                    // per-assignment policies below.
-                    assignmentType: source.assignmentType,
+                    // per-assignment policies below, unless it is an
+                    // Assignment that the copied manifest grades in the
+                    // browser (`admissibleAssignmentType`).
+                    assignmentType: admissibleAssignmentType(
+                        source.assignmentType, manifest: decodeManifest(fromJSON: clonedManifest)),
                     visibility: .closed,
                     // Ungrouped, after the items already there (#2490). The
                     // course clone sets its own section and order next.
@@ -410,10 +413,16 @@ enum AssignmentAuthoringService {
     ///
     /// `ownerDB` takes version v1 (`assignment_versions`), which the
     /// least-privilege MCP role cannot write. MCP passes `ToolContext.mainDB`.
+    ///
+    /// `assignmentType` sets the grading mode (`AssignmentType.defaultGradingMode`)
+    /// and is recorded on the row. Nil keeps this path's behaviour from before
+    /// the type had rules: browser grading, and the type derived from the
+    /// manifest (a Lab, or an Assignment for an upload-only language).
     static func createAssignment(
         courseID: UUID,
         title: String,
         language: AssignmentLanguage?,
+        assignmentType: AssignmentType? = nil,
         notebookData: Data,
         setupsDirectory: String,
         on db: any Database,
@@ -427,8 +436,10 @@ enum AssignmentAuthoringService {
             throw AssignmentAuthoringError.setupCopyFailed(reason: "\(error)")
         }
 
+        let gradingMode = (assignmentType?.defaultGradingMode ?? .browser).rawValue
         let manifest =
-            #"{"schemaVersion":1,"gradingMode":"browser","requiredFiles":[],"testSuites":[],"timeLimitSeconds":10}"#
+            #"{"schemaVersion":1,"gradingMode":""# + gradingMode
+            + #"","requiredFiles":[],"testSuites":[],"timeLimitSeconds":10}"#
         let setup = APITestSetup(
             id: setupID, manifest: manifest, zipPath: zipPath, notebookPath: nil,
             courseID: courseID)
@@ -444,7 +455,7 @@ enum AssignmentAuthoringService {
             let assignment = try await createAssignmentWithUniquePublicID(
                 NewAssignmentFields(
                     testSetupID: setupID, title: title, courseID: courseID,
-                    assignmentType: setup.derivedAssignmentType, visibility: .closed,
+                    assignmentType: assignmentType ?? setup.derivedAssignmentType, visibility: .closed,
                     // Ungrouped, after the items already there (#2490).
                     sortOrder: try await nextSectionItemSortOrder(
                         courseID: courseID, sectionID: nil, db: db)),

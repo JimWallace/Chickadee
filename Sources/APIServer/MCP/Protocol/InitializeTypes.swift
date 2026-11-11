@@ -155,13 +155,20 @@ enum MCPServerInstructions {
         kinds are available: they are NOT uniform, and a kind a language cannot support is refused \
         when you try to save it, with a message naming what that language does support. Author in \
         the assignment's language, not in Python by habit.
+        - Assignment type — every assignment declares one: \(MCPEnumProse<AssignmentType>.quotedOrList). \
+        The type decides the grading: an assignment is graded by the worker and refuses browser \
+        grading, so its secret tests stay hidden; a lab is graded in the student browser for \
+        participation; a class activity needs an activity, and its points stay in Chickadee (no LMS \
+        push, no slip days). create_assignment takes it, update_assignment changes it, and \
+        get_server_info lists each type's rules.
         - Course section — a named group of assignments within a course (e.g. "Labs", "Exams"); an \
         assignment belongs to at most one. Distinct from a test-suite section (which groups tests \
         inside one assignment). List with list_course_sections, create with create_course_section, \
-        rename or change the default grading mode with rename_course_section, reorder with \
-        reorder_course_sections, delete with delete_course_section (assignments in it are ungrouped, \
-        not deleted), and assign an assignment with set_assignment_course_section (which adopts the section's \
-        default grading mode). get_assignment reports an assignment's current course section. \
+        rename or change its optional default assignment type with rename_course_section, reorder \
+        with reorder_course_sections, delete with delete_course_section (assignments in it are \
+        ungrouped, not deleted), and assign an assignment with set_assignment_course_section (which \
+        changes neither its type nor its grading mode). get_assignment reports an assignment's current \
+        course section. \
         Assignments and content items share ONE interleaved per-section display order (a reading can \
         sit between two labs): order a section's items with reorder_section_items (the primary tool, a \
         mix of assignments and content items renumbered together), or reorder_assignments / \

@@ -132,6 +132,8 @@ struct EditAssignmentContext: Encodable {
     var conceptRingPhrase: String?
     /// Each `AssignmentType`, for the "Type" select (docs/assignment-types.md).
     var assignmentTypeOptions: [SelectOption] = []
+    /// The current type's one-sentence note (`AssignmentTypeRules.summary`).
+    var assignmentTypeRules: String = ""
     /// The assignment gate for AI-assisted feedback
     /// (docs/ai-assisted-feedback.md). Nil while the course gate is off, so
     /// the "Student Options" control does not render at all.

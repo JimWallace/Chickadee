@@ -1,8 +1,8 @@
 // APIServer/Services/SectionPlacement.swift
 //
-// Where a new or moved item goes in a course section, and what a move into a
-// section does to the grading mode. The web routes and the MCP tools share
-// both (#2490).
+// Where a new or moved item goes in a course section. The web routes and the
+// MCP tools share it (#2490). A move into a section changes neither the
+// assignment's type nor its grading mode (docs/assignment-types.md).
 
 import Core
 import Fluent
@@ -37,24 +37,4 @@ func nextSectionItemSortOrder(
         try await assignmentQuery.sort(\.$sortOrder, .descending).first()?.sortOrder ?? 0
     let maxContent = try await contentQuery.max(\.$sortOrder) ?? 0
     return Swift.max(maxAssignment, maxContent) + 1
-}
-
-/// Gives a setup the default grading mode of the section its assignment moved
-/// into, and returns the grading mode the setup has afterwards.
-///
-/// The mode is kept when adopting the default would break a manifest rule
-/// (`ManifestCoherence`), for example browser grading on an upload-only
-/// assignment. The move itself still succeeds: a drag into a section is not
-/// the place to surface that refusal. The web move and MCP
-/// `set_assignment_course_section` both call it. Each used to restate three of
-/// the rules, so a new rule would have reached `setManifestGradingMode` after
-/// the move had already saved, and failed it.
-@discardableResult
-func adoptSectionGradingMode(
-    _ section: APICourseSection, setup: APITestSetup, on db: any Database
-) async throws -> String {
-    guard let mode = GradingMode(rawValue: section.defaultGradingMode),
-        ManifestCoherence.violation(introducedBy: { $0.gradingMode = mode }, in: setup.manifest) == nil
-    else { return currentManifestGradingMode(setup.manifest) }
-    return try await setManifestGradingMode(setup: setup, to: mode.rawValue, on: db)
 }

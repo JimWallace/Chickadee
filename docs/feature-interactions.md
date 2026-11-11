@@ -654,24 +654,64 @@ because line numbers go out of date.
   `activity` block) runs only where a row is created and in the one-time
   `BackfillAssignmentType`, and each records the result at once
   (docs/assignment-types.md).
-- **Writers:** every creator through `NewAssignmentFields.assignmentType`
-  (no default), the clone (copies the source), the bundle import (the bundled
-  value or the derivation), the edit page's Type select and MCP
-  `update_assignment`.
+- **Rules the type carries** (phase 2): an Assignment refuses browser grading
+  (read as the effective mode), and a Class activity needs an `activity`
+  block. Both live in `ManifestCoherence.typeViolations`, so every door that
+  checks the manifest rules checks them, and an edit is refused only for a
+  rule it introduces (`violation(for:introducedBy:in:)`), never for one the
+  row inherits. A row that stores no type (`declaredAssignmentType` nil, test
+  fixtures only) gets no type rule.
+- **Writers of the type:** every creator through
+  `NewAssignmentFields.assignmentType` (no default): the new-assignment page
+  (its Type select, else the section's default type, else Assignment), MCP
+  `create_assignment` (its `assignmentType`, else the derivation), quick
+  publish (the derivation). The clone and the bundle import carry the type
+  through `admissibleAssignmentType`, which turns a browser-graded Assignment
+  into a Lab and copies anything else as it is. A change of type goes through
+  `AssignmentTypeChange.apply` (the edit page's Type select and MCP
+  `update_assignment`): it checks `ManifestCoherence.violation(declaring:over:in:)`
+  and writes an `assignment.type_changed` audit record.
+- **Writers that must check the type:** every writer of the grading mode, the
+  submission mode, the language or the activity: `setManifestGradingMode`,
+  `setManifestSubmissionMode`, `changeDeclaredLanguage`,
+  `ActivityAuthoring.setActivity` (each reads `declaredAssignmentType(of:)`),
+  MCP `set_grading_mode`, `set_submission_mode` and
+  `restore_assignment_version`. A new writer of one of those fields passes
+  the type to `ManifestCoherence`; nil is right only where no assignment row
+  exists yet (the zip upload) or the edit cannot change a type rule (a
+  dataset edit).
 - **Readers:** the row tile on the instructor dashboard, the student course
-  page and the admin course page (`AssignmentTypeTile`), MCP `get_assignment`
-  and the bundle export.
-- **Intersection:** `derivedDeclaration` reads the effective grading mode (the
-  row above) and the `activity` block. After creation, the writers of those
-  fields (`setGradingMode`, `set_grading_mode`, `applyLanguageDeclaration`,
-  a section move's `adoptSectionGradingMode`, `set_activity`) do not touch the
-  type, so a Lab can become worker-graded and keep its Lab tile. That is the
-  declared-not-inferred rule, not a bug, while the type is display-only.
-- **Fact:** in phase 1 the type changes no grading, grade push or slip-day
-  behaviour, and its writes carry no audit record. Phase 2 makes the coherence
-  rules, the LEARN push and slip days read it; at that point the writers above
-  must refuse a mode the type does not allow, the type writes need an audit
-  record, and each new reader belongs in this row.
+  page and the admin course page (`AssignmentTypeTile`), MCP `get_assignment`,
+  `check_assignment` (the type rules are `manifest.incoherent` findings), the
+  bundle export, the BrightSpace sweep and the frozen class-goal requeue
+  (`APIAssignment.isExcludedFromGradePush`), the LTI AGS sweep, the
+  BrightSpace result flag (`flagResultForBrightSpaceSync`) and the BrightSpace
+  grade-clear sweep (`AssignmentType.pushesGradesToLMS`), and the slip-day offer, the claim
+  state and the dashboard's slip-day action (`AssignmentType.allowsSlipDays`).
+- **Parallel path that differs on purpose:** the LTI sweep reads only the type,
+  because it never read the BrightSpace "Do not sync" flag.
+- **Known gap:** the BrightSpace page (`BrightSpacePagePresenter`) still shows a
+  Class activity's mapped grade item rather than "Do not sync", and "Push all"
+  can still queue its rows, which the sweeps then drop without sending.
+- **Fact:** a section has no grading mode (phase 3). A section move changes
+  neither the type nor the grading mode; `CourseSectionService.typeNote`
+  reports a section default type that differs from the moved assignment's.
+
+### A course section's default type: `course_sections.default_assignment_type`
+
+- **Rule:** the default only seeds creation. The new-assignment page selects it
+  until the author picks a type (`newAssignmentDeclaredType`), and nothing
+  else reads it for grading.
+- **Writers:** `CourseSectionService.create` and `.update` (the web section
+  forms and MCP `create_course_section` / `rename_course_section`), the
+  course clone, the bundle import (the bundled type, or "lab" from a legacy
+  "browser" grading mode) and the migration `AddSectionDefaultAssignmentType`.
+- **Readers:** the new-assignment page and its draft service, the `/instructor`
+  section header, MCP `list_course_sections`, the bundle export, and a move's
+  type note.
+- **Fact:** the old `default_grading_mode` column stays in the table with a
+  database default of "worker" so the old color of a blue-green deploy can
+  read it; the model no longer maps it. A later release drops it.
 
 ### What a runner receives: `RunnerManifest` and the cache key
 
@@ -1374,7 +1414,7 @@ coordination, and each must see every edit.
   - An activity whose kind compares students (`ActivityKind.comparesStudents`)
     accepts only shared data (`DatasetSpec.isShared`). The rule is in
     `ManifestCoherence`. A new door that writes an activity or a dataset spec
-    must call `ManifestCoherence.violation(introducedBy:in:)`
+    must call `ManifestCoherence.violation(for:introducedBy:in:)`
     (`docs/datasets-course-library.md` §4.11). The web `PUT /datasets`
     routes and MCP `set_dataset` call it through `applyDatasetsEdit`
     (`Services/DatasetsChange.swift`), the one dataset-spec edit (#2771). The bundle import, the

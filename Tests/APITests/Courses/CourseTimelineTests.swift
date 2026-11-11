@@ -324,7 +324,7 @@ import VaporTesting
     /// exist as audit actions — this is the half of #421 versioning left open.
     @Test(arguments: [
         AuditAction.assignmentCreated, .assignmentCloned, .assignmentDeleted,
-        .assignmentVisibilityChanged, .assignmentDueDateChanged,
+        .assignmentVisibilityChanged, .assignmentDueDateChanged, .assignmentTypeChanged,
     ])
     func lifecycleActionsAreCategorisedAsAssignments(_ action: AuditAction) {
         #expect(action.category == .assignments)

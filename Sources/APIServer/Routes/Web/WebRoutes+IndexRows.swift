@@ -51,10 +51,12 @@ struct DashboardSlipDayData {
 
     /// This student's slip-day position on one row, in the form the reveal
     /// gates take: the same inputs `slipDayClaimState(for:user:on:)` loads
-    /// for one assignment. Nil when slip days are off or the row is a staff
-    /// preview, as there.
+    /// for one assignment. Nil when slip days are off, the row is a staff
+    /// preview, or its type takes no slip days (a Class activity), as there.
     func claimState(forSetupID setupID: String, assignment: APIAssignment) -> SlipDayClaimState? {
-        guard policy.enabled, assignment.visibility != .preview else { return nil }
+        guard policy.enabled, assignment.visibility != .preview, assignment.assignmentType.allowsSlipDays else {
+            return nil
+        }
         return SlipDayClaimState(
             policy: policy, balance: balance,
             spentOnAssignment: spendCountBySetupID[setupID] ?? 0)
@@ -500,7 +502,8 @@ extension WebRoutes {
     /// the action is hidden.  Offered only to students, after the deadline,
     /// inside the claim window, with balance, and never on top of a
     /// staff-granted extension (an extension row the slip-day ledger did not
-    /// produce) or a staff-only preview.
+    /// produce), a staff-only preview, or a Class activity, whose live window
+    /// replaces a deadline (docs/assignment-types.md).
     private static func slipDayActionLabel(
         assignment: APIAssignment?,
         extensionDueAt: Date?,
@@ -508,6 +511,7 @@ extension WebRoutes {
         context: IndexRowContext
     ) -> String? {
         guard let assignment, assignment.visibility != .preview,
+            assignment.assignmentType.allowsSlipDays,
             !context.isActiveCourseStaff
         else { return nil }
         let spentCount = context.slipDay.spendCountBySetupID[setupID] ?? 0

@@ -737,7 +737,7 @@ As built (11a):
   `sampleSize == nil && transforms.isEmpty`.
 - **One rule in `ManifestCoherence`.** The rule gives one message per personal
   file (`ActivityAuthoring.personalDataMessage(file:)`). A door calls
-  `violation(introducedBy:in:)`, so it refuses only a personal file that the
+  `violation(for:introducedBy:in:)`, so it refuses only a personal file that the
   edit adds. A legacy manifest that already has the pair can still change its
   leaderboard visibility, or remove the file's dataset settings. It can also
   change the sample of a file that is already personal, because the rule

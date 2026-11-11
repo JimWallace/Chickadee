@@ -21,6 +21,7 @@ extension AuthoringSnapshot {
         assignment: APIAssignment, setup: APITestSetup, manifest: TestProperties, context: ToolContext
     ) async -> (snapshot: AuthoringSnapshot, warnings: [String]) {
         var snapshot = AuthoringSnapshot(manifest: manifest)
+        snapshot.assignmentType = assignment.declaredAssignmentType
         var warnings: [String] = []
         func attempt(_ part: String, _ body: () async throws -> Void) async {
             do {

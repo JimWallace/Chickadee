@@ -28,6 +28,50 @@ public enum AssignmentType: String, CaseIterable, Codable, Sendable {
         }
     }
 
+    /// The display name with its indefinite article, for a sentence:
+    /// "an Assignment", "a Lab", "a Class activity".
+    public var withArticle: String {
+        switch self {
+        case .assignment: "an Assignment"
+        case .lab: "a Lab"
+        case .classActivity: "a Class activity"
+        }
+    }
+
+    // MARK: - The rules (docs/assignment-types.md, "What the type controls")
+
+    /// The grading mode an assignment of this type gets on create when its
+    /// author names none: the student browser for a Lab, the native worker
+    /// otherwise. An upload-only language still forces the worker.
+    public var defaultGradingMode: GradingMode {
+        self == .lab ? .browser : .worker
+    }
+
+    /// Whether this type may be graded in the student browser. An Assignment
+    /// may not: browser grading ships its release and secret tests to every
+    /// student (decision 1).
+    public var allowsBrowserGrading: Bool {
+        self != .assignment
+    }
+
+    /// Whether this type must carry an `activity` block (decision 3).
+    public var requiresActivity: Bool {
+        self == .classActivity
+    }
+
+    /// Whether grades of this type go to the institution's LMS, through
+    /// BrightSpace Valence or LTI AGS. A Class activity's points stay in
+    /// Chickadee, for the leaderboard and achievements (decision 2).
+    public var pushesGradesToLMS: Bool {
+        self != .classActivity
+    }
+
+    /// Whether a student may spend slip days on this type. A Class activity's
+    /// live window replaces a deadline (decision 2).
+    public var allowsSlipDays: Bool {
+        self != .classActivity
+    }
+
     /// The type an assignment created from `manifest` declares when its
     /// creator names none, and the type the one-time backfill recorded for the
     /// assignments that existed before the field (docs/assignment-types.md,

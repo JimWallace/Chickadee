@@ -1266,7 +1266,7 @@ it.
 | Author `publictest_x.lua` | MCP `author_script` accepts it — no extension allowlist | code |
 | …via the web *upload* | **rejected** — `isLikelyTestSuiteFile` lists `sh/bash/zsh/py/r/rb/pl/js/php`, not `lua` | code |
 | Language resolution | `AssignmentLanguage(scriptExtension: "lua")` is nil → resolves to `.python` | code |
-| Grading mode | defaults to **`worker`** (`APICourseSection.defaultGradingMode`) | code |
+| Grading mode | defaults to **`worker`** (the Assignment type's `AssignmentType.defaultGradingMode`) | code |
 | Worker runs it | `/usr/bin/env lua …` → **exit 127**, `env: 'lua': No such file or directory` | run |
 | RunnerCore maps 127 | not 0/1/3 → **`.error`** | code |
 

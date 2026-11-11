@@ -81,7 +81,7 @@ import Vapor
             _ = try await fixture(on: app, archived: true, code: "ARCHSEC")
             await #expect(throws: MCPToolError.self) {
                 _ = try await CreateCourseSectionTool().execute(
-                    .init(courseCode: "ARCHSEC", name: "Labs", defaultGradingMode: "browser"), mcpContext(app))
+                    .init(courseCode: "ARCHSEC", name: "Labs", defaultAssignmentType: "lab"), mcpContext(app))
             }
         }
     }

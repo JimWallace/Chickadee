@@ -39,7 +39,7 @@ enum ActivityAuthoring {
     /// students (`ActivityKind.comparesStudents`). One message for every door
     /// that saves a dataset spec or an activity. It names the file and not
     /// the kind, so a change between two ranked kinds is not refused for a
-    /// file that was already there (`ManifestCoherence.violation(introducedBy:in:)`).
+    /// file that was already there (`ManifestCoherence.violation(for:introducedBy:in:)`).
     static func personalDataMessage(file: String) -> String {
         "This class activity ranks or matches students against each other, so every student must "
             + "grade on the same data. The dataset \"\(file)\" gives each student their own rows. To give "
@@ -148,7 +148,11 @@ enum ActivityAuthoring {
             try await validateRunsPerGroup(of: activity, courseID: setup.courseID, on: lockDB)
             try await validateComposite(of: activity, current: current, setup: setup, on: lockDB)
         }
-        if let violation = ManifestCoherence.violation(introducedBy: { $0.activity = activity }, in: setup.manifest) {
+        // A Class activity keeps its activity (docs/assignment-types.md).
+        let type = try await declaredAssignmentType(of: setup, on: db)
+        if let violation = ManifestCoherence.violation(
+            for: type, introducedBy: { $0.activity = activity }, in: setup.manifest)
+        {
             throw AppError.badRequest(reason: violation)
         }
         try await setManifestActivity(setup: setup, to: activity, on: db)

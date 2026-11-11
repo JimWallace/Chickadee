@@ -9,14 +9,14 @@ import Core
 
 enum CourseSectionError: Error, Sendable, Equatable, CustomStringConvertible {
     case emptyName
-    /// The grading mode is not a `GradingMode`.
-    case unknownGradingMode(String)
+    /// The default type is not an `AssignmentType`.
+    case unknownAssignmentType(String)
 
     /// The input field the error is about.
     var field: String {
         switch self {
         case .emptyName: return "name"
-        case .unknownGradingMode: return "defaultGradingMode"
+        case .unknownAssignmentType: return "defaultAssignmentType"
         }
     }
 
@@ -24,9 +24,10 @@ enum CourseSectionError: Error, Sendable, Equatable, CustomStringConvertible {
         switch self {
         case .emptyName:
             return "Section name must not be empty."
-        case .unknownGradingMode:
+        case .unknownAssignmentType:
             // The same list `MCPEnumProse.parse` names, from one source.
-            return "defaultGradingMode must be one of: \(MCPEnumProse<GradingMode>.oneOfList)."
+            return "defaultAssignmentType must be one of: \(MCPEnumProse<AssignmentType>.oneOfList), "
+                + "or an empty string for no default."
         }
     }
 }

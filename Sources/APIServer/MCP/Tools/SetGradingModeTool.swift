@@ -5,12 +5,11 @@
 // content:write, course-scoped.
 //
 // gradingMode lives in the test setup's manifest, not on the assignment row.
-// get_assignment surfaces it and set_assignment_course_section changes it as a
-// side-effect of adopting a course section's default; this is the direct setter
-// for an assignment that isn't in a section (or whose mode you want to change
-// without moving it). Changing the grading path doesn't change what the tests
-// check, so — matching set_assignment_course_section and the web setup editor — it does
-// NOT re-grade existing submissions, re-run validation, or close the assignment.
+// get_assignment surfaces it; create_assignment sets it from the declared type,
+// and this is the direct setter, bounded by the type (an Assignment refuses
+// "browser", docs/assignment-types.md). Changing the grading path doesn't change
+// what the tests check, so — matching the web setup editor — it does NOT
+// re-grade existing submissions, re-run validation, or close the assignment.
 
 import Core
 import Fluent
@@ -33,11 +32,12 @@ struct SetGradingModeTool: ContentTool {
         "Set how an assignment's submissions are graded by its public ID: \"worker\" (graded by the "
         + "native runner) or \"browser\" (graded in the student's browser on a xeus kernel). This changes only the grading "
         + "path, not the tests, so it does not re-grade existing submissions, re-run validation, or "
-        + "change the open/closed state (matching set_assignment_course_section and the web setup editor). Read "
-        + "the current mode from get_assignment. To make a whole course section default to a mode, use "
-        + "create_course_section / rename_course_section instead. A \"browser\" grade is a participation "
-        + "grade: the student's browser reports it and the server keeps it unchecked, so choose \"worker\" "
-        + "for work whose grade must be correct."
+        + "change the open/closed state (matching the web setup editor). Read the current mode from "
+        + "get_assignment. The assignment's declared type bounds the choice: an assignment (type "
+        + "\"assignment\") refuses \"browser\", because browser grading would deliver its release and "
+        + "secret tests to every student; change the type with update_assignment first. A \"browser\" "
+        + "grade is a participation grade: the student's browser reports it and the server keeps it "
+        + "unchecked, so choose \"worker\" for work whose grade must be correct."
     static let inputSchema: JSONValue = .object([
         "type": .string("object"),
         "properties": .object([
@@ -76,7 +76,7 @@ struct SetGradingModeTool: ContentTool {
         // `ManifestCoherence`'s; `author_script` and `set_activity` refuse the
         // same combinations from the other direction.
         if let violation = ManifestCoherence.violation(
-            introducedBy: { $0.gradingMode = parsed }, in: setup.manifest)
+            for: assignment.declaredAssignmentType, introducedBy: { $0.gradingMode = parsed }, in: setup.manifest)
         {
             throw MCPToolError.invalidArguments(detail: violation)
         }
