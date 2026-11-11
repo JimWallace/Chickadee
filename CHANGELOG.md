@@ -9,6 +9,17 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.907] - 2026-11-11
+
+### Changed
+
+- **The Mac runner runbook schedules updates with launchd, not cron.** On
+  macOS, installing a crontab waits for a permission dialog that an
+  unattended session never answers. `docs/mac-runner.md` now gives a launchd
+  agent and says to run `deploy/chickadee-runner-update.sh` from a clone,
+  because a copy of the script on its own cannot load its helper.
+
+
 ## [0.5.906] - 2026-11-10
 
 ### Added
