@@ -6,6 +6,7 @@ Status:
 |---|---|
 | 1. `shared`: a whole file is linked | **built** |
 | 2. `perPart`: each partition part is stored once and linked | **built** |
+| 3. A whole-file sample is stored as no sample at save time | **built** |
 
 ## The problem
 
@@ -75,9 +76,77 @@ whole.
 the row count also gives the whole file, but it classifies as `perStudent`.
 The rule then reads only the spec, never the file, and it is the safe
 direction: a wrong `perStudent` costs storage, but a wrong `shared` would hand
-one student's rows to every student. An author who wants the whole file
-leaves the sample empty. `DatasetMaterializer` stays the one answer to what
-the bytes are. The mode only decides whether they can be stored once.
+one student's rows to every student. `DatasetMaterializer` stays the one
+answer to what the bytes are. The mode only decides whether they can be
+stored once. The save path, which does read the file, keeps a whole-file
+sample from being stored at all (next section).
+
+## Whole-file samples
+
+A sample at or above the file's data-row count is the whole file:
+`DatasetMaterializer.sampleRows` returns the source unchanged. Stored as a
+sample, it is `perStudent`, so every student's editor holds a private copy of
+the same bytes. HLTH 230 Assignment 2 hit this: an agent turned a partitioned
+library file (384 rows, 555 KB) back into a whole-file delivery with
+`sampleSize: 384`, and nothing reported it.
+
+**Normalized at save time, for a library attachment.** `DatasetWholeFileSample`
+(`Core`) decides it from the spec and the row count, counted as the
+materializer counts rows. A library attachment with no transforms whose
+sample covers the file is stored with **no sample**. The spec keeps its
+source and scope, and the mode is `shared`. A stratum column goes with the
+sample: the whole file holds every category.
+
+A file not attached from the library is **not** normalized. Its spec with no
+sample and no transforms would do nothing, and validation refuses one, so the
+only normal form is no spec at all. That would also remove the file from the
+submit page's dataset downloads (`SubmitDatasetLink`), which is how a student
+of an upload-only assignment receives it, because the submit page offers no
+plain support file. So it is left as it is and reported (below), and the fix
+names the trade.
+
+A transformed spec and a partition are never normalized: a transform varies
+the cells, and a part is a subset.
+
+Two doors normalize (`Services/DatasetWholeFileNormalization.swift`): the one
+dataset edit that the web `PUT /datasets` routes and MCP `set_dataset` share
+(`applyDatasetsEdit`), and the library attach
+(`CourseDatasetService+Attachment.swift`). Normalizing runs after the checks,
+so a spec that a check refuses is refused whatever its sample size. The
+update to another version does **not** normalize the sample it carries: the
+author chose it for another version, and dropping it because the new one is
+smaller would also give the whole file of every later, larger version. A
+detach keeps the sample as it is (`DatasetSpec.withoutLibraryFields`).
+
+The web save is silent: the Files panel re-renders from the stored manifest,
+so the sample field is empty and the note reads "One shared copy." MCP
+reports it in `notes`.
+
+**The whole file without a detach.** `set_dataset` takes `wholeFile: true`. It
+clears the sample, the stratum and the partition, keeps the transforms as
+`transforms` says, and works on a library attachment, whose spec `remove`
+cannot drop. On any other file with no transforms it clears the mark, as
+`remove` does, because the caller asked for it; its note says that an
+upload-only submit page then no longer offers the file. It
+refuses `sampleSize`, `stratumColumn`, a non-zero `partCount` and `remove`.
+`partCount: 0` with no sample size is still refused for a file not attached
+from the library, because the caller may have meant a sample and forgotten
+its size; the refusal names `wholeFile`.
+
+**Reported.** `set_dataset` reports `datasetDelivery` for each dataset, and
+`attach_dataset` for the attached file. Both report `notes` when a save
+normalized a sample, and `warnings` for each stored whole-file sample on the
+assignment: one stored before this rule, one on a file not attached from the
+library, or one that an update to a smaller version made. `check_assignment` reports one as `datasets.wholeFilePerStudent`
+(a warning, `WholeFileSampleCheck`).
+
+**Decision: normalize on the next save, no migration.** A stored whole-file
+sample delivers the right bytes; it only costs storage. A migration would have
+to read every setup zip, and it would change manifest bytes, which moves the
+manifest hash that gates the retest fan-out and the runner cache. The web
+panel sends every spec on each save, so its next save normalizes every library
+attachment; `set_dataset` normalizes the file it edits and warns about the
+others; and `check_assignment` finds the rest.
 
 ## Storage
 
@@ -209,6 +278,8 @@ Support files already behave this way.
 
 ## Rollout
 
+Step 3 (whole-file samples) is described in its own section above.
+
 1. **`shared` only (built).** The `Core` classification, the link-or-file
    replace in `writeDatasetFiles`, the target check, the delivery note in the
    Files panel and `datasetDelivery` in MCP `get_support_files`, and the
@@ -261,12 +332,25 @@ Step 2:
   different parts, holding exactly what `DatasetResolver` grades for their
   deal, and a real file from before the change becomes the link.
 
+Step 3:
+
+- `DatasetWholeFileSampleTests` (`Core`): the row count, a sample at or above
+  it materializes to the source, a real sample, a transform and a partition
+  are not whole-file samples, and a library spec loses its sample while a
+  plain one is left alone.
+- `DatasetWholeFileDeliveryTests` (APIServer): `set_dataset`, the web edit and
+  attach normalize a library spec; a plain spec is kept and warned about; an
+  update to a smaller version keeps its sample; `wholeFile: true` ends a
+  library partition, clears a plain mark and refuses a row selector; a stored
+  whole-file sample is reported by `attach_dataset` and `check_assignment`.
+
 `docs/feature-interactions.md` has a row for `dataset-parts/`.
 
 ## Decisions
 
 - **Only an empty sample size is `shared`** (see "Where the classification
-  lives").
+  lives"). A library attachment's sample that covers the file is removed when
+  the spec is saved (see "Whole-file samples").
 - **The listing shows the mode.** The Files panel shows "One shared copy." or
   "One copy per student." under each dataset except a partition, whose own
   note already says each student is dealt a part. The words live once, in

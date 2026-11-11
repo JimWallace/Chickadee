@@ -54,4 +54,7 @@ struct AuthoringSnapshot: Sendable {
     /// One evaluation per validation-variant seed. Empty when the manifest
     /// declares no expressions.
     var seedEvaluations: [SeedEvaluation] = []
+    /// Every dataset spec whose sample covers its whole file, read against
+    /// the setup zip. Empty when there is none or the zip could not be read.
+    var wholeFileSamples: [WholeFilePerStudentSample] = []
 }

@@ -30,6 +30,30 @@ enum DatasetsChange: Sendable {
         }
     }
 
+    /// The same change with each written spec as a save stores it: a library
+    /// attachment's sample that covers its whole file is stored as no sample
+    /// (`normalizedForSave`). Returns what was normalized, in spec order.
+    func normalizingWholeFileSamples(
+        zipPath: String
+    ) async -> (change: DatasetsChange, normalized: [WholeFileSampleNormalization]) {
+        var normalized: [WholeFileSampleNormalization] = []
+        switch self {
+        case .replaceAll(let specs):
+            var stored: [DatasetSpec] = []
+            for spec in specs {
+                let result = await normalizedForSave(spec, zipPath: zipPath)
+                if let note = result.normalization { normalized.append(note) }
+                stored.append(result.spec)
+            }
+            return (.replaceAll(stored), normalized)
+        case .replace(let file, let spec):
+            guard let spec else { return (self, []) }
+            let result = await normalizedForSave(spec, zipPath: zipPath)
+            if let note = result.normalization { normalized.append(note) }
+            return (.replace(file: file, with: result.spec), normalized)
+        }
+    }
+
     /// `datasets` after the change.
     ///
     /// A one-file change applies to the array that it is given, so a lost
@@ -58,12 +82,18 @@ enum DatasetsChange: Sendable {
 /// file twice, must not drop the spec of a file attached from the course
 /// library, and must not give personal data to an activity that ranks or
 /// matches students. Throws `DatasetsEditError` for a refusal.
+///
+/// A spec that passes is stored as a save stores it: a library attachment's
+/// sample that covers the whole file is stored as no sample
+/// (`DatasetsChange.normalizingWholeFileSamples`), so the file is delivered
+/// as one shared copy. Returns what was normalized.
+@discardableResult
 func applyDatasetsEdit(
-    setup: APITestSetup, change: DatasetsChange, on db: any Database
-) async throws {
+    setup: APITestSetup, change requested: DatasetsChange, on db: any Database
+) async throws -> [WholeFileSampleNormalization] {
     let current = setup.decodedManifest()?.datasets ?? []
     let stored = setup.decodedManifest()?.datasetSpecsByFile ?? [:]
-    let written = change.writtenSpecs
+    let written = requested.writtenSpecs
 
     if !written.isEmpty {
         let bundledFiles = await bundledFileNames(zipPath: setup.zipPath)
@@ -82,6 +112,11 @@ func applyDatasetsEdit(
             }
         }
     }
+
+    // After the checks, so a spec that a check refuses is refused whatever
+    // its sample size. Normalizing keeps the library fields, so an attached
+    // spec is never dropped here.
+    let (change, normalized) = await requested.normalizingWholeFileSamples(zipPath: setup.zipPath)
 
     // An attached spec may be edited here but not dropped: dropping it would
     // end the attachment and give every student the whole file. Detach does
@@ -103,6 +138,7 @@ func applyDatasetsEdit(
     try await mutateManifest(setup: setup, on: db) { props in
         props.datasets = change.applied(to: props.datasets)
     }
+    return normalized
 }
 
 /// The web door to `applyDatasetsEdit`: a whole-array replace, since the page

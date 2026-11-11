@@ -60,11 +60,12 @@ extension CourseDatasetService {
         let bytes = try bytes(of: version, blobs: AssignmentVersionBlobStore(testSetupsDirectory: testSetupsDirectory))
         let column = request.stratumColumn?.trimmingCharacters(in: .whitespaces)
         let stratum = (column?.isEmpty ?? true) ? nil : column
-        let spec = DatasetSpec(
+        let requested = DatasetSpec(
             file: filename, kind: stratum == nil ? .rowSample : .stratifiedSample, sampleSize: request.sampleSize,
             stratumColumn: stratum, source: DatasetSource(slug: dataset.slug, version: version.version),
             scope: request.scope)
-        try requireValid(spec, bytes: bytes)
+        try requireValid(requested, bytes: bytes)
+        let spec = normalizedLibrarySpec(requested, bytes: bytes)
         let change: (inout TestProperties) -> Void = { props in
             props.datasets.removeAll { $0.file == filename }
             props.datasets.append(spec)
@@ -145,6 +146,11 @@ extension CourseDatasetService {
         guard version.version != source.version else { throw CourseDatasetError.alreadyAtVersion(version.version) }
 
         let bytes = try bytes(of: version, blobs: AssignmentVersionBlobStore(testSetupsDirectory: testSetupsDirectory))
+        // The carried sample is not normalized: the author chose it for
+        // another version, and dropping it because this version is smaller
+        // would give the whole file of every later, larger version too.
+        // `check_assignment` and the MCP dataset tools report a sample that
+        // now covers the file.
         let spec = DatasetSpec(
             file: filename, kind: attached.kind, sampleSize: attached.sampleSize,
             stratumColumn: attached.stratumColumn, transforms: attached.transforms,
@@ -349,6 +355,13 @@ extension CourseDatasetService {
         let previous: Data?
         let dataset: APICourseDataset
         let version: Int
+    }
+
+    /// `spec` as the attach path stores it: a sample that covers the whole
+    /// file is stored as no sample, so every student reads one linked copy.
+    /// A library spec keeps its source, so it is never dropped.
+    private static func normalizedLibrarySpec(_ spec: DatasetSpec, bytes: Data) -> DatasetSpec {
+        normalizedForSave(spec, sourceCSV: String(data: bytes, encoding: .utf8)).spec
     }
 
     /// The save-time checks of every dataset door, against the bytes the spec

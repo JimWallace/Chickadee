@@ -90,6 +90,10 @@ struct AttachedDatasetDTO: Encodable, Sendable {
     let stratumColumn: String?
     /// The number of parts of a partition; nil for the other kinds.
     let partCount: Int?
+    /// A `DatasetDeliveryMode` raw value: "shared" when every student reads
+    /// one linked copy, "perPart", or "perStudent" when each student stores a
+    /// file of their own.
+    let datasetDelivery: String
 
     /// Nil for a spec that does not come from the library.
     init?(_ spec: DatasetSpec) {
@@ -101,6 +105,7 @@ struct AttachedDatasetDTO: Encodable, Sendable {
         sampleSize = spec.sampleSize
         stratumColumn = spec.stratumColumn
         partCount = spec.partCount
+        datasetDelivery = spec.deliveryMode.rawValue
     }
 }
 
@@ -133,9 +138,9 @@ enum DatasetToolSchema {
         properties: [
             "file": MCPSchema.string, "slug": MCPSchema.string, "version": MCPSchema.integer,
             "scope": MCPSchema.string, "sampleSize": MCPSchema.integer, "stratumColumn": MCPSchema.string,
-            "partCount": MCPSchema.integer,
+            "partCount": MCPSchema.integer, "datasetDelivery": MCPSchema.string,
         ],
-        required: ["file", "slug", "version", "scope"], additionalProperties: nil)
+        required: ["file", "slug", "version", "scope", "datasetDelivery"], additionalProperties: nil)
 
     static let dataset: JSONValue = MCPSchema.object(
         properties: [
