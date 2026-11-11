@@ -132,7 +132,10 @@ import VaporTesting
         }
     }
 
-    @Test func addMenuOffersAssignmentAndEveryMaterialKind() async throws {
+    /// The section's "+ Add" menu offers every graded type, each opening the
+    /// create page with that type and the section, and every material kind.
+    /// A section names no type of its own.
+    @Test func addMenuOffersEveryTypeAndEveryMaterialKind() async throws {
         try await withAssignmentRoutesApp { app in
             let courseID = try await app.testCourseID(enrollmentMode: .auto)
             let cookie = try await arLoginAsInstructor(on: app)
@@ -141,7 +144,14 @@ import VaporTesting
             try await makeItem(courseID: courseID, sectionID: section.id).save(on: app.db)
 
             let html = try await getHTML("/instructor", cookie: cookie, on: app)
-            #expect(html.contains("href=\"/instructor/new?sectionID=\(try section.requireID().uuidString)\""))
+            let sectionID = try section.requireID().uuidString
+            for type in AssignmentType.allCases {
+                // Elementary escapes the `&` in an attribute value.
+                #expect(
+                    html.contains("href=\"/instructor/new?type=\(type.rawValue)&amp;sectionID=\(sectionID)\""),
+                    "missing + Add item for \(type.rawValue)")
+            }
+            #expect(!html.contains("new items:"))
             for kind in ["slides", "notebook", "document", "link", "outline", "heading"] {
                 #expect(html.contains("data-add-kind=\"\(kind)\""), "missing + Add item for \(kind)")
             }

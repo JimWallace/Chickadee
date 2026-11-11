@@ -11,7 +11,8 @@ import Elementary
 struct AssignmentTypeTile: HTML {
     let type: AssignmentType
 
-    private var kind: String {
+    /// The tile's `data-kind`, shared with the "+ Add" menu.
+    var kind: String {
         switch type {
         case .assignment: "graded"
         case .lab: "lab"
@@ -19,7 +20,8 @@ struct AssignmentTypeTile: HTML {
         }
     }
 
-    private var symbol: String {
+    /// The tile's icon, shared with the "+ Add" menu.
+    var symbol: String {
         switch type {
         case .assignment: "i-clipboard-check"
         case .lab: "i-flask"

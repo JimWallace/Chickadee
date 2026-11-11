@@ -564,7 +564,8 @@ private func registerLateSchemaMigrations(on app: Application) {
     // A course section's optional default assignment type, in place of its
     // default grading mode (docs/assignment-types.md, phase 3). Adds a column
     // to `course_sections` (CreateCourses), gives the old mode column a
-    // default and records "lab" for browser-default sections.
+    // default and records "lab" for browser-default sections. Since 2026-11
+    // the model maps neither column; a later release drops both.
     app.migrations.add(AddSectionDefaultAssignmentType())
 }
 

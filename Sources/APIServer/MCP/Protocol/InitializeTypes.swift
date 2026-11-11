@@ -164,7 +164,7 @@ enum MCPServerInstructions {
         - Course section — a named group of assignments within a course (e.g. "Labs", "Exams"); an \
         assignment belongs to at most one. Distinct from a test-suite section (which groups tests \
         inside one assignment). List with list_course_sections, create with create_course_section, \
-        rename or change its optional default assignment type with rename_course_section, reorder \
+        rename it with rename_course_section (a section names no type), reorder \
         with reorder_course_sections, delete with delete_course_section (assignments in it are \
         ungrouped, not deleted), and assign an assignment with set_assignment_course_section (which \
         changes neither its type nor its grading mode). get_assignment reports an assignment's current \

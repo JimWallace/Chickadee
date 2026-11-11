@@ -28,12 +28,11 @@ import VaporTesting
     /// Creates a section in the given course.
     @discardableResult
     private func makeSection(
-        name: String, type: AssignmentType? = nil,
+        name: String,
         order: Int = 1, courseID: UUID
     ) async throws -> APICourseSection {
         let section = APICourseSection(
-            name: name, defaultAssignmentType: type,
-            sortOrder: order, courseID: courseID)
+            name: name, sortOrder: order, courseID: courseID)
         try await section.save(on: app.db)
         return section
     }
@@ -75,7 +74,7 @@ import VaporTesting
                 beforeRequest: { req in
                     req.headers.add(name: .cookie, value: newCookie)
                     try req.content.encode(
-                        ["name": "Labs", "defaultAssignmentType": "lab", "_csrf": token],
+                        ["name": "Labs", "_csrf": token],
                         as: .urlEncodedForm
                     )
                 },
@@ -88,7 +87,6 @@ import VaporTesting
                 .all()
             #expect(sections.count == 1)
             #expect(sections[0].name == "Labs")
-            #expect(sections[0].defaultAssignmentType == .lab)
             #expect(sections[0].sortOrder == 1)
 
         }
@@ -111,7 +109,7 @@ import VaporTesting
                 beforeRequest: { req in
                     req.headers.add(name: .cookie, value: newCookie)
                     try req.content.encode(
-                        ["name": "Exams", "defaultAssignmentType": "", "_csrf": token],
+                        ["name": "Exams", "_csrf": token],
                         as: .urlEncodedForm
                     )
                 },
@@ -142,32 +140,7 @@ import VaporTesting
                 beforeRequest: { req in
                     req.headers.add(name: .cookie, value: newCookie)
                     try req.content.encode(
-                        ["name": "   ", "defaultAssignmentType": "", "_csrf": token],
-                        as: .urlEncodedForm
-                    )
-                },
-                afterResponse: { res in
-                    #expect(res.status == .badRequest)
-                })
-
-        }
-    }
-
-    @Test func createSection_invalidGradingModeRejected() async throws {
-        try await withApp(app) { _ in
-            try await makeTestCourse(on: app, code: "SECT_BADMODE", mode: .auto)
-            let cookie = try await loginUser(
-                username: "sect_instructor4", password: "pw",
-                role: "instructor", on: app)
-            try await promoteToInstructor("sect_instructor4", on: app)
-            let (token, newCookie) = try await csrfFields(for: "/instructor", cookie: cookie, on: app)
-
-            try await app.asyncTest(
-                .POST, "/instructor/sections",
-                beforeRequest: { req in
-                    req.headers.add(name: .cookie, value: newCookie)
-                    try req.content.encode(
-                        ["name": "Labs", "defaultAssignmentType": "jupyter", "_csrf": token],
+                        ["name": "   ", "_csrf": token],
                         as: .urlEncodedForm
                     )
                 },
@@ -191,7 +164,7 @@ import VaporTesting
                 beforeRequest: { req in
                     req.headers.add(name: .cookie, value: newCookie)
                     try req.content.encode(
-                        ["name": "Labs", "defaultAssignmentType": "", "_csrf": token],
+                        ["name": "Labs", "_csrf": token],
                         as: .urlEncodedForm
                     )
                 },
@@ -292,7 +265,7 @@ import VaporTesting
                 beforeRequest: { req in
                     req.headers.add(name: .cookie, value: newCookie)
                     try req.content.encode(
-                        ["name": "NewName", "defaultAssignmentType": "lab", "_csrf": token],
+                        ["name": "NewName", "_csrf": token],
                         as: .urlEncodedForm
                     )
                 },
@@ -302,7 +275,6 @@ import VaporTesting
 
             let updated = try await APICourseSection.find(section.id, on: app.db)
             #expect(updated?.name == "NewName")
-            #expect(updated?.defaultAssignmentType == .lab)
 
         }
     }
@@ -325,7 +297,7 @@ import VaporTesting
                 beforeRequest: { req in
                     req.headers.add(name: .cookie, value: newCookie)
                     try req.content.encode(
-                        ["name": "", "defaultAssignmentType": "", "_csrf": token],
+                        ["name": "", "_csrf": token],
                         as: .urlEncodedForm
                     )
                 },
@@ -351,7 +323,7 @@ import VaporTesting
                 beforeRequest: { req in
                     req.headers.add(name: .cookie, value: newCookie)
                     try req.content.encode(
-                        ["name": "Anything", "defaultAssignmentType": "", "_csrf": token],
+                        ["name": "Anything", "_csrf": token],
                         as: .urlEncodedForm
                     )
                 },
@@ -507,15 +479,14 @@ import VaporTesting
         }
     }
 
-    /// A move into a Lab-default section keeps the assignment's worker
-    /// grading and its type, and the response carries the note the dashboard
-    /// shows (docs/assignment-types.md, phase 3).
-    @Test func moveToSection_keepsGradingAndReportsTheSectionType() async throws {
+    /// A move into a section keeps the assignment's worker grading and its
+    /// type (docs/assignment-types.md, phase 3).
+    @Test func moveToSection_keepsGradingAndType() async throws {
         try await withApp(app) { _ in
             let course = try await makeTestCourse(on: app, code: "SECT_MOVE3", mode: .auto)
             let courseID = try course.requireID()
             let section = try await makeSection(
-                name: "BrowserSection", type: .lab,
+                name: "BrowserSection",
                 order: 1, courseID: courseID)
             let sectionID = try section.requireID()
 
@@ -541,7 +512,6 @@ import VaporTesting
             let (token, newCookie) = try await csrfFields(for: "/instructor", cookie: cookie, on: app)
 
             struct MoveBody: Content { var sectionID: String }
-            struct MoveReply: Content { var note: String? }
             try await app.asyncTest(
                 .POST, "/instructor/\(publicID)/section",
                 beforeRequest: { req in
@@ -552,8 +522,6 @@ import VaporTesting
                 },
                 afterResponse: { res in
                     #expect(res.status == .ok)
-                    let reply = try res.content.decode(MoveReply.self)
-                    #expect(reply.note?.contains("a Lab") == true)
                 })
 
             let updatedSetup = try await APITestSetup.find(setup.id, on: app.db)

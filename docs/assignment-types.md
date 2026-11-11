@@ -21,8 +21,9 @@ and none of them was designed to carry it:
   participation grade" (`SetGradingModeTool.swift:38`, `AssignmentsPage.swift:123`).
 - `activity` in the manifest. A non-nil block makes an assignment a class
   activity (`docs/class-activities.md`, decision 1).
-- The course section's `defaultGradingMode`, which an assignment takes on
-  quietly when it moves into the section (`SectionPlacement.swift:53`).
+- The course section's `defaultGradingMode`, which an assignment took on
+  quietly when it moved into the section (before phase 3; a section now has
+  no grading mode and no type).
 
 Because the type is only implied, three things go wrong:
 
@@ -71,7 +72,8 @@ browser. The type adds one rule on top, in the same place, so every door
 *(Superseded by phase 3, below.)* The first plan kept the section's
 `defaultGradingMode` and ran its adoption through the type's rules. Phases 2
 and 3 shipped together instead, so a section has no grading mode at all:
-grading follows the type, and a section names an optional default type.
+grading follows the type. A section once named an optional default type;
+nothing reads it now (see "Sections" below).
 
 ### Storage (open 4)
 
@@ -152,7 +154,7 @@ migration should report how many rows it set to each type.
    closes that by making those writers check the type, and it adds an audit
    record to each type change.
 3. **Sections.** `defaultAssignmentType` on course sections replaces
-   `defaultGradingMode`.
+   `defaultGradingMode` (since removed too; see "Sections" below).
 
 ## What shipped in phases 2 and 3
 
@@ -190,23 +192,25 @@ rules, so every door that checks those checks these:
 
 **Creation.** The new-assignment page has a Type select; the type sets the
 grading mode (Lab: browser; Assignment and Class activity: worker; an
-upload-only language always worker). The select starts on the section's
-default type, else Assignment, and follows a section change until the author
-picks a type. MCP `create_assignment` takes an optional `assignmentType`;
+upload-only language always worker). The select starts on the type the
+Overview's "+ Add" menu named (`?type=`: Assignment, Lab or Class activity),
+else Assignment. A section never chooses the type. MCP `create_assignment` takes an optional `assignmentType`;
 omitted, it keeps its old behaviour (browser grading and the derived type, a
 Lab, or an Assignment for an upload-only language).
 
-**Sections.** A section has an optional default type and no grading mode. A
-move changes neither the type nor the grading mode; when the section's default
-differs from the moved assignment's type, the move says so (the dashboard
-notice, and the `note` of MCP `set_assignment_course_section`). The migration
-`AddSectionDefaultAssignmentType` records "lab" on every browser-default
-section and no default on a worker one, and changes no assignment. The old
-`default_grading_mode` column stays, with a database default, until a later
-release drops it, so the old color of a blue-green deploy can still read it.
-A bundle carries `defaultAssignmentType`, and still writes the old
-`defaultGradingMode` for an older importer; a bundle without the type maps
-"browser" to a Lab default.
+**Sections.** A section has a name and nothing else: no grading mode and no
+type. Phase 3 first gave sections an optional default type, which seeded the
+create page; it was removed in 2026-11, because the "+ Add" menu names the
+type for each new item. A move changes neither the type nor the grading
+mode, and reports nothing. The web forms, MCP `create_course_section` /
+`rename_course_section` / `list_course_sections`, the clone and the bundle
+carry no type. The migration `AddSectionDefaultAssignmentType` added the
+`default_assignment_type` column, and the old `default_grading_mode` column
+has a database default; the model maps neither, and both stay until a later
+release drops them, so the old color of a blue-green deploy can still read
+the table. A bundle still writes `defaultGradingMode: "worker"` for an older
+importer, which requires the field; the import ignores it and an older
+bundle's `defaultAssignmentType`.
 
 ## Existing rows that break a rule
 

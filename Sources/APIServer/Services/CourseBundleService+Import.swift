@@ -135,16 +135,13 @@ extension CourseBundleService {
 
     // ── 4b. Validate the enum-valued fields ───────────────────────────
 
-    /// A bundle from a newer server can name a content item kind or a
-    /// legacy section grading mode this server does not know. The import refuses
+    /// A bundle from a newer server can name a content item kind this server
+    /// does not know. The import refuses
     /// it here and names the item, instead of importing the item as a link
     /// in silence (#2172).
     private static func validateBundleKinds(manifest: CourseBundleManifest) throws {
         for item in manifest.contentItems ?? [] {
             _ = try bundledContentItemKind(item)
-        }
-        for section in manifest.sections ?? [] {
-            _ = try bundledSectionDefaultType(section)
         }
     }
 
@@ -581,7 +578,6 @@ private func importBundledSections(
     for bundledSection in manifest.sections ?? [] {
         let newSection = APICourseSection(
             name: bundledSection.name,
-            defaultAssignmentType: try bundledSectionDefaultType(bundledSection),
             sortOrder: bundledSection.sortOrder,
             courseID: courseID
         )
@@ -846,25 +842,6 @@ private func bundledContentItemKind(_ item: BundledContentItem) throws -> Conten
             reason: "Bundle content item \"\(item.title)\" has an unknown kind: \(item.kind)")
     }
     return kind
-}
-
-/// The default type a bundled section names. A type this instance does not
-/// know imports as no default, as an assignment's type does. A bundle written
-/// before sections carried a type names a grading mode instead: "browser"
-/// becomes a Lab default, the browser grading a new item there got, and
-/// "worker" no default (docs/assignment-types.md, phase 3). An unknown
-/// grading mode is still a `badRequest` that names the section and the mode
-/// (#2172).
-private func bundledSectionDefaultType(_ section: BundledSection) throws -> AssignmentType? {
-    if let raw = section.defaultAssignmentType {
-        return AssignmentType(rawValue: raw)
-    }
-    guard let legacy = section.defaultGradingMode else { return nil }
-    guard let mode = GradingMode(rawValue: legacy) else {
-        throw AppError.badRequest(
-            reason: "Bundle section \"\(section.name)\" has an unknown grading mode: \(legacy)")
-    }
-    return mode == .browser ? .lab : nil
 }
 
 /// Resolves a test setup or submission path from a bundle manifest to a file

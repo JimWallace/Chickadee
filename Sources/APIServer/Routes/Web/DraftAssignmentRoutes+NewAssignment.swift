@@ -24,6 +24,9 @@ extension DraftAssignmentRoutes {
             var error: String?
             var notice: String?
             var sectionID: String?
+            /// The type the "+ Add" menu item chose: an `AssignmentType` raw
+            /// value. A section names no default type.
+            var type: String?
             var draftID: String?
         }
         let user = try req.auth.require(APIUser.self)
@@ -81,13 +84,12 @@ extension DraftAssignmentRoutes {
         let dueAt = q?.dueAt ?? storedState.dueAt
         let startsAt = q?.startsAt ?? storedState.startsAt
         let selectedSectionID = q?.sectionID ?? storedState.sectionID
-        // The type the author chose in an earlier draft action, else the
-        // preselected section's default, else Assignment
+        // The type the author chose in an earlier draft action, else the one
+        // the "+ Add" menu item named, else Assignment
         // (docs/assignment-types.md).
-        let chosenType = storedState.assignmentType.flatMap(AssignmentType.init(rawValue:))
         let selectedType =
-            chosenType
-            ?? sections.first(where: { $0.sectionID == selectedSectionID })?.defaultAssignmentType
+            storedState.assignmentType.flatMap(AssignmentType.init(rawValue:))
+            ?? q?.type.flatMap(AssignmentType.init(rawValue:))
             ?? .assignment
 
         let page = PageRequestContext(request: req)
@@ -113,7 +115,6 @@ extension DraftAssignmentRoutes {
                 assignmentLanguageOptions: AssignmentLanguageOption.options(
                     recorded: setup.flatMap { currentManifestLanguage($0.manifest) }),
                 assignmentTypeOptions: AssignmentTypeRules.options(selected: selectedType),
-                assignmentTypeChosen: chosenType != nil,
                 assignmentNotebook: assignmentNotebook,
                 solutionNotebook: solutionNotebook,
                 supportFileRows: supportFileRows,
@@ -164,7 +165,6 @@ extension DraftAssignmentRoutes {
             req: req,
             courseID: courseID,
             draftID: payload.draftIDRaw,
-            sectionIDRaw: payload.sectionIDRaw,
             assignmentTypeRaw: payload.assignmentType
         )
         guard let setupID = setup.id else {
@@ -225,7 +225,8 @@ extension DraftAssignmentRoutes {
                 dueAt: payload.dueAt,
                 startsAt: payload.startsAt,
                 sectionID: payload.sectionIDRaw,
-                draftID: setupID
+                draftID: setupID,
+                assignmentType: payload.assignmentType
             ),
             error: errorMessage
         )
@@ -347,9 +348,7 @@ extension DraftAssignmentRoutes {
         // The declared type sets the grading mode: a Lab in the browser, an
         // Assignment or a Class activity on the worker. An upload-only
         // language still forces the worker (docs/assignment-types.md).
-        let assignmentType = try await newAssignmentDeclaredType(
-            requestedRaw: validated.assignmentTypeRaw, courseID: courseID,
-            sectionIDRaw: validated.sectionIDRaw, on: req.db)
+        let assignmentType = try newAssignmentDeclaredType(requestedRaw: validated.assignmentTypeRaw)
 
         // Preserve the draft's pattern families, sections, and notebook
         // checks across the manifest rebuild.
@@ -400,7 +399,8 @@ extension DraftAssignmentRoutes {
                         dueAt: validated.dueAtRaw,
                         startsAt: validated.startsAtRaw,
                         sectionID: validated.sectionIDRaw,
-                        draftID: validated.draftID
+                        draftID: validated.draftID,
+                        assignmentType: validated.assignmentTypeRaw ?? ""
                     ),
                     error: "No compatible active runner is available to validate this assignment."
                 )
@@ -635,9 +635,7 @@ extension DraftAssignmentRoutes {
         shouldQueueValidation: Bool
     ) async throws -> APIAssignment {
         // The same resolution the manifest's grading mode came from.
-        let assignmentType = try await newAssignmentDeclaredType(
-            requestedRaw: validated.assignmentTypeRaw, courseID: courseID,
-            sectionIDRaw: validated.sectionIDRaw, on: req.db)
+        let assignmentType = try newAssignmentDeclaredType(requestedRaw: validated.assignmentTypeRaw)
         let assignment = try await createAssignmentWithUniquePublicID(
             NewAssignmentFields(
                 testSetupID: try setup.requireID(),
@@ -702,7 +700,6 @@ extension DraftAssignmentRoutes {
         req: Request,
         courseID: UUID,
         draftID: String?,
-        sectionIDRaw: String,
         assignmentTypeRaw: String
     ) async throws -> APITestSetup {
         if let draftID,
@@ -726,9 +723,7 @@ extension DraftAssignmentRoutes {
         let setupID = freshShortID(prefix: "setup")
         let zipPath = req.application.testSetupsDirectory + "\(setupID).zip"
         _ = try await createRunnerSetupZip(suiteFiles: [], suiteConfigJSON: nil, zipPath: zipPath)
-        let gradingMode = try await newAssignmentDeclaredType(
-            requestedRaw: assignmentTypeRaw, courseID: courseID, sectionIDRaw: sectionIDRaw, on: req.db
-        ).defaultGradingMode.rawValue
+        let gradingMode = try newAssignmentDeclaredType(requestedRaw: assignmentTypeRaw).defaultGradingMode.rawValue
         let manifest = try makeWorkerManifestJSON(
             testSuites: [],
             includeMakefile: false,

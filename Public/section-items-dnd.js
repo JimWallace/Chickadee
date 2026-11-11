@@ -64,42 +64,21 @@
 
     // Move a row to another section (per-type endpoint), then renumber the
     // destination to the dropped position so cross-section placement is exact.
-    // An assignment move may return a note (the section's default type differs
-    // from the assignment's, which a move does not change); the reload shows
-    // it as the page notice.
     function persistMove(row, destTbody) {
         var d = descriptor(row);
         var sectionID = destTbody.getAttribute('data-section-id') || '';
         var moveURL = d.type === 'assignment'
             ? '/instructor/' + d.id + '/section'
             : '/instructor/content-items/' + d.id + '/section';
-        var notePromise = null;
         postJSON(moveURL, { sectionID: sectionID })
-            .then(function (res) {
-                if (d.type === 'assignment') notePromise = readNote(res);
+            .then(function () {
                 return postJSON('/instructor/section-items/reorder', {
                     sectionID: sectionID,
                     items: currentItems(destTbody)
                 });
             })
-            .then(function () {
-                if (!notePromise) { window.location.reload(); return; }
-                return notePromise.then(reloadWithNotice);
-            })
+            .then(function () { window.location.reload(); })
             .catch(function () { window.location.reload(); });
-    }
-
-    // The move's optional note, or null when the response has none to read.
-    function readNote(res) {
-        if (!res || !res.ok || typeof res.json !== 'function') return null;
-        return Promise.resolve().then(function () { return res.json(); }).then(
-            function (body) { return (body && typeof body.note === 'string') ? body.note : ''; },
-            function () { return ''; });
-    }
-
-    function reloadWithNotice(note) {
-        if (!note) { window.location.reload(); return; }
-        window.location.assign(window.location.pathname + '?notice=' + encodeURIComponent(note));
     }
 
     var dragged = null;

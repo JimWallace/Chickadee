@@ -1236,14 +1236,12 @@ private struct PassthroughResponder: AsyncResponder {
             let course = try await makeCourse(code: "CPSECT")
             let courseID = try course.requireID()
 
-            // Two sections with distinct default types.
+            // Two sections.
             let browserSec = APICourseSection(
-                name: "Browser Labs", defaultAssignmentType: .lab,
-                sortOrder: 1, courseID: courseID)
+                name: "Browser Labs", sortOrder: 1, courseID: courseID)
             try await browserSec.save(on: app.db)
             let workerSec = APICourseSection(
-                name: "Worker Labs", defaultAssignmentType: nil,
-                sortOrder: 2, courseID: courseID)
+                name: "Worker Labs", sortOrder: 2, courseID: courseID)
             try await workerSec.save(on: app.db)
 
             let setup1 = try await makeSetup(id: "cpsect_s1", courseID: courseID, withNotebook: false)
@@ -1277,16 +1275,14 @@ private struct PassthroughResponder: AsyncResponder {
                 "Copied course not found")
             let copiedID = try copied.requireID()
 
-            // Sections should be recreated with matching names and default types.
+            // Sections should be recreated with matching names, in order.
             let copiedSections = try await APICourseSection.query(on: app.db)
                 .filter(\.$courseID == copiedID)
                 .sort(\.$sortOrder)
                 .all()
             #expect(copiedSections.count == 2, "Copy should have 2 sections")
             #expect(copiedSections.first?.name == "Browser Labs")
-            #expect(copiedSections.first?.defaultAssignmentType == .lab)
             #expect(copiedSections.last?.name == "Worker Labs")
-            #expect(copiedSections.last?.defaultAssignmentType == nil)
 
             // Every copied assignment should land in the right new section.
             let copiedAssignments = try await APIAssignment.query(on: app.db)
@@ -1298,13 +1294,13 @@ private struct PassthroughResponder: AsyncResponder {
                 "All copied assignments should have a sectionID")
 
             let copiedBrowserSec = try #require(
-                copiedSections.first(where: { $0.defaultAssignmentType == .lab }))
+                copiedSections.first(where: { $0.name == "Browser Labs" }))
             let browserLab = try #require(
                 copiedAssignments.first(where: { $0.title == "Browser Lab" }))
             #expect(browserLab.sectionID == (try copiedBrowserSec.requireID()))
 
             let copiedWorkerSec = try #require(
-                copiedSections.first(where: { $0.defaultAssignmentType == nil }))
+                copiedSections.first(where: { $0.name == "Worker Labs" }))
             let workerLab = try #require(
                 copiedAssignments.first(where: { $0.title == "Worker Lab" }))
             #expect(workerLab.sectionID == (try copiedWorkerSec.requireID()))

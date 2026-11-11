@@ -680,7 +680,8 @@ because line numbers go out of date.
   fixtures only) gets no type rule.
 - **Writers of the type:** every creator through
   `NewAssignmentFields.assignmentType` (no default): the new-assignment page
-  (its Type select, else the section's default type, else Assignment), MCP
+  (its Type select, which starts on the "+ Add" menu's `?type=`, else
+  Assignment), MCP
   `create_assignment` (its `assignmentType`, else the derivation), quick
   publish (the derivation). The clone and the bundle import carry the type
   through `admissibleAssignmentType`, which turns a browser-graded Assignment
@@ -710,25 +711,19 @@ because line numbers go out of date.
 - **Known gap:** the BrightSpace page (`BrightSpacePagePresenter`) still shows a
   Class activity's mapped grade item rather than "Do not sync", and "Push all"
   can still queue its rows, which the sweeps then drop without sending.
-- **Fact:** a section has no grading mode (phase 3). A section move changes
-  neither the type nor the grading mode; `CourseSectionService.typeNote`
-  reports a section default type that differs from the moved assignment's.
+- **Fact:** a section has no grading mode and no type. A section move changes
+  neither the type nor the grading mode.
 
-### A course section's default type: `course_sections.default_assignment_type`
+### A new item's type: the "+ Add" menu's `?type=`
 
-- **Rule:** the default only seeds creation. The new-assignment page selects it
-  until the author picks a type (`newAssignmentDeclaredType`), and nothing
-  else reads it for grading.
-- **Writers:** `CourseSectionService.create` and `.update` (the web section
-  forms and MCP `create_course_section` / `rename_course_section`), the
-  course clone, the bundle import (the bundled type, or "lab" from a legacy
-  "browser" grading mode) and the migration `AddSectionDefaultAssignmentType`.
-- **Readers:** the new-assignment page and its draft service, the `/instructor`
-  section header, MCP `list_course_sections`, the bundle export, and a move's
-  type note.
-- **Fact:** the old `default_grading_mode` column stays in the table with a
-  database default of "worker" so the old color of a blue-green deploy can
-  read it; the model no longer maps it. A later release drops it.
+- **Rule:** a section never chooses a type. The Overview's "+ Add" menu links
+  each graded type to `/instructor/new?type=…`; the create page's Type select
+  starts there, else on Assignment (`newAssignmentDeclaredType`).
+- **Writers:** `AssignmentsPage` (`AddItemMenu`).
+- **Readers:** `newAssignmentPage` (`DraftAssignmentRoutes+NewAssignment`).
+- **Fact:** the dead columns `course_sections.default_assignment_type` and
+  `default_grading_mode` stay in the table, unmapped, so the old color of a
+  blue-green deploy can read it. A later release drops them.
 
 ### What a runner receives: `RunnerManifest` and the cache key
 

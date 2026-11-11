@@ -130,7 +130,7 @@ import Vapor
 
             let section = try await CreateCourseSectionTool().execute(
                 CreateCourseSectionTool.Input(
-                    courseCode: "CS246-F26", name: "Labs", defaultAssignmentType: nil),
+                    courseCode: "CS246-F26", name: "Labs"),
                 mcpContext(app, subject: "prof"))
             #expect(section.courseCode == "CS246")
             #expect(section.courseKey == "CS246-F26")
