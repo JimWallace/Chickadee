@@ -147,10 +147,13 @@ struct GetAssignmentTool: ContentTool {
         var composite: CompositeSpec?
         /// True when the activity runs once per lab group (docs/lab-groups.md).
         var runsPerGroup: Bool = false
+        /// The bug-hunt block `set_activity` accepts; nil for any kind but
+        /// `bugHunt`.
+        var bugHunt: BugHuntSpec?
 
         private enum CodingKeys: String, CodingKey {
             case kind, kindDisplayName, leaderboardVisibility, leaderboardPath, aggregation
-            case opponentSource, opponentFile, opensAt, closesAt, composite, runsPerGroup
+            case opponentSource, opponentFile, opensAt, closesAt, composite, runsPerGroup, bugHunt
         }
 
         /// The three nullable keys are always present, explicitly null when
@@ -170,6 +173,7 @@ struct GetAssignmentTool: ContentTool {
             try c.encode(closesAt, forKey: .closesAt)
             try c.encode(composite, forKey: .composite)
             try c.encode(runsPerGroup, forKey: .runsPerGroup)
+            try c.encode(bugHunt, forKey: .bugHunt)
         }
     }
 
@@ -275,6 +279,11 @@ struct GetAssignmentTool: ContentTool {
                             "The composite block, in set_activity's shape; null for any other kind."),
                     ]),
                     "runsPerGroup": MCPSchema.boolean,
+                    "bugHunt": .object([
+                        "type": .array([.string("object"), .string("null")]),
+                        "description": .string(
+                            "The bug-hunt block, in set_activity's shape; null for any other kind."),
+                    ]),
                 ]),
                 "required": .array([
                     .string("kind"), .string("kindDisplayName"), .string("leaderboardVisibility"),
@@ -366,7 +375,8 @@ struct GetAssignmentTool: ContentTool {
                     opensAt: activity.window?.opensAtISO,
                     closesAt: activity.window?.closesAtISO,
                     composite: activity.composite,
-                    runsPerGroup: activity.isPerGroup)
+                    runsPerGroup: activity.isPerGroup,
+                    bugHunt: activity.bugHunt)
             },
             datasets: (manifest?.datasets ?? []).compactMap(AttachedDatasetDTO.init),
             githubSubmission: GitHubSubmissionOutput(manifest: manifest)

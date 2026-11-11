@@ -517,6 +517,15 @@ duplicate.
   the lab's name and progress, and gives each stage's range its own id. In the
   strip, passed is `--green` and failed is `--red`, the test-status pair, and
   reference is `--gray-300`, between empty and passed in both themes.
+- **`.bug-hunt`** (the `bug-hunt-*` family) — a bug hunt's board
+  (docs/bug-hunt-code-map.md). A `.bug-hunt-share` line holds the share
+  covered in the `.score-figure` and a `.bug-hunt-count`. The optional code map
+  is the `.diff-table` listing with one gutter. A row in an item's region is
+  `.diff-uncovered` until the class covers it, `.diff-partial` while only some
+  of the items on the line are covered, and `.diff-added` after. A visually
+  hidden word in the gutter says the state. It renders inside the polled
+  region, so it needs no script. Present mode wraps it in `.present-bug-hunt`,
+  which sets the room's sizes.
 - **`.fieldset-plain`** — the unstyled `<fieldset>` + bold `<legend>` that
   wraps a group of radio or checkbox choices (enroll, the LTI grade
   transport, LTI deep linking, the bird picker).  Use it for any group
@@ -603,12 +612,16 @@ duplicate.
   figure a student opens that page to read, at `2.4em`.  The only display-size
   type in the product: the `--text-*` scale tops out at 1.4rem for page
   headings and deliberately does not carry display sizes, so this is `em`
-  against its container rather than a new scale step.  One per page.
+  against its container rather than a new scale step.  One per page.  A bug
+  hunt's board uses it for the share covered, at the room's size in present
+  mode.
 - **`.diff-table`** — the one unified diff listing (the instructor's
   starter-to-submission page).  Rows are `.diff-added` / `.diff-removed` /
   `.diff-context`, or `.diff-fold` standing in for a run of unchanged lines;
   cells are two `.diff-gutter` line-number columns and one `.diff-line`;
-  `.diff-marker` is a notebook cell boundary.  A second comparison view
+  `.diff-marker` is a notebook cell boundary.  A bug hunt's code map uses it
+  with one gutter and two more row states, `.diff-uncovered` and
+  `.diff-partial` (see `.bug-hunt`).  A second comparison view
   (two attempts, two students) reuses this rather than minting a twin.
 - **`.text-muted`**, `.card-meta`, `.fine-print` — muted text.
 - **`.section-items`** — the student dashboard's section list: one

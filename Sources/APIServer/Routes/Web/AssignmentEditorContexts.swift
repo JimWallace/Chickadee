@@ -275,7 +275,8 @@ struct ActivityEditFacts: Encodable {
             windowOpensAtLocal: dueAtLocalInputString(activity?.window?.opensAt),
             windowClosesAtLocal: dueAtLocalInputString(activity?.window?.closesAt),
             composite: composite,
-            showsVisibilityToggle: activity?.kind != .classComposite,
+            // Both boards are for the projector, so the save refuses visible.
+            showsVisibilityToggle: activity?.kind != .classComposite && activity?.kind != .bugHunt,
             runsPerGroup: activity?.runsPerGroup == true,
             canRunPerGroup: activity?.kind.canRunPerGroup == true)
     }

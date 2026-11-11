@@ -83,6 +83,10 @@ struct LeaderboardPresentation {
     /// (docs/class-composite.md). Defaulted, so a context built before the
     /// composite existed still compiles and still shows its own board.
     var showsComposite: Bool = false
+    /// A bug hunt's board (docs/bug-hunt-code-map.md). Staff only reach it:
+    /// a bug hunt's leaderboard stays hidden from students.
+    var showsBugHunt: Bool = false
+    var bugHunt: BugHuntPresentation?
     /// The composite's canvas, progress and slot holders; nil on every other
     /// kind and for a student.
     var compositeBoard: CompositeBoardPresentation?

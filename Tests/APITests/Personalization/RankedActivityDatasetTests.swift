@@ -27,8 +27,8 @@ import Vapor
     private let sample = DatasetSpec(file: "cases.csv", sampleSize: 3)
     private let shared = DatasetSpec(file: "cases.csv")
 
-    @Test func onlyAClassCompositeDoesNotCompareStudents() {
-        #expect(ActivityKind.allCases.filter { !$0.comparesStudents } == [.classComposite])
+    @Test func onlyTheCompositeAndTheBugHuntDoNotCompareStudents() {
+        #expect(ActivityKind.allCases.filter { !$0.comparesStudents } == [.classComposite, .bugHunt])
     }
 
     @Test func aSpecIsSharedOnlyWithNoSampleAndNoTransforms() {
