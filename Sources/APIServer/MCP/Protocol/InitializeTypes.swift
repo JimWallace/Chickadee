@@ -212,7 +212,7 @@ enum MCPServerInstructions {
         deterministic per-seed sample of its rows under the same filename (the uploaded file becomes \
         the hidden server-side pool), so every student explores their own data; get_support_files \
         reports the mark (isDataset / datasetSampleSize) and remove:true clears it.
-        - Course dataset library — CSV datasets kept once per course, each with versions, a provenance, \
+        - Course dataset library — datasets kept once per course, each with versions, a provenance, \
         a licence and a data dictionary, and copied into each assignment that attaches one. List with \
         list_datasets; read one, with the first rows of a version, with get_dataset. create_dataset \
         makes one from a sourceUrl or from an assignment's support file; update_dataset edits its \
@@ -223,7 +223,10 @@ enum MCPServerInstructions {
         detach_dataset ends an attachment. An attach, a version move, a scope change and a detach \
         re-grade and re-validate but never close the assignment; the library tools change no grade. \
         get_support_files reports each attached file's datasetSource and datasetScope, and \
-        get_assignment lists the attached datasets.
+        get_assignment lists the attached datasets. A dataset is CSV or FHIR NDJSON (create_dataset's \
+        format, fixed for every version): a FHIR dataset holds FHIR R4 resources one per line, is \
+        summarized by patients, resource types and codes, is described with update_dataset's entries, \
+        and is delivered whole to every student, so it takes no sample.
         - Global inputs (personalization) — assignment-scoped names that vary the assignment per \
         student: literal `variables` (a name + JSON value) and `expressions` (a name + source in the \
         ASSIGNMENT'S OWN LANGUAGE, evaluated server-side against the student's `seed`). An expression \

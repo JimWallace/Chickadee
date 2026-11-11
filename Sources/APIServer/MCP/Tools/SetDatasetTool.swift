@@ -106,7 +106,10 @@ struct SetDatasetTool: ContentTool {
         + "the web editor's dataset control this does not close the assignment or re-run validation "
         + "(the suite is unchanged); existing submissions pick up their slice on the next regrade. "
         + "List support files with get_support_files (dataset marks are reported there); pass "
-        + "remove:true to make the file an ordinary shared support file again. "
+        + "remove:true to make the file an ordinary shared support file again. A FHIR NDJSON file "
+        + "(datasetFormat fhirNdjson) is delivered whole, so a sample size, a stratum column, a partition "
+        + "and transforms are refused on it; it becomes a dataset only through the course library "
+        + "(create_dataset, then attach_dataset), and every edit here keeps its format. "
         + MCPActivityProse.sharedDataRule
     static let inputSchema: JSONValue = .object([
         "type": .string("object"),

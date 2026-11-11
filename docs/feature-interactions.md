@@ -1033,8 +1033,18 @@ coordination, and each must see every edit.
     `Public/support-files.js`, and the "Course-wide rows" box on a FHIR
     attachment. An `.ndjson` file that is not a dataset shows no per-student
     control, only "Move to course library" (`withLibraryStates`).
-  - Not yet format-aware (P3, MCP half): the MCP dataset tools' schemas and
-    wording.
+  - The MCP tools (P3): `create_dataset` takes `format` and refuses a
+    filename of the other format by name; `get_dataset` reports `format` and
+    the FHIR summary (`DatasetDTO.fhir`), and
+    `get_dataset` shows resource lines with no header. `list_datasets`
+    reports the format but not the summary, which can be large. The write
+    tools return the summary of the one dataset they change.
+    `update_dataset` edits a FHIR dictionary by `entries` and `example` and
+    refuses `columns` on it, and the reverse. `attach_dataset` and
+    `get_assignment` report an attachment's format as `format`
+    (`AttachedDatasetDTO`); `get_support_files` reports it as
+    `datasetFormat`, beside its other `dataset*` fields.
+    The `DatasetToolSchema.format` enum derives from `DatasetFormat.allCases`.
 - **Rules:**
   - A line of a FHIR file is never re-encoded on any delivery path.
   - Every rebuild of a `DatasetSpec` carries `format`, as it carries the

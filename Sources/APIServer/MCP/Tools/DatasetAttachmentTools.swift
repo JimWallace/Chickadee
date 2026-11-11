@@ -58,7 +58,9 @@ struct AttachDatasetTool: ContentTool {
         + "assignment's own. Called on a file that is already attached from the dataset, it moves the file "
         + "to the version asked for (the newest by default) and sets scope when given; the sample stays, "
         + "and set_dataset changes it. A change re-grades the assignment's submissions and re-validates; it "
-        + "does not close the assignment. detach_dataset ends an attachment. "
+        + "does not close the assignment. detach_dataset ends an attachment. A FHIR dataset (format "
+        + "fhirNdjson) attaches whole: every student receives the whole file, so sampleSize and "
+        + "stratumColumn are refused for it, and scope does not change what a student receives. "
         + MCPActivityProse.sharedDataRule
     static let inputSchema: JSONValue = MCPSchema.object(
         properties: [
@@ -66,7 +68,8 @@ struct AttachDatasetTool: ContentTool {
             "filename": .object([
                 "type": .string("string"),
                 "description": .string(
-                    "Optional. The filename in the assignment, a bare name that ends in .csv. Omitted, the "
+                    "Optional. The filename in the assignment, a bare name that ends in the dataset format's "
+                        + "extension (.csv, or .ndjson for FHIR). Omitted, the "
                         + "version's own filename, or the file already attached from this dataset. A name that "
                         + "no attached file has makes another attachment of the dataset; it does not rename one."),
             ]),

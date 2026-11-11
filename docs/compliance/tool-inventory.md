@@ -180,10 +180,10 @@ blobs on disk. None reads a student's rows, a seed or a student-data model.
 
 | Tool | Handler (`file`) | Resource arg | Authz | Reads / touches | Output |
 |------|------------------|--------------|-------|-----------------|--------|
-| `list_datasets` | `CourseDatasetReadTools.swift` | `courseCode` | course-enrol (`resolveCourse`) | `APICourseDataset`, `APICourseDatasetVersion`, setup manifests (usage) | datasets with versions, dictionary, usage |
-| `get_dataset` | `CourseDatasetReadTools.swift` | `courseCode`, slug | course-enrol (`resolveCourse`) | as `list_datasets`, plus one version's blob | one dataset, plus the header and first rows of the uploaded file |
+| `list_datasets` | `CourseDatasetReadTools.swift` | `courseCode` | course-enrol (`resolveCourse`) | `APICourseDataset`, `APICourseDatasetVersion`, setup manifests (usage) | datasets with format, versions, dictionary (or the FHIR summary), usage |
+| `get_dataset` | `CourseDatasetReadTools.swift` | `courseCode`, slug | course-enrol (`resolveCourse`) | as `list_datasets`, plus one version's blob | one dataset, plus the header and first rows of the uploaded file (FHIR: the first resource lines) |
 | `create_dataset` | `CourseDatasetWriteTools.swift` | `courseCode` (and `assignmentPublicID` to promote) | course-enrol write (TA+) | `APICourseDataset`, `APICourseDatasetVersion`, blob store; a promote also writes the `APITestSetup` manifest | the new dataset |
-| `update_dataset` | `CourseDatasetWriteTools.swift` | `courseCode`, slug | course-enrol write (TA+) | `APICourseDataset`, `APICourseDatasetVersion` (dictionary prose) | the dataset after the edit |
+| `update_dataset` | `CourseDatasetWriteTools.swift` | `courseCode`, slug | course-enrol write (TA+) | `APICourseDataset`, `APICourseDatasetVersion` (dictionary prose; for FHIR, entry prose and the example in `summary_json`) | the dataset after the edit |
 | `add_dataset_version` | `CourseDatasetWriteTools.swift` | `courseCode`, slug | course-enrol write (TA+) | `APICourseDatasetVersion`, blob store (fetch under the SSRF guard) | the new version number, dropped columns, the dataset |
 | `attach_dataset` | `DatasetAttachmentTools.swift` | `assignmentPublicID`, slug | course-enrol write (TA+) | `APITestSetup` zip and manifest; re-grade and re-validate via `applyContentEditEffects` | the attached spec, action, re-queued count |
 | `detach_dataset` | `DatasetAttachmentTools.swift` | `assignmentPublicID`, filename | course-enrol write (TA+) | `APITestSetup` zip and manifest; re-grade and re-validate | file, removed flag, re-queued count |

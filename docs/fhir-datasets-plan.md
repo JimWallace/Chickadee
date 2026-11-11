@@ -4,8 +4,7 @@ The plan to extend the course dataset library
 ([datasets-course-library.md](datasets-course-library.md)) beyond CSV to FHIR
 JSON, and to give a course a simulated live clinical data source.
 
-Status: **P1, P2 and the pages half of P3 built; the MCP half of P3 and P4
-onward planned.** The recommendations are in
+Status: **P1 to P3 built; P4 onward planned.** The recommendations are in
 §1, and the maintainer's decisions of 2026-11-11 are in §11. P1 adds the
 format to the spec, the structural check, the summary and the pretty-printer
 in Core. P2 gives the library a format: a dataset is created as CSV or FHIR
@@ -14,7 +13,9 @@ bundle carry the format. The P3 pages offer the format on the Datasets tab,
 edit the FHIR dictionary and the example, show both on the Data page, and
 serve the student's file as `mine.ndjson`. The dictionary prose and the
 example pick are stored on the summary, so the clone, a new version and the
-bundle carry them. The first
+bundle carry them. The P3 MCP changes are the table in §7: `format` on
+`create_dataset`, `entries` and `example` on `update_dataset`, and the format
+and the summary in every dataset result. The first
 release is **shared only**: every student gets the whole FHIR file. Sampling by
 patient (§4) is designed here but built later (P5).
 
