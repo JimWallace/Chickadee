@@ -115,8 +115,11 @@ enum CourseSectionService {
     }
 
     /// Moves an assignment to the end of `sectionID`'s lane (nil = ungrouped)
-    /// and saves it. The caller has authorized the write and resolved
-    /// `sectionID` in the assignment's course.
+    /// and saves it. The content items attached to the assignment take its new
+    /// section in the same transaction, as `CourseContentService.attach` sets
+    /// it; their `sortOrder` stays, because they are not section items. The
+    /// caller has authorized the write and resolved `sectionID` in the
+    /// assignment's course.
     ///
     /// A move changes neither the declared type nor the grading mode
     /// (docs/assignment-types.md, phase 3). Before phase 3 a move adopted the
@@ -128,12 +131,20 @@ enum CourseSectionService {
     static func moveAssignment(
         _ assignment: APIAssignment, toSection sectionID: UUID?, on db: any Database
     ) async throws -> CourseSectionMoveResult {
-        assignment.sectionID = sectionID
-        // Append to the destination lane's shared (assignment + content) order
-        // so the moved assignment does not collide with an existing sort_order.
-        assignment.sortOrder = try await nextSectionItemSortOrder(
-            courseID: assignment.courseID, sectionID: sectionID, db: db)
-        try await assignment.save(on: db)
+        let assignmentID = try assignment.requireID()
+        try await db.transaction { tx in
+            assignment.sectionID = sectionID
+            // Append to the destination lane's shared (assignment + content)
+            // order so the moved assignment does not collide with an existing
+            // sort_order.
+            assignment.sortOrder = try await nextSectionItemSortOrder(
+                courseID: assignment.courseID, sectionID: sectionID, db: tx)
+            try await assignment.save(on: tx)
+            try await APICourseContentItem.query(on: tx)
+                .filter(\.$assignmentID == assignmentID)
+                .set(\.$sectionID, to: sectionID)
+                .update()
+        }
 
         let section: APICourseSection? =
             if let sectionID { try await APICourseSection.find(sectionID, on: db) } else { nil }
