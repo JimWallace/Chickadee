@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 #
 # chickadee-runner-update.sh — move a runner host's Compose runner to the
-# release that the server runs. Run it from cron on each runner host.
+# release that the server runs. Run it on a schedule on each runner host:
+# cron on Linux, a launchd agent on macOS (docs/mac-runner.md).
 #
 # The server host's deployer refreshes the runner beside the server. A runner
 # on a separate host has no deployer, and its cron job used to run
@@ -37,12 +38,12 @@
 #
 # Exit status: 0 when the runner runs the server's release (already, or after
 # this run), 1 when it could not be updated or does not stay up. It prints
-# nothing when there is nothing to do, so a cron job mails only on a change or
-# a failure.
+# nothing when there is nothing to do, so a cron job mails, and a launchd log
+# grows, only on a change or a failure.
 #
 # It runs on Linux and on macOS with Docker Desktop. macOS has bash 3.2, no
-# flock and no python3 until the developer tools are installed, and its cron
-# finds no docker on PATH. So the script uses no mapfile, no flock and no
+# flock and no python3 until the developer tools are installed, and neither
+# cron nor launchd finds docker on PATH. So the script uses no mapfile, no flock and no
 # python3, and it adds the directories where Docker Desktop and Homebrew put
 # docker to PATH.
 set -uo pipefail
@@ -176,7 +177,7 @@ update_runner() {
 }
 
 # A drain can last up to the runner's stop_grace_period, longer than the time
-# between two cron runs, and two runs must not recreate the runner at once.
+# between two scheduled runs, and two runs must not recreate the runner at once.
 # mkdir is the lock, because it is atomic on every file system and macOS has
 # no flock. The directory holds the PID of its owner. A lock whose owner is no
 # longer alive (the run was killed) is stale, and the next run takes it.
