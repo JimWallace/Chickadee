@@ -9,6 +9,13 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.911] - 2026-11-11
+
+### Changed
+
+- **Datasets have their own table in the Files panel.** A file attached from the course dataset library is no longer listed among the support files on the edit page and in the workbench's Files sheet. It sits in a separate Datasets table with the library's dataset icon, its name linked to the library page, the pinned version, and the library's Update, Detach and Remove actions. How a dataset is linked into the working copy and graded is unchanged.
+
+
 ## [0.5.910] - 2026-11-11
 
 ### Changed
