@@ -216,13 +216,23 @@ public struct BundledSection: Codable, Sendable {
     /// Stable cross-reference within this bundle (e.g. "section_1").
     public let bundleID: String
     public let name: String
-    /// "browser" | "worker"
-    public let defaultGradingMode: String
+    /// The section's default `AssignmentType` raw value; nil = no default, or
+    /// a bundle written before sections carried a type.
+    public let defaultAssignmentType: String?
+    /// "browser" | "worker": the grading-mode default sections carried before
+    /// the type replaced it (docs/assignment-types.md, phase 3). Still
+    /// written, derived from the type, so an older Chickadee can import a
+    /// newer bundle, and read only when `defaultAssignmentType` is absent.
+    public let defaultGradingMode: String?
     public let sortOrder: Int
 
-    public init(bundleID: String, name: String, defaultGradingMode: String, sortOrder: Int) {
+    public init(
+        bundleID: String, name: String, defaultAssignmentType: String?, defaultGradingMode: String?,
+        sortOrder: Int
+    ) {
         self.bundleID = bundleID
         self.name = name
+        self.defaultAssignmentType = defaultAssignmentType
         self.defaultGradingMode = defaultGradingMode
         self.sortOrder = sortOrder
     }

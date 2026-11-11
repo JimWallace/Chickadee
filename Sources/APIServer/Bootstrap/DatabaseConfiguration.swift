@@ -560,6 +560,12 @@ private func registerLateSchemaMigrations(on app: Application) {
     // nullable column to `assignments` (CreateAssignments, far above);
     // `BackfillAssignmentType` below fills it.
     app.migrations.add(AddAssignmentType())
+
+    // A course section's optional default assignment type, in place of its
+    // default grading mode (docs/assignment-types.md, phase 3). Adds a column
+    // to `course_sections` (CreateCourses), gives the old mode column a
+    // default and records "lab" for browser-default sections.
+    app.migrations.add(AddSectionDefaultAssignmentType())
 }
 
 /// The data migrations, registered after every schema migration (#1805).

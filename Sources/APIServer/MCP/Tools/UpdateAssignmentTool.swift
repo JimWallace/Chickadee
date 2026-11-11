@@ -95,8 +95,10 @@ struct UpdateAssignmentTool: ContentTool {
         + "a student as passing; it labels and counts, and never changes a grade. assignmentType "
         + "(\(MCPEnumProse<AssignmentType>.quotedOrList)) declares the kind of graded work: an "
         + "assignment for marks, graded by the worker; a lab graded in the student browser for "
-        + "participation; or a live class activity that is not worth a grade. Does not change "
-        + "test content, so it never triggers a regrade."
+        + "participation; or a live class activity whose points stay in Chickadee. The type has rules "
+        + "(get_server_info lists them): a change is refused while the content breaks the new type's "
+        + "rules, for example \"assignment\" on a browser-graded setup, or \"classActivity\" with no "
+        + "activity. Does not change test content, so it never triggers a regrade."
     static let inputSchema: JSONValue = .object([
         "type": .string("object"),
         "properties": .object([
@@ -241,7 +243,15 @@ struct UpdateAssignmentTool: ContentTool {
         }
         let previousDueAt = assignment.dueAt
         do {
-            // Title/date metadata first. The legacy `isOpen` is applied here only
+            // The type first, so a refused type leaves every other field
+            // unchanged. The declared type is a column only: no manifest change, no
+            // regrade. Its rules and its audit record are
+            // `AssignmentTypeChange`'s (docs/assignment-types.md).
+            if let typeUpdate {
+                try await AssignmentTypeChange.apply(
+                    typeUpdate, to: assignment, via: "mcp", on: context.db, audit: context.request)
+            }
+            // Title/date metadata next. The legacy `isOpen` is applied here only
             // when `visibility` was not given (visibility is the richer form and
             // wins).
             try await AssignmentAuthoringService.updateMetadata(
@@ -254,12 +264,8 @@ struct UpdateAssignmentTool: ContentTool {
                 try await AssignmentAuthoringService.setVisibility(
                     assignment, visibilityUpdate, audit: .mcp(context), on: context.db)
             }
-            // The declared type is a column only: no manifest change, no
-            // regrade (docs/assignment-types.md).
-            if let typeUpdate, typeUpdate != assignment.assignmentType {
-                assignment.assignmentType = typeUpdate
-                try await assignment.save(on: context.db)
-            }
+        } catch let error as AssignmentTypeChangeError {
+            throw MCPToolError.invalidArguments(detail: error.message)
         } catch AssignmentAuthoringError.validationNotPassed {
             throw MCPToolError.invalidArguments(
                 detail: "The assignment cannot be opened until its runner validation has passed.")

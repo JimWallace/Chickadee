@@ -1,6 +1,6 @@
 # Assignment types: Assignment, Lab, Class activity
 
-**Status: decided 2026-11-10; phase 1 in progress.** The maintainer took the
+**Status: decided 2026-11-10; phases 1 to 3 shipped (phase 1 in #2983, phases 2 and 3 together).** The maintainer took the
 recommendation on each decision that was marked "open" (see "Decisions").
 
 ## The problem
@@ -68,12 +68,10 @@ browser. The type adds one rule on top, in the same place, so every door
 
 ### Course sections
 
-A section move keeps adopting the section's `defaultGradingMode`, but the
-adoption now goes through the type's rules. Moving an Assignment into a
-browser-default section leaves it worker-graded and says so in the move
-result, as today's skipped coherence adoptions already do. A
-`defaultAssignmentType` on the section is a possible phase-2 addition. It is
-not needed for HLTH 230.
+*(Superseded by phase 3, below.)* The first plan kept the section's
+`defaultGradingMode` and ran its adoption through the type's rules. Phases 2
+and 3 shipped together instead, so a section has no grading mode at all:
+grading follows the type, and a section names an optional default type.
 
 ### Storage (open 4)
 
@@ -153,22 +151,89 @@ migration should report how many rows it set to each type.
    leaves the declared type as it was (`docs/feature-interactions.md`). Phase 2
    closes that by making those writers check the type, and it adds an audit
    record to each type change.
-3. **Optional.** `defaultAssignmentType` on course sections.
+3. **Sections.** `defaultAssignmentType` on course sections replaces
+   `defaultGradingMode`.
 
-## Decisions
+## What shipped in phases 2 and 3
 
-Decided by the maintainer on 2026-11-10. The "open N" marks above refer to
-this list.
+**The rules** are in `ManifestCoherence.typeViolations`, next to the manifest
+rules, so every door that checks those checks these:
 
-1. **An Assignment refuses browser grading.** A browser-graded piece of work
-   is a Lab by this note's definition.
-2. **A Class activity skips the BrightSpace/LTI push and slip days.** Its
-   points stay in Chickadee for the leaderboard and achievements.
-3. **A Class activity must have an `activity` block.** Without one, the work
-   is a Lab or an Assignment. Lab 4b stays a Lab that carries an activity.
-4. **The type is a database column** on `assignments`.
+- An Assignment refuses browser grading, read as the effective mode (a stored
+  `browser` on an upload-only setup grades on the worker and breaks nothing).
+  Refused by `set_grading_mode` and the web grading-mode edit, by a
+  submission-mode or language edit that would make browser grading effective,
+  by a version restore and by a type change to Assignment on a browser-graded
+  setup.
+- A Class activity needs an `activity` block. Removing the activity is
+  refused, and so is a type change to Class activity on a setup without one.
+  A new Class activity (the new-assignment page, `create_assignment`) starts
+  without its block, because the activity editor is on the edit page; until
+  `set_activity` adds one, `check_assignment` reports it as a
+  `manifest.incoherent` error.
+- Each rule refuses only what an edit introduces, never what a row inherits,
+  as the manifest rules do. Reads, grading and pages are never refused.
+- A Class activity's grades skip the BrightSpace sweep, the BrightSpace result
+  flag and grade-clear sweep, the frozen class-goal requeue and the LTI AGS
+  sweep; its points stay in Chickadee. Slip days are
+  not offered on it, and no claim window holds its post-deadline reveals.
+- A type change goes through `AssignmentTypeChange.apply` (the edit page's
+  Type select and MCP `update_assignment`), which checks the rules and writes
+  an `assignment.type_changed` audit record.
+- The clone and the bundle import copy the type, except that an Assignment
+  that the copied manifest grades in the browser becomes a Lab
+  (`admissibleAssignmentType`). A Class activity with no activity is copied as
+  it is.
+- `get_server_info` lists each type with its rules (`assignmentTypes`), in the
+  same sentences the edit page and the new-assignment page show
+  (`AssignmentTypeRules`).
 
-Still open, and not a type decision: runner load. All five HLTH 230 class
-activities are worker-graded, so about 150 students submitting at once all
-queue on the runners. That is the load that Labs avoid by grading in the
-browser. It may affect which activity kinds suit a live session.
+**Creation.** The new-assignment page has a Type select; the type sets the
+grading mode (Lab: browser; Assignment and Class activity: worker; an
+upload-only language always worker). The select starts on the section's
+default type, else Assignment, and follows a section change until the author
+picks a type. MCP `create_assignment` takes an optional `assignmentType`;
+omitted, it keeps its old behaviour (browser grading and the derived type, a
+Lab, or an Assignment for an upload-only language).
+
+**Sections.** A section has an optional default type and no grading mode. A
+move changes neither the type nor the grading mode; when the section's default
+differs from the moved assignment's type, the move says so (the dashboard
+notice, and the `note` of MCP `set_assignment_course_section`). The migration
+`AddSectionDefaultAssignmentType` records "lab" on every browser-default
+section and no default on a worker one, and changes no assignment. The old
+`default_grading_mode` column stays, with a database default, until a later
+release drops it, so the old color of a blue-green deploy can still read it.
+A bundle carries `defaultAssignmentType`, and still writes the old
+`defaultGradingMode` for an older importer; a bundle without the type maps
+"browser" to a Lab default.
+
+## Existing rows that break a rule
+
+Checked on production through MCP on 2026-11-10. HLTH 230-W27 is the only
+course with typed rows.
+
+| Row | Type | Grading | Activity | Rule broken |
+|---|---|---|---|---|
+| Bug Hunt 1: Blood Pressure Categories (`Da8dat`) | Class activity | worker | none | needs an activity |
+| Bug Hunt 2: Dosage Rules (`tVt2Hi`) | Class activity | worker | none | needs an activity |
+
+No Assignment is browser-graded.
+
+**Known exceptions: the two Bug Hunts.** The maintainer decided on 2026-11-10
+that both stay Class activities with no grades ("Bug hunts are in-class
+activities, they are fine as they are no grades"). Each is meant to be a
+collaborative coverage activity, in which the class writes tests together to
+cover the whole codebase. They get an activity block when that kind lands,
+which is designed separately. Until then they break the activity rule, and
+that is expected:
+
+- The rule refuses only a write that introduces the break: a change of type to
+  Class activity on a setup with no activity, or the removal of an activity.
+  Every other edit of either Bug Hunt is allowed, and reads, grading and pages
+  are unaffected.
+- `check_assignment` reports each as a `manifest.incoherent` error until the
+  activity block is added.
+- As Class activities they take no slip days and send no grade to LEARN, which
+  is what the maintainer wants.
+- A clone or a bundle import copies them as they are.

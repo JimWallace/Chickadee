@@ -522,7 +522,7 @@ extension InstructorDashboardRoutes {
             return CourseSectionRow(
                 sectionID: sID.uuidString,
                 name: section.name,
-                defaultGradingMode: section.defaultGradingMode,
+                defaultAssignmentType: section.defaultAssignmentType,
                 sortOrder: section.sortOrder,
                 items: mergedBySectionItemOrder(keyedBySectionID[sID] ?? [])
             )

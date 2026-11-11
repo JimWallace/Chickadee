@@ -31,6 +31,10 @@ struct AuthoringSnapshot: Sendable {
     }
 
     let manifest: TestProperties
+    /// The assignment's declared type, so the type rules are reported with
+    /// the manifest rules (docs/assignment-types.md). Nil checks the manifest
+    /// alone.
+    var assignmentType: AssignmentType?
     /// The latest validation run of the reference solution, or nil before one.
     var solutionRun: TestOutcomeCollection?
     /// The current variant batch, in variant order. Empty when the manifest

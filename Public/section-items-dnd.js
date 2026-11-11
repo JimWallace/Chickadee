@@ -64,21 +64,36 @@
 
     // Move a row to another section (per-type endpoint), then renumber the
     // destination to the dropped position so cross-section placement is exact.
+    // An assignment move may return a note (the section's default type differs
+    // from the assignment's, which a move does not change); the reload shows
+    // it as the page notice.
     function persistMove(row, destTbody) {
         var d = descriptor(row);
         var sectionID = destTbody.getAttribute('data-section-id') || '';
         var moveURL = d.type === 'assignment'
             ? '/instructor/' + d.id + '/section'
             : '/instructor/content-items/' + d.id + '/section';
+        var note = '';
         postJSON(moveURL, { sectionID: sectionID })
+            .then(function (res) {
+                if (d.type !== 'assignment' || !res.ok) return null;
+                return res.json().then(function (body) {
+                    note = (body && typeof body.note === 'string') ? body.note : '';
+                }, function () { note = ''; });
+            })
             .then(function () {
                 return postJSON('/instructor/section-items/reorder', {
                     sectionID: sectionID,
                     items: currentItems(destTbody)
                 });
             })
-            .then(function () { window.location.reload(); })
+            .then(function () { reloadWithNotice(note); })
             .catch(function () { window.location.reload(); });
+    }
+
+    function reloadWithNotice(note) {
+        if (!note) { window.location.reload(); return; }
+        window.location.assign(window.location.pathname + '?notice=' + encodeURIComponent(note));
     }
 
     var dragged = null;

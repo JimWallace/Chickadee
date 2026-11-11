@@ -86,9 +86,9 @@ extension ElementaryPageFixtures {
     static var overviewSections: [CourseSectionRow] {
         [
             CourseSectionRow(
-                sectionID: "s1", name: "Labs & <Quizzes>", defaultGradingMode: "worker", sortOrder: 0,
+                sectionID: "s1", name: "Labs & <Quizzes>", defaultAssignmentType: nil, sortOrder: 0,
                 items: Array(overviewItems.prefix(4))),
-            CourseSectionRow(sectionID: "s2", name: "Readings", defaultGradingMode: "browser", sortOrder: 1, items: []),
+            CourseSectionRow(sectionID: "s2", name: "Readings", defaultAssignmentType: .lab, sortOrder: 1, items: []),
         ]
     }
 

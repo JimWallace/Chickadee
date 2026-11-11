@@ -1,8 +1,8 @@
 // APIServer/Views/EditAssignmentTypeBlock.swift
 //
 // The assignment edit page's Type block: the declared Assignment, Lab or Class
-// activity (docs/assignment-types.md). Authoring metadata, so it sits apart
-// from the Student Options, on the same workbench sheet.
+// activity (docs/assignment-types.md). The type decides how the work is graded
+// and whether it counts, so the block states the current type's rules.
 
 import Elementary
 
@@ -30,7 +30,7 @@ struct EditAssignmentTypeBlock: HTML {
                     " "
                 }
                 p(.class("field-note field-note--muted")) {
-                    "Sets the icon this assignment shows in the course lists."
+                    edit.assignmentTypeRules
                 }
                 button(.class("btn action-btn"), .type(.submit)) { "Save type" }
             }

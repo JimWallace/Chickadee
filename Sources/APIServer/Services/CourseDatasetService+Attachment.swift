@@ -70,7 +70,11 @@ extension CourseDatasetService {
             props.datasets.append(spec)
         }
         // An activity that ranks or matches students refuses personal data.
-        if let violation = ManifestCoherence.violation(introducedBy: change, in: setup.manifest) {
+        // A dataset edit changes neither the grading mode nor the activity, so
+        // no type rule can be introduced here (type: nil).
+        if let violation = ManifestCoherence.violation(
+            for: nil, introducedBy: change, in: setup.manifest)
+        {
             throw CourseDatasetError.attachmentIssue(violation)
         }
 

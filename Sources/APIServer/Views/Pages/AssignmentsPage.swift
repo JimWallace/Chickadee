@@ -24,6 +24,9 @@ struct AssignmentsPage: HTML {
     let enrolledStudentCount: Int
     /// The published assignments a material's edit form offers under "Show on".
     var attachTargets: [AssignmentAttachTarget] = []
+    /// From `?notice=`: what a move reported, for example that the section's
+    /// default type differs from the moved assignment's type.
+    var flash = FlashMessages()
 
     /// The staff dashboard also serves a TA, who is not offered a control
     /// that the server refuses.
@@ -35,7 +38,7 @@ struct AssignmentsPage: HTML {
     }
 
     var body: some HTML {
-        BaseLayout(title: heading, page: page) {
+        BaseLayout(title: heading, page: page, flash: flash) {
             InstructorTabs(active: .overview)
             // Public/section-items-dnd.js keeps an assignment in its section
             // when the viewer may not move it to another one.
@@ -117,14 +120,16 @@ struct AssignmentsPage: HTML {
                                 .placeholder("e.g. Labs"), .required)
                         }
                         label(.class("form-label")) {
-                            "Default grading mode"
+                            "Default type for new work"
                             select(
-                                .class("form-input editor-input"), .name("defaultGradingMode"),
-                                .title("Student Browser grading suits a participation grade")
+                                .class("form-input editor-input"), .name("defaultAssignmentType"),
+                                .title("Grading follows each assignment's type, not its section")
                             ) {
-                                option(.value("worker")) { "Chickadee" }
-                                option(.value("browser")) { "Student Browser" }
+                                SectionDefaultTypeOptions(selected: nil)
                             }
+                        }
+                        p(.class("field-note field-note--muted")) {
+                            "Grading follows each assignment's type, not its section."
                         }
                         button(.class("btn btn-primary btn-compact"), .type(.submit)) { "Create section" }
                     }
@@ -170,8 +175,6 @@ private struct SectionBlock: HTML {
     let controls: DashboardControls
     let attachTargets: [AssignmentAttachTarget]
 
-    private var isWorker: Bool { section.defaultGradingMode == "worker" }
-
     var body: some HTML {
         div(.class("section-block"), .data("section-id", value: section.sectionID)) {
             div(.class("section-header")) {
@@ -179,7 +182,9 @@ private struct SectionBlock: HTML {
                 div(.class("section-view")) {
                     strong { section.name }
                     " "
-                    span(.class("section-mode-note")) { "tested in \(isWorker ? "Chickadee" : "Student Browser")" }
+                    if let type = section.defaultAssignmentType {
+                        span(.class("section-type-note")) { "new items: \(type.displayName)" }
+                    }
                     if controls.manageSections {
                         button(
                             .class("btn-link js-section-edit-toggle icon-btn-text"), .type(.button),
@@ -231,12 +236,11 @@ private struct SectionBlock: HTML {
                     .class("form-input section-name-input"), .type(.text), .name("name"), .value(section.name),
                     .required)
                 select(
-                    .class("form-input grading-mode-select"), .name("defaultGradingMode"),
-                    .title("Student Browser grading suits a participation grade")
+                    .class("form-input section-type-select"), .name("defaultAssignmentType"),
+                    .title("Default type for new work. Grading follows each assignment's type, not its section"),
+                    .ariaLabel("Default type for new work")
                 ) {
-                    option(.value("worker")) { "Chickadee" }.attributes(.selected, when: isWorker)
-                    option(.value("browser")) { "Student Browser" }
-                        .attributes(.selected, when: section.defaultGradingMode == "browser")
+                    SectionDefaultTypeOptions(selected: section.defaultAssignmentType)
                 }
                 button(.class("btn btn-primary btn-compact"), .type(.submit)) { "Save" }
             }
@@ -409,6 +413,19 @@ private struct SectionItemsTable<Rows: HTML>: HTML {
             } else {
                 tbody(.data("section-id", value: sectionID)) { rows }
             }
+        }
+    }
+}
+
+/// The options of a section's default-type select: no default, then every
+/// assignment type.
+private struct SectionDefaultTypeOptions: HTML {
+    let selected: AssignmentType?
+
+    var body: some HTML {
+        option(.value("")) { "No default type" }.attributes(.selected, when: selected == nil)
+        for type in AssignmentType.allCases {
+            option(.value(type.rawValue)) { type.displayName }.attributes(.selected, when: selected == type)
         }
     }
 }

@@ -4,7 +4,8 @@
 // (`CourseAdminRoutes+Sections.swift`) and the MCP tools
 // (`CourseSectionTools.swift`) (#2769). Each surface wrote them once, and they
 // drifted: the web checked the grading mode against string literals, while MCP
-// checked it against `GradingMode`.
+// checked it against `GradingMode`. A section now carries an optional default
+// assignment type instead of a grading mode (docs/assignment-types.md).
 //
 // Authorization stays at each surface, and so does the section lookup for a
 // move (the web ignores a section in another course, and MCP refuses it). A
@@ -19,22 +20,25 @@ import Foundation
 /// draft that exists is valid.
 struct CourseSectionDraft: Sendable {
     let name: String
-    let defaultGradingMode: GradingMode
+    let defaultAssignmentType: AssignmentType?
 
-    init(name: String, defaultGradingMode: String) throws(CourseSectionError) {
+    /// `defaultAssignmentType` nil or "" means no default.
+    init(name: String, defaultAssignmentType: String?) throws(CourseSectionError) {
         self.name = try CourseSectionService.validatedName(name)
-        self.defaultGradingMode = try CourseSectionService.parseGradingMode(defaultGradingMode)
+        self.defaultAssignmentType = try defaultAssignmentType.flatMap(CourseSectionService.parseDefaultType)
     }
 }
 
 /// A validated change to a course section. A nil field is left unchanged.
 struct CourseSectionEdit: Sendable {
     let name: String?
-    let defaultGradingMode: GradingMode?
+    /// Nil leaves the default unchanged; `.some(nil)` clears it.
+    let defaultAssignmentType: AssignmentType??
 
-    init(name: String?, defaultGradingMode: String?) throws(CourseSectionError) {
+    /// `defaultAssignmentType` nil leaves it unchanged, and "" clears it.
+    init(name: String?, defaultAssignmentType: String?) throws(CourseSectionError) {
         self.name = try name.map(CourseSectionService.validatedName)
-        self.defaultGradingMode = try defaultGradingMode.map(CourseSectionService.parseGradingMode)
+        self.defaultAssignmentType = try defaultAssignmentType.map(CourseSectionService.parseDefaultType)
     }
 }
 
@@ -42,8 +46,13 @@ struct CourseSectionEdit: Sendable {
 struct CourseSectionMoveResult: Sendable {
     /// The section the assignment is now in; nil when ungrouped.
     let section: APICourseSection?
-    /// The assignment's grading mode after the move; nil when it has no setup.
+    /// The assignment's grading mode, which a move never changes; nil when
+    /// it has no setup.
     let gradingMode: String?
+    /// Set when the section's default type differs from the assignment's
+    /// declared type. A move changes neither, so this only says so
+    /// (docs/assignment-types.md).
+    let typeNote: String?
 }
 
 enum CourseSectionService {
@@ -57,11 +66,13 @@ enum CourseSectionService {
         return name
     }
 
-    /// The grading mode for `raw`. A value that is not a `GradingMode` is
-    /// refused.
-    static func parseGradingMode(_ raw: String) throws(CourseSectionError) -> GradingMode {
-        guard let mode = GradingMode(rawValue: raw) else { throw .unknownGradingMode(raw) }
-        return mode
+    /// The default type for `raw`: nil for an empty string (no default), and
+    /// a value that is not an `AssignmentType` is refused.
+    static func parseDefaultType(_ raw: String) throws(CourseSectionError) -> AssignmentType? {
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.isEmpty { return nil }
+        guard let type = AssignmentType(rawValue: trimmed) else { throw .unknownAssignmentType(raw) }
+        return type
     }
 
     // MARK: - Writes
@@ -76,7 +87,7 @@ enum CourseSectionService {
             .filter(\.$courseID == courseID)
             .max(\.$sortOrder) ?? 0
         let section = APICourseSection(
-            name: draft.name, defaultGradingMode: draft.defaultGradingMode.rawValue,
+            name: draft.name, defaultAssignmentType: draft.defaultAssignmentType,
             sortOrder: maxOrder + 1, courseID: courseID)
         try await section.save(on: db)
         return section
@@ -87,7 +98,7 @@ enum CourseSectionService {
         _ section: APICourseSection, with edit: CourseSectionEdit, on db: any Database
     ) async throws {
         if let name = edit.name { section.name = name }
-        if let mode = edit.defaultGradingMode { section.defaultGradingMode = mode.rawValue }
+        if let type = edit.defaultAssignmentType { section.defaultAssignmentType = type }
         try await section.save(on: db)
     }
 
@@ -104,10 +115,15 @@ enum CourseSectionService {
     }
 
     /// Moves an assignment to the end of `sectionID`'s lane (nil = ungrouped)
-    /// and saves it. A move into a named section adopts that section's default
-    /// grading mode where the manifest allows it (`adoptSectionGradingMode`).
-    /// Ungrouping leaves the grading mode unchanged. The caller has authorized
-    /// the write and resolved `sectionID` in the assignment's course.
+    /// and saves it. The caller has authorized the write and resolved
+    /// `sectionID` in the assignment's course.
+    ///
+    /// A move changes neither the declared type nor the grading mode
+    /// (docs/assignment-types.md, phase 3). Before phase 3 a move adopted the
+    /// section's default grading mode, so an Assignment dragged into a
+    /// browser-default section shipped its secret tests to every student.
+    /// When the section's default type differs from the assignment's, the
+    /// result says so, so the author can change the type deliberately.
     @discardableResult
     static func moveAssignment(
         _ assignment: APIAssignment, toSection sectionID: UUID?, on db: any Database
@@ -121,15 +137,20 @@ enum CourseSectionService {
 
         let section: APICourseSection? =
             if let sectionID { try await APICourseSection.find(sectionID, on: db) } else { nil }
-        guard let setup = try await APITestSetup.find(assignment.testSetupID, on: db) else {
-            return CourseSectionMoveResult(section: section, gradingMode: nil)
+        let setup = try await APITestSetup.find(assignment.testSetupID, on: db)
+        return CourseSectionMoveResult(
+            section: section, gradingMode: setup.map { currentManifestGradingMode($0.manifest) },
+            typeNote: section.flatMap { typeNote(for: assignment, in: $0) })
+    }
+
+    /// The sentence a move reports when `section` names a default type that
+    /// `assignment` does not declare, or nil.
+    static func typeNote(for assignment: APIAssignment, in section: APICourseSection) -> String? {
+        guard let sectionType = section.defaultAssignmentType, sectionType != assignment.assignmentType else {
+            return nil
         }
-        let gradingMode =
-            if let section {
-                try await adoptSectionGradingMode(section, setup: setup, on: db)
-            } else {
-                currentManifestGradingMode(setup.manifest)
-            }
-        return CourseSectionMoveResult(section: section, gradingMode: gradingMode)
+        return "\(assignment.title) stays \(assignment.assignmentType.withArticle), though "
+            + "\(section.name) defaults to \(sectionType.withArticle); change the type on its edit page "
+            + "if needed."
     }
 }

@@ -16,7 +16,9 @@ extension InstructorDashboardRoutes {
     /// Saves the declared type. A dedicated lightweight endpoint, like the
     /// Student Options: the main Save closes and re-validates, and the type is
     /// a column, not test content. No manifest change, no regrade. An unknown
-    /// value is refused with an error banner.
+    /// value, or a type whose rules the content breaks
+    /// (`AssignmentTypeChange`), is refused with an error banner. A change is
+    /// recorded in the audit log.
     @Sendable
     func saveAssignmentType(req: Request) async throws -> Response {
         let assignment = try await loadAssignmentForWrite(req, atLeast: CourseRoleFloor.assignmentLifecycle)
@@ -27,8 +29,11 @@ extension InstructorDashboardRoutes {
         guard let type = AssignmentType(rawValue: raw) else {
             return req.redirect(to: "/instructor/\(assignment.publicID)/edit?error=Unknown+assignment+type")
         }
-        assignment.assignmentType = type
-        try await assignment.save(on: req.db)
+        do {
+            try await AssignmentTypeChange.apply(type, to: assignment, via: "web", on: req.db, audit: req)
+        } catch let error as AssignmentTypeChangeError {
+            return req.redirect(to: "/instructor/\(assignment.publicID)/edit?error=\(urlEncode(error.message))")
+        }
         return req.redirect(to: "/instructor/\(assignment.publicID)/edit?notice=Assignment+type+saved")
     }
 }

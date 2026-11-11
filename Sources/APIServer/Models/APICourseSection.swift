@@ -1,12 +1,21 @@
 // APIServer/Models/APICourseSection.swift
 //
 // A course section groups assignments under a named heading (e.g. "Labs", "Exams").
-// Each section has a default grading mode that pre-populates the creation form for
-// new items added to that section.
+// A section may name a default assignment type, which the new-assignment page and
+// MCP `create_assignment` take when the author names none
+// (docs/assignment-types.md, phase 3). Grading follows the type, never the
+// section: a section has no grading mode, and moving an assignment between
+// sections changes neither its type nor its grading mode.
+//
+// The `default_grading_mode` column that sections used to carry stays in the
+// table, with a database default, until a later release drops it, so the old
+// color of a blue-green deploy can still read the table
+// (`AddSectionDefaultAssignmentType`). Nothing here reads or writes it.
 //
 // Assignments reference their section via a nullable section_id FK (SET NULL on delete),
 // so deleting a section drops its assignments into the "ungrouped" bucket — no data loss.
 
+import Core
 import Fluent
 import Vapor
 
@@ -21,10 +30,18 @@ final class APICourseSection: Model, Content, @unchecked Sendable {
     @Field(key: "name")
     var name: String
 
-    /// Default grading mode for new items created in this section.
-    /// Values: "browser" | "worker"
-    @Field(key: "default_grading_mode")
-    var defaultGradingMode: String
+    /// The `AssignmentType` raw value a new assignment in this section
+    /// declares when its author names none. Nil = no default. Use the typed
+    /// `defaultAssignmentType` accessor.
+    @OptionalField(key: "default_assignment_type")
+    var defaultAssignmentTypeRaw: String?
+
+    /// Typed accessor for `defaultAssignmentTypeRaw`. An unrecognised value
+    /// reads as no default.
+    var defaultAssignmentType: AssignmentType? {
+        get { defaultAssignmentTypeRaw.flatMap(AssignmentType.init(rawValue:)) }
+        set { defaultAssignmentTypeRaw = newValue?.rawValue }
+    }
 
     /// Ordering among sections within the course (lower = shown first).
     @Field(key: "sort_order")
@@ -40,12 +57,12 @@ final class APICourseSection: Model, Content, @unchecked Sendable {
     init() {}
 
     init(
-        id: UUID? = nil, name: String, defaultGradingMode: String = "worker",
+        id: UUID? = nil, name: String, defaultAssignmentType: AssignmentType? = nil,
         sortOrder: Int, courseID: UUID
     ) {
         self.id = id
         self.name = name
-        self.defaultGradingMode = defaultGradingMode
+        self.defaultAssignmentTypeRaw = defaultAssignmentType?.rawValue
         self.sortOrder = sortOrder
         self.courseID = courseID
     }

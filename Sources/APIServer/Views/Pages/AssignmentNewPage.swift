@@ -8,6 +8,7 @@
 // and the editor scripts with the edit page; Public/assignment-new-page.js
 // wires them here.
 
+import Core
 import Elementary
 
 struct AssignmentNewPage: HTML {
@@ -26,6 +27,12 @@ struct AssignmentNewPage: HTML {
     /// `draftID` as JSON: a quoted string, or `null`.
     let draftIDJSON: String
     let assignmentLanguageOptions: [SelectOption]
+    /// The Type select's options; the selected one is the stored choice, else
+    /// the preselected section's default type, else Assignment.
+    let assignmentTypeOptions: [SelectOption]
+    /// True when the author chose the type in an earlier draft action, so a
+    /// section change does not replace it.
+    let assignmentTypeChosen: Bool
     let assignmentNotebook: NewAssignmentNotebookContext?
     let solutionNotebook: NewAssignmentNotebookContext?
     let supportFileRows: [EditableSuiteRow]
@@ -60,7 +67,8 @@ struct AssignmentNewPage: HTML {
                 }
                 NewAssignmentTitlebar(
                     assignmentName: assignmentName, startsAt: startsAt, dueAt: dueAt, sections: sections,
-                    preselectedSectionID: preselectedSectionID, assignmentLanguageOptions: assignmentLanguageOptions)
+                    preselectedSectionID: preselectedSectionID, assignmentLanguageOptions: assignmentLanguageOptions,
+                    assignmentTypeOptions: assignmentTypeOptions, assignmentTypeChosen: assignmentTypeChosen)
                 draftActionButtons
                 NewAssignmentFilesBlock(
                     hasDraft: draftID != nil, assignmentNotebook: assignmentNotebook,
@@ -172,7 +180,7 @@ struct AssignmentNewPage: HTML {
     }
 }
 
-/// The name, dates, section and language row, and the page actions.
+/// The name, dates, section, type and language row, and the page actions.
 private struct NewAssignmentTitlebar: HTML {
     let assignmentName: String
     let startsAt: String
@@ -180,6 +188,8 @@ private struct NewAssignmentTitlebar: HTML {
     let sections: [CourseSectionRow]
     let preselectedSectionID: String
     let assignmentLanguageOptions: [SelectOption]
+    let assignmentTypeOptions: [SelectOption]
+    let assignmentTypeChosen: Bool
 
     var body: some HTML {
         div(.class("page-titlebar page-titlebar--top")) {
@@ -210,6 +220,8 @@ private struct NewAssignmentTitlebar: HTML {
                         sectionPicker
                         " "
                     }
+                    typePicker
+                    " "
                     label(.class("field-inline")) {
                         "Language "
                         select(
@@ -231,10 +243,12 @@ private struct NewAssignmentTitlebar: HTML {
                     .id("uw-date-warning"), .class("card-meta date-warning"),
                     .custom(name: "style", value: "display:none")
                 ) {}
-                p(
-                    .id("grading-mode-hint"), .class("card-meta grading-mode-hint"),
-                    .custom(name: "style", value: "display:none")
-                ) {}
+                p(.id("assignment-type-hint"), .class("card-meta assignment-type-hint")) {
+                    AssignmentTypeRules.summary(
+                        for: assignmentTypeOptions.first(where: \.selected).flatMap {
+                            AssignmentType(rawValue: $0.value)
+                        } ?? .assignment)
+                }
             }
             div(.class("editor-actions")) {
                 button(.class("btn btn-primary"), .type(.submit)) { "Create & Validate" }
@@ -253,10 +267,41 @@ private struct NewAssignmentTitlebar: HTML {
                 // browser selects the first option anyway.
                 option(.value("")) { "— Ungrouped —" }
                 for section in sections {
-                    option(.value(section.sectionID), .data("grading-mode", value: section.defaultGradingMode)) {
+                    option(
+                        .value(section.sectionID),
+                        .data("assignment-type", value: section.defaultAssignmentType?.rawValue ?? "")
+                    ) {
                         section.name
                     }
                     .attributes(.selected, when: preselectedSectionID == section.sectionID)
+                }
+            }
+            " "
+        }
+    }
+
+    /// The Type select (docs/assignment-types.md). The type sets the grading
+    /// mode, so each option carries its rules for the hint below the row.
+    /// Public/assignment-new-page.js follows the section's default type until
+    /// the author picks one.
+    private var typePicker: some HTML {
+        label(.class("field-inline")) {
+            "Type "
+            select(
+                .class("form-input input-compact"), .name("assignmentType"), .id("assignmentTypeSelect"),
+                .data("chosen", value: assignmentTypeChosen ? "true" : "false")
+            ) {
+                for entry in assignmentTypeOptions {
+                    option(
+                        .value(entry.value),
+                        .data(
+                            "hint",
+                            value: AssignmentType(rawValue: entry.value).map(AssignmentTypeRules.summary(for:))
+                                ?? "")
+                    ) {
+                        entry.label
+                    }
+                    .attributes(.selected, when: entry.selected)
                 }
             }
             " "

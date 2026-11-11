@@ -57,7 +57,7 @@ import Vapor
             // is refused for a TA.
             await #expect(throws: MCPToolError.self) {
                 _ = try await CreateCourseSectionTool().execute(
-                    .init(courseCode: "TAFLOOR", name: "Labs", defaultGradingMode: "browser"), mcpContext(app))
+                    .init(courseCode: "TAFLOOR", name: "Labs", defaultAssignmentType: "lab"), mcpContext(app))
             }
         }
     }
@@ -79,7 +79,7 @@ import Vapor
             #expect(mode.gradingMode == "browser")
 
             let section = try await CreateCourseSectionTool().execute(
-                .init(courseCode: "INSTFLOOR", name: "Labs", defaultGradingMode: "browser"), mcpContext(app))
+                .init(courseCode: "INSTFLOOR", name: "Labs", defaultAssignmentType: "lab"), mcpContext(app))
             #expect(section.name == "Labs")
         }
     }

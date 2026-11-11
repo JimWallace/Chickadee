@@ -34,4 +34,9 @@ struct NewAssignmentDraftPayload {
     /// omitted it, which the publish path treats as "not answered" and
     /// refuses rather than guessing.
     let assignmentLanguage: String
+    /// The Type select's value: an `AssignmentType` raw value, or empty when
+    /// the form omitted it, which falls back to the section's default type
+    /// (`newAssignmentDeclaredType`). Empty by default, the "no choice" the
+    /// form sends without the select.
+    var assignmentType: String = ""
 }

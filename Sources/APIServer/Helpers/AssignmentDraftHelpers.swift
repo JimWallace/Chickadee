@@ -29,6 +29,9 @@ struct NewAssignmentDraftFormState: Codable {
     var requiredCapabilitiesCSV: String
     var assignmentNotebookName: String?
     var solutionNotebookName: String?
+    /// The Type select's value, kept across draft actions. Nil in a state
+    /// stored before the field existed.
+    var assignmentType: String?
 
     static let empty = NewAssignmentDraftFormState(
         assignmentName: "",

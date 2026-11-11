@@ -28,11 +28,11 @@ import VaporTesting
     /// Creates a section in the given course.
     @discardableResult
     private func makeSection(
-        name: String, mode: String = "worker",
+        name: String, type: AssignmentType? = nil,
         order: Int = 1, courseID: UUID
     ) async throws -> APICourseSection {
         let section = APICourseSection(
-            name: name, defaultGradingMode: mode,
+            name: name, defaultAssignmentType: type,
             sortOrder: order, courseID: courseID)
         try await section.save(on: app.db)
         return section
@@ -75,7 +75,7 @@ import VaporTesting
                 beforeRequest: { req in
                     req.headers.add(name: .cookie, value: newCookie)
                     try req.content.encode(
-                        ["name": "Labs", "defaultGradingMode": "browser", "_csrf": token],
+                        ["name": "Labs", "defaultAssignmentType": "lab", "_csrf": token],
                         as: .urlEncodedForm
                     )
                 },
@@ -88,7 +88,7 @@ import VaporTesting
                 .all()
             #expect(sections.count == 1)
             #expect(sections[0].name == "Labs")
-            #expect(sections[0].defaultGradingMode == "browser")
+            #expect(sections[0].defaultAssignmentType == .lab)
             #expect(sections[0].sortOrder == 1)
 
         }
@@ -111,7 +111,7 @@ import VaporTesting
                 beforeRequest: { req in
                     req.headers.add(name: .cookie, value: newCookie)
                     try req.content.encode(
-                        ["name": "Exams", "defaultGradingMode": "worker", "_csrf": token],
+                        ["name": "Exams", "defaultAssignmentType": "", "_csrf": token],
                         as: .urlEncodedForm
                     )
                 },
@@ -142,7 +142,7 @@ import VaporTesting
                 beforeRequest: { req in
                     req.headers.add(name: .cookie, value: newCookie)
                     try req.content.encode(
-                        ["name": "   ", "defaultGradingMode": "worker", "_csrf": token],
+                        ["name": "   ", "defaultAssignmentType": "", "_csrf": token],
                         as: .urlEncodedForm
                     )
                 },
@@ -167,7 +167,7 @@ import VaporTesting
                 beforeRequest: { req in
                     req.headers.add(name: .cookie, value: newCookie)
                     try req.content.encode(
-                        ["name": "Labs", "defaultGradingMode": "jupyter", "_csrf": token],
+                        ["name": "Labs", "defaultAssignmentType": "jupyter", "_csrf": token],
                         as: .urlEncodedForm
                     )
                 },
@@ -191,7 +191,7 @@ import VaporTesting
                 beforeRequest: { req in
                     req.headers.add(name: .cookie, value: newCookie)
                     try req.content.encode(
-                        ["name": "Labs", "defaultGradingMode": "worker", "_csrf": token],
+                        ["name": "Labs", "defaultAssignmentType": "", "_csrf": token],
                         as: .urlEncodedForm
                     )
                 },
@@ -277,7 +277,7 @@ import VaporTesting
             let course = try await makeTestCourse(on: app, code: "SECT_RENAME1", mode: .auto)
             let courseID = try course.requireID()
             let section = try await makeSection(
-                name: "OldName", mode: "worker",
+                name: "OldName",
                 order: 1, courseID: courseID)
             let sectionID = try section.requireID().uuidString
 
@@ -292,7 +292,7 @@ import VaporTesting
                 beforeRequest: { req in
                     req.headers.add(name: .cookie, value: newCookie)
                     try req.content.encode(
-                        ["name": "NewName", "defaultGradingMode": "browser", "_csrf": token],
+                        ["name": "NewName", "defaultAssignmentType": "lab", "_csrf": token],
                         as: .urlEncodedForm
                     )
                 },
@@ -302,7 +302,7 @@ import VaporTesting
 
             let updated = try await APICourseSection.find(section.id, on: app.db)
             #expect(updated?.name == "NewName")
-            #expect(updated?.defaultGradingMode == "browser")
+            #expect(updated?.defaultAssignmentType == .lab)
 
         }
     }
@@ -325,7 +325,7 @@ import VaporTesting
                 beforeRequest: { req in
                     req.headers.add(name: .cookie, value: newCookie)
                     try req.content.encode(
-                        ["name": "", "defaultGradingMode": "worker", "_csrf": token],
+                        ["name": "", "defaultAssignmentType": "", "_csrf": token],
                         as: .urlEncodedForm
                     )
                 },
@@ -351,7 +351,7 @@ import VaporTesting
                 beforeRequest: { req in
                     req.headers.add(name: .cookie, value: newCookie)
                     try req.content.encode(
-                        ["name": "Anything", "defaultGradingMode": "worker", "_csrf": token],
+                        ["name": "Anything", "defaultAssignmentType": "", "_csrf": token],
                         as: .urlEncodedForm
                     )
                 },
@@ -507,16 +507,18 @@ import VaporTesting
         }
     }
 
-    @Test func moveToSection_syncsBrowserGradingMode() async throws {
+    /// A move into a Lab-default section keeps the assignment's worker
+    /// grading and its type, and the response carries the note the dashboard
+    /// shows (docs/assignment-types.md, phase 3).
+    @Test func moveToSection_keepsGradingAndReportsTheSectionType() async throws {
         try await withApp(app) { _ in
             let course = try await makeTestCourse(on: app, code: "SECT_MOVE3", mode: .auto)
             let courseID = try course.requireID()
             let section = try await makeSection(
-                name: "BrowserSection", mode: "browser",
+                name: "BrowserSection", type: .lab,
                 order: 1, courseID: courseID)
             let sectionID = try section.requireID()
 
-            // Create assignment with a manifest that has gradingMode = "worker"
             let manifest = """
                 {"schemaVersion":1,"requiredFiles":[],"testSuites":[{"tier":"public","script":"test.sh"}],"timeLimitSeconds":10,"makefile":null,"gradingMode":"worker"}
                 """
@@ -528,6 +530,7 @@ import VaporTesting
             let assignment = APIAssignment(
                 testSetupID: setupID, title: "GradeModeTest",
                 dueAt: nil, isOpen: true, courseID: courseID)
+            assignment.assignmentType = .assignment
             try await assignment.save(on: app.db)
             let publicID = assignment.publicID
 
@@ -538,6 +541,7 @@ import VaporTesting
             let (token, newCookie) = try await csrfFields(for: "/instructor", cookie: cookie, on: app)
 
             struct MoveBody: Content { var sectionID: String }
+            struct MoveReply: Content { var note: String? }
             try await app.asyncTest(
                 .POST, "/instructor/\(publicID)/section",
                 beforeRequest: { req in
@@ -548,14 +552,17 @@ import VaporTesting
                 },
                 afterResponse: { res in
                     #expect(res.status == .ok)
+                    let reply = try res.content.decode(MoveReply.self)
+                    #expect(reply.note?.contains("a Lab") == true)
                 })
 
-            // The test setup manifest should now have gradingMode = "browser"
             let updatedSetup = try await APITestSetup.find(setup.id, on: app.db)
             let manifestData = Data((updatedSetup?.manifest ?? "").utf8)
             let dict = try JSONSerialization.jsonObject(with: manifestData) as? [String: Any]
-            #expect(dict?["gradingMode"] as? String == "browser")
-
+            #expect(dict?["gradingMode"] as? String == "worker")
+            let moved = try #require(try await APIAssignment.find(assignment.id, on: app.db))
+            #expect(moved.assignmentType == .assignment)
+            #expect(moved.sectionID == sectionID)
         }
     }
 }

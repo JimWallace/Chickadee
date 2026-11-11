@@ -33,6 +33,9 @@ struct SaveNewAssignmentForm {
     let requiredArchitecture: String
     let requiredLanguagesCSV: String
     let requiredCapabilitiesCSV: String
+    /// The Type select's value; empty or nil falls back to the section's
+    /// default type (`newAssignmentDeclaredType`).
+    let assignmentTypeRaw: String?
 }
 
 /// Outcome of validating a `SaveNewAssignmentForm` — either a fully
@@ -67,6 +70,8 @@ struct ValidatedSaveNewAssignment {
     let suiteFiles: [File]
     let suiteConfigRaw: String?
     let requirementSpec: AssignmentRequirementSpec?
+    /// The Type select's value, resolved by the save handler.
+    let assignmentTypeRaw: String?
 }
 
 extension DraftAssignmentRoutes {
@@ -92,6 +97,7 @@ extension DraftAssignmentRoutes {
             var requiredArchitecture: String?
             var requiredLanguagesCSV: String?
             var requiredCapabilitiesCSV: String?
+            var assignmentType: String?
         }
 
         guard let body = try? await req.decodeContent(SaveBody.self) else {
@@ -126,7 +132,9 @@ extension DraftAssignmentRoutes {
             requiredLanguagesCSV: try multipartTextField(named: ["requiredLanguagesCSV"], from: req)
                 ?? body.requiredLanguagesCSV ?? "",
             requiredCapabilitiesCSV: try multipartTextField(named: ["requiredCapabilitiesCSV"], from: req)
-                ?? body.requiredCapabilitiesCSV ?? ""
+                ?? body.requiredCapabilitiesCSV ?? "",
+            assignmentTypeRaw: try multipartTextField(named: ["assignmentType"], from: req)
+                ?? body.assignmentType
         )
     }
 
@@ -232,7 +240,8 @@ extension DraftAssignmentRoutes {
                 uploadedSolutionNotebookFilename: uploadedSolutionNotebookFilename,
                 suiteFiles: suiteFiles,
                 suiteConfigRaw: form.suiteConfigRaw,
-                requirementSpec: requirementSpec
+                requirementSpec: requirementSpec,
+                assignmentTypeRaw: form.assignmentTypeRaw
             ))
     }
 

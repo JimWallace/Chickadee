@@ -13,7 +13,7 @@ not exist.
 
 - [architecture.md](architecture.md) — system architecture: targets, grading pipeline, auth, sandboxing, MCP, deployment
 - [grading-integrity.md](grading-integrity.md) — what a submission can do to its own grade today, the decisions, and the four-phase plan (#2223)
-- [assignment-types.md](assignment-types.md) — a declared Assignment / Lab / Class activity type: what it controls, the backfill, and the phases (phase 1 shipped)
+- [assignment-types.md](assignment-types.md) — a declared Assignment / Lab / Class activity type: what it controls, the rules each type carries, section default types, and the rows that break a rule (phases 1 to 3 shipped)
 - [failure-detail.md](failure-detail.md) — how much of a failing test a student sees: `full`, `actualOnly` and `verdictOnly`
 - [manifest-format-v2.md](manifest-format-v2.md) — proposed: the manifest (`TestProperties`) review, the v2 envelope and its phased rollout
 - [runner-capability-profiles.md](runner-capability-profiles.md) — runner capability matching, the language gate, `minimumRunnerVersion`

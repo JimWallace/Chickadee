@@ -45,9 +45,14 @@ describes it now.
 ## Design decisions
 
 1. **An activity is an assignment, not a new content type.** Content items are
-   ungraded. An activity needs grading, achievements, freeze and the LEARN push,
-   and all of that hangs off an assignment. The manifest gains an optional
-   `activity` block; `nil` means ordinary assignment behaviour at every branch.
+   ungraded. An activity needs grading, achievements and freeze, and all of
+   that hangs off an assignment. The manifest gains an optional `activity`
+   block; `nil` means ordinary assignment behaviour at every branch. The
+   assignment's declared type decides the rest (docs/assignment-types.md): a
+   Class activity must carry the block, and its points stay in Chickadee for
+   the leaderboard and achievements, with no LEARN or LTI push and no slip
+   days. A Lab may carry an activity too (HLTH 230 Lab 4b) and keeps a Lab's
+   push and slip days.
 2. **Two orthogonal axes, hidden behind named kinds.** Internally an activity is
    an *opponent source* (what else is in the workspace when the script runs, and
    how many times it runs) plus a *class aggregation* (how the class's results

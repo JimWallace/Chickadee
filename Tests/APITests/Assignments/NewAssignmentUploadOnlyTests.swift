@@ -70,11 +70,11 @@ import VaporTesting
         return try #require(setup.decodedManifest())
     }
 
-    /// A section that grades in the browser by default, so the section's mode
-    /// differs from the `worker` an upload-only language requires.
+    /// A section whose default type is Lab, which grades in the browser, so
+    /// the default differs from the `worker` an upload-only language requires.
     private func browserSection(courseID: UUID, on app: Application) async throws -> UUID {
         let section = APICourseSection(
-            name: "Labs", defaultGradingMode: "browser", sortOrder: 1, courseID: courseID)
+            name: "Labs", defaultAssignmentType: .lab, sortOrder: 1, courseID: courseID)
         try await section.save(on: app.db)
         return try section.requireID()
     }
@@ -95,8 +95,8 @@ import VaporTesting
     }
 
     /// The other half of the rule: a language with an editor kernel keeps the
-    /// notebook mode and takes the section's grading mode, as before.
-    @Test func publishingAPythonDraftTakesTheSectionsGradingMode() async throws {
+    /// notebook mode and takes the grading mode of the section's default type.
+    @Test func publishingAPythonDraftTakesTheSectionsDefaultType() async throws {
         try await withAssignmentRoutesApp { app in
             let courseID = try await app.testCourseID(enrollmentMode: .auto)
             let sectionID = try await browserSection(courseID: courseID, on: app)
@@ -128,7 +128,7 @@ import VaporTesting
         let rebuilt = try #require(
             decodeManifest(
                 fromJSON: try rebuildDraftManifestJSON(
-                    draft, testSuites: [], includeMakefile: true, sectionGradingMode: "browser",
+                    draft, testSuites: [], includeMakefile: true, gradingMode: "browser",
                     starterNotebook: "lab.ipynb")))
         #expect(rebuilt.language == language)
         #expect(rebuilt.languageDeclared == true)

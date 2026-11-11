@@ -92,9 +92,10 @@ func applyDatasetsEdit(
         throw DatasetsEditError.attachedSpecDropped(file)
     }
 
-    // An activity that ranks or matches students refuses personal data.
+    // An activity that ranks or matches students refuses personal data. A
+    // dataset edit cannot introduce a type rule (type: nil).
     if let violation = ManifestCoherence.violation(
-        introducedBy: { $0.datasets = change.applied(to: $0.datasets) }, in: setup.manifest)
+        for: nil, introducedBy: { $0.datasets = change.applied(to: $0.datasets) }, in: setup.manifest)
     {
         throw DatasetsEditError.incoherent(violation)
     }

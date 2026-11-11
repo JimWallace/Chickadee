@@ -205,7 +205,8 @@ struct InstructorDashboardRoutes: RouteCollection {
                 showUngroupedBlock: hasUngrouped || !hasSections,
                 showEmptyMessage: !hasSections && !hasUngrouped,
                 enrolledStudentCount: roster.enrolledStudentCount,
-                attachTargets: Self.attachTargets(sections: sectionContexts, ungroupedItems: ungroupedItems))
+                attachTargets: Self.attachTargets(sections: sectionContexts, ungroupedItems: ungroupedItems),
+                flash: FlashMessages(notice: req.query[String.self, at: "notice"]))
         }.encodeResponse(for: req)
     }
 
@@ -621,9 +622,8 @@ struct InstructorDashboardRoutes: RouteCollection {
                     SelectOption(value: $0.rawValue, label: $0.displayName, selected: assignment.concept == $0)
                 },
             conceptRingPhrase: assignment.concept?.ringPhrase,
-            assignmentTypeOptions: AssignmentType.allCases.map {
-                SelectOption(value: $0.rawValue, label: $0.displayName, selected: assignment.assignmentType == $0)
-            },
+            assignmentTypeOptions: AssignmentTypeRules.options(selected: assignment.assignmentType),
+            assignmentTypeRules: AssignmentTypeRules.summary(for: assignment.assignmentType),
             aiFeedback: try await APICourse.find(assignment.courseID, on: req.db)?.aiFeedbackEnabled == true
                 ? AIFeedbackSetting(enabled: assignment.aiFeedbackEnabled == true) : nil,
             timeLimitSeconds: manifest?.timeLimitSeconds ?? 10,

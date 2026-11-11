@@ -81,7 +81,8 @@ struct ValidationVariantSummary {
 struct CourseSectionRow: Encodable {
     let sectionID: String  // UUID as string
     let name: String
-    let defaultGradingMode: String  // "browser" | "worker"
+    /// The type new work in this section declares by default; nil = none.
+    let defaultAssignmentType: AssignmentType?
     let sortOrder: Int
     /// Assignments and content items in this section, interleaved and sorted.
     let items: [InstructorSectionItem]
