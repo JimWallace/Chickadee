@@ -4,8 +4,10 @@ The plan to extend the course dataset library
 ([datasets-course-library.md](datasets-course-library.md)) beyond CSV to FHIR
 JSON, and to give a course a simulated live clinical data source.
 
-Status: **plan, for the maintainer's review.** Nothing here is built. The
-recommendations are in §1; the questions that need the maintainer are in §11.
+Status: **plan, decisions made.** Nothing here is built. The recommendations
+are in §1, and the maintainer's decisions of 2026-11-11 are in §11. The first
+release is **shared only**: every student gets the whole FHIR file. Sampling by
+patient (§4) is designed here but built later (P5).
 
 ---
 
@@ -13,14 +15,15 @@ recommendations are in §1; the questions that need the maintainer are in §11.
 
 | Question | Recommendation |
 |---|---|
-| Format | **NDJSON only**: one FHIR R4 resource per line, resource types mixed in one file. A Bundle upload is a later, optional convenience that converts to NDJSON at upload. |
-| Validation | **Structural only.** Each line is a JSON object with a `resourceType` and an `id`; every patient reference resolves inside the file; each resource belongs to at most one patient. No profile validation. |
-| Unit of sampling | **The patient.** A patient's slice is the Patient line and every line whose `subject` or `patient` names it, plus the shared context lines (Practitioner, Organization, Location and the like). `sampleSize` counts patients; a partition deals patients. |
-| Refused for FHIR (first release) | Transforms (`missingValues`, `formatNoise`), a stratum other than a primitive Patient element, a resource in two patients, a dangling patient reference, a non-context resource with no patient. |
+| Format | **NDJSON**: one FHIR R4 resource per line, resource types mixed in one file. A Bundle may be uploaded and is converted to NDJSON at upload (P4); the stored version is always NDJSON. |
+| Validation | **Structural only.** Each line is a JSON object with a `resourceType` and an `id`, and no `resourceType`/`id` pair repeats. No profile validation. The patient-membership checks run only when a spec samples by patient (P5). |
+| First release | **Shared only.** A FHIR spec has no sample, no partition, no stratum and no transforms, so every student gets the whole file through the existing `shared` link. |
+| Unit of sampling (later, P5) | **The patient.** A patient's slice is the Patient line and every line whose `subject` or `patient` names it, plus the shared context lines (Practitioner, Organization, Location and the like). `sampleSize` counts patients; a partition deals patients. No strata. |
+| Refused for FHIR | A stratum and transforms, always. In the first release, a sample and a partition too. From P5, a sampled spec on a file with a resource in two patients, a dangling patient reference, or a non-context resource with no patient. |
 | Format discriminator | `DatasetFormat` in Core (`csv`, `fhirNdjson`) on the library dataset and on `DatasetSpec`, decoded as `csv`, encoded only when it is not `csv`, so no stored manifest changes a byte. |
 | MCP | No new tool in the first release. `create_dataset` gains `format`; the read tools report it; `update_dataset` gains notes keyed by resource type and code. |
 | Simulated live source | **Stage 1: option (c)**, an in-kernel helper that pages through the attached file, with a simulated clock that gives option (b) without a server. **Stage 2 (after Winter 2027): option (a)**, a same-origin read-only endpoint for the editor only, behind the same helper API. Grading always reads the file. |
-| HLTH 230 Assignment 3 | **Yes, it can be ready before mid-March 2027**, with a go/no-go on **2027-02-13** (§10). The fallback needs no code. |
+| HLTH 230 Assignment 3 | **Yes, it can be ready before mid-March 2027**, with a go/no-go on **2027-02-13** (§10). Shared delivery makes the path three PRs. The fallback needs no code. |
 
 ---
 
@@ -100,7 +103,8 @@ non-goal (§12).
 The alternative that lost is the Bundle (`collection`, `searchset` or
 `transaction`). Synthea's default output is one Bundle per patient. Accepting
 a Bundle at upload and storing the converted NDJSON is a small, separate
-phase (P6), done only if an instructor needs it. The stored version is always
+phase (P4, decided in §11). The conversion re-encodes each entry once, at
+upload; from then on the stored lines are fixed. The stored version is always
 NDJSON, so nothing downstream sees a Bundle.
 
 The extension is `.ndjson`. The media type for downloads is
@@ -116,13 +120,16 @@ number:
   (`CourseDatasetService.maxVersionBytes`, unchanged);
 - a line that is not a JSON object, or that has no string `resourceType` or no
   string `id`;
-- the same `resourceType`/`id` pair on two lines;
-- a file with no `Patient`;
-- a resource whose `subject` or `patient` reference names a `Patient/<id>`
-  that the file does not hold (a dangling reference);
-- a resource that names two different patients;
-- a resource of a type outside the **context list** that names no patient
-  (see §4, rule P3).
+- the same `resourceType`/`id` pair on two lines.
+
+Three more checks belong to sampling and run only when a spec samples or
+partitions by patient (P5), at save time against the file: a resource whose
+`subject` or `patient` names a `Patient/<id>` the file does not hold, a
+resource that names two different patients, and a resource of a type outside
+the **context list** that names no patient (§4, rule P3). A shared file needs
+none of them, so the first release does not refuse a file for them. The
+summary (§5) still counts the dangling references, so the instructor sees
+them.
 
 Blank lines are skipped, and `\r\n` is read as `\n`, as for CSV
 (`DatasetMaterializer.normalizedLines`).
@@ -139,6 +146,11 @@ later R5 dataset is a value, not a migration.
 ---
 
 ## 4. The unit of sampling
+
+This section is built in P5, not in the first release, which delivers a FHIR
+file whole (§11, decision 1). It is designed now so that the first release
+does not close it off: the spec field, the format switch in the materializer
+and the save-time refusals are where P5 adds to.
 
 ### The patient is the unit
 
@@ -173,19 +185,14 @@ resource and the resources that belong to it.
 |---|---|---|
 | `sampleSize` | data rows | **patients** |
 | `rowSample` | partial Fisher-Yates over row indices | the same algorithm over patient numbers, so D6 holds: a smaller course-scoped sample is a prefix of a larger one, in patients |
-| `stratumColumn` | a header column | a **top-level string element of Patient**, such as `gender`; a nested path is refused (see below) |
+| `stratumColumn` | a header column | **refused** (§11, decision 3) |
 | `partition`, `partCount` | row `i` in part `i mod N` | patient `i` in part `i mod N`; context lines in every part |
 | `scope` `course`/`assignment` | which seed picks the rows | unchanged |
-| `transforms` | `missingValues`, `formatNoise` | **refused** in the first release |
+| `transforms` | `missingValues`, `formatNoise` | **refused** |
 
-**Strata.** `stratumColumn` keeps its name in the stored spec and the MCP
-schema, so the schema does not fork. For a FHIR spec it names a top-level
-Patient element whose value is a JSON string: `gender` is the useful one, and
-`birthDate` is legal but a poor stratum. A nested path (`address.state`) and a
-non-string value are refused at save. A patient with no value for the element
-is its own stratum, as an empty cell is for CSV. HLTH 230 Assignment 3 does
-not need strata; the plan builds them only if the maintainer wants them in the
-first release (§11, question 3).
+**Strata are not built.** A FHIR spec with a `stratumColumn` is refused at
+save. If they are wanted later, the natural form is a top-level string element
+of Patient, such as `gender`.
 
 **Transforms are refused.** `missingValues` blanks a cell. On a FHIR resource
 the equivalent removes an element or a `value[x]`, which changes the JSON and
@@ -261,8 +268,8 @@ Core that walks the original line's tokens and adds whitespace only. A test
 pins its output on a fixture, on both platforms in CI.
 
 The example comes from the pool. D9 says a student never downloads the pool;
-one synthetic resource chosen by the instructor is not a download, but it is a
-change to the letter of D9, so it is §11 question 2.
+one synthetic resource chosen by the instructor is not a download, and the
+maintainer accepted it (§11, decision 2).
 
 "Your rows" stays one download per assignment, served as `mine.ndjson` for a
 FHIR file (§7).
@@ -333,8 +340,8 @@ count. The changes are to schemas, descriptions and results:
 | `add_dataset_version` | the description stops saying "CSV"; the file must match the dataset's format. |
 | `list_datasets`, `get_dataset` | report `format`. For FHIR, `get_dataset` returns the summary and the first 5 lines of the version in place of the header and first rows. |
 | `update_dataset` | gains `entries` (resource type, optional system and code, description), changed by name as `columns` is today, so an agent that edits one entry does not clear the others. `columns` on a FHIR dataset is refused, and the reverse. |
-| `attach_dataset` | the description says that `sampleSize` counts patients and `stratumColumn` names a Patient element for a FHIR dataset, and that transforms are refused. |
-| `set_dataset` | carries `format` through every edit; refuses transforms on a FHIR spec; refuses to make a new spec on an `.ndjson` support file that is not attached (first release: FHIR enters through the library). |
+| `attach_dataset` | the description says that a FHIR dataset attaches whole: a sample, a partition, a stratum and transforms are refused. From P5, it says that `sampleSize` and `partCount` count patients. |
+| `set_dataset` | carries `format` through every edit; refuses a stratum and transforms on a FHIR spec, and a sample or a partition until P5; refuses to make a new spec on an `.ndjson` support file that is not attached (FHIR enters through the library). |
 | `get_support_files`, `get_assignment` | report `datasetFormat`. |
 | `initialize` instructions | the "Course dataset library" paragraph gains two sentences on FHIR. |
 
@@ -464,7 +471,7 @@ arrivals = feed.advance(minutes=15)
    option (b) without a server. The helper lives in Assignment 3's support
    files. A reference copy with its tests can go under `docs/examples/` once it
    has been used once.
-2. **Stage 2, after the term, if the maintainer wants it:** option (a), for the
+2. **Stage 2, after the term (P6, decided in §11):** option (a), for the
    editor only, behind the **same** helper API: `Feed.connect()` uses HTTP when
    the endpoint answers and the file otherwise, and graded code is told to
    take the resources as an argument rather than fetch them. The pedagogical
@@ -485,7 +492,7 @@ save".
 |---|---|---|
 | Versioning and pinning | A new version is pinned per attachment, as today. D6 holds in patients: an edit that keeps the patient count keeps every student's patients; an edit that adds or removes a patient deals every cohort again. | The Datasets tab's "which kind of change" note counts patients for FHIR. A new version that adds Observations to existing patients keeps the cohort. |
 | Format change across versions | Refused: a dataset's format is fixed at create. | A course that moves from CSV to FHIR makes a new dataset. |
-| Storage | 16 MB per version, unchanged. FHIR is verbose: an Observation line is 500 to 900 bytes. 300 patients with 12 sets of three vitals is about 10,800 Observations, 6 to 10 MB. | A sampled FHIR dataset is `perStudent`: a 60-patient sample is about 2 MB per student, 600 MB for 300 students in working copies. A shared one is a link (`dataset-shared-delivery.md`). The authoring note says so; §11 question 1. |
+| Storage | 16 MB per version, unchanged. FHIR is verbose: an Observation line is 500 to 900 bytes. 300 patients with 12 sets of three vitals is about 10,800 Observations, 6 to 10 MB. | The first release is shared, so each student's copy is a link (`dataset-shared-delivery.md`) and the file is stored once. From P5, a sampled FHIR dataset is `perStudent`: a 60-patient sample is about 2 MB per student, 600 MB for 300 students. The P5 authoring note says so. |
 | Class activities | `isShared` reads the spec only, so a whole FHIR file is allowed in a ranked activity and a sampled one is refused, exactly as for CSV. | None new. The simulated clock is deterministic, so it does not make a shared file personal. |
 | Jobs with no student | The class corpus run and a composite reference render read the pool. | Unchanged. |
 | Personalization expressions | Read the student's NDJSON by name in the overlay. | A Python expression must `json.loads` each line; the authoring docs give the pattern. |
@@ -493,7 +500,7 @@ save".
 | Browser grading download | The materialized file is sent per grade. | Assignment 3 is an Assignment, graded by the worker, so it does not pay this. A browser-graded lab with a large FHIR file would. |
 | JupyterLite | The file browser opens an unknown extension in the text editor; a 10 MB single-line-per-resource file is slow to open there. | Student code reads it with `open`; the Data page is where students look at the data. Checked in P3 on the real editor. |
 | Bundle import into an older server | A version 2 server would profile NDJSON as a CSV. | Bundle `schemaVersion` 3 (§6). |
-| R students | The helper and the endpoint are Python. | An R helper is §11 question 6. |
+| R students | The helper and the endpoint are Python. | No R helper for now (§11, decision 6). |
 
 The main risk is the **patient-membership rule**. A resource that reaches its
 patient by another path, or a type missing from the context list, either is
@@ -514,13 +521,17 @@ files that already exist are edited only with the maintainer's approval (the
 
 | Phase | What | Tests | Size |
 |---|---|---|---|
-| P1 Core | `DatasetFormat`; `DatasetSpec.format` with the stable encoder; `FHIRNdjsonProfile`, `FHIRDatasetSummary`, `FHIRDatasetIssue`; the patient index; `DatasetMaterializer` selection by patient for `rowSample` and `partition`, `allParts`, the context-only "header"; `DatasetSpecValidation` refusals; the re-indenter; `overlap` in patients; the feature-interactions section | `FHIRNdjsonProfileTests` (each refusal, by fixture); `FHIRDatasetMaterializerTests` (lines verbatim and in pool order, nested-sample prefix in patients, parts disjoint and covering, context in every part); the encoder byte pin; `DatasetDeliveryModeTests` FHIR cases | one PR |
-| P2 Library | the migration; `CourseDatasetService` create, add version, promote by format; the summary on the version row; staff download by extension; `DatasetPartStore` names by extension; bundle `schemaVersion` 3; clone | `CourseDatasetServiceTests` FHIR cases; `CourseDatasetBundleTests` v3 round trip and v2 export when no FHIR dataset; `CourseDatasetLifecycleTests` clone | one PR |
-| P3 Surfaces | Datasets tab: format choice on upload, the FHIR dictionary (entries), the example pick; `CourseDataPage` summary and example; `mine.ndjson`; Files panel: sample in patients, no transform controls, the Patient-element stratum (if built); upload page wording | `ElementaryPageGuardTests`, the dataset page fixtures, `StudentDataRoutesTests` (byte equality with the grader for FHIR), `RouteAuthorizationMatrixTests`, `support-files-library.test.mjs`; a check on the real editor that the file opens | one or two PRs |
-| P4 MCP | §7 | `CourseDatasetToolsTests`, `MCPOutputSchemaSyncTests`, `MCPInstructionsCatalogSyncTests`, the roadmap and compliance rows | one PR |
-| P5 Helper (content) | `chickadee_fhir.py` and Assignment 3's data, as course content | the helper's own tests run in the assignment's validation; a worker-graded validation run green | content, not a platform PR |
-| P6 Bundle upload (optional) | convert a Bundle to NDJSON at upload; the version note says so | conversion fixtures, including a Bundle whose entries use `urn:uuid` references | one PR, only on demand |
-| P7 Live endpoint (optional, after the term) | §8(a) | route, authorization, rate-limit and isolation tests; a new MCP tool or field and every catalog test in §7 | two PRs |
+P1 to P3 are the Assignment 3 path. P4 to P6 follow it, in any order.
+
+| Phase | What | Tests | Size |
+|---|---|---|---|
+| P1 Core, shared | `DatasetFormat`; `DatasetSpec.format` with the stable encoder; `FHIRNdjsonProfile` (the structural checks of F2), `FHIRDatasetSummary`, `FHIRDatasetIssue`; the format switch in `DatasetMaterializer` (a FHIR spec delivers the whole file); `DatasetSpecValidation` refusals (a sample, a partition, a stratum and transforms on a FHIR spec; format and extension agree); the re-indenter; the feature-interactions section | `FHIRNdjsonProfileTests` (each refusal, by fixture); a FHIR spec materializes to the source bytes for any seed; the encoder byte pin; `DatasetDeliveryModeTests` (a FHIR spec is `shared`) | one PR |
+| P2 Library | the migration; `CourseDatasetService` create, add version, promote by format; the summary on the version row; staff download by extension; bundle `schemaVersion` 3; clone | `CourseDatasetServiceTests` FHIR cases; `CourseDatasetBundleTests` v3 round trip and v2 export when no FHIR dataset; `CourseDatasetLifecycleTests` clone | one PR |
+| P3 Surfaces and MCP | Datasets tab: format choice on upload, the FHIR dictionary (entries), the example pick; `CourseDataPage` summary and example; `mine.ndjson`; Files panel: a FHIR row shows no sample, partition or transform controls; upload page wording; the MCP changes of §7 | `ElementaryPageGuardTests`, the dataset page fixtures, `StudentDataRoutesTests` (byte equality with the grader for FHIR), `RouteAuthorizationMatrixTests`, `support-files-library.test.mjs`; `CourseDatasetToolsTests`, `MCPOutputSchemaSyncTests`, `MCPInstructionsCatalogSyncTests`, the roadmap and compliance rows; a check on the real editor that the file opens | two PRs: pages, then MCP |
+| Helper (content) | `chickadee_fhir.py` (§8(c) with the simulated clock) and Assignment 3's feed, as course content | the helper's own tests run in the assignment's validation; a worker-graded validation run green | content, not a platform PR |
+| P4 Bundle upload | convert a Bundle to NDJSON at upload, writing each entry's `resource` as one line in entry order; the version note says it was converted | conversion fixtures, including a Bundle whose entries use `urn:uuid` references, which are rewritten to `<Type>/<id>` | one PR |
+| P5 Sampling by patient | §4: the patient index; `rowSample` and `partition` by patient; `allParts` and the context-only "header"; `DatasetPartStore` names by extension; the membership refusals at save; `overlap` in patients; the Files panel and MCP sample fields for FHIR | `FHIRDatasetMaterializerTests` (lines verbatim and in pool order, nested-sample prefix in patients, parts disjoint and covering, context in every part); each membership refusal by fixture; `DatasetPartStoreTests` FHIR case | one or two PRs, when customization is revisited |
+| P6 Live endpoint | §8(a), for the editor, behind the helper's API | route, authorization, rate-limit and isolation tests; a new MCP tool or field and every catalog test in §7 | two PRs, not required now |
 
 ### HLTH 230 Assignment 3
 
@@ -530,12 +541,14 @@ vital-signs screen (body temperature LOINC 8310-5, heart rate 8867-4, oxygen
 saturation 59408-5) over a simulated emergency-department feed of about 300
 patients.
 
-**Can a FHIR dataset be ready before mid-March 2027? Yes, with a gate.** It
-needs P1 to P3 deployed, and P5 authored; P4 is wanted for agent authoring but
-not required, because the upload form is a door. That is three or four
-platform PRs, on code whose shape the CSV library already set, with roughly
-thirteen weeks before the gate. The risk is not size but review: P1 decides
-the membership rule, and it should not be rushed.
+**Can a FHIR dataset be ready before mid-March 2027? Yes, with a gate.**
+Every student gets the same 300 patients (§11, decision 1), so the path is P1
+to P3 deployed and the helper authored: four platform PRs, none of which
+touches selection, on code whose shape the CSV library already set, with
+roughly thirteen weeks before the gate. The MCP half of P3 is wanted for agent
+authoring but is not required, because the upload form is a door. The
+patient-membership rule, the part of this plan that most needs care, is in P5
+and off this path.
 
 **Go/no-go on 2027-02-13**, two weeks before the likely open: P1 to P3 are
 live in production, the Assignment 3 feed is uploaded and published, and a
@@ -551,26 +564,27 @@ sampling the library exists to replace, so the fallback should stay shared.
 
 ---
 
-## 11. Open questions for the maintainer
+## 11. Decisions by the maintainer
 
-1. **Does Assignment 3 give every student the same 300 patients, or a sample?**
-   Shared costs one copy and allows a ranked activity on the same feed; a
-   sample costs about 2 MB per student and gives each student their own
-   screen result.
-2. **The Data page example comes from the pool.** One instructor-chosen
-   synthetic resource shown to every student. Accept it as consistent with
-   D9, or render the example from each student's own rows (which needs an
-   assignment, because a slice is per assignment)?
-3. **Strata in the first release?** Assignment 3 does not need them. Leaving
-   them out shrinks P1 and P3.
-4. **Bundle upload (P6)?** Needed only if an instructor will upload Synthea's
-   per-patient Bundles rather than its bulk NDJSON.
-5. **The live endpoint (P7)?** Decide after the term, on what students did
-   with the helper.
-6. **R.** An R version of the helper, for an R assignment, depends on whether
-   the xeus-r environment has a JSON reader (`jsonlite`); adding one is a
-   kernel-environment change with a boot cost (`environment-r.yml`).
-7. **Assignment 3's open date.** The gate in §10 assumes about 2027-02-27.
+The maintainer answered the open questions on 2026-11-11.
+
+1. **Shared first. Decided.** The first release delivers a FHIR dataset whole
+   to every student (`shared`). Per-student samples and partitions by patient
+   are a later phase (P5), taken up when customization is revisited. Assignment
+   3 gives every student the same 300 patients.
+2. **The Data page example comes from the pool. Decided: yes.** One
+   instructor-chosen synthetic resource is shown to every student. This is
+   consistent with D9: it is not a download, and under decision 1 every
+   student holds the whole file anyway.
+3. **Strata. Decided: no.** No FHIR stratum in any phase of this plan. A FHIR
+   spec with a `stratumColumn` is refused.
+4. **Bundle upload. Decided: yes.** A Bundle may be uploaded and is stored as
+   NDJSON (P4). It is not on the Assignment 3 path.
+5. **The live endpoint. Decided: yes, later.** Build §8(a) (P6), but it is not
+   required now and is not on the Assignment 3 path.
+6. **R. Decided: not now.** No R helper.
+7. **Assignment 3's open date. Confirmed:** about 2027-02-27, so the gate in
+   §10 stands at 2027-02-13.
 
 ---
 
