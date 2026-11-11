@@ -71,20 +71,29 @@ struct JupyterLiteContentsRoutes: RouteCollection {
 
         // The kernel's file system walks to the notebook's folder one level at a
         // time, so it reads `users` before `users/<id>`. A student who may not
-        // read the tree gets a `users` that lists only their own folder; a 403
-        // here leaves the kernel's working directory at the drive root (#469).
+        // read the tree gets a `users` that lists only their own folder, never a
+        // 403, which can leave the kernel unable to boot (below; #469).
         //
         // The drive root is read the same way, by `os.listdir('/drive')`: a
         // student gets a root whose one child is `users`. (The IndexedDB drive
         // reads the root as `all.json`, which still answers with the student's
         // own folder below.)
+        //
+        // Course staff who are not admins read `users` the same way. Staff
+        // drafts moved to the server drive in #2925, and listing `users` is
+        // admin-only (`mayReadUserFile` with no owner), so a staff kernel got a
+        // 403 there, and on the service-worker transport (WebKit) the kernel
+        // never received an answer and never reached idle (2026-11). As for a
+        // student, the listing creates the caller's own folder if it is
+        // missing. Another user's folder is still reached by its path,
+        // through `mayReadUserFile`.
+        let requested = relativePath.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        let includeContent = req.query[String.self, at: "content"] == "1"
+        if requested == "users", !caller.isAdmin, let userRoot = try userRootPath(for: caller, isStaff: false) {
+            return try ownUsersDirectoryResponse(
+                baseURL: baseURL, userRoot: userRoot, fileManager: fm, includeContent: includeContent)
+        }
         if !isStaff, let userRoot = try userRootPath(for: caller, isStaff: false) {
-            let requested = relativePath.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
-            let includeContent = req.query[String.self, at: "content"] == "1"
-            if requested == "users" {
-                return try ownUsersDirectoryResponse(
-                    baseURL: baseURL, userRoot: userRoot, fileManager: fm, includeContent: includeContent)
-            }
             if requested.isEmpty {
                 return try studentRootDirectoryResponse(
                     baseURL: baseURL, userRoot: userRoot, fileManager: fm, includeContent: includeContent)

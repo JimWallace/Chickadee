@@ -1158,6 +1158,11 @@ coordination, and each must see every edit.
     `all.json`, which answers with the student's own folder. A change to one
     listing in `JupyterLiteContentsRoutes` must keep the other two consistent
     (`JupyterLiteContentsWriteRoutesTests`).
+  - Every non-admin caller, course staff included, reads `users` as
+    `[users/<id>]`, because a staff draft's kernel walks through it (#2925). A
+    403 there kept the kernel from booting on WebKit (2026-11). Another user's
+    folder is reached only by its path, through `mayReadUserFile`
+    (`JupyterLiteContentsUserFolderTests`).
   - The file's mtime is the only reset signal. JupyterLab's save compares it
     with its last save and raises "File changed". The page's IndexedDB reseed
     reads it too, so it is skipped when the server drive is on: a drive save
