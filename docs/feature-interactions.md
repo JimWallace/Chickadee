@@ -1007,14 +1007,33 @@ coordination, and each must see every edit.
     spec rule.
   - `datasetDiagnosticsReports` skips a FHIR spec: there is nothing to
     estimate when every student gets the whole file.
-  - Not yet format-aware (P3): the student download route (`mine.csv`, served
-    as `text/csv`) and the upload page's dataset line.
+  - `CourseDatasetService` (P2): `create` and `addVersion` check a file by
+    the dataset's format (`checkedFile`); a FHIR version stores
+    `summary_json`, its patient count in `row_count` and no columns. Attach and
+    update take the format from the library dataset, promote from the file's
+    extension. `sourceIssue` refuses a spec whose format is not its dataset's,
+    so the whole-manifest doors drop that source.
+  - The clone (`copyLibrary`) copies the format and the summary. The bundle
+    writes `schemaVersion` 3 when a dataset is not CSV
+    (`CourseBundleManifest.schemaVersion(carrying:)`), and the import checks a
+    FHIR version's bytes and recomputes its summary.
+  - The staff download names the file and its type by the format; the
+    student download sends the spec's media type.
+  - A FHIR version's `row_count` is patients, not lines. MCP `get_dataset`
+    reads `truncated` from the file's lines for FHIR, not from `rowCount`.
+  - Not yet format-aware (P3): the student download route's `mine.csv` URL,
+    the upload page's dataset line, the Datasets tab and Data
+    page (a FHIR version shows no columns and its patients as rows), the
+    Files panel's "Move to course library" offer (CSV only), and the MCP
+    dataset tools' schemas and wording.
 - **Rules:**
   - A line of a FHIR file is never re-encoded on any delivery path.
   - Every rebuild of a `DatasetSpec` carries `format`, as it carries the
     library fields and `partCount`.
   - Only the library attach path sets the format
     (`DatasetSpecValidation.libraryFieldIssue`).
+  - A library dataset's format is fixed at create; a version of another
+    format is refused.
   - A new format updates every reader above, or says why it does not.
 
 ### Dataset transform kinds: `DatasetTransform.Kind`

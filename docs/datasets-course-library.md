@@ -605,7 +605,11 @@ and `docs/mcp-authoring-roadmap.md` (`MCPRoadmapDocSyncTests`).
   the library is `schemaVersion` 2. Its manifest has a `datasets` list
   (`BundledDataset`), and each version's bytes are at `datasets/<sha256>`, one
   file per hash. A course with no dataset still exports version 1, so a
-  server that knows only version 1 reads it. An import accepts 1 and 2. It
+  server that knows only version 1 reads it. A bundle with a FHIR NDJSON
+  dataset is version 3, which adds each dataset's `format`
+  ([fhir-datasets-plan.md](fhir-datasets-plan.md) §6), and an import checks
+  such a version's bytes as FHIR and computes its summary from them. An
+  import accepts 1 to 3. It
   creates the library before the test setups, for the same reason as the
   clone, and it refuses a dataset file that is missing or whose bytes do not
   hash to the name, a repeated slug or version number, and an oversized

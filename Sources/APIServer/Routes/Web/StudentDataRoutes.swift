@@ -126,7 +126,10 @@ struct StudentDataRoutes: RouteCollection {
             throw AppError.notFound(resource: "Dataset")
         }
         let response = Response(status: .ok, body: .init(string: csv))
-        response.headers.replaceOrAdd(name: .contentType, value: "text/csv; charset=utf-8")
+        // A FHIR file keeps its own type, though the route still ends in
+        // `mine.csv` until the pages learn the format (docs/fhir-datasets-plan.md P3).
+        let format = setup.decodedManifest()?.datasetSpecsByFile[filename]?.format ?? .csv
+        response.headers.replaceOrAdd(name: .contentType, value: "\(format.mediaType); charset=utf-8")
         // The filename is a bare name from the manifest; a quote in it would
         // end the header value early.
         let safeName = filename.replacingOccurrences(of: "\"", with: "_")

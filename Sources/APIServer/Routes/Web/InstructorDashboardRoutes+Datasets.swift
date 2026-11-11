@@ -134,12 +134,14 @@ extension InstructorDashboardRoutes {
         }
         let bytes = try CourseDatasetService.bytes(of: version, blobs: datasetBlobs(req))
         let response = Response(status: .ok, body: .init(data: bytes))
-        response.headers.replaceOrAdd(name: .contentType, value: "text/csv; charset=utf-8")
+        let format = dataset.format
+        response.headers.replaceOrAdd(name: .contentType, value: "\(format.mediaType); charset=utf-8")
         // The slug passed `validatedSlug`, so it needs no quoting, and the
-        // slug and version keep two downloads apart.
+        // slug and version keep two downloads apart. The extension is the
+        // dataset's format (docs/fhir-datasets-plan.md §3).
         response.headers.replaceOrAdd(
             name: .contentDisposition,
-            value: "attachment; filename=\"\(dataset.slug)-v\(version.version).csv\"")
+            value: "attachment; filename=\"\(dataset.slug)-v\(version.version).\(format.fileExtension)\"")
         return response
     }
 

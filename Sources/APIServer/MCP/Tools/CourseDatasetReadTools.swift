@@ -146,10 +146,17 @@ struct GetDatasetTool: ContentTool {
         let lines = text.split(omittingEmptySubsequences: true, whereSeparator: \.isNewline)
         let head = lines.prefix(limit + 1).joined(separator: "\n") + "\n"
         let capped = MCPContentByteCap.cappedUTF8(Data(head.utf8), cap: MCPContentByteCap.defaultBytes)
+        // A FHIR version's `rowCount` counts patients, not lines, so whether
+        // lines were left out is read from the lines themselves.
+        let linesLeftOut =
+            switch dataset.format {
+            case .csv: version.rowCount > limit
+            case .fhirNdjson: lines.count > limit + 1
+            }
         return Output(
             courseCode: course.code, courseKey: course.urlKey, courseTerm: course.term?.displayName,
             dataset: try await datasetDTO(dataset, context: context), version: number,
             columns: version.columns.map(DatasetColumnDTO.init), rows: capped?.content ?? head,
-            rowCount: version.rowCount, truncated: version.rowCount > limit || capped?.truncated == true)
+            rowCount: version.rowCount, truncated: linesLeftOut || capped?.truncated == true)
     }
 }
