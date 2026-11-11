@@ -55,7 +55,7 @@ extension CourseDatasetService {
             let versions = try await versions(of: dataset, on: db).map {
                 BundledDatasetVersion(
                     version: $0.version, filename: $0.filename, sha256: $0.sha256, sizeBytes: $0.sizeBytes,
-                    rowCount: $0.rowCount, columns: $0.columns, note: $0.note)
+                    rowCount: $0.rowCount, columns: $0.columns, note: $0.note, summary: $0.summary)
             }
             bundled.append(
                 BundledDataset(
@@ -100,7 +100,12 @@ extension CourseDatasetService {
                     let facts: CheckedUpload? =
                         switch format {
                         case .csv: nil
-                        case .fhirNdjson: try checkedFile(filename: version.filename, bytes: data, format: format)
+                        case .fhirNdjson:
+                            // The facts are recomputed from the bytes; only
+                            // the instructor's prose and example pick come
+                            // from the bundle.
+                            try checkedFile(filename: version.filename, bytes: data, format: format)
+                                .carryingNotes(from: version.summary, bytes: data)
                         }
                     try blobs.put(data)
                     return (true, facts)

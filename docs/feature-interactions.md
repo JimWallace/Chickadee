@@ -1021,11 +1021,20 @@ coordination, and each must see every edit.
     student download sends the spec's media type.
   - A FHIR version's `row_count` is patients, not lines. MCP `get_dataset`
     reads `truncated` from the file's lines for FHIR, not from `rowCount`.
-  - Not yet format-aware (P3): the student download route's `mine.csv` URL,
-    the upload page's dataset line, the Datasets tab and Data
-    page (a FHIR version shows no columns and its patients as rows), the
-    Files panel's "Move to course library" offer (CSV only), and the MCP
-    dataset tools' schemas and wording.
+  - The pages (P3): the Datasets tab takes the format at create and words a
+    version's `row_count` by it (`InstructorDatasetDetail.countText`). The
+    dictionary route edits a FHIR version's summary
+    (`updateFHIRDictionary`): the prose of each type and code, and the
+    example. A new version and a bundle import carry that prose
+    (`carryingNotes`). The Data page shows the summary and the example, and
+    the student download is `mine.ndjson` for a FHIR spec (both names serve
+    the same bytes). The upload page's data line says "every patient". The
+    Files panel hides the sample fields on a FHIR spec, in the view and in
+    `Public/support-files.js`, and the "Course-wide rows" box on a FHIR
+    attachment. An `.ndjson` file that is not a dataset shows no per-student
+    control, only "Move to course library" (`withLibraryStates`).
+  - Not yet format-aware (P3, MCP half): the MCP dataset tools' schemas and
+    wording.
 - **Rules:**
   - A line of a FHIR file is never re-encoded on any delivery path.
   - Every rebuild of a `DatasetSpec` carries `format`, as it carries the
@@ -1034,6 +1043,9 @@ coordination, and each must see every edit.
     (`DatasetSpecValidation.libraryFieldIssue`).
   - A library dataset's format is fixed at create; a version of another
     format is refused.
+  - FHIR dictionary prose sits on an entry of the summary, so it can name
+    only what the file holds. Anything that recomputes a summary carries the
+    prose and the example pick from the one before it.
   - A new format updates every reader above, or says why it does not.
 
 ### Dataset transform kinds: `DatasetTransform.Kind`

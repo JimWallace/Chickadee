@@ -42,11 +42,15 @@ struct InstructorDatasetDetail: Sendable {
     /// Publishing needs a provenance and a licence.
     let canPublish: Bool
     let currentVersion: Int
-    /// The newest version's dictionary.
+    /// The newest version's dictionary, for a CSV dataset.
     let columns: [DatasetColumn]
     /// Newest first.
     let versions: [Version]
     let usage: [Usage]
+    var format: DatasetFormat = .csv
+    /// The newest version's summary and dictionary, for a FHIR dataset
+    /// (docs/fhir-datasets-plan.md §5).
+    var fhir: FHIRDatasetSummary?
 
     var downloadHref: String {
         "/instructor/datasets/download?slug=\(urlEncode(slug))&version=\(currentVersion)"
@@ -58,6 +62,15 @@ struct InstructorDatasetDetail: Sendable {
 
     static func rowsText(_ count: Int) -> String {
         count == 1 ? "1 row" : "\(count) rows"
+    }
+
+    /// A version's `row_count` in its own unit: rows of a CSV, patients of a
+    /// FHIR file (docs/fhir-datasets-plan.md §5).
+    static func countText(_ count: Int, format: DatasetFormat) -> String {
+        switch format {
+        case .csv: rowsText(count)
+        case .fhirNdjson: count == 1 ? "1 patient" : "\(count) patients"
+        }
     }
 
     static func usageText(count: Int) -> String {
@@ -83,7 +96,8 @@ extension InstructorDatasetDetail {
                 Version(
                     number: version.version,
                     detailsText: [
-                        version.filename, Self.rowsText(version.rowCount), formatBytes(version.sizeBytes),
+                        version.filename, Self.countText(version.rowCount, format: dataset.format),
+                        formatBytes(version.sizeBytes),
                     ].joined(separator: " · "),
                     note: version.note, createdISO: version.createdAt.map(iso8601String) ?? "",
                     createdText: version.createdAt.map(formatter.string(from:)) ?? "—",
@@ -94,6 +108,7 @@ extension InstructorDatasetDetail {
                     title: entry.assignmentTitle ?? "Draft \(entry.testSetupID)",
                     editHref: entry.assignmentPublicID.map { "/instructor/\($0)/edit" },
                     detailsText: "\(entry.file) · v\(entry.version)", isBehind: entry.version < current)
-            })
+            },
+            format: dataset.format, fhir: versions.first { $0.version == current }?.summary)
     }
 }

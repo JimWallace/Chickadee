@@ -26,10 +26,30 @@ public enum FHIRNdjsonProfile {
         for (offset, rawLine) in normalized.split(separator: "\n", omittingEmptySubsequences: false).enumerated() {
             let line = rawLine.trimmingCharacters(in: .whitespaces)
             guard !line.isEmpty else { continue }
-            try tally.add(resource(in: line, lineNumber: offset + 1), lineNumber: offset + 1)
+            try tally.add(resource(in: line, lineNumber: offset + 1), line: line, lineNumber: offset + 1)
         }
         guard tally.resourceCount > 0 else { throw .empty }
         return tally.summary()
+    }
+
+    /// The line of `text` that holds the resource `resourceType`/`id`, as
+    /// an example, or nil when the file has none or the line is longer than
+    /// `FHIRDatasetSummary.maxExampleBytes`.
+    public static func example(
+        resourceType: String, id: String, in text: String
+    ) -> FHIRDatasetSummary.ExampleResource? {
+        let normalized = text.replacingOccurrences(of: "\r\n", with: "\n").replacingOccurrences(of: "\r", with: "\n")
+        for rawLine in normalized.split(separator: "\n") {
+            let line = rawLine.trimmingCharacters(in: .whitespaces)
+            // A cheap test first: the id must appear on the line.
+            guard line.contains(id),
+                let object = (try? JSONSerialization.jsonObject(with: Data(line.utf8))) as? [String: Any],
+                object["resourceType"] as? String == resourceType, object["id"] as? String == id
+            else { continue }
+            guard line.utf8.count <= FHIRDatasetSummary.maxExampleBytes else { return nil }
+            return .init(resourceType: resourceType, id: id, json: line)
+        }
+        return nil
     }
 
     /// The JSON object on one line, checked for a type and an id.
@@ -69,7 +89,9 @@ public enum FHIRNdjsonProfile {
             guard let coding = entry as? [String: Any], let code = coding["code"] as? String, !code.isEmpty else {
                 return nil
             }
-            return Coding(system: coding["system"] as? String, code: code, display: coding["display"] as? String)
+            // An empty system reads as none, so a page can send it back as "".
+            let system = (coding["system"] as? String).flatMap { $0.isEmpty ? nil : $0 }
+            return Coding(system: system, code: code, display: coding["display"] as? String)
         }
     }
 
@@ -115,8 +137,12 @@ public enum FHIRNdjsonProfile {
         var patientIDs: Set<String> = []
         var referencedPatientIDs: [String] = []
         var codes: [CodeKey: CodeTally] = [:]
+        /// The default example: the first Observation, else the first
+        /// resource, that fits `maxExampleBytes`.
+        var firstObservation: FHIRDatasetSummary.ExampleResource?
+        var firstResource: FHIRDatasetSummary.ExampleResource?
 
-        mutating func add(_ resource: Resource, lineNumber: Int) throws(FHIRDatasetIssue) {
+        mutating func add(_ resource: Resource, line: String, lineNumber: Int) throws(FHIRDatasetIssue) {
             let key = resource.type + "/" + resource.id
             if let first = firstLine[key] {
                 throw .duplicateResource(
@@ -126,6 +152,12 @@ public enum FHIRNdjsonProfile {
             resourceCount += 1
             typeCounts[resource.type, default: 0] += 1
             if resource.type == "Patient" { patientIDs.insert(resource.id) }
+            if line.utf8.count <= FHIRDatasetSummary.maxExampleBytes {
+                let example = FHIRDatasetSummary.ExampleResource(
+                    resourceType: resource.type, id: resource.id, json: line)
+                if firstResource == nil { firstResource = example }
+                if firstObservation == nil, resource.type == "Observation" { firstObservation = example }
+            }
             referencedPatientIDs.append(contentsOf: resource.patientReferences)
             // A resource that carries one code twice counts once.
             for coding in Set(resource.codings) {
@@ -153,7 +185,8 @@ public enum FHIRNdjsonProfile {
                 },
                 codes: Array(uses.prefix(FHIRDatasetSummary.maxListedCodes)),
                 omittedCodeCount: max(uses.count - FHIRDatasetSummary.maxListedCodes, 0),
-                danglingPatientReferences: referencedPatientIDs.count { !patientIDs.contains($0) })
+                danglingPatientReferences: referencedPatientIDs.count { !patientIDs.contains($0) },
+                example: firstObservation ?? firstResource)
         }
 
         /// Most used first; ties by type, system and code, so the order never

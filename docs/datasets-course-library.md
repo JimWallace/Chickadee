@@ -608,7 +608,8 @@ and `docs/mcp-authoring-roadmap.md` (`MCPRoadmapDocSyncTests`).
   server that knows only version 1 reads it. A bundle with a FHIR NDJSON
   dataset is version 3, which adds each dataset's `format`
   ([fhir-datasets-plan.md](fhir-datasets-plan.md) §6), and an import checks
-  such a version's bytes as FHIR and computes its summary from them. An
+  such a version's bytes as FHIR and computes its summary from them, keeping
+  the bundled dictionary prose and example pick. An
   import accepts 1 to 3. It
   creates the library before the test setups, for the same reason as the
   clone, and it refuses a dataset file that is missing or whose bytes do not

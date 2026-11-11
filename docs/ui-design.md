@@ -931,6 +931,11 @@ duplicate.
   too long for the row (the admin LTI platforms table); give its `<summary>`
   a visually hidden copy of the row's name, so a screen reader can tell one
   "Edit" from the next.
+- **`.test-output-pre`** — the house preformatted block: monospace text kept
+  as written and wrapped, on the muted surface. It holds a test's long output
+  on the submission page and a FHIR example resource on the dataset pages. Use
+  it for any machine text that is shown whole; do not add another block class.
+  `.compiler-output` is the build log's own block.
 - **`.disclosure-summary`** — the `<summary>` of a `<details>` that a reader
   opens occasionally, such as the options under a form.  It starts with an
   `.accordion-caret` (a span around the `#i-chevron-right` icon), which turns

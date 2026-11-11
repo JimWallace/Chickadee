@@ -5,6 +5,7 @@
 //
 //   GET /data/:courseKey                              → CourseDataPage
 //   GET /testsetups/:testSetupID/data/:filename/mine.csv → the viewer's own rows
+//   GET /testsetups/:testSetupID/data/:filename/mine.ndjson → the same, for a FHIR file
 //
 // The Data page lives at `/data/:courseKey`, not `/:courseKey/data`: a fixed
 // second segment would route ahead of the vanity URL `/:courseCode/:slug`
@@ -25,7 +26,13 @@ import Vapor
 struct StudentDataRoutes: RouteCollection {
     func boot(routes: any RoutesBuilder) throws {
         routes.get("data", ":courseKey", use: courseDataPage)
-        routes.get("testsetups", ":testSetupID", "data", ":filename", "mine.csv", use: myDatasetRows)
+        // One handler: the name only follows the format, and the spec decides
+        // what is sent (docs/fhir-datasets-plan.md §5).
+        for format in DatasetFormat.allCases {
+            routes.get(
+                "testsetups", ":testSetupID", "data", ":filename", .constant("mine.\(format.fileExtension)"),
+                use: myDatasetRows)
+        }
     }
 
     // MARK: - GET /data/:courseKey
@@ -53,8 +60,8 @@ struct StudentDataRoutes: RouteCollection {
             return CourseDataEntry(
                 name: dataset.name, description: dataset.datasetDescription, provenance: dataset.provenance,
                 licence: dataset.licence, isPublished: dataset.isPublished,
-                rowsText: version.map { InstructorDatasetDetail.rowsText($0.rowCount) } ?? "",
-                columns: version?.columns ?? [], downloads: downloads[dataset.slug] ?? [])
+                rowsText: version.map { InstructorDatasetDetail.countText($0.rowCount, format: dataset.format) } ?? "",
+                columns: version?.columns ?? [], downloads: downloads[dataset.slug] ?? [], fhir: version?.summary)
         }
         let page = try await PageRequestContext.courseAware(req)
         return try await HTMLResponse {
@@ -81,7 +88,7 @@ struct StudentDataRoutes: RouteCollection {
                 downloads[slug, default: []].append(
                     .init(
                         assignmentTitle: assignment.title, filename: spec.file,
-                        href: CourseDataEntry.downloadHref(setupID: setupID, filename: spec.file)))
+                        href: CourseDataEntry.downloadHref(setupID: setupID, filename: spec.file, format: spec.format)))
             }
         }
         return downloads.mapValues { $0.sorted { $0.assignmentTitle < $1.assignmentTitle } }
@@ -101,7 +108,7 @@ struct StudentDataRoutes: RouteCollection {
         return try await studentMayViewClosedAssignment(assignment, userID: userID, on: req.db)
     }
 
-    // MARK: - GET /testsetups/:testSetupID/data/:filename/mine.csv
+    // MARK: - GET /testsetups/:testSetupID/data/:filename/mine.csv (or mine.ndjson)
 
     @Sendable
     func myDatasetRows(req: Request) async throws -> Response {
@@ -126,8 +133,7 @@ struct StudentDataRoutes: RouteCollection {
             throw AppError.notFound(resource: "Dataset")
         }
         let response = Response(status: .ok, body: .init(string: csv))
-        // A FHIR file keeps its own type, though the route still ends in
-        // `mine.csv` until the pages learn the format (docs/fhir-datasets-plan.md P3).
+        // A FHIR file keeps its own type, whichever name the URL ends in.
         let format = setup.decodedManifest()?.datasetSpecsByFile[filename]?.format ?? .csv
         response.headers.replaceOrAdd(name: .contentType, value: "\(format.mediaType); charset=utf-8")
         // The filename is a bare name from the manifest; a quote in it would

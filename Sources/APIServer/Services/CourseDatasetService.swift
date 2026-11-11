@@ -285,9 +285,10 @@ enum CourseDatasetService {
     static func addVersion(
         to dataset: APICourseDataset, upload: Upload, blobs: AssignmentVersionBlobStore, on db: any Database
     ) async throws -> AddedVersion {
-        let checked = try checkedUpload(upload, format: dataset.format)
         let hash = sha256HexDigest(upload.bytes)
         let existing = try await versions(of: dataset, on: db)
+        let checked = try checkedUpload(upload, format: dataset.format)
+            .carryingNotes(from: existing.last?.summary, bytes: upload.bytes)
         if let same = existing.first(where: { $0.sha256 == hash }) {
             throw CourseDatasetError.duplicateVersion(of: same.version)
         }
@@ -450,6 +451,18 @@ enum CourseDatasetService {
         let columns: [DatasetColumn]
         /// The summary of a FHIR file; nil for a CSV.
         let summary: FHIRDatasetSummary?
+
+        /// This upload with the FHIR dictionary prose and example of
+        /// `previous`, the summary of the version before it, on every entry
+        /// the new file still has (docs/fhir-datasets-plan.md §5). `bytes` is
+        /// the checked file. A CSV upload is returned as it is.
+        func carryingNotes(from previous: FHIRDatasetSummary?, bytes: Data) -> CheckedUpload {
+            // The bytes passed the UTF-8 check that made this upload.
+            guard let summary, let previous, let text = String(bytes: bytes, encoding: .utf8) else { return self }
+            return CheckedUpload(
+                filename: filename, rowCount: rowCount, columns: columns,
+                summary: summary.carryingNotes(from: previous, text: text))
+        }
     }
 
     /// `bytes` checked as a version of a `format` dataset: the name, the size,
@@ -484,9 +497,8 @@ enum CourseDatasetService {
         try checkedFile(filename: upload.filename, bytes: upload.bytes, format: format)
     }
 
-    /// Trimmed text, or nil when nothing is left.
+    /// Trimmed text, or nil when nothing is left (`DatasetDictionary.cleaned`).
     static func cleaned(_ raw: String?) -> String? {
-        guard let text = raw?.trimmingCharacters(in: .whitespacesAndNewlines), !text.isEmpty else { return nil }
-        return text
+        DatasetDictionary.cleaned(raw)
     }
 }
