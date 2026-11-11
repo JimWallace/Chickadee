@@ -28,53 +28,8 @@ extension WebRoutes {
         let aggregation = activity.kind.aggregation
         let groupID = groupSession.flatMap { UUID(uuidString: $0.selectedGroupID) }
 
-        // Nameless like a student view, locking no handle like a staff one.
-        // Staff decide what they project and when, and opening the page to
-        // check it must not spend every student's one change (#1757).
-        let reader = LeaderboardReader.presenting(as: user)
-        var places: [PresentPlace] = []
-        let title: String
-        var tournament: TournamentPresentation?
-        switch aggregation {
-        case .standings:
-            let board = try await buildStandingsBoard(
-                setup: setup, reader: reader, showAll: true, groupID: groupID, on: req.db)
-            places = board.rows.map {
-                PresentPlace(
-                    rank: $0.rank, rankText: $0.rankText, rankTier: $0.rankTier, handle: $0.handle,
-                    valueText: $0.valueText, avatar: $0.avatar)
-            }
-            title = "Standings · highest average"
-        case .union:
-            let union = try await buildUnionPresentation(
-                setup: setup, reader: reader, showAll: true, allURL: "", on: req.db)
-            places = (union?.kills ?? []).map {
-                PresentPlace(
-                    rank: $0.rank, rankText: $0.rankText, rankTier: $0.rankTier, handle: $0.handle,
-                    valueText: $0.valueText, avatar: $0.avatar)
-            }
-            title = "Tests · most faults found"
-        case .bracket:
-            tournament = try await buildTournamentPresentation(
-                setup: setup, viewerID: nil, includeNames: false, groupID: groupID, on: req.db)
-            // A title is a noun phrase; where the run stands goes in the clock's place.
-            title = tournament.map { "Tournament · \($0.scheduleName.lowercased())" } ?? "Tournament"
-        case .composite:
-            // A composite ranks nobody: the composed image takes the
-            // podium's place (docs/class-composite.md).
-            title = "Class composite"
-        case .leaderboard:
-            // Named rather than left to a catch-all arm, so a fifth
-            // aggregation does not render the metric board silently (#1745).
-            let board = try await buildLeaderboard(
-                setup: setup, reader: reader, showAll: true, groupID: groupID, on: req.db)
-            places = board.rows.map {
-                PresentPlace(
-                    rank: $0.rank, rankText: $0.rankText, rankTier: $0.rankTier, handle: $0.handle,
-                    valueText: $0.metricText, avatar: $0.avatar)
-            }
-            title = "Leaderboard · highest metric"
-        }
+        var (places, title, tournament) = try await presentPlaces(
+            req: req, user: user, setup: setup, aggregation: aggregation, groupID: groupID)
         let champion = try await buildChampionPresentation(
             setup: setup, activity: activity, groupID: groupID, viewerID: nil, includeNames: false, on: req.db)
         // The hill's holder is not always first on the metric board, so the
@@ -89,6 +44,9 @@ extension WebRoutes {
         }
         let compositeProgress = try await compositeProgress(
             setup: setup, activity: activity, assignment: assignment, groupID: groupID, on: req.db)
+        // A bug hunt ranks nobody: its board takes the podium's place.
+        let bugHunt = try await BugHuntPresentation.build(
+            setup: setup, activity: activity, app: req.application, on: req.db)
         let podium = PresentPlace.podiumOrder(places)
         let winner = tournament?.winner
 
@@ -127,7 +85,7 @@ extension WebRoutes {
             pollURL: "\(boardURL)?present=1&fragment=present\(groupID.map { "&group=\($0)" } ?? "")",
             boardURL: boardURL,
             arenaSetupID: aggregation == .bracket && playsInArena(setup) ? setupID : nil,
-            compositeStage: compositeProgress?.stage)
+            compositeStage: compositeProgress?.stage, bugHunt: bugHunt)
 
         // `?fragment=present` renders the SAME view the page renders inline,
         // so the refresh cannot drift from what it replaces.
@@ -142,6 +100,63 @@ extension WebRoutes {
         // The fragment refreshes the board only; the session panel sits
         // outside it, so the code on the wall does not flicker.
         return Response.pollFragment(html: html, for: req)
+    }
+
+    /// The ranked places, the board's title and, for a bracket, the
+    /// tournament, by the activity's aggregation.
+    private func presentPlaces(
+        req: Request, user: APIUser, setup: APITestSetup, aggregation: ActivityAggregation, groupID: UUID?
+    ) async throws -> (places: [PresentPlace], title: String, tournament: TournamentPresentation?) {
+        // Nameless like a student view, locking no handle like a staff one.
+        // Staff decide what they project and when, and opening the page to
+        // check it must not spend every student's one change (#1757).
+        let reader = LeaderboardReader.presenting(as: user)
+        var places: [PresentPlace] = []
+        let title: String
+        var tournament: TournamentPresentation?
+        switch aggregation {
+        case .standings:
+            let board = try await buildStandingsBoard(
+                setup: setup, reader: reader, showAll: true, groupID: groupID, on: req.db)
+            places = board.rows.map {
+                PresentPlace(
+                    rank: $0.rank, rankText: $0.rankText, rankTier: $0.rankTier, handle: $0.handle,
+                    valueText: $0.valueText, avatar: $0.avatar)
+            }
+            title = "Standings · highest average"
+        case .union:
+            let union = try await buildUnionPresentation(
+                setup: setup, reader: reader, showAll: true, allURL: "", on: req.db)
+            places = (union?.kills ?? []).map {
+                PresentPlace(
+                    rank: $0.rank, rankText: $0.rankText, rankTier: $0.rankTier, handle: $0.handle,
+                    valueText: $0.valueText, avatar: $0.avatar)
+            }
+            title = "Tests · most faults found"
+        case .bracket:
+            tournament = try await buildTournamentPresentation(
+                setup: setup, viewerID: nil, includeNames: false, groupID: groupID, on: req.db)
+            // A title is a noun phrase; where the run stands goes in the clock's place.
+            title = tournament.map { "Tournament · \($0.scheduleName.lowercased())" } ?? "Tournament"
+        case .composite:
+            // A composite ranks nobody: the composed image takes the
+            // podium's place (docs/class-composite.md).
+            title = "Class composite"
+        case .coverage:
+            title = "Bug hunt"
+        case .leaderboard:
+            // Named rather than left to a catch-all arm, so a fifth
+            // aggregation does not render the metric board silently (#1745).
+            let board = try await buildLeaderboard(
+                setup: setup, reader: reader, showAll: true, groupID: groupID, on: req.db)
+            places = board.rows.map {
+                PresentPlace(
+                    rank: $0.rank, rankText: $0.rankText, rankTier: $0.rankTier, handle: $0.handle,
+                    valueText: $0.metricText, avatar: $0.avatar)
+            }
+            title = "Leaderboard · highest metric"
+        }
+        return (places, title, tournament)
     }
 
     /// Present mode: the join code box for `&fragment=join`, else the page or
@@ -280,4 +295,7 @@ struct PresentModePresentation {
     /// A class composite's stage, in the podium's place; nil on every other
     /// kind.
     var compositeStage: CompositeStagePresentation?
+    /// A bug hunt's coverage and code map, in the podium's place; nil on
+    /// every other kind.
+    var bugHunt: BugHuntPresentation?
 }

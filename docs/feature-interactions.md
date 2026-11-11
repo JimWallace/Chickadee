@@ -338,11 +338,25 @@ because line numbers go out of date.
   - On an activity that runs per lab group, no writer writes
     `class_item_coverage`. A new writer of item coverage branches on the
     lab the same way.
-  - The whole class's `class_item_coverage` has two readers: the sweep's
-    whole-class branch and the instructor's coverage section
-    (`buildAssignmentCoverageRows`). That section treats no rows as "not a
-    contribution assignment", so it is empty on a per-group activity; it
-    has no lab reader yet.
+  - The whole class's `class_item_coverage` has three readers: the sweep's
+    whole-class branch, the instructor's coverage section
+    (`buildAssignmentCoverageRows`), and a bug hunt's board
+    (`BugHuntCoverage.read`, `docs/bug-hunt-code-map.md`). The coverage
+    section treats no rows as "not a contribution assignment", so it is
+    empty on a per-group activity; it has no lab reader yet. A bug hunt
+    cannot run per lab group, so its board reads the whole class only.
+  - A bug hunt's board looks items up by the runner's outcome name of each
+    listed script (`runnerOutcomeTestName`). Renaming a listed entry's
+    display name after the class has covered it leaves the old row under
+    the old name, and the board reads that item as uncovered.
+  - A bug hunt's `items` name suite scripts, and only `set_activity` checks
+    them (`ActivityAuthoring.validateBugHunt`). A suite edit that removes or
+    renames a listed script leaves an item that no result can cover, so the
+    board stops short of 100%. Call `set_activity` with the new list after
+    such an edit.
+  - Only a contribution assignment writes these rows (a starter with slot
+    cells). A bug hunt whose starter has none saves, and its board says so
+    (`BugHuntPresentation.recordsCoverage`).
   - Turning `runsPerGroup` off leaves the lab coverage unread: the item
     goal counts from `class_item_coverage` again.
   - Course delete removes it (`LabGoalGroups.deleteClassGoalData`).

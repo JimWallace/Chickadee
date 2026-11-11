@@ -2451,6 +2451,10 @@ body:has(.notebook-header .nb-title-block) .nav {
 .diff-context { color: inherit; }
 .diff-added { background: var(--success-bg); color: var(--success-fg); }
 .diff-removed { background: var(--danger-bg); color: var(--danger-fg); }
+/* A bug hunt's code map: a line the class has not covered yet, and one where
+   only some of the items on it are covered. */
+.diff-uncovered { background: var(--gray-100); color: var(--gray-600); }
+.diff-partial { background: var(--warning-bg); }
 .diff-fold td {
     padding: .2rem .75rem;
     background: var(--gray-50);
@@ -2928,6 +2932,17 @@ body:has(.notebook-header .nb-title-block) .nav {
 .composite-tile .composite-frame { max-width: 16rem; }
 /* Every lab's image, side by side, under a per-group composite's staff board. */
 .composite-labs { display: grid; grid-template-columns: repeat(auto-fill, minmax(16rem, 1fr)); gap: 1.5rem; }
+
+/* Bug hunt (docs/bug-hunt-code-map.md): the share the class has covered in
+   the score figure, and the code in the diff listing (.diff-uncovered and
+   .diff-partial sit with the listing's row states). */
+.bug-hunt { display: flex; flex-direction: column; gap: 1rem; }
+.bug-hunt-share { display: flex; align-items: baseline; gap: .75rem; }
+.bug-hunt-count { font-size: var(--text-lg); color: var(--gray-600); }
+/* The projector shows the share and the code at the room's size. */
+.present-bug-hunt { flex: 1; }
+.present-bug-hunt .score-figure { font-size: 6em; }
+.present-bug-hunt .diff-table { font-size: var(--text-lg); }
 .composite-labs-item { display: flex; flex-direction: column; gap: .5rem; }
 .composite-labs-item > h3, .composite-labs-item > p { margin: 0; }
 @media (prefers-reduced-motion: reduce) {

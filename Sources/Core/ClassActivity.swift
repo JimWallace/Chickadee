@@ -112,6 +112,10 @@ public enum ActivityAggregation: String, Codable, CaseIterable, Sendable {
     /// A shared image composed from one contribution per dealt slot
     /// (`docs/class-composite.md`). Shows a picture, ranks nobody.
     case composite
+    /// The share of the bug hunt's items that the class has covered together
+    /// (`class_item_coverage`), with an optional code map
+    /// (`docs/bug-hunt-code-map.md`). Ranks nobody.
+    case coverage
 }
 
 /// The activity kinds this build can author and grade.
@@ -159,6 +163,12 @@ public enum ActivityKind: String, Codable, CaseIterable, Sendable {
     /// `composite` object; the projector composes the class's contributions.
     /// No opponent, and no grade effect (`docs/class-composite.md`).
     case classComposite
+    /// Bug hunt: the class writes tests together, and each suite entry the
+    /// `bugHunt` block lists is an item the class covers once any student's
+    /// tests pass it. The projector shows the share covered, and optionally
+    /// the code with each item's lines lit (`docs/bug-hunt-code-map.md`). No
+    /// opponent, and it ranks nobody.
+    case bugHunt
 
     /// Two-or-three-word chrome label.
     public var displayName: String {
@@ -170,6 +180,7 @@ public enum ActivityKind: String, Codable, CaseIterable, Sendable {
         case .elimination: return "Tournament"
         case .testsVersusImplementations: return "Tests and code"
         case .classComposite: return "Class composite"
+        case .bugHunt: return "Bug hunt"
         }
     }
 
@@ -216,6 +227,12 @@ public enum ActivityKind: String, Codable, CaseIterable, Sendable {
             return
                 "Each student renders one dealt slot of a shared image, which the projector composes; "
                 + "it never changes a grade."
+        case .bugHunt:
+            return
+                "The class writes tests together in the starter notebook's contribution slots; each "
+                + "listed suite entry is covered once any student's tests pass it, and the projector "
+                + "shows the share covered, with the code lit line by line when a code map is set; "
+                + "it ranks nobody."
         }
     }
 
@@ -228,6 +245,7 @@ public enum ActivityKind: String, Codable, CaseIterable, Sendable {
         case .elimination: return .bracket
         case .testsVersusImplementations: return .union
         case .classComposite: return .composite
+        case .bugHunt: return .coverage
         }
     }
 
@@ -237,7 +255,7 @@ public enum ActivityKind: String, Codable, CaseIterable, Sendable {
     public var opponentSource: ActivityOpponentSource {
         switch self {
         case .beatTheInstructor: return .supportFile
-        case .bestMetric, .classComposite: return .none
+        case .bestMetric, .classComposite, .bugHunt: return .none
         case .kingOfTheHill: return .champion
         case .roundRobin, .testsVersusImplementations: return .classmates
         case .elimination: return .paired
@@ -252,7 +270,7 @@ public enum ActivityKind: String, Codable, CaseIterable, Sendable {
     public var canRunPerGroup: Bool {
         switch aggregation {
         case .leaderboard, .standings, .bracket, .composite: return true
-        case .union: return false
+        case .union, .coverage: return false
         }
     }
 
@@ -268,7 +286,7 @@ public enum ActivityKind: String, Codable, CaseIterable, Sendable {
         case .beatTheInstructor, .bestMetric, .kingOfTheHill, .roundRobin, .elimination,
             .testsVersusImplementations:
             return true
-        case .classComposite: return false
+        case .classComposite, .bugHunt: return false
         }
     }
 }
@@ -445,6 +463,10 @@ public struct ClassActivity: Codable, Equatable, Sendable {
     /// and the projector settings. Nil on every other kind, and nil on a
     /// composite until `ActivityAuthoring` seeds `CompositeSpec.starter`.
     public let composite: CompositeSpec?
+    /// For a `bugHunt` activity: the items the class covers and the optional
+    /// code map. Nil on every other kind, and nil on a bug hunt until
+    /// `ActivityAuthoring` seeds it.
+    public let bugHunt: BugHuntSpec?
     /// True when the activity runs once per lab group (docs/lab-groups.md):
     /// each group's session is its clock, in place of `window`. False — the
     /// default and what every activity before this carried — leaves the
@@ -457,12 +479,14 @@ public struct ClassActivity: Codable, Equatable, Sendable {
         opponentFile: String? = nil,
         window: LiveSessionWindow? = nil,
         composite: CompositeSpec? = nil,
-        runsPerGroup: Bool = false
+        runsPerGroup: Bool = false,
+        bugHunt: BugHuntSpec? = nil
     ) {
         self.kind = kind
         self.leaderboardVisibility = leaderboardVisibility
         self.opponentFile = opponentFile
         self.composite = composite
+        self.bugHunt = bugHunt
         self.runsPerGroup = runsPerGroup
         // An unbounded window is no window: storing an empty block would put
         // a field on the manifest that says nothing and make "has a window"
@@ -471,7 +495,7 @@ public struct ClassActivity: Codable, Equatable, Sendable {
     }
 
     private enum CodingKeys: String, CodingKey {
-        case kind, leaderboardVisibility, opponentFile, window, composite, runsPerGroup
+        case kind, leaderboardVisibility, opponentFile, window, composite, runsPerGroup, bugHunt
     }
 
     public init(from decoder: any Decoder) throws {
@@ -484,6 +508,7 @@ public struct ClassActivity: Codable, Equatable, Sendable {
         window = (decoded?.isBounded == true) ? decoded : nil
         composite = try c.decodeIfPresent(CompositeSpec.self, forKey: .composite)
         runsPerGroup = try c.decodeIfPresent(Bool.self, forKey: .runsPerGroup) ?? false
+        bugHunt = try c.decodeIfPresent(BugHuntSpec.self, forKey: .bugHunt)
     }
 
     public func encode(to encoder: any Encoder) throws {
@@ -497,6 +522,7 @@ public struct ClassActivity: Codable, Equatable, Sendable {
         // Written only when true, so a block that does not run per group
         // keeps the bytes it had before the field existed.
         if runsPerGroup { try c.encode(runsPerGroup, forKey: .runsPerGroup) }
+        try c.encodeIfPresent(bugHunt, forKey: .bugHunt)
     }
 
     /// True when a submission arriving at `now` is inside the live-session
@@ -561,7 +587,7 @@ public struct ClassActivity: Codable, Equatable, Sendable {
     public func withOpponentFile(_ file: String?) -> ClassActivity {
         ClassActivity(
             kind: kind, leaderboardVisibility: leaderboardVisibility, opponentFile: file,
-            window: window, composite: composite, runsPerGroup: runsPerGroup)
+            window: window, composite: composite, runsPerGroup: runsPerGroup, bugHunt: bugHunt)
     }
 
     /// The same block with a different leaderboard visibility, everything
@@ -569,7 +595,7 @@ public struct ClassActivity: Codable, Equatable, Sendable {
     public func withLeaderboardVisibility(_ visibility: LeaderboardVisibility) -> ClassActivity {
         ClassActivity(
             kind: kind, leaderboardVisibility: visibility, opponentFile: opponentFile,
-            window: window, composite: composite, runsPerGroup: runsPerGroup)
+            window: window, composite: composite, runsPerGroup: runsPerGroup, bugHunt: bugHunt)
     }
 
     /// The same block with a different live-session window, everything else
@@ -579,7 +605,7 @@ public struct ClassActivity: Codable, Equatable, Sendable {
     public func withWindow(_ window: LiveSessionWindow?) -> ClassActivity {
         ClassActivity(
             kind: kind, leaderboardVisibility: leaderboardVisibility, opponentFile: opponentFile,
-            window: window, composite: composite, runsPerGroup: runsPerGroup)
+            window: window, composite: composite, runsPerGroup: runsPerGroup, bugHunt: bugHunt)
     }
 
     /// The same block with a different composite block, everything else
@@ -587,7 +613,7 @@ public struct ClassActivity: Codable, Equatable, Sendable {
     public func withComposite(_ composite: CompositeSpec?) -> ClassActivity {
         ClassActivity(
             kind: kind, leaderboardVisibility: leaderboardVisibility, opponentFile: opponentFile,
-            window: window, composite: composite, runsPerGroup: runsPerGroup)
+            window: window, composite: composite, runsPerGroup: runsPerGroup, bugHunt: bugHunt)
     }
 
     /// The same block run once per lab group, or not, everything else kept —
@@ -602,6 +628,14 @@ public struct ClassActivity: Codable, Equatable, Sendable {
     public func withRunsPerGroup(_ runsPerGroup: Bool) -> ClassActivity {
         ClassActivity(
             kind: kind, leaderboardVisibility: leaderboardVisibility, opponentFile: opponentFile,
-            window: window, composite: composite, runsPerGroup: runsPerGroup)
+            window: window, composite: composite, runsPerGroup: runsPerGroup, bugHunt: bugHunt)
+    }
+
+    /// The same block with a different bug-hunt block, everything else kept:
+    /// the rebuild for `set_activity`'s `bugHunt` field.
+    public func withBugHunt(_ bugHunt: BugHuntSpec?) -> ClassActivity {
+        ClassActivity(
+            kind: kind, leaderboardVisibility: leaderboardVisibility, opponentFile: opponentFile,
+            window: window, composite: composite, runsPerGroup: runsPerGroup, bugHunt: bugHunt)
     }
 }

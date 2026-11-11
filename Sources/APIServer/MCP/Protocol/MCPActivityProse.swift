@@ -61,6 +61,11 @@ enum MCPActivityProse {
             return
                 "ranks nobody: composes one image from the `composite` object each student's test "
                 + "script reports for the student's dealt slot, and seeds no record"
+        case .coverage:
+            return
+                "ranks nobody: shows the share of the bug hunt's listed items that the class's tests "
+                + "have covered together, with the code lit line by line when a code map is set, and "
+                + "seeds no record"
         }
     }
 
@@ -83,7 +88,7 @@ struct MCPActivityKindCapability: Encodable, Sendable, Equatable {
     /// What the kind does and where its ranking number comes from.
     let summary: String
     /// How the class's results combine: the kind's `ActivityAggregation` token
-    /// (`leaderboard`, `standings`, `bracket`, `union` or `composite`). The schema's enum is
+    /// (`leaderboard`, `standings`, `bracket`, `union`, `composite` or `coverage`). The schema's enum is
     /// derived from the same cases, so the two cannot disagree.
     let aggregation: String
     /// What is staged beside the submission when the script runs: "none", or

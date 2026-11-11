@@ -141,12 +141,15 @@ enum ActivityAuthoring {
         if current?.kind != requested?.kind, try await hasStudentSubmissions(setup: setup, on: lockDB) {
             throw AppError.badRequest(reason: kindLockedMessage)
         }
-        let activity = try requested.map { try withSeededComposite($0, current: current) }
+        let activity = try requested.map {
+            try withSeededBugHunt(try withSeededComposite($0, current: current), current: current, setup: setup)
+        }
         if let activity {
             try await validateOpponent(of: activity, setup: setup)
             try validateWindow(of: activity)
             try await validateRunsPerGroup(of: activity, courseID: setup.courseID, on: lockDB)
             try await validateComposite(of: activity, current: current, setup: setup, on: lockDB)
+            try validateBugHunt(of: activity, setup: setup)
         }
         if let violation = ManifestCoherence.violation(introducedBy: { $0.activity = activity }, in: setup.manifest) {
             throw AppError.badRequest(reason: violation)
@@ -303,6 +306,63 @@ enum ActivityAuthoring {
         }
     }
 
+    /// The refusal for showing a bug hunt's leaderboard page to students: its
+    /// board is for the projector (docs/bug-hunt-code-map.md).
+    static let bugHuntLeaderboardHiddenMessage =
+        "A bug hunt is shown on the projector only, so its leaderboard stays hidden from students."
+
+    /// The refusal for a bug-hunt block on a kind that is not a bug hunt.
+    static func bugHuntOnOtherKindMessage(_ kind: ActivityKind) -> String {
+        "\(kind.displayName) is not a bug hunt, so it takes no bug-hunt settings."
+    }
+
+    /// The refusal for an item that names no suite entry.
+    static func bugHuntItemNotInSuiteMessage(_ item: String) -> String {
+        "The item \"\(item)\" is not a script in this assignment's suite. Name each item by its "
+            + "script filename, as get_suite lists it."
+    }
+
+    /// The requested block with its bug-hunt block settled: kept or seeded
+    /// for a bug hunt, refused on any other kind. The seed lists every suite
+    /// entry that no other entry depends on: in a bug hunt, the gate that
+    /// checks the class's tests against correct code is a prerequisite of
+    /// each bug's entry, so the seed is the bugs.
+    private static func withSeededBugHunt(
+        _ activity: ClassActivity, current: ClassActivity?, setup: APITestSetup
+    ) throws -> ClassActivity {
+        guard activity.kind == .bugHunt else {
+            guard activity.bugHunt == nil else {
+                throw AppError.badRequest(reason: bugHuntOnOtherKindMessage(activity.kind))
+            }
+            return activity
+        }
+        guard activity.leaderboardVisibility == .hidden else {
+            throw AppError.badRequest(reason: bugHuntLeaderboardHiddenMessage)
+        }
+        guard activity.bugHunt == nil else { return activity }
+        if current?.kind == .bugHunt, let kept = current?.bugHunt { return activity.withBugHunt(kept) }
+        let suite = setup.decodedManifest()?.testSuites ?? []
+        let prerequisites = Set(suite.flatMap(\.dependsOn))
+        let items = suite.map(\.script).filter { !prerequisites.contains($0) }
+        // No entry to seed is no bug hunt: refused, so the board never
+        // shows an empty share.
+        guard !items.isEmpty else { throw AppError.badRequest(reason: BugHuntSpecProblem.noItems.message) }
+        return activity.withBugHunt(BugHuntSpec(items: items))
+    }
+
+    /// Refuses a bug-hunt block that breaks a `BugHuntSpec` rule or lists an
+    /// item that is not a script in the suite.
+    private static func validateBugHunt(of activity: ClassActivity, setup: APITestSetup) throws {
+        guard let spec = activity.bugHunt else { return }
+        if let problem = spec.problem {
+            throw AppError.badRequest(reason: problem.message)
+        }
+        let scripts = Set((setup.decodedManifest()?.testSuites ?? []).map(\.script))
+        if let missing = spec.items.first(where: { !scripts.contains($0) }) {
+            throw AppError.badRequest(reason: bugHuntItemNotInSuiteMessage(missing))
+        }
+    }
+
     static let compositeScopeLockedMessage =
         "Students already hold slots, so this composite cannot change between the whole class and lab groups."
 
@@ -361,7 +421,7 @@ enum ActivityAuthoring {
         switch aggregation {
         case .leaderboard: return .highestMetric
         case .standings, .bracket: return .tournamentWinner
-        case .union, .composite: return nil
+        case .union, .composite, .coverage: return nil
         }
     }
 

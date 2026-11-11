@@ -15,8 +15,8 @@ assignment.
 
 Every part of issue #1508 is shipped. These activity kinds exist:
 `beatTheInstructor`, `bestMetric`, `kingOfTheHill`, `roundRobin`,
-`elimination`, `testsVersusImplementations` and `classComposite`. The
-`bugHunt` kind is in the same family. Browser-graded bot challenges, the
+`elimination`, `testsVersusImplementations`, `classComposite` and `bugHunt`
+(`docs/bug-hunt-code-map.md`). Browser-graded bot challenges, the
 live-session window, the class corpus run and the projector arena are shipped
 too.
 
@@ -86,7 +86,7 @@ describes it now.
 | `kingOfTheHill` | `champion` (whoever holds the hill; the bundled bot until a student does) | `leaderboard` | `record` on `highestMetric`, `record` on `champion` |
 | `roundRobin` | `classmates` (every classmate's latest submission; the bundled bot until one exists) | `standings` | `record` on `tournamentWinner`; `standing` / `matchesWon` badges are authored |
 | `elimination` | `paired` (the one entrant a schedule pairs the job with; the bot for a student's own submission) | `bracket` | `record` on `tournamentWinner` |
-| `bugHunt` | `variants` (instructor's seeded variants) | `union` | see `docs/collaborative-class-assignments.md` |
+| `bugHunt` | `none` (each seeded variant is an ordinary suite entry) | `coverage` — the share of the listed items the class's tests cover, with an optional code map | nothing; the projector's board is the reward surface (see `docs/bug-hunt-code-map.md`) |
 | `testsVersusImplementations` | `classmates` (the same matrix a round robin plays) | `union` — every match read twice, as a kill and as a fault | nothing; the page is the reward surface |
 | `classComposite` | `none` | `composite` — one image from each dealt slot's contribution | nothing; the composed image is the reward surface (see `docs/class-composite.md`) |
 

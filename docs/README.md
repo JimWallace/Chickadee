@@ -81,6 +81,7 @@ not exist.
 - [collaborative-class-assignments.md](collaborative-class-assignments.md) — shipped: contribution assignments and class goals
 - [class-activities.md](class-activities.md) — shipped: leaderboards, bots, round robins, hills and brackets (#1508)
 - [class-composite.md](class-composite.md) — shipped: each student renders one slot of a shared image, composed live on the projector
+- [bug-hunt-code-map.md](bug-hunt-code-map.md) — shipped: a bug hunt's reference code on the projector, lit part by part as the class covers it
 - [lab-groups.md](lab-groups.md) — shipped: lab groups and in-lab sessions: a session per (activity, group), a join code for the room, every class activity run once per group
 
 ## Achievements and avatars
