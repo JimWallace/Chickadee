@@ -9,6 +9,13 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.913] - 2026-11-11
+
+### Changed
+
+- **The "+ Add" menu chooses a new item's type; sections no longer have a default type.** Each section's "+ Add" menu on the instructor Overview lists Assignment, Lab and Class activity beside the material types, and opens the create page with that type selected. Sections no longer show a "new items" type or offer a default-type select, the create page no longer follows a section, and moving an assignment no longer reports a type mismatch. MCP `create_course_section`, `rename_course_section` and `list_course_sections` drop `defaultAssignmentType` (`rename_course_section` now requires `name`), `set_assignment_course_section` drops `note`, and course clones and bundles no longer carry a section type. The database column stays, unmapped, until a later release drops it.
+
+
 ## [0.5.912] - 2026-11-11
 
 ### Fixed
