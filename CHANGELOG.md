@@ -9,6 +9,13 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.910] - 2026-11-11
+
+### Changed
+
+- **Hold back untarjs 5.4.0.** Dependabot ignores `@emscripten-forge/untarjs` 5.4.0. That version has no `lib/unpack.js`, so the vendor build fails.
+
+
 ## [0.5.909] - 2026-11-11
 
 ### Added
