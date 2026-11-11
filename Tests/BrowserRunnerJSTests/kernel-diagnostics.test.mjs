@@ -156,6 +156,28 @@ test('collector suppresses the benign JupyterLab insertWidget layout race', () =
   assert.equal(errs[0].payload.message, 'InvalidStateError: Drive IndexedDB open failed');
 });
 
+test('collector describes a non-Error rejection instead of "[object Object]"', () => {
+  // Every stalled Safari boot in 2026-11 reported only "[object Object]". A
+  // reason with no message is described by its constructor and fields, and a
+  // server-drive path loses the user's folder id.
+  const { posted, winListeners } = loadCollector();
+  const dispatch = (reason) => {
+    for (const fn of winListeners.unhandledrejection || []) fn({ reason });
+  };
+  dispatch({ status: 404, url: '/jupyterlite/api/contents/users/abc123/lab.ipynb', reason: 'Not Found' });
+  dispatch('plain string');
+  // An Error's own message is scrubbed too, and an encoded path as well.
+  dispatch({ message: 'ENOENT: /drive/users/abc123/x.ipynb and users%2Fabc123%2Fy' });
+  const msgs = posted.filter(p => p.payload.kind === 'kernel_error').map(p => p.payload.message);
+  assert.equal(msgs.length, 3);
+  assert.equal(msgs[2], 'ENOENT: /drive/users/<id>/x.ipynb and users%2F<id>%2Fy');
+  assert.match(msgs[0], /status=404/);
+  assert.match(msgs[0], /url=\/jupyterlite\/api\/contents\/users\/<id>\/lab\.ipynb/);
+  assert.match(msgs[0], /reason="Not Found"/);
+  assert.doesNotMatch(msgs[0], /abc123|\[object Object\]/);
+  assert.equal(msgs[1], 'plain string');
+});
+
 test('collector trackUnhealthy ignores a transient unknown but flags a sustained one', () => {
   const { exports } = loadCollector();
   const t = exports.trackUnhealthy;
