@@ -124,22 +124,93 @@ docker compose stop
 ## Keep it current
 
 Use `deploy/chickadee-runner-update.sh`, as any separate runner host does
-(`deploy/README.md`, "Runner hosts: keep the runner at the server's release"). It reads the version the
-server reports at `/health` and moves the runner to that release's
-`:sha-<commit>` build, so the runner never runs ahead of the server and follows
-a rollback back. Do not run `docker compose pull` on a timer instead: `:latest`
-moves when the image is built, before the server has deployed it.
+(`deploy/README.md`, "Runner hosts: keep the runner at the server's
+release"). It reads the version the server reports at `/health` and moves the
+runner to that release's `:sha-<commit>` build, so the runner never runs ahead
+of the server and follows a rollback back. Do not run `docker compose pull` on
+a timer instead: `:latest` moves when the image is built, before the server
+has deployed it.
 
-Pass `--image-repo` with the arm64 image, and point `--compose-dir` at the
-folder that holds the compose file. In the crontab of the user who runs Docker
-Desktop (`crontab -e`), with your own paths:
+Run the script from a clone of the repository. It loads
+`scripts/lib/deployment-target.sh` from beside it, so a copy of the script on
+its own fails when it recreates the runner. A shallow clone in the runner
+folder is enough. It needs `git`, which on a new Mac asks to install the
+developer tools the first time, so run it while someone is at the Mac:
 
+```bash
+git clone --depth 1 https://github.com/JimWallace/Chickadee.git ~/chickadee-swift-runner/repo
 ```
-*/10 * * * * /Users/NAME/Chickadee/deploy/chickadee-runner-update.sh --compose-dir /Users/NAME/chickadee-swift-runner --image-repo ghcr.io/jimwallace/chickadee-runner >> /Users/NAME/Library/Logs/chickadee-runner-update.log 2>&1
+
+The clone does not update itself. The script changes rarely; to take a change:
+
+```bash
+git -C ~/chickadee-swift-runner/repo pull --ff-only
 ```
 
-If the arm64 build of a release is not published yet, the pull fails, the
-runner keeps its current image, and the next run tries again.
+Schedule it with launchd, not cron. On macOS, installing a crontab waits for a
+permission dialog ("would like to administer your computer"), and from a
+remote or unattended session nobody answers it. A launchd agent in the user's
+own `LaunchAgents` folder needs no such permission. Save this as
+`~/Library/LaunchAgents/ca.uwaterloo.chickadee-runner-update.plist`, with
+`NAME` replaced by your user name. It passes `--image-repo` with the arm64
+image and `--compose-dir` with the runner folder, and runs at login and every
+10 minutes:
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>ca.uwaterloo.chickadee-runner-update</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/Users/NAME/chickadee-swift-runner/repo/deploy/chickadee-runner-update.sh</string>
+    <string>--compose-dir</string>
+    <string>/Users/NAME/chickadee-swift-runner</string>
+    <string>--image-repo</string>
+    <string>ghcr.io/jimwallace/chickadee-runner</string>
+  </array>
+  <key>StartInterval</key>
+  <integer>600</integer>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>StandardOutPath</key>
+  <string>/Users/NAME/Library/Logs/chickadee-runner-update.log</string>
+  <key>StandardErrorPath</key>
+  <string>/Users/NAME/Library/Logs/chickadee-runner-update.log</string>
+</dict>
+</plist>
+```
+
+Load it. The agent runs while the user is logged in, which Docker Desktop
+needs too. After an edit to the plist, stop it (below) and load it again; a
+second load of a loaded agent fails.
+
+```bash
+launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/ca.uwaterloo.chickadee-runner-update.plist
+```
+
+Check its last run. An exit code of 0 means the runner runs the server's
+release:
+
+```bash
+launchctl print gui/$(id -u)/ca.uwaterloo.chickadee-runner-update
+```
+
+Stop the updates:
+
+```bash
+launchctl bootout gui/$(id -u)/ca.uwaterloo.chickadee-runner-update
+```
+
+The script writes to the log only when it updates the runner or fails. If the
+arm64 build of a release is not published yet, the pull fails, the runner
+keeps its current image, and the next run tries again.
+
+If the host already runs the script from cron, remove that crontab line. Both
+together do no harm, because the script holds a lock, but one schedule is
+enough.
 
 `restart: unless-stopped` brings the runner back when Docker Desktop starts,
 unless it was stopped by hand.
