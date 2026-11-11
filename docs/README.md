@@ -65,6 +65,7 @@ not exist.
 - [datasets-course-library.md](datasets-course-library.md) — the per-course dataset library: versions and dictionary, attachments, the course cohort seed, the student Data page, the MCP tools, clone and bundle, `formatNoise`, the ranked-activity refusal and the dealt partition; opens with a Status table
 - [dataset-shared-delivery.md](dataset-shared-delivery.md) — link a dataset that is the same for many students into the editor working copy instead of writing a copy per student: a whole file to the shared extraction (step 1), a partition part to a part stored once (step 2)
 - [examples/r-lab9-trial/](examples/r-lab9-trial/) — a worked R lab: starter, solution, data and test scripts for each tier
+- [examples/miniweb/](examples/miniweb/) — a sketch for an HLTH 230 unit on how the web works and a search-engine lab: a generated fictional web (URL to HTML), a reference crawler and PageRank, and a check of the link farm lesson
 
 ## Courses, roles and students
 
