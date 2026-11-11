@@ -24,8 +24,7 @@ struct AssignmentsPage: HTML {
     let enrolledStudentCount: Int
     /// The published assignments a material's edit form offers under "Show on".
     var attachTargets: [AssignmentAttachTarget] = []
-    /// From `?notice=`: what a move reported, for example that the section's
-    /// default type differs from the moved assignment's type.
+    /// From `?notice=`: what an action reported.
     var flash = FlashMessages()
 
     /// The staff dashboard also serves a TA, who is not offered a control
@@ -119,18 +118,6 @@ struct AssignmentsPage: HTML {
                                 .class("form-input editor-input"), .type(.text), .name("name"),
                                 .placeholder("e.g. Labs"), .required)
                         }
-                        label(.class("form-label")) {
-                            "Default type for new work"
-                            select(
-                                .class("form-input editor-input"), .name("defaultAssignmentType"),
-                                .title("Grading follows each assignment's type, not its section")
-                            ) {
-                                SectionDefaultTypeOptions(selected: nil)
-                            }
-                        }
-                        p(.class("field-note field-note--muted")) {
-                            "Grading follows each assignment's type, not its section."
-                        }
                         button(.class("btn btn-primary btn-compact"), .type(.submit)) { "Create section" }
                     }
                 }
@@ -146,8 +133,7 @@ struct AssignmentsPage: HTML {
                         h2(.class("ungrouped-heading")) { "Ungrouped" }
                     }
                     AddItemMenu(
-                        newAssignmentHref: controls.createAssignment ? "/instructor/new" : nil,
-                        panelID: "add-material-ungrouped")
+                        newItemSectionID: controls.createAssignment ? "" : nil, panelID: "add-material-ungrouped")
                 }
             }
             AddMaterialPanel(
@@ -181,10 +167,6 @@ private struct SectionBlock: HTML {
                 span(.class("section-drag-handle"), .ariaHidden) { "⋮⋮" }
                 div(.class("section-view")) {
                     strong { section.name }
-                    " "
-                    if let type = section.defaultAssignmentType {
-                        span(.class("section-type-note")) { "new items: \(type.displayName)" }
-                    }
                     if controls.manageSections {
                         button(
                             .class("btn-link js-section-edit-toggle icon-btn-text"), .type(.button),
@@ -192,8 +174,7 @@ private struct SectionBlock: HTML {
                         ) { Icon("i-pencil") }
                     }
                     AddItemMenu(
-                        newAssignmentHref: controls.createAssignment
-                            ? "/instructor/new?sectionID=\(section.sectionID)" : nil,
+                        newItemSectionID: controls.createAssignment ? section.sectionID : nil,
                         panelID: "add-material-\(section.sectionID)")
                 }
                 if controls.manageSections {
@@ -235,13 +216,6 @@ private struct SectionBlock: HTML {
                 input(
                     .class("form-input section-name-input"), .type(.text), .name("name"), .value(section.name),
                     .required)
-                select(
-                    .class("form-input section-type-select"), .name("defaultAssignmentType"),
-                    .title("Default type for new work. Grading follows each assignment's type, not its section"),
-                    .ariaLabel("Default type for new work")
-                ) {
-                    SectionDefaultTypeOptions(selected: section.defaultAssignmentType)
-                }
                 button(.class("btn btn-primary btn-compact"), .type(.submit)) { "Save" }
             }
             button(
@@ -257,12 +231,22 @@ private struct SectionBlock: HTML {
     }
 }
 
-/// The "+ Add" menu: a new assignment, or a piece of material, which opens
-/// the add-material panel `panelID`. No assignment item when
-/// `newAssignmentHref` is nil (a TA).
+/// The "+ Add" menu: a new Assignment, Lab or Class activity, each opening
+/// the create page with that type chosen, or a piece of material, which opens
+/// the add-material panel `panelID`. A section names no default type; the
+/// author picks the type here (docs/assignment-types.md). No graded items
+/// when `newItemSectionID` is nil (a TA).
 private struct AddItemMenu: HTML {
-    let newAssignmentHref: String?
+    /// The section a new graded item joins, "" for the ungrouped bucket, or
+    /// nil when the viewer may not create one.
+    let newItemSectionID: String?
     let panelID: String
+
+    private func newItemHref(_ type: AssignmentType, sectionID: String) -> String {
+        sectionID.isEmpty
+            ? "/instructor/new?type=\(type.rawValue)"
+            : "/instructor/new?type=\(type.rawValue)&sectionID=\(sectionID)"
+    }
 
     private static let materials: [(kind: String, icon: String, label: String)] = [
         ("slides", "i-slides", "Slides"), ("notebook", "i-notebook", "Notebook"),
@@ -277,10 +261,17 @@ private struct AddItemMenu: HTML {
                 Icon("i-chevron-down")
             }
             div(.class("add-section-popup card suite-section-popup row-menu-panel"), .role("menu")) {
-                if let newAssignmentHref {
-                    a(.class("row-menu-item"), .href(newAssignmentHref), .role("menuitem")) {
-                        span(.class("item-tile"), .data("kind", value: "graded")) { Icon("i-clipboard-check") }
-                        "Assignment"
+                if let newItemSectionID {
+                    div(.class("add-test-group-label")) { "Graded" }
+                    for type in AssignmentType.allCases {
+                        let tile = AssignmentTypeTile(type: type)
+                        a(
+                            .class("row-menu-item"), .href(newItemHref(type, sectionID: newItemSectionID)),
+                            .role("menuitem")
+                        ) {
+                            span(.class("item-tile"), .data("kind", value: tile.kind)) { Icon(tile.symbol) }
+                            type.displayName
+                        }
                     }
                     hr()
                 }
@@ -413,19 +404,6 @@ private struct SectionItemsTable<Rows: HTML>: HTML {
             } else {
                 tbody(.data("section-id", value: sectionID)) { rows }
             }
-        }
-    }
-}
-
-/// The options of a section's default-type select: no default, then every
-/// assignment type.
-private struct SectionDefaultTypeOptions: HTML {
-    let selected: AssignmentType?
-
-    var body: some HTML {
-        option(.value("")) { "No default type" }.attributes(.selected, when: selected == nil)
-        for type in AssignmentType.allCases {
-            option(.value(type.rawValue)) { type.displayName }.attributes(.selected, when: selected == type)
         }
     }
 }

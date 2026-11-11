@@ -3903,9 +3903,7 @@ td.pf-var-locked-value { font-family: var(--font-mono); font-size: var(--text-sm
     background: transparent;
     color: var(--muted);
 }
-.section-type-note { font-size: var(--text-sm); color: var(--gray-500); }
 .section-action--push { margin-left: auto; }
-.section-type-select { font-size: var(--text-base); padding: .25rem .45rem; }
 /* Tight row of icon/action buttons in an assignment-row Actions cell. It sets
    no white-space and no button padding: the extension and grade-override
    popover forms open inside the cell and would inherit both. */

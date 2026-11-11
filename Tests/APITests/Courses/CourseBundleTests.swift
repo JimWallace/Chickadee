@@ -488,24 +488,24 @@ import VaporTesting
         }
     }
 
-    /// A legacy section grading mode this server does not know is refused
-    /// the same way (#2172).
-    @Test func importRejectsAnUnknownSectionGradingMode() async throws {
+    /// A section's legacy grading mode is read by nothing, so even a value
+    /// this server does not know imports, with the section's name.
+    @Test func importIgnoresASectionsLegacyGradingMode() async throws {
         try await withApp(app) { _ in
             let cookie = try await loginAsAdmin("testadmin_cb", on: app)
             let zipData = try await makeMinimalBundleZip(
                 courseCode: "UNKNOWN_MODE",
                 sections: [
                     BundledSection(
-                        bundleID: "section_1", name: "Labs", defaultAssignmentType: nil,
-                        defaultGradingMode: "quantum", sortOrder: 1)
+                        bundleID: "section_1", name: "Labs", defaultGradingMode: "quantum", sortOrder: 1)
                 ])
-            let (status, body) = try await postImport(cookie: cookie, zipData: zipData)
-            #expect(status == .badRequest)
-            #expect(body.contains("quantum"))
-            #expect(body.contains("Labs"))
-            let count = try await APICourse.query(on: app.db).filter(\.$code == "UNKNOWN_MODE").count()
-            #expect(count == 0)
+            let (status, _) = try await postImport(cookie: cookie, zipData: zipData)
+            #expect(status != .badRequest)
+            let course = try #require(
+                try await APICourse.query(on: app.db).filter(\.$code == "UNKNOWN_MODE").first())
+            let sections = try await APICourseSection.query(on: app.db)
+                .filter(\.$courseID == course.requireID()).all()
+            #expect(sections.map(\.name) == ["Labs"])
         }
     }
 
@@ -1234,14 +1234,12 @@ import VaporTesting
             let course = try await makeTestCourse(code: "RT_SECTS")
             let courseID = try course.requireID()
 
-            // Two sections with distinct default types.
+            // Two sections.
             let browserSec = APICourseSection(
-                name: "Browser Labs", defaultAssignmentType: .lab,
-                sortOrder: 1, courseID: courseID)
+                name: "Browser Labs", sortOrder: 1, courseID: courseID)
             try await browserSec.save(on: app.db)
             let workerSec = APICourseSection(
-                name: "Worker Labs", defaultAssignmentType: nil,
-                sortOrder: 2, courseID: courseID)
+                name: "Worker Labs", sortOrder: 2, courseID: courseID)
             try await workerSec.save(on: app.db)
 
             let setup1 = try await insertSetupWithZip(id: "rt_sects_s1", courseID: courseID)
@@ -1306,16 +1304,14 @@ import VaporTesting
                 "Imported course not found")
             let importedID = try imported.requireID()
 
-            // Sections recreated with correct names and default types.
+            // Sections recreated with correct names, in order.
             let importedSections = try await APICourseSection.query(on: app.db)
                 .filter(\.$courseID == importedID)
                 .sort(\.$sortOrder)
                 .all()
             #expect(importedSections.count == 2, "Imported course should have 2 sections")
             #expect(importedSections.first?.name == "Browser Labs")
-            #expect(importedSections.first?.defaultAssignmentType == .lab)
             #expect(importedSections.last?.name == "Worker Labs")
-            #expect(importedSections.last?.defaultAssignmentType == nil)
 
             // All assignments placed in a section, not ungrouped.
             let importedAssignments = try await APIAssignment.query(on: app.db)

@@ -3,8 +3,8 @@
 // Tools for *course* sections — the named groups that organize an assignment
 // list (e.g. "Labs", "Assignments", "Exams"), distinct from the test-suite
 // sections inside a single assignment (create_suite_section / move_suite_item).  A
-// course section (`APICourseSection`) has a name, a sort order, and an optional
-// default assignment type; an assignment belongs to at most one via its
+// course section (`APICourseSection`) has a name and a sort order, and names no
+// type or grading mode; an assignment belongs to at most one via its
 // nullable `sectionID`.  content:read for the listing, content:write for the
 // rest.
 //
@@ -30,9 +30,6 @@ struct ListCourseSectionsTool: ContentTool {
         struct Section: Encodable, Sendable {
             let sectionID: String
             let name: String
-            /// The `AssignmentType` raw value new work here declares by
-            /// default; absent when the section names none.
-            let defaultAssignmentType: String?
             let sortOrder: Int
         }
         let courseCode: String
@@ -46,8 +43,8 @@ struct ListCourseSectionsTool: ContentTool {
     static let description =
         "List the course sections (assignment groups like \"Labs\" or \"Assignments\") for a course, "
         + "identified by course code, in display order. Returns each section's id (use it as "
-        + "set_assignment_course_section's courseSectionID), name, default assignment type (absent when "
-        + "the section names none), and sort order. A section has no grading mode: grading follows each "
+        + "set_assignment_course_section's courseSectionID), name and sort order. A section names no type "
+        + "and no grading mode: grading follows each "
         + "assignment's declared type. These are course-level groups for organizing the assignment list — not the "
         + "test-suite sections inside an assignment (those come from get_suite)."
     static let inputSchema: JSONValue = .object([
@@ -71,7 +68,6 @@ struct ListCourseSectionsTool: ContentTool {
                     "properties": .object([
                         "sectionID": MCPSchema.string,
                         "name": MCPSchema.string,
-                        "defaultAssignmentType": MCPSchema.nullableString,
                         "sortOrder": MCPSchema.integer,
                     ]),
                     "required": .array([
@@ -96,7 +92,6 @@ struct ListCourseSectionsTool: ContentTool {
             return Output.Section(
                 sectionID: id.uuidString,
                 name: section.name,
-                defaultAssignmentType: section.defaultAssignmentType?.rawValue,
                 sortOrder: section.sortOrder)
         }
         return Output(
@@ -111,8 +106,6 @@ struct CreateCourseSectionTool: ContentTool {
     struct Input: Decodable, Sendable {
         let courseCode: String
         let name: String
-        /// An `AssignmentType` raw value; absent or "" = no default.
-        let defaultAssignmentType: String?
     }
 
     struct Output: Encodable, Sendable {
@@ -122,17 +115,15 @@ struct CreateCourseSectionTool: ContentTool {
         let courseTerm: String?
         let sectionID: String
         let name: String
-        let defaultAssignmentType: String?
         let sortOrder: Int
     }
 
     static let name = "create_course_section"
     static let description =
         "Create a new course section (an assignment group like \"Labs\") in a course, by course code. "
-        + "Provide a name and optionally defaultAssignmentType (\(MCPEnumProse<AssignmentType>.quotedOrList)): "
-        + "the type create_assignment declares for new work in this section when it names none. Grading "
-        + "follows the type, so the section sets no grading mode, and moving an assignment into it changes "
-        + "neither the type nor the grading. The new section is appended after the existing ones. Returns its id for use with set_assignment_course_section."
+        + "Provide a name. A section names no type: create_assignment declares each assignment's own. "
+        + "Grading follows the type, so the section sets no grading mode, and moving an assignment into it "
+        + "changes neither the type nor the grading. The new section is appended after the existing ones. Returns its id for use with set_assignment_course_section."
     static let inputSchema: JSONValue = .object([
         "type": .string("object"),
         "properties": .object([
@@ -140,14 +131,6 @@ struct CreateCourseSectionTool: ContentTool {
             "name": .object([
                 "type": .string("string"),
                 "description": .string("Display name for the new section (non-empty), e.g. \"Labs\"."),
-            ]),
-            "defaultAssignmentType": .object([
-                "type": .string("string"),
-                "description": .string(
-                    "The type new work in this section declares by default: "
-                        + "\(MCPEnumProse<AssignmentType>.quotedOrList), or \"\" for no default. A lab is "
-                        + "browser-graded for participation; an assignment and a class activity are "
-                        + "worker-graded."),
             ]),
         ]),
         "required": .array([.string("courseCode"), .string("name")]),
@@ -161,7 +144,6 @@ struct CreateCourseSectionTool: ContentTool {
             "courseTerm": MCPSchema.courseTermOutput,
             "sectionID": MCPSchema.string,
             "name": MCPSchema.string,
-            "defaultAssignmentType": MCPSchema.nullableString,
             "sortOrder": MCPSchema.integer,
         ]),
         "required": .array([
@@ -176,8 +158,7 @@ struct CreateCourseSectionTool: ContentTool {
     func execute(_ input: Input, _ context: ToolContext) async throws -> Output {
         let draft: CourseSectionDraft
         do {
-            draft = try CourseSectionDraft(
-                name: input.name, defaultAssignmentType: input.defaultAssignmentType)
+            draft = try CourseSectionDraft(name: input.name)
         } catch {
             throw mcpToolError(error)
         }
@@ -189,7 +170,6 @@ struct CreateCourseSectionTool: ContentTool {
             courseCode: course.code, courseKey: course.urlKey, courseTerm: course.term?.displayName,
             sectionID: try section.requireID().uuidString,
             name: section.name,
-            defaultAssignmentType: section.defaultAssignmentType?.rawValue,
             sortOrder: section.sortOrder)
     }
 }
@@ -210,9 +190,6 @@ struct SetAssignmentCourseSectionTool: ContentTool {
         let sectionName: String?
         /// The assignment's grading mode, which a move never changes.
         let gradingMode: String?
-        /// Set when the section's default type differs from the assignment's
-        /// declared type, which the move leaves as it was.
-        let note: String?
     }
 
     static let name = "set_assignment_course_section"
@@ -220,8 +197,8 @@ struct SetAssignmentCourseSectionTool: ContentTool {
         "Place an assignment into a course section (assignment group like \"Labs\"), or ungroup it, by "
         + "assignment public ID. courseSectionID comes from list_course_sections; pass \"\" (or omit) "
         + "to ungroup. A move changes neither the assignment's declared type nor its grading mode, which "
-        + "follows the type; when the section's default type differs from the assignment's, the result's "
-        + "note says so, and update_assignment changes the type. This is organizational metadata and does not re-run validation "
+        + "follows the type; update_assignment changes the type. This is organizational metadata and does not "
+        + "re-run validation "
         + "or change the open/closed state."
     static let inputSchema: JSONValue = .object([
         "type": .string("object"),
@@ -243,7 +220,6 @@ struct SetAssignmentCourseSectionTool: ContentTool {
             "sectionID": MCPSchema.string,
             "sectionName": MCPSchema.string,
             "gradingMode": MCPSchema.string,
-            "note": MCPSchema.nullableString,
         ]),
         "required": .array([.string("assignmentPublicID"), .string("sectionID")]),
     ])
@@ -271,8 +247,7 @@ struct SetAssignmentCourseSectionTool: ContentTool {
             assignmentPublicID: assignment.publicID,
             sectionID: resolvedSectionID?.uuidString ?? "",
             sectionName: moved.section?.name,
-            gradingMode: moved.gradingMode,
-            note: moved.typeNote)
+            gradingMode: moved.gradingMode)
     }
 
 }
@@ -282,26 +257,21 @@ struct SetAssignmentCourseSectionTool: ContentTool {
 struct RenameCourseSectionTool: ContentTool {
     struct Input: Decodable, Sendable {
         let courseSectionID: String
-        /// New display name; omit to leave unchanged.
-        let name: String?
-        /// An `AssignmentType` raw value; "" clears it; omit to leave unchanged.
-        let defaultAssignmentType: String?
+        /// The new display name.
+        let name: String
     }
 
     struct Output: Encodable, Sendable {
         let sectionID: String
         let name: String
-        let defaultAssignmentType: String?
         let sortOrder: Int
     }
 
     static let name = "rename_course_section"
     static let description =
-        "Rename a course section (assignment group like \"Labs\") and/or change its default assignment "
-        + "type, by course-section id (from list_course_sections). Provide name and/or "
-        + "defaultAssignmentType (\(MCPEnumProse<AssignmentType>.quotedOrList), or \"\" to clear it) — at "
-        + "least one. The default applies only to work created in the section afterwards; it changes "
-        + "neither the type nor the grading of assignments already in it. This is a course section (assignment "
+        "Rename a course section (assignment group like \"Labs\") by course-section id (from "
+        + "list_course_sections). A rename changes neither the type nor the grading of any assignment "
+        + "in it. This is a course section (assignment "
         + "group), not a test-suite section inside an assignment — use rename_suite_section for those."
     static let inputSchema: JSONValue = .object([
         "type": .string("object"),
@@ -312,16 +282,10 @@ struct RenameCourseSectionTool: ContentTool {
             ]),
             "name": .object([
                 "type": .string("string"),
-                "description": .string("New display name (non-empty); omit to leave unchanged."),
-            ]),
-            "defaultAssignmentType": .object([
-                "type": .string("string"),
-                "description": .string(
-                    "New default assignment type (\(MCPEnumProse<AssignmentType>.quotedOrList)), \"\" to "
-                        + "clear it, or omit to leave it unchanged."),
+                "description": .string("New display name (non-empty)."),
             ]),
         ]),
-        "required": .array([.string("courseSectionID")]),
+        "required": .array([.string("courseSectionID"), .string("name")]),
         "additionalProperties": .bool(false),
     ])
     static let outputSchema: JSONValue? = .object([
@@ -329,7 +293,6 @@ struct RenameCourseSectionTool: ContentTool {
         "properties": .object([
             "sectionID": MCPSchema.string,
             "name": MCPSchema.string,
-            "defaultAssignmentType": MCPSchema.nullableString,
             "sortOrder": MCPSchema.integer,
         ]),
         "required": .array([
@@ -341,15 +304,11 @@ struct RenameCourseSectionTool: ContentTool {
     static let requiredScopes: Set<ContentScope> = [.write]
 
     func execute(_ input: Input, _ context: ToolContext) async throws -> Output {
-        let newName = input.name?.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard newName != nil || input.defaultAssignmentType != nil else {
-            throw MCPToolError.invalidArguments(detail: "Provide at least one of: name, defaultAssignmentType.")
-        }
         let section = try await resolveCourseSectionForEdit(
             sectionID: input.courseSectionID, context: context, atLeast: CourseRoleFloor.manageSections)
         let edit: CourseSectionEdit
         do {
-            edit = try CourseSectionEdit(name: newName, defaultAssignmentType: input.defaultAssignmentType)
+            edit = try CourseSectionEdit(name: input.name)
         } catch {
             throw mcpToolError(error)
         }
@@ -357,7 +316,6 @@ struct RenameCourseSectionTool: ContentTool {
         return Output(
             sectionID: try section.requireID().uuidString,
             name: section.name,
-            defaultAssignmentType: section.defaultAssignmentType?.rawValue,
             sortOrder: section.sortOrder)
     }
 }

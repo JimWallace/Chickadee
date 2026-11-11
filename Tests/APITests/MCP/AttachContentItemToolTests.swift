@@ -14,7 +14,7 @@ import Vapor
 @Suite(.serialized, .timeLimit(.minutes(5))) struct AttachContentItemToolTests {
     private func makeSection(on app: Application, name: String, courseID: UUID) async throws -> APICourseSection {
         let section = APICourseSection(
-            name: name, defaultAssignmentType: .lab, sortOrder: 1, courseID: courseID)
+            name: name, sortOrder: 1, courseID: courseID)
         try await section.save(on: app.db)
         return section
     }

@@ -128,7 +128,7 @@ import Vapor
         try await withTestApp { app in
             let courseID = try await makeTestCourse(on: app, code: "CCS_UPDATE").requireID()
             let section = APICourseSection(
-                name: "Week 1", defaultAssignmentType: .lab, sortOrder: 1, courseID: courseID)
+                name: "Week 1", sortOrder: 1, courseID: courseID)
             try await section.save(on: app.db)
             let sectionID = try section.requireID()
             let item = try await CourseContentService.create(

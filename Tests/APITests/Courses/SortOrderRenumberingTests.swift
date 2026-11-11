@@ -39,9 +39,9 @@ import Vapor
     private func fixture(code: String = "SORT1") async throws -> Fixture {
         let course = try await makeTestCourse(on: app, code: code)
         let courseID = try course.requireID()
-        let sectionA = APICourseSection(name: "A", defaultAssignmentType: nil, sortOrder: 1, courseID: courseID)
+        let sectionA = APICourseSection(name: "A", sortOrder: 1, courseID: courseID)
         try await sectionA.save(on: app.db)
-        let sectionB = APICourseSection(name: "B", defaultAssignmentType: nil, sortOrder: 2, courseID: courseID)
+        let sectionB = APICourseSection(name: "B", sortOrder: 2, courseID: courseID)
         try await sectionB.save(on: app.db)
         let labOne = try await assignment(code + "_one", courseID: courseID, section: sectionA, order: 1)
         let labTwo = try await assignment(code + "_two", courseID: courseID, section: sectionA, order: 2)

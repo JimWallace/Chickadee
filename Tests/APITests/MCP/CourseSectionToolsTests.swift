@@ -26,10 +26,10 @@ import Vapor
 
     @discardableResult
     private func makeSection(
-        on app: Application, name: String, type: AssignmentType?, order: Int, courseID: UUID
+        on app: Application, name: String, order: Int, courseID: UUID
     ) async throws -> APICourseSection {
         let section = APICourseSection(
-            name: name, defaultAssignmentType: type, sortOrder: order, courseID: courseID)
+            name: name, sortOrder: order, courseID: courseID)
         try await section.save(on: app.db)
         return section
     }
@@ -38,9 +38,8 @@ import Vapor
         try await withTestApp { app in
             _ = try await fixture(on: app)
             let out = try await CreateCourseSectionTool().execute(
-                .init(courseCode: "CS246", name: "Labs", defaultAssignmentType: "lab"), mcpContext(app))
+                .init(courseCode: "CS246", name: "Labs"), mcpContext(app))
             #expect(out.name == "Labs")
-            #expect(out.defaultAssignmentType == "lab")
             #expect(!out.sectionID.isEmpty)
 
             let saved = try #require(
@@ -49,32 +48,20 @@ import Vapor
         }
     }
 
-    @Test func createCourseSectionRejectsBadMode() async throws {
-        try await withTestApp { app in
-            _ = try await fixture(on: app)
-            await #expect(throws: MCPToolError.self) {
-                _ = try await CreateCourseSectionTool().execute(
-                    .init(courseCode: "CS246", name: "Labs", defaultAssignmentType: "nonsense"), mcpContext(app))
-            }
-        }
-    }
-
     @Test func listCourseSectionsReturnsInSortOrder() async throws {
         try await withTestApp { app in
             let fx = try await fixture(on: app)
             let courseID = try fx.course.requireID()
-            try await makeSection(on: app, name: "Exams", type: nil, order: 2, courseID: courseID)
-            try await makeSection(on: app, name: "Labs", type: .lab, order: 1, courseID: courseID)
+            try await makeSection(on: app, name: "Exams", order: 2, courseID: courseID)
+            try await makeSection(on: app, name: "Labs", order: 1, courseID: courseID)
 
             let out = try await ListCourseSectionsTool().execute(.init(courseCode: "CS246"), mcpContext(app))
             #expect(out.sections.map(\.name) == ["Labs", "Exams"])
-            #expect(out.sections.first?.defaultAssignmentType == "lab")
-            #expect(out.sections.last?.defaultAssignmentType == nil)
         }
     }
 
     /// Moving an assignment whose manifest marks grader-only files into a
-    /// Lab-default section keeps worker grading: a move never changes the
+    /// section keeps worker grading: a move never changes the
     /// grading mode, so the withheld files never reach a student's kernel.
     @Test func setAssignmentSectionKeepsWorkerWhenGraderOnlyFilesMarked() async throws {
         try await withTestApp { app in
@@ -88,7 +75,7 @@ import Vapor
             let holdoutAssignment = try await makeTestAssignment(
                 on: app, testSetupID: "setup_go", courseID: courseID, title: "Holdout Lab")
             let section = try await makeSection(
-                on: app, name: "Labs", type: .lab, order: 1, courseID: courseID)
+                on: app, name: "Labs", order: 1, courseID: courseID)
             let sectionID = try section.requireID()
 
             let out = try await SetAssignmentCourseSectionTool().execute(
@@ -110,9 +97,9 @@ import Vapor
         try await withTestApp { app in
             let fx = try await fixture(on: app)
             let courseID = try fx.course.requireID()
-            // A section with no default type; the assignment's manifest is "browser".
+            // The assignment's manifest is "browser".
             let section = try await makeSection(
-                on: app, name: "Labs", type: nil, order: 1, courseID: courseID)
+                on: app, name: "Labs", order: 1, courseID: courseID)
             let sectionID = try section.requireID()
 
             let out = try await SetAssignmentCourseSectionTool().execute(
@@ -121,7 +108,6 @@ import Vapor
             #expect(out.sectionID == sectionID.uuidString)
             #expect(out.sectionName == "Labs")
             #expect(out.gradingMode == "browser")
-            #expect(out.note == nil)
 
             // Assignment row now points at the section.
             let reloaded = try #require(try await APIAssignment.find(fx.assignment.id, on: app.db))
@@ -137,7 +123,7 @@ import Vapor
             let fx = try await fixture(on: app)
             let courseID = try fx.course.requireID()
             let section = try await makeSection(
-                on: app, name: "Labs", type: .lab, order: 1, courseID: courseID)
+                on: app, name: "Labs", order: 1, courseID: courseID)
             _ = try await SetAssignmentCourseSectionTool().execute(
                 .init(
                     assignmentPublicID: fx.assignment.publicID,
@@ -173,7 +159,7 @@ import Vapor
             let fx = try await fixture(on: app)
             let courseID = try fx.course.requireID()
             let section = try await makeSection(
-                on: app, name: "Labs", type: nil, order: 1, courseID: courseID)
+                on: app, name: "Labs", order: 1, courseID: courseID)
             fx.course.isArchived = true
             try await fx.course.save(on: app.db)
 
@@ -195,7 +181,7 @@ import Vapor
             // A section in a DIFFERENT course must not be assignable here.
             let other = try await makeTestCourse(on: app, code: "CS999", name: "Other")
             let foreign = try await makeSection(
-                on: app, name: "Labs", type: .lab, order: 1, courseID: try other.requireID())
+                on: app, name: "Labs", order: 1, courseID: try other.requireID())
             await #expect(throws: MCPToolError.self) {
                 _ = try await SetAssignmentCourseSectionTool().execute(
                     .init(
