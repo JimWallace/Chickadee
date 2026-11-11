@@ -17,6 +17,14 @@ struct WholeFileSampleNormalization: Sendable, Equatable {
             + "sample size. Every student reads one linked copy of the whole file (datasetDelivery \"shared\"), "
             + "and so will a later, larger version; send a sampleSize again to sample one."
     }
+
+    /// The same, as one line of Files panel status in place of "Saved".
+    /// The status reports the save, not the state: the row's delivery note
+    /// ("One shared copy.") already says how the file is delivered, and a
+    /// spec with no sample cannot say that it once had one.
+    var panelNote: String {
+        "Saved with no sample: it covered all \(dataRowCount) rows."
+    }
 }
 
 /// A stored spec whose sample covers the whole file, so each student stores a

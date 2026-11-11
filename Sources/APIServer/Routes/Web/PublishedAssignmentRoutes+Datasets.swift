@@ -35,10 +35,11 @@ extension PublishedAssignmentRoutes {
     func putDatasets(req: Request) async throws -> DatasetsResponse {
         let (_, setup) = try await loadAssignmentAndSetupForWrite(req, atLeast: .ta)
         let body = try await req.decodeContent(DatasetsBody.self)
-        try await applyDatasetsEdit(setup: setup, datasets: body.datasets, on: req.db)
+        let normalized = try await applyDatasetsEdit(setup: setup, datasets: body.datasets, on: req.db)
         // Read back rather than echoing the request: the response is what the
         // Files panel renders its controls from, so it has to be the state the
-        // manifest now holds.
-        return try await datasetsPanelResponse(req: req, setup: setup)
+        // manifest now holds. A sample the save dropped is named, so the
+        // field does not empty without a word.
+        return try await datasetsPanelResponse(req: req, setup: setup, saved: normalized)
     }
 }

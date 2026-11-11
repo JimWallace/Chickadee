@@ -317,7 +317,15 @@
                     });
                 }).then(function (body) {
                     renderState(body);
-                    ChickadeeUI.setStatus(statusOf(row), spec ? 'Saved' : 'Cleared', 'ok');
+                    // A note names a sample the save dropped because it
+                    // covered the whole file. The PUT carries every row, so a
+                    // note can name another row too.
+                    var saved = (body && body.savedNotes) || {};
+                    ChickadeeUI.setStatus(statusOf(row), saved[filename] || (spec ? 'Saved' : 'Cleared'), 'ok');
+                    rows().forEach(function (other) {
+                        var note = saved[other.getAttribute('data-support-file')];
+                        if (other !== row && note) ChickadeeUI.setStatus(statusOf(other), note, 'ok');
+                    });
                 }).catch(function (e) {
                     ChickadeeUI.setStatus(statusOf(row), '');
                     ChickadeeUI.showActionError(

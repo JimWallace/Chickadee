@@ -118,9 +118,11 @@ author chose it for another version, and dropping it because the new one is
 smaller would also give the whole file of every later, larger version. A
 detach keeps the sample as it is (`DatasetSpec.withoutLibraryFields`).
 
-The web save is silent: the Files panel re-renders from the stored manifest,
-so the sample field is empty and the note reads "One shared copy." MCP
-reports it in `notes`.
+The web save says so. The datasets `PUT` returns `savedNotes`, keyed by file
+(`WholeFileSampleNormalization.panelNote`), and the Files panel shows the note
+in that row's status in place of "Saved", so the emptied sample field is
+explained. The `PUT` carries every row, so a note can name a row the author
+did not edit. MCP reports the same in `notes`.
 
 **The whole file without a detach.** `set_dataset` takes `wholeFile: true`. It
 clears the sample, the stratum and the partition, keeps the transforms as
@@ -338,6 +340,10 @@ Step 3:
   it materializes to the source, a real sample, a transform and a partition
   are not whole-file samples, and a library spec loses its sample while a
   plain one is left alone.
+- `DatasetsSavedNotesRouteTests` (APIServer): the web `PUT` names a dropped
+  library sample in `savedNotes`, and a save that keeps every sample has none.
+- `support-files-saved-notes.test.mjs`: the panel shows the note in place of
+  "Saved", on the row it names.
 - `DatasetWholeFileDeliveryTests` (APIServer): `set_dataset`, the web edit and
   attach normalize a library spec; a plain spec is kept and warned about; an
   update to a smaller version keeps its sample; `wholeFile: true` ends a

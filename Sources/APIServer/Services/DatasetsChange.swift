@@ -144,12 +144,14 @@ func applyDatasetsEdit(
 /// The web door to `applyDatasetsEdit`: a whole-array replace, since the page
 /// sends the complete desired state. A refusal is `.badRequest`. It lives here,
 /// not under Routes/Web, because it shares its name with the function MCP
-/// calls, and `MCPRouteLayerDependencyTests` matches names.
+/// calls, and `MCPRouteLayerDependencyTests` matches names. Returns what the
+/// save normalized, which the routes show in the Files panel.
+@discardableResult
 func applyDatasetsEdit(
     setup: APITestSetup, datasets: [DatasetSpec], on db: any Database
-) async throws {
+) async throws -> [WholeFileSampleNormalization] {
     do {
-        try await applyDatasetsEdit(setup: setup, change: .replaceAll(datasets), on: db)
+        return try await applyDatasetsEdit(setup: setup, change: .replaceAll(datasets), on: db)
     } catch let refusal as DatasetsEditError {
         throw AppError.badRequest(reason: refusal.description)
     }
