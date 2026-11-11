@@ -4,6 +4,11 @@
 // fixture (CSV, JSON, ...) bundled with the assignment, with its per-student
 // dataset control (docs/datasets.md). The create page and the edit body render
 // the same markup, and Public/support-files.js drives both.
+//
+// A file attached from the course dataset library is a dataset, not a support
+// file: the edit body lists it in its own Datasets table, and this row then
+// names the dataset and its version and offers the library's actions
+// (docs/datasets-course-library.md §4.5).
 
 import Elementary
 
@@ -12,7 +17,11 @@ struct SupportFileRow: HTML {
 
     var body: some HTML {
         tr(.data("support-file", value: file.name)) {
-            td { strong { "Support file" } }
+            if let attachment {
+                td { DatasetNameCell(attachment: attachment) }
+            } else {
+                td { strong { "Support file" } }
+            }
             td {
                 a(.href(file.url)) { code { file.name } }
                 datasetControl
@@ -21,19 +30,21 @@ struct SupportFileRow: HTML {
                 }
             }
             td(.class("time")) {
-                // The delete door refuses an attached file, so its Remove
-                // detaches it and removes the file in one step.
-                button(
-                    .class(
-                        "btn action-btn action-danger "
-                            + (isAttached ? "js-library-remove" : "js-support-file-delete-btn")),
-                    .type(.button), .data("filename", value: file.name)
-                ) { "Remove" }
+                if let attachment {
+                    AttachedDatasetActions(filename: file.name, attachment: attachment)
+                } else {
+                    button(
+                        .class("btn action-btn action-danger js-support-file-delete-btn"), .type(.button),
+                        .data("filename", value: file.name)
+                    ) { "Remove" }
+                }
             }
         }
     }
 
-    private var isAttached: Bool { file.library?.attachment != nil }
+    private var attachment: SupportFileLibraryState.Attachment? { file.library?.attachment }
+
+    private var isAttached: Bool { attachment != nil }
 
     /// `hidden` on the fields that only mean something for a dataset.
     private var hiddenUnlessDataset: [MarkupAttribute<HTMLTag.span>] {
@@ -140,9 +151,50 @@ struct SupportFileRow: HTML {
     }
 }
 
-/// The course library line under a support file: where an attached file comes
-/// from, with update, scope and detach, or the move into the library for a
-/// CSV that is not attached. Public/support-files.js sends each action.
+/// An attached dataset's name cell: the course library's dataset icon, its
+/// name linked to its library page, and the version the file pins. The link
+/// opens a new tab, because the workbench shows this table over a live kernel.
+private struct DatasetNameCell: HTML {
+    let attachment: SupportFileLibraryState.Attachment
+
+    var body: some HTML {
+        Icon("i-list")
+        " "
+        NewTabLink(href: InstructorDatasetDetail.href(slug: attachment.slug), text: attachment.name)
+        " "
+        span(.class("chip")) { "v\(attachment.version)" }
+    }
+}
+
+/// An attached dataset's actions. Its file is the library's, so there is no
+/// plain delete: the delete door refuses an attached file, and Remove detaches
+/// it and removes the file in one step.
+private struct AttachedDatasetActions: HTML {
+    let filename: String
+    let attachment: SupportFileLibraryState.Attachment
+
+    var body: some HTML {
+        if let newer = attachment.newerVersion {
+            button(
+                .class("btn action-btn js-library-update"), .type(.button), .data("filename", value: filename)
+            ) { "Update to v\(newer)" }
+            " "
+        }
+        button(
+            .class("btn action-btn js-library-detach"), .type(.button), .data("filename", value: filename),
+            .title("Keep the file and its per-student sample as a support file")
+        ) { "Detach" }
+        " "
+        button(
+            .class("btn action-btn action-danger js-library-remove"), .type(.button),
+            .data("filename", value: filename)
+        ) { "Remove" }
+    }
+}
+
+/// The course library line under a support file: the row scope of an attached
+/// dataset, or the move into the library for a CSV that is not attached.
+/// Public/support-files.js sends each action.
 private struct SupportFileLibraryControl: HTML {
     let filename: String
     let library: SupportFileLibraryState
@@ -150,13 +202,6 @@ private struct SupportFileLibraryControl: HTML {
     var body: some HTML {
         div(.class("dataset-control")) {
             if let attachment = library.attachment {
-                span { "From \(attachment.sourceText)" }
-                if let newer = attachment.newerVersion {
-                    button(
-                        .class("btn action-btn js-library-update"), .type(.button),
-                        .data("filename", value: filename)
-                    ) { "Update to v\(newer)" }
-                }
                 label(.class("dataset-toggle")) {
                     input(
                         attributes: [
@@ -164,10 +209,6 @@ private struct SupportFileLibraryControl: HTML {
                         ] + (attachment.isCourseScoped ? [.checked] : []))
                     " Course-wide rows"
                 }
-                button(
-                    .class("btn action-btn js-library-detach"), .type(.button), .data("filename", value: filename)
-                ) { "Detach" }
-                span(.class("dataset-note")) { "Detach keeps the file and its per-student sample." }
             } else {
                 button(
                     .class("btn action-btn js-library-promote"), .type(.button), .data("filename", value: filename)

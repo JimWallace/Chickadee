@@ -456,11 +456,20 @@ Tests: `InstructorDatasetsTabTests`, `InstructorDatasetsAuditTests`, and the two
 
 **The Files panel (5b, built).** The edit page's Files panel reaches the
 library through five JSON routes, each answering with the panel state as the
-datasets PUT does (`PublishedAssignmentRoutes+DatasetLibrary.swift`):
+datasets PUT does (`PublishedAssignmentRoutes+DatasetLibrary.swift`).
+
+An attached file is listed apart from the support files, in the panel's own
+Datasets table (`EditDatasetsBlock` in `AssignmentEditBody.swift`, also the
+workbench's Files sheet). Each row names the dataset with the library's icon,
+links it to its library page in a new tab (the workbench shows the table over a
+live kernel) and shows the pinned version as a chip. Its
+actions are the library's (Update, Detach, Remove), never the support-file
+delete. Nothing about how the file is linked or graded depends on the table it
+sits in: the split is by `SupportFileLibraryState.attachment` only.
 
 | Control | Route | Does |
 |---|---|---|
-| A select and Attach, beside the upload (only when the course has datasets) | `POST …/datasets/library/attach` `{slug}` | Attaches the newest version under its own filename, with course scope and no sample (decision 1). The instructor then sets the sample as for any dataset. |
+| A select and Attach, in the Datasets head (only when the course has datasets) | `POST …/datasets/library/attach` `{slug}` | Attaches the newest version under its own filename, with course scope and no sample (decision 1). The instructor then sets the sample as for any dataset. |
 | "Update to v3", on an attached row that pins an older version | `…/update` `{file}` | Moves to the newest version. |
 | "Course-wide rows" | `…/scope` `{file, courseScoped}` | Sets the scope (`setAttachmentScope`). |
 | Detach | `…/detach` `{file}` | Ends the attachment and keeps the file and its sample. No confirm, because it is easy to undo. |

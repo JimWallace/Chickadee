@@ -1063,6 +1063,13 @@ coordination, and each must see every edit.
     `subject_user_id` metadata key, so `AuditLogger.recordDatasetWrite` sets
     `title` to the dataset name. A new course-scoped audit action must set one
     of those keys, or its row shows a bare UUID.
+  - The edit page's Files panel, and the workbench's Files sheet, list an
+    attached file (`SupportFileLibraryState.attachment != nil`) in the
+    Datasets table, apart from the support files (`EditDatasetsBlock`), with
+    the library's actions only, because the delete door refuses an attached
+    file. A new action on a `SupportFileRow` must say which of the two kinds
+    it applies to. `Public/support-files.js` finds rows by
+    `tr[data-support-file]` in either table.
 
 ### The result: `TestOutcomeCollection` counts and the grade
 
