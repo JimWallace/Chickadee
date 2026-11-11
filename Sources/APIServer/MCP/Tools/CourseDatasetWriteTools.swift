@@ -32,9 +32,13 @@ struct CreateDatasetTool: ContentTool {
         let note: String?
         /// ... or from this assignment's support file `filename`.
         let assignmentPublicID: String?
-        /// With `sourceUrl`, the stored filename; with `assignmentPublicID`, the
-        /// support file to move into the library.
+        /// With `sourceUrl` or `uploadID`, the stored filename; with
+        /// `assignmentPublicID`, the support file to move into the library.
         let filename: String?
+        /// ... or from a staged `begin_upload` upload in this course
+        /// (docs/mcp-file-uploads.md). A `var`, so the memberwise init defaults
+        /// it to nil and keeps its shape.
+        var uploadID: String?
     }
 
     struct Output: Encodable, Sendable {
@@ -47,8 +51,10 @@ struct CreateDatasetTool: ContentTool {
 
     static let name = "create_dataset"
     static let description =
-        "Create a dataset in the course library. Version 1 comes from ONE of two places: a CSV at "
-        + "sourceUrl, or a support file of an assignment (assignmentPublicID plus filename). From an "
+        "Create a dataset in the course library. Version 1 comes from ONE of three places: a CSV "
+        + "uploaded through begin_upload (uploadID plus filename; the way to deliver a local file byte for "
+        + "byte), a CSV at sourceUrl, or a support file of an assignment (assignmentPublicID plus "
+        + "filename). From an "
         + "assignment, the file becomes attached to the new dataset and keeps its bytes, its sample and "
         + "its scope, so no student's rows change. The dataset starts unpublished: students see it on the "
         + "course Data page only after update_dataset publishes it, which needs a provenance and a licence. "
@@ -74,22 +80,24 @@ struct CreateDatasetTool: ContentTool {
                 "description": .string("Optional. The terms of use. Publishing needs it."),
             ]),
             "sourceUrl": DatasetToolSchema.sourceURL,
+            "uploadID": DatasetToolSchema.uploadID,
             "note": .object([
                 "type": .string("string"),
                 "description": .string(
-                    "Optional, with sourceUrl. A note on version 1. A promoted file's version 1 is noted "
+                    "Optional, with sourceUrl or uploadID. A note on version 1. A promoted file's version 1 is noted "
                         + "\"Moved from an assignment\"."),
             ]),
             "assignmentPublicID": .object([
                 "type": .string("string"),
                 "description": .string(
-                    "Instead of sourceUrl: the assignment whose support file becomes version 1. It must be in "
+                    "Instead of sourceUrl or uploadID: the assignment whose support file becomes version 1. It must be in "
                         + "the same course."),
             ]),
             "filename": .object([
                 "type": .string("string"),
                 "description": .string(
                     "With sourceUrl: optional, the stored filename (default: the URL's last path segment). "
+                        + "With uploadID: required, the stored filename (a bare name that ends in .csv). "
                         + "With assignmentPublicID: required, the support file to move into the library."),
             ]),
         ],
@@ -114,17 +122,17 @@ struct CreateDatasetTool: ContentTool {
             description: input.description, provenance: input.provenance, licence: input.licence)
 
         let dataset: APICourseDataset
-        switch (input.sourceUrl, input.assignmentPublicID) {
-        case (let url?, nil):
-            let bytes = try await fetch(url, context.request)
-            let upload = CourseDatasetService.Upload(
-                filename: datasetVersionFilename(input.filename, sourceURL: url), bytes: bytes, note: input.note)
+        switch (DatasetVersionSource(sourceUrl: input.sourceUrl, uploadID: input.uploadID), input.assignmentPublicID) {
+        case (let source?, nil):
+            let (upload, staged) = try await source.materialize(
+                filename: input.filename, note: input.note, courseID: courseID, fetch: fetch, context: context)
             dataset = try await datasetLibraryCall {
                 try await CourseDatasetService.create(
                     courseID: courseID, dataset: new, upload: upload,
                     blobs: AssignmentVersionBlobStore(testSetupsDirectory: testSetupsDirectory), on: context.db
                 ).dataset
             }
+            if let staged { await consumeMCPUpload(staged, context: context) }
         case (nil, let publicID?):
             guard let filename = input.filename else {
                 throw MCPToolError.invalidArguments(
@@ -143,7 +151,7 @@ struct CreateDatasetTool: ContentTool {
             }
         default:
             throw MCPToolError.invalidArguments(
-                detail: "Pass exactly one of sourceUrl or assignmentPublicID as the source of version 1.")
+                detail: "Pass exactly one of uploadID, sourceUrl or assignmentPublicID as the source of version 1.")
         }
         return Output(
             courseKey: course.urlKey, courseTerm: course.term?.displayName,
@@ -281,9 +289,12 @@ struct AddDatasetVersionTool: ContentTool {
     struct Input: Decodable, Sendable {
         let courseCode: String
         let slug: String
-        let sourceUrl: String
+        let sourceUrl: String?
         let filename: String?
         let note: String?
+        /// A staged `begin_upload` upload in this course, in place of
+        /// `sourceUrl` (docs/mcp-file-uploads.md).
+        var uploadID: String?
     }
 
     struct Output: Encodable, Sendable {
@@ -301,7 +312,8 @@ struct AddDatasetVersionTool: ContentTool {
 
     static let name = "add_dataset_version"
     static let description =
-        "Add a new version to a library dataset from a CSV at sourceUrl, with an optional note. The "
+        "Add a new version to a library dataset from a CSV, with an optional note. The CSV comes from "
+        + "ONE of uploadID (a file uploaded byte for byte through begin_upload, with filename) or sourceUrl. The "
         + "dictionary prose carries over by column name, and droppedColumns names the columns the new "
         + "file lacks. Bytes equal to an earlier version are refused. Attached assignments keep the "
         + "version they pin, so no grade changes: the result's usage marks each one isBehind, and "
@@ -309,12 +321,13 @@ struct AddDatasetVersionTool: ContentTool {
     static let inputSchema: JSONValue = MCPSchema.object(
         properties: [
             "courseCode": MCPSchema.courseCode, "slug": DatasetToolSchema.slug,
-            "sourceUrl": DatasetToolSchema.sourceURL, "filename": DatasetToolSchema.versionFilename,
+            "sourceUrl": DatasetToolSchema.sourceURL, "uploadID": DatasetToolSchema.uploadID,
+            "filename": DatasetToolSchema.versionFilename,
             "note": .object([
                 "type": .string("string"), "description": .string("Optional. What changed in this version."),
             ]),
         ],
-        required: ["courseCode", "slug", "sourceUrl"])
+        required: ["courseCode", "slug"])
     static let outputSchema: JSONValue? = MCPSchema.object(
         properties: [
             "courseKey": MCPSchema.courseKeyOutput, "courseTerm": MCPSchema.courseTermOutput,
@@ -332,16 +345,20 @@ struct AddDatasetVersionTool: ContentTool {
             code: input.courseCode, context: context, atLeast: CourseRoleFloor.manageCourseDatasets)
         let dataset = try await requireCourseDataset(
             slug: input.slug, courseID: try course.requireID(), context: context)
-        let bytes = try await fetch(input.sourceUrl, context.request)
-        let upload = CourseDatasetService.Upload(
-            filename: datasetVersionFilename(input.filename, sourceURL: input.sourceUrl), bytes: bytes,
-            note: input.note)
+        guard let source = DatasetVersionSource(sourceUrl: input.sourceUrl, uploadID: input.uploadID) else {
+            throw MCPToolError.invalidArguments(
+                detail: "Pass exactly one of uploadID or sourceUrl as the source of the new version.")
+        }
+        let (upload, staged) = try await source.materialize(
+            filename: input.filename, note: input.note, courseID: try course.requireID(), fetch: fetch,
+            context: context)
         let added = try await datasetLibraryCall {
             try await CourseDatasetService.addVersion(
                 to: dataset, upload: upload,
                 blobs: AssignmentVersionBlobStore(testSetupsDirectory: context.request.application.testSetupsDirectory),
                 on: context.db)
         }
+        if let staged { await consumeMCPUpload(staged, context: context) }
         return Output(
             courseKey: course.urlKey, courseTerm: course.term?.displayName, version: added.version.version,
             droppedColumns: added.droppedColumns,

@@ -567,6 +567,10 @@ private func registerLateSchemaMigrations(on app: Application) {
     // default and records "lab" for browser-default sections. Since 2026-11
     // the model maps neither column; a later release drops both.
     app.migrations.add(AddSectionDefaultAssignmentType())
+
+    // Staged MCP file uploads (docs/mcp-file-uploads.md). New table with an
+    // FK to `courses`; no ordering constraint beyond CreateCourses.
+    app.migrations.add(CreateMCPUploads())
 }
 
 /// The data migrations, registered after every schema migration (#1805).

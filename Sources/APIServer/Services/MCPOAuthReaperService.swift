@@ -9,6 +9,8 @@
 //   • oauth_grants — refresh-token grants that are revoked or past their
 //     expiry can never mint again, so they're safe to drop. (Reuse-detection
 //     only consults non-revoked grants, so removing revoked ones is harmless.)
+//   • mcp_uploads — staged begin_upload files (docs/mcp-file-uploads.md) that
+//     expired unused. Each can hold up to 8 MB, so they go too.
 //
 // Only runs when MCP is enabled. Periodic scaffolding lives in
 // `PeriodicSweepMonitor`.
@@ -43,6 +45,9 @@ func reapExpiredMCPOAuthRecords(on db: any Database, logger: Logger, now: Date =
             group.filter(\.$revoked == true).filter(\.$expiresAt < now)
         }
         .delete()
+    // Staged MCP uploads (docs/mcp-file-uploads.md) past their expiry. A used
+    // upload is deleted in-flow; an unused one waits here, holding its bytes.
+    try await MCPUploadService.purgeExpired(on: db, now: now)
     logger.debug("MCP OAuth reaper sweep complete")
 }
 

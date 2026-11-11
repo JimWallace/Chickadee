@@ -117,6 +117,7 @@ struct MCPEnrollmentDenialContractTests {
             #"{"assignmentPublicID":"$A","id":"has_x","kind":"variable_exists","variable":"x"}"#),
         "update_notebook": Sample(#"{"assignmentPublicID":"$A","notebook":$NB}"#),
         "update_solution": Sample(#"{"assignmentPublicID":"$A","notebook":$NB}"#),
+        "begin_upload": Sample(#"{"courseCode":"CS246"}"#),
         "author_script": Sample(#"{"assignmentPublicID":"$A","filename":"test_new.sh","content":"exit 0\n"}"#),
         "delete_support_file": Sample(#"{"assignmentPublicID":"$A","filename":"cases.csv"}"#),
         "create_course_section": Sample(#"{"courseCode":"CS246","name":"Exams"}"#),
