@@ -9,6 +9,13 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.909] - 2026-11-11
+
+### Added
+
+- A bug-hunt class activity (`bugHunt`). The projector shows the share of the bug hunt's items that the class's tests have covered together, and, when the activity carries the code, the code with each item's lines lit once the class covers it. Set it up with MCP `set_activity`. See `docs/bug-hunt-code-map.md`.
+
+
 ## [0.5.908] - 2026-11-11
 
 ### Changed
