@@ -1,0 +1,181 @@
+{
+ "crawled": [
+  "https://harbourclinic.example/",
+  "https://harbourclinic.example/asthma",
+  "https://harbourclinic.example/hours?day=saturday",
+  "https://harbourclinic.example/services/allergy",
+  "https://harbourhealth.example/",
+  "https://harbourhealth.example/pollen",
+  "https://harbourhealth.example/print",
+  "https://start.example/",
+  "https://wheezeless.example/",
+  "https://wheezeless.example/buy",
+  "https://wheezeless.example/proof"
+ ],
+ "graph": {
+  "https://harbourclinic.example/": [
+   "https://harbourclinic.example/asthma",
+   "https://harbourclinic.example/hours?day=saturday",
+   "https://harbourclinic.example/services/allergy"
+  ],
+  "https://harbourclinic.example/asthma": [
+   "https://harbourclinic.example/",
+   "https://harbourhealth.example/pollen"
+  ],
+  "https://harbourclinic.example/hours?day=saturday": [
+   "https://harbourclinic.example/"
+  ],
+  "https://harbourclinic.example/services/allergy": [
+   "https://harbourclinic.example/",
+   "https://harbourclinic.example/asthma",
+   "https://wheezeless.example/"
+  ],
+  "https://harbourhealth.example/": [
+   "https://harbourclinic.example/asthma",
+   "https://harbourhealth.example/pollen"
+  ],
+  "https://harbourhealth.example/pollen": [
+   "https://harbourclinic.example/services/allergy",
+   "https://harbourhealth.example/",
+   "https://harbourhealth.example/print"
+  ],
+  "https://harbourhealth.example/print": [],
+  "https://start.example/": [
+   "https://harbourclinic.example/",
+   "https://harbourhealth.example/"
+  ],
+  "https://wheezeless.example/": [
+   "https://wheezeless.example/buy",
+   "https://wheezeless.example/proof"
+  ],
+  "https://wheezeless.example/buy": [
+   "https://wheezeless.example/",
+   "https://wheezeless.example/proof"
+  ],
+  "https://wheezeless.example/proof": [
+   "https://wheezeless.example/",
+   "https://wheezeless.example/buy"
+  ]
+ },
+ "links": {
+  "https://harbourclinic.example/": [
+   "https://harbourclinic.example/asthma",
+   "https://harbourclinic.example/services/allergy",
+   "https://harbourclinic.example/hours?day=saturday"
+  ],
+  "https://harbourclinic.example/asthma": [
+   "https://harbourclinic.example/",
+   "https://harbourhealth.example/pollen"
+  ],
+  "https://harbourclinic.example/hours?day=saturday": [
+   "https://harbourclinic.example/"
+  ],
+  "https://harbourclinic.example/services/allergy": [
+   "https://harbourclinic.example/asthma",
+   "https://harbourclinic.example/",
+   "https://wheezeless.example/"
+  ],
+  "https://harbourhealth.example/": [
+   "https://harbourhealth.example/pollen",
+   "https://harbourclinic.example/asthma"
+  ],
+  "https://harbourhealth.example/pollen": [
+   "https://harbourhealth.example/",
+   "https://harbourhealth.example/print",
+   "https://harbourclinic.example/services/allergy",
+   "https://harbourhealth.example/pollen/archive"
+  ],
+  "https://harbourhealth.example/print": [],
+  "https://start.example/": [
+   "https://harbourclinic.example/",
+   "https://harbourhealth.example/"
+  ],
+  "https://wheezeless.example/": [
+   "https://wheezeless.example/buy",
+   "https://wheezeless.example/proof"
+  ],
+  "https://wheezeless.example/buy": [
+   "https://wheezeless.example/",
+   "https://wheezeless.example/proof"
+  ],
+  "https://wheezeless.example/proof": [
+   "https://wheezeless.example/",
+   "https://wheezeless.example/buy"
+  ]
+ },
+ "pagerank": {
+  "https://harbourclinic.example/": 0.13007872706939622,
+  "https://harbourclinic.example/asthma": 0.09376339281522422,
+  "https://harbourclinic.example/hours?day=saturday": 0.05342667336993362,
+  "https://harbourclinic.example/services/allergy": 0.07483372678581704,
+  "https://harbourhealth.example/": 0.045020776908885354,
+  "https://harbourhealth.example/pollen": 0.07555430616754652,
+  "https://harbourhealth.example/print": 0.037978087445989295,
+  "https://start.example/": 0.016571034030105868,
+  "https://wheezeless.example/": 0.16751057215663423,
+  "https://wheezeless.example/buy": 0.15263135162523384,
+  "https://wheezeless.example/proof": 0.15263135162523384
+ },
+ "search": {
+  "Clinic": [
+   "https://harbourclinic.example/",
+   "https://harbourclinic.example/asthma",
+   "https://harbourclinic.example/services/allergy",
+   "https://harbourclinic.example/hours?day=saturday",
+   "https://harbourhealth.example/",
+   "https://start.example/"
+  ],
+  "allergy": [
+   "https://harbourclinic.example/",
+   "https://harbourhealth.example/pollen",
+   "https://harbourclinic.example/services/allergy"
+  ],
+  "asthma": [
+   "https://wheezeless.example/",
+   "https://wheezeless.example/buy",
+   "https://wheezeless.example/proof",
+   "https://harbourclinic.example/",
+   "https://harbourclinic.example/asthma",
+   "https://harbourhealth.example/pollen",
+   "https://harbourclinic.example/services/allergy",
+   "https://harbourhealth.example/"
+  ],
+  "asthma cure": [
+   "https://wheezeless.example/",
+   "https://wheezeless.example/buy",
+   "https://wheezeless.example/proof",
+   "https://harbourclinic.example/services/allergy"
+  ],
+  "nothing-matches": [],
+  "pollen forecast": [
+   "https://harbourclinic.example/asthma",
+   "https://harbourhealth.example/pollen",
+   "https://harbourhealth.example/",
+   "https://harbourhealth.example/print"
+  ]
+ },
+ "seed": "https://start.example/",
+ "tiny_graph": {
+  "a": [
+   "b",
+   "c"
+  ],
+  "b": [
+   "c"
+  ],
+  "c": [
+   "a"
+  ],
+  "d": [
+   "c"
+  ],
+  "e": []
+ },
+ "tiny_pagerank": {
+  "a": 0.3590620253962456,
+  "b": 0.18874593910118093,
+  "c": 0.37990287887606744,
+  "d": 0.03614457831325302,
+  "e": 0.03614457831325302
+ }
+}

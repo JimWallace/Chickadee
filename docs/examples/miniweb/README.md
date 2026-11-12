@@ -5,9 +5,10 @@ lecture on how the web works and how web search came about, with stops at
 Waterloo. Part 2 is a lab in which students build a small search engine,
 including PageRank, over a fictional web that ships as a dataset.
 
-Status: **the dataset, the reference solution and a check of the lesson
-exist.** The lecture, the starter notebook, the tests and the placement in the
-course are not written yet. Nothing here needs a Swift change.
+Status: **the dataset, the lab (starter, solution, six tests) and a check of
+the lesson exist.** The lecture is not written, and the lab is not yet an
+assignment in HLTH 230. The unit goes in the back half of the term. Nothing here needs
+a Swift change.
 
 | File | What it is |
 |---|---|
@@ -17,6 +18,11 @@ course are not written yet. Nothing here needs a Swift change.
 | `miniweb.py` | The helper students import: `fetch(url)` returns `(200, html)` or `(404, "")`. |
 | `reference_solution.py` | One function per lab stage. Stdlib only. |
 | `check_story.py` | Runs the reference solution on both webs, prints the lecture's tables, and fails if a claim stops holding. |
+| `build_lab.py` | Writes `starter.ipynb`, `solution.ipynb` and `expected_small.json` from one list of cells. |
+| `starter.ipynb` | What students open (kernel `xpython`). Seven `TODO` regions: one per stage, two in Stage 6. |
+| `solution.ipynb` | The answer key, used to validate the suite. |
+| `expected_small.json` | The answers for `miniweb_small.json`: each page's links, the crawl, the graph, PageRank, eight searches. |
+| `publictest_1_normalize.py` … `publictest_6_search.py` | One public test per stage. |
 
 Regenerate and check:
 
@@ -24,7 +30,38 @@ Regenerate and check:
 cd docs/examples/miniweb
 python3 generate_miniweb.py
 python3 check_story.py
+python3 build_lab.py
 ```
+
+## Setting it up as an assignment
+
+Support files: `miniweb.py`, `miniweb.json`, `miniweb_small.json`,
+`expected_small.json`. Tests: the six `publictest_*.py`, one point each, all
+public. Starter: `starter.ipynb`. Grading: browser. The tests are plain stdlib
+Python, run in well under a second each, and need nothing from the kernel
+environment.
+
+**Each test grades only its own stage.** A test for a later stage replaces the
+earlier stages' functions in the student's module (through the function's
+`__globals__`) with lookups into `expected_small.json` or a table in the test.
+So a broken `normalize` fails Stage 1 and nothing else. Stage 6 still runs the given helpers `extract_text` and `tokenize`, which students do not edit. The fixture holds
+answers, never an algorithm, so a test file that a student reads in the browser
+does not give away an earlier stage.
+
+**Validation.** On 2026-11-12 the suite was run against both notebooks: the
+solution passes 6 of 6 and the unedited starter fails 6 of 6, each with a
+message that names what is wrong. Breaking `normalize`, `extract_links` or
+`crawl` alone in the solution fails only that stage's test. That run extracted
+the notebooks with a stand-in that follows the extractor's rule (definitions
+and imports at top level, side effects under `__main__`), not with
+`RunnerCore` itself. Validating the uploaded setup on the server is the real
+check.
+
+**What a student can see.** The setup is browser-graded, so the tests and
+`expected_small.json` are readable in the developer tools
+(`docs/grading-integrity.md`). The fixture holds the small web's answers. A
+student who hard-codes them passes the tests and learns nothing; the written
+questions run on the main web, which the fixture does not cover.
 
 ## Why a fictional web
 
@@ -127,12 +164,12 @@ marked core of each function.
 
 | Stage | Function | Students learn | Test (on `miniweb_small.json`) |
 |---|---|---|---|
-| 1 | `normalize(url)` | URL anatomy, `urljoin` | a table of hrefs and bases against canonical answers |
-| 2 | `extract_links(base, html)` | HTML structure, `html.parser` | the links of three pages, in order; non-http schemes dropped |
+| 1 | `normalize(url)` | URL anatomy, `urlsplit` | ten URLs against their canonical forms |
+| 2 | `extract_links(base, html)` | relative links, `urljoin` | one page with every kind of href: order and duplicates kept, `mailto:` and `tel:` dropped |
 | 3 | `crawl(seed)` | breadth-first search, a visited set, 404s | all 11 pages reached, nothing outside the web |
 | 4 | `build_graph(pages)` | a graph as a dict of sets | the exact edge set |
-| 5 | `pagerank(graph)` | power iteration, damping, dangling pages | ranks within `1e-6`, summing to 1 |
-| 6 | `search(query, ...)` | an inverted index, sorting by score | the top results for two queries |
+| 5 | `pagerank(graph)` | power iteration, damping, dangling pages | ranks within `1e-6` on a five-page graph and on the test web |
+| 6 | `build_index(pages)`, `search(query, ...)` | an inverted index, sorting by score | eight searches, including a tie, a limit `k` and an empty query |
 
 The reference solution is stdlib only (`html.parser`, `urllib.parse`,
 `collections.deque`), so it runs in the browser kernel, which has no
@@ -154,18 +191,12 @@ worker if that matters.
 
 ## When in the course
 
-HLTH 230-W27 has Labs 0 to 9, Assignments 0 to 4 and five class activities
-(`docs/assignment-types.md`). The lab needs functions, loops, strings,
-dictionaries and sets. It needs no pandas.
-
-| Option | Lecture | Lab | For | Against |
-|---|---|---|---|---|
-| A. Capstone | Last weeks of term | Directly after | Uses everything students know; the history makes a good closing lecture | Competes with exam review and the final assignment |
-| B. Mid-term | Right after the lab that introduces dictionaries and sets | The next lab slot | Practises dictionaries on something other than a table; a break from data frames | Students have less programming behind them |
-| C. Split | Early, with "where data comes from" | Later, as in A or B | The "how the web works" material helps from the start | Two months between the history and the algorithm |
-
-The course schedule is not in this repository, so the choice is the
-maintainer's.
+**The back half of the term** (decided 2026-11-12). HLTH 230-W27 has Labs 0 to
+9, Assignments 0 to 4 and five class activities (`docs/assignment-types.md`).
+The lab needs functions, loops, strings, dictionaries and sets, and no pandas,
+so any back-half lab slot works once dictionaries and sets are taught. The
+lecture belongs in the same week as the lab, or the week before. The exact slot
+waits on the W27 schedule, which is not in this repository.
 
 ## Sources for the history pages
 
