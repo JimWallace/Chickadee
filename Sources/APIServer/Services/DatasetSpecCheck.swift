@@ -83,8 +83,11 @@ func datasetSpecRefusal(
 /// FHIR spec, or any spec on a file named as FHIR, gets the format's save-time
 /// checks there too: the name, the settings and the file's structure.
 func datasetFormatRefusal(_ spec: DatasetSpec, zipPath: String) async -> String? {
-    guard formatNeedsCheck(spec) else { return nil }
-    if let issue = DatasetSpecValidation.unknownFormatIssue(with: spec) { return issue }
+    // A format this server does not know cannot be checked here. The zip
+    // brings the whole manifest, so the spec may be one the upload never
+    // touched; it is carried as written and delivered whole
+    // (docs/dataset-kinds-plan.md §5).
+    guard formatNeedsCheck(spec), spec.unknownFormat == nil else { return nil }
     guard let data = await extractZipEntry(zipPath: zipPath, entryName: spec.file) else {
         return "Dataset file '\(spec.file)' is not among this assignment's bundled files."
     }

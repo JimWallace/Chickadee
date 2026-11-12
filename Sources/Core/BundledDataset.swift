@@ -58,10 +58,7 @@ public struct BundledDataset: Codable, Sendable, Equatable {
         // (docs/dataset-kinds-plan.md §5).
         let rawFormat = try c.decodeIfPresent(String.self, forKey: .format)
         if let rawFormat, DatasetFormat(rawValue: rawFormat) == nil {
-            throw DecodingError.dataCorruptedError(
-                forKey: .format, in: c,
-                debugDescription: "The dataset '\(slug)' has the format '\(rawFormat)', which this server does not "
-                    + "know. Import the bundle into the server that exported it, or a newer one.")
+            throw BundledDatasetFormatError.unknownFormat(slug: slug, format: rawFormat)
         }
         format = rawFormat.flatMap(DatasetFormat.init(rawValue:)) ?? .csv
     }

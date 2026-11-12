@@ -86,6 +86,15 @@ public struct DatasetSpec: Codable, Equatable, Sendable {
     /// `capabilities`.
     public let unknownFormat: String?
 
+    /// The stored format value, as written: an unknown one too. What a tool
+    /// or a page reports, so a format this server does not know is not shown
+    /// as CSV.
+    public var formatName: String { unknownFormat ?? format.rawValue }
+
+    /// The media type of the delivered file. A format this server does not
+    /// know is sent as bytes.
+    public var mediaType: String { unknownFormat == nil ? format.mediaType : "application/octet-stream" }
+
     /// What this spec's format lets it do. A spec of an unknown format
     /// selects nothing.
     public var capabilities: DatasetCapabilities {
@@ -96,7 +105,7 @@ public struct DatasetSpec: Codable, Equatable, Sendable {
         file: String, kind: DatasetKind = .rowSample, sampleSize: Int? = nil,
         stratumColumn: String? = nil, transforms: [DatasetTransform] = [],
         source: DatasetSource? = nil, scope: DatasetSliceScope = .assignment, partCount: Int? = nil,
-        format: DatasetFormat = .csv
+        format: DatasetFormat = .csv, unknownFormat: String? = nil
     ) {
         self.file = file
         self.kind = kind
@@ -107,7 +116,7 @@ public struct DatasetSpec: Codable, Equatable, Sendable {
         self.scope = scope
         self.partCount = partCount
         self.format = format
-        self.unknownFormat = nil
+        self.unknownFormat = unknownFormat
     }
 
     /// A rebuild that carries `unknownFormat`, for the rebuilds in this file.

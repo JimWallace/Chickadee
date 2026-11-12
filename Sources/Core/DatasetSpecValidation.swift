@@ -152,7 +152,7 @@ public enum DatasetSpecValidation {
             return "'\(proposed.file)': whether a dataset gives the same rows in every assignment "
                 + "cannot be changed here."
         }
-        if proposed.format != (stored?.format ?? .csv) {
+        if proposed.format != (stored?.format ?? .csv) || proposed.unknownFormat != stored?.unknownFormat {
             return "'\(proposed.file)': the dataset's format is set when it is attached from the course "
                 + "library, and cannot be changed here."
         }

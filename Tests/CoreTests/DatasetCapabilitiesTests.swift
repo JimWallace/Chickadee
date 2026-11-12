@@ -70,13 +70,22 @@ import Testing
         let json =
             #"{"slug":"feed","name":"Feed","isPublished":false,"currentVersion":1,"versions":[],"#
             + #""format":"jsonRecords"}"#
-        do {
-            _ = try JSONDecoder().decode(BundledDataset.self, from: Data(json.utf8))
-            Issue.record("An unknown format was accepted")
-        } catch DecodingError.dataCorrupted(let context) {
-            #expect(context.debugDescription.contains("'feed'"))
-            #expect(context.debugDescription.contains("'jsonRecords'"))
+        #expect(throws: BundledDatasetFormatError.unknownFormat(slug: "feed", format: "jsonRecords")) {
+            try JSONDecoder().decode(BundledDataset.self, from: Data(json.utf8))
         }
+    }
+
+    /// An edit that drops an unknown format, or a rebuild that carries it,
+    /// cannot store the spec as CSV.
+    @Test func anEditCannotTurnAnUnknownFormatIntoCSV() throws {
+        let stored = try JSONDecoder().decode(DatasetSpec.self, from: Data(Self.futureSpec.utf8))
+        let dropped = DatasetSpec(file: stored.file, sampleSize: 3)
+        #expect(DatasetSpecValidation.libraryFieldIssue(proposed: dropped, stored: stored) != nil)
+        let carried = DatasetSpec(file: stored.file, sampleSize: 3, unknownFormat: stored.unknownFormat)
+        #expect(DatasetSpecValidation.libraryFieldIssue(proposed: carried, stored: stored) == nil)
+        #expect(DatasetSpecValidation.issue(with: carried, sourceCSV: "a\n1\n") != nil)
+        #expect(stored.formatName == "jsonRecords")
+        #expect(stored.mediaType == "application/octet-stream")
     }
 
     @Test func aSettingTheFormatLacksIsRefusedByTheCapabilityCheck() {

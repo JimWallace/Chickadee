@@ -170,7 +170,7 @@ struct GetSupportFilesTool: ContentTool {
                         datasetScope: datasetSpecs[name]?.scope.rawValue,
                         datasetPartCount: datasetSpecs[name]?.partCount,
                         datasetDelivery: datasetSpecs[name]?.deliveryMode.rawValue,
-                        datasetFormat: datasetSpecs[name]?.format.rawValue))
+                        datasetFormat: datasetSpecs[name]?.formatName))
             }
             return Output(
                 assignmentPublicID: assignment.publicID,

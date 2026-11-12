@@ -102,7 +102,7 @@ struct AttachedDatasetDTO: Encodable, Sendable {
     /// Nil for a spec that does not come from the library.
     init?(_ spec: DatasetSpec) {
         guard let source = spec.source else { return nil }
-        format = spec.format.rawValue
+        format = spec.formatName
         file = spec.file
         slug = source.slug
         version = source.version

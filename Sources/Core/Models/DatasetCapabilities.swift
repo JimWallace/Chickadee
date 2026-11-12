@@ -7,7 +7,7 @@
 // without turning on everything else.
 
 /// The selection settings a dataset file accepts.
-public struct DatasetCapabilities: Equatable, Sendable {
+public struct DatasetCapabilities: Codable, Equatable, Sendable {
     /// A per-student sample of units (`sampleSize`).
     public let sample: Bool
     /// A sample balanced across a column's values (`stratumColumn`).
