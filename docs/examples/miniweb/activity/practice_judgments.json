@@ -1,0 +1,41 @@
+{
+ "diabetes": {
+  "https://eastgateclinic.example/": 1,
+  "https://jhi.example/articles/007": 1,
+  "https://livingwithdiabetes.example/": 1,
+  "https://livingwithdiabetes.example/posts/my-first-pump": 1,
+  "https://maplevalleyhospital.example/departments/diabetes": 2
+ },
+ "flu vaccine": {
+  "https://jhi.example/articles/001": 1,
+  "https://livingwithdiabetes.example/posts/flu-season": 1,
+  "https://publichealth.example/topics/flu": 2,
+  "https://publichealth.example/topics/flu/clinics": 2,
+  "https://publichealth.example/topics/flu/fact-sheet": 1,
+  "https://publichealth.example/topics/vaccines": 1,
+  "https://riverbendpharmacy.example/flu-shots": 2
+ },
+ "heat warning": {
+  "https://jhi.example/articles/004": 1,
+  "https://publichealth.example/topics/heat": 2,
+  "https://runnersknee.example/posts/heat-running": 1
+ },
+ "history of search": {
+  "https://searchhistory.example/": 2,
+  "https://searchhistory.example/archie": 1,
+  "https://searchhistory.example/backrub": 1,
+  "https://searchhistory.example/directories": 1,
+  "https://searchhistory.example/oed": 1,
+  "https://searchhistory.example/open-text": 1
+ },
+ "measles": {
+  "https://jhi.example/articles/002": 1,
+  "https://newparentnotes.example/posts/vaccine-schedule": 1,
+  "https://publichealth.example/topics/measles": 2,
+  "https://publichealth.example/topics/travel": 1,
+  "https://publichealth.example/topics/vaccines": 1
+ },
+ "visiting hours": {
+  "https://maplevalleyhospital.example/visiting": 2
+ }
+}

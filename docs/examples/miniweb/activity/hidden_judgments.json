@@ -1,0 +1,65 @@
+{
+ "asthma": {
+  "https://jhi.example/articles/003": 1,
+  "https://maplevalleyhospital.example/departments/respiratory": 2,
+  "https://publichealth.example/topics/air-quality": 2
+ },
+ "boil water": {
+  "https://publichealth.example/topics/water": 2
+ },
+ "cheriton": {
+  "https://searchhistory.example/cheriton": 2,
+  "https://searchhistory.example/google-founding": 1
+ },
+ "emergency": {
+  "https://jhi.example/articles/003": 1,
+  "https://jhi.example/articles/020": 1,
+  "https://maplevalleyhospital.example/departments/emergency": 2,
+  "https://newparentnotes.example/posts/fever": 1
+ },
+ "flu": {
+  "https://livingwithdiabetes.example/posts/flu-season": 1,
+  "https://maplevalleyhospital.example/departments/respiratory": 1,
+  "https://publichealth.example/topics/flu": 2,
+  "https://publichealth.example/topics/flu/clinics": 1,
+  "https://publichealth.example/topics/flu/fact-sheet": 1,
+  "https://riverbendpharmacy.example/flu-shots": 1
+ },
+ "flu cure": {
+  "https://maplevalleyhospital.example/departments/respiratory": 1,
+  "https://publichealth.example/topics/flu": 2,
+  "https://publichealth.example/topics/flu/fact-sheet": 1
+ },
+ "food poisoning": {
+  "https://jhi.example/articles/018": 1,
+  "https://publichealth.example/topics/food-safety": 2,
+  "https://publichealth.example/topics/handwashing": 1
+ },
+ "mental health": {
+  "https://campusclinic.example/": 1,
+  "https://maplevalleyhospital.example/departments/mental-health": 2,
+  "https://publichealth.example/topics/mental-health": 2
+ },
+ "pagerank": {
+  "https://jhi.example/articles/010": 1,
+  "https://searchhistory.example/after-pagerank": 1,
+  "https://searchhistory.example/backrub": 2,
+  "https://searchhistory.example/citation-analysis": 1,
+  "https://searchhistory.example/pagerank-patent": 2
+ },
+ "quit smoking": {
+  "https://jhi.example/articles/019": 1,
+  "https://publichealth.example/topics/smoking": 2
+ },
+ "travel vaccines": {
+  "https://campusclinic.example/": 1,
+  "https://publichealth.example/topics/measles": 1,
+  "https://publichealth.example/topics/travel": 2,
+  "https://publichealth.example/topics/vaccines": 1
+ },
+ "wildfire smoke": {
+  "https://jhi.example/articles/003": 1,
+  "https://publichealth.example/topics/air-quality": 2,
+  "https://runnersknee.example/posts/air-quality-days": 1
+ }
+}

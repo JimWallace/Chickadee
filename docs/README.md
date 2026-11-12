@@ -66,6 +66,8 @@ not exist.
 - [fhir-datasets-plan.md](fhir-datasets-plan.md) — plan, not built: FHIR NDJSON datasets in the course library, shared first and sampled by patient later, and a simulated live clinical feed
 - [dataset-shared-delivery.md](dataset-shared-delivery.md) — link a dataset that is the same for many students into the editor working copy instead of writing a copy per student: a whole file to the shared extraction (step 1), a partition part to a part stored once (step 2)
 - [examples/r-lab9-trial/](examples/r-lab9-trial/) — a worked R lab: starter, solution, data and test scripts for each tier
+- [examples/miniweb/](examples/miniweb/) — an HLTH 230 unit on how the web works and a search-engine lab: a generated fictional web (URL to HTML), starter and solution notebooks, six stage tests, and a check of the link farm lesson
+- [examples/miniweb/activity/](examples/miniweb/activity/README.md) — a 50-minute `bestMetric` contest after the lab: students write one `score(features)` function, graded by nDCG@5 on hidden health queries whose judgments are grader-only on the worker
 
 ## Courses, roles and students
 
