@@ -967,6 +967,18 @@ coordination, and each must see every edit.
     `datasetDelivery`. A `shared` dataset is a link to the shared extraction
     in the working copy; a `perStudent` one is a real file
     (`docs/dataset-shared-delivery.md`).
+  - A library attachment's sample that covers its whole file is not stored:
+    `applyDatasetsEdit` (the web and `set_dataset`) and the library attach
+    pass it through `DatasetWholeFileNormalization.swift`, which drops the
+    sample and keeps the spec. The mode therefore turns `shared`, so the
+    working-copy writer links the file and a ranked activity (`isShared`)
+    accepts it. The coherence check runs on the normalized specs. A plain
+    file's spec is never dropped by this: `StudentDatasetDelivery` and the
+    submit page's dataset links (`SubmitDatasetLink`) read "a spec exists",
+    and an upload-only student receives the file only through them. The
+    update to another version keeps its sample. Any new door that saves a
+    library spec must call `normalizedForSave`. `WholeFileSampleCheck` and
+    the MCP warnings use the same rule (`DatasetWholeFileSample.deliversWholeFile`).
   - A write never goes through a dataset link:
     `DatasetWorkingCopyPlacement.write` removes the link first. A change of
     mode is reconciled on the next visit by `datasetTargetIsCurrent`, which

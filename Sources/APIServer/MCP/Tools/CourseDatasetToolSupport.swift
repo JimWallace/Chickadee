@@ -96,6 +96,10 @@ struct AttachedDatasetDTO: Encodable, Sendable {
     let stratumColumn: String?
     /// The number of parts of a partition; nil for the other kinds.
     let partCount: Int?
+    /// A `DatasetDeliveryMode` raw value: "shared" when every student reads
+    /// one linked copy, "perPart", or "perStudent" when each student stores a
+    /// file of their own.
+    let datasetDelivery: String
     /// A `DatasetFormat` raw value.
     let format: String
 
@@ -110,6 +114,7 @@ struct AttachedDatasetDTO: Encodable, Sendable {
         sampleSize = spec.sampleSize
         stratumColumn = spec.stratumColumn
         partCount = spec.partCount
+        datasetDelivery = spec.deliveryMode.rawValue
     }
 }
 
@@ -142,9 +147,9 @@ enum DatasetToolSchema {
         properties: [
             "file": MCPSchema.string, "slug": MCPSchema.string, "version": MCPSchema.integer,
             "scope": MCPSchema.string, "sampleSize": MCPSchema.integer, "stratumColumn": MCPSchema.string,
-            "partCount": MCPSchema.integer, "format": format,
+            "partCount": MCPSchema.integer, "format": format, "datasetDelivery": MCPSchema.string,
         ],
-        required: ["file", "slug", "version", "scope", "format"], additionalProperties: nil)
+        required: ["file", "slug", "version", "scope", "format", "datasetDelivery"], additionalProperties: nil)
 
     /// A dataset's format. The enum is derived, so it cannot fall behind
     /// `DatasetFormat`.

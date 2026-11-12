@@ -29,7 +29,9 @@ import Vapor
                 ("test_a.sh", "exit 0\n"),
                 ("assignment.ipynb", "{}"),
                 ("solution.ipynb", "{}"),
-                ("cases.csv", "caseid,age\n1,20\n2,30\n3,40\n"),
+                // Five rows, so a sample of 3 is a real sample: one that
+                // covers every row is stored as no sample.
+                ("cases.csv", "caseid,age\n1,20\n2,30\n3,40\n4,20\n5,30\n"),
             ])
         return assignment
     }
