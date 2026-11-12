@@ -9,6 +9,59 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.920] - 2026-11-12
+
+### Added
+
+- **A dataset format, and FHIR NDJSON in Core.** A dataset spec now records its
+  format, CSV or FHIR NDJSON. A stored manifest keeps its bytes, because the
+  format is written only when it is not CSV. A FHIR NDJSON file is delivered
+  whole and byte for byte to every student. Saving a FHIR spec refuses a
+  sample, a partition, a stratum and transforms, and checks that each line is
+  a JSON object with a resource type and an id. Core also summarizes a FHIR
+  file (resource counts and the codes in use) and pretty-prints one resource
+  without reordering it. Nothing can attach a FHIR dataset yet; the course
+  library gains the format next (docs/fhir-datasets-plan.md).
+
+### Added
+
+- **The course dataset library records a format.** A library dataset is now
+  CSV or FHIR NDJSON, set when it is created and kept for every version. A FHIR
+  version is checked as FHIR at upload and stores a summary: its patient count,
+  its resource types and the codes in use. Attaching a FHIR dataset delivers
+  the whole file and refuses a sample. Moving a `.ndjson` support file into
+  the library makes a FHIR dataset. A course clone and a course bundle carry
+  the format; a bundle with a FHIR dataset is version 3, which an older server
+  refuses. The staff download names a FHIR version `.ndjson`. The pages and
+  the MCP tools offer the choice in a later release
+  (docs/fhir-datasets-plan.md).
+
+### Added
+
+- **The MCP dataset tools handle FHIR NDJSON.** `create_dataset` takes a
+  `format` of `csv` or `fhirNdjson`. It refuses a filename of the other format
+  with a message that names `format`. `list_datasets` reports each dataset's
+  format. `get_dataset` also reports a FHIR dataset's summary: patients,
+  resource types, codes in use, descriptions and the example resource. For a FHIR dataset,
+  `get_dataset` shows the first resource lines. `update_dataset` describes a
+  FHIR dataset by `entries`, which are resource types and codes, and by
+  `example`. `attach_dataset`, `get_assignment` and `get_support_files` report
+  the attached file's format. The `initialize` instructions describe FHIR
+  datasets (docs/fhir-datasets-plan.md §7).
+
+### Added
+
+- **The dataset pages handle FHIR NDJSON.** The Datasets tab's upload form asks
+  for the format. A FHIR dataset's page lists its resource types and codes, each
+  with a description field. It also shows the example resource that the Data
+  page displays, and the instructor can pick a different one. The student Data
+  page shows the patient count, the resource types and the codes grouped by
+  system (LOINC, SNOMED CT, ICD-10), with the example pretty-printed. The
+  student's copy downloads as `mine.ndjson`. In the assignment editor's Files
+  panel, a FHIR dataset has no sample fields, and a `.ndjson` support file can
+  be moved into the course library (docs/fhir-datasets-plan.md).
+
+
 ## [0.5.919] - 2026-11-12
 
 ### Changed
