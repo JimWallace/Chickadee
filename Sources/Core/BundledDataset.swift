@@ -52,7 +52,18 @@ public struct BundledDataset: Codable, Sendable, Equatable {
         isPublished = try c.decode(Bool.self, forKey: .isPublished)
         currentVersion = try c.decode(Int.self, forKey: .currentVersion)
         versions = try c.decode([BundledDatasetVersion].self, forKey: .versions)
-        format = try c.decodeIfPresent(DatasetFormat.self, forKey: .format) ?? .csv
+        // An unknown format is refused by name, so a later format needs no
+        // new bundle schemaVersion: version 3 means "datasets carry a
+        // format", and a reader that does not know one says which
+        // (docs/dataset-kinds-plan.md §5).
+        let rawFormat = try c.decodeIfPresent(String.self, forKey: .format)
+        if let rawFormat, DatasetFormat(rawValue: rawFormat) == nil {
+            throw DecodingError.dataCorruptedError(
+                forKey: .format, in: c,
+                debugDescription: "The dataset '\(slug)' has the format '\(rawFormat)', which this server does not "
+                    + "know. Import the bundle into the server that exported it, or a newer one.")
+        }
+        format = rawFormat.flatMap(DatasetFormat.init(rawValue:)) ?? .csv
     }
 
     public func encode(to encoder: any Encoder) throws {

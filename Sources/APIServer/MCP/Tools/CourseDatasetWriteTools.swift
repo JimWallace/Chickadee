@@ -331,7 +331,9 @@ struct UpdateDatasetTool: ContentTool {
                         licence: input.licence),
                     on: db)
                 if let columns = input.columns {
-                    guard dataset.format == .csv else {
+                    switch dataset.format {
+                    case .csv: break
+                    case .fhirNdjson:
                         throw CourseDatasetError.dictionary(
                             "'\(dataset.slug)' is a FHIR dataset, which has no columns. Describe it with entries.")
                     }
@@ -356,7 +358,9 @@ struct UpdateDatasetTool: ContentTool {
     private static func updateEntries(
         _ input: Input, of dataset: APICourseDataset, blobs: AssignmentVersionBlobStore, on db: any Database
     ) async throws {
-        guard dataset.format == .fhirNdjson else {
+        switch dataset.format {
+        case .fhirNdjson: break
+        case .csv:
             throw CourseDatasetError.dictionary(
                 "'\(dataset.slug)' is a CSV dataset. Describe its columns with columns, not entries.")
         }

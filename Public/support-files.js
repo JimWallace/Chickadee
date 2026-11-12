@@ -145,11 +145,12 @@
                 // part count and where to edit it, and the toggle is locked so
                 // one click cannot end the partition. An attached file's toggle
                 // (data-lock="attached") stays locked: detach ends it.
-                // A format other than CSV is delivered whole, so it has no
-                // sample fields (DatasetFormat.supportsSelection). The spec
-                // names its format only when it is not CSV.
+                // A format that takes no sample (FHIR) has no sample fields.
+                // The row says so in data-dataset-sample, from the format's
+                // capabilities (DatasetCapabilities), so this script needs no
+                // list of formats.
                 var partitioned = !!spec && spec.kind === 'partition';
-                var whole = !!spec && !!spec.format && spec.format !== 'csv';
+                var whole = !!spec && row.getAttribute('data-dataset-sample') === 'off';
                 var sampled = !!spec && !partitioned && !whole;
                 var attached = !!(toggle.dataset && toggle.dataset.lock === 'attached');
                 toggle.disabled = attached || partitioned;

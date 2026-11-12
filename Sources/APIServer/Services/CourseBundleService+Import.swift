@@ -66,6 +66,10 @@ extension CourseBundleService {
         let manifest: CourseBundleManifest
         do {
             manifest = try decoder.decode(CourseBundleManifest.self, from: manifestData)
+        } catch DecodingError.dataCorrupted(let context) {
+            // A refusal the manifest's own decoder words, such as a dataset
+            // format this server does not know, reaches the admin as written.
+            throw AppError.invalidParameter(name: "bundle.json", reason: context.debugDescription)
         } catch {
             throw AppError.invalidParameter(name: "bundle.json", reason: "\(error)")
         }

@@ -98,7 +98,7 @@ extension DraftAssignmentRoutes {
                     datasetStratumColumn: row.datasetStratumColumn,
                     datasetTransforms: row.datasetTransforms,
                     datasetPartCount: row.datasetPartCount,
-                    datasetFormat: row.datasetFormat
+                    datasetCapabilities: row.datasetCapabilities
                 )
             }
     }

@@ -27,7 +27,9 @@ extension CourseDatasetService {
         _ dataset: APICourseDataset, version number: Int, edit: FHIRDictionaryEdit,
         blobs: AssignmentVersionBlobStore, on db: any Database
     ) async throws -> APICourseDatasetVersion {
-        guard dataset.format == .fhirNdjson else {
+        switch dataset.format {
+        case .fhirNdjson: break
+        case .csv:
             throw CourseDatasetError.dictionary("'\(dataset.slug)' is a CSV dataset. Describe its columns instead.")
         }
         guard let version = try await version(number, of: dataset, on: db) else {

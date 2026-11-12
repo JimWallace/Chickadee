@@ -34,12 +34,15 @@ public enum DatasetDeliveryMode: String, Codable, Sendable, Equatable, CaseItera
     /// partition is `perStudent`; so is a partition with no part count, which
     /// authoring refuses and which the materializer would deliver whole.
     ///
-    /// A format the materializer does not select from (`supportsSelection`)
-    /// is `shared` whatever the other settings say, because the materializer
-    /// delivers it whole (docs/fhir-datasets-plan.md §11, decision 1). That is
-    /// the safe direction too: the bytes really are the same for everyone.
-    public init(format: DatasetFormat, isPartition: Bool, partCount: Int?, sampleSize: Int?, hasTransforms: Bool) {
-        if !format.supportsSelection {
+    /// A spec whose capabilities select nothing is `shared` whatever the
+    /// other settings say, because the materializer delivers it whole
+    /// (docs/fhir-datasets-plan.md §11, decision 1). That is the safe
+    /// direction too: the bytes really are the same for everyone.
+    public init(
+        capabilities: DatasetCapabilities, isPartition: Bool, partCount: Int?, sampleSize: Int?,
+        hasTransforms: Bool
+    ) {
+        if !capabilities.selects {
             self = .shared
         } else if isPartition {
             self = !hasTransforms && (partCount ?? 0) > 0 ? .perPart : .perStudent
@@ -53,7 +56,7 @@ extension DatasetSpec {
     /// How this file is stored in a student's working copy.
     public var deliveryMode: DatasetDeliveryMode {
         DatasetDeliveryMode(
-            format: format, isPartition: kind == .partition, partCount: partCount, sampleSize: sampleSize,
+            capabilities: capabilities, isPartition: kind == .partition, partCount: partCount, sampleSize: sampleSize,
             hasTransforms: !transforms.isEmpty)
     }
 }

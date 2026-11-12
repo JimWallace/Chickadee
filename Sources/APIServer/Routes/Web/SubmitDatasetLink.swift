@@ -16,8 +16,8 @@ struct SubmitDatasetLink: Sendable {
 
     init(spec: DatasetSpec, setupID: String) {
         filename = spec.file
-        if !spec.format.supportsSelection {
-            rowsText = "every patient"
+        if !spec.capabilities.selects {
+            rowsText = "every \(spec.capabilities.unitName)"
         } else if let partCount = spec.partCount, spec.kind == .partition {
             rowsText = "one part of \(partCount)"
         } else {

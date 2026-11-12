@@ -41,7 +41,7 @@ public enum DatasetMaterializer {
         // (docs/fhir-datasets-plan.md §11, decision 1). Authoring refuses
         // every selecting setting on it; one that arrives through a
         // whole-manifest door is ignored here rather than read as CSV.
-        guard spec.format.supportsSelection else { return source }
+        guard spec.capabilities.selects else { return source }
         let selected = select(source: source, spec: spec, seedHex: seedHex, part: spec.part(forDeal: dealNumber))
         guard !spec.transforms.isEmpty else { return selected }
         return spec.transforms.enumerated().reduce(selected) { csv, step in

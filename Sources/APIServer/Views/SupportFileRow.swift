@@ -17,7 +17,12 @@ struct SupportFileRow: HTML {
     let file: EditableSuiteRow
 
     var body: some HTML {
-        tr(.data("support-file", value: file.name)) {
+        // The panel script reads whether the file's format takes a sample
+        // here, rather than knowing the formats itself.
+        tr(
+            .data("support-file", value: file.name),
+            .data("dataset-sample", value: file.datasetCapabilities.sample ? "on" : "off")
+        ) {
             if let attachment {
                 td { DatasetNameCell(attachment: attachment) }
             } else {
@@ -29,7 +34,8 @@ struct SupportFileRow: HTML {
                     datasetControl
                 }
                 if let library = file.library {
-                    SupportFileLibraryControl(filename: file.name, library: library, format: file.datasetFormat)
+                    SupportFileLibraryControl(
+                        filename: file.name, library: library, capabilities: file.datasetCapabilities)
                 }
             }
             td(.class("time")) {
@@ -58,7 +64,7 @@ struct SupportFileRow: HTML {
     /// partition has no sample, and the panel has no field for its parts. A
     /// format that is delivered whole (FHIR) has no sample either.
     private var hiddenUnlessSampled: [MarkupAttribute<HTMLTag.span>] {
-        file.isDataset && file.datasetPartCount == nil && file.datasetFormat.supportsSelection ? [] : [.hidden]
+        file.isDataset && file.datasetPartCount == nil && file.datasetCapabilities.sample ? [] : [.hidden]
     }
 
     /// Whether the row shows the per-student control. A FHIR file that is not
@@ -66,7 +72,7 @@ struct SupportFileRow: HTML {
     /// course library (docs/fhir-datasets-plan.md §7), so its row shows only
     /// "Move to course library".
     private var offersDatasetControl: Bool {
-        file.isDataset || !DatasetFormat.fhirNdjson.matches(filename: file.name)
+        file.isDataset || !DatasetFormat.candidates(forFilename: file.name).contains(where: \.entersThroughLibrary)
     }
 
     /// `disabled` on the derivation inputs when an agent wrote steps the panel
@@ -211,14 +217,14 @@ private struct AttachedDatasetActions: HTML {
 private struct SupportFileLibraryControl: HTML {
     let filename: String
     let library: SupportFileLibraryState
-    /// The attached spec's format. A format delivered whole gives every
-    /// student the whole file, so whose seed picks the rows does not apply
-    /// and the scope box is not shown.
-    let format: DatasetFormat
+    /// What the attached spec's format lets it do. A spec that selects
+    /// nothing gives every student the whole file, so whose seed picks the
+    /// rows does not apply and the scope box is not shown.
+    let capabilities: DatasetCapabilities
 
     var body: some HTML {
         if let attachment = library.attachment {
-            if format.supportsSelection {
+            if capabilities.selects {
                 scopeControl(attachment)
             }
         } else {

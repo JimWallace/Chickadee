@@ -30,7 +30,7 @@ function makeInput(value = '', disabled = false) {
 }
 
 /// One `tr[data-support-file]` carrying the control's six elements.
-function makeRow(filename) {
+function makeRow(filename, sample = 'on') {
   const parts = {
     '.js-dataset-toggle': makeInput(),
     '.js-dataset-size-field': makeInput(),
@@ -50,7 +50,12 @@ function makeRow(filename) {
   const row = {
     filename,
     parts,
-    getAttribute: (name) => (name === 'data-support-file' ? filename : null),
+    getAttribute: (name) => {
+      if (name === 'data-support-file') return filename;
+      // SupportFileRow writes the format's sample capability here.
+      if (name === 'data-dataset-sample') return sample;
+      return null;
+    },
     querySelector: (sel) => parts[sel] || null,
   };
   Object.keys(parts).forEach((sel) => {
@@ -68,7 +73,8 @@ function load({ specs = [], diagnostics = null, filename = 'ed_feed.ndjson', loc
   const bodyHandlers = {};
   let stored = specs.slice();
 
-  const rows = [makeRow(filename)];
+  // A .ndjson file is FHIR, whose format takes no sample.
+  const rows = [makeRow(filename, filename.endsWith('.ndjson') ? 'off' : 'on')];
   // The server marks a locked toggle with data-lock (SupportFileRow).
   if (lock) rows[0].parts['.js-dataset-toggle'].dataset = { lock };
   const doc = {

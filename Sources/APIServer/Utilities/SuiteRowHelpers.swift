@@ -109,7 +109,7 @@ func currentSetupFiles(
             datasetStratumColumn: datasetSpecs[name]?.stratumColumn,
             datasetTransforms: datasetSpecs[name]?.transforms ?? [],
             datasetPartCount: datasetSpecs[name]?.partCount,
-            datasetFormat: datasetSpecs[name]?.format ?? .csv
+            datasetCapabilities: datasetSpecs[name]?.capabilities ?? .table
         )
     }
 
@@ -174,7 +174,7 @@ func editableSuiteRowsForSetup(_ setup: APITestSetup) async -> [EditableSuiteRow
             datasetStratumColumn: datasetSpecs[name]?.stratumColumn,
             datasetTransforms: datasetSpecs[name]?.transforms ?? [],
             datasetPartCount: datasetSpecs[name]?.partCount,
-            datasetFormat: datasetSpecs[name]?.format ?? .csv
+            datasetCapabilities: datasetSpecs[name]?.capabilities ?? .table
         )
     }
     .sorted { lhs, rhs in
