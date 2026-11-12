@@ -35,7 +35,8 @@ struct ListDatasetsTool: ContentTool {
         + "and copied into each assignment that attaches it. Its format is csv, with a column dictionary "
         + "in columns, or fhirNdjson, FHIR R4 resources one per line, whose summary (patients, resource "
         + "types, codes in use, the instructor's descriptions and the example resource) get_dataset "
-        + "returns as fhir; a FHIR version's rowCount counts patients."
+        + "returns as summary ({descriptionVersion, format, fhirNdjson}); a FHIR version's rowCount counts "
+        + "patients."
     static let inputSchema: JSONValue = MCPSchema.object(
         properties: ["courseCode": MCPSchema.courseCode], required: ["courseCode"])
     static let outputSchema: JSONValue? = MCPSchema.object(
@@ -112,7 +113,7 @@ struct GetDatasetTool: ContentTool {
         + "the rows of the uploaded file. A student "
         + "receives a sample of them, or all of them, as the assignment that attaches the file says; "
         + "preview_personalization shows one student's rows. For a FHIR dataset, rows holds the first "
-        + "maxRows resource lines (default 5) and dataset.fhir the newest version's summary; every "
+        + "maxRows resource lines (default 5) and dataset.summary the newest version's description; every "
         + "student receives the whole file."
     static let inputSchema: JSONValue = MCPSchema.object(
         properties: [

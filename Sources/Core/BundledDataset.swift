@@ -88,20 +88,30 @@ public struct BundledDatasetVersion: Codable, Sendable, Equatable {
     public let rowCount: Int
     public let columns: [DatasetColumn]
     public let note: String?
-    /// The summary of a FHIR version, carried for the instructor's dictionary
-    /// prose and example pick; the import recomputes its facts from the
-    /// bytes. Nil, and not encoded, for a CSV version, so a CSV bundle keeps
-    /// its bytes.
-    public let summary: FHIRDatasetSummary?
+    /// The description of a version not described by columns (FHIR), carried
+    /// for the instructor's dictionary prose and example pick; the import
+    /// recomputes its facts from the bytes. Nil, and not encoded, for a CSV
+    /// version, so a CSV bundle keeps its bytes. Stored under the key
+    /// `summary`, which also reads the bare FHIR summary that bundles wrote
+    /// before the description envelope (`DatasetDescription`).
+    public let datasetDescription: DatasetDescription?
+
+    /// The FHIR summary, when the description is one.
+    public var summary: FHIRDatasetSummary? { datasetDescription?.fhirSummary }
 
     /// Relative path within the bundle ZIP.
     public var bundleFilename: String { "datasets/\(sha256)" }
 
+    private enum CodingKeys: String, CodingKey {
+        case version, filename, sha256, sizeBytes, rowCount, columns, note
+        case datasetDescription = "summary"
+    }
+
     public init(
         version: Int, filename: String, sha256: String, sizeBytes: Int, rowCount: Int, columns: [DatasetColumn],
-        note: String?, summary: FHIRDatasetSummary? = nil
+        note: String?, description: DatasetDescription? = nil
     ) {
-        self.summary = summary
+        self.datasetDescription = description
         self.version = version
         self.filename = filename
         self.sha256 = sha256

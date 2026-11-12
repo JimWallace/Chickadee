@@ -96,7 +96,8 @@ import Vapor
             #expect(out.dataset.format == "fhirNdjson")
             #expect(out.dataset.columns.isEmpty)
             #expect(out.dataset.versions.map(\.rowCount) == [2])
-            let summary = try #require(out.dataset.fhir)
+            #expect(out.dataset.summary?.format == .fhirNdjson)
+            let summary = try #require(out.dataset.summary?.fhirSummary)
             #expect(summary.patientCount == 2)
             #expect(summary.example?.id == "o1")
             try expectValid(out, against: CreateDatasetTool.outputSchema, "create_dataset")
@@ -139,7 +140,7 @@ import Vapor
                 Dictionary(uniqueKeysWithValues: list.datasets.map { ($0.slug, $0.format) })
                     == ["ed-feed": "fhirNdjson", "wards": "csv"])
             // A list leaves the summary to get_dataset.
-            #expect(list.datasets.allSatisfy { $0.fhir == nil })
+            #expect(list.datasets.allSatisfy { $0.summary == nil })
             try expectValid(list, against: ListDatasetsTool.outputSchema, "list_datasets")
 
             let lines = Self.feed.split(separator: "\n")
@@ -148,7 +149,7 @@ import Vapor
             #expect(two.rows == lines.prefix(2).joined(separator: "\n") + "\n")
             #expect(two.rowCount == 2)
             #expect(two.truncated)
-            #expect(two.dataset.fhir?.patientCount == 2)
+            #expect(two.dataset.summary?.fhirSummary?.patientCount == 2)
             try expectValid(two, against: GetDatasetTool.outputSchema, "get_dataset")
 
             let all = try await GetDatasetTool().execute(
@@ -187,7 +188,7 @@ import Vapor
                     .init(resourceType: "Observation", system: "http://loinc.org", code: "8310-5", description: "Oral")
                 ],
                 example: .init(resourceType: "Patient", id: "p2"))
-            let summary = try #require(out.dataset.fhir)
+            let summary = try #require(out.dataset.summary?.fhirSummary)
             // Entries by name: the earlier type prose stays.
             #expect(summary.resourceTypes.first { $0.resourceType == "Patient" }?.description == "Arrivals")
             #expect(summary.codes.first { $0.code == "8310-5" }?.description == "Oral")

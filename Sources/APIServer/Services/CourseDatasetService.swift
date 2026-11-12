@@ -263,7 +263,7 @@ enum CourseDatasetService {
                 let version = APICourseDatasetVersion(
                     datasetID: try dataset.requireID(), version: 1, filename: checked.filename, sha256: hash,
                     sizeBytes: upload.bytes.count, rowCount: checked.rowCount,
-                    columns: checked.columns, summary: checked.summary, note: cleaned(upload.note))
+                    columns: checked.columns, description: checked.description, note: cleaned(upload.note))
                 try await version.create(on: tx)
                 return (dataset, version)
             }
@@ -288,7 +288,7 @@ enum CourseDatasetService {
         let hash = sha256HexDigest(upload.bytes)
         let existing = try await versions(of: dataset, on: db)
         let checked = try checkedUpload(upload, format: dataset.format)
-            .carryingNotes(from: existing.last?.summary, bytes: upload.bytes)
+            .carryingNotes(from: existing.last?.datasetDescription, bytes: upload.bytes)
         if let same = existing.first(where: { $0.sha256 == hash }) {
             throw CourseDatasetError.duplicateVersion(of: same.version)
         }
@@ -307,7 +307,7 @@ enum CourseDatasetService {
                     let version = APICourseDatasetVersion(
                         datasetID: datasetID, version: newest + 1, filename: checked.filename, sha256: hash,
                         sizeBytes: upload.bytes.count, rowCount: checked.rowCount,
-                        columns: carried.columns, summary: checked.summary, note: cleaned(upload.note))
+                        columns: carried.columns, description: checked.description, note: cleaned(upload.note))
                     try await version.create(on: tx)
                     dataset.currentVersion = newest + 1
                     try await dataset.update(on: tx)
@@ -449,19 +449,24 @@ enum CourseDatasetService {
         let rowCount: Int
         /// The inferred dictionary of a CSV; empty for FHIR.
         let columns: [DatasetColumn]
-        /// The summary of a FHIR file; nil for a CSV.
-        let summary: FHIRDatasetSummary?
+        /// The description of a format not described by columns; nil for a
+        /// CSV.
+        let description: DatasetDescription?
 
-        /// This upload with the FHIR dictionary prose and example of
-        /// `previous`, the summary of the version before it, on every entry
-        /// the new file still has (docs/fhir-datasets-plan.md §5). `bytes` is
-        /// the checked file. A CSV upload is returned as it is.
-        func carryingNotes(from previous: FHIRDatasetSummary?, bytes: Data) -> CheckedUpload {
+        /// This upload with the dictionary prose and example of `previous`,
+        /// the description of the version before it, on every entry the new
+        /// file still has (docs/fhir-datasets-plan.md §5). `bytes` is the
+        /// checked file. A CSV upload, whose prose `DatasetDictionary.carried`
+        /// carries, is returned as it is.
+        func carryingNotes(from previous: DatasetDescription?, bytes: Data) -> CheckedUpload {
             // The bytes passed the UTF-8 check that made this upload.
-            guard let summary, let previous, let text = String(bytes: bytes, encoding: .utf8) else { return self }
-            return CheckedUpload(
-                filename: filename, rowCount: rowCount, columns: columns,
-                summary: summary.carryingNotes(from: previous, text: text))
+            guard let description, let previous, let text = String(bytes: bytes, encoding: .utf8) else { return self }
+            let carried: DatasetDescription
+            switch (description, previous) {
+            case (.fhirNdjson(let new), .fhirNdjson(let old)):
+                carried = .fhirNdjson(new.carryingNotes(from: old, text: text))
+            }
+            return CheckedUpload(filename: filename, rowCount: rowCount, columns: columns, description: carried)
         }
     }
 
@@ -479,14 +484,15 @@ enum CourseDatasetService {
             switch DatasetDictionary.profile(csv: text) {
             case .success(let profile):
                 return CheckedUpload(
-                    filename: filename, rowCount: profile.rowCount, columns: profile.columns, summary: nil)
+                    filename: filename, rowCount: profile.rowCount, columns: profile.columns, description: nil)
             case .failure(let error): throw CourseDatasetError.notATable(error)
             }
         case .fhirNdjson:
             do {
                 let summary = try FHIRNdjsonProfile.profile(text)
                 return CheckedUpload(
-                    filename: filename, rowCount: summary.patientCount, columns: [], summary: summary)
+                    filename: filename, rowCount: summary.patientCount, columns: [],
+                    description: .fhirNdjson(summary))
             } catch {
                 throw CourseDatasetError.notFHIR(error)
             }
