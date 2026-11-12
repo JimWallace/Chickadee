@@ -9,6 +9,8 @@ every assignment achievement), [student-wardrobe.md](student-wardrobe.md)
 (where a student finds out). It answers #2619 (can an achievement grant a
 wardrobe item?), and it gives #2617 (one toast for everything earned) and
 #2621 (the trophy case) the stored record they both need.
+Items an instructor defines for their own course, rather than items in code,
+are the next step: [custom-wardrobe-items.md](custom-wardrobe-items.md).
 
 | Slice | Content | Issue | State |
 |---|---|---|---|
