@@ -204,20 +204,29 @@ enum MCPServerInstructions {
         files only — a graded row belongs to delete_suite_item or its family/check, and the reserved \
         setup members are refused; any graderOnly / dataset mark naming the file is cleared with it); \
         write one with author_script(tier:"support") — \
-        passing the body inline as content, or, for a data file too large to inline faithfully (e.g. a \
-        big CSV), passing sourceUrl (an https URL the server fetches under an SSRF guard: https only, \
+        passing the body inline as content; or, for a file on your machine too large to inline faithfully \
+        (e.g. a big CSV or a helper module), staging it with begin_upload(courseCode) and passing the \
+        returned uploadID; or passing sourceUrl (an https URL the server fetches under an SSRF guard: https only, \
         no private/loopback/metadata hosts, no redirects, \(SupportFileURLFetcher.maxBytesText) cap, UTF-8 body). \
         Confirm a data file is bundled before authoring checks that load it. A support data file can \
         also be marked as a per-student DATASET with set_dataset: each student then receives a \
         deterministic per-seed sample of its rows under the same filename (the uploaded file becomes \
         the hidden server-side pool), so every student explores their own data; get_support_files \
         reports the mark (isDataset / datasetSampleSize) and remove:true clears it.
+        - Staged uploads — begin_upload(courseCode) returns an uploadID, an uploadURL on this server and a \
+        secret, single-use uploadToken. PUT the file's raw bytes there from a shell, with the token as a \
+        bearer header (curl -sS -T FILE -H "Authorization: Bearer <uploadToken>" "<uploadURL>"; the \
+        result's curlExample has both filled in); the response reports sizeBytes and sha256 so you can confirm the \
+        bytes arrived exactly. Then pass uploadID, in place of content or sourceUrl, to author_script, \
+        create_dataset or add_dataset_version in that course. The file must be UTF-8 text of at most \
+        \(MCPUploadService.maxBytesText); the upload belongs to your grant and that course only, is used up \
+        by the write that succeeds, and expires \(Int(MCPUploadService.lifetime / 60)) minutes after begin_upload.
         - Course dataset library — datasets kept once per course, each with versions, a provenance, \
         a licence and a data dictionary, and copied into each assignment that attaches one. List with \
         list_datasets; read one, with the first rows of a version, with get_dataset. create_dataset \
-        makes one from a sourceUrl or from an assignment's support file; update_dataset edits its \
+        makes one from an uploadID (begin_upload), a sourceUrl or an assignment's support file; update_dataset edits its \
         metadata and column prose and publishes it to the course Data page students read (a provenance \
-        and a licence are required); add_dataset_version stores a new version. attach_dataset copies a \
+        and a licence are required); add_dataset_version stores a new version (from an uploadID or a sourceUrl). attach_dataset copies a \
         version into an assignment and pins it (scope "course" gives a student the same rows in every \
         assignment that attaches the dataset), and moves an attached file to another version; \
         detach_dataset ends an attachment. An attach, a version move, a scope change and a detach \

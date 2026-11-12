@@ -1230,6 +1230,11 @@ coordination, and each must see every edit.
     `all.json`, which answers with the student's own folder. A change to one
     listing in `JupyterLiteContentsRoutes` must keep the other two consistent
     (`JupyterLiteContentsWriteRoutesTests`).
+  - Every non-admin caller, course staff included, reads `users` as
+    `[users/<id>]`, because a staff draft's kernel walks through it (#2925). A
+    403 there kept the kernel from booting on WebKit (2026-11). Another user's
+    folder is reached only by its path, through `mayReadUserFile`
+    (`JupyterLiteContentsUserFolderTests`).
   - The file's mtime is the only reset signal. JupyterLab's save compares it
     with its last save and raises "File changed". The page's IndexedDB reseed
     reads it too, so it is skipped when the server drive is on: a drive save
@@ -1825,7 +1830,8 @@ coordination, and each must see every edit.
   `set_activity` lock count, version v1 of `create_assignment` and
   `clone_assignment`, the copied reference solution of `clone_assignment`,
   the starter run of `get_suite`, the start of a `run_tournament` run, and
-  the reference render jobs of `set_activity` with `prepareReference`.
+  the reference render jobs of `set_activity` with `prepareReference`, and
+  the staged uploads of `begin_upload` (`mcp_uploads`).
 - **Rules:**
   - A step that the `chickadee_mcp` role is denied runs on `mainDB`, not on
     `ToolContext.db`. A new MCP step on an ungranted table needs a choice:
@@ -1837,6 +1843,30 @@ coordination, and each must see every edit.
   - `MCPRoleDatabase` models the role in tests. A tool that touches a table
     the role cannot use passes on the test databases unless a test runs it
     through the stand-in.
+
+### Staged MCP uploads: `mcp_uploads`
+
+- **Writers:** MCP `begin_upload` (`MCPUploadService.begin`), the upload URL
+  `PUT /mcp/uploads/:uploadID` (`MCPUploadRoutes`, `MCPUploadService.receive`),
+  the write tools that consume an upload (`consumeMCPUpload` in
+  `author_script`, `create_dataset`, `add_dataset_version`), the expiry purge
+  in `begin` and the hourly MCP OAuth reaper (`reapExpiredMCPOAuthRecords`).
+- **Readers:** `MCPUploadService.load`, from the same three write tools.
+- **Rules** (`docs/mcp-file-uploads.md`):
+  - An upload belongs to one grant (token subject plus OAuth client) and one
+    course. `load` answers another grant as if the id did not exist.
+  - The cap is `SupportFileURLFetcher.maxBytes`, shared with `sourceUrl`; a
+    change to one changes both. The route's body limit is the same constant.
+  - The bytes must be UTF-8. A write tool that later accepts binary bytes
+    must not rely on the PUT having checked anything else.
+  - A write consumes the upload only after it succeeds. A new consumer must
+    keep that order, or a refused write costs the agent its upload.
+  - The table is on the owner pool (`mainDB`). The `chickadee_mcp` role has no
+    grant on it.
+  - The upload token travels in the `Authorization` header, never in the
+    path. Vapor's route logger (into the admin `query_logs` buffer) and
+    `RequestTimingMiddleware` (into `request_metrics`) record paths, so a
+    secret in a path reaches the admin diagnostics surface.
 
 ### The avatar handle: `users.avatar_handle`
 

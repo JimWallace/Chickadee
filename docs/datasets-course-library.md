@@ -559,7 +559,7 @@ is not archived.
 | `get_dataset` | `content:read` | the same for one dataset, plus the header and first rows of one version |
 | `create_dataset` | `content:write` | version 1 from a `sourceUrl` under the SSRF guard, or by promoting an assignment's support file |
 | `update_dataset` | `content:write` | name, description, provenance, licence, column prose, published |
-| `add_dataset_version` | `content:write` | a new version from a `sourceUrl` with a note |
+| `add_dataset_version` | `content:write` | a new version from a `sourceUrl` or a `begin_upload` `uploadID`, with a note |
 | `attach_dataset` | `content:write` | attach to an assignment, with filename, version, scope and the sample fields; on an attached file, move it to another version or scope |
 | `detach_dataset` | `content:write` | end an attachment, keeping the file and its sample unless `removeFile` |
 

@@ -9,6 +9,49 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.919] - 2026-11-12
+
+### Changed
+
+- **Weekly Swift dependency update.** jwt-kit 5.8.0 to 5.9.0. fluent-postgres-driver 2.14.0 to 2.14.1. swift-collections 1.7.5 to 1.7.6.
+
+
+## [0.5.918] - 2026-11-12
+
+### Security
+
+- **fast-uri 3.1.9.** The lock file of the JupyterLite extension now pins fast-uri 3.1.9. This fixes an improper path equivalence in relative reference normalization.
+
+
+## [0.5.917] - 2026-11-11
+
+### Changed
+
+- **The staff-draft browser probe runs as a course instructor who is not an admin.** `authoring-draft-check.mjs` signed in as the first account, which is always an admin, so CI never met the `users` listing that the server drive refused to other staff and that left the Safari kernel at "starting". A throwaway admin now creates the course and adds a second, non-admin account as its instructor, and the probe fails unless the editor's kernel reaches idle within `SMOKE_KERNEL_MS`. Its saves press Ctrl+S or Cmd+S by platform, so the probe also passes on a Mac.
+
+
+## [0.5.916] - 2026-11-11
+
+### Fixed
+
+- **"Create Blank" works again on the new-assignment page.** The multipart form interceptor resent each submit with `new FormData(form)`, which leaves out the submit button, so the hidden draft-action buttons' `draftAction` never reached the server. "Create Blank", "Create from Assignment" and "Clear" saved the draft and did nothing else. The interceptor now sends the submitter's name and value, as a native submit does.
+
+
+## [0.5.915] - 2026-11-11
+
+### Fixed
+
+- **The authoring editor's kernel boots again in Safari for course staff who are not admins.** On the server drive the kernel's file system reads the `users` folder on its way to a staff draft, and the server refused that listing to everyone but admins. Safari's file transport never answered the kernel after the refusal, so the kernel stayed in "starting" until the stall notice. Non-admin staff now read `users` as a student does: one child, their own folder.
+- **An editor error that is not an `Error` object is reported by its fields.** The kernel diagnostics recorded such a rejection as "[object Object]"; they now record its type and a few fields, with the user's folder id removed.
+
+
+## [0.5.914] - 2026-11-11
+
+### Added
+
+- **MCP `begin_upload`: deliver a large local file byte for byte.** An agent calls `begin_upload` for a course, PUTs the file to the returned URL with `curl -T` and the single-use upload token as a bearer header, and passes the `uploadID` to `author_script`, `create_dataset` or `add_dataset_version` in place of `content` or `sourceUrl`. The upload belongs to the grant and course that began it, takes UTF-8 text up to the 8 MB `sourceUrl` cap, is used up by the write that succeeds, and expires after 30 minutes. See `docs/mcp-file-uploads.md`.
+
+
 ## [0.5.913] - 2026-11-11
 
 ### Changed

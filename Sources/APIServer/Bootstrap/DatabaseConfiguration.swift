@@ -568,6 +568,9 @@ private func registerLateSchemaMigrations(on app: Application) {
     // the model maps neither column; a later release drops both.
     app.migrations.add(AddSectionDefaultAssignmentType())
 
+    // Staged MCP file uploads (docs/mcp-file-uploads.md). New table with an
+    // FK to `courses`; no ordering constraint beyond CreateCourses.
+    app.migrations.add(CreateMCPUploads())
     // A course library dataset's format, and a FHIR version's summary
     // (docs/fhir-datasets-plan.md §6). Adds a column to `course_datasets` and
     // one to `course_dataset_versions` (CreateCourseDatasets, far above); no

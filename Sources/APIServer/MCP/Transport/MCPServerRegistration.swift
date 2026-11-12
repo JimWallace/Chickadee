@@ -72,6 +72,9 @@ enum MCPToolCatalog {
             AuthorNotebookCheckTool().erased(),
             UpdateNotebookTool().erased(),
             UpdateSolutionTool().erased(),
+            // A staged upload, used by author_script, create_dataset and
+            // add_dataset_version (docs/mcp-file-uploads.md).
+            BeginUploadTool().erased(),
             AuthorScriptTool().erased(),
             DeleteSupportFileTool().erased(),
             CreateCourseSectionTool().erased(),
@@ -179,6 +182,9 @@ func registerMCPRoutes(_ app: Application) throws {
         collection: MCPRoutes(dispatcher: dispatcher, configuration: routeConfiguration))
     try app.register(
         collection: MCPMetadataRoutes(endpoints: endpoints, advertisedScopes: mcp.mode.advertisedScopes))
+    // The begin_upload URL (docs/mcp-file-uploads.md). Outside the bearer
+    // group: the single-use token in its path is the credential.
+    try app.register(collection: MCPUploadRoutes())
 
     app.logger.info(
         "MCP endpoint mounted at /mcp — issuer=\(endpoints.issuer), resource=\(endpoints.resource)")

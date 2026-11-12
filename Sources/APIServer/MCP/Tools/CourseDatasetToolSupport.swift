@@ -225,8 +225,17 @@ enum DatasetToolSchema {
     static let versionFilename: JSONValue = .object([
         "type": .string("string"),
         "description": .string(
-            "Optional. The version's filename, a bare name that ends in the dataset format's extension: "
-                + ".csv, or .ndjson for FHIR. Omitted, it is the last path segment of sourceUrl."),
+            "The version's filename, a bare name that ends in the dataset format's extension: .csv, or "
+                + ".ndjson for FHIR. Required with uploadID. With "
+                + "sourceUrl it is optional, and omitted it is the last path segment of the URL."),
+    ])
+
+    static let uploadID: JSONValue = .object([
+        "type": .string("string"),
+        "description": .string(
+            "The uploadID from begin_upload, after a UTF-8 file in the dataset's format was PUT to its "
+                + "uploadURL. Begun in this course by this agent; needs filename; a successful call uses it up. "
+                + "Use it in place of sourceUrl for a file on the agent's own machine."),
     ])
 
     static let sourceURL: JSONValue = .object([
@@ -237,6 +246,48 @@ enum DatasetToolSchema {
                 + "(https only, no private, loopback or metadata hosts, no redirects, "
                 + "\(SupportFileURLFetcher.maxBytesText) cap)."),
     ])
+}
+
+// MARK: - Where a new version's bytes come from
+
+/// The source of a new library version: a `sourceUrl` the server fetches, or a
+/// staged `begin_upload` upload (docs/mcp-file-uploads.md).
+enum DatasetVersionSource {
+    case url(String)
+    case upload(id: String)
+
+    /// The one source given, or nil when neither or both are.
+    init?(sourceUrl: String?, uploadID: String?) {
+        let url = (sourceUrl?.trimmingCharacters(in: .whitespacesAndNewlines)).flatMap { $0.isEmpty ? nil : $0 }
+        let upload = (uploadID?.trimmingCharacters(in: .whitespacesAndNewlines)).flatMap { $0.isEmpty ? nil : $0 }
+        switch (url, upload) {
+        case (let url?, nil): self = .url(url)
+        case (nil, let upload?): self = .upload(id: upload)
+        default: return nil
+        }
+    }
+
+    /// The version to store, and the staged upload to consume once the store
+    /// succeeds (nil for a URL). An upload must be in `courseID` and needs a
+    /// `filename`, since it has no URL to name it.
+    func materialize(
+        filename: String?, note: String?, courseID: UUID, fetch: DatasetSourceFetch, context: ToolContext
+    ) async throws -> (upload: CourseDatasetService.Upload, staged: MCPUploadService.Staged?) {
+        switch self {
+        case .url(let url):
+            let bytes = try await fetch(url, context.request)
+            return (.init(filename: datasetVersionFilename(filename, sourceURL: url), bytes: bytes, note: note), nil)
+        case .upload(let id):
+            guard let filename = filename?.trimmingCharacters(in: .whitespaces), !filename.isEmpty else {
+                throw MCPToolError.invalidArguments(
+                    detail:
+                        "Pass filename with uploadID: the stored filename, a bare name that ends in .csv, or .ndjson for FHIR."
+                )
+            }
+            let staged = try await loadMCPUpload(id, courseID: courseID, context: context)
+            return (.init(filename: filename, bytes: staged.bytes, note: note), staged)
+        }
+    }
 }
 
 // MARK: - Lookups and errors

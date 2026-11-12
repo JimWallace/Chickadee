@@ -52,6 +52,7 @@ not exist.
 
 - [authoring-editors.md](authoring-editors.md) — the suite editor, the notebook write-back, the language seed and server-side auto-compute
 - [auto-compute.md](auto-compute.md) — auto-compute in the pattern-family editor
+- [mcp-file-uploads.md](mcp-file-uploads.md) — `begin_upload`: how an agent delivers a large local file byte for byte, and why its token is a header
 - [mcp-authoring-roadmap.md](mcp-authoring-roadmap.md) — the MCP authoring roadmap, largely delivered, and its tool index (`MCPRoadmapDocSyncTests` reads it)
 - [assignment-versioning.md](assignment-versioning.md) — content version history: capture, read, restore
 - [inputs.md](inputs.md) — global and section inputs: literals, `=` expressions, `$name` references
