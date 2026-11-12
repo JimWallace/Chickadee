@@ -9,6 +9,13 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.918] - 2026-11-12
+
+### Security
+
+- **fast-uri 3.1.9.** The lock file of the JupyterLite extension now pins fast-uri 3.1.9. This fixes an improper path equivalence in relative reference normalization.
+
+
 ## [0.5.917] - 2026-11-11
 
 ### Changed
