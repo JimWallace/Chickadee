@@ -12,6 +12,8 @@ Stage B). Every student receives the same file (decision 1 of that plan).
 | `test_chickadee_fhir.py` | The helper's own checks. Exits 0 or 1, so it can run as a suite script. |
 | `reference_solution.py` | The reference answers to Question 4, and the values the tests expect. |
 
+The quiet feed for the tests is generated, not stored: `python3 -I generate_ed_feed.py quiet_feed.ndjson --patients 5 --seed 7`.
+
 Rebuild the feed and print the expected answers from this folder. The second
 command imports the helper from this folder, so it runs without `-I`:
 
@@ -72,11 +74,14 @@ support file.
 > two or more of them, because sepsis is treatable when it is caught early
 > and often fatal when it is not.
 >
-> Write the five functions below.
+> Write the functions below. `readFeed` is a helper for the others and is
+> not graded on its own.
 >
 > - `readFeed(path)` returns the resources of the file as a list of
 >   dictionaries, one per line. Call `json.loads` on each line that is not
 >   blank.
+> - `countResources(path)` returns a dictionary from resource type to the
+>   number of resources of that type in the file.
 > - `latestVitals(feed, patientID)` returns a dictionary from LOINC code to
 >   the patient's most recent value of that code. The times are written so
 >   that comparing two of them as strings with `>` compares them as times.
@@ -84,30 +89,35 @@ support file.
 >   from `latestVitals` meets. A code that is missing meets no criterion.
 > - `flaggedPatients(feed)` returns the ids of the patients whose latest
 >   vital signs meet two or more criteria, sorted.
+> - `screenFeed(path)` returns `flaggedPatients` for the file at `path`.
 > - `firstAlertHour(path)` replays the day with the `Feed` class in
 >   `chickadee_fhir.py`. Start its clock at `"2027-03-01T00:00:00Z"`, advance
 >   it one hour at a time, and keep every resource received so far. Return
 >   the hour at which `flaggedPatients` first returns a patient, or -1 if no
 >   patient is flagged within 24 hours.
 
-The starter cells are the five stubs, each with the docstring of
+The starter cells are the stubs, each with the docstring of
 `reference_solution.py` and `# Write your code here`, after a cell with
 `import json` and `from chickadee_fhir import Feed`.
 
-## The proposed tests
+## The tests
 
-The families follow the shapes of Questions 1 to 3: an "is defined" case,
-public cases on the student's own data, then release and secret edge cases.
-Because the feed is shared, "your feed" cases use literal expected values,
-which `reference_solution.py` prints.
+A generated test calls the student's function with literal arguments. So the
+functions that run on the whole feed take its path and return something
+small, and the others are tested on small literal feeds. The feed is shared,
+so the "the feed" cases use literal expected values, which
+`reference_solution.py` prints. `quiet_feed.ndjson` is a support file
+(`generate_ed_feed.py quiet_feed.ndjson --patients 5 --seed 7`) in which no
+patient screens positive.
 
 | Family | Kind | Public | Release | Secret |
 |---|---|---|---|---|
-| `readFeed` | `boundary_equality` on `len(readFeed("ed_feed.ndjson"))` via a hand-written script | 6,580 resources | a file with a blank last line | — |
-| `latestVitals` | `boundary_equality` | p001 on the feed: `{"8310-5": 38.3, "8867-4": 113, "59408-5": 94, "9279-1": 21}` | two observations of one code out of time order | a patient with no observations: `{}` |
+| `countResources` | `boundary_equality` | the feed: 300 Patients, 300 Encounters, 5,980 Observations | the quiet feed | — |
+| `latestVitals` | `boundary_equality` | one patient, three codes | two observations of one code out of time order | a patient with no observations: `{}` |
 | `sirsCount` | `boundary_equality` | 0, 1, 2 and 3 criteria | 38.0 exactly (not above) | a low temperature (35.8) |
-| `flaggedPatients` | `unordered_equality` | the 20 ids on the feed | an empty feed | a patient flagged earlier but not on the latest values |
-| `firstAlertHour` | `boundary_equality` | 3 on the feed | — | a feed with no positive patient: -1 |
+| `flaggedPatients` | `unordered_equality` | two patients, one flagged | an empty feed | a patient flagged earlier but not on the latest values |
+| `screenFeed` | `unordered_equality` | the 20 ids on the feed | — | the quiet feed: `[]` |
+| `firstAlertHour` | `boundary_equality` | 3 on the feed | — | the quiet feed: -1 |
 
 The helper's own checks (`test_chickadee_fhir.py`) can run as a release-tier
 script with 0 points, so a broken helper shows up in validation and not in a

@@ -1,12 +1,19 @@
-"""Reference solution for the proposed HLTH 230 Assignment 3, Question 4.
+"""Reference solution for HLTH 230 Assignment 3, Question 4.
 
 Question 4 screens a simulated emergency department feed (ed_feed.ndjson,
 FHIR R4 NDJSON) for the systemic inflammatory response syndrome (SIRS)
 criteria that can be read from vital signs. The question text is in
-README.md. Run this file to print the answers the suite's "your feed" cases
-expect:
+README.md.
 
-    python3 -I reference_solution.py ed_feed.ndjson
+A generated test calls a student's function with literal arguments, so the
+functions that run on the whole feed take its path and return something
+small; the others take a list of resources and are tested on small literal
+feeds. `readFeed` is a helper the student writes and the others call; it is
+not graded on its own.
+
+Run this file to print the answers the suite's "the feed" cases expect:
+
+    python3 reference_solution.py ed_feed.ndjson
 """
 
 import json
@@ -27,6 +34,15 @@ def readFeed(path: str) -> list[dict]:
             if line.strip():
                 resources.append(json.loads(line))
     return resources
+
+
+def countResources(path: str) -> dict:
+    """Return the number of resources of each type in the file at path."""
+    counts = {}
+    for resource in readFeed(path):
+        kind = resource["resourceType"]
+        counts[kind] = counts.get(kind, 0) + 1
+    return counts
 
 
 def latestVitals(feed: list[dict], patientID: str) -> dict:
@@ -68,12 +84,18 @@ def flaggedPatients(feed: list[dict]) -> list[str]:
     return sorted(flagged)
 
 
+def screenFeed(path: str) -> list[str]:
+    """Return flaggedPatients for the file at path."""
+    return flaggedPatients(readFeed(path))
+
+
 def firstAlertHour(path: str) -> int:
     """Return how many hours of the day pass before a patient first screens positive.
 
-    Reads the feed one simulated hour at a time from 2027-03-01T00:00:00Z,
-    with the latest vital signs received so far. Returns -1 if no patient
-    screens positive within 24 hours.
+    Replays the file one simulated hour at a time from 2027-03-01T00:00:00Z
+    with the Feed class of chickadee_fhir.py, keeping every resource
+    received so far. Returns -1 if no patient screens positive within 24
+    hours.
     """
     feed = Feed(path)
     feed.clock.start_at("2027-03-01T00:00:00Z")
@@ -87,14 +109,11 @@ def firstAlertHour(path: str) -> int:
 
 if __name__ == "__main__":
     path = sys.argv[1] if len(sys.argv) > 1 else "ed_feed.ndjson"
-    feed = readFeed(path)
     print(json.dumps(
         {
-            "resources": len(feed),
-            "flaggedPatients": flaggedPatients(feed),
-            "flaggedCount": len(flaggedPatients(feed)),
+            "countResources": countResources(path),
+            "screenFeed": screenFeed(path),
             "firstAlertHour": firstAlertHour(path),
-            "latestVitals_p001": latestVitals(feed, "p001"),
         },
         indent=2,
     ))
