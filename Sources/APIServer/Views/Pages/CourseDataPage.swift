@@ -46,7 +46,7 @@ private struct CourseDataSection: HTML {
             if let description = dataset.description {
                 p { description }
             }
-            dl(.class("detail-grid")) {
+            dl(.class("detail-grid section-gap")) {
                 if let provenance = dataset.provenance {
                     dt { "Provenance" }
                     dd { provenance }
@@ -173,7 +173,7 @@ private struct CourseFHIRCodeTable: HTML {
                 tbody {
                     for entry in codes {
                         tr {
-                            td { code { entry.code } }
+                            td(.class("nowrap")) { code { entry.code } }
                             td { entry.display ?? "" }
                             td { entry.resourceType }
                             td { entry.units.joined(separator: ", ") }

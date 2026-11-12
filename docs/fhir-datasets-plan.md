@@ -4,7 +4,9 @@ The plan to extend the course dataset library
 ([datasets-course-library.md](datasets-course-library.md)) beyond CSV to FHIR
 JSON, and to give a course a simulated live clinical data source.
 
-Status: **P1 to P3 built; P4 onward planned.** The recommendations are in
+Status: **P1 to P3 built and merged (v0.5.920); P4 onward planned.** The
+generalization in `docs/dataset-kinds-plan.md` §6, items 1 to 5, is built on
+top (capabilities, tolerant decoding, the description envelope). The recommendations are in
 §1, and the maintainer's decisions of 2026-11-11 are in §11. P1 adds the
 format to the spec, the structural check, the summary and the pretty-printer
 in Core. P2 gives the library a format: a dataset is created as CSV or FHIR

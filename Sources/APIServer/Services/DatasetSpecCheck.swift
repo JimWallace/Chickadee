@@ -55,9 +55,9 @@ func datasetSpecRefusal(
     // have no sample.
     if let sampleSize = spec.sampleSize {
         guard sampleSize >= 1 else { return "sampleSize for '\(spec.file)' must be 1 or more." }
-    } else if spec.source == nil, spec.transforms.isEmpty, spec.kind != .partition, spec.format == .csv {
-        // A FHIR spec takes no sample at all; its own check below says what
-        // it needs instead (a library source).
+    } else if spec.source == nil, spec.transforms.isEmpty, spec.kind != .partition, spec.capabilities.sample {
+        // A format that takes no sample (FHIR) needs none; its own check
+        // below says what it needs instead (a library source).
         return "sampleSize for '\(spec.file)' is required and must be 1 or more."
     }
     // Needs no file, so it runs before the early return below.
@@ -69,8 +69,7 @@ func datasetSpecRefusal(
     // (docs/fhir-datasets-plan.md §3).
     guard
         spec.kind == .stratifiedSample || spec.kind == .partition || spec.stratumColumn != nil
-            || spec.partCount != nil || !spec.transforms.isEmpty || spec.format != .csv
-            || DatasetFormat.fhirNdjson.matches(filename: spec.file)
+            || spec.partCount != nil || !spec.transforms.isEmpty || formatNeedsCheck(spec)
     else {
         return nil
     }
@@ -84,7 +83,11 @@ func datasetSpecRefusal(
 /// FHIR spec, or any spec on a file named as FHIR, gets the format's save-time
 /// checks there too: the name, the settings and the file's structure.
 func datasetFormatRefusal(_ spec: DatasetSpec, zipPath: String) async -> String? {
-    guard spec.format != .csv || DatasetFormat.fhirNdjson.matches(filename: spec.file) else { return nil }
+    // A format this server does not know cannot be checked here. The zip
+    // brings the whole manifest, so the spec may be one the upload never
+    // touched; it is carried as written and delivered whole
+    // (docs/dataset-kinds-plan.md §5).
+    guard formatNeedsCheck(spec), spec.unknownFormat == nil else { return nil }
     guard let data = await extractZipEntry(zipPath: zipPath, entryName: spec.file) else {
         return "Dataset file '\(spec.file)' is not among this assignment's bundled files."
     }
@@ -93,6 +96,14 @@ func datasetFormatRefusal(_ spec: DatasetSpec, zipPath: String) async -> String?
     case .csv: return DatasetSpecValidation.csvExtensionIssue(with: spec)
     case .fhirNdjson: return DatasetSpecValidation.fhirIssue(with: spec, sourceText: text)
     }
+}
+
+/// Whether `spec`'s format, or its file's name, needs the format checks: an
+/// unknown format, a format that enters through the library, or a file named
+/// as one.
+private func formatNeedsCheck(_ spec: DatasetSpec) -> Bool {
+    spec.unknownFormat != nil || spec.format.entersThroughLibrary
+        || DatasetFormat.candidates(forFilename: spec.file).contains(where: \.entersThroughLibrary)
 }
 
 /// Reads the dataset specs off a setup's manifest.  An undecodable manifest

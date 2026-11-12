@@ -233,7 +233,16 @@ extension CourseDatasetService {
         }
 
         var input = input
-        input.format = DatasetFormat.fhirNdjson.matches(filename: filename) ? .fhirNdjson : .csv
+        // The format is the one the file's extension names. A name no format
+        // claims is a CSV, as a hand-marked dataset always was; a name two
+        // formats claim cannot be guessed (docs/dataset-kinds-plan.md §6).
+        let candidates = DatasetFormat.candidates(forFilename: filename)
+        guard candidates.count <= 1 else {
+            throw CourseDatasetError.attachmentIssue(
+                "'\(filename)' could be \(candidates.map(\.displayName).joined(separator: " or ")). Create the "
+                    + "dataset on the Datasets tab, where the format is chosen.")
+        }
+        input.format = candidates.first ?? .csv
         let existing = manifest.datasetSpecsByFile[filename]
         func spec(source: DatasetSource) -> DatasetSpec {
             DatasetSpec(
@@ -241,7 +250,7 @@ extension CourseDatasetService {
                 stratumColumn: existing?.stratumColumn, transforms: existing?.transforms ?? [], source: source,
                 scope: .assignment, partCount: existing?.partCount, format: input.format)
         }
-        if input.format == .fhirNdjson {
+        if input.format.entersThroughLibrary {
             // Checked against the source the create will make, before it does.
             try requireValid(spec(source: DatasetSource(slug: try validatedSlug(input.slug), version: 1)), bytes: bytes)
         }

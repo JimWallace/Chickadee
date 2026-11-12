@@ -357,7 +357,10 @@ struct SetDatasetTool: ContentTool {
             partCount: partCount,
             // The format is the library attach path's to set, like the
             // library fields above; this door carries it.
-            format: existing?.format ?? .csv)
+            format: existing?.format ?? .csv,
+            // An unknown format is carried too, so the save checks refuse the
+            // edit rather than store the spec as CSV.
+            unknownFormat: existing?.unknownFormat)
     }
 
     /// Maps the wire shape to the model. An unrecognised kind is dropped rather

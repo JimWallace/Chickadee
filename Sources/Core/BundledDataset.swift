@@ -52,7 +52,15 @@ public struct BundledDataset: Codable, Sendable, Equatable {
         isPublished = try c.decode(Bool.self, forKey: .isPublished)
         currentVersion = try c.decode(Int.self, forKey: .currentVersion)
         versions = try c.decode([BundledDatasetVersion].self, forKey: .versions)
-        format = try c.decodeIfPresent(DatasetFormat.self, forKey: .format) ?? .csv
+        // An unknown format is refused by name, so a later format needs no
+        // new bundle schemaVersion: version 3 means "datasets carry a
+        // format", and a reader that does not know one says which
+        // (docs/dataset-kinds-plan.md §5).
+        let rawFormat = try c.decodeIfPresent(String.self, forKey: .format)
+        if let rawFormat, DatasetFormat(rawValue: rawFormat) == nil {
+            throw BundledDatasetFormatError.unknownFormat(slug: slug, format: rawFormat)
+        }
+        format = rawFormat.flatMap(DatasetFormat.init(rawValue:)) ?? .csv
     }
 
     public func encode(to encoder: any Encoder) throws {
@@ -80,20 +88,45 @@ public struct BundledDatasetVersion: Codable, Sendable, Equatable {
     public let rowCount: Int
     public let columns: [DatasetColumn]
     public let note: String?
-    /// The summary of a FHIR version, carried for the instructor's dictionary
-    /// prose and example pick; the import recomputes its facts from the
-    /// bytes. Nil, and not encoded, for a CSV version, so a CSV bundle keeps
-    /// its bytes.
-    public let summary: FHIRDatasetSummary?
+    /// The description of a version not described by columns (FHIR), carried
+    /// for the instructor's dictionary prose and example pick; the import
+    /// recomputes its facts from the bytes. Nil, and not encoded, for a CSV
+    /// version, so a CSV bundle keeps its bytes. Stored under the key
+    /// `summary`, which also reads the bare FHIR summary that bundles wrote
+    /// before the description envelope (`DatasetDescription`).
+    public let datasetDescription: DatasetDescription?
+
+    /// The FHIR summary, when the description is one.
+    public var summary: FHIRDatasetSummary? { datasetDescription?.fhirSummary }
 
     /// Relative path within the bundle ZIP.
     public var bundleFilename: String { "datasets/\(sha256)" }
 
+    private enum CodingKeys: String, CodingKey {
+        case version, filename, sha256, sizeBytes, rowCount, columns, note
+        case datasetDescription = "summary"
+    }
+
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        version = try c.decode(Int.self, forKey: .version)
+        filename = try c.decode(String.self, forKey: .filename)
+        sha256 = try c.decode(String.self, forKey: .sha256)
+        sizeBytes = try c.decode(Int.self, forKey: .sizeBytes)
+        rowCount = try c.decode(Int.self, forKey: .rowCount)
+        columns = try c.decode([DatasetColumn].self, forKey: .columns)
+        note = try c.decodeIfPresent(String.self, forKey: .note)
+        // A description this server cannot read (a newer envelope) is no
+        // description, as on the version row; the import recomputes the
+        // facts from the bytes and loses only the prose.
+        datasetDescription = try? c.decodeIfPresent(DatasetDescription.self, forKey: .datasetDescription)
+    }
+
     public init(
         version: Int, filename: String, sha256: String, sizeBytes: Int, rowCount: Int, columns: [DatasetColumn],
-        note: String?, summary: FHIRDatasetSummary? = nil
+        note: String?, description: DatasetDescription? = nil
     ) {
-        self.summary = summary
+        self.datasetDescription = description
         self.version = version
         self.filename = filename
         self.sha256 = sha256

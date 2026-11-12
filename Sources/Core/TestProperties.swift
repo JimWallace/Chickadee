@@ -513,7 +513,7 @@ public struct TestProperties: Codable, Equatable, Sendable {
     /// A format the materializer does not select from is delivered whole, so
     /// its spec never needs one (docs/fhir-datasets-plan.md §11).
     public var hasPartitionedDatasets: Bool {
-        datasets.contains { $0.kind == .partition && $0.format.supportsSelection }
+        datasets.contains { $0.kind == .partition && $0.capabilities.partition }
     }
 
     /// Instructor-authored achievements / goals / awards for this assignment —

@@ -209,7 +209,10 @@ extension InstructorDashboardRoutes {
             if !added.droppedColumns.isEmpty {
                 notice += " The new file has no \(added.droppedColumns.joined(separator: ", ")) column."
             }
-            if dataset.format == .fhirNdjson {
+            switch dataset.format {
+            case .csv:
+                break
+            case .fhirNdjson:
                 // Prose carries by type and code, so a code whose meaning
                 // changed keeps its old description until it is edited.
                 notice += " Descriptions carried over by type and code; check them in the dictionary."
@@ -245,8 +248,9 @@ extension InstructorDashboardRoutes {
         let courseID = try await requireDatasetWrite(req: req, user: user)
         let form = try await req.decodeContent(DictionaryForm.self)
         let dataset = try await requireDataset(form.slug, courseID: courseID, on: req.db)
-        if dataset.format == .fhirNdjson {
-            return try await saveFHIRDictionary(req: req, dataset: dataset, form: form)
+        switch dataset.format {
+        case .csv: break
+        case .fhirNdjson: return try await saveFHIRDictionary(req: req, dataset: dataset, form: form)
         }
         let names = form.columnNames ?? []
         let descriptions = form.columnDescriptions ?? []

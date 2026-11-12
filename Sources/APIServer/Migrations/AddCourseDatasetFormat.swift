@@ -7,8 +7,9 @@
 //   existing dataset is a CSV, and the old color of a blue-green deploy, which
 //   does not map the column, creates a CSV dataset during the overlap.
 // - `course_dataset_versions.summary_json`: nullable text, the encoded
-//   `FHIRDatasetSummary` of a FHIR version. Null for a CSV version, whose
-//   dictionary stays in `columns_json`.
+//   description of a FHIR version: a `DatasetDescription` envelope, or a bare
+//   `FHIRDatasetSummary` in a row written before the envelope. Null for a CSV
+//   version, whose dictionary stays in `columns_json`.
 //
 // During the overlap the old color does not read `format` either: it would
 // clone a FHIR dataset as CSV and export it in a version 2 bundle. A FHIR

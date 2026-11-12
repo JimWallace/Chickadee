@@ -1002,17 +1002,41 @@ coordination, and each must see every edit.
 
 - **Objects:** `DatasetSpec.format` (`csv` or `fhirNdjson`), decoded as `csv`
   and encoded only when it is not, so a stored manifest keeps its bytes
-  (`docs/fhir-datasets-plan.md`).
+  (`docs/fhir-datasets-plan.md`). `DatasetSpec.unknownFormat`: a stored value
+  this server does not know, kept as written. `DatasetFormat.capabilities`
+  (`DatasetCapabilities`: sample, stratum, partition, transforms, unit name),
+  read through `DatasetSpec.capabilities`, which selects nothing for an
+  unknown format (`docs/dataset-kinds-plan.md`).
 - **Readers that branch on the format:**
-  - `DatasetMaterializer.materialize`: a format without `supportsSelection`
-    is delivered as the source bytes, whatever the spec selects.
-  - `DatasetDeliveryMode.init`: such a format is always `shared`. The Files
-    panel row carries `datasetFormat` so its note reads the same rule.
+  - **Selection reads `capabilities`, never `format`.**
+    `DatasetMaterializer.materialize`: a spec whose capabilities select
+    nothing is delivered as the source bytes, whatever it asks for.
+  - `DatasetDeliveryMode.init`: such a spec is always `shared`. The Files
+    panel row carries `datasetCapabilities` so its note reads the same rule.
   - `DatasetSpec.part(forDeal:)`, `TestProperties.hasPartitionedDatasets` and
-    `DatasetDeals.withholdingUndealtParts`: a FHIR spec is never a partition.
-  - `DatasetSpecValidation.issue`: a FHIR spec refuses a sample, a partition,
-    a stratum and transforms, needs a `.ndjson` name and a file that passes
-    `FHIRNdjsonProfile`; a CSV spec refuses a `.ndjson` name.
+    `DatasetDeals.withholdingUndealtParts` read `capabilities.partition`.
+  - Two copies that must agree: `SupportFileRow` writes the sample
+    capability on the row (`data-dataset-sample`), and
+    `Public/support-files.js` reads it to hide the sample fields. The view
+    also hides the per-student toggle and the "Course-wide rows" box of a
+    spec that selects nothing.
+  - **A name's format:** `DatasetFormat.candidates(forFilename:)` lists the
+    formats an extension could be; `entersThroughLibrary` says which formats
+    become datasets only through the library (FHIR). Promote, the save-time
+    checks and the Files panel read these, not "ends in `.ndjson`".
+  - **An unknown format** (written by a newer server): the spec decodes,
+    re-encodes as written, delivers whole and is refused at save
+    (`unknownFormatIssue`); every rebuild carries it (`set_dataset`,
+    `withScope`, `withoutLibraryFields`), and `libraryFieldIssue` compares
+    it. The zip upload carries such a spec through untouched. MCP and the
+    download report `formatName` and `mediaType`, never `csv`. A bundle
+    refuses an unknown format by name (`BundledDatasetFormatError`), so a new
+    format needs no new bundle `schemaVersion`.
+  - `DatasetSpecValidation.issue`: `capabilityIssue` refuses each setting
+    the format's capabilities lack (for FHIR: a sample, a partition, a stratum
+    and transforms); a FHIR spec needs a `.ndjson` name and a file that passes
+    `FHIRNdjsonProfile`; a CSV spec refuses a name of a format that enters
+    through the library.
   - `datasetSpecRefusal` reads the file for every FHIR spec, and the zip
     upload runs the same format checks (`datasetFormatRefusal`). Bundle
     import, clone and restore copy the manifest as it is, as for every other
@@ -1020,8 +1044,9 @@ coordination, and each must see every edit.
   - `datasetDiagnosticsReports` skips a FHIR spec: there is nothing to
     estimate when every student gets the whole file.
   - `CourseDatasetService` (P2): `create` and `addVersion` check a file by
-    the dataset's format (`checkedFile`); a FHIR version stores
-    `summary_json`, its patient count in `row_count` and no columns. Attach and
+    the dataset's format (`checkedFile`); a FHIR version stores a
+    `DatasetDescription` envelope in `summary_json` (a row written before the
+    envelope holds a bare summary, which reads the same), its patient count in `row_count` and no columns. Attach and
     update take the format from the library dataset, promote from the file's
     extension. `sourceIssue` refuses a spec whose format is not its dataset's,
     so the whole-manifest doors drop that source.
@@ -1047,7 +1072,8 @@ coordination, and each must see every edit.
     control, only "Move to course library" (`withLibraryStates`).
   - The MCP tools (P3): `create_dataset` takes `format` and refuses a
     filename of the other format by name; `get_dataset` reports `format` and
-    the FHIR summary (`DatasetDTO.fhir`), and
+    the version's description (`DatasetDTO.summary`, the
+    `DatasetDescription` envelope), and
     `get_dataset` shows resource lines with no header. `list_datasets`
     reports the format but not the summary, which can be large. The write
     tools return the summary of the one dataset they change.
@@ -1068,6 +1094,9 @@ coordination, and each must see every edit.
   - FHIR dictionary prose sits on an entry of the summary, so it can name
     only what the file holds. Anything that recomputes a summary carries the
     prose and the example pick from the one before it.
+  - A place that must act differently per format switches over every
+    format, with no `default` and no `==`, so a new format does not compile
+    until it answers.
   - A new format updates every reader above, or says why it does not.
 
 ### Dataset transform kinds: `DatasetTransform.Kind`

@@ -64,8 +64,9 @@ struct DatasetUsageDTO: Encodable, Sendable {
 }
 
 /// A library dataset with its versions and the assignments that attach it.
-/// `columns` is the newest version's dictionary for a CSV dataset; `fhir` is
-/// the newest version's summary and dictionary for a FHIR dataset
+/// `columns` is the newest version's dictionary for a CSV dataset; `summary`
+/// is the newest version's description for any other format, an envelope
+/// that names its format (`DatasetDescription`)
 /// (docs/fhir-datasets-plan.md §7).
 struct DatasetDTO: Encodable, Sendable {
     let slug: String
@@ -78,7 +79,7 @@ struct DatasetDTO: Encodable, Sendable {
     let isPublished: Bool
     let currentVersion: Int
     let columns: [DatasetColumnDTO]
-    let fhir: FHIRDatasetSummary?
+    let summary: DatasetDescription?
     let versions: [DatasetVersionDTO]
     let usage: [DatasetUsageDTO]
 }
@@ -106,7 +107,7 @@ struct AttachedDatasetDTO: Encodable, Sendable {
     /// Nil for a spec that does not come from the library.
     init?(_ spec: DatasetSpec) {
         guard let source = spec.source else { return nil }
-        format = spec.format.rawValue
+        format = spec.formatName
         file = spec.file
         slug = source.slug
         version = source.version
@@ -158,6 +159,14 @@ enum DatasetToolSchema {
         "enum": .array(DatasetFormat.allCases.map { .string($0.rawValue) }),
     ])
 
+    /// A version's description: the envelope of `DatasetDescription`, with
+    /// one payload key per format. A new format adds its key here.
+    static let description: JSONValue = MCPSchema.object(
+        properties: [
+            "descriptionVersion": MCPSchema.integer, "format": format, "fhirNdjson": fhirSummary,
+        ],
+        required: ["descriptionVersion", "format"], additionalProperties: nil)
+
     /// The summary and dictionary of a FHIR version. It mirrors the encoding
     /// of `FHIRDatasetSummary` by hand, so a field added there is added here;
     /// `CourseDatasetFHIRToolsTests` validates real results against it.
@@ -201,7 +210,7 @@ enum DatasetToolSchema {
             "description": MCPSchema.string,
             "provenance": MCPSchema.string, "licence": MCPSchema.string, "isPublished": MCPSchema.boolean,
             "currentVersion": MCPSchema.integer,
-            "columns": columns, "fhir": fhirSummary,
+            "columns": columns, "summary": description,
             "versions": .object([
                 "type": .string("array"),
                 "items": MCPSchema.object(
@@ -352,7 +361,7 @@ func datasetDTO(
         description: dataset.datasetDescription,
         provenance: dataset.provenance, licence: dataset.licence, isPublished: dataset.isPublished,
         currentVersion: dataset.currentVersion, columns: (newest?.columns ?? []).map(DatasetColumnDTO.init),
-        fhir: includingSummary ? newest?.summary : nil,
+        summary: includingSummary ? newest?.datasetDescription : nil,
         versions: versions.map(DatasetVersionDTO.init),
         // `Usage` carries the pinned version and not the spec, so this is
         // `CourseDatasetService.attachmentIsBehind` on the version alone.

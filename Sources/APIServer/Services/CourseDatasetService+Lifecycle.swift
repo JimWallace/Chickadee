@@ -39,7 +39,7 @@ extension CourseDatasetService {
                 try await APICourseDatasetVersion(
                     datasetID: copyID, version: version.version, filename: version.filename,
                     sha256: version.sha256, sizeBytes: version.sizeBytes, rowCount: version.rowCount,
-                    columns: version.columns, summary: version.summary, note: version.note
+                    columns: version.columns, description: version.datasetDescription, note: version.note
                 ).create(on: db)
             }
         }
@@ -55,7 +55,7 @@ extension CourseDatasetService {
             let versions = try await versions(of: dataset, on: db).map {
                 BundledDatasetVersion(
                     version: $0.version, filename: $0.filename, sha256: $0.sha256, sizeBytes: $0.sizeBytes,
-                    rowCount: $0.rowCount, columns: $0.columns, note: $0.note, summary: $0.summary)
+                    rowCount: $0.rowCount, columns: $0.columns, note: $0.note, description: $0.datasetDescription)
             }
             bundled.append(
                 BundledDataset(
@@ -105,7 +105,7 @@ extension CourseDatasetService {
                             // the instructor's prose and example pick come
                             // from the bundle.
                             try checkedFile(filename: version.filename, bytes: data, format: format)
-                                .carryingNotes(from: version.summary, bytes: data)
+                                .carryingNotes(from: version.datasetDescription, bytes: data)
                         }
                     try blobs.put(data)
                     return (true, facts)
@@ -130,7 +130,8 @@ extension CourseDatasetService {
                     datasetID: datasetID, version: version.version,
                     filename: try validatedFilename(version.filename, format: bundled.format),
                     sha256: version.sha256, sizeBytes: version.sizeBytes, rowCount: facts?.rowCount ?? version.rowCount,
-                    columns: facts?.columns ?? version.columns, summary: facts?.summary, note: cleaned(version.note)
+                    columns: facts?.columns ?? version.columns, description: facts?.description,
+                    note: cleaned(version.note)
                 ).create(on: db)
             }
         }

@@ -46,15 +46,34 @@ public enum DatasetFormat: String, Codable, Sendable, Equatable, CaseIterable {
         return filename.count > suffix.count && filename.lowercased().hasSuffix(suffix)
     }
 
-    /// Whether the materializer selects from a file of this format. A format
-    /// that does not is delivered whole, whatever the spec asks for: the
-    /// save-time checks refuse a sample, a partition, a stratum and transforms
-    /// on it, and delivery never fails a student over a spec that slipped
-    /// through a whole-manifest door.
-    public var supportsSelection: Bool {
+    /// The selection settings a spec of this format accepts. A format whose
+    /// capabilities select nothing is delivered whole, whatever the spec
+    /// asks for: the save-time checks refuse each setting it lacks, and
+    /// delivery never fails a student over a spec that slipped through a
+    /// whole-manifest door.
+    public var capabilities: DatasetCapabilities {
         switch self {
-        case .csv: return true
-        case .fhirNdjson: return false
+        case .csv: return .table
+        // Shared first (docs/fhir-datasets-plan.md §11, decision 1);
+        // sampling by patient is P5.
+        case .fhirNdjson: return .whole(unitName: "patient")
         }
+    }
+
+    /// Whether a file of this format becomes a dataset only through the
+    /// course library. A FHIR file is checked and summarized there; a CSV can
+    /// also be marked by hand in an assignment's Files panel.
+    public var entersThroughLibrary: Bool {
+        switch self {
+        case .csv: return false
+        case .fhirNdjson: return true
+        }
+    }
+
+    /// The formats a file named `filename` could be, by its extension. Today
+    /// at most one; a later format that shares an extension (plain NDJSON
+    /// records) makes it two, and a caller then asks which.
+    public static func candidates(forFilename filename: String) -> [DatasetFormat] {
+        allCases.filter { $0.matches(filename: filename) }
     }
 }

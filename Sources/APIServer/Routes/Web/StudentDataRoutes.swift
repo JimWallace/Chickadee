@@ -134,8 +134,8 @@ struct StudentDataRoutes: RouteCollection {
         }
         let response = Response(status: .ok, body: .init(string: csv))
         // A FHIR file keeps its own type, whichever name the URL ends in.
-        let format = setup.decodedManifest()?.datasetSpecsByFile[filename]?.format ?? .csv
-        response.headers.replaceOrAdd(name: .contentType, value: "\(format.mediaType); charset=utf-8")
+        let mediaType = setup.decodedManifest()?.datasetSpecsByFile[filename]?.mediaType ?? DatasetFormat.csv.mediaType
+        response.headers.replaceOrAdd(name: .contentType, value: "\(mediaType); charset=utf-8")
         // The filename is a bare name from the manifest; a quote in it would
         // end the header value early.
         let safeName = filename.replacingOccurrences(of: "\"", with: "_")

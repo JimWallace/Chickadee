@@ -931,6 +931,9 @@ duplicate.
   too long for the row (the admin LTI platforms table); give its `<summary>`
   a visually hidden copy of the row's name, so a screen reader can tell one
   "Edit" from the next.
+- **`.nowrap`** — text that must not wrap, such as a table cell holding a
+  code or an identifier ("59408-5", whose hyphen a narrow column would
+  otherwise break at).
 - **`.test-output-pre`** — the house preformatted block: monospace text kept
   as written and wrapped, on the muted surface. It holds a test's long output
   on the submission page and a FHIR example resource on the dataset pages. Use

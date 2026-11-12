@@ -49,21 +49,30 @@ final class APICourseDatasetVersion: Model, Content, @unchecked Sendable {
     @OptionalField(key: "note")
     var note: String?
 
-    /// The JSON-encoded `FHIRDatasetSummary` of a FHIR version; nil for a CSV
-    /// version. Read through `summary`.
+    /// The JSON-encoded `DatasetDescription` of a version whose format is not
+    /// described by columns (FHIR); nil for a CSV version. Read through
+    /// `description`. A row written before the envelope holds a bare FHIR
+    /// summary, which reads the same (docs/dataset-kinds-plan.md §5).
     @OptionalField(key: "summary_json")
     var summaryJSON: String?
 
     @Timestamp(key: "created_at", on: .create)
     var createdAt: Date?
 
-    /// The FHIR summary (docs/fhir-datasets-plan.md §5). A stored value that
-    /// does not decode reads as nil, rather than failing the read.
-    var summary: FHIRDatasetSummary? {
+    /// The version's description. A stored value that does not decode, such
+    /// as one a newer server wrote, reads as nil rather than failing the read.
+    var datasetDescription: DatasetDescription? {
         get {
-            summaryJSON.flatMap { try? JSONDecoder().decode(FHIRDatasetSummary.self, from: Data($0.utf8)) }
+            summaryJSON.flatMap { try? JSONDecoder().decode(DatasetDescription.self, from: Data($0.utf8)) }
         }
-        set { summaryJSON = newValue.flatMap(Self.encodeSummary) }
+        set { summaryJSON = newValue.flatMap(Self.encodeDescription) }
+    }
+
+    /// The FHIR summary, when the description is one
+    /// (docs/fhir-datasets-plan.md §5).
+    var summary: FHIRDatasetSummary? {
+        get { datasetDescription?.fhirSummary }
+        set { datasetDescription = newValue.map(DatasetDescription.fhirNdjson) }
     }
 
     /// The data dictionary. A stored value that does not decode reads as no
@@ -79,7 +88,7 @@ final class APICourseDatasetVersion: Model, Content, @unchecked Sendable {
 
     init(
         id: UUID? = nil, datasetID: UUID, version: Int, filename: String, sha256: String, sizeBytes: Int,
-        rowCount: Int, columns: [DatasetColumn], summary: FHIRDatasetSummary? = nil, note: String? = nil
+        rowCount: Int, columns: [DatasetColumn], description: DatasetDescription? = nil, note: String? = nil
     ) {
         self.id = id
         self.datasetID = datasetID
@@ -89,7 +98,7 @@ final class APICourseDatasetVersion: Model, Content, @unchecked Sendable {
         self.sizeBytes = sizeBytes
         self.rowCount = rowCount
         self.columnsJSON = Self.encodeColumns(columns)
-        self.summaryJSON = summary.flatMap(Self.encodeSummary)
+        self.summaryJSON = description.flatMap(Self.encodeDescription)
         self.note = note
     }
 
@@ -100,8 +109,8 @@ final class APICourseDatasetVersion: Model, Content, @unchecked Sendable {
         return text
     }
 
-    static func encodeSummary(_ summary: FHIRDatasetSummary) -> String? {
-        guard let data = try? ManifestCodec.stableEncoder.encode(summary) else { return nil }
+    static func encodeDescription(_ description: DatasetDescription) -> String? {
+        guard let data = try? ManifestCodec.stableEncoder.encode(description) else { return nil }
         return String(bytes: data, encoding: .utf8)
     }
 }

@@ -37,6 +37,7 @@ public enum DatasetSpecValidation {
     /// are typing into.
     public static func issue(with spec: DatasetSpec, sourceCSV: String?) -> String? {
         if let issue = scopeIssue(with: spec) { return issue }
+        if let issue = unknownFormatIssue(with: spec) { return issue }
         switch spec.format {
         case .csv:
             if let issue = csvExtensionIssue(with: spec) { return issue }
@@ -47,14 +48,47 @@ public enum DatasetSpecValidation {
         }
     }
 
-    /// A CSV spec on a file named as FHIR NDJSON, or nil. Any other name is
-    /// left alone: a hand-marked dataset has never needed a `.csv` name, and
-    /// refusing one now would refuse a stored spec at its next edit.
+    /// A spec whose format this server does not know, or nil. A newer
+    /// server wrote it; it still delivers the file whole, but this server
+    /// cannot check an edit of it (docs/dataset-kinds-plan.md §5).
+    public static func unknownFormatIssue(with spec: DatasetSpec) -> String? {
+        guard let unknown = spec.unknownFormat else { return nil }
+        return "'\(spec.file)' is a dataset of format '\(unknown)', which this server does not know. Edit it on "
+            + "the server that wrote it."
+    }
+
+    /// A CSV spec on a file whose name belongs to a format that enters
+    /// through the course library, or nil. Any other name is left alone: a
+    /// hand-marked dataset has never needed a `.csv` name, and refusing one
+    /// now would refuse a stored spec at its next edit.
     public static func csvExtensionIssue(with spec: DatasetSpec) -> String? {
-        guard DatasetFormat.fhirNdjson.matches(filename: spec.file) else { return nil }
-        return "'\(spec.file)' is named as \(DatasetFormat.fhirNdjson.displayName), so it cannot be a "
+        guard let other = DatasetFormat.candidates(forFilename: spec.file).first(where: \.entersThroughLibrary)
+        else { return nil }
+        return "'\(spec.file)' is named as \(other.displayName), so it cannot be a "
             + "\(DatasetFormat.csv.displayName) dataset. Attach it from the course library as a "
-            + "\(DatasetFormat.fhirNdjson.displayName) dataset."
+            + "\(other.displayName) dataset."
+    }
+
+    /// The first setting of `spec` that its format's capabilities do not
+    /// allow, or nil. The materializer would ignore such a setting, and an
+    /// instructor who set it would believe it did something.
+    public static func capabilityIssue(with spec: DatasetSpec) -> String? {
+        let capabilities = spec.format.capabilities
+        let prefix = "'\(spec.file)': a \(spec.format.displayName) dataset"
+        let whole = capabilities.selects ? "" : "; every student receives the whole file"
+        if !capabilities.partition, spec.kind == .partition || spec.partCount != nil {
+            return "\(prefix) cannot be split into parts\(whole)."
+        }
+        if !capabilities.sample, spec.sampleSize != nil {
+            return "\(prefix) takes no sample size\(whole)."
+        }
+        if !capabilities.stratum, spec.kind == .stratifiedSample || !(spec.stratumColumn ?? "").isEmpty {
+            return "\(prefix) takes no stratum column."
+        }
+        if !capabilities.transforms, !spec.transforms.isEmpty {
+            return "\(prefix) takes no transforms."
+        }
+        return nil
     }
 
     /// Why a FHIR NDJSON spec cannot be saved, or nil.
@@ -72,21 +106,7 @@ public enum DatasetSpecValidation {
             return "\(label): a \(DatasetFormat.fhirNdjson.displayName) dataset needs a name ending in "
                 + "'.\(DatasetFormat.fhirNdjson.fileExtension)'."
         }
-        let wholeFile = "every student receives the whole file"
-        if spec.kind == .partition || spec.partCount != nil {
-            return "\(label): a \(DatasetFormat.fhirNdjson.displayName) dataset cannot be split into parts; "
-                + "\(wholeFile)."
-        }
-        if spec.sampleSize != nil {
-            return "\(label): a \(DatasetFormat.fhirNdjson.displayName) dataset takes no sample size; "
-                + "\(wholeFile)."
-        }
-        if spec.kind == .stratifiedSample || !(spec.stratumColumn ?? "").isEmpty {
-            return "\(label): a \(DatasetFormat.fhirNdjson.displayName) dataset takes no stratum column."
-        }
-        if !spec.transforms.isEmpty {
-            return "\(label): a \(DatasetFormat.fhirNdjson.displayName) dataset takes no transforms."
-        }
+        if let issue = capabilityIssue(with: spec) { return issue }
         guard let sourceText else {
             return "\(label) is not UTF-8 text, so it cannot hold FHIR resources."
         }
@@ -132,7 +152,7 @@ public enum DatasetSpecValidation {
             return "'\(proposed.file)': whether a dataset gives the same rows in every assignment "
                 + "cannot be changed here."
         }
-        if proposed.format != (stored?.format ?? .csv) {
+        if proposed.format != (stored?.format ?? .csv) || proposed.unknownFormat != stored?.unknownFormat {
             return "'\(proposed.file)': the dataset's format is set when it is attached from the course "
                 + "library, and cannot be changed here."
         }
