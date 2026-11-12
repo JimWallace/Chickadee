@@ -81,9 +81,16 @@ struct SupportFileRow: HTML {
         file.datasetTransformsEditable ? [] : [.disabled]
     }
 
+    /// `hidden` on the per-student toggle of a format whose capabilities
+    /// select nothing: every student receives the same file, so
+    /// "Per-student data" would say something false. The delivery note says "One shared copy".
+    private var hiddenUnlessSelectable: [MarkupAttribute<HTMLTag.label>] {
+        file.datasetCapabilities.selects ? [] : [.hidden]
+    }
+
     private var datasetControl: some HTML {
         div(.class("dataset-control")) {
-            label(.class("dataset-toggle")) {
+            label(attributes: [.class("dataset-toggle")] + hiddenUnlessSelectable) {
                 " "
                 // An attached file always has a spec; detach ends it. A
                 // partition is not a sample, so this box does not end it.

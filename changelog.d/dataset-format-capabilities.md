@@ -9,3 +9,7 @@
   such a format is refused by name. This lets a later format ship without
   breaking a blue-green switchover or a rollback
   (docs/dataset-kinds-plan.md).
+- **The MCP dataset result reports a FHIR summary as `summary`.** It was
+  `fhir`. The value is a description that names its own format:
+  `{descriptionVersion, format, fhirNdjson}`. A later format adds its own key
+  inside it.

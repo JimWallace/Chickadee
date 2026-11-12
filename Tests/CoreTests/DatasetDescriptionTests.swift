@@ -28,7 +28,6 @@ import Testing
         #expect(text.contains(#""format":"fhirNdjson""#))
         #expect(try JSONDecoder().decode(DatasetDescription.self, from: Data(text.utf8)) == description)
         #expect(description.format == .fhirNdjson)
-        #expect(description.unitCount == 1)
     }
 
     @Test func aBareSummaryWrittenBeforeTheEnvelopeReadsAsFHIR() throws {

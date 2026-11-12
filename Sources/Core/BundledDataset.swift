@@ -107,6 +107,21 @@ public struct BundledDatasetVersion: Codable, Sendable, Equatable {
         case datasetDescription = "summary"
     }
 
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        version = try c.decode(Int.self, forKey: .version)
+        filename = try c.decode(String.self, forKey: .filename)
+        sha256 = try c.decode(String.self, forKey: .sha256)
+        sizeBytes = try c.decode(Int.self, forKey: .sizeBytes)
+        rowCount = try c.decode(Int.self, forKey: .rowCount)
+        columns = try c.decode([DatasetColumn].self, forKey: .columns)
+        note = try c.decodeIfPresent(String.self, forKey: .note)
+        // A description this server cannot read (a newer envelope) is no
+        // description, as on the version row; the import recomputes the
+        // facts from the bytes and loses only the prose.
+        datasetDescription = try? c.decodeIfPresent(DatasetDescription.self, forKey: .datasetDescription)
+    }
+
     public init(
         version: Int, filename: String, sha256: String, sizeBytes: Int, rowCount: Int, columns: [DatasetColumn],
         note: String?, description: DatasetDescription? = nil

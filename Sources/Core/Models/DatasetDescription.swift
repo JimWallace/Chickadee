@@ -37,13 +37,6 @@ public enum DatasetDescription: Equatable, Sendable {
         case .fhirNdjson(let summary): return summary
         }
     }
-
-    /// The units of the file in its own words: "300 patients".
-    public var unitCount: Int {
-        switch self {
-        case .fhirNdjson(let summary): return summary.patientCount
-        }
-    }
 }
 
 extension DatasetDescription: Codable {

@@ -111,7 +111,7 @@ private struct FHIRCodeTable: HTML {
                 tbody {
                     for entry in codes {
                         tr {
-                            td {
+                            td(.class("nowrap")) {
                                 code { entry.code }
                                 input(.type(.hidden), .name("codeTypes[]"), .value(entry.resourceType))
                                 input(.type(.hidden), .name("codeSystems[]"), .value(entry.system ?? ""))
