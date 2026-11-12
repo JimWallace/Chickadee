@@ -123,6 +123,10 @@ final class AvatarPickerContext: Encodable {
     let rings: [AvatarPickerOption]
     /// The seasonal rings out of their term: shown, never selectable.
     let laterRings: [AvatarPickerOption]
+    /// How the student earned each open ring an achievement granted, in
+    /// ring order: "Cross-fade: earned for “Painted a tile”."
+    /// (docs/achievement-rewards.md, S2). Empty when none was granted.
+    let grantNotes: [String]
     /// Course staff wear the staff ring and cannot choose one: the Ring group
     /// becomes a note.
     let isStaff: Bool
@@ -134,7 +138,8 @@ final class AvatarPickerContext: Encodable {
 
     init(
         for spec: AvatarSpec, isStaff: Bool, handle: String = "", hatchedText: String = "",
-        hatch: AvatarHatchContext? = nil, unlocked: Set<WardrobeItem> = []
+        hatch: AvatarHatchContext? = nil, unlocked: Set<WardrobeItem> = [],
+        grantLabels: [WardrobeItem: String] = [:]
     ) {
         hero = AvatarPresentation(for: spec, size: .podium, accessibility: .decorative, isStaff: isStaff)
         self.isStaff = isStaff
@@ -180,6 +185,12 @@ final class AvatarPickerContext: Encodable {
                 || AvatarCustomization.isOpen(value, for: .border, season: season, unlocked: unlocked)
         }
         rings = open.map { Self.ringOption($0, for: spec, isLocked: false) }
+        grantNotes = open.compactMap { value in
+            guard let item = WardrobeItem(slot: .border, value: value), unlocked.contains(item),
+                let label = grantLabels[item]
+            else { return nil }
+            return "\(item.displayName): earned for “\(label)”."
+        }
         laterRings = values.filter { !open.contains($0) && AvatarBorder(rawValue: $0)?.season != nil }
             .map { Self.ringOption($0, for: spec, isLocked: true) }
     }

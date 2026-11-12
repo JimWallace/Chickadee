@@ -1,6 +1,6 @@
 # Achievements and rewards across the site
 
-**Status: decided; S1, S3, S4 and S5 shipped.** The maintainer took the six open
+**Status: decided; S1, S2, S3, S4 and S5 shipped.** The maintainer took the six open
 decisions on 2026-10-17 (see "Decisions taken" at the end). Each took the
 recommended answer. It continues
 [achievements-unification.md](achievements-unification.md) (one editor for
@@ -13,10 +13,10 @@ wardrobe item?), and it gives #2617 (one toast for everything earned) and
 | Slice | Content | Issue | State |
 |---|---|---|---|
 | S1 | The award ledger: one stored row for each achievement a student earns | — | shipped |
-| S2 | A wardrobe item as an achievement reward, on an assignment | — | proposed |
+| S2 | A wardrobe item as an achievement reward, on an assignment | #2619 | shipped (individual rows; see "What S2 shipped") |
 | S3 | Course achievements: the model, the course signals and the evaluator | — | shipped |
 | S4 | The course Achievements tab in the instructor area | — | shipped |
-| S5 | MCP parity for course achievements and the reward field | — | shipped (course tools; the reward field comes with S2) |
+| S5 | MCP parity for course achievements and the reward field | — | shipped (the reward field with S2) |
 | S6 | The site rules, re-expressed as achievements in code | — | proposed |
 | S7 | Student surfaces: the trophy case and the one toast read the ledger | #2621, #2617 | proposed |
 | S8 | Carry-through: course bundle, new term, account export, deletion | — | proposed |
@@ -206,8 +206,9 @@ point stays fixed: an item an achievement grants has no built-in rule, so the
 that issue:
 
 1. **Which items.** A separate pool. `WardrobeItem.grantable` lists the items
-   with no built-in rule. Spectrum is the first. The gradcap and the rubber
-   duck join it when W4 (#2620) gives them a slot. A built-in-rule item is
+   with no built-in rule: spectrum, and cross-fade, drawn from the Cross-fade
+   pattern of the HLTH 230 week-1 activity "The Class Paints a Picture". The
+   gradcap and the rubber duck join it when W4 (#2620) gives them a slot. A built-in-rule item is
    never grantable: the editor does not offer it, and the validator refuses
    it.
 2. **Course items are account-wide (decided).** An item one course grants shows
@@ -533,6 +534,32 @@ S6 and S8 as they fit.
 
 ---
 
+## What S2 shipped
+
+- `RewardType.wardrobe` and `AchievementReward.item`, decoded with
+  `decodeIfPresent`; `WardrobeItem.grantable` (spectrum, cross-fade) and
+  `hasBuiltInRule`, with a test that every item is exactly one of rule, found
+  or grantable.
+- `wardrobe_unlocks.source` and `label` (`AddWardrobeUnlockSource`).
+- The grant on read: the student's own result page grants the item of each
+  satisfied individual `wardrobe` achievement
+  (`AchievementAwardStore.grantWardrobeRewards`), writes a ledger row, and
+  shows the Earned toast with "Earned for “<name>”." The account page's Ring
+  group says "<ring>: earned for “<name>”." from the stored label.
+- The Reward control in the assignment editor: Badge or Wardrobe item for an
+  individual row, with the item select and the account-wide note. The table's
+  summary names the item.
+- MCP: `rewardType` and `rewardItem` on the `get_achievements` and
+  `update_achievements` row, with prose derived from `WardrobeItem.grantable`
+  (`MCPWardrobeItemProse`, `MCPWardrobeItemCoverageTests`).
+
+Not in S2, and refused on save until a later slice builds it: a class goal's
+"Also grant" (the sweep would grant the item), and a wardrobe reward on a
+course achievement. The editor does not draw the instructor's bird beside the
+item select yet.
+
+---
+
 ## Decisions taken
 
 The maintainer answered the six open questions on 2026-10-17. Each took the
@@ -545,4 +572,4 @@ recommended answer.
 | Course scope (decision 3) | S3 ships `individual` course achievements only. |
 | The course tab's gate (decision 9) | `ta` and above, as the assignment table is. |
 | `sly` and Ace (decision 8) | Two rules. `sly` keeps its own every-test-passed check. |
-| A seeded completion achievement | Not yet. Spectrum stays the only grantable item until W4 gives the gradcap a slot. |
+| A seeded completion achievement | Not yet. Spectrum stays the only grantable item until W4 gives the gradcap a slot. Superseded on 2026-11-12: the maintainer asked for cross-fade as a second grantable ring, for a week-1 class activity. |

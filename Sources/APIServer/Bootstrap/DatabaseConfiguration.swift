@@ -604,4 +604,8 @@ private func registerDataMigrations(on app: Application) {
     // before the column, from its manifest (docs/assignment-types.md). Reads
     // `assignments` and `test_setups`, so it follows `AddAssignmentType`.
     app.migrations.add(BackfillAssignmentType())
+
+    // A wardrobe unlock records the achievement that granted it, and its
+    // name (docs/achievement-rewards.md, S2). Schema only.
+    app.migrations.add(AddWardrobeUnlockSource())
 }

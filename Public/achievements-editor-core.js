@@ -177,7 +177,13 @@
         return conds.map(function (c) { return condPhrase(c, ctx); }).join(joiner);
     }
 
-    /// The Earned-when cell. `ctx.dimLabel` names a record dimension.
+    /// Does this row grant a wardrobe item (docs/achievement-rewards.md, S2)?
+    function grantsItem(row) {
+        return row.scope === 'individual' && row.rewardType === 'wardrobe';
+    }
+
+    /// The Earned-when cell. `ctx.dimLabel` names a record dimension, and
+    /// `ctx.itemLabel` a wardrobe item.
     function summary(row, ctx) {
         if (row.scope === 'record') {
             return 'record · ' + ctx.dimLabel(row.recordDimension);
@@ -185,6 +191,10 @@
         if (row.scope === 'classWide') {
             return conditionsText(row, ctx) + ' · by ' + n(row.classPercent)
                 + '% of class · +' + n(row.points) + (row.points === 1 ? ' pt' : ' pts');
+        }
+        if (grantsItem(row)) {
+            var item = ctx.itemLabel ? ctx.itemLabel(row.rewardItem) : n(row.rewardItem);
+            return conditionsText(row, ctx) + ' · ' + ctx.esc(item);
         }
         return conditionsText(row, ctx);
     }
@@ -244,6 +254,12 @@
                 next.classPercent = Number(form.classPercent || 0);
                 next.points = Number(form.points || 0);
             }
+            // Only an individual row may grant an item; every other row
+            // keeps its scope's own reward, so it sends none.
+            if (form.scope === 'individual' && form.rewardType === 'wardrobe') {
+                next.rewardType = 'wardrobe';
+                next.rewardItem = form.rewardItem;
+            }
         }
         return { ok: true, achievement: next };
     }
@@ -276,6 +292,7 @@
         condPhrase: condPhrase,
         conditionsText: conditionsText,
         summary: summary,
+        grantsItem: grantsItem,
         sectionOptions: sectionOptions,
         conditionFromRow: conditionFromRow,
         buildAchievement: buildAchievement,

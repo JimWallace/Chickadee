@@ -156,9 +156,11 @@ struct AccountRoutes: RouteCollection {
         let userID = try user.requireID()
         let stored = (try? await WardrobeUnlockStore.unlocked(for: userID, on: req.db)) ?? []
         let unlocked = (try? await WardrobeUnlockStore.grantEarned(for: userID, on: req.db)) ?? stored
+        // The achievement that granted an item names how it was earned.
+        let grantLabels = (try? await WardrobeUnlockStore.grantLabels(for: userID, on: req.db)) ?? [:]
         guard let term = AcademicTerm.current() else {
             return AvatarPickerContext(
-                for: spec, isStaff: isStaff, handle: handle ?? "", unlocked: unlocked)
+                for: spec, isStaff: isStaff, handle: handle ?? "", unlocked: unlocked, grantLabels: grantLabels)
         }
         let status = try await AvatarStore.hatchStatus(for: user, term: term, on: req.db)
         let requested: AvatarHatchStrip? =
@@ -172,7 +174,7 @@ struct AccountRoutes: RouteCollection {
         let hatchedText = (status.lastHatchedAt ?? user.createdAt).map { "Hatched \(formatter.string(from: $0))" }
         return AvatarPickerContext(
             for: spec, isStaff: isStaff, handle: handle ?? "", hatchedText: hatchedText ?? "", hatch: hatch,
-            unlocked: unlocked)
+            unlocked: unlocked, grantLabels: grantLabels)
     }
 
     /// The one-shot success banner after a redirect back to this page.

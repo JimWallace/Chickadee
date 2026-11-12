@@ -1931,22 +1931,36 @@ coordination, and each must see every edit.
   - `WardrobeUnlockStore.grantFound`, from `POST /account/wardrobe/found`
     (`Routes/Web/AccountRoutes+Found.swift`). The Konami script
     `Public/quantum-cats-egg.js` posts it.
+  - `AchievementAwardStore.grantWardrobeRewards`, when the student's own
+    result page loads and an individual assignment achievement with a
+    `wardrobe` reward is satisfied (docs/achievement-rewards.md, S2). It
+    writes `source` and `label`, and an award ledger row, which a course
+    `achievementsEarned` condition counts like any assignment award. It
+    does not grant while the submission is pending, because the page shows
+    no Earned toast then.
 - **Readers:**
   - The "Your bird" card (`AvatarPickerContext`) and the avatar save
     chokepoint (`AvatarCustomization.isOpen`), which offer and accept only
-    stored items.
+    stored items. The card reads `label` for "how you earned it"
+    (`WardrobeUnlockStore.grantLabels`).
   - The result page's Earned toast, which shows what `grantNew` stored.
   - The data export.
   - Indirectly, every page that draws a bird: a worn ring shows on
     leaderboards and rosters (`AvatarPresentation`).
 - **Also reads `WardrobeItem.allCases`:** the course Achievements tab's
-  "Built in" list (`BuiltInRuleRow`), found items included.
+  "Built in" list (`BuiltInRuleRow`), found items included and grantable
+  items left out.
 - **Rules** (`docs/student-wardrobe.md`, 6b and 6c):
   - A stored unlock is never taken back.
   - `earned(by:)` never returns a found item, and `grantFound` refuses an
     earned one. `grantEarned` counts only earnable items when it decides to
     skip the progress queries, and `grantNew` never returns a found item. A
     new found item needs no change to the grading path.
+  - A grantable item (`WardrobeItem.grantable`) has no built-in rule:
+    `earned(by:)` never returns one, `grantEarned` skips it when it decides
+    to skip the progress queries (`hasBuiltInRule`), and `grantNew` never
+    returns one. Only a `wardrobe` achievement grants it, and the result
+    page's toast shows it with the achievement's name.
   - Course staff wear the staff ring: no surface offers them a ring to wear.
     The result page's toast skips ring items for them, and the layout
     renders them no found-ring toast (`CurrentUserContext.foundRingToast`).
