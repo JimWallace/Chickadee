@@ -37,6 +37,11 @@ public enum DatasetMaterializer {
     /// §4.11). Only a `.partition` spec reads it. A nil number gives a
     /// partition the whole file, which is what a job with no student grades.
     public static func materialize(source: String, spec: DatasetSpec, seedHex: String, dealNumber: Int?) -> String {
+        // A FHIR file is delivered whole and byte for byte
+        // (docs/fhir-datasets-plan.md §11, decision 1). Authoring refuses
+        // every selecting setting on it; one that arrives through a
+        // whole-manifest door is ignored here rather than read as CSV.
+        guard spec.format.supportsSelection else { return source }
         let selected = select(source: source, spec: spec, seedHex: seedHex, part: spec.part(forDeal: dealNumber))
         guard !spec.transforms.isEmpty else { return selected }
         return spec.transforms.enumerated().reduce(selected) { csv, step in

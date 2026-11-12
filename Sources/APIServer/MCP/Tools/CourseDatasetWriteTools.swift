@@ -35,6 +35,10 @@ struct CreateDatasetTool: ContentTool {
         /// With `sourceUrl` or `uploadID`, the stored filename; with
         /// `assignmentPublicID`, the support file to move into the library.
         let filename: String?
+        /// A `DatasetFormat` raw value. Nil means CSV for `sourceUrl`, and the
+        /// file's extension for a promote. A `var` optional, so the memberwise
+        /// initializer may omit it.
+        var format: String?
         /// ... or from a staged `begin_upload` upload in this course
         /// (docs/mcp-file-uploads.md). A `var`, so the memberwise init defaults
         /// it to nil and keeps its shape.
@@ -51,15 +55,19 @@ struct CreateDatasetTool: ContentTool {
 
     static let name = "create_dataset"
     static let description =
-        "Create a dataset in the course library. Version 1 comes from ONE of three places: a CSV "
+        "Create a dataset in the course library. Version 1 comes from ONE of three places: a file "
         + "uploaded through begin_upload (uploadID plus filename; the way to deliver a local file byte for "
-        + "byte), a CSV at sourceUrl, or a support file of an assignment (assignmentPublicID plus "
+        + "byte), a file at sourceUrl, or a support file of an assignment (assignmentPublicID plus "
         + "filename). From an "
         + "assignment, the file becomes attached to the new dataset and keeps its bytes, its sample and "
-        + "its scope, so no student's rows change. The dataset starts unpublished: students see it on the "
+        + "its scope, so no student's rows change. format is csv (the default) or fhirNdjson, FHIR R4 "
+        + "resources one per line in a .ndjson file; it is fixed for every later version. A promoted file "
+        + "takes the format of its extension. The dataset starts unpublished: students see it on the "
         + "course Data page only after update_dataset publishes it, which needs a provenance and a licence. "
-        + "The dictionary's value types are inferred from the file; describe the columns with "
-        + "update_dataset. Attach the dataset to an assignment with attach_dataset."
+        + "A CSV dictionary's value types are inferred from the file; describe the columns with "
+        + "update_dataset. A FHIR dataset is summarized instead (patients, resource types, codes in use); "
+        + "describe its entries with update_dataset. Attach the dataset to an assignment with "
+        + "attach_dataset."
     static let inputSchema: JSONValue = MCPSchema.object(
         properties: [
             "courseCode": MCPSchema.courseCode,
@@ -100,6 +108,13 @@ struct CreateDatasetTool: ContentTool {
                         + "With uploadID: required, the stored filename (a bare name that ends in .csv). "
                         + "With assignmentPublicID: required, the support file to move into the library."),
             ]),
+            "format": .object([
+                "type": .string("string"),
+                "enum": .array(DatasetFormat.allCases.map { .string($0.rawValue) }),
+                "description": .string(
+                    "Optional. csv (the default) or fhirNdjson. The filename must end in .csv or .ndjson to "
+                        + "match. For a promote it may be omitted: the file's extension decides."),
+            ]),
         ],
         required: ["courseCode", "name"])
     static let outputSchema: JSONValue? = MCPSchema.object(
@@ -117,15 +132,18 @@ struct CreateDatasetTool: ContentTool {
             code: input.courseCode, context: context, atLeast: CourseRoleFloor.manageCourseDatasets)
         let courseID = try course.requireID()
         let testSetupsDirectory = context.request.application.testSetupsDirectory
+        let format = try Self.format(input.format)
         let new = CourseDatasetService.NewDataset(
             name: input.name, slug: try newDatasetSlug(input.slug, name: input.name),
-            description: input.description, provenance: input.provenance, licence: input.licence)
+            description: input.description, provenance: input.provenance, licence: input.licence,
+            format: format ?? .csv)
 
         let dataset: APICourseDataset
         switch (DatasetVersionSource(sourceUrl: input.sourceUrl, uploadID: input.uploadID), input.assignmentPublicID) {
         case (let source?, nil):
             let (upload, staged) = try await source.materialize(
                 filename: input.filename, note: input.note, courseID: courseID, fetch: fetch, context: context)
+            try Self.requireAgreement(filename: upload.filename, format: new.format)
             dataset = try await datasetLibraryCall {
                 try await CourseDatasetService.create(
                     courseID: courseID, dataset: new, upload: upload,
@@ -143,6 +161,9 @@ struct CreateDatasetTool: ContentTool {
                 throw MCPToolError.invalidArguments(
                     detail: "The assignment \(publicID) is not in \(course.urlKey). A dataset belongs to one course.")
             }
+            // A promote takes the format of the file's extension; a format
+            // that is passed must agree with it.
+            if let format { try Self.requireAgreement(filename: filename, format: format) }
             dataset = try await datasetLibraryCall {
                 try await CourseDatasetService.promote(
                     file: filename, from: setup, dataset: new, testSetupsDirectory: testSetupsDirectory,
@@ -159,6 +180,32 @@ struct CreateDatasetTool: ContentTool {
     }
 }
 
+extension CreateDatasetTool {
+    /// The format named by `raw`, or nil when it is omitted.
+    static func format(_ raw: String?) throws -> DatasetFormat? {
+        guard let raw else { return nil }
+        guard let format = DatasetFormat(rawValue: raw) else {
+            let names = DatasetFormat.allCases.map { "\"\($0.rawValue)\"" }.joined(separator: " or ")
+            throw MCPToolError.invalidArguments(detail: "format \"\(raw)\" is not known. Pass \(names).")
+        }
+        return format
+    }
+
+    /// Refuses a filename whose extension is not `format`'s, naming the
+    /// format that the extension would need.
+    static func requireAgreement(filename: String, format: DatasetFormat) throws {
+        guard !format.matches(filename: filename) else { return }
+        if let other = DatasetFormat.allCases.first(where: { $0.matches(filename: filename) }) {
+            throw MCPToolError.invalidArguments(
+                detail: "'\(filename)' is a .\(other.fileExtension) file, but format is \"\(format.rawValue)\". "
+                    + "Pass format: \"\(other.rawValue)\", or a filename that ends in .\(format.fileExtension).")
+        }
+        throw MCPToolError.invalidArguments(
+            detail: "'\(filename)' does not end in .\(format.fileExtension), as a \(format.displayName) dataset "
+                + "needs. Pass filename, or set format to match the file.")
+    }
+}
+
 // MARK: - update_dataset
 
 struct UpdateDatasetTool: ContentTool {
@@ -171,14 +218,32 @@ struct UpdateDatasetTool: ContentTool {
         let licence: String?
         let isPublished: Bool?
         /// The prose of the newest version's columns. A column it does not
-        /// name keeps its prose.
+        /// name keeps its prose. CSV only.
         let columns: [ColumnInput]?
+        /// The prose of the newest version's resource types and codes. An
+        /// entry it does not name keeps its prose. FHIR only.
+        var entries: [EntryInput]?
+        /// The example resource of the newest version. FHIR only.
+        var example: ExampleInput?
     }
 
     struct ColumnInput: Decodable, Sendable {
         let name: String
         let description: String?
         let unit: String?
+    }
+
+    /// A resource type, or with `code` one code of it (docs/fhir-datasets-plan.md §7).
+    struct EntryInput: Decodable, Sendable {
+        let resourceType: String
+        let system: String?
+        let code: String?
+        let description: String
+    }
+
+    struct ExampleInput: Decodable, Sendable {
+        let resourceType: String
+        let id: String
     }
 
     struct Output: Encodable, Sendable {
@@ -194,6 +259,11 @@ struct UpdateDatasetTool: ContentTool {
         + "version's columns. An omitted field is left as it is; an empty string clears a text field. "
         + "columns changes only the columns it names: send {name, description, unit} per column, with "
         + "\"\" to clear one. A column's value type is inferred from the file and cannot be set. "
+        + "A FHIR dataset has no columns: entries describes its resource types ({resourceType, "
+        + "description}) and its codes ({resourceType, system, code, description}), changing only the "
+        + "entries named, and example picks the resource ({resourceType, id}) the Data page shows. An "
+        + "entry or example the newest version lacks is refused, as are columns on a FHIR dataset and "
+        + "entries on a CSV one. "
         + "Publishing needs a provenance and a licence, and a published dataset must keep both. No "
         + "assignment's grades change."
     static let inputSchema: JSONValue = MCPSchema.object(
@@ -214,6 +284,20 @@ struct UpdateDatasetTool: ContentTool {
                     ],
                     required: ["name"]),
             ]),
+            "entries": .object([
+                "type": .string("array"),
+                "description": .string(
+                    "Optional, FHIR only. Prose for the named resource types and codes of the newest version."),
+                "items": MCPSchema.object(
+                    properties: [
+                        "resourceType": MCPSchema.string, "system": MCPSchema.string, "code": MCPSchema.string,
+                        "description": MCPSchema.string,
+                    ],
+                    required: ["resourceType", "description"]),
+            ]),
+            "example": MCPSchema.object(
+                properties: ["resourceType": MCPSchema.string, "id": MCPSchema.string],
+                required: ["resourceType", "id"]),
         ],
         required: ["courseCode", "slug"])
     static let outputSchema: JSONValue? = MCPSchema.object(
@@ -231,6 +315,7 @@ struct UpdateDatasetTool: ContentTool {
             code: input.courseCode, context: context, atLeast: CourseRoleFloor.manageCourseDatasets)
         let dataset = try await requireCourseDataset(
             slug: input.slug, courseID: try course.requireID(), context: context)
+        let blobs = AssignmentVersionBlobStore(testSetupsDirectory: context.request.application.testSetupsDirectory)
         // One transaction, so a refused step leaves the dataset as it was.
         // Unpublish first and publish last, so one call can clear the licence
         // of a published dataset, or fill it and publish.
@@ -246,7 +331,15 @@ struct UpdateDatasetTool: ContentTool {
                         licence: input.licence),
                     on: db)
                 if let columns = input.columns {
+                    guard dataset.format == .csv else {
+                        throw CourseDatasetError.dictionary(
+                            "'\(dataset.slug)' is a FHIR dataset, which has no columns. Describe it with entries.")
+                    }
                     try await Self.updateColumns(columns, of: dataset, on: db)
+                }
+                // An empty entries list is a no-op, as an empty columns list is.
+                if !(input.entries ?? []).isEmpty || input.example != nil {
+                    try await Self.updateEntries(input, of: dataset, blobs: blobs, on: db)
                 }
                 if input.isPublished == true {
                     try await CourseDatasetService.setPublished(dataset, true, on: db)
@@ -256,6 +349,29 @@ struct UpdateDatasetTool: ContentTool {
         return Output(
             courseKey: course.urlKey, courseTerm: course.term?.displayName,
             dataset: try await datasetDTO(dataset, context: context))
+    }
+
+    /// Applies `entries` and `example` to the newest version's FHIR
+    /// dictionary. Entries it does not name keep their prose.
+    private static func updateEntries(
+        _ input: Input, of dataset: APICourseDataset, blobs: AssignmentVersionBlobStore, on db: any Database
+    ) async throws {
+        guard dataset.format == .fhirNdjson else {
+            throw CourseDatasetError.dictionary(
+                "'\(dataset.slug)' is a CSV dataset. Describe its columns with columns, not entries.")
+        }
+        var edit = CourseDatasetService.FHIRDictionaryEdit(replacingOthers: false)
+        for entry in input.entries ?? [] {
+            if let code = entry.code {
+                let key = FHIRDatasetSummary.CodeKey(resourceType: entry.resourceType, system: entry.system, code: code)
+                edit.codes.append((key, entry.description))
+            } else {
+                edit.types.append((entry.resourceType, entry.description))
+            }
+        }
+        if let example = input.example { edit.example = (example.resourceType, example.id) }
+        _ = try await CourseDatasetService.updateFHIRDictionary(
+            dataset, version: dataset.currentVersion, edit: edit, blobs: blobs, on: db)
     }
 
     /// Merges `columns` into the newest version's prose. The service replaces
@@ -312,10 +428,12 @@ struct AddDatasetVersionTool: ContentTool {
 
     static let name = "add_dataset_version"
     static let description =
-        "Add a new version to a library dataset from a CSV, with an optional note. The CSV comes from "
-        + "ONE of uploadID (a file uploaded byte for byte through begin_upload, with filename) or sourceUrl. The "
-        + "dictionary prose carries over by column name, and droppedColumns names the columns the new "
-        + "file lacks. Bytes equal to an earlier version are refused. Attached assignments keep the "
+        "Add a new version to a library dataset, with an optional note. The file comes from ONE of "
+        + "uploadID (a file uploaded byte for byte through begin_upload, with filename) or sourceUrl, and "
+        + "must be in the dataset's format (list_datasets reports it): a CSV, or FHIR NDJSON in a .ndjson "
+        + "file. The dictionary prose carries over: by column name for a CSV, with droppedColumns naming "
+        + "the columns the new file lacks; by resource type and code for FHIR, with the example kept when "
+        + "the new file still has it. Bytes equal to an earlier version are refused. Attached assignments keep the "
         + "version they pin, so no grade changes: the result's usage marks each one isBehind, and "
         + "attach_dataset moves an assignment to the new version."
     static let inputSchema: JSONValue = MCPSchema.object(

@@ -50,7 +50,7 @@ extension CourseDatasetService {
         guard dataset.courseID == setup.courseID else { throw CourseDatasetError.wrongCourse }
         guard let manifest = setup.decodedManifest() else { throw CourseDatasetError.unreadableManifest }
 
-        let filename = try validatedFilename(request.filename ?? version.filename)
+        let filename = try validatedFilename(request.filename ?? version.filename, format: dataset.format)
         try requireSupportFileName(filename, manifest: manifest)
         if manifest.libraryAttachment(for: filename) != nil { throw CourseDatasetError.alreadyAttached(filename) }
         if await listZipEntries(zipPath: setup.zipPath).contains(filename) {
@@ -63,7 +63,7 @@ extension CourseDatasetService {
         let spec = DatasetSpec(
             file: filename, kind: stratum == nil ? .rowSample : .stratifiedSample, sampleSize: request.sampleSize,
             stratumColumn: stratum, source: DatasetSource(slug: dataset.slug, version: version.version),
-            scope: request.scope)
+            scope: request.scope, format: dataset.format)
         try requireValid(spec, bytes: bytes)
         let change: (inout TestProperties) -> Void = { props in
             props.datasets.removeAll { $0.file == filename }
@@ -128,7 +128,8 @@ extension CourseDatasetService {
 
     /// Re-copies an attached file from another version of its dataset and
     /// returns the new spec. The sample, the stratum and the transforms carry
-    /// over, and are checked again against the new bytes.
+    /// over, and are checked again against the new bytes. The format is the
+    /// dataset's, which never changes.
     @discardableResult
     static func updateAttachment(
         file filename: String, in setup: APITestSetup, to number: Int?, testSetupsDirectory: String,
@@ -149,7 +150,7 @@ extension CourseDatasetService {
             file: filename, kind: attached.kind, sampleSize: attached.sampleSize,
             stratumColumn: attached.stratumColumn, transforms: attached.transforms,
             source: DatasetSource(slug: dataset.slug, version: version.version), scope: attached.scope,
-            partCount: attached.partCount)
+            partCount: attached.partCount, format: dataset.format)
         try requireValid(spec, bytes: bytes)
 
         guard let previous = await extractZipEntry(zipPath: setup.zipPath, entryName: filename) else {
@@ -208,6 +209,12 @@ extension CourseDatasetService {
     /// `filename` of `setup`, and attaches the file to it. The bytes do not
     /// change, and a sample the file already has is kept, so every student
     /// keeps the rows they had.
+    ///
+    /// The file's extension names the format: a `.ndjson` file becomes a FHIR
+    /// NDJSON dataset (docs/fhir-datasets-plan.md §7), whatever `input.format`
+    /// says, and any other file a CSV one. A FHIR file is delivered whole, so a
+    /// sample or a partition on its spec is refused before anything is
+    /// created.
     static func promote(
         file filename: String, from setup: APITestSetup, dataset input: NewDataset, testSetupsDirectory: String,
         on db: any Database
@@ -219,16 +226,25 @@ extension CourseDatasetService {
             throw CourseDatasetError.unreadableFile(filename)
         }
 
+        var input = input
+        input.format = DatasetFormat.fhirNdjson.matches(filename: filename) ? .fhirNdjson : .csv
+        let existing = manifest.datasetSpecsByFile[filename]
+        func spec(source: DatasetSource) -> DatasetSpec {
+            DatasetSpec(
+                file: filename, kind: existing?.kind ?? .rowSample, sampleSize: existing?.sampleSize,
+                stratumColumn: existing?.stratumColumn, transforms: existing?.transforms ?? [], source: source,
+                scope: .assignment, partCount: existing?.partCount, format: input.format)
+        }
+        if input.format == .fhirNdjson {
+            // Checked against the source the create will make, before it does.
+            try requireValid(spec(source: DatasetSource(slug: try validatedSlug(input.slug), version: 1)), bytes: bytes)
+        }
+
         let (dataset, version) = try await create(
             courseID: setup.courseID, dataset: input,
             upload: Upload(filename: filename, bytes: bytes, note: "Moved from an assignment"),
             blobs: AssignmentVersionBlobStore(testSetupsDirectory: testSetupsDirectory), on: db)
-        let source = DatasetSource(slug: dataset.slug, version: version.version)
-        let existing = manifest.datasetSpecsByFile[filename]
-        let spec = DatasetSpec(
-            file: filename, kind: existing?.kind ?? .rowSample, sampleSize: existing?.sampleSize,
-            stratumColumn: existing?.stratumColumn, transforms: existing?.transforms ?? [], source: source,
-            scope: .assignment, partCount: existing?.partCount)
+        let spec = spec(source: DatasetSource(slug: dataset.slug, version: version.version))
         try await mutateManifest(setup: setup, on: db) { props in
             props.datasets.removeAll { $0.file == filename }
             props.datasets.append(spec)
@@ -252,6 +268,10 @@ extension CourseDatasetService {
         }
         guard let version = try await version(source.version, of: dataset, on: db) else {
             return "'\(spec.file)' names version \(source.version) of '\(source.slug)', which does not exist."
+        }
+        guard spec.format == dataset.format else {
+            return "'\(spec.file)' is marked \(spec.format.displayName), but the library dataset '\(source.slug)' "
+                + "is \(dataset.format.displayName)."
         }
         guard let bytes = await extractZipEntry(zipPath: zipPath, entryName: spec.file),
             sha256HexDigest(bytes) == version.sha256

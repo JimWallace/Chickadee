@@ -76,6 +76,11 @@ extension CourseBundleService {
                 reason: "Unsupported bundle schemaVersion \(manifest.schemaVersion); expected "
                     + "\(supported.lowerBound) to \(supported.upperBound)")
         }
+        if let issue = CourseBundleManifest.datasetFormatIssue(
+            schemaVersion: manifest.schemaVersion, datasets: manifest.datasets ?? [])
+        {
+            throw AppError.badRequest(reason: issue)
+        }
 
         return manifest
     }

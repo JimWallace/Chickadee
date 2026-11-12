@@ -986,6 +986,78 @@ coordination, and each must see every edit.
     `DatasetLinkTargets.placement`, which both the writer and the skip check
     read.
 
+### Dataset format: `DatasetFormat`
+
+- **Objects:** `DatasetSpec.format` (`csv` or `fhirNdjson`), decoded as `csv`
+  and encoded only when it is not, so a stored manifest keeps its bytes
+  (`docs/fhir-datasets-plan.md`).
+- **Readers that branch on the format:**
+  - `DatasetMaterializer.materialize`: a format without `supportsSelection`
+    is delivered as the source bytes, whatever the spec selects.
+  - `DatasetDeliveryMode.init`: such a format is always `shared`. The Files
+    panel row carries `datasetFormat` so its note reads the same rule.
+  - `DatasetSpec.part(forDeal:)`, `TestProperties.hasPartitionedDatasets` and
+    `DatasetDeals.withholdingUndealtParts`: a FHIR spec is never a partition.
+  - `DatasetSpecValidation.issue`: a FHIR spec refuses a sample, a partition,
+    a stratum and transforms, needs a `.ndjson` name and a file that passes
+    `FHIRNdjsonProfile`; a CSV spec refuses a `.ndjson` name.
+  - `datasetSpecRefusal` reads the file for every FHIR spec, and the zip
+    upload runs the same format checks (`datasetFormatRefusal`). Bundle
+    import, clone and restore copy the manifest as it is, as for every other
+    spec rule.
+  - `datasetDiagnosticsReports` skips a FHIR spec: there is nothing to
+    estimate when every student gets the whole file.
+  - `CourseDatasetService` (P2): `create` and `addVersion` check a file by
+    the dataset's format (`checkedFile`); a FHIR version stores
+    `summary_json`, its patient count in `row_count` and no columns. Attach and
+    update take the format from the library dataset, promote from the file's
+    extension. `sourceIssue` refuses a spec whose format is not its dataset's,
+    so the whole-manifest doors drop that source.
+  - The clone (`copyLibrary`) copies the format and the summary. The bundle
+    writes `schemaVersion` 3 when a dataset is not CSV
+    (`CourseBundleManifest.schemaVersion(carrying:)`), and the import checks a
+    FHIR version's bytes and recomputes its summary.
+  - The staff download names the file and its type by the format; the
+    student download sends the spec's media type.
+  - A FHIR version's `row_count` is patients, not lines. MCP `get_dataset`
+    reads `truncated` from the file's lines for FHIR, not from `rowCount`.
+  - The pages (P3): the Datasets tab takes the format at create and words a
+    version's `row_count` by it (`InstructorDatasetDetail.countText`). The
+    dictionary route edits a FHIR version's summary
+    (`updateFHIRDictionary`): the prose of each type and code, and the
+    example. A new version and a bundle import carry that prose
+    (`carryingNotes`). The Data page shows the summary and the example, and
+    the student download is `mine.ndjson` for a FHIR spec (both names serve
+    the same bytes). The upload page's data line says "every patient". The
+    Files panel hides the sample fields on a FHIR spec, in the view and in
+    `Public/support-files.js`, and the "Course-wide rows" box on a FHIR
+    attachment. An `.ndjson` file that is not a dataset shows no per-student
+    control, only "Move to course library" (`withLibraryStates`).
+  - The MCP tools (P3): `create_dataset` takes `format` and refuses a
+    filename of the other format by name; `get_dataset` reports `format` and
+    the FHIR summary (`DatasetDTO.fhir`), and
+    `get_dataset` shows resource lines with no header. `list_datasets`
+    reports the format but not the summary, which can be large. The write
+    tools return the summary of the one dataset they change.
+    `update_dataset` edits a FHIR dictionary by `entries` and `example` and
+    refuses `columns` on it, and the reverse. `attach_dataset` and
+    `get_assignment` report an attachment's format as `format`
+    (`AttachedDatasetDTO`); `get_support_files` reports it as
+    `datasetFormat`, beside its other `dataset*` fields.
+    The `DatasetToolSchema.format` enum derives from `DatasetFormat.allCases`.
+- **Rules:**
+  - A line of a FHIR file is never re-encoded on any delivery path.
+  - Every rebuild of a `DatasetSpec` carries `format`, as it carries the
+    library fields and `partCount`.
+  - Only the library attach path sets the format
+    (`DatasetSpecValidation.libraryFieldIssue`).
+  - A library dataset's format is fixed at create; a version of another
+    format is refused.
+  - FHIR dictionary prose sits on an entry of the summary, so it can name
+    only what the file holds. Anything that recomputes a summary carries the
+    prose and the example pick from the one before it.
+  - A new format updates every reader above, or says why it does not.
+
 ### Dataset transform kinds: `DatasetTransform.Kind`
 
 - **Objects:** the kind of each step in a spec's `transforms`, and the bytes

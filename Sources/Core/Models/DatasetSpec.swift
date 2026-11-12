@@ -72,11 +72,17 @@ public struct DatasetSpec: Codable, Equatable, Sendable {
     /// How many parts a `.partition` spec splits the file into. Nil for the
     /// other kinds, which authoring refuses to store with one.
     public let partCount: Int?
+    /// The file's format. `.csv` is the decoded default, so every spec written
+    /// before FHIR support keeps its bytes (docs/fhir-datasets-plan.md §6).
+    /// Only the library attach path writes another value; every other door
+    /// carries the stored value through unchanged, as for `source`.
+    public let format: DatasetFormat
 
     public init(
         file: String, kind: DatasetKind = .rowSample, sampleSize: Int? = nil,
         stratumColumn: String? = nil, transforms: [DatasetTransform] = [],
-        source: DatasetSource? = nil, scope: DatasetSliceScope = .assignment, partCount: Int? = nil
+        source: DatasetSource? = nil, scope: DatasetSliceScope = .assignment, partCount: Int? = nil,
+        format: DatasetFormat = .csv
     ) {
         self.file = file
         self.kind = kind
@@ -86,6 +92,7 @@ public struct DatasetSpec: Codable, Equatable, Sendable {
         self.source = source
         self.scope = scope
         self.partCount = partCount
+        self.format = format
     }
 
     /// The part of the file that `dealNumber` receives, or nil when the spec
@@ -94,7 +101,9 @@ public struct DatasetSpec: Codable, Equatable, Sendable {
     /// count, so a later change of the count still gives each part to the
     /// same share of the class.
     public func part(forDeal dealNumber: Int?) -> Int? {
-        guard kind == .partition, let partCount, partCount > 0, let dealNumber, dealNumber >= 0 else {
+        guard kind == .partition, format.supportsSelection, let partCount, partCount > 0, let dealNumber,
+            dealNumber >= 0
+        else {
             return nil
         }
         return dealNumber % partCount
@@ -112,7 +121,7 @@ public struct DatasetSpec: Codable, Equatable, Sendable {
         if isShared { return nil }
         return DatasetSpec(
             file: file, kind: kind, sampleSize: sampleSize, stratumColumn: stratumColumn,
-            transforms: transforms, partCount: partCount)
+            transforms: transforms, partCount: partCount, format: format)
     }
 
     /// The same spec with another scope. The library attach path is the only
@@ -120,7 +129,7 @@ public struct DatasetSpec: Codable, Equatable, Sendable {
     public func withScope(_ scope: DatasetSliceScope) -> DatasetSpec {
         DatasetSpec(
             file: file, kind: kind, sampleSize: sampleSize, stratumColumn: stratumColumn, transforms: transforms,
-            source: source, scope: scope, partCount: partCount)
+            source: source, scope: scope, partCount: partCount, format: format)
     }
 
     /// True when every student receives the same bytes: no sample, no
@@ -132,7 +141,7 @@ public struct DatasetSpec: Codable, Equatable, Sendable {
     public var isShared: Bool { deliveryMode == .shared }
 
     private enum CodingKeys: String, CodingKey {
-        case file, kind, sampleSize, stratumColumn, transforms, source, scope, partCount
+        case file, kind, sampleSize, stratumColumn, transforms, source, scope, partCount, format
     }
 
     public init(from decoder: any Decoder) throws {
@@ -145,6 +154,7 @@ public struct DatasetSpec: Codable, Equatable, Sendable {
         source = try c.decodeIfPresent(DatasetSource.self, forKey: .source)
         scope = try c.decodeIfPresent(DatasetSliceScope.self, forKey: .scope) ?? .assignment
         partCount = try c.decodeIfPresent(Int.self, forKey: .partCount)
+        format = try c.decodeIfPresent(DatasetFormat.self, forKey: .format) ?? .csv
     }
 
     /// Writes the same keys, in the same form, as the synthesized encoder did
@@ -164,5 +174,8 @@ public struct DatasetSpec: Codable, Equatable, Sendable {
             try c.encode(scope, forKey: .scope)
         }
         try c.encodeIfPresent(partCount, forKey: .partCount)
+        if format != .csv {
+            try c.encode(format, forKey: .format)
+        }
     }
 }
