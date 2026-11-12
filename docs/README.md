@@ -63,7 +63,8 @@ not exist.
 - [personalization-drift-prevention-plan.md](personalization-drift-prevention-plan.md) — the plan that prevents drift between personalization and the solution
 - [datasets.md](datasets.md) — per-student datasets (#1083)
 - [datasets-course-library.md](datasets-course-library.md) — the per-course dataset library: versions and dictionary, attachments, the course cohort seed, the student Data page, the MCP tools, clone and bundle, `formatNoise`, the ranked-activity refusal and the dealt partition; opens with a Status table
-- [fhir-datasets-plan.md](fhir-datasets-plan.md) — plan, not built: FHIR NDJSON datasets in the course library, shared first and sampled by patient later, and a simulated live clinical feed
+- [fhir-datasets-plan.md](fhir-datasets-plan.md) — FHIR NDJSON datasets in the course library: P1–P3 built (shared, whole file); Bundle upload, sampling by patient and a live feed planned
+- [dataset-kinds-plan.md](dataset-kinds-plan.md) — plan: one dataset component for many kinds of data (tables, record lists, FHIR, graphs, signals); its "change now" items are built, the rest is planned
 - [dataset-shared-delivery.md](dataset-shared-delivery.md) — link a dataset that is the same for many students into the editor working copy instead of writing a copy per student: a whole file to the shared extraction (step 1), a partition part to a part stored once (step 2)
 - [examples/r-lab9-trial/](examples/r-lab9-trial/) — a worked R lab: starter, solution, data and test scripts for each tier
 
