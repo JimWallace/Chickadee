@@ -66,6 +66,7 @@ not exist.
 - [fhir-datasets-plan.md](fhir-datasets-plan.md) — plan, not built: FHIR NDJSON datasets in the course library, shared first and sampled by patient later, and a simulated live clinical feed
 - [dataset-shared-delivery.md](dataset-shared-delivery.md) — link a dataset that is the same for many students into the editor working copy instead of writing a copy per student: a whole file to the shared extraction (step 1), a partition part to a part stored once (step 2), and a sample that covers its whole file stored as no sample at save time (step 3)
 - [examples/r-lab9-trial/](examples/r-lab9-trial/) — a worked R lab: starter, solution, data and test scripts for each tier
+- [examples/fhir/](examples/fhir/) — the FHIR feed for HLTH 230 Assignment 3: a reproducible generator, the `chickadee_fhir.py` helper with its checks, and a proposed Question 4 with its reference solution and tests
 
 ## Courses, roles and students
 
