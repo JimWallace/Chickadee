@@ -52,6 +52,7 @@ not exist.
 
 - [authoring-editors.md](authoring-editors.md) — the suite editor, the notebook write-back, the language seed and server-side auto-compute
 - [auto-compute.md](auto-compute.md) — auto-compute in the pattern-family editor
+- [mcp-file-uploads.md](mcp-file-uploads.md) — `begin_upload`: how an agent delivers a large local file byte for byte, and why its token is a header
 - [mcp-authoring-roadmap.md](mcp-authoring-roadmap.md) — the MCP authoring roadmap, largely delivered, and its tool index (`MCPRoadmapDocSyncTests` reads it)
 - [assignment-versioning.md](assignment-versioning.md) — content version history: capture, read, restore
 - [inputs.md](inputs.md) — global and section inputs: literals, `=` expressions, `$name` references
@@ -62,6 +63,7 @@ not exist.
 - [personalization-drift-prevention-plan.md](personalization-drift-prevention-plan.md) — the plan that prevents drift between personalization and the solution
 - [datasets.md](datasets.md) — per-student datasets (#1083)
 - [datasets-course-library.md](datasets-course-library.md) — the per-course dataset library: versions and dictionary, attachments, the course cohort seed, the student Data page, the MCP tools, clone and bundle, `formatNoise`, the ranked-activity refusal and the dealt partition; opens with a Status table
+- [fhir-datasets-plan.md](fhir-datasets-plan.md) — plan, not built: FHIR NDJSON datasets in the course library, shared first and sampled by patient later, and a simulated live clinical feed
 - [dataset-shared-delivery.md](dataset-shared-delivery.md) — link a dataset that is the same for many students into the editor working copy instead of writing a copy per student: a whole file to the shared extraction (step 1), a partition part to a part stored once (step 2), and a sample that covers its whole file stored as no sample at save time (step 3)
 - [examples/r-lab9-trial/](examples/r-lab9-trial/) — a worked R lab: starter, solution, data and test scripts for each tier
 

@@ -37,8 +37,69 @@ public enum DatasetSpecValidation {
     /// are typing into.
     public static func issue(with spec: DatasetSpec, sourceCSV: String?) -> String? {
         if let issue = scopeIssue(with: spec) { return issue }
-        if let issue = transformIssue(with: spec, sourceCSV: sourceCSV) { return issue }
-        return selectionIssue(with: spec, sourceCSV: sourceCSV)
+        switch spec.format {
+        case .csv:
+            if let issue = csvExtensionIssue(with: spec) { return issue }
+            if let issue = transformIssue(with: spec, sourceCSV: sourceCSV) { return issue }
+            return selectionIssue(with: spec, sourceCSV: sourceCSV)
+        case .fhirNdjson:
+            return fhirIssue(with: spec, sourceText: sourceCSV)
+        }
+    }
+
+    /// A CSV spec on a file named as FHIR NDJSON, or nil. Any other name is
+    /// left alone: a hand-marked dataset has never needed a `.csv` name, and
+    /// refusing one now would refuse a stored spec at its next edit.
+    public static func csvExtensionIssue(with spec: DatasetSpec) -> String? {
+        guard DatasetFormat.fhirNdjson.matches(filename: spec.file) else { return nil }
+        return "'\(spec.file)' is named as \(DatasetFormat.fhirNdjson.displayName), so it cannot be a "
+            + "\(DatasetFormat.csv.displayName) dataset. Attach it from the course library as a "
+            + "\(DatasetFormat.fhirNdjson.displayName) dataset."
+    }
+
+    /// Why a FHIR NDJSON spec cannot be saved, or nil.
+    ///
+    /// The first release delivers a FHIR file whole to every student
+    /// (docs/fhir-datasets-plan.md §11, decision 1), so every setting that
+    /// selects or changes rows is refused: the materializer would ignore it,
+    /// and an instructor who set it would believe it did something. The file
+    /// itself must pass the structural checks of `FHIRNdjsonProfile`, and the
+    /// spec must name a course library version: a FHIR dataset enters through
+    /// the library (§7), which is also the only door that sets the format.
+    public static func fhirIssue(with spec: DatasetSpec, sourceText: String?) -> String? {
+        let label = "'\(spec.file)'"
+        guard DatasetFormat.fhirNdjson.matches(filename: spec.file) else {
+            return "\(label): a \(DatasetFormat.fhirNdjson.displayName) dataset needs a name ending in "
+                + "'.\(DatasetFormat.fhirNdjson.fileExtension)'."
+        }
+        let wholeFile = "every student receives the whole file"
+        if spec.kind == .partition || spec.partCount != nil {
+            return "\(label): a \(DatasetFormat.fhirNdjson.displayName) dataset cannot be split into parts; "
+                + "\(wholeFile)."
+        }
+        if spec.sampleSize != nil {
+            return "\(label): a \(DatasetFormat.fhirNdjson.displayName) dataset takes no sample size; "
+                + "\(wholeFile)."
+        }
+        if spec.kind == .stratifiedSample || !(spec.stratumColumn ?? "").isEmpty {
+            return "\(label): a \(DatasetFormat.fhirNdjson.displayName) dataset takes no stratum column."
+        }
+        if !spec.transforms.isEmpty {
+            return "\(label): a \(DatasetFormat.fhirNdjson.displayName) dataset takes no transforms."
+        }
+        guard let sourceText else {
+            return "\(label) is not UTF-8 text, so it cannot hold FHIR resources."
+        }
+        do {
+            _ = try FHIRNdjsonProfile.profile(sourceText)
+        } catch {
+            return "\(label): \(error.description)"
+        }
+        guard spec.source != nil else {
+            return "\(label): a \(DatasetFormat.fhirNdjson.displayName) dataset is attached from the course "
+                + "library. Add it to the library, then attach it."
+        }
+        return nil
     }
 
     /// Why `spec`'s slice scope cannot be saved, or nil. Needs no file.
@@ -70,6 +131,10 @@ public enum DatasetSpecValidation {
         if proposed.scope != (stored?.scope ?? .assignment) {
             return "'\(proposed.file)': whether a dataset gives the same rows in every assignment "
                 + "cannot be changed here."
+        }
+        if proposed.format != (stored?.format ?? .csv) {
+            return "'\(proposed.file)': the dataset's format is set when it is attached from the course "
+                + "library, and cannot be changed here."
         }
         return nil
     }

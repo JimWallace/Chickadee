@@ -96,7 +96,10 @@ func datasetDiagnosticsReports(
     zipPath: String, datasets: [DatasetSpec]
 ) async -> [DatasetFileDiagnostics] {
     var reports: [DatasetFileDiagnostics] = []
-    for spec in datasets {
+    // A format the materializer does not select from gives every student the
+    // whole file, so there is nothing to estimate; reading a FHIR file as CSV
+    // would name a JSON fragment as a column (docs/fhir-datasets-plan.md §4).
+    for spec in datasets where spec.format.supportsSelection {
         guard let data = await extractZipEntry(zipPath: zipPath, entryName: spec.file),
             let text = String(data: data, encoding: .utf8)
         else { continue }

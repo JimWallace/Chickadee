@@ -10,6 +10,7 @@
 // names the dataset and its version and offers the library's actions
 // (docs/datasets-course-library.md §4.5).
 
+import Core
 import Elementary
 
 struct SupportFileRow: HTML {
@@ -24,9 +25,11 @@ struct SupportFileRow: HTML {
             }
             td {
                 a(.href(file.url)) { code { file.name } }
-                datasetControl
+                if offersDatasetControl {
+                    datasetControl
+                }
                 if let library = file.library {
-                    SupportFileLibraryControl(filename: file.name, library: library)
+                    SupportFileLibraryControl(filename: file.name, library: library, format: file.datasetFormat)
                 }
             }
             td(.class("time")) {
@@ -52,9 +55,18 @@ struct SupportFileRow: HTML {
     }
 
     /// `hidden` on the sample fields, which mean nothing for a partition: a
-    /// partition has no sample, and the panel has no field for its parts.
+    /// partition has no sample, and the panel has no field for its parts. A
+    /// format that is delivered whole (FHIR) has no sample either.
     private var hiddenUnlessSampled: [MarkupAttribute<HTMLTag.span>] {
-        file.isDataset && file.datasetPartCount == nil ? [] : [.hidden]
+        file.isDataset && file.datasetPartCount == nil && file.datasetFormat.supportsSelection ? [] : [.hidden]
+    }
+
+    /// Whether the row shows the per-student control. A FHIR file that is not
+    /// a dataset cannot become one here, because FHIR enters through the
+    /// course library (docs/fhir-datasets-plan.md §7), so its row shows only
+    /// "Move to course library".
+    private var offersDatasetControl: Bool {
+        file.isDataset || !DatasetFormat.fhirNdjson.matches(filename: file.name)
     }
 
     /// `disabled` on the derivation inputs when an agent wrote steps the panel
@@ -193,26 +205,39 @@ private struct AttachedDatasetActions: HTML {
 }
 
 /// The course library line under a support file: the row scope of an attached
-/// dataset, or the move into the library for a CSV that is not attached.
+/// dataset, or the move into the library for a CSV or FHIR NDJSON file that is
+/// not attached.
 /// Public/support-files.js sends each action.
 private struct SupportFileLibraryControl: HTML {
     let filename: String
     let library: SupportFileLibraryState
+    /// The attached spec's format. A format delivered whole gives every
+    /// student the whole file, so whose seed picks the rows does not apply
+    /// and the scope box is not shown.
+    let format: DatasetFormat
 
     var body: some HTML {
-        div(.class("dataset-control")) {
-            if let attachment = library.attachment {
-                label(.class("dataset-toggle")) {
-                    input(
-                        attributes: [
-                            .type(.checkbox), .class("js-library-scope"), .data("filename", value: filename),
-                        ] + (attachment.isCourseScoped ? [.checked] : []))
-                    " Course-wide rows"
-                }
-            } else {
+        if let attachment = library.attachment {
+            if format.supportsSelection {
+                scopeControl(attachment)
+            }
+        } else {
+            div(.class("dataset-control")) {
                 button(
                     .class("btn action-btn js-library-promote"), .type(.button), .data("filename", value: filename)
                 ) { "Move to course library" }
+            }
+        }
+    }
+
+    private func scopeControl(_ attachment: SupportFileLibraryState.Attachment) -> some HTML {
+        div(.class("dataset-control")) {
+            label(.class("dataset-toggle")) {
+                input(
+                    attributes: [
+                        .type(.checkbox), .class("js-library-scope"), .data("filename", value: filename),
+                    ] + (attachment.isCourseScoped ? [.checked] : []))
+                " Course-wide rows"
             }
         }
     }

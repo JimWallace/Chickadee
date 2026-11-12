@@ -68,10 +68,18 @@
     // Always posts to window.parent: in the editor that is the notebook page
     // (which forwards it); loaded top-level (the editor-smoke REPL) parent is
     // self, so a top-level listener can still observe it for testing.
+    // A server-drive path names the viewer's own folder (`users/<id>/`, or
+    // `users%2F<id>` inside an encoded URL). Every message this collector
+    // sends passes through here, so the id is replaced once, for all of them:
+    // kernel_error rows carry no user identifier.
+    function scrubUserFolder(text) {
+        return String(text).replace(/users(\/|%2F)[^/%\s"']+/gi, 'users$1<id>');
+    }
+
     function post(kind, source, message) {
         try {
             var payload = { ck: 'kernel-diag', kind: kind, source: String(source).slice(0, 64) };
-            if (message != null) payload.message = String(message).slice(0, 1000);
+            if (message != null) payload.message = scrubUserFolder(message).slice(0, 1000);
             window.parent.postMessage(payload, origin);
         } catch (_) { /* never throw */ }
     }
@@ -177,12 +185,54 @@
         return String(message || '').indexOf('insertWidget') !== -1;
     }
 
+    // A rejection reason that is not an Error (a plain object, a Response, a
+    // worker's serialized error) has no `.message`, and String() of it is
+    // "[object Object]", which says nothing about what failed. Production
+    // reported exactly that on every stalled boot of 2026-11. Describe such a
+    // reason by its constructor and a shallow, bounded list of its fields.
+    // (`post` removes a user folder id from the result.)
+    function describeRejection(reason) {
+        if (reason == null) return 'unhandledrejection';
+        if (typeof reason !== 'object') return String(reason);
+        if (typeof reason.message === 'string' && reason.message) return reason.message;
+        var parts = [];
+        try {
+            var ctor = reason.constructor && reason.constructor.name;
+            parts.push(ctor || 'Object');
+            if (typeof reason.status === 'number') parts.push('status=' + reason.status);
+            if (typeof reason.url === 'string' && reason.url) parts.push('url=' + reason.url.split('?')[0]);
+            var keys = Object.keys(reason).slice(0, 8);
+            for (var i = 0; i < keys.length; i++) {
+                var key = keys[i];
+                if (key === 'status' || key === 'url') continue;
+                var value = reason[key];
+                var shown;
+                if (value == null || typeof value === 'number' || typeof value === 'boolean') {
+                    shown = String(value);
+                } else if (typeof value === 'string') {
+                    shown = JSON.stringify(value.slice(0, 160));
+                } else if (typeof value === 'object') {
+                    shown = (value.constructor && value.constructor.name) || 'Object';
+                    if (typeof value.message === 'string' && value.message) {
+                        shown += '(' + JSON.stringify(value.message.slice(0, 160)) + ')';
+                    }
+                } else {
+                    shown = typeof value;
+                }
+                parts.push(key + '=' + shown);
+            }
+        } catch (_) { /* report what was gathered */ }
+        return parts.join(' ').slice(0, 500);
+    }
+
     try {
         window.addEventListener('unhandledrejection', function (e) {
             try {
                 var reason = e && e.reason;
-                var message = (reason && reason.message) || String(reason || 'unhandledrejection');
-                if (isBenignLayoutRace(message)) return;
+                // The race is matched on the error's own text, as before, not on
+                // the field list below, so no field can hide a real failure.
+                if (isBenignLayoutRace((reason && reason.message) || String(reason || ''))) return;
+                var message = describeRejection(reason);
                 reportError('unhandledrejection', message);
             } catch (_) { /* ignore */ }
         });

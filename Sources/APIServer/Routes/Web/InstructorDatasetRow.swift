@@ -10,7 +10,7 @@ struct InstructorDatasetRow: Sendable {
     let slug: String
     let name: String
     let isPublished: Bool
-    /// "v3 · 1204 rows · 45 KB"
+    /// "v3 · 1204 rows · 45 KB", or "v1 · 300 patients · 8.2 MB" for FHIR
     let detailsText: String
     /// "2 assignments", or "Not attached"
     let usageText: String
@@ -28,7 +28,7 @@ struct InstructorDatasetRow: Sendable {
     init(dataset: APICourseDataset, newest: APICourseDatasetVersion?, usageCount: Int) {
         var details = ["v\(dataset.currentVersion)"]
         if let newest {
-            details.append(InstructorDatasetDetail.rowsText(newest.rowCount))
+            details.append(InstructorDatasetDetail.countText(newest.rowCount, format: dataset.format))
             details.append(formatBytes(newest.sizeBytes))
         }
         self.init(

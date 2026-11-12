@@ -21,7 +21,7 @@ The original vertical slice (two tools, proving the auth/transport/dispatch
 pipeline) has grown into the full feature. The live tool catalog
 (`MCPToolCatalog.live` in
 `Sources/APIServer/MCP/Transport/MCPServerRegistration.swift`) ships
-71 tools at v0.5.854, all `content:read` / `content:write` scoped and
+73 tools after `begin_upload`, all `content:read` / `content:write` scoped and
 course-scoped. `MCPToolCatalog.live` is the source of truth for the count —
 prefer it over any prose figure, which can drift.
 
@@ -62,9 +62,9 @@ The catalog:
 | `set_dataset` | `content:write` | Mark a support file as a per-student dataset (per-seed row sample under the same filename) or clear the mark; no regrade/close |
 | `list_datasets` | `content:read` | The course dataset library: each dataset with its versions, dictionary and the assignments that attach it |
 | `get_dataset` | `content:read` | One library dataset, plus the header and first rows of one version and its dictionary |
-| `create_dataset` | `content:write` | Create a library dataset from a `sourceUrl` or by promoting an assignment's support file; starts unpublished; no regrade/close |
+| `create_dataset` | `content:write` | Create a library dataset from an `uploadID`, a `sourceUrl` or by promoting an assignment's support file; starts unpublished; no regrade/close |
 | `update_dataset` | `content:write` | Edit a library dataset's metadata and column prose, and publish it to the course Data page; no regrade/close |
-| `add_dataset_version` | `content:write` | Add a version to a library dataset from a `sourceUrl`; attachments keep their pinned version; no regrade/close |
+| `add_dataset_version` | `content:write` | Add a version to a library dataset from an `uploadID` or a `sourceUrl`; attachments keep their pinned version; no regrade/close |
 | `attach_dataset` | `content:write` | Attach a library dataset to an assignment (pinned version, scope, sample), or move an attached file to another version or scope; re-grades and re-validates, no close |
 | `detach_dataset` | `content:write` | End a library attachment, keeping the file and its sample unless `removeFile`; re-grades and re-validates, no close |
 | `set_minimum_runner_version` | `content:write` | Set (or clear) the minimum native-runner version that may grade the assignment (semver); server-side claim-time gate, worker path only; no regrade/close |
@@ -84,6 +84,7 @@ The catalog:
 | `delete_suite_item` | `content:write` | Remove a script, family (+ its cases), or notebook check from the suite |
 | `delete_support_file` | `content:write` | Remove a non-graded support/data file from the setup zip (graded rows, reserved members and a file a test lists in `dependsOn` refused; clears any graderOnly / dataset mark; shares `deleteFileFromSetup` with the web delete) |
 | `author_notebook_check` | `content:write` | Create/replace a notebook check (DataFrame shape/columns/equality, figures, AST, …) |
+| `begin_upload` | `content:write` | Stage a local file of up to 8 MB byte for byte: an upload URL and single-use token for `curl -T`, then an `uploadID` for `author_script`, `create_dataset` or `add_dataset_version` ([mcp-file-uploads.md](mcp-file-uploads.md)) |
 | `author_script` | `content:write` | Escape hatch: create/replace a hand-written test (prefer a pattern family / notebook check) or a non-graded support file |
 | `update_notebook` | `content:write` | Replace the starter notebook |
 | `update_solution` | `content:write` | Replace the reference solution and re-validate |

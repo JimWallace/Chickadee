@@ -145,8 +145,12 @@
                 // part count and where to edit it, and the toggle is locked so
                 // one click cannot end the partition. An attached file's toggle
                 // (data-lock="attached") stays locked: detach ends it.
+                // A format other than CSV is delivered whole, so it has no
+                // sample fields (DatasetFormat.supportsSelection). The spec
+                // names its format only when it is not CSV.
                 var partitioned = !!spec && spec.kind === 'partition';
-                var sampled = !!spec && !partitioned;
+                var whole = !!spec && !!spec.format && spec.format !== 'csv';
+                var sampled = !!spec && !partitioned && !whole;
                 var attached = !!(toggle.dataset && toggle.dataset.lock === 'attached');
                 toggle.disabled = attached || partitioned;
                 toggle.checked = !!spec;

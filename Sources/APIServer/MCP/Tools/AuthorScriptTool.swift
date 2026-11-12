@@ -62,6 +62,11 @@ struct AuthorScriptTool: ContentTool {
         /// a file from the student). Absent/null leaves the current mark
         /// unchanged. Ignored for test tiers.
         let graderOnly: Bool?
+        /// A staged upload from `begin_upload`, in the assignment's course, as
+        /// the file body (docs/mcp-file-uploads.md). The third source beside
+        /// `content` and `sourceUrl`; exactly one of the three is given. A
+        /// `var`, so the memberwise init defaults it to nil and keeps its shape.
+        var uploadID: String?
     }
 
     struct Output: Encodable, Sendable {
@@ -92,9 +97,10 @@ struct AuthorScriptTool: ContentTool {
         + "catches errors in it) and is opaque to readers. Use a graded tier here only when no pattern "
         + "kind or notebook check fits. "
         + "Create or replace a single hand-written test or support file in an assignment's test "
-        + "setup, by its public ID. Provide filename (a bare name, no path separators) and EITHER "
-        + "content (the full body inline) OR sourceUrl (an https URL the server fetches — for a "
-        + "data/support file too large to inline faithfully, e.g. a CSV fixture; the fetch is "
+        + "setup, by its public ID. Provide filename (a bare name, no path separators) and ONE of "
+        + "content (the full body inline), uploadID (a file uploaded byte for byte through "
+        + "begin_upload — the way to deliver a local data/support file too large to inline faithfully, "
+        + "e.g. a CSV fixture), or sourceUrl (an https URL the server fetches; the fetch is "
         + "SSRF-guarded: https only, no private/loopback/metadata addresses, no redirects, size-capped, "
         + "and the body must be UTF-8 text). tier is \(MCPTierProse.slashAlternatives) for a graded test, or "
         + "\"support\" for a helper file that tests or personalization expressions can import but that "
@@ -125,8 +131,16 @@ struct AuthorScriptTool: ContentTool {
             "content": .object([
                 "type": .string("string"),
                 "description": .string(
-                    "The full file body, written verbatim into the setup zip. Provide this OR "
-                        + "sourceUrl, not both."),
+                    "The full file body, written verbatim into the setup zip. Provide exactly one of "
+                        + "content, uploadID and sourceUrl."),
+            ]),
+            "uploadID": .object([
+                "type": .string("string"),
+                "description": .string(
+                    "The uploadID from begin_upload, after the file was PUT to its uploadURL. The stored "
+                        + "bytes become the file body, byte for byte. The upload must be begun in this "
+                        + "assignment's course by this agent; a successful write uses it up. Provide exactly "
+                        + "one of content, uploadID and sourceUrl."),
             ]),
             "sourceUrl": .object([
                 "type": .string("string"),
@@ -136,7 +150,8 @@ struct AuthorScriptTool: ContentTool {
                         + "(https only; the host must not resolve to a loopback/private/link-local/"
                         + "cloud-metadata address; redirects are not followed; capped at "
                         + "\(SupportFileURLFetcher.maxBytesText); body must "
-                        + "be UTF-8 text). Provide this OR content, not both."),
+                        + "be UTF-8 text). For a file on the agent's own machine, use uploadID instead. "
+                        + "Provide exactly one of content, uploadID and sourceUrl."),
             ]),
             "tier": MCPSchema.tierEnum(
                 TestTierValues.withSupport,
@@ -178,8 +193,8 @@ struct AuthorScriptTool: ContentTool {
                         + "Absent leaves the current mark unchanged; ignored for test tiers."),
             ]),
         ]),
-        // content/sourceUrl are a one-of (validated in execute), so neither is
-        // individually required here.
+        // content/uploadID/sourceUrl are a one-of (validated in execute), so
+        // none is individually required here.
         "required": .array([.string("assignmentPublicID"), .string("filename")]),
         "additionalProperties": .bool(false),
     ])
@@ -281,8 +296,8 @@ struct AuthorScriptTool: ContentTool {
         }
 
         // Now that the call has cleared the cheap rejections, materialize the
-        // body (fetching sourceUrl if that's the source).
-        let content = try await Self.materialize(source, context: context)
+        // body (fetching sourceUrl, or loading the upload, if that's the source).
+        let (content, upload) = try await Self.materialize(source, courseID: setup.courseID, context: context)
 
         switch resolved {
         case .support:
@@ -319,6 +334,8 @@ struct AuthorScriptTool: ContentTool {
         // Close, re-grade, and re-validate (matching the web Save button).
         let finalized = try await finalizeContentEdit(
             assignment: assignment, setup: setup, context: context, retest: true)
+        // The write succeeded, so the upload is used up.
+        if let upload { await consumeMCPUpload(upload, context: context) }
 
         return Output(
             assignmentPublicID: assignment.publicID,
@@ -332,46 +349,58 @@ struct AuthorScriptTool: ContentTool {
 
     // MARK: - Body resolution (inline content or fetched sourceUrl)
 
-    /// Where a file's body comes from: inline `content` or a server-fetched
-    /// `sourceUrl`.
+    /// Where a file's body comes from: inline `content`, a server-fetched
+    /// `sourceUrl`, or a staged `begin_upload` upload.
     private enum ContentSource {
         case inline(String)
         case remote(url: String)
+        case upload(id: String)
     }
 
-    /// Validates the `content`/`sourceUrl` one-of and returns the source. Cheap
-    /// and side-effect-free (no network) so it can run before authorization.
+    /// Validates the `content`/`uploadID`/`sourceUrl` one-of and returns the
+    /// source. Cheap and side-effect-free (no network, no database) so it can
+    /// run before authorization.
     private static func resolveContentSource(_ input: Input) throws -> ContentSource {
-        let inline = input.content
         let url = input.sourceUrl?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let uploadID = input.uploadID?.trimmingCharacters(in: .whitespacesAndNewlines)
+        var sources: [ContentSource] = []
+        if let inline = input.content, !inline.isEmpty { sources.append(.inline(inline)) }
+        if let url, !url.isEmpty { sources.append(.remote(url: url)) }
+        if let uploadID, !uploadID.isEmpty { sources.append(.upload(id: uploadID)) }
 
-        switch (inline?.isEmpty == false, url?.isEmpty == false) {
-        case (true, true):
-            throw MCPToolError.invalidArguments(detail: "Provide either `content` or `sourceUrl`, not both.")
-        case (false, false):
+        guard sources.count <= 1 else {
             throw MCPToolError.invalidArguments(
-                detail: "Provide `content` (the body inline) or `sourceUrl` (an https URL to fetch).")
-        case (true, false):
-            return .inline(inline ?? "")
-        case (false, true):
-            return .remote(url: url ?? "")
+                detail: "Provide exactly one of `content`, `uploadID` and `sourceUrl`, not several.")
         }
+        guard let source = sources.first else {
+            throw MCPToolError.invalidArguments(
+                detail: "Provide `content` (the body inline), `uploadID` (a file staged with begin_upload) "
+                    + "or `sourceUrl` (an https URL to fetch).")
+        }
+        return source
     }
 
     /// Produces the file body, fetching `sourceUrl` under the SSRF guard when
-    /// the source is remote. Maps a fetch refusal to an MCP tool error.
-    private static func materialize(_ source: ContentSource, context: ToolContext) async throws -> String {
+    /// the source is remote, or loading the staged upload (which must be in
+    /// `courseID`). Returns the upload too, so the caller consumes it once the
+    /// write succeeds. Maps a refusal to an MCP tool error.
+    private static func materialize(
+        _ source: ContentSource, courseID: UUID, context: ToolContext
+    ) async throws -> (content: String, upload: MCPUploadService.Staged?) {
         switch source {
         case .inline(let body):
-            return body
+            return (body, nil)
         case .remote(let url):
             do {
-                return try await SupportFileURLFetcher.fetch(urlString: url, on: context.request)
+                return (try await SupportFileURLFetcher.fetch(urlString: url, on: context.request), nil)
             } catch let error as SupportFileFetchError {
                 throw MCPToolError.invalidArguments(detail: error.toolDetail)
             } catch {
                 throw MCPToolError.executionFailed(detail: "Failed to fetch sourceUrl: \(error).")
             }
+        case .upload(let id):
+            let staged = try await loadMCPUpload(id, courseID: courseID, context: context)
+            return (try await mcpUploadCall { try staged.text() }, staged)
         }
     }
 

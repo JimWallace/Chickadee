@@ -66,6 +66,10 @@ struct EditableSuiteRow: Encodable {
     /// panel has no fields for a partition, so it shows a note instead of the
     /// sample fields.
     let datasetPartCount: Int?
+    /// The dataset's format (docs/fhir-datasets-plan.md §6); `.csv` on every
+    /// non-dataset row. Carried so the delivery note reads the same rule as
+    /// the spec's `deliveryMode`.
+    let datasetFormat: DatasetFormat
     /// The file's place in the course dataset library, for the edit page's
     /// Files panel. Nil on every other row and page, which then shows no
     /// library control (`withLibraryStates`).
@@ -89,7 +93,7 @@ struct EditableSuiteRow: Encodable {
         guard isDataset else { return "" }
         let isPartition = datasetPartCount != nil
         let mode = DatasetDeliveryMode(
-            isPartition: isPartition, partCount: datasetPartCount, sampleSize: datasetSampleSize,
+            format: datasetFormat, isPartition: isPartition, partCount: datasetPartCount, sampleSize: datasetSampleSize,
             hasTransforms: !datasetTransforms.isEmpty)
         return DatasetDeliveryNote.text(for: mode, isPartition: isPartition) ?? ""
     }
@@ -140,7 +144,8 @@ struct EditableSuiteRow: Encodable {
         datasetSampleSize: Int? = nil,
         datasetStratumColumn: String? = nil,
         datasetTransforms: [DatasetTransform] = [],
-        datasetPartCount: Int? = nil
+        datasetPartCount: Int? = nil,
+        datasetFormat: DatasetFormat = .csv
     ) {
         self.name = name
         self.url = url
@@ -155,6 +160,7 @@ struct EditableSuiteRow: Encodable {
         self.datasetStratumColumn = datasetStratumColumn
         self.datasetTransforms = datasetTransforms
         self.datasetPartCount = datasetPartCount
+        self.datasetFormat = datasetFormat
     }
 
     /// Display name if set, otherwise the filename stem (extension stripped).

@@ -123,7 +123,10 @@ struct SetDatasetTool: ContentTool {
         + "the web editor's dataset control this does not close the assignment or re-run validation "
         + "(the suite is unchanged); existing submissions pick up their slice on the next regrade. "
         + "List support files with get_support_files (dataset marks are reported there); pass "
-        + "remove:true to make the file an ordinary shared support file again. To give every student the "
+        + "remove:true to make the file an ordinary shared support file again. A FHIR NDJSON file "
+        + "(datasetFormat fhirNdjson) is delivered whole, so a sample size, a stratum column, a partition "
+        + "and transforms are refused on it; it becomes a dataset only through the course library "
+        + "(create_dataset, then attach_dataset), and every edit here keeps its format. To give every student the "
         + "WHOLE file, pass wholeFile:true, never a sampleSize equal to the row count: it clears the sample, "
         + "the stratum and the partition, and works on a file attached from the course library too (whose "
         + "spec cannot be removed); on any other file it clears the mark, as remove:true does. On a library "
@@ -320,7 +323,7 @@ struct SetDatasetTool: ContentTool {
             return DatasetSpec(
                 file: filename, kind: .rowSample,
                 transforms: input.transforms.map(Self.transforms(from:)) ?? existing?.transforms ?? [],
-                source: existing?.source, scope: existing?.scope ?? .assignment)
+                source: existing?.source, scope: existing?.scope ?? .assignment, format: existing?.format ?? .csv)
         }
         let column = input.stratumColumn?.trimmingCharacters(in: .whitespaces)
         let stratum = (column?.isEmpty ?? true) ? nil : column
@@ -351,7 +354,10 @@ struct SetDatasetTool: ContentTool {
             // attach path writes them, and every other door carries them.
             source: existing?.source,
             scope: existing?.scope ?? .assignment,
-            partCount: partCount)
+            partCount: partCount,
+            // The format is the library attach path's to set, like the
+            // library fields above; this door carries it.
+            format: existing?.format ?? .csv)
     }
 
     /// Maps the wire shape to the model. An unrecognised kind is dropped rather

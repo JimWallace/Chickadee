@@ -34,6 +34,7 @@ struct DatasetColumnDTO: Encodable, Sendable {
 struct DatasetVersionDTO: Encodable, Sendable {
     let version: Int
     let filename: String
+    /// Data rows of a CSV; Patient resources of a FHIR file.
     let rowCount: Int
     let sizeBytes: Int
     let note: String?
@@ -63,16 +64,21 @@ struct DatasetUsageDTO: Encodable, Sendable {
 }
 
 /// A library dataset with its versions and the assignments that attach it.
-/// `columns` is the newest version's dictionary.
+/// `columns` is the newest version's dictionary for a CSV dataset; `fhir` is
+/// the newest version's summary and dictionary for a FHIR dataset
+/// (docs/fhir-datasets-plan.md §7).
 struct DatasetDTO: Encodable, Sendable {
     let slug: String
     let name: String
+    /// A `DatasetFormat` raw value: "csv" or "fhirNdjson".
+    let format: String
     let description: String?
     let provenance: String?
     let licence: String?
     let isPublished: Bool
     let currentVersion: Int
     let columns: [DatasetColumnDTO]
+    let fhir: FHIRDatasetSummary?
     let versions: [DatasetVersionDTO]
     let usage: [DatasetUsageDTO]
 }
@@ -94,10 +100,13 @@ struct AttachedDatasetDTO: Encodable, Sendable {
     /// one linked copy, "perPart", or "perStudent" when each student stores a
     /// file of their own.
     let datasetDelivery: String
+    /// A `DatasetFormat` raw value.
+    let format: String
 
     /// Nil for a spec that does not come from the library.
     init?(_ spec: DatasetSpec) {
         guard let source = spec.source else { return nil }
+        format = spec.format.rawValue
         file = spec.file
         slug = source.slug
         version = source.version
@@ -138,16 +147,61 @@ enum DatasetToolSchema {
         properties: [
             "file": MCPSchema.string, "slug": MCPSchema.string, "version": MCPSchema.integer,
             "scope": MCPSchema.string, "sampleSize": MCPSchema.integer, "stratumColumn": MCPSchema.string,
-            "partCount": MCPSchema.integer, "datasetDelivery": MCPSchema.string,
+            "partCount": MCPSchema.integer, "format": format, "datasetDelivery": MCPSchema.string,
         ],
-        required: ["file", "slug", "version", "scope", "datasetDelivery"], additionalProperties: nil)
+        required: ["file", "slug", "version", "scope", "format", "datasetDelivery"], additionalProperties: nil)
+
+    /// A dataset's format. The enum is derived, so it cannot fall behind
+    /// `DatasetFormat`.
+    static let format: JSONValue = .object([
+        "type": .string("string"),
+        "enum": .array(DatasetFormat.allCases.map { .string($0.rawValue) }),
+    ])
+
+    /// The summary and dictionary of a FHIR version. It mirrors the encoding
+    /// of `FHIRDatasetSummary` by hand, so a field added there is added here;
+    /// `CourseDatasetFHIRToolsTests` validates real results against it.
+    static let fhirSummary: JSONValue = MCPSchema.object(
+        properties: [
+            "fhirVersion": MCPSchema.string, "resourceCount": MCPSchema.integer, "patientCount": MCPSchema.integer,
+            "resourceTypes": .object([
+                "type": .string("array"),
+                "items": MCPSchema.object(
+                    properties: [
+                        "resourceType": MCPSchema.string, "count": MCPSchema.integer,
+                        "description": MCPSchema.string,
+                    ],
+                    required: ["resourceType", "count"], additionalProperties: nil),
+            ]),
+            "codes": .object([
+                "type": .string("array"),
+                "items": MCPSchema.object(
+                    properties: [
+                        "resourceType": MCPSchema.string, "system": MCPSchema.string, "code": MCPSchema.string,
+                        "display": MCPSchema.string, "count": MCPSchema.integer,
+                        "units": .object(["type": .string("array"), "items": MCPSchema.string]),
+                        "description": MCPSchema.string,
+                    ],
+                    required: ["resourceType", "code", "count", "units"], additionalProperties: nil),
+            ]),
+            "omittedCodeCount": MCPSchema.integer, "danglingPatientReferences": MCPSchema.integer,
+            "example": MCPSchema.object(
+                properties: ["resourceType": MCPSchema.string, "id": MCPSchema.string, "json": MCPSchema.string],
+                required: ["resourceType", "id", "json"], additionalProperties: nil),
+        ],
+        required: [
+            "fhirVersion", "resourceCount", "patientCount", "resourceTypes", "codes", "omittedCodeCount",
+            "danglingPatientReferences",
+        ],
+        additionalProperties: nil)
 
     static let dataset: JSONValue = MCPSchema.object(
         properties: [
-            "slug": MCPSchema.string, "name": MCPSchema.string, "description": MCPSchema.string,
+            "slug": MCPSchema.string, "name": MCPSchema.string, "format": format,
+            "description": MCPSchema.string,
             "provenance": MCPSchema.string, "licence": MCPSchema.string, "isPublished": MCPSchema.boolean,
             "currentVersion": MCPSchema.integer,
-            "columns": columns,
+            "columns": columns, "fhir": fhirSummary,
             "versions": .object([
                 "type": .string("array"),
                 "items": MCPSchema.object(
@@ -168,7 +222,7 @@ enum DatasetToolSchema {
             ]),
         ],
         required: [
-            "slug", "name", "isPublished", "currentVersion", "columns", "versions", "usage",
+            "slug", "name", "format", "isPublished", "currentVersion", "columns", "versions", "usage",
         ],
         additionalProperties: nil)
 
@@ -176,17 +230,69 @@ enum DatasetToolSchema {
     static let versionFilename: JSONValue = .object([
         "type": .string("string"),
         "description": .string(
-            "Optional. The version's filename, a bare name that ends in .csv. Omitted, it is the last "
-                + "path segment of sourceUrl."),
+            "The version's filename, a bare name that ends in the dataset format's extension: .csv, or "
+                + ".ndjson for FHIR. Required with uploadID. With "
+                + "sourceUrl it is optional, and omitted it is the last path segment of the URL."),
+    ])
+
+    static let uploadID: JSONValue = .object([
+        "type": .string("string"),
+        "description": .string(
+            "The uploadID from begin_upload, after a UTF-8 file in the dataset's format was PUT to its "
+                + "uploadURL. Begun in this course by this agent; needs filename; a successful call uses it up. "
+                + "Use it in place of sourceUrl for a file on the agent's own machine."),
     ])
 
     static let sourceURL: JSONValue = .object([
         "type": .string("string"),
         "description": .string(
-            "An https URL of a UTF-8 CSV file with a header row. The server fetches it under an SSRF guard "
+            "An https URL of a UTF-8 file in the dataset's format: a CSV with a header row, or FHIR R4 "
+                + "NDJSON with one resource per line. The server fetches it under an SSRF guard "
                 + "(https only, no private, loopback or metadata hosts, no redirects, "
                 + "\(SupportFileURLFetcher.maxBytesText) cap)."),
     ])
+}
+
+// MARK: - Where a new version's bytes come from
+
+/// The source of a new library version: a `sourceUrl` the server fetches, or a
+/// staged `begin_upload` upload (docs/mcp-file-uploads.md).
+enum DatasetVersionSource {
+    case url(String)
+    case upload(id: String)
+
+    /// The one source given, or nil when neither or both are.
+    init?(sourceUrl: String?, uploadID: String?) {
+        let url = (sourceUrl?.trimmingCharacters(in: .whitespacesAndNewlines)).flatMap { $0.isEmpty ? nil : $0 }
+        let upload = (uploadID?.trimmingCharacters(in: .whitespacesAndNewlines)).flatMap { $0.isEmpty ? nil : $0 }
+        switch (url, upload) {
+        case (let url?, nil): self = .url(url)
+        case (nil, let upload?): self = .upload(id: upload)
+        default: return nil
+        }
+    }
+
+    /// The version to store, and the staged upload to consume once the store
+    /// succeeds (nil for a URL). An upload must be in `courseID` and needs a
+    /// `filename`, since it has no URL to name it.
+    func materialize(
+        filename: String?, note: String?, courseID: UUID, fetch: DatasetSourceFetch, context: ToolContext
+    ) async throws -> (upload: CourseDatasetService.Upload, staged: MCPUploadService.Staged?) {
+        switch self {
+        case .url(let url):
+            let bytes = try await fetch(url, context.request)
+            return (.init(filename: datasetVersionFilename(filename, sourceURL: url), bytes: bytes, note: note), nil)
+        case .upload(let id):
+            guard let filename = filename?.trimmingCharacters(in: .whitespaces), !filename.isEmpty else {
+                throw MCPToolError.invalidArguments(
+                    detail:
+                        "Pass filename with uploadID: the stored filename, a bare name that ends in .csv, or .ndjson for FHIR."
+                )
+            }
+            let staged = try await loadMCPUpload(id, courseID: courseID, context: context)
+            return (.init(filename: filename, bytes: staged.bytes, note: note), staged)
+        }
+    }
 }
 
 // MARK: - Lookups and errors
@@ -233,15 +339,20 @@ func datasetDTO(_ dataset: APICourseDataset, context: ToolContext) async throws 
 }
 
 /// `datasetDTO` from the dataset's versions (oldest first) and its usage,
-/// already read, for a list of datasets that reads them in batch.
+/// already read, for a list of datasets that reads them in batch. A list
+/// leaves out the FHIR summary (`includingSummary: false`): it can list 500
+/// codes and a 16 KB example per dataset, and `get_dataset` returns it.
 func datasetDTO(
-    _ dataset: APICourseDataset, versions: [APICourseDatasetVersion], usage: [CourseDatasetService.Usage]
+    _ dataset: APICourseDataset, versions: [APICourseDatasetVersion], usage: [CourseDatasetService.Usage],
+    includingSummary: Bool = true
 ) -> DatasetDTO {
     let newest = versions.first { $0.version == dataset.currentVersion }
     return DatasetDTO(
-        slug: dataset.slug, name: dataset.name, description: dataset.datasetDescription,
+        slug: dataset.slug, name: dataset.name, format: dataset.format.rawValue,
+        description: dataset.datasetDescription,
         provenance: dataset.provenance, licence: dataset.licence, isPublished: dataset.isPublished,
         currentVersion: dataset.currentVersion, columns: (newest?.columns ?? []).map(DatasetColumnDTO.init),
+        fhir: includingSummary ? newest?.summary : nil,
         versions: versions.map(DatasetVersionDTO.init),
         // `Usage` carries the pinned version and not the spec, so this is
         // `CourseDatasetService.attachmentIsBehind` on the version alone.

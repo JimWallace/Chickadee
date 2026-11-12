@@ -55,6 +55,7 @@ public enum DatasetWholeFileSample {
     public static func normalization(of spec: DatasetSpec, dataRowCount: Int) -> Normalization {
         guard spec.source != nil, deliversWholeFile(spec, dataRowCount: dataRowCount) else { return .unchanged }
         return .shared(
-            DatasetSpec(file: spec.file, kind: .rowSample, source: spec.source, scope: spec.scope))
+            DatasetSpec(
+                file: spec.file, kind: .rowSample, source: spec.source, scope: spec.scope, format: spec.format))
     }
 }
