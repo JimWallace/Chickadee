@@ -131,7 +131,7 @@ case: three farm pages reached by one sponsored link take the top three places.
 **4. Rank is not relevance.** For `flu`, PageRank puts the hospital's
 visiting-hours page ("visitors with flu symptoms should stay home") above the
 public health flu page, because the visiting page is better linked. That
-motivates combining a text score with PageRank, which is the optional capstone.
+motivates combining a text score with PageRank, which is the in-class activity.
 
 ## The unit
 
@@ -181,13 +181,14 @@ Questions for the written part: why the in-degree and PageRank tables differ;
 what the damping factor does to the farm, and why; and why the visiting-hours
 page ranks above the flu page.
 
-### Optional capstone: a `bestMetric` activity
+### The in-class activity: a `bestMetric` contest
 
-A leaderboard for the best search engine (`docs/class-activities.md`). Students
-combine a text score with PageRank however they like; the metric is a ranking
-quality score (nDCG) on queries judged in advance. If it is browser-graded,
-students can read the judgments (`docs/grading-integrity.md`). Grade it on the
-worker if that matters.
+A 50-minute contest for the lecture after the lab, drafted in
+[activity/](activity/README.md). Each student writes one `score(features)`
+function. The grader ranks pages for twelve hidden health queries and puts the
+mean nDCG@5 on a live leaderboard. It is graded on the worker, so the
+relevance judgments stay grader-only. PageRank alone scores 35, the starter
+64, and an entry that applies the lecture's link farm lesson 83.
 
 ## When in the course
 
