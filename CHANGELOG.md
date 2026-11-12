@@ -9,6 +9,13 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.919] - 2026-11-12
+
+### Changed
+
+- **Weekly Swift dependency update.** jwt-kit 5.8.0 to 5.9.0. fluent-postgres-driver 2.14.0 to 2.14.1. swift-collections 1.7.5 to 1.7.6.
+
+
 ## [0.5.918] - 2026-11-12
 
 ### Security
