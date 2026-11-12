@@ -21,6 +21,12 @@ public struct FHIRDatasetSummary: Codable, Equatable, Sendable {
     /// The longest line that can be the example resource. The Data page shows
     /// it whole, and the version row stores it.
     public static let maxExampleBytes = 16_384
+
+    /// Whether `line` is short enough to be the example. One rule for the
+    /// profile's default, a picked example and a carried one.
+    public static func fitsAsExample(_ line: String) -> Bool {
+        line.utf8.count <= maxExampleBytes
+    }
     /// The longest description of one type or code. A file lists up to
     /// `maxListedCodes` codes, and every version row stores the prose.
     public static let maxDescriptionCharacters = 1_000

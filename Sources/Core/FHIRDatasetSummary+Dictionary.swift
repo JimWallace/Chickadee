@@ -75,11 +75,14 @@ extension FHIRDatasetSummary {
     public func withExample(
         resourceType: String, id: String, in text: String
     ) throws(FHIRDictionaryEditIssue) -> FHIRDatasetSummary {
-        guard let example = FHIRNdjsonProfile.example(resourceType: resourceType, id: id, in: text) else {
+        guard let line = FHIRNdjsonProfile.resourceLine(resourceType: resourceType, id: id, in: text) else {
             throw .unknownExample(resourceType: resourceType, id: id)
         }
+        guard Self.fitsAsExample(line) else {
+            throw .exampleTooLong(resourceType: resourceType, id: id)
+        }
         var edited = self
-        edited.example = example
+        edited.example = ExampleResource(resourceType: resourceType, id: id, json: line)
         return edited
     }
 

@@ -34,10 +34,21 @@ public enum FHIRNdjsonProfile {
 
     /// The line of `text` that holds the resource `resourceType`/`id`, as
     /// an example, or nil when the file has none or the line is longer than
-    /// `FHIRDatasetSummary.maxExampleBytes`.
+    /// `FHIRDatasetSummary.maxExampleBytes`. Silent on purpose: a new
+    /// version carries an example this way and falls back to its default. A
+    /// pick an instructor makes uses `resourceLine`, to say which it was.
     public static func example(
         resourceType: String, id: String, in text: String
     ) -> FHIRDatasetSummary.ExampleResource? {
+        guard let line = resourceLine(resourceType: resourceType, id: id, in: text),
+            FHIRDatasetSummary.fitsAsExample(line)
+        else { return nil }
+        return .init(resourceType: resourceType, id: id, json: line)
+    }
+
+    /// The line of `text` that holds the resource `resourceType`/`id`,
+    /// without surrounding whitespace, or nil when the file has none.
+    public static func resourceLine(resourceType: String, id: String, in text: String) -> String? {
         let normalized = text.replacingOccurrences(of: "\r\n", with: "\n").replacingOccurrences(of: "\r", with: "\n")
         for rawLine in normalized.split(separator: "\n") {
             let line = rawLine.trimmingCharacters(in: .whitespaces)
@@ -46,8 +57,7 @@ public enum FHIRNdjsonProfile {
                 let object = (try? JSONSerialization.jsonObject(with: Data(line.utf8))) as? [String: Any],
                 object["resourceType"] as? String == resourceType, object["id"] as? String == id
             else { continue }
-            guard line.utf8.count <= FHIRDatasetSummary.maxExampleBytes else { return nil }
-            return .init(resourceType: resourceType, id: id, json: line)
+            return line
         }
         return nil
     }
@@ -152,7 +162,7 @@ public enum FHIRNdjsonProfile {
             resourceCount += 1
             typeCounts[resource.type, default: 0] += 1
             if resource.type == "Patient" { patientIDs.insert(resource.id) }
-            if line.utf8.count <= FHIRDatasetSummary.maxExampleBytes {
+            if FHIRDatasetSummary.fitsAsExample(line) {
                 let example = FHIRDatasetSummary.ExampleResource(
                     resourceType: resource.type, id: resource.id, json: line)
                 if firstResource == nil { firstResource = example }

@@ -295,16 +295,30 @@ extension InstructorDashboardRoutes {
         }
         let pickType = (form.exampleType ?? "").trimmingCharacters(in: .whitespaces)
         let pickID = (form.exampleID ?? "").trimmingCharacters(in: .whitespaces)
+        // The descriptions are saved first and the example pick second, so a
+        // pick the file lacks does not throw away the prose typed beside it.
+        // The two writes are not one transaction on purpose: the message
+        // says the descriptions are saved when only the pick is refused.
         do {
             let current = try await CourseDatasetService.version(version, of: dataset, on: req.db)?.summary?.example
-            if !pickType.isEmpty, !pickID.isEmpty, pickType != current?.resourceType || pickID != current?.id {
-                edit.example = (pickType, pickID)
-            }
             _ = try await CourseDatasetService.updateFHIRDictionary(
                 dataset, version: version, edit: edit, blobs: datasetBlobs(req), on: req.db)
             await AuditLogger.recordDatasetWrite(
                 .datasetDictionaryChanged, dataset: dataset, metadata: ["version": "\(version)"], on: req)
-            return Self.redirectToDataset(req: req, slug: dataset.slug, notice: "Saved.")
+            guard !pickType.isEmpty, !pickID.isEmpty, pickType != current?.resourceType || pickID != current?.id
+            else {
+                return Self.redirectToDataset(req: req, slug: dataset.slug, notice: "Saved.")
+            }
+            do {
+                var pick = CourseDatasetService.FHIRDictionaryEdit(replacingOthers: false)
+                pick.example = (pickType, pickID)
+                _ = try await CourseDatasetService.updateFHIRDictionary(
+                    dataset, version: version, edit: pick, blobs: datasetBlobs(req), on: req.db)
+                return Self.redirectToDataset(req: req, slug: dataset.slug, notice: "Saved.")
+            } catch let error as CourseDatasetError {
+                return Self.redirectToDataset(
+                    req: req, slug: dataset.slug, error: "The descriptions are saved. \(error.description)")
+            }
         } catch let error as CourseDatasetError {
             return Self.redirectToDataset(req: req, slug: dataset.slug, error: error.description)
         }
