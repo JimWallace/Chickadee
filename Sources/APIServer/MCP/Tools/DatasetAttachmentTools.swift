@@ -45,6 +45,12 @@ struct AttachDatasetTool: ContentTool {
         let dataset: AttachedDatasetDTO
         /// Submissions re-queued to re-grade with the new rows.
         let submissionsRequeued: Int
+        /// What the attach changed beyond what was asked: a sample that
+        /// covers the whole file is stored as no sample.
+        let notes: [String]
+        /// A stored spec on the assignment whose sample covers its whole
+        /// file, so every student stores a private copy. Each names its fix.
+        let warnings: [String]
     }
 
     static let name = "attach_dataset"
@@ -52,7 +58,11 @@ struct AttachDatasetTool: ContentTool {
         "Attach a course library dataset to an assignment by slug, as a support file. The server copies "
         + "the version's bytes into the assignment and pins that version, so a new library version changes "
         + "nothing until you call this again. Pass sampleSize for a per-student row sample (and "
-        + "stratumColumn to balance it across a column), or omit it to give every student every row. scope "
+        + "stratumColumn to balance it across a column), or omit it to give every student every row; a "
+        + "sampleSize at or above the file's data-row count is stored as no sample, and notes says so. The "
+        + "result's dataset reports datasetDelivery: \"shared\" when every student reads one linked copy, "
+        + "\"perStudent\" when each stores a file of their own; warnings names any stored sample on the "
+        + "assignment that gives the whole file per student. scope "
         + "\"course\" (the default) gives a student the same rows in every assignment of the course that "
         + "attaches the dataset, so later work builds on the same cohort; \"assignment\" gives rows of this "
         + "assignment's own. Called on a file that is already attached from the dataset, it moves the file "
@@ -96,8 +106,11 @@ struct AttachDatasetTool: ContentTool {
         properties: [
             "assignmentPublicID": MCPSchema.string, "action": MCPSchema.string,
             "dataset": DatasetToolSchema.attached, "submissionsRequeued": MCPSchema.integer,
+            "notes": .object(["type": .string("array"), "items": MCPSchema.string]),
+            "warnings": .object(["type": .string("array"), "items": MCPSchema.string]),
         ],
-        required: ["assignmentPublicID", "action", "dataset", "submissionsRequeued"], additionalProperties: nil)
+        required: ["assignmentPublicID", "action", "dataset", "submissionsRequeued", "notes", "warnings"],
+        additionalProperties: nil)
     static let annotations: MCPToolAnnotations? = MCPToolAnnotations(
         readOnlyHint: false, destructiveHint: false, idempotentHint: true)
     static let requiredScopes: Set<ContentScope> = [.write]
@@ -159,8 +172,19 @@ struct AttachDatasetTool: ContentTool {
         guard let dto = AttachedDatasetDTO(spec) else {
             throw MCPToolError.executionFailed(detail: "The attached spec has no library source.")
         }
+        var notes: [String] = []
+        if let asked = input.sampleSize, spec.sampleSize == nil,
+            let rows = await bundledDataRowCount(zipPath: setup.zipPath, file: spec.file)
+        {
+            notes.append(
+                WholeFileSampleNormalization(file: spec.file, sampleSize: asked, dataRowCount: rows).note)
+        }
+        let warnings = await wholeFilePerStudentSamples(
+            in: setup.decodedManifest()?.datasets ?? [], zipPath: setup.zipPath
+        ).map { "\($0.message) \($0.fix)" }
         return Output(
-            assignmentPublicID: assignment.publicID, action: action, dataset: dto, submissionsRequeued: requeued)
+            assignmentPublicID: assignment.publicID, action: action, dataset: dto, submissionsRequeued: requeued,
+            notes: notes, warnings: warnings)
     }
 
     private static func scope(from raw: String) throws -> DatasetSliceScope {

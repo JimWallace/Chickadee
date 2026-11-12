@@ -33,6 +33,11 @@ struct DatasetsResponse: Content {
     /// Each dataset's delivery note (`DatasetDeliveryNote`), keyed by file, so
     /// the panel repaints it from the server's words after every edit.
     var deliveryNotes: [String: String]
+    /// What the save just changed beyond what was asked, keyed by file: a
+    /// library sample that covers the whole file is stored as none
+    /// (`WholeFileSampleNormalization.panelNote`). Empty on a GET. The panel
+    /// shows it in the row's status, where "Saved" would otherwise go.
+    var savedNotes: [String: String] = [:]
 
     init(datasets: [DatasetSpec], diagnostics: [DatasetFileDiagnostics]) {
         self.datasets = datasets
@@ -209,12 +214,23 @@ private func estimateMeasureName(_ measure: DatasetColumnDivergence.Measure) -> 
 
 /// The full panel payload for a setup: its specs plus their estimate blocks,
 /// computed off the event loop.  The one constructor every datasets handler
-/// uses, so the GET and PUT of both pairs cannot disagree about what the
-/// panel is told.
+/// uses (a PUT through the `saved:` wrapper below), so the GET and PUT of
+/// both pairs cannot disagree about what the panel is told.
 func datasetsPanelResponse(req: Request, setup: APITestSetup) async throws -> DatasetsResponse {
     let specs = datasetSpecs(inManifest: setup.manifest)
     guard !specs.isEmpty else { return DatasetsResponse(datasets: [], diagnostics: []) }
     let zipPath = setup.zipPath
     let diagnostics = await datasetDiagnosticsReports(zipPath: zipPath, datasets: specs)
     return DatasetsResponse(datasets: specs, diagnostics: diagnostics)
+}
+
+/// The panel response after a save, with the save's normalizations as
+/// `savedNotes`.
+func datasetsPanelResponse(
+    req: Request, setup: APITestSetup, saved normalized: [WholeFileSampleNormalization]
+) async throws -> DatasetsResponse {
+    var response = try await datasetsPanelResponse(req: req, setup: setup)
+    response.savedNotes = Dictionary(
+        normalized.map { ($0.file, $0.panelNote) }, uniquingKeysWith: { first, _ in first })
+    return response
 }
