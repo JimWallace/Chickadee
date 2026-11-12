@@ -356,6 +356,20 @@
     --avatar-quantumcats-orbit: #7CA3EA;
     --avatar-quantumcats-cat: #2B1D3A;
     --avatar-quantumcats-eye: #F4F1FA;
+    /* The cross-fade ring: granted by an instructor's achievement
+       (docs/achievement-rewards.md, decision 4). Eight flat steps from blue
+       on the left to red on the right, the Cross-fade pattern of "The Class
+       Paints a Picture" (red x*4, blue 236 - x*4) sampled at each step and
+       lifted toward white until it holds the term-ring contrast floors
+       (AvatarCrossFadeRingTests). No dark mirror. */
+    --avatar-crossfade-1: #5047E9;
+    --avatar-crossfade-2: #6747D2;
+    --avatar-crossfade-3: #7945BD;
+    --avatar-crossfade-4: #8E40A3;
+    --avatar-crossfade-5: #9F3889;
+    --avatar-crossfade-6: #B32965;
+    --avatar-crossfade-7: #C30A34;
+    --avatar-crossfade-8: #E0000C;
     --avatar-ouroboros-body: #3F8E4A;
     --avatar-ouroboros-back: #2A6B36;
     --avatar-greenlight-band: #3E9653;
@@ -4781,6 +4795,14 @@ tr.drop-adopt  { outline: 2px solid var(--blue); outline-offset: -2px; }
 .av-spectrum-moss { fill: var(--avatar-accent-moss); }
 .av-spectrum-lagoon { fill: var(--avatar-accent-lagoon); }
 .av-spectrum-orchid { fill: var(--avatar-accent-orchid); }
+.av-crossfade-1 { fill: var(--avatar-crossfade-1); }
+.av-crossfade-2 { fill: var(--avatar-crossfade-2); }
+.av-crossfade-3 { fill: var(--avatar-crossfade-3); }
+.av-crossfade-4 { fill: var(--avatar-crossfade-4); }
+.av-crossfade-5 { fill: var(--avatar-crossfade-5); }
+.av-crossfade-6 { fill: var(--avatar-crossfade-6); }
+.av-crossfade-7 { fill: var(--avatar-crossfade-7); }
+.av-crossfade-8 { fill: var(--avatar-crossfade-8); }
 .av-gear { fill: var(--avatar-gear); }
 .av-gear-line { fill: none; stroke: var(--avatar-gear); }
 .av-bloom-eye { fill: var(--avatar-bloom-eye); }

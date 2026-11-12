@@ -82,6 +82,9 @@ struct DataExportWardrobeUnlock: Codable, Sendable {
     /// "expression.chirp".
     let item: String
     let unlockedAt: Date?
+    /// The name of the achievement that granted the item; nil for an item a
+    /// rule earned or a student found (docs/achievement-rewards.md, S2).
+    var label: String?
 }
 
 struct DataExportAchievementAward: Codable, Sendable {
@@ -253,7 +256,7 @@ func gatherDataExportContent(
         }
     let wardrobeUnlocks = try await APIWardrobeUnlock.query(on: db).filter(\.$userID == userID)
         .sort(\.$unlockedAt, .ascending).all()
-        .map { DataExportWardrobeUnlock(item: $0.item, unlockedAt: $0.unlockedAt) }
+        .map { DataExportWardrobeUnlock(item: $0.item, unlockedAt: $0.unlockedAt, label: $0.label) }
     let achievementAwards = try await AchievementAwardStore.awards(for: userID, on: db)
         .map {
             DataExportAchievementAward(

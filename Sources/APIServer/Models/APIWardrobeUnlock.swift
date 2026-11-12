@@ -26,10 +26,23 @@ final class APIWardrobeUnlock: Model, @unchecked Sendable {
     @Timestamp(key: "unlocked_at", on: .create)
     var unlockedAt: Date?
 
+    /// What granted the item: `achievement:<level>:<owner>:<id>` for an item
+    /// an achievement granted (docs/achievement-rewards.md, S2); nil for an
+    /// item a built-in rule earned or a student found.
+    @OptionalField(key: "source")
+    var source: String?
+
+    /// The name of the achievement that granted the item, for the account
+    /// page's "how you earned it"; nil for a rule item or a found one.
+    @OptionalField(key: "label")
+    var label: String?
+
     init() {}
 
-    init(userID: UUID, item: WardrobeItem) {
+    init(userID: UUID, item: WardrobeItem, source: String? = nil, label: String? = nil) {
         self.userID = userID
         self.item = item.rawValue
+        self.source = source
+        self.label = label
     }
 }

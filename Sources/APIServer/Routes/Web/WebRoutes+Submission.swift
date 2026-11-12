@@ -396,7 +396,7 @@ extension WebRoutes {
             assignment: submissionAssignment, on: req.db)
         applyClassGoalBonus(to: &processed, goals: classGoalAchievements, snapshots: goalSnapshots)
 
-        let badges = try await submissionBadges(
+        let (badges, grantedItems) = try await submissionBadges(
             req: req, submission: submission, displayCollection: displayCollection, setupProps: setupProps,
             processed: processed,
             awardRecipient: awardRecipient(user, submission, isStaff: isStaff, course: studentReveal.course))
@@ -422,11 +422,7 @@ extension WebRoutes {
 
         // An instructor override is the student's effective grade for the
         // assignment; surface it above this attempt's autograded breakdown.
-        var overrideGradePercent: Int?
-        if let submissionUserID = submission.userID {
-            overrideGradePercent = try await gradeOverridePercent(
-                setupID: submission.testSetupID, userID: submissionUserID, on: req.db)
-        }
+        let overrideGradePercent = try await submitterOverridePercent(submission, on: req.db)
 
         let links = studentFacingLinks(
             submission: submission, assignment: submissionAssignment, props: setupProps,
@@ -461,10 +457,25 @@ extension WebRoutes {
             delta: DeltaBanner(hasDelta: hasDelta, headerText: deltaHeaderText)
         )
         ctx.bird = try await submissionBird(
-            for: user, submission: submission, context: ctx, isStaff: isStaff, graded: displayCollection, req: req)
+            for: user, submission: submission, context: ctx, isStaff: isStaff,
+            result: OwnResult(graded: displayCollection, granted: grantedItems), req: req)
         let page = PageRequestContext(request: req)
         let flash = SpareFlash.messages(for: req.query[String.self, at: "spare"])
         return try await HTMLResponse { SubmissionPage(page: page, result: ctx, flash: flash) }.encodeResponse(for: req)
+    }
+
+    /// The instructor's grade override for the submitter, if any.
+    private func submitterOverridePercent(_ submission: APISubmission, on db: any Database) async throws -> Int? {
+        guard let userID = submission.userID else { return nil }
+        return try await gradeOverridePercent(setupID: submission.testSetupID, userID: userID, on: db)
+    }
+
+    /// What the student's own bird reacts to: the graded result the page
+    /// shows, and the items this page's achievements just granted
+    /// (docs/achievement-rewards.md, S2).
+    private struct OwnResult {
+        let graded: TestOutcomeCollection?
+        let granted: [AchievementAwardStore.GrantedItem]
     }
 
     /// The bird of the student who made this submission
@@ -474,13 +485,13 @@ extension WebRoutes {
     /// it is stored: no reaction and no celebration.
     private func submissionBird(
         for user: APIUser, submission: APISubmission, context: SubmissionContext, isStaff: Bool,
-        graded: TestOutcomeCollection?, req: Request
+        result: OwnResult, req: Request
     ) async throws -> SubmissionBird? {
         let db = req.db
         guard submission.kind == APISubmission.Kind.student, let submitterID = submission.userID else { return nil }
         if user.id == submitterID {
             return try await ownBird(
-                for: user, submission: submission, context: context, isStaff: isStaff, graded: graded, req: req)
+                for: user, submission: submission, context: context, isStaff: isStaff, result: result, req: req)
         }
         guard isStaff, let submitter = try await APIUser.find(submitterID, on: db) else { return nil }
         let spec = try await AvatarStore.ensureSpec(for: submitter, on: db)
@@ -496,8 +507,9 @@ extension WebRoutes {
     /// first.
     private func ownBird(
         for user: APIUser, submission: APISubmission, context: SubmissionContext, isStaff: Bool,
-        graded: TestOutcomeCollection?, req: Request
+        result: OwnResult, req: Request
     ) async throws -> SubmissionBird {
+        let graded = result.graded
         let db = req.db
         let spec = try await AvatarStore.ensureSpec(for: user, on: db)
         let reaction = AvatarReaction(
@@ -519,7 +531,8 @@ extension WebRoutes {
             }
         }
         let earned =
-            context.isPending ? nil : try await earnedItem(for: user, wearing: spec, isStaff: isStaff, req: req)
+            context.isPending
+            ? nil : try await earnedItem(for: user, wearing: spec, isStaff: isStaff, granted: result.granted, req: req)
         return SubmissionBird(
             avatar: AvatarPresentation(
                 for: reaction.applied(to: spec), size: .result, accessibility: .decorative, isStaff: isStaff),
@@ -533,22 +546,36 @@ extension WebRoutes {
     /// lookup fails, the page shows no toast, and a failed grant grants again
     /// on the next load. Course staff cannot choose a ring, so a ring is
     /// never theirs to wear.
+    ///
+    /// `granted` holds the items this page's achievements just granted
+    /// (docs/achievement-rewards.md, S2). The toast shows one of those first,
+    /// with the achievement's name, since the instructor chose it for this
+    /// assignment; the rule items it grants stay stored and show on the next
+    /// load or on the account page.
     private func earnedItem(
-        for user: APIUser, wearing spec: AvatarSpec, isStaff: Bool, req: Request
+        for user: APIUser, wearing spec: AvatarSpec, isStaff: Bool,
+        granted achievementItems: [AchievementAwardStore.GrantedItem], req: Request
     ) async throws -> SubmissionEarnedItem? {
         let db = req.db
         let userID = try user.requireID()
+        // The rule grant runs on every load, so a rule item is stored even
+        // when an achievement's item takes the toast.
+        let ruleItems =
+            (try? await WardrobeUnlockStore.grantNew(
+                for: userID, on: db, checks: req.application.wardrobeGrantChecks)) ?? []
         // The staff lookup only matters when something was granted, which is
         // rare, so it runs after the grant.
-        guard
-            let granted = try? await WardrobeUnlockStore.grantNew(
-                for: userID, on: db, checks: req.application.wardrobeGrantChecks), !granted.isEmpty,
+        guard !(achievementItems.isEmpty && ruleItems.isEmpty),
             let staff = try? await AvatarStore.courseStaff(among: [userID], on: db)
         else {
             return nil
         }
         let isCourseStaff = !staff.isEmpty
-        guard let item = granted.first(where: { !(isCourseStaff && $0.slot == .border) }) else { return nil }
+        func wearable(_ item: WardrobeItem) -> Bool { !(isCourseStaff && item.slot == .border) }
+        if let granted = achievementItems.first(where: { wearable($0.item) }) {
+            return SubmissionEarnedItem(granted.item, wearing: spec, isStaff: isStaff, grantedBy: granted.label)
+        }
+        guard let item = ruleItems.first(where: wearable) else { return nil }
         return SubmissionEarnedItem(item, wearing: spec, isStaff: isStaff)
     }
 
@@ -690,7 +717,7 @@ extension WebRoutes {
         setupProps: TestProperties?,
         processed: ProcessedCollection,
         awardRecipient: AwardRecipient?
-    ) async throws -> [AchievementBadge] {
+    ) async throws -> (badges: [AchievementBadge], granted: [AchievementAwardStore.GrantedItem]) {
         let subID = try submission.requireID()
         let classAchievements = try await APIClassAchievement.query(on: req.db)
             .filter(\.$submissionID == subID)
@@ -707,7 +734,22 @@ extension WebRoutes {
         let earned =
             displayCollection == nil
             ? [] : badgesEarnedBySubmission(processed.badgeContext, props: setupProps, standings: standings)
+        var granted: [AchievementAwardStore.GrantedItem] = []
         if let awardRecipient {
+            // A wardrobe achievement is hidden until earned
+            // (docs/achievement-rewards.md, decision 5): it is never a badge
+            // here, and its item is granted the first time it is satisfied.
+            // Not while a retest is pending: the page shows no toast then, and
+            // an item granted with no toast would never get one.
+            let isPending = submission.statusValue == .pending || submission.statusValue == .assigned
+            if displayCollection != nil, !isPending {
+                let rewards = earnedWardrobeRewards(processed.badgeContext, props: setupProps, standings: standings)
+                if !rewards.isEmpty {
+                    granted = await AchievementAwardStore.grantWardrobeRewardsOrLog(
+                        rewards, testSetupID: submission.testSetupID, submissionID: subID,
+                        earnedBy: awardRecipient.userID, on: req.db, logger: req.logger)
+                }
+            }
             let recorded = AchievementAwardStore.Earned(
                 testSetupID: submission.testSetupID, submissionID: subID, badges: earned)
             await AchievementAwardStore.recordOrLog(
@@ -720,7 +762,7 @@ extension WebRoutes {
                     for: awardRecipient.userID, in: [course], on: req.db, logger: req.logger)
             }
         }
-        return earned + classRecordBadges(classAchievements, props: setupProps)
+        return (earned + classRecordBadges(classAchievements, props: setupProps), granted)
     }
 
     /// Selects the result row to render on the submission page: the worker

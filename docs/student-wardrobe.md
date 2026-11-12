@@ -147,6 +147,7 @@ gets the ring. It is not a rank.
 | two-tone | earned | half in the bird's accent, half in its cap colour |
 | stitched | earned | the accent with 24 cream stitches |
 | spectrum | special | five bands in the five accent colours |
+| cross-fade, shown as "Cross-fade" | special | eight steps from blue on the left to red on the right, the Cross-fade pattern of the class composite activity "The Class Paints a Picture" |
 | snowflake, shown as "Winter" | seasonal (Winter) | a ramp from ice blue at the top to indigo at the bottom |
 | blossom, shown as "Spring" | seasonal (Spring) | a ramp from blossom pink to apricot to new-leaf green |
 | maple, shown as "Fall" | seasonal (Fall) | a ramp from gold to orange to brick to maroon |
@@ -233,8 +234,8 @@ instructor setup: the concept tag on an assignment.
 - **Account-wide and lateral**, as every wardrobe item is.
 - **In the export** (`profile.json`, `wardrobeUnlocks`) and removed with the
   account.
-- Spectrum has no rule yet and stays locked until the achievement link
-  exists (E7).
+- Spectrum and cross-fade have no rule. An instructor's achievement grants
+  them ([achievement-rewards.md](achievement-rewards.md), decision 4, S2).
 
 ### 6c. Found items
 
@@ -430,7 +431,7 @@ spam, and each submission costs runner time.
 | two-tone ring | every test passes on three assignments | correctness |
 | `dreamy` face | a graded submission at least 48 hours before the due date, on three assignments | habit |
 | stitched ring | every test passes after an earlier attempt that did not, on three assignments | persistence |
-| spectrum ring | no rule; hidden until the achievement link (E7) | — |
+| spectrum ring, cross-fade ring | no rule; an assignment achievement grants it ([achievement-rewards.md](achievement-rewards.md), S2) | — |
 | concept rings | every test passes on linked assignments (E6) | mastery |
 
 The early rule reads the server's submission time and the assignment's own

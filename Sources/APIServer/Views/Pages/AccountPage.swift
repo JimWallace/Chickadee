@@ -498,6 +498,9 @@ private struct AccountRingGroup: HTML {
                         AccountBorderSwatch(option: option)
                     }
                 }
+                for note in picker.grantNotes {
+                    p(.class("field-note field-note--muted")) { note }
+                }
                 if !picker.laterRings.isEmpty {
                     AccountLockedList(labelID: "bird-locked-label") {
                         for option in picker.laterRings {

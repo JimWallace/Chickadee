@@ -146,7 +146,7 @@ const sections = [
     label(accent, bird(88, { ...base, accessory: 'scarf', accent, back: 'straw' })))],
   ['Ring — chosen on the account page; the solid ring in the five accents', ['none', ...accents].map(border =>
     label(border, bird(88, { ...base, border, accessory: 'headband', back: 'straw' })))],
-  ['Patterned rings — rainbow is a starter; two-tone and stitched are earned; spectrum is special; snowflake, blossom and maple are seasonal; the six concept rings are earned',
+  ['Patterned rings — rainbow is a starter; two-tone and stitched are earned; spectrum and cross-fade are special (an achievement grants them); snowflake, blossom and maple are seasonal; the six concept rings are earned',
     rings.filter(r => !['none', 'solid', 'staff'].includes(r)).map(border =>
       label(border, bird(88, { ...base, border, accent: 'lagoon', back: 'straw' })))],
   ['Concept rings and the found Quantum Cats ring at 96px and 36px, all three tilts — the life ring, green light and ouroboros reach in to r 25.4; none may touch the eyes or beak',

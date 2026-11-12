@@ -56,8 +56,23 @@
     function presenterCtx() {
         return {
             signalMeta: SIGNAL_META, sectionNames: sectionNames(), esc: esc, dimLabel: dimLabel,
-            targetLabel: targetLabel, achievementName: achievementName
+            targetLabel: targetLabel, achievementName: achievementName, itemLabel: itemLabel
         };
+    }
+
+    // wardrobe item raw value -> its name, off the Item select in the editor
+    // template, so WardrobeItem.grantable stays the one list.
+    var ITEM_LABEL = null;
+    function itemLabel(value) {
+        if (!ITEM_LABEL) {
+            ITEM_LABEL = {};
+            var tpl = /** @type {HTMLTemplateElement | null} */ (document.getElementById('achievement-editor-template'));
+            var root = tpl && tpl.content ? tpl.content : document;
+            Array.prototype.forEach.call(root.querySelectorAll('#am-rewardItem option'), function (o) {
+                ITEM_LABEL[o.value] = o.textContent.trim();
+            });
+        }
+        return ITEM_LABEL[value] || n(value);
     }
 
     // "courseSection:<id>" -> "Unit 2", read off the course target select in
@@ -404,6 +419,19 @@
             el('am-classPercent').value = n(row.classPercent);
             el('am-points').value = n(row.points);
             el('am-recordDimension').value = row.recordDimension || 'firstToSolve';
+            // The Reward control is on the assignment editor only.
+            var rewardSel = el('am-rewardType');
+            var itemSel = el('am-rewardItem');
+            var itemBox = host.querySelector('.js-am-reward-item');
+            function showRewardItem() {
+                if (itemBox) itemBox.hidden = rewardSel.value !== 'wardrobe';
+            }
+            if (rewardSel) {
+                rewardSel.value = Core.grantsItem(row) ? 'wardrobe' : 'badge';
+                if (row.rewardItem) itemSel.value = row.rewardItem;
+                rewardSel.addEventListener('change', showRewardItem);
+                showRewardItem();
+            }
             (row.conditions || []).forEach(function (c) { addConditionRow(conditionsBox, c); });
             showScopeFields();
 
@@ -442,7 +470,9 @@
                     conditions: conditions,
                     classPercent: el('am-classPercent').value,
                     points: el('am-points').value,
-                    recordDimension: el('am-recordDimension').value
+                    recordDimension: el('am-recordDimension').value,
+                    rewardType: rewardSel ? rewardSel.value : '',
+                    rewardItem: itemSel ? itemSel.value : ''
                 }, index >= 0 ? state[index] : null);
                 if (!built.ok) {
                     st.textContent = built.error;

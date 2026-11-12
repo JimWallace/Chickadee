@@ -265,6 +265,8 @@ import Testing
             "--avatar-quantumcats-band", "--avatar-quantumcats-orbit", "--avatar-quantumcats-cat",
             "--avatar-quantumcats-eye",
         ])
+        // The cross-fade ring's eight steps, by class (docs/achievement-rewards.md, S2).
+        expected.formUnion((1...8).map { "--avatar-crossfade-\($0)" })
         for cap in AvatarCap.allCases {
             for accent in AvatarAccent.allCases {
                 for backdrop in AvatarBackdrop.allCases {
