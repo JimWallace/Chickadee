@@ -60,8 +60,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/vapor/fluent-postgres-driver.git",
       "state" : {
-        "revision" : "26fe8199666eb0794660dfa0560b75c2ac1e40a8",
-        "version" : "2.14.0"
+        "revision" : "518a9dafba6f7670e3abadbb3204e9a0ee13ddba",
+        "version" : "2.14.1"
       }
     },
     {
@@ -78,8 +78,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/vapor/jwt-kit.git",
       "state" : {
-        "revision" : "8bda2e7fe7d0e48f98b9d33d5e0b360fe9a5368d",
-        "version" : "5.8.0"
+        "revision" : "ae8f53decd49e3272d56714556362351d8b02807",
+        "version" : "5.9.0"
       }
     },
     {
@@ -186,8 +186,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/apple/swift-collections.git",
       "state" : {
-        "revision" : "f96b909e1a9e469620bc5037c1e24e00153f376f",
-        "version" : "1.7.5"
+        "revision" : "88754449ab766a739610b660e117762115fabc9c",
+        "version" : "1.7.6"
       }
     },
     {
