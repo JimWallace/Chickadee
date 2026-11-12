@@ -12,7 +12,7 @@ Stage B). Every student receives the same file (decision 1 of that plan).
 | `test_chickadee_fhir.py` | The helper's own checks. Exits 0 or 1, so it can run as a suite script. |
 | `reference_solution.py` | The reference answers to Question 4, and the values the tests expect. |
 
-The quiet feed for the tests is generated, not stored: `python3 -I generate_ed_feed.py quiet_feed.ndjson --patients 5 --seed 7`.
+The quiet feed for the tests is generated, not stored: `python3 -I generate_ed_feed.py quiet_feed.ndjson --patients 2 --seed 3`.
 
 Rebuild the feed and print the expected answers from this folder. The second
 command imports the helper from this folder, so it runs without `-I`:
@@ -107,7 +107,7 @@ functions that run on the whole feed take its path and return something
 small, and the others are tested on small literal feeds. The feed is shared,
 so the "the feed" cases use literal expected values, which
 `reference_solution.py` prints. `quiet_feed.ndjson` is a support file
-(`generate_ed_feed.py quiet_feed.ndjson --patients 5 --seed 7`) in which no
+(`generate_ed_feed.py quiet_feed.ndjson --patients 2 --seed 3`) in which no
 patient screens positive.
 
 | Family | Kind | Public | Release | Secret |
