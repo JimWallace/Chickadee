@@ -1,7 +1,7 @@
 # The search business game: a crawlable web as a course dataset
 
-A design for a multi-week HLTH 230 game in which each student runs a search
-company from 1995 to 2000. The web students crawl is a **course dataset**: a
+A design for a three-year HLTH 230 game in which each student runs a search
+company from 1996 to 2000. The web students crawl is a **course dataset**: a
 JSON file that maps each URL to its HTML. There is a new version of the
 dataset for each game year. Chickadee serves nothing new. The rules (the crawl
 budget, politeness, search quality) are enforced by the grading scripts.
@@ -9,31 +9,33 @@ budget, politeness, search quality) are enforced by the grading scripts.
 Status: **design draft, 2026-11-13. Nothing here is built.** It builds on the
 search-engine lab and the in-class activity in
 [examples/miniweb/](examples/miniweb/README.md), and on the course dataset
-library ([datasets-course-library.md](datasets-course-library.md)). The open
-questions in §8 need the maintainer.
+library ([datasets-course-library.md](datasets-course-library.md)). §8 records
+the maintainer's decisions and the questions still open.
 
 ## 1. The game
 
-Each student founds a search company in the first game year and names it.
-Each week in the back half of the term is one game year, and each year is an
-assignment. The lab stages arrive in the order the history lecture tells them,
-so each year a company gains the next capability.
+The game **wraps the search-engine lab** (decided 2026-11-13): it does not
+replace the lab or add a second track of work. The lab's six stages are split
+across three game years, and each year is one assignment. A student's company
+gains each capability by finishing the lab stages that build it, in the order
+the history lecture tells them.
 
-| Year | The web (dataset version) | New capability | What the year grades | Lab stage |
+| Year | The web (dataset version) | Lab stages that build the capability | What the year grades | Leaderboard metric |
 |---|---|---|---|---|
-| 1995 | about 40 pages: a directory, a few sites | A hand-picked directory | How many categories the directory covers | Stage 0 (browsing) |
-| 1996 | about 80 pages; `robots.txt` appears | A crawler, with a crawl budget | Sites reached within the budget, politely | Stages 1 to 3 |
-| 1997 | about 110 pages | An inverted index and search | Search quality on the year's hidden queries | Stage 6 |
-| 1998 | about 140 pages; the link farm appears | PageRank | Search quality, now with spam in the web | Stages 4 and 5 |
-| 1999 | the farm grows; some hosts forbid crawlers | Hand-tuned ranking (the `score` contest) | Search quality and coverage together | the activity |
-| 2000 | the crash: whole sites return 404 | Nothing new | Whether the company stays above the quality bar | none |
+| 1996: the crawler | about 80 pages; `robots.txt` appears | 1 to 3: normalize, extract links, crawl | the stages' tests, and a polite crawl within the budget | hosts reached |
+| 1998: PageRank | about 140 pages; the link farm appears | 4 to 6: graph, PageRank, search, then the `score` contest | the stages' tests | search quality (nDCG@5) times coverage |
+| 2000: the crash | whole sites return 404 | none new: the 1998 engine, run again | whether the engine stays above a quality bar | search quality on the shrunken web |
+
+Each company carries a **generated name**, a parody of a 1990s search company,
+fixed for the whole game (D9).
 
 Two things carry the game's history:
 
 - **The web changes between versions.** New sites appear, and some pages
   break. The link farm arrives in 1998, the year PageRank makes links
-  valuable, so the class sees the adversarial response happen.
-- **Event cards are content items** posted each week: "Yahoo declines to buy
+  valuable, so the class sees the adversarial response happen. In 2000 whole
+  sites vanish, and an engine that leaned on them loses quality.
+- **Event cards are content items** posted each year: "Yahoo declines to buy
   your ranking algorithm", "a Waterloo alumnus offers seed funding". They are
   narrative. Nothing reads them for a grade.
 
@@ -87,7 +89,7 @@ A keyed file in this design is always delivered
 whole (the `shared` mode in `datasets-course-library.md` §4.11). A sampled
 web would break links, so the save-time checks refuse a sample size or a
 transform on a keyed file. A partition by host would be a later decision
-(§8, Q5).
+(§8, open question 4).
 
 The profile of a keyed file reports:
 
@@ -105,7 +107,7 @@ known name, and students read it with `json.load`. Nothing queries it on
 their behalf.
 
 **D3. Each game year is a dataset version.** The generator
-(`examples/miniweb/generate_miniweb.py`, extended) writes all six years from
+(`examples/miniweb/generate_miniweb.py`, extended) writes all three years from
 one seed. A page keeps its URL and its text from year to year unless the
 story changes it. Each year's assignment pins its version through
 `DatasetSource`. The Datasets tab already tells an instructor what kind of
@@ -209,24 +211,71 @@ Either way, the map itself is new:
 reports one `metric` for the leaderboard. That year's script computes it as
 "users", for example search quality multiplied by the share of the web
 covered. Chickadee has no cross-assignment state, so cash carried from year
-to year is not modelled. A company's "valuation" is the sum of its yearly
-metrics, shown on a course page or computed by the instructor (§8, Q3). The
+to year is not modelled. A company's "valuation" is the sum of its three
+yearly metrics, shown on a course page or computed by the instructor (§8,
+open question 1). The
 economy stays three numbers: budget, users and valuation. The learning stays
 in the lab code.
+
+**D9. A company's name is generated from the student's handle.** Every
+student already has a per-course handle and a bird that the leaderboards show
+(`docs/student-avatars.md`). The company name is a pure function of the
+handle: a stable hash of it picks one parody name from a fixed list. So:
+
+- the name is the same in every year without being stored;
+- it adds no identity: anyone who can compute the name already sees the handle
+  beside it, and staff see the real name as they do today;
+- nobody types a name, so nothing needs moderation.
+
+The names parody the 1990s search and portal companies, with a 1990s suffix:
+
+| Parody of | Names |
+|---|---|
+| AltaVista | AltaVisor, BaltaVista |
+| Yahoo | Yodelhoo, Yahoot |
+| Lycos | Lycrawl |
+| Excite | Excitable, Overexcite |
+| Infoseek | InfoSneak, InfoPeek |
+| HotBot | LukewarmBot |
+| Ask Jeeves | Ask Jeremy |
+| WebCrawler | WebCrawdad |
+| Northern Light | Northern Lite |
+| Open Text | Open Texting |
+| Google | Gaggle, Googolplex |
+| suffixes | .com, Online, Interactive, Networks, Direct, 2000 |
+
+That is 16 bases and 6 suffixes, 96 names, for example "Lycrawl
+Interactive" or "Gaggle.com". Two students in a large class can draw the same
+name. That is harmless, because the handle tells them apart, and it can be
+played as a trademark dispute. Every name is a pun on a company that is long
+gone or long renamed, and none is the real name.
+
+Two alternatives lost:
+
+- **A personal one-row dataset of company names**, scoped to the course. It
+  would reuse the cohort seed, but a ranked year refuses a personal dataset
+  (`datasets-course-library.md` §4.11), and the name has to show on exactly
+  those years.
+- **Names that students choose.** These would need moderation, and they would
+  be a second identity next to the bird.
+
+**Where it shows:** beside the handle on the year leaderboards and on the
+class map. This is a small new piece of presentation: a Core function from
+handle to name, and one line in the leaderboard view.
 
 ## 4. Achievements
 
 | Achievement | Earned when | Signal | State |
 |---|---|---|---|
 | Archie | a first crawl fetches any page | `testPass` on the 1996 crawl entry | exists |
-| Spam Fighter | no farm page in the top five for any flu query | `testPass` on a 1999 entry | exists |
+| Spam Fighter | no farm page in the top five for any flu query | `testPass` on a 1998 entry | exists |
 | Survived the Crash | above the quality bar in 2000 | `testPass` on the 2000 entry | exists |
 | Bechtolsheim's Cheque | highest metric in 1998 | `record` on `highestMetric` | exists |
 | Polite Crawler (one year) | no forbidden fetch in that year | `testPass` on the year's politeness entry | exists |
 | The Whole Web (class goal) | the class together reached every host | `itemsCovered` class goal | exists, once D6's gate lets rows be written |
 | Full Index | one student reached every host in a year | none: `itemsCovered` is a class-level signal | **new** |
 | Polite Crawler (all term) | no forbidden fetch in any year | none: cross-assignment signals read grades, not one entry | **new** |
-| First Finder | first in the class to reach a host | none: first finders are a staff table column | **new**, and needs a decision about naming students (§8, Q6) |
+| First Finder | first in the class to reach a host | none: first finders are a staff table column | **new**, and needs a decision about naming students (§8, open question 5) |
 
 ## 5. Grades stay out of the game
 
@@ -243,7 +292,7 @@ search engine earns full marks whether their company wins or not.
 | Course dataset library: versions, provenance, Data page, clone | exists |
 | Shared delivery of a whole file | exists |
 | The keyed format (D2): spec field, profile, dictionary, save-time refusals, Data page rendering, version diff | **new** |
-| Generator for six yearly webs, with `robots.txt` and the 2000 crash | **new**, extends `generate_miniweb.py` |
+| Generator for three yearly webs, with `robots.txt` and the 2000 crash | **new**, extends `generate_miniweb.py` |
 | Metered fetch and politeness check (D4) | **new**, in the grading scripts; no Swift |
 | Leaderboard per year, `bestMetric`, windows | exists |
 | Coverage rows for an assignment without slot cells (D6) | **new**: a gate change |
@@ -251,7 +300,8 @@ search engine earns full marks whether their company wins or not.
 | A kind with a leaderboard and a coverage board (D7) | **new** |
 | The web map with counts and a layout (D7) | **new** |
 | Three achievements in §4 | **new** |
-| Valuation across years (D8) | **new** or by hand (§8, Q3) |
+| Valuation across years (D8) | **new** or by hand (§8, open question 1) |
+| Company names from the handle (D9) | **new**: a Core function and one line in the leaderboard view |
 | Event cards | exists (content items) |
 
 ## 7. Build order
@@ -263,9 +313,10 @@ search engine earns full marks whether their company wins or not.
 2. **Library and surfaces.** Upload, versions, the keyed version diff, and the
    Data page and dictionary for two entries. MCP `create_dataset` and
    `add_dataset_version` accept a keyed file.
-3. **The six yearly webs.** Extend the generator. `check_story.py` gains one
-   check per year, such as "the farm appears in 1998" and "a crawler that
-   ignores `robots.txt` loses politeness".
+3. **The three yearly webs.** Extend the generator. `check_story.py` gains one
+   check per year, such as "the farm appears in 1998", "a crawler that
+   ignores `robots.txt` loses politeness" and "the 1998 reference engine falls
+   below the bar in 2000 unless it handles the vanished sites".
 4. **The year scripts.** Metered fetch, politeness, coverage entries per host,
    and the yearly metric. Validate each year against a reference company.
 5. **Coverage without slot cells.** The D6 gate, so a year's host entries
@@ -273,34 +324,39 @@ search engine earns full marks whether their company wins or not.
 6. **The map.** The D7 kind (or the two-assignment form), coverage counts
    and the SVG layout. This is the only slice with UI.
 7. **Later:** per-page coverage items, the three new achievements in §4,
-   a partition by host (§8, Q5), and valuation across years.
+   a partition by host (§8, open question 4), valuation across years, and company names
+   (D9) if the leaderboard line is not in an earlier slice.
 
 Slices 1 to 4 make the game playable on a yearly leaderboard, with no map.
 Slices 5 and 6 add the class's shared map.
 
-## 8. Open questions for the maintainer
+## 8. Decisions and open questions
 
-1. **How many game years?** Six weeks is the whole back half of the term. Three
-   years (1996 crawl, 1998 PageRank, 2000 crash) is a lighter version.
-2. **Does the game replace the lab and the activity, or wrap them?** This
-   draft wraps them: the lab's stages unlock the years, and the activity
-   becomes 1999.
-3. **Valuation across years:** a course page, or the instructor adds up the
-   leaderboards by hand?
-4. **Budget size:** a budget below the web's size makes the crawl order
+Decided by the maintainer on 2026-11-13:
+
+1. **Three game years**: 1996 (the crawler), 1998 (PageRank) and 2000 (the
+   crash). Not six.
+2. **The game wraps the lab.** The lab's stages build each year's capability
+   (§1). The in-class `score` contest becomes the end of 1998.
+3. **Company names are generated**, parodies of real 1990s companies, as a
+   small joke (D9).
+
+Still open:
+
+1. **Valuation across years:** a course page, or the instructor adds up the
+   three leaderboards by hand?
+2. **Budget size:** a budget below the web's size makes the crawl order
    matter. The proposal is about half the web each year, tuned by the
    generator's checks.
-5. **A partition by host ("webmasters"):** each student is dealt a few sites
-   to maintain, and gains points when other companies reach them. This is a
-   dealt partition of a keyed file. A ranked year cannot carry it: an activity
-   that compares students accepts only a `shared` dataset
-   (`datasets-course-library.md` §4.11). It would have to live in an unranked
-   assignment beside the year. Deferred.
-6. **Names:** the leaderboard shows a per-course handle and a chickadee
-   avatar (`docs/student-avatars.md`), and first finders are staff-only.
-   Company names chosen by students would be a second identity next to the
-   avatar, and would need moderation. Is a company name wanted, and may a
-   student see who found a site first?
+3. **D7's two forms:** a new kind with a leaderboard and a coverage board, or
+   two assignments per year.
+4. **A partition by host ("webmasters"):** each student is dealt a few sites
+   to maintain, and gains points when other companies reach them. A ranked
+   year cannot carry it: an activity that compares students accepts only a
+   `shared` dataset (`datasets-course-library.md` §4.11). Deferred.
+5. **First finders:** may a student see which company reached a site first?
+   Company names make this lighter than showing a handle, but it is still a
+   name next to an achievement.
 
 ## 9. Non-goals
 
