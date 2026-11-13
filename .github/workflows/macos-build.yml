@@ -39,6 +39,10 @@ on:
     # and from the Tuesday mutation sweep.
     - cron: "47 4 * * 3"
   workflow_dispatch:
+  # TEMPORARY: a workflow that is not on main cannot be dispatched, so this
+  # proves the new workflow on its own branch. Removed before merge.
+  push:
+    branches: [claude/adoring-heisenberg-xlui4x-ci-gaps]
 
 concurrency:
   group: macos-build-${{ github.ref }}
