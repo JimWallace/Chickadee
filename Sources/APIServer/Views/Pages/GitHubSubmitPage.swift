@@ -23,9 +23,7 @@ struct GitHubSubmitPage: HTML {
                 span(.class("chip")) { "Attempt \(chips.attemptNumber)" }
                 if let deadlineText = chips.deadlineText {
                     " "
-                    span(.class("chip js-relative-time"), .data("iso", value: chips.deadlineISO ?? "")) {
-                        deadlineText
-                    }
+                    span(.class("chip")) { DueDate(iso: chips.deadlineISO ?? "", text: deadlineText) }
                 }
             }
             if let errorText = state.errorText {

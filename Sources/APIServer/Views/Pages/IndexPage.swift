@@ -4,6 +4,7 @@
 // materials, one table per course section, with the per-row grade and the
 // student's actions (edit, upload, reset, slip day, solution, leaderboard).
 
+import Core
 import Elementary
 
 struct IndexPage: HTML {
@@ -41,7 +42,7 @@ struct IndexPage: HTML {
                 if activeCourse != nil {
                     div(.class("notice-box")) {
                         p(.class("empty")) { "No assignments available yet." }
-                        p(.class("section-note")) { "Labs open one at a time as the term goes on." }
+                        p(.class("section-note")) { "Assignments open one at a time as the term goes on." }
                         p { a(.href("/account")) { "Check your course memberships" } }
                     }
                 } else {
@@ -198,7 +199,7 @@ private struct IndexAssignmentRow: HTML {
                     span(
                         .class("tier tier-preview staff-only-tag"),
                         .title("Visible to course staff only — students can't see this assignment yet.")
-                    ) { "preview" }
+                    ) { AssignmentVisibility.preview.displayLabel }
                 } else if row.status == "extended" {
                     span(.class("tier tier-extended"), .title("You can submit past the class deadline")) {
                         "extended"
@@ -257,7 +258,9 @@ private struct IndexAssignmentRow: HTML {
                 }
                 if row.latest.gradeIsOverridden {
                     " · "
-                    span(.class("grade-override-tag"), .title("Your grade was set by your instructor")) { "adjusted" }
+                    span(.class("grade-override-tag"), .title("Your instructor set this grade for the assignment")) {
+                        "overridden"
+                    }
                 }
                 for title in row.materialTitles {
                     " · \(title)"
@@ -276,15 +279,9 @@ private struct IndexAssignmentRow: HTML {
         if let opensAtText = row.opensAtText {
             span(.title("This assignment opens automatically at this time.")) { "Opens \(opensAtText)" }
         } else if row.hasActiveExtension {
-            let effective = row.effectiveDueAtText ?? ""
-            "Due "
-            span(.class("js-relative-time"), .data("iso", value: row.effectiveDueAtISO ?? "")) { effective }
-            " · \(effective) "
-            span(.class("card-meta")) { "(extension)" }
+            DueDate(iso: row.effectiveDueAtISO ?? "", text: row.effectiveDueAtText ?? "", note: "(extension)")
         } else if let dueAt = row.dueAt {
-            "Due "
-            span(.class("js-relative-time"), .data("iso", value: row.dueAtISO ?? "")) { dueAt }
-            " · \(dueAt)"
+            DueDate(iso: row.dueAtISO ?? "", text: dueAt)
         } else {
             "No due date"
         }

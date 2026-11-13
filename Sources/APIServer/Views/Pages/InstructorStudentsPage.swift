@@ -30,12 +30,19 @@ struct InstructorStudentsPage: HTML {
     /// True when the course has a group set: the students table then has a
     /// Group column (docs/lab-groups.md).
     var showsGroups = false
+    /// Why the roster controls are hidden, when they are: an archived course
+    /// or a TA (UI audit #3007, finding 17). The Slip days and Groups tabs
+    /// say the same.
+    var readOnlyNote: String?
 
     var body: some HTML {
         BaseLayout(title: "Students", page: page, flash: flash) {
             InstructorTabs(active: .students)
             section(.class("page-section")) {
                 titlebar
+                if rosterReadOnly, let readOnlyNote {
+                    p(.class("section-note")) { readOnlyNote }
+                }
                 if let activeCourseID, !rosterReadOnly {
                     div(.class("add-panel card"), .id("add-staff-panel")) {
                         form(.method(.post), .action("/courses/\(activeCourseID)/staff"), .class("form-stack")) {
@@ -68,8 +75,14 @@ struct InstructorStudentsPage: HTML {
                     }
                 }
                 studentsTable
-                p(.class("empty"), .id("no-students-msg")) { "No students enrolled yet." }
-                    .attributes(.hidden, when: !students.isEmpty)
+                p(.class("empty"), .id("no-students-msg")) {
+                    "No students enrolled yet."
+                    if activeCourseID != nil, !rosterReadOnly {
+                        " "
+                        a(.href("/instructor/enroll-csv")) { "Enroll from a CSV" }
+                    }
+                }
+                .attributes(.hidden, when: !students.isEmpty)
             }
             PageStyle(
                 """
@@ -103,17 +116,17 @@ struct InstructorStudentsPage: HTML {
                     .method(.post), .action("/courses/\(activeCourseID)/enrollment-mode"), .class("form-flush")
                 ) {
                     CSRFField(token: page.csrfToken)
-                    label(.class("visually-hidden"), .for("enrollment-mode")) { "Enrolment mode" }
+                    label(.class("visually-hidden"), .for("enrollment-mode")) { "Enrollment mode" }
                     span(.class("state-select"), .data("state", value: courseEnrollmentMode)) {
                         select(
                             .id("enrollment-mode"), .name("enrollmentMode"), .class("form-input"),
                             .dataFlag("ck-submit-on-change")
                         ) {
-                            option(.value("open")) { "Open enrolment" }
+                            option(.value("open")) { "Open enrollment" }
                                 .attributes(.selected, when: courseEnrollmentMode == "open")
-                            option(.value("auto")) { "Auto enrolment" }
+                            option(.value("auto")) { "Auto enrollment" }
                                 .attributes(.selected, when: courseEnrollmentMode == "auto")
-                            option(.value("closed")) { "Closed enrolment" }
+                            option(.value("closed")) { "Closed enrollment" }
                                 .attributes(.selected, when: courseEnrollmentMode == "closed")
                         }
                     }
@@ -133,7 +146,7 @@ struct InstructorStudentsPage: HTML {
                 a(.class("row-menu-item"), .href("/instructor/enroll-csv"), .role("menuitem")) {
                     span(.class("item-tile"), .data("kind", value: "document")) { Icon("i-upload") }
                     span {
-                        "Enrol from CSV"
+                        "Enroll from CSV"
                         br()
                         span(.class("card-meta")) { "Username list; unknown users wait as pending" }
                     }

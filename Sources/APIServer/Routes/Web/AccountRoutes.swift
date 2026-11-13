@@ -256,7 +256,7 @@ struct AccountRoutes: RouteCollection {
             throw AppError.notFound(resource: "Course")
         }
         guard course.enrollmentMode == .open else {
-            throw AppError.forbidden(action: "leave a \(course.enrollmentMode.rawValue)-enrolment course")
+            throw AppError.forbidden(action: "leave a \(course.enrollmentMode.rawValue)-enrollment course")
         }
 
         try await APICourseEnrollment.query(on: req.db)

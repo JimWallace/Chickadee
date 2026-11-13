@@ -217,8 +217,8 @@ private struct EditHeaderFields: HTML {
                 " "
             }
             p(.class("card-meta fine-print")) {
-                "The language sets the extension of generated tests, so set it before you add pattern families "
-                    + "or notebook checks. \(edit.uploadOnlyLanguagesProse) assignments are upload-only."
+                "Set the language before you add pattern families or notebook checks; "
+                    + "\(edit.uploadOnlyLanguagesProse) assignments are upload-only."
             }
             label(.class("form-label field-gap")) {
                 "Submission Method "
@@ -231,8 +231,7 @@ private struct EditHeaderFields: HTML {
                 " "
             }
             p(.class("card-meta fine-print")) {
-                "File upload only hides the notebook editor and grades every submission on the native runner. "
-                    + "Use it for makefile-graded work (for example C++) or multi-file projects submitted as a zip."
+                "File upload only hides the notebook editor, for makefile-graded work or multi-file zips."
             }
             label(.class("form-label field-gap")) {
                 "Class activity "

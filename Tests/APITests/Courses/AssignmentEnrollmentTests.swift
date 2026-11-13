@@ -179,7 +179,7 @@ import VaporTesting
                 afterResponse: { res in
                     #expect(res.status == .ok)
                     let html = res.body.string
-                    #expect(html.contains("Enrol from CSV"))
+                    #expect(html.contains("Enroll from CSV"))
                     #expect(html.contains("/courses/\(courseID)/enroll-csv"))
                     #expect(html.contains("type=\"file\""))
                     #expect(html.contains("Cancel"))

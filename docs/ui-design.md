@@ -1097,6 +1097,13 @@ Two renderings, chosen by what the reader is asking (UI audit S8):
   seed both with the server string and the cell prints the same instant twice
   on every load before the script runs.  A hover `title` does not satisfy this: it is not a disclosure.
 
+- **Due dates** a student reads — the dashboard row, the submit page —
+  render through the `DueDate` view: the word "Due", the relative reading,
+  then the absolute time, with an optional note such as "(extension)".  The
+  reader asks both "how long do I have" and "when exactly", so both show,
+  and the label says which date it is (UI audit #3007).  Staff schedule
+  views (the Overview, the per-student page) still show the absolute date.
+
 The server-formatted string stays in the cell as the no-JS fallback, so a
 column degrades to an absolute date rather than to nothing.  Staleness
 questions ("is this runner offline?") use

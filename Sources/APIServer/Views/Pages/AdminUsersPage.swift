@@ -27,7 +27,10 @@ struct AdminUsersPage: HTML {
                 div(.class("page-titlebar")) {
                     h2 {
                         "People "
-                        span(.class("text-muted")) { "\(userCount) users · \(adminCount) admins" }
+                        span(.class("text-muted")) {
+                            "\(userCount) \(userCount == 1 ? "user" : "users") · "
+                                + "\(adminCount) \(adminCount == 1 ? "admin" : "admins")"
+                        }
                     }
                 }
                 // Typing filters the rows shown, live. Enter submits the form,

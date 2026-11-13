@@ -490,7 +490,7 @@ private struct InstructorBrightspaceRosterRow: HTML {
                             button(
                                 .class("row-menu-item row-menu-item--danger"), .type(.submit), .role("menuitem")
                             ) {
-                                Icon("i-trash")
+                                Icon("i-user-minus")
                                 "Remove from course"
                             }
                         }

@@ -69,7 +69,7 @@ struct AccountPage: HTML {
                             tr {
                                 th { "Code" }
                                 th { "Name" }
-                                th { "Enrolment" }
+                                th { "Enrollment" }
                                 th { span(.class("visually-hidden")) { "Actions" } }
                             }
                         }
@@ -198,9 +198,7 @@ struct AccountPage: HTML {
                 ""
             }
             p {
-                "Request a copy of the personal information Chickadee holds about you: your profile, course "
-                    + "enrollments, submissions (including the files you uploaded), grading results, and account "
-                    + "activity records — delivered as a single zip archive. Limit one export per day."
+                "Request a zip of the personal information Chickadee holds about you, at most once a day."
             }
             if exportCanRequest {
                 form(.method(.post), .action("/account/export"), .class("inline-form")) {

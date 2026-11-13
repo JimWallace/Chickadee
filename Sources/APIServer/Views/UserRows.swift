@@ -91,7 +91,7 @@ struct UserRow: HTML {
                     option(.value("admin")) { "Admin" }
                         .attributes(.selected, when: user.role == "admin")
                 }
-                .attributes(.disabled, when: user.isCurrentUser)
+                .attributes(.disabled, .title("You cannot change your own role"), when: user.isCurrentUser)
             }
         }
     }

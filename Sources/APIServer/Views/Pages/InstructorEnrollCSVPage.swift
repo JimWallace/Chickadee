@@ -16,9 +16,9 @@ struct InstructorEnrollCSVPage: HTML {
     let error: String?
 
     var body: some HTML {
-        BaseLayout(title: "Enrol from CSV — \(courseCode)", page: page) {
+        BaseLayout(title: "Enroll from CSV — \(courseCode)", page: page) {
             div(.class("page-titlebar enroll-csv-titlebar")) {
-                h1 { "Enrol from CSV" }
+                h1 { "Enroll from CSV" }
                 span(.class("enroll-csv-course-name")) { "\(courseCode) — \(courseName)" }
             }
             if let error {
@@ -28,7 +28,7 @@ struct InstructorEnrollCSVPage: HTML {
                 h2 { "Add students" }
                 p(.class("section-intro")) {
                     "Upload a CSV file, type user IDs directly, or both — supplied IDs are merged. Unknown IDs are "
-                        + "recorded as pending enrolments and resolved when the student first signs in."
+                        + "recorded as pending enrollments and resolved when the student first signs in."
                 }
                 form(
                     .method(.post), .action("/courses/\(courseID)/enroll-csv"), .enctype(.multipartFormData),
@@ -61,7 +61,7 @@ struct InstructorEnrollCSVPage: HTML {
                         " "
                     }
                     div(.class("enroll-csv-form-buttons")) {
-                        button(.class("btn btn-primary"), .type(.submit)) { "Enrol" }
+                        button(.class("btn btn-primary"), .type(.submit)) { "Enroll" }
                         " "
                         a(.href("/instructor"), .class("btn")) { "Cancel" }
                     }

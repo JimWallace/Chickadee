@@ -76,9 +76,9 @@ struct OAuthConsentPage: HTML {
             strong { clientName }
             ". "
             if readsStudentAnswers {
-                "It can read students' written answers, without names, only in assignments where AI-assisted feedback is on, and it cannot access grades or enrolment."
+                "It can read students' written answers, without names, only in assignments where AI-assisted feedback is on, and it cannot access grades or enrollment."
             } else {
-                "It cannot access student data, grades, enrolment, or submissions."
+                "It cannot access student data, grades, enrollment, or submissions."
             }
             " You can revoke access later."
         }
