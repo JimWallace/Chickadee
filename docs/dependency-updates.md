@@ -42,6 +42,17 @@ update fails.
      does not mean that a PR will land. It also reports a security alert that has had no
      PR for a week, and a `RELEASE_TOKEN` that is broken or near expiry. It
      closes each issue whose problem is gone.
+   - `swift-currency.yml` runs each Monday. Dependabot's Swift toolchain is
+     older than ours, so it opens no Swift PRs; this workflow asks the CI
+     toolchain instead. When pins are behind, it files one issue with the key
+     `swift-currency`. The issue lists the pins and has a brief for an agent:
+     run `swift package update <package>` per package, build, test and open a
+     PR, with the SwiftLint plugin and JavaScriptKit each in its own PR. When
+     the check cannot run, the issue says so instead. The next green run
+     closes the issue.
+
+The weekly digest (`weekly-digest.yml`) lists the newest Swift currency run
+with the other weekly checks on `main`.
 
 Once a regeneration commit is on a Dependabot branch, Dependabot no longer
 rebases that PR. If `main` moves and the branch conflicts or falls behind, the

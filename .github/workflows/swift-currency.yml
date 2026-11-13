@@ -20,6 +20,13 @@ name: Swift package currency
 #
 # Red here is a notification, not a broken build: this job is off the pull
 # request path, so an upstream release can never block a merge.
+#
+# A red run alone told nobody: nothing watches a scheduled run. So the `report`
+# job files one issue labelled `dependency-update-failed`, keyed
+# `swift-currency` (scripts/dependency-issue.sh), with the pins that are behind
+# and a brief for an agent. A later red run comments on the same issue, and the
+# first green run closes it. It reports only for `main`; a dispatch on a branch
+# reports nothing. The weekly digest lists the newest run.
 
 on:
   schedule:
@@ -39,6 +46,8 @@ permissions:
 jobs:
   currency:
     runs-on: ubuntu-latest
+    outputs:
+      status: ${{ steps.currency.outputs.status }}
     # Two resolves against GitHub remotes, a few minutes each when cold. The
     # ceiling sits above 2 x the script's own 900 s per-directory timeout, so a
     # stalled resolve fails with the script's explanation.
@@ -57,11 +66,17 @@ jobs:
       - name: Prove the check can fail
         run: scripts/check-swift-currency.py --self-test
 
+      # The exit status says which kind of red this is: 1 is pins behind, 2 is
+      # a check that could not run. The report job words its issue by it.
       - name: Are the Swift pins current?
         id: currency
+        shell: bash
         run: |
           set -o pipefail
           scripts/check-swift-currency.py 2>&1 | tee /tmp/swift-currency.txt
+          status="${PIPESTATUS[0]}"
+          echo "status=$status" >> "$GITHUB_OUTPUT"
+          exit "$status"
 
       - name: Summarise
         if: always()
@@ -73,3 +88,96 @@ jobs:
             cat /tmp/swift-currency.txt 2>/dev/null || echo "the check produced no output"
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Keep the report for the issue
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: swift-currency
+          path: /tmp/swift-currency.txt
+          if-no-files-found: ignore
+          retention-days: 7
+
+  # Files, updates or closes the `swift-currency` issue. On the host, not in
+  # the Swift image, because it needs gh.
+  report:
+    needs: currency
+    if: >-
+      always()
+      && github.ref == 'refs/heads/main'
+      && (needs.currency.result == 'success' || needs.currency.result == 'failure')
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      issues: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      RESULT: ${{ needs.currency.result }}
+      STATUS: ${{ needs.currency.outputs.status }}
+      RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: swift-currency
+          path: report
+        continue-on-error: true
+
+      - name: File, update or close the issue
+        run: |
+          set -euo pipefail
+          if [ "$RESULT" = "success" ]; then
+            scripts/dependency-issue.sh close swift-currency \
+              "Every versioned Swift pin is current again: $RUN_URL"
+            exit 0
+          fi
+          report="$(cat report/swift-currency.txt 2>/dev/null || echo "the check produced no output")"
+          if [ "$STATUS" = "1" ]; then
+            title="Swift package pins are behind"
+            # Each directory line, "DIR: N pin(s) behind", and its pin lines,
+            # "  name: old -> new".
+            behind="$(grep -E '(pin\(s\) behind$|^  [^ ]+: [^ ]+ -> [^ ]+$)' <<<"$report" || true)"
+            {
+              echo "Swift package pins on \`main\` are behind what \`swift package update\` resolves with the CI toolchain."
+              echo ""
+              echo "Run: $RUN_URL"
+              echo ""
+              echo "### Pins behind"
+              echo ""
+              echo '```'
+              echo "${behind:-(none listed; see the run)}"
+              echo '```'
+              echo ""
+              echo "### Brief for an agent"
+              echo ""
+              echo "Bring the Swift pins listed above up to date in pull requests into \`main\`."
+              echo ""
+              echo "- For each package, run \`swift package update <package>\` in the directory that lists it (\`/\` or \`wasm/\`). Then run \`swift build\` and the tests that the change affects, and open a PR."
+              echo "- Land the SwiftLint plugin (\`SwiftLintPlugins\`) and JavaScriptKit (\`wasm/\`) each as its own PR, as \`.github/dependabot.yml\` says. A SwiftLint release can add a rule that fails \`scripts/swiftlint.sh --strict\`, and JavaScriptKit feeds the vendored browser wasm."
+              echo "- Do not skip, disable or quarantine a test, and do not loosen a check, to get green. Adapt our code to the new version."
+              echo "- If a new version cannot work here, cap the requirement in \`Package.swift\` with a comment that says why, and say so on this issue."
+              echo "- This issue closes when \`.github/workflows/swift-currency.yml\` next passes on \`main\`. Dispatch it after the PRs merge."
+            } > body.md
+          else
+            title="Swift package currency check cannot run"
+            {
+              echo "The Swift package currency check could not run (exit status ${STATUS:-unknown}), so it says nothing about the pins."
+              echo ""
+              echo "Run: $RUN_URL"
+              echo ""
+              echo "### The check said"
+              echo ""
+              echo '```'
+              tail -n 60 <<<"$report"
+              echo '```'
+              echo ""
+              echo "### Brief for an agent"
+              echo ""
+              echo "Find why \`scripts/check-swift-currency.py\` could not resolve, from the output above and the run's log: a remote that is down, a timeout, a missing \`Package.resolved\`, or dry-run output that the script no longer reads. Fix the cause, and keep \`--self-test\` proving that the check can fail. Then dispatch \`.github/workflows/swift-currency.yml\` on \`main\`. If pins are behind, the run adds them to this issue."
+            } > body.md
+          fi
+          scripts/dependency-issue.sh open swift-currency "$title" body.md
