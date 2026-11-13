@@ -115,32 +115,18 @@ if (dropZone && fileInput) {
     });
 })();
 
-// Results page: poll until the submission reaches its final state.
+// Results page: reload once the submission has a result.
 //
-// Statuses that require polling:
-//   pending / assigned  — runner hasn't started yet
-const root = document.getElementById('submission-root');
-if (root) {
-    const isPending = root.dataset.pending === 'true';
-
-    if (isPending) {
-        const submissionID = root.dataset.submissionId;
-        const poll = setInterval(async () => {
-            try {
-                const res = await fetch(`/api/v1/submissions/${submissionID}`);
-                if (!res.ok) return;
-                const data = await res.json();
-                const done = data.status !== 'pending' && data.status !== 'assigned';
-                if (done) {
-                    clearInterval(poll);
-                    window.location.reload();
-                }
-            } catch (_) {
-                // network blip — try again next tick
-            }
-        }, 2000);
-    }
-}
+// The pending band is a region `table-poll.js` refreshes from
+// `/submissions/:id?fragment=state` (the one poller, docs/ui-design.md
+// "Interaction idioms"). The region names the state ("Queued", "Grading");
+// when it reports a final one it carries `data-submission-final`, and the
+// results are a whole page, so the page reloads.
+document.querySelectorAll('.js-submission-state').forEach((region) => {
+    region.addEventListener('chickadee:table-repaint', () => {
+        if (region.querySelector('[data-submission-final]')) window.location.reload();
+    });
+});
 
 // ── Destructive-action confirmation ────────────────────────────────────────
 // One seam for "are you sure?" (UI audit S5). A form or control declares the

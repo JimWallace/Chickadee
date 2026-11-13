@@ -532,14 +532,14 @@ struct SubmissionContext: Encodable {
     /// header — behaviour identical to the pre-sections page.
     let sectionedOutcomes: [SectionedOutcomes]
     let passCount: Int
-    /// The other three states, for the count tiles in the score band.  These
-    /// are the four states `TestOutcomeStatus` has; "skipped" is derived from a
-    /// short-result pattern rather than being a status, so it is not a tile.
+    /// The other count tiles in the score band (`ResultCountTiles`): with
+    /// `passCount` and `skippedCount` they partition the tests, so a test
+    /// skipped behind a failed prerequisite is counted once, as skipped.
     let failCount: Int
     let errorCount: Int
     let timeoutCount: Int
-    /// Rows skipped because a prerequisite failed.  Derived per row rather than
-    /// being a `TestOutcomeStatus`, so it is counted from the rendered rows.
+    /// Tests skipped because a prerequisite failed, over every tier. Derived
+    /// per outcome rather than being a `TestStatus`.
     let skippedCount: Int
     let totalTests: Int
     let gradePercent: Int
@@ -596,6 +596,17 @@ struct SubmissionContext: Encodable {
     /// result when the viewer is that student, as stored when staff read it
     /// (docs/result-celebration.md). Nil for any other submission kind.
     var bird: SubmissionBird?
+    /// The assignment's title, for the page's `<h1>` and tab title; nil when
+    /// the submission has no published assignment.
+    var assignmentTitle: String?
+    /// When the submission arrived: an ISO 8601 stamp for the relative
+    /// rendering, and its absolute form as the no-JS fallback.
+    var submittedAtISO: String?
+    var submittedAtText: String?
+    /// The way back: the student's history of this assignment, or the
+    /// assignment's submissions page for staff. Nil when there is none.
+    var backURL: String?
+    var backLabel: String?
 }
 
 /// The submitting student's bird on a result page, and how it reacts to the

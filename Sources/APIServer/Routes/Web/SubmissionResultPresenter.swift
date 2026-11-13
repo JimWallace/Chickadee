@@ -235,9 +235,15 @@ extension WebRoutes {
         processed.compilerOutput = collection.compilerOutput
         processed.warnings = collection.warnings
         processed.passCount = collection.passCount
-        processed.failCount = collection.failCount
-        processed.errorCount = collection.errorCount
-        processed.timeoutCount = collection.timeoutCount
+        // The count tiles partition the tests (#3007, finding 2): a test
+        // skipped behind a failed prerequisite carries a `fail` status, so it
+        // is counted as skipped and not as failed too. Counted over every tier,
+        // like the grade, because the masked secret rows are on the page too.
+        let tiles = ResultCountTiles(collection: collection)
+        processed.failCount = tiles.failed
+        processed.errorCount = tiles.errors
+        processed.timeoutCount = tiles.timedOut
+        processed.skippedCount = tiles.skipped
         processed.totalTests = collection.totalTests
         processed.executionTimeMs = collection.executionTimeMs
         processed.totalPoints = collection.totalPoints
@@ -269,9 +275,6 @@ extension WebRoutes {
                 viewerIsStaff: viewer.isStaff
             )
         }
-        // Counted from the rendered rows: "skipped" is a short-result pattern
-        // rather than a status, so the collection cannot report it.
-        processed.skippedCount = processed.outcomes.count(where: \.isSkipped)
         // Open the first failure's output and leave the rest closed.
         if let first = processed.outcomes.firstIndex(where: {
             $0.status != "pass" && !$0.isSkipped && $0.longResult != nil
@@ -589,6 +592,48 @@ func classGoalViews(
 
 // Internal (was private): built here, consumed by `submissionPage` in
 // WebRoutes+Submission.swift.
+/// The result page's count tiles, as one partition of the tests: every test is
+/// in exactly one of passed, failed, errors, timed out and skipped (UI audit
+/// #3007, finding 2). A dependency skip carries a `fail` status, so the
+/// collection's own counts would show it twice. A collection stored without
+/// its outcomes keeps its own counts, with nothing skipped.
+struct ResultCountTiles: Equatable {
+    var failed: Int
+    var errors: Int
+    var timedOut: Int
+    var skipped: Int
+
+    init(collection: TestOutcomeCollection) {
+        guard !collection.outcomes.isEmpty else {
+            self.init(
+                failed: collection.failCount, errors: collection.errorCount,
+                timedOut: collection.timeoutCount, skipped: 0)
+            return
+        }
+        var tiles = ResultCountTiles(failed: 0, errors: 0, timedOut: 0, skipped: 0)
+        for outcome in collection.outcomes {
+            if outcome.status != .pass, parseSkip(shortResult: outcome.shortResult).isSkipped {
+                tiles.skipped += 1
+                continue
+            }
+            switch outcome.status {
+            case .pass: break
+            case .fail: tiles.failed += 1
+            case .error: tiles.errors += 1
+            case .timeout: tiles.timedOut += 1
+            }
+        }
+        self = tiles
+    }
+
+    init(failed: Int, errors: Int, timedOut: Int, skipped: Int) {
+        self.failed = failed
+        self.errors = errors
+        self.timedOut = timedOut
+        self.skipped = skipped
+    }
+}
+
 /// All values derived from decoding & filtering the chosen
 /// `TestOutcomeCollection`.  Bundled into a struct so the per-helper signatures
 /// stay readable.
@@ -599,16 +644,14 @@ struct ProcessedCollection {
     var warnings: [String]
     var outcomes: [OutcomeRow]
     var passCount: Int
-    /// The other three outcome states, for the count tiles.  Deliberately the
-    /// four states `TestOutcomeStatus` actually has — "skipped" is derived from
-    /// a short-result pattern, not a status, so it is not a tile.
+    /// The other count tiles (`ResultCountTiles`): tests that ran and failed,
+    /// errored or timed out. A test skipped behind a failed prerequisite is in
+    /// none of them.
     var failCount: Int
     var errorCount: Int
     var timeoutCount: Int
-    /// Rows whose short result matches the dependency-skip pattern.  Unlike the
-    /// other three this is not a `TestOutcomeStatus` — it is derived per row —
-    /// so it is counted from the rendered rows rather than read off the
-    /// collection.
+    /// Tests whose short result matches the dependency-skip pattern, over
+    /// every tier. Not a `TestStatus`: it is derived per outcome.
     var skippedCount: Int
     var totalTests: Int
     var totalPoints: Int

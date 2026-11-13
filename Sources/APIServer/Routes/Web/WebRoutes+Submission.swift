@@ -138,7 +138,7 @@ extension WebRoutes {
             let setupID = req.parameters.get("testSetupID"),
             let setup = try await APITestSetup.find(setupID, on: req.db)
         else {
-            throw AppError.notFound(resource: "Test setup")
+            throw AppError.notFound(resource: "Assignment")
         }
         // Block cross-tenant info disclosure: an authenticated student
         // shouldn't be able to learn that a setupID exists in a course
@@ -217,7 +217,7 @@ extension WebRoutes {
             let setupID = req.parameters.get("testSetupID"),
             let setup = try await APITestSetup.find(setupID, on: req.db)
         else {
-            throw AppError.notFound(resource: "Test setup")
+            throw AppError.notFound(resource: "Assignment")
         }
 
         // Browser-graded assignments must be submitted from the notebook page.
@@ -275,7 +275,7 @@ extension WebRoutes {
             let setupID = req.parameters.get("testSetupID"),
             try await APITestSetup.find(setupID, on: req.db) != nil
         else {
-            throw AppError.notFound(resource: "Test setup")
+            throw AppError.notFound(resource: "Assignment")
         }
 
         let fmt = waterlooDateTimeFormatter()
@@ -338,6 +338,14 @@ extension WebRoutes {
         let (setup, isStaff) = try await submissionSetupAndStaff(req: req, user: user, submission: submission)
         guard isStaff || submission.userID == user.id else {
             throw AppError.forbidden(action: "view this submission")
+        }
+
+        // Two representations, one query, as on every polled page:
+        // `?fragment=state` renders the pending band's contents from the same
+        // view the page rendered inline, for `table-poll.js` (#3007).
+        if req.query[String.self, at: "fragment"] == "state" {
+            return Response.pollFragment(
+                html: SubmissionStateRegion(status: submission.statusValue).render(), for: req)
         }
 
         // Fetch the assignment for deadline-based output gating.
@@ -456,12 +464,35 @@ extension WebRoutes {
             ),
             delta: DeltaBanner(hasDelta: hasDelta, headerText: deltaHeaderText)
         )
+        ctx.assignmentTitle = submissionAssignment?.title
+        if let submittedAt = submission.submittedAt {
+            ctx.submittedAtISO = submittedAt.formatted(.iso8601)
+            ctx.submittedAtText = waterlooDateTimeFormatter().string(from: submittedAt)
+        }
+        let back = submissionBackLink(
+            submission: submission, assignment: submissionAssignment, isStaff: isStaff, viewer: user)
+        ctx.backURL = back?.url
+        ctx.backLabel = back?.label
         ctx.bird = try await submissionBird(
             for: user, submission: submission, context: ctx, isStaff: isStaff,
             result: OwnResult(graded: displayCollection, granted: grantedItems), req: req)
         let page = PageRequestContext(request: req)
         let flash = SpareFlash.messages(for: req.query[String.self, at: "spare"])
         return try await HTMLResponse { SubmissionPage(page: page, result: ctx, flash: flash) }.encodeResponse(for: req)
+    }
+
+    /// The result page's way back (#3007, findings 3 and 13): the viewer's
+    /// own history of the assignment, or for staff the assignment's
+    /// submissions page. Nil when the submission has no published assignment.
+    private func submissionBackLink(
+        submission: APISubmission, assignment: APIAssignment?, isStaff: Bool, viewer: APIUser
+    ) -> (url: String, label: String)? {
+        guard let assignment else { return nil }
+        if submission.kind == APISubmission.Kind.student, submission.userID == viewer.id {
+            return ("/testsetups/\(submission.testSetupID)/history", "Submission history")
+        }
+        guard isStaff else { return nil }
+        return ("/instructor/\(assignment.publicID)/submissions", "All submissions")
     }
 
     /// The instructor's grade override for the submitter, if any.
@@ -587,7 +618,7 @@ extension WebRoutes {
     /// setup's decoded manifest, which each used to re-fetch and re-decode
     /// independently (#1128). A missing setup (hence course) leaves the
     /// viewer non-staff, as `isSubmissionStaff` does (#417 Slice G).
-    private func submissionSetupAndStaff(
+    func submissionSetupAndStaff(
         req: Request, user: APIUser, submission: APISubmission
     ) async throws -> (setup: APITestSetup?, isStaff: Bool) {
         guard let setup = try await APITestSetup.find(submission.testSetupID, on: req.db) else {
