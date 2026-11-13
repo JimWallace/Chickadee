@@ -1228,15 +1228,26 @@ coordination, and each must see every edit.
     `Public/app.js` answers with a reload.
   - Both history tables (`SubmissionHistoryPage`,
     `StudentAssignmentHistoryPage`), through `displayLabel(forRaw:)`.
+  - The wardrobe grant in `WebRoutes+Submission`. It grants no item while
+    the submission awaits a result, because the page shows no Earned toast
+    then, and an item granted with no toast never gets one. The page and the
+    grant must agree.
 - **Rules:**
-  - There is one definition of "waiting". Do not test `status == .pending`
-    by hand on a page. If the page and the poller disagree, a page can
-    poll forever or never poll.
+  - `awaitsResult` is the only "waiting" test. Do not test
+    `status == .pending` by hand on a page or before a grant. If the page
+    and the poller disagree, a page can poll forever or never poll. If the
+    page and the grant disagree, an item is granted with no toast.
+  - The re-queue guard in `flipSubmissionToPending`
+    (`RunnerValidationService`) is not a "waiting" test. It asks whether the
+    queue already holds the row (`.pending`, `.assigned`), and the server
+    never writes `.running`.
   - A new `SubmissionStatus` case needs a `displayLabel` and an
     `awaitsResult` answer. Student words name no "runner" or "worker".
 - **Trap:** the page once treated only `.pending` and `.assigned` as
   waiting, while the poller also waited on `.running`. A page first loaded
-  in `.running` showed empty results and did not poll.
+  in `.running` showed empty results and did not poll. After that fix, the
+  wardrobe grant still tested `.pending` and `.assigned` by hand, so a
+  `.running` retest granted an item with no toast (#3018 review).
 
 ### Browser and native grades differ: `gradeSourceDisagreement`
 

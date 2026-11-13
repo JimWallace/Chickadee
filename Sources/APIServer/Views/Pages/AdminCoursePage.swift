@@ -344,11 +344,14 @@ private struct AdminCourseAssignmentItem: HTML {
                 }
             }
             td(.class("item-status")) {
-                let label = AssignmentVisibility.displayLabel(forRaw: assignment.visibility)
-                switch assignment.visibility {
-                case "open": span(.class("tier tier-open")) { label }
-                case "preview": span(.class("tier tier-preview")) { label }
-                default: span(.class("tier tier-closed")) { label }
+                let tierClass =
+                    switch assignment.visibility {
+                    case "open": "tier-open"
+                    case "preview": "tier-preview"
+                    default: "tier-closed"
+                    }
+                span(.class("tier \(tierClass)")) {
+                    AssignmentVisibility.displayLabel(forRaw: assignment.visibility)
                 }
             }
         }
