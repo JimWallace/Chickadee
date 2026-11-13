@@ -187,6 +187,11 @@
             // The first poll has no ETag yet, so it gets a 200 even when
             // nothing changed. Rewriting a `role="status"` region with the
             // same text makes a screen reader announce it again.
+            // Best-effort: it compares the browser's serialization with the
+            // server's string, so it matches only where the two are equal.
+            // The result page's plain state region is such a case. A region
+            // with filled relative times, entities or normalized attributes
+            // never matches, and is rewritten as before.
             if (table.getAttribute('data-poll-swap') === 'region' && target.innerHTML === html) {
                 return false;
             }

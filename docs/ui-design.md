@@ -352,8 +352,9 @@ duplicate.
   it, because the gain is the student's own good news in the open colour,
   not a pass or fail count, which is what `.chip-ok` marks.
 - **`.due-relative`** — the relative reading inside a `DueDate`, after the
-  absolute time.  It is seeded empty, and its "·" separator is CSS that
-  shows only once `relative-time.js` has filled it ("Timestamps").
+  absolute time.  It modifies the `DueDate` view and is not a chip.  It is
+  seeded empty, and its "·" separator is CSS that shows only once
+  `relative-time.js` has filled it ("Timestamps", "Due dates").
 - **`.account-identity`** — the account page's identity header: the resolved
   name and the username under it.  The bird is not here: it is in the
   `.bird-card` just below.  The name
@@ -1009,7 +1010,7 @@ no second poller:
 |---|---|
 | `data-poll-url` | the server endpoint rendering the replacement, from the SAME view the page rendered inline |
 | `data-poll-interval` | milliseconds between polls (default 5000) |
-| `data-poll-swap` | `region` replaces the element's own contents; `json` replaces nothing and hands each changed JSON body to the element as a `chickadee:poll-data` event; omitted replaces its `<tbody>` |
+| `data-poll-swap` | `region` replaces the element's own contents, but not when they already match the response, so a `role="status"` region does not announce the same text again (best-effort: it compares serialized markup); `json` replaces nothing and hands each changed JSON body to the element as a `chickadee:poll-data` event; omitted replaces its `<tbody>` |
 | `data-poll-until` | an instant after which the poll stops for good; omitted polls while the tab is open |
 
 Every poll is conditional (ETag / 304) and carries `X-Background-Refresh: 1`,

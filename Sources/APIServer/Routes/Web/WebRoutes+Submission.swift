@@ -474,9 +474,7 @@ extension WebRoutes {
     /// any other request, which renders the page.
     private func submissionStateFragment(req: Request, submission: APISubmission) -> Response? {
         guard req.query[String.self, at: "fragment"] == "state" else { return nil }
-        let region = SubmissionStateRegion(
-            status: submission.statusValue,
-            resultsURL: "/submissions/\(submission.id ?? "")")
+        let region = SubmissionStateRegion(status: submission.statusValue, submissionID: submission.id ?? "")
         return Response.pollFragment(html: region.render(), for: req)
     }
 
@@ -786,8 +784,10 @@ extension WebRoutes {
             // (docs/achievement-rewards.md, decision 5): it is never a badge
             // here, and its item is granted the first time it is satisfied.
             // Not while a retest is pending: the page shows no toast then, and
-            // an item granted with no toast would never get one.
-            let isPending = submission.statusValue == .pending || submission.statusValue == .assigned
+            // an item granted with no toast would never get one. "Pending" is
+            // the page's own test (`SubmissionStatus.awaitsResult`), so the
+            // grant and the page cannot disagree about a `.running` row.
+            let isPending = submission.statusValue?.awaitsResult ?? false
             if displayCollection != nil, !isPending {
                 let rewards = earnedWardrobeRewards(processed.badgeContext, props: setupProps, standings: standings)
                 if !rewards.isEmpty {
