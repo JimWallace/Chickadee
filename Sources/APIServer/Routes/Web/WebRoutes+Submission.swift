@@ -340,13 +340,7 @@ extension WebRoutes {
             throw AppError.forbidden(action: "view this submission")
         }
 
-        // Two representations, one query, as on every polled page:
-        // `?fragment=state` renders the pending band's contents from the same
-        // view the page rendered inline, for `table-poll.js` (#3007).
-        if req.query[String.self, at: "fragment"] == "state" {
-            return Response.pollFragment(
-                html: SubmissionStateRegion(status: submission.statusValue).render(), for: req)
-        }
+        if let fragment = submissionStateFragment(req: req, submission: submission) { return fragment }
 
         // Fetch the assignment for deadline-based output gating.
         let submissionAssignment = try await assignmentByTestSetupID(submission.testSetupID, on: req.db)
@@ -464,21 +458,39 @@ extension WebRoutes {
             ),
             delta: DeltaBanner(hasDelta: hasDelta, headerText: deltaHeaderText)
         )
-        ctx.assignmentTitle = submissionAssignment?.title
-        if let submittedAt = submission.submittedAt {
-            ctx.submittedAtISO = submittedAt.formatted(.iso8601)
-            ctx.submittedAtText = waterlooDateTimeFormatter().string(from: submittedAt)
-        }
-        let back = submissionBackLink(
-            submission: submission, assignment: submissionAssignment, isStaff: isStaff, viewer: user)
-        ctx.backURL = back?.url
-        ctx.backLabel = back?.label
+        applySubmissionChrome(
+            to: &ctx, submission: submission, assignment: submissionAssignment, isStaff: isStaff, viewer: user)
         ctx.bird = try await submissionBird(
             for: user, submission: submission, context: ctx, isStaff: isStaff,
             result: OwnResult(graded: displayCollection, granted: grantedItems), req: req)
         let page = PageRequestContext(request: req)
         let flash = SpareFlash.messages(for: req.query[String.self, at: "spare"])
         return try await HTMLResponse { SubmissionPage(page: page, result: ctx, flash: flash) }.encodeResponse(for: req)
+    }
+
+    /// Two representations, one query, as on every polled page:
+    /// `?fragment=state` renders the pending band's contents from the same
+    /// view the page rendered inline, for `table-poll.js` (#3007). Nil for
+    /// any other request, which renders the page.
+    private func submissionStateFragment(req: Request, submission: APISubmission) -> Response? {
+        guard req.query[String.self, at: "fragment"] == "state" else { return nil }
+        return Response.pollFragment(html: SubmissionStateRegion(status: submission.statusValue).render(), for: req)
+    }
+
+    /// What the page says about the submission itself (#3007, finding 3):
+    /// the assignment's title, when it arrived, and the way back.
+    private func applySubmissionChrome(
+        to ctx: inout SubmissionContext, submission: APISubmission, assignment: APIAssignment?, isStaff: Bool,
+        viewer: APIUser
+    ) {
+        ctx.assignmentTitle = assignment?.title
+        if let submittedAt = submission.submittedAt {
+            ctx.submittedAtISO = submittedAt.formatted(.iso8601)
+            ctx.submittedAtText = waterlooDateTimeFormatter().string(from: submittedAt)
+        }
+        let back = submissionBackLink(submission: submission, assignment: assignment, isStaff: isStaff, viewer: viewer)
+        ctx.backURL = back?.url
+        ctx.backLabel = back?.label
     }
 
     /// The result page's way back (#3007, findings 3 and 13): the viewer's
