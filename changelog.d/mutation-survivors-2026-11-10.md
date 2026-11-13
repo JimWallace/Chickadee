@@ -1,0 +1,3 @@
+### Changed
+
+- **Mutation survivors from the 2026-11-10 sweep triaged (#2970).** New boundary tests pin the zip-bomb limits (an archive exactly at the entry and byte limits is extracted, one over is refused) and the long-poll grant in `Tests/CoreTests`, where the sweep can see them. Two more rules are now tested: the runner's report truncation over the serialized budget, and the test setup cache's startup cleanup and evict-failure log. Two mutants that no input can distinguish (the batched MIME typing and the order of the session-window date formatters) are recorded in `Tools/mutation/equivalent-mutants.json` with the argument. No production code changed.
