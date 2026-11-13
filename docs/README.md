@@ -67,6 +67,7 @@ not exist.
 - [examples/r-lab9-trial/](examples/r-lab9-trial/) — a worked R lab: starter, solution, data and test scripts for each tier
 - [examples/miniweb/](examples/miniweb/) — an HLTH 230 unit on how the web works and a search-engine lab: a generated fictional web (URL to HTML), starter and solution notebooks, six stage tests, and a check of the link farm lesson
 - [examples/miniweb/activity/](examples/miniweb/activity/README.md) — a 50-minute `bestMetric` contest after the lab: students write one `score(features)` function, graded by nDCG@5 on hidden health queries whose judgments are grader-only on the worker
+- [search-business-game.md](search-business-game.md) — design draft: a multi-week game in which each student runs a search company from 1995 to 2000, on a crawlable web delivered as a keyed (URL to HTML) course dataset with one version per game year; crawl budget enforced by a metered fetch at grading
 
 ## Courses, roles and students
 
