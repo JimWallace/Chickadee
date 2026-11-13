@@ -552,6 +552,7 @@ extension PublishedAssignmentRoutes {
             assignment.validationStatus = "no-runner"
             assignment.validationSubmissionID = nil
             try await assignment.save(on: req.db)
+            req.setOverviewNotice("Saved \(assignment.title). No runner can grade it, so validation did not run.")
             return req.redirect(to: "/instructor")
         }
 
@@ -568,6 +569,7 @@ extension PublishedAssignmentRoutes {
         )
         assignment.validationSubmissionID = validationSubmissionID
         try await assignment.save(on: req.db)
+        req.setOverviewNotice("Saved \(assignment.title). Validation is running.")
         return req.redirect(to: "/instructor")
     }
 }

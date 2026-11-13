@@ -285,7 +285,7 @@ struct GitHubCourseRoutes: RouteCollection {
         let courseID = try await Self.requireInstructorCourse(req)
         let body = try await req.decodeContent(TemplateBody.self)
         guard let setup = try await APITestSetup.find(body.testSetupID, on: req.db), setup.courseID == courseID
-        else { throw AppError.notFound(resource: "Test setup") }
+        else { throw AppError.notFound(resource: "Assignment") }
         let existing = try await APIGitHubAssignmentTemplate.query(on: req.db)
             .filter(\.$testSetupID == body.testSetupID).first()
         let templateID = body.templateID.flatMap { Int64($0) }

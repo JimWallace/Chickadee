@@ -18,6 +18,9 @@ struct AssignmentSubmissionHistoryRow: Encodable {
     /// grades differ (`gradeSourceDisagreement`). The student's own history
     /// never carries it: it is a signal for the instructor.
     var sourceDisagreement: GradeSourceDisagreement?
+    /// `submittedAt` as ISO 8601, so the table reads it as relative time:
+    /// a submission is human activity (docs/ui-design.md §"Timestamps").
+    var submittedAtISO: String?
 }
 
 /// One course section of the per-student, grouped-by-assignment view at
@@ -33,7 +36,8 @@ struct StudentAssignmentSectionContext: Encodable {
 struct StudentAssignmentRow: Encodable {
     let assignmentID: String
     let title: String
-    let status: String  // "open" | "closed"
+    /// `AssignmentVisibility.rawValue`; views show its `displayLabel`.
+    let status: String
     let isOpen: Bool
     let dueAtText: String?
     let effectiveDueAtText: String?  // shown when an extension is active

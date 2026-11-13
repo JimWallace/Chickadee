@@ -221,10 +221,10 @@ struct GitHubSubmissionRoutes: RouteCollection {
         guard
             let setupID = req.parameters.get("testSetupID"),
             let setup = try await APITestSetup.find(setupID, on: req.db)
-        else { throw AppError.notFound(resource: "Test setup") }
+        else { throw AppError.notFound(resource: "Assignment") }
         try await req.cachedRequireCourseEnrollment(caller: user, courseID: setup.courseID)
         guard try await GitHubSubmissionOffer.isOffered(setup: setup, on: req.db) else {
-            throw AppError.notFound(resource: "Test setup")
+            throw AppError.notFound(resource: "Assignment")
         }
         return setup
     }

@@ -3,8 +3,9 @@
 // GET /submissions/:id: one submission's results. The header with the
 // download and the grade band, the class goals, then the outcome tables, one
 // per test-suite section, with the masked secret rows under each. While the
-// submission waits for a runner, the page shows a spinner and
-// `submission-root[data-pending]` tells the page script to poll.
+// submission has no result, the page shows its state ("Queued", "Grading") in
+// a region `table-poll.js` refreshes (`?fragment=state`); `app.js` reloads the
+// page once the region reports a final state.
 
 import Core
 import Elementary
@@ -17,7 +18,7 @@ struct SubmissionPage: HTML {
     var flash = FlashMessages()
 
     var body: some HTML {
-        BaseLayout(title: "Submission \(result.submissionID)", page: page, flash: flash) {
+        BaseLayout(title: tabTitle, page: page, flash: flash) {
             PageStyle(
                 """
                 .class-goals-block { margin: 1rem 0; }
@@ -48,9 +49,12 @@ struct SubmissionPage: HTML {
                     CompositeTileSection(tile: tile, csrfToken: page.csrfToken, submissionID: result.submissionID)
                 }
                 if result.isPending {
-                    div(.class("pending-box")) {
-                        div(.class("spinner")) {}
-                        p { "Waiting for a runner to pick up your submission…" }
+                    div(
+                        .class("pending-box js-submission-state"), .role("status"),
+                        .data("poll-url", value: "/submissions/\(result.submissionID)?fragment=state"),
+                        .data("poll-swap", value: "region"), .data("poll-interval", value: "2000")
+                    ) {
+                        SubmissionStateRegion(status: SubmissionStatus(rawValue: result.status))
                     }
                 } else {
                     results
@@ -71,14 +75,36 @@ struct SubmissionPage: HTML {
                 script(.src(page.asset("/class-composite-core.js"))) {}
                 script(.src(page.asset("/class-composite.js"))) {}
             }
+            if result.isPending {
+                script(.src(page.asset("/table-poll.js"))) {}
+            }
         }
+    }
+
+    /// The assignment and the attempt; never a database ID.
+    private var tabTitle: String {
+        guard let title = result.assignmentTitle else { return "Submission results" }
+        return "\(title) — Attempt \(result.attemptNumber)"
     }
 
     private var header: some HTML {
         div(.class("submission-header")) {
             div(.class("submission-header-row")) {
-                h1 { "Submission" }
                 div {
+                    h1 { result.assignmentTitle ?? "Submission" }
+                    p(.class("titlebar-subtitle")) {
+                        "Attempt \(result.attemptNumber)"
+                        if let iso = result.submittedAtISO, let text = result.submittedAtText {
+                            " · submitted "
+                            span(.class("js-relative-time"), .data("iso", value: iso)) { text }
+                        }
+                    }
+                }
+                div {
+                    if let url = result.backURL, let label = result.backLabel {
+                        a(.class("btn action-btn"), .href(url)) { label }
+                        " "
+                    }
                     a(.class("btn action-btn"), .href("/api/v1/submissions/\(result.submissionID)/download")) {
                         if let filename = result.submissionFilename {
                             "Download \(filename)"
@@ -180,6 +206,7 @@ struct SubmissionPage: HTML {
                 SubmissionDiagnosticCard(value: result.passCount, label: "Passed", alert: false)
                 SubmissionDiagnosticCard(value: result.failCount, label: "Failed", alert: result.failCount > 0)
                 SubmissionDiagnosticCard(value: result.errorCount, label: "Errors", alert: false)
+                SubmissionDiagnosticCard(value: result.timeoutCount, label: "Timed out", alert: false)
                 SubmissionDiagnosticCard(value: result.skippedCount, label: "Skipped", alert: false)
             }
             if let delta = result.deltaHeaderText {
@@ -234,7 +261,6 @@ struct SubmissionPage: HTML {
         } else {
             if result.secretRevealActive {
                 div(.class("notice-box")) {
-                    "🔓 "
                     strong { "Secret tests revealed" }
                     " — you used your reveal token for this assignment, so hidden-test details are shown on all of your submissions."
                 }
@@ -266,7 +292,7 @@ private struct SubmissionClassGoal: HTML {
     let goal: ClassGoalView
 
     private var status: String {
-        var text = goal.met ? "✅ Reached!" : "\(goal.progressPercent)% of the way"
+        var text = goal.met ? "Reached" : "\(goal.progressPercent)% of the way"
         text += " · \(goal.studentsMeeting) / \(goal.denominator) \(goal.studentsLabel)"
         if let coverage = goal.coverageSummary { text += " · \(coverage)" }
         if goal.locked { text += " · final" }
@@ -415,13 +441,12 @@ private struct SubmissionOutcomeRows: HTML {
                     }
                     if outcome.status == "pass", let longResult = outcome.longResult {
                         details(.class("test-output-details")) {
-                            summary { "Show output ▸" }
+                            summary { "Show output" }
                             pre(.class("test-output-pre")) { longResult }
                         }
                     }
                     if let hint = outcome.hint {
                         div(.class("test-hint")) {
-                            "💡 "
                             strong { "Hint:" }
                             " \(hint)"
                         }
@@ -454,12 +479,29 @@ private struct SubmissionOutcomeRows: HTML {
             tr(.class("test-output-row")) {
                 td(.custom(name: "colspan", value: hasDelta ? "4" : "3")) {
                     details(.class("test-output-details")) {
-                        summary { "Output" }
+                        summary { "Show output" }
                         pre(.class("test-output-pre test-output-pre-wide")) { longResult }
                     }
                     .attributes(.custom(name: "open"), when: outcome.isFirstFailureOutput)
                 }
             }
+        }
+    }
+}
+
+/// The pending band's contents: the state's one label and, while it lasts, a
+/// spinner. Rendered inline and as the `?fragment=state` poll response, so
+/// the refresh cannot drift from the page. A final state carries
+/// `data-submission-final`, which `app.js` answers by reloading the page.
+struct SubmissionStateRegion: HTML {
+    let status: SubmissionStatus?
+
+    var body: some HTML {
+        if let status, status.awaitsResult {
+            div(.class("spinner")) {}
+            p { status.displayLabel }
+        } else {
+            p(.data("submission-final", value: "true")) { "Loading results" }
         }
     }
 }

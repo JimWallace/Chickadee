@@ -103,14 +103,14 @@ struct EnrolledCourseRow: HTML {
             td {
                 form(
                     .method(.post), .action("/admin/users/\(targetUserID)/unenroll/\(course.id)"),
-                    .class("inline-form")
+                    .class("inline-form"), .data("confirm", value: "Remove this user from \(course.code)?")
                 ) {
                     CSRFField(token: csrfToken)
                     button(
                         .class("btn action-btn action-btn-icon action-danger"), .type(.submit),
                         .title("Remove from course"), .ariaLabel("Remove from course")
                     ) {
-                        Icon("i-trash")
+                        Icon("i-user-minus")
                     }
                 }
             }

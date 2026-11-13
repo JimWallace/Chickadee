@@ -57,7 +57,7 @@ extension DraftAssignmentRoutes {
         do { body = try await req.decodeContent(SuitePayload.self) } catch {
             throw AppError.invalidParameter(
                 name: "request body",
-                reason: "Invalid suite payload: \(error.localizedDescription)")
+                reason: unreadableEditorPayload(req, error))
         }
 
         try await applySuiteEdit(

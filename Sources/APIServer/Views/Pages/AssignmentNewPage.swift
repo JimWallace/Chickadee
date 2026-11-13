@@ -159,7 +159,7 @@ struct AssignmentNewPage: HTML {
         }
         div(.class("runner-req-row")) {
             label(.class("req-field")) {
-                "Languages "
+                "Runner languages "
                 input(
                     .class("form-input input-sm"), .type(.text), .name("requiredLanguagesCSV"),
                     .value(requiredLanguagesCSV), .placeholder("e.g. \(LanguageProse.allTokensCSV)"))
@@ -230,10 +230,11 @@ private struct NewAssignmentTitlebar: HTML {
                     }
                 }
                 p(.class("card-meta fine-print")) {
-                    "Every generated test renders in this language, so it is stated here rather than worked out "
-                        + "later. Pick \"None\" for a suite of plain shell scripts. Choosing "
-                        + "\(LanguageProse.uploadOnlyDisplayNames) makes the assignment upload-only, since those "
-                        + "languages have no notebook editor."
+                    "Generated tests use this language, and an assignment in "
+                        + "\(LanguageProse.uploadOnlyDisplayNames) is upload-only. "
+                    NewTabLink(
+                        href: "https://github.com/JimWallace/Chickadee/blob/main/docs/language-declaration.md",
+                        text: "How languages work ")
                 }
                 div(
                     .id("uw-date-warning"), .class("card-meta date-warning"),

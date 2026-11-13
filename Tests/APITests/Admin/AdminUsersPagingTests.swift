@@ -90,7 +90,7 @@ import VaporTesting
             let admins = try await APIUser.query(on: app.db).filter(\.$role == "admin").count()
 
             let first = try await getHTML("/admin/users", cookie: cookie, on: app)
-            #expect(first.contains("\(total) users · \(admins) admins"))
+            #expect(first.contains("\(total) users · \(admins) \(admins == 1 ? "admin" : "admins")"))
             #expect(first.contains("href=\"/admin/users?page=2\""))
             #expect(!first.contains(">Previous<"))
             #expect(

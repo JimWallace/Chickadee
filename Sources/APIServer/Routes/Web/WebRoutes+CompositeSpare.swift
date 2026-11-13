@@ -21,7 +21,7 @@ extension WebRoutes {
         let userID = try user.requireID()
         guard let setupID = req.parameters.get("testSetupID"),
             let setup = try await APITestSetup.find(setupID, on: req.db)
-        else { throw AppError.notFound(resource: "Test setup") }
+        else { throw AppError.notFound(resource: "Assignment") }
         let back = try await spareReturnPath(req: req, userID: userID)
 
         let assignment: APIAssignment?

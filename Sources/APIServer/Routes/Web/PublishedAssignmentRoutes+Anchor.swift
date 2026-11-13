@@ -26,7 +26,7 @@ extension PublishedAssignmentRoutes {
         let body: SuiteAnchorPayload
         do { body = try await req.decodeContent(SuiteAnchorPayload.self) } catch {
             throw AppError.invalidParameter(
-                name: "request body", reason: "Invalid anchor payload: \(error.localizedDescription)")
+                name: "request body", reason: unreadableEditorPayload(req, error))
         }
         let effective = SuiteAnchorPinning.normalized(body.anchor)
         do {

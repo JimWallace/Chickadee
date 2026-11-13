@@ -236,8 +236,7 @@ extension AdminRoutes {
         } catch {
             req.logger.warning(
                 "BrightSpace set-credentials: whoami verification failed: \(error.localizedDescription)")
-            req.session.data["bs_flash_error"] =
-                "Could not verify those credentials against D2L: \(error.localizedDescription)"
+            req.session.data["bs_flash_error"] = learnFailureText(error, action: "verify those credentials")
             return req.redirect(to: "/admin/brightspace")
         }
 
@@ -275,7 +274,8 @@ extension AdminRoutes {
             let label = who.uniqueName.isEmpty ? who.displayName : "\(who.displayName) (\(who.uniqueName))"
             req.session.data["bs_flash_success"] = "Connected as \(label)."
         } catch {
-            req.session.data["bs_flash_error"] = "Connection failed: \(error.localizedDescription)"
+            req.logger.warning("BrightSpace connection test failed: \(error)")
+            req.session.data["bs_flash_error"] = learnFailureText(error, action: "connect to LEARN")
         }
         return req.redirect(to: "/admin/brightspace")
     }

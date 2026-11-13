@@ -364,7 +364,7 @@ private struct AdminCourseRoster: HTML {
     var body: some HTML {
         section(.class("page-section")) {
             div(.class("page-titlebar")) {
-                h2 { "Enrolled students (\(course.enrollmentCount))" }
+                h2 { "Enrolled (\(course.enrollmentCount))" }
                 div(.class("toolbar")) {
                     enrollmentModeForm
                     if !course.isArchived {
@@ -380,7 +380,7 @@ private struct AdminCourseRoster: HTML {
                         ) {
                             CSRFField(token: csrfToken)
                             label(.class("btn action-btn")) {
-                                "Enrol from CSV "
+                                "Enroll from CSV "
                                 // The one inline style the UI rules allow: a
                                 // JS-free hidden file input the label opens.
                                 input(
@@ -405,7 +405,7 @@ private struct AdminCourseRoster: HTML {
                 .attributes(.class("is-open"), when: staffForm.error != nil)
             }
             if enrolledUsers.isEmpty {
-                p(.class("empty")) { "No students enrolled yet." }
+                p(.class("empty")) { "No one is enrolled yet." }
             } else {
                 table(.class("results-table section-items section-items--manage")) {
                     colgroup {
@@ -435,17 +435,17 @@ private struct AdminCourseRoster: HTML {
     private var enrollmentModeForm: some HTML {
         form(.method(.post), .action("/admin/courses/\(course.id)/enrollment-mode"), .class("form-flush")) {
             CSRFField(token: csrfToken)
-            label(.class("visually-hidden"), .for("enrollment-mode")) { "Enrolment mode" }
+            label(.class("visually-hidden"), .for("enrollment-mode")) { "Enrollment mode" }
             span(.class("state-select"), .data("state", value: course.enrollmentMode)) {
                 select(
                     .id("enrollment-mode"), .name("enrollmentMode"), .class("form-input"),
                     .dataFlag("ck-submit-on-change")
                 ) {
-                    option(.value("open")) { "Open enrolment" }
+                    option(.value("open")) { "Open enrollment" }
                         .attributes(.selected, when: course.enrollmentMode == "open")
-                    option(.value("auto")) { "Auto enrolment" }
+                    option(.value("auto")) { "Auto enrollment" }
                         .attributes(.selected, when: course.enrollmentMode == "auto")
-                    option(.value("closed")) { "Closed enrolment" }
+                    option(.value("closed")) { "Closed enrollment" }
                         .attributes(.selected, when: course.enrollmentMode == "closed")
                 }
             }

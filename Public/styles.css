@@ -2324,11 +2324,11 @@ body:has(.notebook-header .nb-title-block) .nav {
 }
 
 .submission-score-row .diagnostics-cards {
-    flex: 1 1 20rem;
-    /* Always four across: these are one reading, not a responsive grid. Below
-       the flex-basis the whole block wraps under the grade rather than
-       splitting 3+1. */
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    flex: 1 1 24rem;
+    /* Always five across (passed, failed, errors, timed out, skipped): one
+       partition of the tests, not a responsive grid. Below the flex-basis the
+       whole block wraps under the grade rather than splitting 4+1. */
+    grid-template-columns: repeat(5, minmax(0, 1fr));
 }
 
 .score-delta {

@@ -15,7 +15,7 @@ struct ConnectedAgentsPage: HTML {
             section(.class("page-section")) {
                 h1(.class("agents-heading")) { "Connected agents" }
                 p(.class("section-intro")) {
-                    "AI agents authorized to author course content on \(isAdmin ? "a user's" : "your") behalf over the Model Context Protocol. Revoking stops the agent immediately; any access token it holds lapses within minutes. "
+                    "AI agents authorized to author course content on \(isAdmin ? "a user's" : "your") behalf over the Model Context Protocol. "
                     NewTabLink(
                         href: "https://github.com/JimWallace/Chickadee/blob/main/docs/ai-assisted-feedback.md",
                         text: "What a feedback grant can read "
