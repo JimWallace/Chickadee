@@ -9,6 +9,27 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.930] - 2026-11-13
+
+### Fixed
+
+- **The result page names a pending submission's state.** It shows "Queued" or "Grading" instead of one "waiting for a runner" message, and it polls through `table-poll.js` (`?fragment=state`), so the private poller in `app.js` is gone (#3007).
+- **The result page's count tiles add up to the tests.** A test skipped behind a failed prerequisite counts once, as skipped, and a "Timed out" tile shows timeouts (#3007).
+- **A staff-only assignment is no longer called "closed" on the per-student page.** One display map names each assignment state on every page (#3007).
+- **Removing a user from a course on the admin user page now asks first,** with the same icon as the other remove actions (#3007).
+- **The admin Runners table says when no runner is connected** instead of showing only headers (#3007).
+
+### Changed
+
+- **The result page names the assignment, the attempt and when it was submitted,** with a link back to the history; the tab title no longer shows a database ID (#3007).
+- **History tables show submission states in words** ("Graded", "Grading failed") and submission times as relative time; the staff table uses the student table's column order (#3007).
+- **"Create & Validate" and "Save & Validate" report what happened** in a notice on the Overview (#3007).
+- **The error page has a plain-language title, a way back and "Assignment" instead of "Test setup"** in its not-found text (#3007).
+- **Staff pages no longer print raw Swift errors.** LEARN, alert and editor failures show a sentence that says what to do, and the raw error goes to the log (#3007).
+- **Due dates a student reads share one `DueDate` view,** labelled "Due", with relative and absolute times (#3007).
+- **Smaller copy fixes from the audit:** one word for a grade override ("overridden"), "enrollment" throughout, "1 admin", no emoji in the result page's chrome, back links on the history and submissions pages, a route out of empty rosters, a read-only note for TAs on the Students tab, and shorter notes on several forms (#3007).
+
+
 ## [0.5.929] - 2026-11-13
 
 ### Changed
