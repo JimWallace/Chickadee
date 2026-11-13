@@ -260,6 +260,17 @@ jobs:
           browser: ${{ matrix.browser }}
           server-artifact: probe-server
 
+      # Failure diagnostics. Each check that reads SMOKE_SCREENSHOT_DIR saves
+      # its screenshots there, and run-smoke.sh puts each check in its own
+      # subdirectory and adds the server log when the check fails. The shell
+      # check also saves a full-page and an editor-frame screenshot, the
+      # browser console and a Playwright trace on a failure. The last step
+      # uploads the directory when a step fails. Set through GITHUB_ENV
+      # because in a container job `github.workspace` names the host path.
+      - name: Set the smoke diagnostics directory
+        shell: bash
+        run: echo "SMOKE_SCREENSHOT_DIR=$GITHUB_WORKSPACE/smoke-diagnostics" >> "$GITHUB_ENV"
+
       # selftest.sh drives the editor THREE ways against this one build, in the
       # matrix engine (Chromium / WebKit):
       #   • default boot — must PASS, crossOriginIsolated=true (SharedArrayBuffer
@@ -535,6 +546,18 @@ jobs:
           fi
           echo "::warning::FLAKE RETRY: webkit workbench preview e2e failed (rc=${rc}) — same flake class as the notebook-page e2e. Retrying once; a second failure fails the gate."
           SMOKE_BROWSER="$ENGINE" SMOKE_CHECK=workbench-preview-check.mjs Tools/editor-smoke-test/run-smoke.sh
+
+      # Three days is enough to read a failure. `overwrite` because a re-run
+      # of the leg uploads under the same name.
+      - name: Upload smoke diagnostics (${{ matrix.browser }})
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: smoke-diagnostics-${{ matrix.browser }}
+          path: smoke-diagnostics/
+          if-no-files-found: warn
+          overwrite: true
+          retention-days: 3
 
   # Always-running required status. Green when the smoke passed OR was skipped
   # (no editor-relevant changes), red only when the smoke actually failed — so
