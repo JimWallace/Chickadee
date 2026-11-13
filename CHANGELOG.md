@@ -9,6 +9,17 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.935] - 2026-11-13
+
+### Changed
+
+- **One nightly steward replaces the separate maintenance tasks.** A single scheduled task on the maintainer's machine starts at 23:30 America/Toronto and follows `Tools/maintenance/nightly.md`: production health first, then its own open pull requests, then the jobs due that night, then fill work (audit findings, maintenance issues, deeper sweeps, and improvements to the nightly tests and to itself) until 04:00, and a `Steward night report` issue each morning. Its pull requests carry the `steward` label and auto-merge on green, except a change to its own rules. The dead-code review and the audit rotation move into the repository (`dead-code-review.md`, `audit-rotation.md`), and the new `scheduled-checks.md` triages red scheduled CI runs, CodeQL alerts and ZAP findings.
+
+### Fixed
+
+- **UI audit follow-ups (#3014, #3007).** The Overview now always consumes its one-shot session notice, so it does not show again on a later visit. The error page gives no "Go back" link for a referer path that starts with `//` or holds a backslash. A due date shows its absolute time once, with the relative reading seeded empty as in the audit log. The result page's final state has a plain "View results" link in case the reload does not happen. A polled region that already shows the same markup is not rewritten, so a screen reader does not announce an unchanged state again. The result page and its poller share one definition of "waiting", so a page first loaded while grading runs also polls. The dashboard and the admin course page use the assignment state display words.
+
+
 ## [0.5.934] - 2026-11-13
 
 ### Changed
