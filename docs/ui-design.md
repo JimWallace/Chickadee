@@ -1470,7 +1470,9 @@ intentional look change means regenerating baselines
 (`Tools/visual-regression/run-visual.sh --update`) in the same PR.  The same
 CI job also runs the axe-core accessibility scan (`run-a11y.sh`) over those
 pages in both schemes: critical/serious violations are zero-tolerance,
-moderate/minor ratchet down via `a11y-baseline.json`.
+moderate/minor ratchet down via `a11y-baseline.json`. The job also runs each
+week on `main`, because its pull request trigger is path-filtered; a red
+weekly run files an issue (`Tools/visual-regression/README.md`).
 
 A screenshot cannot see everything, though — the capture fires ~300 ms after
 load, so it never observes a table's **background repaint**, where the shared

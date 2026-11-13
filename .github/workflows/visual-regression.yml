@@ -18,6 +18,19 @@ name: Visual regression
 # becomes part of review.  If no baselines are committed yet the job captures
 # and uploads them as the `visual-baselines-bootstrap` artifact instead of
 # failing (bootstrap mode).
+#
+# WEEKLY ON MAIN. The pull request trigger is path-filtered, so a change
+# outside those paths (a Core model, a route helper, a stylesheet token read
+# through the server) can change a page without this job running. The weekly
+# schedule runs the same job on `main`. Nothing about the comparison changes:
+# the baselines are committed files, not the PR base's screenshots, so `main`
+# is compared with the baselines that `main` itself carries. A red scheduled
+# run means `main` renders differently from its own baselines, or fails the
+# axe scan or the repaint probe. The `report` job then files one issue
+# labelled `scheduled-check-failed`, keyed `visual-main`
+# (scripts/dependency-issue.sh); the next green run on `main` closes it. A
+# dispatch on `main` reports the same way; a dispatch on a branch reports
+# nothing.
 
 on:
   pull_request:
@@ -33,6 +46,10 @@ on:
       - "Sources/APIServer/Routes/Web/**"
       - "Tools/visual-regression/**"
       - ".github/workflows/visual-regression.yml"
+  schedule:
+    # Thursdays at 04:52 UTC: away from the Monday cluster of weekly reports,
+    # and after the Wednesday macOS build.
+    - cron: "52 4 * * 4"
   workflow_dispatch:
 
 concurrency:
@@ -145,3 +162,69 @@ jobs:
           name: visual-baselines-bootstrap
           path: visual-bootstrap/
           if-no-files-found: ignore
+
+  # Files, updates or closes the `visual-main` issue. Never on a pull request:
+  # there the red check on the PR is the report.
+  report:
+    needs: visual
+    if: >-
+      always()
+      && github.event_name != 'pull_request'
+      && github.ref == 'refs/heads/main'
+      && (needs.visual.result == 'success' || needs.visual.result == 'failure')
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      actions: read
+      issues: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      R: ${{ github.repository }}
+      RESULT: ${{ needs.visual.result }}
+      RUN_ID: ${{ github.run_id }}
+      RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+      ISSUE_LABEL: scheduled-check-failed
+      ISSUE_LABEL_DESCRIPTION: "A scheduled check on main failed; see scripts/dependency-issue.sh"
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: File, update or close the issue
+        run: |
+          set -euo pipefail
+          if [ "$RESULT" = "success" ]; then
+            scripts/dependency-issue.sh close visual-main "Visual regression passes on main again: $RUN_URL"
+            exit 0
+          fi
+          steps="$(gh run view "$RUN_ID" --repo "$R" --json jobs \
+            --jq '.jobs[] | select(.name == "visual") | .steps[] | select(.conclusion == "failure") | "- \(.name)"' || true)"
+          log="$(gh run view "$RUN_ID" --repo "$R" --log-failed 2>/dev/null \
+            | cut -f3- | sed 's/^[0-9T:.-]*Z //' | tail -n 80 || true)"
+          {
+            echo "Visual regression (\`.github/workflows/visual-regression.yml\`) failed on \`main\` at \`${GITHUB_SHA:0:7}\`."
+            echo ""
+            echo "Run: $RUN_URL (the \`visual-diffs\` artifact holds each \`*.diff.png\` and \`*.actual.png\`)"
+            echo ""
+            echo "### Failed steps"
+            echo ""
+            echo "${steps:-(none reported; see the run)}"
+            echo ""
+            echo "### End of the failed log"
+            echo ""
+            echo '```'
+            echo "${log:-(no log available)}"
+            echo '```'
+            echo ""
+            echo "### Brief for an agent"
+            echo ""
+            echo "Make \`main\` pass visual regression again. The pull request run is path-filtered, so the change that caused this may have touched no file in its filter. Find it with \`git log\` since the last green run of this workflow on \`main\`."
+            echo ""
+            echo "- **Capture and compare** failed: download \`visual-diffs\` and decide for each page whether the change is intended. An intended change needs new baselines (\`Tools/visual-regression/run-visual.sh --update\`) in a PR. A regression needs a fix in a PR, and the baselines stay."
+            echo "- **Accessibility scan** failed: critical and serious axe violations are zero-tolerance. Fix the markup or the style; do not add to \`a11y-baseline.json\`."
+            echo "- **Table repaint probe** failed: a shared table component stopped working after a repaint. Fix the component."
+            echo "- Do not skip, disable or quarantine a check, and do not loosen a threshold, to get green. Run \`ui-review\` on any UI fix, as \`Sources/APIServer/Views/CLAUDE.md\` says."
+            echo "- This issue closes when the workflow next passes on \`main\`. Dispatch it on \`main\` after the fix merges."
+          } > body.md
+          scripts/dependency-issue.sh open visual-main "Visual regression failing on main" body.md

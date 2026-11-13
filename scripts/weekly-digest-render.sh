@@ -23,6 +23,10 @@
 #   kernel.log          that run's failed log, only when it failed
 #   flake.json          the newest flake-telemetry tally: {tally}, or {} when there is none
 #   dependabot.json     the open Dependabot PRs: [{number, title, url}]
+#   swift-currency-run.json  the newest swift-currency.yml run on main
+#   macos-run.json      the newest macos-build.yml run on main
+#   visual-run.json     the newest scheduled visual-regression.yml run
+#                       (each of the three: [{conclusion, status, createdAt, url}])
 #
 # A person is asked for:
 #   * a ZAP scan that did not run this week, ended red, or could not be read;
@@ -31,6 +35,9 @@
 #   * a kernel update with a major version bump, or a red currency run that
 #     lists no packages (a failed solve, not an update);
 #   * open Dependabot PRs;
+#   * a weekly check (Swift currency, macOS build, visual regression on main)
+#     that ended red, did not run this week, or has no run at all. A red run
+#     has its own issue with a brief; the digest names its label and key;
 #   * any source that could not be read.
 #
 # The model that wrote this digest until 2026-11 also read upstream release
@@ -63,7 +70,7 @@ source_error() {
 
 render() {
   local dir="$1" output="$2"
-  local since needs=() security=() kernels=() flakes=() deps=()
+  local since needs=() security=() kernels=() flakes=() deps=() checks=()
 
   since="$(tr -d '[:space:]' < "$dir/window.txt" 2> /dev/null)"
   if [[ ! "$since" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9:]{8}Z$ ]]; then
@@ -214,6 +221,39 @@ render() {
     fi
   fi
 
+  # --- Weekly checks on main ----------------------------------------------
+  # file|name|workflow|the label and key of the issue that a red run files
+  local spec c_file c_name c_workflow c_issue c_state c_at c_url
+  for spec in \
+    "swift-currency-run.json|Swift package currency|swift-currency.yml|dependency-update-failed, key swift-currency" \
+    "macos-run.json|macOS build|macos-build.yml|scheduled-check-failed, key macos-build" \
+    "visual-run.json|Visual regression on main|visual-regression.yml|scheduled-check-failed, key visual-main"; do
+    IFS='|' read -r c_file c_name c_workflow c_issue <<< "$spec"
+    err="$(source_error "$dir/$c_file")"
+    if [ -n "$err" ]; then
+      needs+=("The $c_name runs could not be read: $err")
+      checks+=("**$c_name.** Unknown: the runs could not be read.")
+      continue
+    fi
+    if [ "$(jq 'length' "$dir/$c_file")" -eq 0 ]; then
+      needs+=("No $c_name run was found. Check that $c_workflow is scheduled.")
+      checks+=("**$c_name.** No run was found.")
+      continue
+    fi
+    # A run that has not finished has an empty conclusion; report its status.
+    c_state="$(jq -r '.[0] | if (.status // "completed") == "completed" then ((.conclusion | select(. != "")) // "unknown") else .status end' "$dir/$c_file")"
+    c_at="$(jq -r '.[0].createdAt // ""' "$dir/$c_file")"
+    c_url="$(jq -r '.[0].url // ""' "$dir/$c_file")"
+    checks+=("**$c_name.** The newest run started $c_at and is $c_state: $c_url")
+    if [[ "$c_state" =~ ^(queued|in_progress|waiting|pending|requested)$ ]]; then
+      continue
+    elif [ "$c_state" != "success" ]; then
+      needs+=("$c_name ended $c_state: $c_url. Its issue ($c_issue) has a brief for an agent.")
+    elif [[ "$c_at" < "$since" ]]; then
+      needs+=("The newest $c_name run is from $c_at, before this week. Check that $c_workflow still runs: $c_url")
+    fi
+  done
+
   # --- Write ---------------------------------------------------------------
   {
     echo "Weekly digest for the week from $since. A script wrote it from the scheduled reports (scripts/weekly-digest-render.sh); no model read them."
@@ -240,6 +280,10 @@ render() {
     echo "## Dependabot"
     echo
     printf '%s\n' "${deps[@]}"
+    echo
+    echo "## Weekly checks on main"
+    echo
+    printf '%s\n\n' "${checks[@]}"
   } > "$output"
 
   echo "${#needs[@]}"
@@ -271,6 +315,10 @@ self_test() {
     echo '[{"conclusion":"success","createdAt":"2026-11-02T07:00:00Z","url":"https://example.com/kernel/1"}]' > "$tmp/d/kernel-run.json"
     jq -n '{tally: "Week ending 2026-11-02:\n- smoke: 1 red run(s)"}' > "$tmp/d/flake.json"
     echo '[]' > "$tmp/d/dependabot.json"
+    local f
+    for f in swift-currency-run macos-run visual-run; do
+      echo "[{\"conclusion\":\"success\",\"status\":\"completed\",\"createdAt\":\"2026-11-04T05:00:00Z\",\"url\":\"https://example.com/$f/1\"}]" > "$tmp/d/$f.json"
+    done
   }
 
   run() { count="$(render "$tmp/d" "$tmp/out.md")"; body="$(cat "$tmp/out.md")"; }
@@ -280,7 +328,8 @@ self_test() {
   if [ "$count" = "0" ] && grep -qx 'Nothing this week.' <<< "$body" \
     && grep -q 'ended success: https://example.com/zap/1' <<< "$body" \
     && grep -q '1 open alert(s). None was created this week.' <<< "$body" \
-    && grep -q 'The kernels are current' <<< "$body" && grep -q 'smoke: 1 red run' <<< "$body"; then
+    && grep -q 'The kernels are current' <<< "$body" && grep -q 'smoke: 1 red run' <<< "$body" \
+    && grep -q 'The newest run started 2026-11-04T05:00:00Z and is success: https://example.com/macos-run/1' <<< "$body"; then
     pass "a quiet week asks nobody for anything"
   else
     fail "a quiet week asks nobody for anything (count $count)"
@@ -419,6 +468,37 @@ self_test() {
     pass "a kernel run still in progress asks nobody for anything"
   else
     fail "a kernel run still in progress asks nobody for anything (count $count)"
+  fi
+
+  fixture
+  echo '[{"conclusion":"failure","status":"completed","createdAt":"2026-11-04T05:00:00Z","url":"https://example.com/macos/2"}]' > "$tmp/d/macos-run.json"
+  run
+  if [ "$count" = "1" ] && grep -q 'macOS build ended failure: https://example.com/macos/2. Its issue (scheduled-check-failed, key macos-build)' <<< "$body"; then
+    pass "flags a red weekly check and names its issue"
+  else
+    fail "flags a red weekly check and names its issue (count $count)"
+  fi
+
+  fixture
+  echo '[{"conclusion":"success","status":"completed","createdAt":"2026-10-20T05:00:00Z","url":"https://example.com/visual/0"}]' > "$tmp/d/visual-run.json"
+  echo '[]' > "$tmp/d/swift-currency-run.json"
+  rm "$tmp/d/macos-run.json"
+  run
+  if [ "$count" = "3" ] && grep -q 'newest Visual regression on main run is from 2026-10-20' <<< "$body" \
+    && grep -q 'No Swift package currency run was found' <<< "$body" \
+    && grep -q 'macOS build runs could not be read: macos-run.json is missing' <<< "$body"; then
+    pass "a weekly check that is stale, absent or unreadable asks a person"
+  else
+    fail "a weekly check that is stale, absent or unreadable asks a person (count $count)"
+  fi
+
+  fixture
+  echo '[{"conclusion":"","status":"in_progress","createdAt":"2026-11-04T05:00:00Z","url":"https://example.com/visual/3"}]' > "$tmp/d/visual-run.json"
+  run
+  if [ "$count" = "0" ] && grep -q 'and is in_progress: https://example.com/visual/3' <<< "$body"; then
+    pass "a weekly check still in progress asks nobody for anything"
+  else
+    fail "a weekly check still in progress asks nobody for anything (count $count)"
   fi
 
   rm -rf "$tmp"

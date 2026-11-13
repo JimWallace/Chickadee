@@ -1,0 +1,211 @@
+name: macOS build
+
+# Proves once a week that the package still builds on macOS, and runs the
+# DB-free tests there. Chickadee targets macOS and Linux, but every other
+# workflow runs on Ubuntu, so a macOS-only break (a Darwin API, a Foundation
+# difference, the `sandbox-exec` path of SandboxedScriptRunner) would reach
+# `main` and stay there unseen.
+#
+# A REPORT, NEVER A GATE. It is not on the pull request path: macOS minutes
+# cost ten times Linux minutes, and a weekly signal is enough for a platform
+# that the deployment does not run on.
+#
+# THE TOOLCHAIN. The same Swift as the CI image. Package.swift names the
+# minor (`swift-tools-version:6.4`), and the image tag `swift:6.4-resolute`
+# floats to the newest 6.4 patch; swiftly installs that same patch here. The
+# SDK comes from the newest Xcode on the runner, because Package.swift sets
+# a macOS floor (`.macOS("27.0")`) that an older SDK cannot build.
+#
+# KNOWN RED UNTIL GITHUB SHIPS A MACOS 27 IMAGE. Measured in November 2026:
+# `macos-latest` is macOS 26 with Xcode 26.0 to 26.6, whose newest SDK is
+# macOS 26.5, and SwiftPM refuses the 27.0 deployment target ("the range of
+# supported deployment target versions is 10.13 to 26.5.x"). No `macos-27`
+# label exists yet; a job that asks for one waits in the queue. So this run
+# fails in its first minute, in "Select the newest Xcode", with that reason,
+# and its issue stays open as the record that macOS is not covered. When a
+# hosted image has the SDK, point runs-on at it (or wait for macos-latest to
+# move); nothing else here should need to change. The swiftly install of the
+# toolchain was proven on macos-latest.
+#
+# THE TESTS. `swift build` builds every product, server included. The tests
+# are the ones that need no Postgres and no grading interpreter:
+#   CoreTests, LoadTestTests  the core lane of swift-tests.yml, with RunnerCore
+#                             through Core
+#   SandboxIsolationTests     the macOS `sandbox-exec` profile, the one worker
+#                             suite with a macOS branch
+# APITests needs Postgres. The rest of WorkerTests needs the interpreters of
+# the CI image, and its `.ciOnly` tests assert that they are present, so it
+# cannot pass on a bare macOS runner. A skipped test fails the run here as on
+# Linux (scripts/check-no-skipped-tests.sh): a sandbox suite that skipped
+# because `sandbox-exec` was refused would otherwise read as green.
+#
+# On a red run on `main`, the `report` job files one issue labelled
+# `scheduled-check-failed`, keyed `macos-build` (scripts/dependency-issue.sh).
+# A later red run comments on it, and the next green run closes it. The weekly
+# digest lists the newest run.
+
+on:
+  schedule:
+    # Wednesdays at 04:47 UTC: away from the Monday cluster of weekly reports
+    # and from the Tuesday mutation sweep.
+    - cron: "47 4 * * 3"
+  workflow_dispatch:
+
+concurrency:
+  group: macos-build-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  macos:
+    runs-on: macos-latest
+    # A cold build of the whole package with no cache (a weekly run would
+    # find any cache evicted), then the tests.
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Select the newest Xcode
+        run: |
+          set -euo pipefail
+          best="" best_sdk=""
+          for app in /Applications/Xcode*.app; do
+            [ -d "$app/Contents/Developer" ] || continue
+            sdk="$(DEVELOPER_DIR="$app/Contents/Developer" xcrun --sdk macosx --show-sdk-version 2>/dev/null || true)"
+            [ -n "$sdk" ] || continue
+            echo "$app: macOS SDK $sdk"
+            if [ -z "$best_sdk" ] || [ "$(printf '%s\n%s\n' "$best_sdk" "$sdk" | sort -V | tail -1)" = "$sdk" ]; then
+              best="$app" best_sdk="$sdk"
+            fi
+          done
+          if [ -z "$best" ]; then
+            echo "::error::No Xcode with a macOS SDK on this runner."
+            exit 1
+          fi
+          sudo xcode-select --switch "$best/Contents/Developer"
+          floor="$(sed -n 's/.*\.macOS("\([0-9.]*\)").*/\1/p' Package.swift | head -1)"
+          host="$(sw_vers -productVersion)"
+          {
+            echo "### macOS build"
+            echo ""
+            echo "- Runner: macOS $host"
+            echo "- Xcode: $best (macOS SDK $best_sdk)"
+            echo "- Package.swift floor: macOS ${floor:-unknown}"
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "MACOS_FLOOR=$floor" >> "$GITHUB_ENV"
+          if [ -n "$floor" ] && [ "$(printf '%s\n%s\n' "$floor" "$best_sdk" | sort -V | head -1)" != "$floor" ]; then
+            echo "::error::The newest Xcode on this runner has the macOS $best_sdk SDK, below the macOS $floor floor in Package.swift, so nothing can build. Move runs-on to an image with a macOS $floor SDK."
+            exit 1
+          fi
+
+      # Pinned by version and checksum, as in runner-wasm-vendor.yml. The
+      # package is the Apple-signed swiftly installer.
+      - name: Install Swift
+        run: |
+          set -euo pipefail
+          version="$(sed -n '1s/^\/\/ *swift-tools-version: *\([0-9.]*\).*/\1/p' Package.swift)"
+          if [ -z "$version" ]; then
+            echo "::error::Could not read swift-tools-version from Package.swift."
+            exit 1
+          fi
+          swiftly_version=1.2.0
+          swiftly_sha256=a1b48692b00ea6902957423473c87bee7c7f3e18c015a4a09317102f6820b987
+          swiftly_pkg="swiftly-${swiftly_version}.pkg"
+          curl -fsSLO "https://download.swift.org/swiftly/darwin/${swiftly_pkg}"
+          echo "${swiftly_sha256}  ${swiftly_pkg}" | shasum -a 256 --check --strict
+          installer -pkg "${swiftly_pkg}" -target CurrentUserHomeDirectory
+          "$HOME/.swiftly/bin/swiftly" init -y --skip-install --quiet-shell-followup
+          . "$HOME/.swiftly/env.sh"
+          swiftly install "$version" --use
+          hash -r
+          swift --version
+          echo "- Swift: $(swift --version 2>&1 | head -1)" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Build
+        run: |
+          . "$HOME/.swiftly/env.sh"
+          swift build
+
+      - name: Test the DB-free suites
+        run: |
+          set -euo pipefail
+          # The tests run on the host, and a binary built for a newer macOS
+          # than the host does not launch. Say so plainly, not with a loader
+          # error. The build above still ran, so it is still proven.
+          host="$(sw_vers -productVersion)"
+          if [ -n "$MACOS_FLOOR" ] && [ "$(printf '%s\n%s\n' "$MACOS_FLOOR" "$host" | sort -V | head -1)" != "$MACOS_FLOOR" ]; then
+            echo "::error::The runner is macOS $host, below the macOS $MACOS_FLOOR floor in Package.swift, so the tests cannot launch. Move runs-on to a newer macOS image."
+            exit 1
+          fi
+          . "$HOME/.swiftly/env.sh"
+          mkdir -p "$RUNNER_TEMP/xunit"
+          swift test --filter "CoreTests|LoadTestTests|SandboxIsolationTests" \
+            --xunit-output "$RUNNER_TEMP/xunit/macos-tests.xml"
+          scripts/check-no-skipped-tests.sh "$RUNNER_TEMP"/xunit/*-swift-testing.xml
+
+  # Files, updates or closes the `macos-build` issue. Only for `main`: a
+  # dispatch on a branch tests the branch and reports nothing.
+  report:
+    needs: macos
+    if: >-
+      always()
+      && github.ref == 'refs/heads/main'
+      && (needs.macos.result == 'success' || needs.macos.result == 'failure')
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      actions: read
+      issues: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      R: ${{ github.repository }}
+      RESULT: ${{ needs.macos.result }}
+      RUN_ID: ${{ github.run_id }}
+      RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+      ISSUE_LABEL: scheduled-check-failed
+      ISSUE_LABEL_DESCRIPTION: "A scheduled check on main failed; see scripts/dependency-issue.sh"
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: File, update or close the issue
+        run: |
+          set -euo pipefail
+          if [ "$RESULT" = "success" ]; then
+            scripts/dependency-issue.sh close macos-build "The macOS build passes again: $RUN_URL"
+            exit 0
+          fi
+          steps="$(gh run view "$RUN_ID" --repo "$R" --json jobs \
+            --jq '.jobs[] | select(.name == "macos") | .steps[] | select(.conclusion == "failure") | "- \(.name)"' || true)"
+          log="$(gh run view "$RUN_ID" --repo "$R" --log-failed 2>/dev/null \
+            | cut -f3- | sed 's/^[0-9T:.-]*Z //' | tail -n 80 || true)"
+          {
+            echo "The weekly macOS build (\`.github/workflows/macos-build.yml\`) failed on \`main\` at \`${GITHUB_SHA:0:7}\`."
+            echo ""
+            echo "Run: $RUN_URL"
+            echo ""
+            echo "### Failed steps"
+            echo ""
+            echo "${steps:-(none reported; see the run)}"
+            echo ""
+            echo "### End of the failed log"
+            echo ""
+            echo '```'
+            echo "${log:-(no log available)}"
+            echo '```'
+            echo ""
+            echo "### Brief for an agent"
+            echo ""
+            echo "Make \`main\` build and pass its DB-free tests on macOS again. Find the root cause from the run's log. The Linux lanes are green, so look for a difference between the platforms: a Darwin or Glibc API, a Foundation behaviour, a \`#if os(Linux)\` branch with no macOS side, or the \`sandbox-exec\` profile."
+            echo ""
+            echo "- Fix it in a pull request into \`main\`. Do not skip, disable or quarantine a test, and do not narrow the workflow's test filter, to get green."
+            echo "- If the runner image is the cause (an Xcode or macOS older than the floor in \`Package.swift\`), change \`runs-on\` or the Xcode selection in the workflow, and say so on this issue."
+            echo "- Dispatch \`macos-build.yml\` on your branch to prove the fix. This issue closes when the workflow next passes on \`main\`."
+          } > body.md
+          scripts/dependency-issue.sh open macos-build "macOS build failing on main" body.md
