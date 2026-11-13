@@ -35,6 +35,16 @@ set -euo pipefail
 # the environment once, into a file-private `let`. The measurement is in
 # docs/mutation-testing-pilot.md, "Why the guards read the environment once".
 #
+# A THIRD PATCH STOPS ONE MUTANT FROM COSTING A SHARD. RemoveSideEffects means to
+# skip a variable declaration, but that check passes any statement that is not a
+# `do`, so it deletes any
+# `let name = ...` whose text contains `_ = ` -- including one inside a closure,
+# as in `let startHeartbeat = Task { _ = try? await ... }`. Every later use of
+# the name then fails to compile, and schemata put every mutant in one binary,
+# so shard 10 of the 2026-11-10 sweep produced no outcomes at all (#2970).
+# Tools/mutation/0003-keep-named-bindings.patch skips a declaration that names a
+# binding. `let _ = f()` stays a mutant, because removing it still compiles.
+#
 # Every `Tools/mutation/*.patch` is applied, in name order. Adding one means
 # re-verifying with the probe, exactly as for a new MUTER_REF.
 #
@@ -82,6 +92,7 @@ cd "$repo_root"
 
 config="Tools/mutation/config.json"
 # Name order is application order: 0001 before 0002, and 0002 assumes 0001.
+# 0003 touches a different file and assumes neither.
 patch_files=(Tools/mutation/[0-9][0-9][0-9][0-9]-*.patch)
 plan_only=0
 check_flags_only=0
