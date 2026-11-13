@@ -45,7 +45,7 @@ struct WorkbenchAppBar: HTML {
             button(.class("btn action-btn wb-issues"), .type(.button), .id("wb-issues"), .hidden) {}
             span(.class("field-note"), .id("wb-validation-note"), .role("status"), .hidden) {}
             span(.class("wb-save-status"), .id("wb-save-status"), .role("status")) {}
-            button(.class("btn btn-primary"), .type(.button), .id("wb-save")) { "Save & Validate" }
+            button(.class("btn btn-primary"), .type(.button), .id("wb-save")) { "Save & validate" }
         }
     }
 
