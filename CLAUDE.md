@@ -414,6 +414,10 @@ or audit that a session does not run does not happen.
 - For drift between the docs and the code, run `docs-audit`. Run it once a
   month, when the maintainer asks, and file the report as an issue labelled
   `docs-audit`.
+- The recurring jobs that need judgement (failed dependency updates, Swift
+  pin bumps, mutation survivor triage, the performance check, the dead-code
+  review) are scheduled tasks on the maintainer's machine, listed in
+  `Tools/maintenance/README.md`.
 - Before a commit, run `diff-reviewer` on the uncommitted diff.
 - Before a commit on a change under `Sources/` or to a `Public/*.js` file, run
   `interaction-review`. It checks the change for side effects on other
