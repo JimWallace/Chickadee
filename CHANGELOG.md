@@ -9,6 +9,13 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.936] - 2026-11-13
+
+### Added
+
+- **Design note: custom wardrobe items.** `docs/custom-wardrobe-items.md` proposes letting course instructors compose their own rings, backdrops, faces and wearables from site templates and a checked palette, granted by their course's achievements. Docs only.
+
+
 ## [0.5.935] - 2026-11-13
 
 ### Changed
