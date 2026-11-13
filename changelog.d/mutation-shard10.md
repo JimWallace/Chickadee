@@ -1,3 +1,0 @@
-### Fixed
-
-- **The weekly mutation sweep no longer loses a shard to a deleted `let`.** Muter's RemoveSideEffects operator deleted `let startHeartbeat = Task { _ = ... }` in the worker's job pipeline, because its check for a variable declaration passes any statement that is not a `do` and the closure's `_ = ` text looked like a discarded result. The defer that awaits the task then did not compile, and shard 10 of the 2026-11-10 sweep produced no outcomes (#2970). A third Muter patch, `Tools/mutation/0003-keep-named-bindings.patch`, skips a declaration that names a binding. `let _ = f()` is still mutated.
