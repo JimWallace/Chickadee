@@ -179,7 +179,7 @@ extension InstructorDashboardRoutes {
             throw AppError.notFound(resource: "Student")
         }
         guard let setup = try await APITestSetup.find(assignment.testSetupID, on: req.db) else {
-            throw AppError.notFound(resource: "Test setup")
+            throw AppError.notFound(resource: "Assignment")
         }
 
         let isEnrolled =

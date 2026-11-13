@@ -439,7 +439,10 @@ struct AdminRoutes: RouteCollection {
             _ = try await monitor.dispatchTestAlert(application: req.application)
             return req.redirect(to: adminNoticeRedirect("/admin/alerts", ok: "Test alert dispatched to webhook."))
         } catch {
-            return req.redirect(to: adminNoticeRedirect("/admin/alerts", error: "Test alert failed: \(error)"))
+            req.logger.warning("Test alert dispatch failed: \(error)")
+            return req.redirect(
+                to: adminNoticeRedirect(
+                    "/admin/alerts", error: "The test alert was not delivered. Check the webhook URL and try again."))
         }
     }
 

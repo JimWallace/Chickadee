@@ -11,6 +11,7 @@
 // `friendlyReason` below substitutes a more humane default.
 
 import Elementary
+import Foundation
 import Vapor
 
 struct ErrorPageMiddleware: AsyncMiddleware {
@@ -43,7 +44,7 @@ struct ErrorPageMiddleware: AsyncMiddleware {
             let isCSRFFailure =
                 status == .forbidden
                 && reason.range(of: "csrf", options: .caseInsensitive) != nil
-            let title = isCSRFFailure ? "Session refreshed" : status.reasonPhrase
+            let title = isCSRFFailure ? "Session refreshed" : errorPageTitle(for: status)
             let message =
                 isCSRFFailure
                 ? "Your session was refreshed since this page was opened, so your "
@@ -75,11 +76,42 @@ struct ErrorPageMiddleware: AsyncMiddleware {
                     page: PageRequestContext(errorPageRequest: request),
                     status: Int(status.code),
                     title: title,
-                    message: message
+                    message: message,
+                    backURL: sameOriginReferer(of: request)
                 )
             }.encodeResponse(for: request)
         }
     }
+}
+
+/// A plain-language title for the error page (UI audit #3007, finding 6):
+/// the reason phrase ("Unprocessable Entity") is protocol, not prose. The
+/// status code still shows, as fine print.
+func errorPageTitle(for status: HTTPStatus) -> String {
+    switch status {
+    case .badRequest, .unprocessableEntity: "Request not understood"
+    case .unauthorized: "Sign in required"
+    case .forbidden: "No access"
+    case .notFound, .gone: "Page not found"
+    case .methodNotAllowed: "Action not allowed"
+    case .conflict: "Already changed"
+    case .payloadTooLarge: "Upload too large"
+    case .tooManyRequests: "Too many requests"
+    case .badGateway, .serviceUnavailable, .gatewayTimeout: "Temporarily unavailable"
+    default: status.code >= 500 ? "Something went wrong" : status.reasonPhrase
+    }
+}
+
+/// The referring page's path when it is on this server, for the error page's
+/// "Go back" link; nil for no referer, another origin or the failing page.
+func sameOriginReferer(of request: Request) -> String? {
+    guard let referer = request.headers.first(name: .referer),
+        let url = URL(string: referer), let host = url.host,
+        let requestHost = request.headers.first(name: .host)
+    else { return nil }
+    let origin = url.port.map { "\(host):\($0)" } ?? host
+    guard origin == requestHost, !url.path.isEmpty, url.path != request.url.path else { return nil }
+    return url.query.map { "\(url.path)?\($0)" } ?? url.path
 }
 
 /// Returns a humane user-facing message for an HTTP error.  When the caller

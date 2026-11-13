@@ -136,7 +136,7 @@ extension WebRoutes {
             let setupID = req.parameters.get("testSetupID"),
             let setup = try await APITestSetup.find(setupID, on: req.db)
         else {
-            throw AppError.notFound(resource: "Test setup")
+            throw AppError.notFound(resource: "Assignment")
         }
         // Cross-tenant guard: only members of the setup's course may interact
         // with it (same gate as the submit form).

@@ -37,7 +37,7 @@ extension WebRoutes {
             let setupID = req.parameters.get("testSetupID"),
             let setup = try await APITestSetup.find(setupID, on: req.db)
         else {
-            throw AppError.notFound(resource: "Test setup")
+            throw AppError.notFound(resource: "Assignment")
         }
         try await req.cachedRequireCourseEnrollment(caller: user, courseID: setup.courseID)
 
@@ -186,7 +186,7 @@ extension WebRoutes {
             let setupID = req.parameters.get("testSetupID"),
             let setup = try await APITestSetup.find(setupID, on: req.db)
         else {
-            throw AppError.notFound(resource: "Test setup")
+            throw AppError.notFound(resource: "Assignment")
         }
 
         // A bare test setup with no assignment row is not a student-facing
@@ -734,7 +734,7 @@ extension WebRoutes {
             let setupID = req.parameters.get("testSetupID"),
             let setup = try await APITestSetup.find(setupID, on: req.db)
         else {
-            throw AppError.notFound(resource: "Test setup")
+            throw AppError.notFound(resource: "Assignment")
         }
 
         try await req.cachedRequireCourseEnrollment(caller: user, courseID: setup.courseID)
@@ -845,7 +845,7 @@ extension WebRoutes {
             let setupID = req.parameters.get("testSetupID"),
             let setup = try await APITestSetup.find(setupID, on: req.db)
         else {
-            throw AppError.notFound(resource: "Test setup")
+            throw AppError.notFound(resource: "Assignment")
         }
         try await req.cachedRequireCourseEnrollment(caller: user, courseID: setup.courseID)
         let isStaff = try await req.cachedIsCourseStaff(user, inCourse: setup.courseID)

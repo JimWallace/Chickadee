@@ -17,7 +17,7 @@ extension InstructorDashboardRoutes {
     func saveGitHubSubmissionSetting(req: Request) async throws -> Response {
         let assignment = try await loadAssignmentForWrite(req, atLeast: CourseRoleFloor.studentOptions)
         guard let setup = try await APITestSetup.find(assignment.testSetupID, on: req.db) else {
-            throw AppError.notFound(resource: "Test setup")
+            throw AppError.notFound(resource: "Assignment")
         }
         struct ToggleBody: Content {
             // A checkbox is absent from the body when it is not checked.

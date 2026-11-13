@@ -430,7 +430,7 @@ fi
 # in Public/styles.css as a named component, where review sees it next to
 # the component it would duplicate. When you shrink a block, lower the
 # baseline in the same PR.
-PAGE_STYLE_BASELINE=142
+PAGE_STYLE_BASELINE=133
 page_style_count="$(
   for f in "${style_views[@]}"; do page_style_blocks "$f"; done | awk '
     /<style>/ { inblock = 1; next }

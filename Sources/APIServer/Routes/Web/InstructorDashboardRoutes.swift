@@ -196,6 +196,7 @@ struct InstructorDashboardRoutes: RouteCollection {
         let hasSections = !allSections.isEmpty
         let hasUngrouped = !ungroupedItems.isEmpty
         let page = try await PageRequestContext.courseAware(req)
+        let notice = req.query[String.self, at: "notice"] ?? req.takeOverviewNotice()
         return try await HTMLResponse {
             AssignmentsPage(
                 page: page,
@@ -206,7 +207,7 @@ struct InstructorDashboardRoutes: RouteCollection {
                 showEmptyMessage: !hasSections && !hasUngrouped,
                 enrolledStudentCount: roster.enrolledStudentCount,
                 attachTargets: Self.attachTargets(sections: sectionContexts, ungroupedItems: ungroupedItems),
-                flash: FlashMessages(notice: req.query[String.self, at: "notice"]))
+                flash: FlashMessages(notice: notice))
         }.encodeResponse(for: req)
     }
 
