@@ -53,7 +53,7 @@ permissions:
 
 jobs:
   macos:
-    runs-on: macos-latest
+    runs-on: macos-27
     # A cold build of the whole package with no cache (a weekly run would
     # find any cache evicted), then the tests.
     timeout-minutes: 120
