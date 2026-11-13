@@ -8,7 +8,11 @@ keeps the short form and points here.
   been on Swift Testing since the migration completed (PRs #597–#608). `scripts/no-new-xctest.sh`
   blocks any new `import XCTest` under `Tests/`. The nightly
   `test-coverage.yml` run measures line coverage over all four targets
-  (91.7 % on 2026-10-17) against an 80 % floor.
+  (91.7 % on 2026-10-17) against an 80 % floor. Every other lane runs on
+  Linux. The weekly `macos-build.yml` builds the package on macOS and runs
+  the suites that need no Postgres and no interpreter (`CoreTests`,
+  `LoadTestTests`, `SandboxIsolationTests`). It is not on the pull request
+  path, and a red run files an issue labelled `scheduled-check-failed`.
 - **Approved Swift Testing vocabulary.** `@Suite`, `@Test`, `#expect`,
   `#require`, `.serialized`, `.tags(...)`, `.enabled(if:)` / `.enabled { }` /
   `.disabled(if:)`, `@Test(arguments:)`, `#expect(processExitsWith:)` (an exit
