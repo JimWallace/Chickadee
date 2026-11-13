@@ -207,15 +207,71 @@ Either way, the map itself is new:
   in the student's dataset. The board renders it as server-side SVG, because
   no graph library is vendored.
 
-**D8. The economy lives in the grading scripts, not in Chickadee.** Each year
-reports one `metric` for the leaderboard. That year's script computes it as
-"users", for example search quality multiplied by the share of the web
-covered. Chickadee has no cross-assignment state, so cash carried from year
-to year is not modelled. A company's "valuation" is the sum of its three
-yearly metrics, shown on a course page or computed by the instructor (§8,
-open question 1). The
-economy stays three numbers: budget, users and valuation. The learning stays
-in the lab code.
+**D8. The economy is one number, a valuation, and the game's leaderboard is
+a course page called the Market.** Each year's script reports one `metric`,
+as every `bestMetric` assignment does. The year leaderboards stay as they
+are. The Market is a new course page that reads the three years together and
+shows each company's valuation (decided 2026-11-13).
+
+**The metric scale.** Every game year reports its `metric` on 0 to 100, so the
+years can be added. 1996 reports the percent of hosts reached within the
+budget. 1998 reports search quality times coverage, as a percent. 2000
+reports search quality on the shrunken web, as a percent. `metric` is
+unclamped in the contract, so this scale is a rule of the game's scripts,
+checked by the generator's story checks (§7, slice 3), and not a platform
+rule.
+
+**The valuation.** A company's points are its best metric in each year,
+weighted toward the later years, because a company proves itself over time:
+
+```text
+points    = 1 × m1996 + 2 × m1998 + 3 × m2000          (0 to 600)
+valuation = 10 ^ (3 + 6 × points / 600) dollars         ($1 thousand to $1 billion)
+```
+
+- A year with no submission counts 0, so a company that has not started is
+  worth $1,000: a garage startup.
+- **The crash.** A company below the quality bar in 2000 loses 99% of its
+  valuation, which is two steps down a logarithmic scale and plain to see.
+  This is the only rule that is not a sum, and it exists for the story.
+- Two companies with equal points have equal valuations, and the page lists
+  them in order of handle.
+
+**The page.** One row per company, highest valuation first:
+
+- **The CEO** is the student's bird, the avatar the leaderboards already show
+  (`docs/student-avatars.md`), drawn with its stored wardrobe.
+- **The company name** (D9) and a **ticker symbol** of four capital letters,
+  derived from the name ("Lycrawl Interactive" is LYCR).
+- **The valuation in fake dollars**, formatted as a 1990s financial page
+  would: "$4.2M", "$310K", "$1.1B".
+- **A bar on a logarithmic scale** from $1 thousand to $1 billion, with
+  gridlines at thousand, million and billion. The bar's width is computed on
+  the server and set as a CSS custom property on the row, the one kind of
+  inline style the view rules allow (`Sources/APIServer/Views/CLAUDE.md`), so
+  the page needs no script.
+- **The years so far**, as three small marks: reached, not yet open, or bust.
+
+Each viewer sees what the year leaderboards show them today: classmates by
+handle, bird and company name, and staff also by real name. A year counts on
+the Market only while that year's leaderboard is visible, so the Market never
+shows a ranking the instructor has not published. The Market has its own
+Present mode for the projector, as the leaderboard does.
+
+**Linking the three years.** Each year's `activity` block gains a `series`
+field: a short slug such as `search-1990s`, and the year's position in the
+series. The Market lists every series in the course. A field joins the block
+only when code uses it, and the block's rebuild rule carries a new field
+through every edit (`docs/class-activities.md`, "Compatibility rules"), so
+this is the supported way to add it. The alternative, a course setting that
+lists the three assignment IDs, lost: it would not survive a course clone
+without an ID map, and the block already does.
+
+**Nothing on the Market is a grade.** The valuation reads leaderboard metrics,
+and nothing reads it back (§5).
+
+The economy stays three numbers: the budget, a year's metric and the
+valuation. The learning stays in the lab code.
 
 **D9. A company's name is generated from the student's handle.** Every
 student already has a per-course handle and a bird that the leaderboards show
@@ -259,9 +315,9 @@ Two alternatives lost:
 - **Names that students choose.** These would need moderation, and they would
   be a second identity next to the bird.
 
-**Where it shows:** beside the handle on the year leaderboards and on the
-class map. This is a small new piece of presentation: a Core function from
-handle to name, and one line in the leaderboard view.
+**Where it shows:** on the Market (D8), beside the handle on the year
+leaderboards, and on the class map. The name and the ticker symbol come from
+one Core function of the handle.
 
 ## 4. Achievements
 
@@ -300,8 +356,10 @@ search engine earns full marks whether their company wins or not.
 | A kind with a leaderboard and a coverage board (D7) | **new** |
 | The web map with counts and a layout (D7) | **new** |
 | Three achievements in §4 | **new** |
-| Valuation across years (D8) | **new** or by hand (§8, open question 1) |
-| Company names from the handle (D9) | **new**: a Core function and one line in the leaderboard view |
+| The Market course page, with valuations, CEO birds and the log scale (D8) | **new**: a course page and its Present mode |
+| `series` on the activity block (D8) | **new**: one field, carried by the existing rebuild rule |
+| Company names and ticker symbols from the handle (D9) | **new**: a Core function, used by the Market and the year leaderboards |
+| Year leaderboard rows (`leaderboard_entries`), which the Market reads | exists |
 | Event cards | exists (content items) |
 
 ## 7. Build order
@@ -321,14 +379,18 @@ search engine earns full marks whether their company wins or not.
    and the yearly metric. Validate each year against a reference company.
 5. **Coverage without slot cells.** The D6 gate, so a year's host entries
    write `class_item_coverage` rows and the `itemsCovered` class goal works.
-6. **The map.** The D7 kind (or the two-assignment form), coverage counts
-   and the SVG layout. This is the only slice with UI.
-7. **Later:** per-page coverage items, the three new achievements in §4,
-   a partition by host (§8, open question 4), valuation across years, and company names
-   (D9) if the leaderboard line is not in an earlier slice.
+6. **The Market.** The `series` field, the valuation in Core (a pure function
+   with tests: the weights, the crash rule, the log scale's ends), company
+   names and ticker symbols, and the course page with its Present mode.
+7. **The map.** The D7 kind (or the two-assignment form), coverage counts
+   and the SVG layout.
+8. **Later:** per-page coverage items, the three new achievements in §4,
+   and a partition by host (§8, open question 4).
 
-Slices 1 to 4 make the game playable on a yearly leaderboard, with no map.
-Slices 5 and 6 add the class's shared map.
+Slices 1 to 4 make the game playable on the yearly leaderboards. Slice 6
+adds the Market, which is the game's real leaderboard. Slices 5 and 7 add the
+class's shared map. If time is short, build the Market before the map: it
+needs no change to coverage and no new activity kind.
 
 ## 8. Decisions and open questions
 
@@ -340,11 +402,14 @@ Decided by the maintainer on 2026-11-13:
    (§1). The in-class `score` contest becomes the end of 1998.
 3. **Company names are generated**, parodies of real 1990s companies, as a
    small joke (D9).
+4. **The game's leaderboard is a course page of company valuations** (D8):
+   the student's bird as CEO, fake dollars, a logarithmic scale.
 
 Still open:
 
-1. **Valuation across years:** a course page, or the instructor adds up the
-   three leaderboards by hand?
+1. **The valuation's weights and the crash:** 1, 2 and 3 for the three
+   years, and a 99% loss below the 2000 bar, are proposals. Tune them once
+   the reference companies exist.
 2. **Budget size:** a budget below the web's size makes the crawl order
    matter. The proposal is about half the web each year, tuned by the
    generator's checks.
