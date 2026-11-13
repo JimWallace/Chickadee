@@ -9,6 +9,13 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.937] - 2026-11-13
+
+### Security
+
+- **Section delete in the suite editor checks the form target.** The delete button's `data-action` must resolve to a same-origin path before it becomes a form target. The check is now one shared helper, `ChickadeeUI.sameOriginURL`, used by the suite editor and the assignments page. This closes CodeQL alert 24 (js/xss-through-dom).
+
+
 ## [0.5.936] - 2026-11-13
 
 ### Added
