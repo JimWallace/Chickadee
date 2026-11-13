@@ -11,8 +11,11 @@ struct SubmissionHistoryPage: HTML {
     let rows: [SubmissionHistoryRow]
 
     var body: some HTML {
-        BaseLayout(title: "Submission History", page: page) {
-            h1 { assignmentTitle }
+        BaseLayout(title: "\(assignmentTitle) — History", page: page) {
+            div(.class("page-titlebar")) {
+                h1 { assignmentTitle }
+                a(.class("btn action-btn"), .href("/")) { "Dashboard" }
+            }
             if rows.isEmpty {
                 p(.class("empty")) { "No submissions yet for this assignment." }
             } else {
@@ -55,8 +58,8 @@ struct SubmissionHistoryTableRow: HTML {
         let history = row.history
         tr {
             td(.class("col-hide-phone")) { "\(history.attemptNumber)" }
-            td { history.submittedAt }
-            td { history.status }
+            SubmittedAtCell(row: history)
+            td { span(.class("tier")) { SubmissionStatus.displayLabel(forRaw: history.status) } }
             td { history.gradeText }
             td {
                 div(.class("history-actions")) {
@@ -83,6 +86,20 @@ struct SubmissionHistoryTableRow: HTML {
                     }
                 }
             }
+        }
+    }
+}
+
+/// A history row's submit time: relative, with the server's absolute text as
+/// the no-JS fallback (docs/ui-design.md §"Timestamps").
+struct SubmittedAtCell: HTML {
+    let row: AssignmentSubmissionHistoryRow
+
+    var body: some HTML {
+        if let iso = row.submittedAtISO {
+            td(.class("js-relative-time"), .data("iso", value: iso)) { row.submittedAt }
+        } else {
+            td { row.submittedAt }
         }
     }
 }

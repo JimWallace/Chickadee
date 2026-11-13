@@ -28,6 +28,22 @@ public enum AssignmentVisibility: String, Codable, Sendable, CaseIterable {
     /// equivalent from a student's perspective.
     public var acceptsStudentSubmissions: Bool { self == .open }
 
+    /// The one display word for this state, used by every view that names it
+    /// (UI audit #3007, finding 9): the dashboard, the Overview and the
+    /// per-student page all said something different for `.preview`.
+    public var displayLabel: String {
+        switch self {
+        case .closed: "closed"
+        case .preview: "staff only"
+        case .open: "open"
+        }
+    }
+
+    /// The display word for a stored raw value; an unknown value shows as is.
+    public static func displayLabel(forRaw raw: String) -> String {
+        AssignmentVisibility(rawValue: raw)?.displayLabel ?? raw
+    }
+
     /// Maps the legacy `isOpen` boolean onto the enum (`true` ⇒ `.open`,
     /// `false` ⇒ `.closed`). Pre-three-state data has no notion of `.preview`,
     /// so this never produces it; used when decoding old course bundles.

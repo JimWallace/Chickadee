@@ -394,7 +394,7 @@ extension StudentCourseRoutes {
         let (actor, student, assignment) = (action.actor, action.student, action.assignment)
         let assignmentIDRaw = assignment.publicID
         guard let setup = try await APITestSetup.find(assignment.testSetupID, on: req.db) else {
-            throw AppError.notFound(resource: "Test setup")
+            throw AppError.notFound(resource: "Assignment")
         }
 
         let starter: Data
@@ -792,8 +792,9 @@ extension StudentCourseRoutes {
         return StudentAssignmentRow(
             assignmentID: assignment.publicID,
             title: assignment.title,
-            // Student-facing: Preview is indistinguishable from closed.
-            status: assignment.visibility == .preview ? "closed" : assignment.visibility.rawValue,
+            // A staff page: it names the state as the Overview does, so a
+            // staff-only assignment is not mislabelled "closed" (#3007).
+            status: assignment.visibility.rawValue,
             isOpen: assignment.isOpen,
             dueAtText: dueAtText,
             effectiveDueAtText: effectiveDueAtText,

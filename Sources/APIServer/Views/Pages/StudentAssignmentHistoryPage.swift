@@ -50,8 +50,8 @@ struct StudentAssignmentHistoryPage: HTML {
                     thead {
                         tr {
                             th { "Attempt" }
-                            th { "Status" }
                             th { "Submitted" }
+                            th { "Status" }
                             th { "Grade" }
                             th { "Details" }
                             th { "Action" }
@@ -81,8 +81,8 @@ struct StudentAssignmentHistoryRow: HTML {
     var body: some HTML {
         tr {
             td { "\(row.attemptNumber)" }
-            td { span(.class("tier")) { row.status } }
-            td { row.submittedAt }
+            SubmittedAtCell(row: row)
+            td { span(.class("tier")) { SubmissionStatus.displayLabel(forRaw: row.status) } }
             td {
                 strong { row.gradeText }
                 // A signal for the instructor, not an accusation

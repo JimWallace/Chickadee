@@ -433,10 +433,10 @@ private struct CourseAssignmentItemRow: HTML {
                     .title("No runner could grade this when it was last saved, so validation did not run.")
                 ) { "No runner" }
             default:
-                span(.class("tier tier-closed")) { "closed" }
+                span(.class("tier tier-closed")) { AssignmentVisibility.closed.displayLabel }
             }
         } else {
-            span(.class("tier tier-unpublished")) { "Unpublished" }
+            span(.class("tier tier-unpublished")) { "unpublished" }
         }
     }
 
@@ -452,11 +452,7 @@ private struct CourseAssignmentItemRow: HTML {
     /// The words for a published status, in the select and in the read-only
     /// label.
     private static func statusLabel(_ status: String) -> String {
-        switch status {
-        case "open": "open"
-        case "preview": "staff only"
-        default: "closed"
-        }
+        (AssignmentVisibility(rawValue: status) ?? .closed).displayLabel
     }
 
     private var unpublishedActions: some HTML {
