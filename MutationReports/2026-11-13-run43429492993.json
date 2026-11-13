@@ -1,0 +1,263 @@
+{
+  "commit": null,
+  "config": {
+    "configHash": "938610a82d4e",
+    "muterRef": "7f1f258",
+    "patchHash": "7fbc3a8f0b94",
+    "swift": "Swift version 6.4.2 (swift-6.4.2-RELEASE)"
+  },
+  "date": "2026-11-13",
+  "killed": 862,
+  "phantomsFiltered": 293,
+  "shardsExpected": 12,
+  "shardsReported": 12,
+  "survived": 15,
+  "survivors": [
+    {
+      "file": "Sources/Core/AssignmentType.swift",
+      "line": 47,
+      "mutations": [
+        {
+          "column": 14,
+          "mutated": "self != .lab ? .browser : .worker",
+          "offset": 1992,
+          "original": "self == .lab ? .browser : .worker"
+        }
+      ],
+      "operator": "RelationalOperatorReplacement",
+      "source": "self == .lab ? .browser : .worker"
+    },
+    {
+      "file": "Sources/Core/AssignmentType.swift",
+      "line": 47,
+      "mutations": [
+        {
+          "column": 42,
+          "mutated": "self == .lab  ? .worker :  .browser",
+          "offset": 2020,
+          "original": "self == .lab ? .browser : .worker"
+        }
+      ],
+      "operator": "SwapTernary",
+      "source": "self == .lab ? .browser : .worker"
+    },
+    {
+      "file": "Sources/Core/AssignmentType.swift",
+      "line": 54,
+      "mutations": [
+        {
+          "column": 14,
+          "mutated": "self == .assignment",
+          "offset": 2270,
+          "original": "self != .assignment"
+        }
+      ],
+      "operator": "RelationalOperatorReplacement",
+      "source": "self != .assignment"
+    },
+    {
+      "file": "Sources/Core/AssignmentType.swift",
+      "line": 59,
+      "mutations": [
+        {
+          "column": 14,
+          "mutated": "self != .classActivity",
+          "offset": 2416,
+          "original": "self == .classActivity"
+        }
+      ],
+      "operator": "RelationalOperatorReplacement",
+      "source": "self == .classActivity"
+    },
+    {
+      "file": "Sources/Core/AssignmentType.swift",
+      "line": 66,
+      "mutations": [
+        {
+          "column": 14,
+          "mutated": "self == .classActivity",
+          "offset": 2712,
+          "original": "self != .classActivity"
+        }
+      ],
+      "operator": "RelationalOperatorReplacement",
+      "source": "self != .classActivity"
+    },
+    {
+      "file": "Sources/Core/AssignmentType.swift",
+      "line": 72,
+      "mutations": [
+        {
+          "column": 14,
+          "mutated": "self == .classActivity",
+          "offset": 2921,
+          "original": "self != .classActivity"
+        }
+      ],
+      "operator": "RelationalOperatorReplacement",
+      "source": "self != .classActivity"
+    },
+    {
+      "file": "Sources/Core/DatasetSpecValidation.swift",
+      "line": 79,
+      "mutations": [
+        {
+          "column": 61,
+          "mutated": "let capabilities = spec.format.capabilities\n        let prefix = \"'\\(spec.file)': a \\(spec.format.displayName) dataset\"\n        let whole = capabilities.selects ? \"\" : \"; every student receives the whole file\"\n        if !capabilities.partition, spec.kind == .partition && spec.partCount != nil {\n            return \"\\(prefix) cannot be split into parts\\(whole).\"\n        }\n        if !capabilities.sample, spec.sampleSize != nil {\n            return \"\\(prefix) takes no sample size\\(whole).\"\n        }\n        if !capabilities.stratum, spec.kind == .stratifiedSample || !(spec.stratumColumn ?? \"\").isEmpty {\n            return \"\\(prefix) takes no stratum column.\"\n        }\n        if !capabilities.transforms, !spec.transforms.isEmpty {\n            return \"\\(prefix) takes no transforms.\"\n        }\n        return nil",
+          "offset": 4323,
+          "original": "let capabilities = spec.format.capabilities\n        let prefix = \"'\\(spec.file)': a \\(spec.format.displayName) dataset\"\n        let whole = capabilities.selects ? \"\" : \"; every student receives the whole file\"\n        if !capabilities.partition, spec.kind == .partition || spec.partCount != nil {\n            return \"\\(prefix) cannot be split into parts\\(whole).\"\n        }\n        if !capabilities.sample, spec.sampleSize != nil {\n            return \"\\(prefix) takes no sample size\\(whole).\"\n        }\n        if !capabilities.stratum, spec.kind == .stratifiedSample || !(spec.stratumColumn ?? \"\").isEmpty {\n            return \"\\(prefix) takes no stratum column.\"\n        }\n        if !capabilities.transforms, !spec.transforms.isEmpty {\n            return \"\\(prefix) takes no transforms.\"\n        }\n        return nil"
+        }
+      ],
+      "operator": "ChangeLogicalConnector",
+      "source": "if !capabilities.partition, spec.kind == .partition || spec.partCount != nil {"
+    },
+    {
+      "file": "Sources/Core/DatasetSpecValidation.swift",
+      "line": 85,
+      "mutations": [
+        {
+          "column": 66,
+          "mutated": "let capabilities = spec.format.capabilities\n        let prefix = \"'\\(spec.file)': a \\(spec.format.displayName) dataset\"\n        let whole = capabilities.selects ? \"\" : \"; every student receives the whole file\"\n        if !capabilities.partition, spec.kind == .partition || spec.partCount != nil {\n            return \"\\(prefix) cannot be split into parts\\(whole).\"\n        }\n        if !capabilities.sample, spec.sampleSize != nil {\n            return \"\\(prefix) takes no sample size\\(whole).\"\n        }\n        if !capabilities.stratum, spec.kind == .stratifiedSample && !(spec.stratumColumn ?? \"\").isEmpty {\n            return \"\\(prefix) takes no stratum column.\"\n        }\n        if !capabilities.transforms, !spec.transforms.isEmpty {\n            return \"\\(prefix) takes no transforms.\"\n        }\n        return nil",
+          "offset": 4621,
+          "original": "let capabilities = spec.format.capabilities\n        let prefix = \"'\\(spec.file)': a \\(spec.format.displayName) dataset\"\n        let whole = capabilities.selects ? \"\" : \"; every student receives the whole file\"\n        if !capabilities.partition, spec.kind == .partition || spec.partCount != nil {\n            return \"\\(prefix) cannot be split into parts\\(whole).\"\n        }\n        if !capabilities.sample, spec.sampleSize != nil {\n            return \"\\(prefix) takes no sample size\\(whole).\"\n        }\n        if !capabilities.stratum, spec.kind == .stratifiedSample || !(spec.stratumColumn ?? \"\").isEmpty {\n            return \"\\(prefix) takes no stratum column.\"\n        }\n        if !capabilities.transforms, !spec.transforms.isEmpty {\n            return \"\\(prefix) takes no transforms.\"\n        }\n        return nil"
+        }
+      ],
+      "operator": "ChangeLogicalConnector",
+      "source": "if !capabilities.stratum, spec.kind == .stratifiedSample || !(spec.stratumColumn ?? \"\").isEmpty {"
+    },
+    {
+      "file": "Sources/Core/FHIRNdjsonProfile.swift",
+      "line": 206,
+      "mutations": [
+        {
+          "column": 33,
+          "mutated": "if lhs.count != rhs.count { return lhs.count > rhs.count }\n            if lhs.resourceType == rhs.resourceType { return lhs.resourceType < rhs.resourceType }\n            if lhs.system != rhs.system { return (lhs.system ?? \"\") < (rhs.system ?? \"\") }\n            return lhs.code < rhs.code",
+          "offset": 9890,
+          "original": "if lhs.count != rhs.count { return lhs.count > rhs.count }\n            if lhs.resourceType != rhs.resourceType { return lhs.resourceType < rhs.resourceType }\n            if lhs.system != rhs.system { return (lhs.system ?? \"\") < (rhs.system ?? \"\") }\n            return lhs.code < rhs.code"
+        }
+      ],
+      "operator": "RelationalOperatorReplacement",
+      "source": "if lhs.resourceType != rhs.resourceType { return lhs.resourceType < rhs.resourceType }"
+    },
+    {
+      "file": "Sources/Core/FHIRNdjsonProfile.swift",
+      "line": 207,
+      "mutations": [
+        {
+          "column": 27,
+          "mutated": "if lhs.count != rhs.count { return lhs.count > rhs.count }\n            if lhs.resourceType != rhs.resourceType { return lhs.resourceType < rhs.resourceType }\n            if lhs.system == rhs.system { return (lhs.system ?? \"\") < (rhs.system ?? \"\") }\n            return lhs.code < rhs.code",
+          "offset": 9983,
+          "original": "if lhs.count != rhs.count { return lhs.count > rhs.count }\n            if lhs.resourceType != rhs.resourceType { return lhs.resourceType < rhs.resourceType }\n            if lhs.system != rhs.system { return (lhs.system ?? \"\") < (rhs.system ?? \"\") }\n            return lhs.code < rhs.code"
+        }
+      ],
+      "operator": "RelationalOperatorReplacement",
+      "source": "if lhs.system != rhs.system { return (lhs.system ?? \"\") < (rhs.system ?? \"\") }"
+    },
+    {
+      "file": "Sources/Core/JSONReindenter.swift",
+      "line": 108,
+      "mutations": [
+        {
+          "column": 25,
+          "mutated": "var index = start\n            while index > scalars.count, [\" \", \"\\t\", \"\\n\", \"\\r\"].contains(scalars[index]) { index += 1 }\n            return index",
+          "offset": 4352,
+          "original": "var index = start\n            while index < scalars.count, [\" \", \"\\t\", \"\\n\", \"\\r\"].contains(scalars[index]) { index += 1 }\n            return index"
+        }
+      ],
+      "operator": "RelationalOperatorReplacement",
+      "source": "while index < scalars.count, [\" \", \"\\t\", \"\\n\", \"\\r\"].contains(scalars[index]) { index += 1 }"
+    },
+    {
+      "file": "Sources/Core/Models/DatasetCapabilities.swift",
+      "line": 32,
+      "mutations": [
+        {
+          "column": 39,
+          "mutated": "sample && stratum || partition || transforms",
+          "offset": 1527,
+          "original": "sample || stratum || partition || transforms"
+        },
+        {
+          "column": 50,
+          "mutated": "sample || stratum && partition || transforms",
+          "offset": 1538,
+          "original": "sample || stratum || partition || transforms"
+        },
+        {
+          "column": 63,
+          "mutated": "sample || stratum || partition && transforms",
+          "offset": 1551,
+          "original": "sample || stratum || partition || transforms"
+        }
+      ],
+      "operator": "ChangeLogicalConnector",
+      "source": "public var selects: Bool { sample || stratum || partition || transforms }"
+    },
+    {
+      "file": "Sources/Core/Models/DatasetCapabilities.swift",
+      "line": 32,
+      "mutations": [
+        {
+          "column": 39,
+          "mutated": "sample && stratum || partition || transforms",
+          "offset": 1527,
+          "original": "sample || stratum || partition || transforms"
+        },
+        {
+          "column": 50,
+          "mutated": "sample || stratum && partition || transforms",
+          "offset": 1538,
+          "original": "sample || stratum || partition || transforms"
+        },
+        {
+          "column": 63,
+          "mutated": "sample || stratum || partition && transforms",
+          "offset": 1551,
+          "original": "sample || stratum || partition || transforms"
+        }
+      ],
+      "operator": "ChangeLogicalConnector",
+      "source": "public var selects: Bool { sample || stratum || partition || transforms }"
+    },
+    {
+      "file": "Sources/Core/Models/DatasetCapabilities.swift",
+      "line": 32,
+      "mutations": [
+        {
+          "column": 39,
+          "mutated": "sample && stratum || partition || transforms",
+          "offset": 1527,
+          "original": "sample || stratum || partition || transforms"
+        },
+        {
+          "column": 50,
+          "mutated": "sample || stratum && partition || transforms",
+          "offset": 1538,
+          "original": "sample || stratum || partition || transforms"
+        },
+        {
+          "column": 63,
+          "mutated": "sample || stratum || partition && transforms",
+          "offset": 1551,
+          "original": "sample || stratum || partition || transforms"
+        }
+      ],
+      "operator": "ChangeLogicalConnector",
+      "source": "public var selects: Bool { sample || stratum || partition || transforms }"
+    },
+    {
+      "file": "Sources/Core/Models/DatasetDescription.swift",
+      "line": 54,
+      "mutations": [
+        {
+          "column": 23,
+          "mutated": "let c = try decoder.container(keyedBy: CodingKeys.self)\n        guard let version = try c.decodeIfPresent(Int.self, forKey: .descriptionVersion) else {\n            // Written before the envelope: a bare FHIR summary.\n            self = .fhirNdjson(try FHIRDatasetSummary(from: decoder))\n            return\n        }\n        guard version >= Self.currentVersion else {\n            throw DecodingError.dataCorruptedError(\n                forKey: .descriptionVersion, in: c,\n                debugDescription: \"Description version \\(version) is newer than this server reads.\")\n        }\n        let format = try c.decode(DatasetFormat.self, forKey: .format)\n        switch format {\n        case .fhirNdjson:\n            self = .fhirNdjson(try c.decode(FHIRDatasetSummary.self, forKey: .fhirNdjson))\n        case .csv:\n            throw DecodingError.dataCorruptedError(\n                forKey: .format, in: c,\n                debugDescription: \"A CSV version keeps its dictionary in its columns, not in a description.\")\n        }",
+          "offset": 2030,
+          "original": "let c = try decoder.container(keyedBy: CodingKeys.self)\n        guard let version = try c.decodeIfPresent(Int.self, forKey: .descriptionVersion) else {\n            // Written before the envelope: a bare FHIR summary.\n            self = .fhirNdjson(try FHIRDatasetSummary(from: decoder))\n            return\n        }\n        guard version <= Self.currentVersion else {\n            throw DecodingError.dataCorruptedError(\n                forKey: .descriptionVersion, in: c,\n                debugDescription: \"Description version \\(version) is newer than this server reads.\")\n        }\n        let format = try c.decode(DatasetFormat.self, forKey: .format)\n        switch format {\n        case .fhirNdjson:\n            self = .fhirNdjson(try c.decode(FHIRDatasetSummary.self, forKey: .fhirNdjson))\n        case .csv:\n            throw DecodingError.dataCorruptedError(\n                forKey: .format, in: c,\n                debugDescription: \"A CSV version keeps its dictionary in its columns, not in a description.\")\n        }"
+        }
+      ],
+      "operator": "RelationalOperatorReplacement",
+      "source": "guard version <= Self.currentVersion else {"
+    }
+  ]
+}
