@@ -54,7 +54,9 @@ struct SubmissionPage: HTML {
                         .data("poll-url", value: "/submissions/\(result.submissionID)?fragment=state"),
                         .data("poll-swap", value: "region"), .data("poll-interval", value: "2000")
                     ) {
-                        SubmissionStateRegion(status: SubmissionStatus(rawValue: result.status))
+                        SubmissionStateRegion(
+                            status: SubmissionStatus(rawValue: result.status),
+                            resultsURL: "/submissions/\(result.submissionID)")
                     }
                 } else {
                     results
@@ -493,15 +495,24 @@ private struct SubmissionOutcomeRows: HTML {
 /// spinner. Rendered inline and as the `?fragment=state` poll response, so
 /// the refresh cannot drift from the page. A final state carries
 /// `data-submission-final`, which `app.js` answers by reloading the page.
+/// When the reload does not happen (JS stopped, the reload failed), the final
+/// state also carries a plain link to the results.
 struct SubmissionStateRegion: HTML {
     let status: SubmissionStatus?
+    /// The result page, for the final state's fallback link; nil omits it.
+    var resultsURL: String?
 
     var body: some HTML {
         if let status, status.awaitsResult {
             div(.class("spinner")) {}
             p { status.displayLabel }
         } else {
-            p(.data("submission-final", value: "true")) { "Loading results" }
+            p(.data("submission-final", value: "true")) {
+                "Loading results. "
+                if let resultsURL {
+                    a(.href(resultsURL)) { "View results" }
+                }
+            }
         }
     }
 }

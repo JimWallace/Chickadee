@@ -474,7 +474,10 @@ extension WebRoutes {
     /// any other request, which renders the page.
     private func submissionStateFragment(req: Request, submission: APISubmission) -> Response? {
         guard req.query[String.self, at: "fragment"] == "state" else { return nil }
-        return Response.pollFragment(html: SubmissionStateRegion(status: submission.statusValue).render(), for: req)
+        let region = SubmissionStateRegion(
+            status: submission.statusValue,
+            resultsURL: "/submissions/\(submission.id ?? "")")
+        return Response.pollFragment(html: region.render(), for: req)
     }
 
     /// What the page says about the submission itself (#3007, finding 3):

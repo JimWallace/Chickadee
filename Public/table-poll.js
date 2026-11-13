@@ -183,6 +183,13 @@
                 return true;
             }
             var html = body;
+            // A region that already shows exactly this markup is left alone.
+            // The first poll has no ETag yet, so it gets a 200 even when
+            // nothing changed. Rewriting a `role="status"` region with the
+            // same text makes a screen reader announce it again.
+            if (table.getAttribute('data-poll-swap') === 'region' && target.innerHTML === html) {
+                return false;
+            }
             // A region swap rebuilds every scroll container in it, so the
             // reader's horizontal place in a wide table (the bracket) is put
             // back by position.

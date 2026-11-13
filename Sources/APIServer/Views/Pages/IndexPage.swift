@@ -205,7 +205,7 @@ private struct IndexAssignmentRow: HTML {
                         "extended"
                     }
                 } else {
-                    span(.class(statusClass)) { row.status }
+                    span(.class(statusClass)) { AssignmentVisibility.displayLabel(forRaw: row.status) }
                 }
             }
             td(.class("item-grade col-hide-phone")) {
