@@ -9,6 +9,13 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.926] - 2026-11-13
+
+### Added
+
+- **Scheduled maintenance procedures.** `Tools/maintenance/` holds the procedures for the recurring jobs that need judgement (failed dependency updates, Swift pin bumps and mutation survivor triage), with a table of every scheduled task on the maintainer's machine and its one-line prompt.
+
+
 ## [0.5.925] - 2026-11-13
 
 ### Fixed
