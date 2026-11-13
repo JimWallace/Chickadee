@@ -9,6 +9,16 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.932] - 2026-11-13
+
+### Fixed
+
+- **The performance bench kit runs on macOS.** `Tools/perf-bench/run-load.sh`
+  read the server's CPU time from `/proc`, which macOS does not have, so the
+  weekly check stopped after the page measurements. It now falls back to `ps`
+  where `/proc` is missing.
+
+
 ## [0.5.931] - 2026-11-13
 
 ### Added
