@@ -29,6 +29,16 @@ the history lecture tells them.
 Each company carries a **generated name**, a parody of a 1990s search company,
 fixed for the whole game (D9).
 
+The professor runs companies too. Each year has a **house company**, an
+engine built the way the historical winner built it, revealed in the year's
+debrief (D10). In 1996 it is Lycrawl (LYCR), a crawler that fetches as much
+as it can and ranks by word count. In 1998 Googolplex (GOOG) arrives with
+PageRank. In 2000 GOOG survives the crash and LYCR does not. The class's
+companies are the heroes, and history sweeps in at the end of each year and
+flattens most of them, as it does in *Halt and Catch Fire*. The house engines
+give the lecture its plot: "here is what you built, here is what won, and here
+is why."
+
 Two things carry the game's history:
 
 - **The web changes between versions.** New sites appear, and some pages
@@ -319,6 +329,48 @@ Two alternatives lost:
 leaderboards, and on the class map. The name and the ticker symbol come from
 one Core function of the handle.
 
+**D10. House companies: the professor's historical engines.** Each year, the
+instructor submits one or more house engines through the year's own
+assignment, as an ordinary staff submission, so the same script grades them
+on the same web with the same budget. Nothing about grading is special.
+
+| House company | Ticker | Its engine | 1996 | 1998 | 2000 |
+|---|---|---|---|---|---|
+| Lycrawl | LYCR | breadth-first crawl to the budget, obeys `robots.txt`, ranks by word count | the winner | strong coverage, but the link farm takes its flu results | below the bar: bust |
+| Googolplex | GOOG | the 1998 crawler, PageRank, and text match with the farm penalty (the in-class activity's instructor entry) | not founded | arrives at the reveal | survives the crash and leads the Market |
+
+- **Revealed, not live.** A house company is hidden until the instructor
+  reveals it, by year, in the debrief. Then it enters the Market at its
+  valuation. For GOOG in 1998 that is a sudden entry near the top: the sweep.
+- **Not ranked on the year leaderboards.** A staff submission never takes a
+  place on a leaderboard and never earns a record (`docs/class-activities.md`,
+  "The leaderboard"). That rule stays. House companies appear only on the
+  Market, styled apart from the class: a "historical" mark beside the name,
+  and the professor's bird as CEO.
+- **The same formula as everyone.** A house company's valuation uses D8's
+  formula, so the comparison is honest. GOOG has no 1996 metric (it was not
+  founded), which caps its points at 500 of 600 and its valuation at about
+  $100 million before the crash rule. Most of the class will finish below
+  it. A student whose engine beats the 1998 state of the art finishes above
+  it, and has earned that.
+- **How the Market knows which submission is a house company.** The year's
+  `activity` block gains a `house` list: for each house company, its name, its
+  ticker, the staff submission that is its engine, and whether it is revealed.
+  The instructor sets an entry from the submission page ("Use as house
+  company") or through `set_activity`. A submission does not survive a course
+  clone, so each term submits its house engines again. They are short
+  notebooks kept in the course files, so this is one submission per company
+  per year.
+- **The engines are teaching material.** Each is a short notebook, written
+  for the debrief, that shows the historical approach and nothing more. They
+  live with the generator (`examples/miniweb/house/`) and are checked by the
+  story checks: LYCR must win 1996 among the reference companies and bust in
+  2000, and GOOG must lead the Market at the end.
+
+The debrief for each year then has the same shape: show the class's Market,
+reveal the house company, and explain what happened in that year and why the
+historical winner's approach won.
+
 ## 4. Achievements
 
 | Achievement | Earned when | Signal | State |
@@ -360,6 +412,8 @@ search engine earns full marks whether their company wins or not.
 | `series` on the activity block (D8) | **new**: one field, carried by the existing rebuild rule |
 | Company names and ticker symbols from the handle (D9) | **new**: a Core function, used by the Market and the year leaderboards |
 | Year leaderboard rows (`leaderboard_entries`), which the Market reads | exists |
+| House companies: the `house` list, the reveal, the Market's historical rows (D10) | **new** |
+| House engines (LYCR, GOOG) as notebooks, and their story checks (D10) | **new**, no Swift |
 | Event cards | exists (content items) |
 
 ## 7. Build order
@@ -382,15 +436,19 @@ search engine earns full marks whether their company wins or not.
 6. **The Market.** The `series` field, the valuation in Core (a pure function
    with tests: the weights, the crash rule, the log scale's ends), company
    names and ticker symbols, and the course page with its Present mode.
-7. **The map.** The D7 kind (or the two-assignment form), coverage counts
+7. **House companies.** The `house` list on the block, "Use as house company"
+   on the submission page, the reveal, and the Market's historical rows. The
+   LYCR and GOOG notebooks and their story checks come with slice 3.
+8. **The map.** The D7 kind (or the two-assignment form), coverage counts
    and the SVG layout.
-8. **Later:** per-page coverage items, the three new achievements in §4,
+9. **Later:** per-page coverage items, the three new achievements in §4,
    and a partition by host (§8, open question 4).
 
-Slices 1 to 4 make the game playable on the yearly leaderboards. Slice 6
-adds the Market, which is the game's real leaderboard. Slices 5 and 7 add the
-class's shared map. If time is short, build the Market before the map: it
-needs no change to coverage and no new activity kind.
+Slices 1 to 4 make the game playable on the yearly leaderboards. Slices 6
+and 7 add the Market and the house companies, which are the game's real
+leaderboard and its plot. Slices 5 and 8 add the class's shared map. If time
+is short, build the Market and the house companies before the map: they need
+no change to coverage and no new activity kind.
 
 ## 8. Decisions and open questions
 
@@ -404,6 +462,9 @@ Decided by the maintainer on 2026-11-13:
    small joke (D9).
 4. **The game's leaderboard is a course page of company valuations** (D8):
    the student's bird as CEO, fake dollars, a logarithmic scale.
+5. **Each year has a professor's house company** with the historical
+   approach, revealed in the debrief (D10): LYCR wins 1996, GOOG sweeps in
+   from 1998.
 
 Still open:
 
