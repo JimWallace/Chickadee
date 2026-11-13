@@ -4,7 +4,10 @@
   Wednesday, with the Swift minor that `Package.swift` names, and runs the
   suites that need no Postgres and no interpreter, the macOS sandbox suite
   among them. Every other workflow runs on Linux. A red run files an issue
-  labelled `scheduled-check-failed`, and the next green run closes it.
+  labelled `scheduled-check-failed`, and the next green run closes it. No
+  hosted runner has the macOS 27 SDK that the package floor needs yet, so the
+  run fails at its first step until one does, and its issue records that macOS
+  is not covered.
 - **Visual regression runs weekly on `main`.** The pull request trigger is
   path-filtered, so a change outside its paths could alter a page unseen. The
   schedule compares `main` with the baselines that `main` carries, and a red

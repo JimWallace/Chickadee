@@ -16,6 +16,17 @@ name: macOS build
 # SDK comes from the newest Xcode on the runner, because Package.swift sets
 # a macOS floor (`.macOS("27.0")`) that an older SDK cannot build.
 #
+# KNOWN RED UNTIL GITHUB SHIPS A MACOS 27 IMAGE. Measured in November 2026:
+# `macos-latest` is macOS 26 with Xcode 26.0 to 26.6, whose newest SDK is
+# macOS 26.5, and SwiftPM refuses the 27.0 deployment target ("the range of
+# supported deployment target versions is 10.13 to 26.5.x"). No `macos-27`
+# label exists yet; a job that asks for one waits in the queue. So this run
+# fails in its first minute, in "Select the newest Xcode", with that reason,
+# and its issue stays open as the record that macOS is not covered. When a
+# hosted image has the SDK, point runs-on at it (or wait for macos-latest to
+# move); nothing else here should need to change. The swiftly install of the
+# toolchain was proven on macos-latest.
+#
 # THE TESTS. `swift build` builds every product, server included. The tests
 # are the ones that need no Postgres and no grading interpreter:
 #   CoreTests, LoadTestTests  the core lane of swift-tests.yml, with RunnerCore
@@ -39,10 +50,6 @@ on:
     # and from the Tuesday mutation sweep.
     - cron: "47 4 * * 3"
   workflow_dispatch:
-  # TEMPORARY: a workflow that is not on main cannot be dispatched, so this
-  # proves the new workflow on its own branch. Removed before merge.
-  push:
-    branches: [claude/adoring-heisenberg-xlui4x-ci-gaps]
 
 concurrency:
   group: macos-build-${{ github.ref }}
@@ -91,7 +98,8 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
           echo "MACOS_FLOOR=$floor" >> "$GITHUB_ENV"
           if [ -n "$floor" ] && [ "$(printf '%s\n%s\n' "$floor" "$best_sdk" | sort -V | head -1)" != "$floor" ]; then
-            echo "::warning::EXPERIMENT The newest Xcode has the macOS $best_sdk SDK, below the macOS $floor floor in Package.swift."
+            echo "::error::The newest Xcode on this runner has the macOS $best_sdk SDK, below the macOS $floor floor in Package.swift, so nothing can build. Move runs-on to an image with a macOS $floor SDK."
+            exit 1
           fi
 
       # Pinned by version and checksum, as in runner-wasm-vendor.yml. The

@@ -12,7 +12,9 @@ keeps the short form and points here.
   Linux. The weekly `macos-build.yml` builds the package on macOS and runs
   the suites that need no Postgres and no interpreter (`CoreTests`,
   `LoadTestTests`, `SandboxIsolationTests`). It is not on the pull request
-  path, and a red run files an issue labelled `scheduled-check-failed`.
+  path, and a red run files an issue labelled `scheduled-check-failed`. It
+  stays red until a GitHub-hosted image has the macOS 27 SDK that the
+  `Package.swift` floor needs; the workflow header has the measurement.
 - **Approved Swift Testing vocabulary.** `@Suite`, `@Test`, `#expect`,
   `#require`, `.serialized`, `.tags(...)`, `.enabled(if:)` / `.enabled { }` /
   `.disabled(if:)`, `@Test(arguments:)`, `#expect(processExitsWith:)` (an exit
