@@ -13,7 +13,7 @@ on Mondays at 07:15 UTC. Follow the rules in `Tools/maintenance/README.md`.
    (`.github/dependabot.yml`).
 3. `swift build`, then `swift test`. Fix the fallout: warnings are errors,
    and strict concurrency and strict memory safety are on.
-4. Branch `claude/swift-pins-<date>` from `origin/main`. Add a changelog
+4. Branch `steward/swift-pins-<date>` from `origin/main`. Add a changelog
    fragment, run `scripts/format-lint.sh`, and open a pull request that
    lists each pin, old and new, with a link to each release's notes. Enable
    auto-merge.
