@@ -84,6 +84,16 @@ the root README).
 `SMOKE_BROWSER`) are read by `editor-check.mjs`. The editor is cross-origin
 isolated unconditionally, so there is no server-side isolation flag.
 
+`SMOKE_SCREENSHOT_DIR` collects failure diagnostics. `run-smoke.sh` gives each
+check and engine its own subdirectory (`<check>-<engine>/`), and copies the
+whole server log there when the check fails. The workbench, toolbar, guide and
+graded checks save a screenshot after each step and one on a failure. The
+workbench shell check also saves, on a failure, a full-page screenshot, a
+screenshot of `#jl-frame`, the browser console and a Playwright trace
+(`trace.zip`, opened with `npx playwright show-trace`). The CI `smoke` job sets
+the variable and uploads the directory as the `smoke-diagnostics-<engine>`
+artifact when a step fails.
+
 `SMOKE_BROWSER` selects the engine: `chromium` (default), `webkit` (the Safari
 engine — install with `npx playwright install webkit`), or `firefox`. CI runs the
 selftest under **both Chromium and WebKit**; run WebKit locally before shipping
