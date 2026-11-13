@@ -126,8 +126,8 @@ extension PublishedAssignmentRoutes {
 
     // MARK: - Promote
 
-    /// Moves a CSV support file into the course library, named after the
-    /// file. The instructor renames it on the Datasets tab. The new dataset
+    /// Moves a CSV or FHIR NDJSON support file into the course library, in
+    /// the format of its extension, named after the file. The instructor renames it on the Datasets tab. The new dataset
     /// starts unpublished (decision 3).
     @Sendable
     func promoteSupportFileToLibrary(req: Request) async throws -> DatasetsResponse {

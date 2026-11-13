@@ -32,7 +32,12 @@ struct InstructorDatasetPage: HTML {
                 p(.class("section-note")) { "Publishing needs a provenance and a licence." }
             }
             DatasetFacts(page: page, dataset: dataset)
-            DatasetDictionarySection(page: page, dataset: dataset)
+            if let summary = dataset.fhir {
+                FHIRDictionarySection(
+                    page: page, slug: dataset.slug, version: dataset.currentVersion, summary: summary)
+            } else {
+                DatasetDictionarySection(page: page, dataset: dataset)
+            }
             DatasetVersionsSection(page: page, dataset: dataset, maxUploadText: maxUploadText)
             DatasetUsageSection(dataset: dataset)
         }
@@ -244,7 +249,8 @@ private struct DatasetVersionsSection: HTML {
             }
             DatasetUploadPanel(
                 page: page, panelID: "dataset-version-panel", action: "/instructor/datasets/versions",
-                slug: dataset.slug, submitLabel: "Upload version", maxUploadText: maxUploadText)
+                slug: dataset.slug, submitLabel: "Upload version", maxUploadText: maxUploadText,
+                format: dataset.format)
             table(.class("results-table section-items")) {
                 colgroup {
                     col()

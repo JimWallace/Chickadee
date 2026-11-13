@@ -115,13 +115,12 @@ enum EditorSamples {
             sections: draft
                 ? [
                     CourseSectionRow(
-                        sectionID: "c1", name: "Labs", defaultAssignmentType: .lab, sortOrder: 0, items: [])
+                        sectionID: "c1", name: "Labs", sortOrder: 0, items: [])
                 ]
                 : [],
             preselectedSectionID: draft ? "c1" : "", draftID: draft ? "draft1" : nil,
             draftIDJSON: draft ? "\"draft1\"" : "null", assignmentLanguageOptions: languageOptions,
             assignmentTypeOptions: AssignmentTypeRules.options(selected: draft ? .lab : .assignment),
-            assignmentTypeChosen: draft,
             assignmentNotebook: draft ? NewAssignmentNotebookContext(name: "a.ipynb", editURL: "/e/a") : nil,
             solutionNotebook: nil, supportFileRows: draft ? [supportFile(dataset: true, editable: true)] : [],
             detectedLanguages: draft ? ["python"] : [], detectedCapabilities: draft ? ["numpy"] : [],

@@ -72,11 +72,40 @@ public struct DatasetSpec: Codable, Equatable, Sendable {
     /// How many parts a `.partition` spec splits the file into. Nil for the
     /// other kinds, which authoring refuses to store with one.
     public let partCount: Int?
+    /// The file's format. `.csv` is the decoded default, so every spec written
+    /// before FHIR support keeps its bytes (docs/fhir-datasets-plan.md §6).
+    /// Only the library attach path writes another value; every other door
+    /// carries the stored value through unchanged, as for `source`.
+    public let format: DatasetFormat
+    /// A stored format value this server does not know, kept as written, or
+    /// nil. A newer server wrote it (docs/dataset-kinds-plan.md §5). The spec
+    /// still decodes, delivers the file whole and re-encodes the same value,
+    /// so a blue-green overlap or a rollback never fails a manifest; the
+    /// save-time checks refuse to store a new edit of it. `format` reads
+    /// `.csv` for such a spec, and no reader may select by it: they read
+    /// `capabilities`.
+    public let unknownFormat: String?
+
+    /// The stored format value, as written: an unknown one too. What a tool
+    /// or a page reports, so a format this server does not know is not shown
+    /// as CSV.
+    public var formatName: String { unknownFormat ?? format.rawValue }
+
+    /// The media type of the delivered file. A format this server does not
+    /// know is sent as bytes.
+    public var mediaType: String { unknownFormat == nil ? format.mediaType : "application/octet-stream" }
+
+    /// What this spec's format lets it do. A spec of an unknown format
+    /// selects nothing.
+    public var capabilities: DatasetCapabilities {
+        unknownFormat == nil ? format.capabilities : .whole(unitName: "record")
+    }
 
     public init(
         file: String, kind: DatasetKind = .rowSample, sampleSize: Int? = nil,
         stratumColumn: String? = nil, transforms: [DatasetTransform] = [],
-        source: DatasetSource? = nil, scope: DatasetSliceScope = .assignment, partCount: Int? = nil
+        source: DatasetSource? = nil, scope: DatasetSliceScope = .assignment, partCount: Int? = nil,
+        format: DatasetFormat = .csv, unknownFormat: String? = nil
     ) {
         self.file = file
         self.kind = kind
@@ -86,6 +115,22 @@ public struct DatasetSpec: Codable, Equatable, Sendable {
         self.source = source
         self.scope = scope
         self.partCount = partCount
+        self.format = format
+        self.unknownFormat = unknownFormat
+    }
+
+    /// A rebuild that carries `unknownFormat`, for the rebuilds in this file.
+    private init(rebuilding spec: DatasetSpec, source: DatasetSource?, scope: DatasetSliceScope) {
+        self.file = spec.file
+        self.kind = spec.kind
+        self.sampleSize = spec.sampleSize
+        self.stratumColumn = spec.stratumColumn
+        self.transforms = spec.transforms
+        self.source = source
+        self.scope = scope
+        self.partCount = spec.partCount
+        self.format = spec.format
+        self.unknownFormat = spec.unknownFormat
     }
 
     /// The part of the file that `dealNumber` receives, or nil when the spec
@@ -94,7 +139,9 @@ public struct DatasetSpec: Codable, Equatable, Sendable {
     /// count, so a later change of the count still gives each part to the
     /// same share of the class.
     public func part(forDeal dealNumber: Int?) -> Int? {
-        guard kind == .partition, let partCount, partCount > 0, let dealNumber, dealNumber >= 0 else {
+        guard kind == .partition, capabilities.partition, let partCount, partCount > 0, let dealNumber,
+            dealNumber >= 0
+        else {
             return nil
         }
         return dealNumber % partCount
@@ -110,17 +157,13 @@ public struct DatasetSpec: Codable, Equatable, Sendable {
     /// instead would hand every student the whole pool.
     public func withoutLibraryFields() -> DatasetSpec? {
         if isShared { return nil }
-        return DatasetSpec(
-            file: file, kind: kind, sampleSize: sampleSize, stratumColumn: stratumColumn,
-            transforms: transforms, partCount: partCount)
+        return DatasetSpec(rebuilding: self, source: nil, scope: .assignment)
     }
 
     /// The same spec with another scope. The library attach path is the only
     /// caller that changes a scope.
     public func withScope(_ scope: DatasetSliceScope) -> DatasetSpec {
-        DatasetSpec(
-            file: file, kind: kind, sampleSize: sampleSize, stratumColumn: stratumColumn, transforms: transforms,
-            source: source, scope: scope, partCount: partCount)
+        DatasetSpec(rebuilding: self, source: source, scope: scope)
     }
 
     /// True when every student receives the same bytes: no sample, no
@@ -132,7 +175,7 @@ public struct DatasetSpec: Codable, Equatable, Sendable {
     public var isShared: Bool { deliveryMode == .shared }
 
     private enum CodingKeys: String, CodingKey {
-        case file, kind, sampleSize, stratumColumn, transforms, source, scope, partCount
+        case file, kind, sampleSize, stratumColumn, transforms, source, scope, partCount, format
     }
 
     public init(from decoder: any Decoder) throws {
@@ -145,6 +188,12 @@ public struct DatasetSpec: Codable, Equatable, Sendable {
         source = try c.decodeIfPresent(DatasetSource.self, forKey: .source)
         scope = try c.decodeIfPresent(DatasetSliceScope.self, forKey: .scope) ?? .assignment
         partCount = try c.decodeIfPresent(Int.self, forKey: .partCount)
+        // A value this server does not know is kept, not refused: the spec
+        // must still decode on an older server (docs/dataset-kinds-plan.md §5).
+        let rawFormat = try c.decodeIfPresent(String.self, forKey: .format)
+        let known = rawFormat.flatMap(DatasetFormat.init(rawValue:))
+        format = known ?? .csv
+        unknownFormat = known == nil ? rawFormat : nil
     }
 
     /// Writes the same keys, in the same form, as the synthesized encoder did
@@ -164,5 +213,10 @@ public struct DatasetSpec: Codable, Equatable, Sendable {
             try c.encode(scope, forKey: .scope)
         }
         try c.encodeIfPresent(partCount, forKey: .partCount)
+        if let unknownFormat {
+            try c.encode(unknownFormat, forKey: .format)
+        } else if format != .csv {
+            try c.encode(format, forKey: .format)
+        }
     }
 }

@@ -1,6 +1,6 @@
 // Core/CourseBundleManifest.swift
 //
-// Codable types for the Chickadee course bundle format (schemaVersion 1 and 2).
+// Codable types for the Chickadee course bundle format (schemaVersion 1 to 3).
 //
 // Bundle ZIP layout:
 //   bundle.json                        — this manifest (JSON, iso8601 dates)
@@ -11,7 +11,10 @@
 //
 // Version 2 adds the course dataset library (`datasets`). An export writes 2
 // only when the course has a dataset, so a bundle without one stays readable
-// by a server that knows only version 1.
+// by a server that knows only version 1. Version 3 adds a dataset's `format`
+// (docs/fhir-datasets-plan.md §6). An export writes 3 only when a dataset is
+// not a CSV: a version 2 server would profile an NDJSON file as a CSV, and a
+// JSON line can pass as a one-column header, so it must refuse the bundle.
 //
 // bundleID values are stable cross-references within a single bundle.
 // They are NEVER reused as DB primary keys on the target instance;
@@ -26,11 +29,36 @@ public import Foundation
 
 public struct CourseBundleManifest: Codable, Sendable {
     /// The format versions an import accepts.
-    public static let supportedSchemaVersions = 1...2
-    /// The version a bundle that carries datasets is written as.
+    public static let supportedSchemaVersions = 1...3
+    /// The version a bundle that carries only CSV datasets is written as.
     public static let datasetsSchemaVersion = 2
+    /// The version a bundle that carries a dataset of another format is
+    /// written as.
+    public static let datasetFormatsSchemaVersion = 3
 
-    /// 1, or 2 for a bundle that carries the dataset library.
+    /// The version an export of `datasets` is written as: 1 with none, 2
+    /// when every one is a CSV, 3 otherwise.
+    public static func schemaVersion(carrying datasets: [BundledDataset]) -> Int {
+        if datasets.isEmpty { return 1 }
+        return datasets.allSatisfy { $0.format == .csv } ? datasetsSchemaVersion : datasetFormatsSchemaVersion
+    }
+
+    /// Why a bundle of `schemaVersion` cannot carry `datasets`, or nil: a
+    /// dataset that is not a CSV needs version 3. A server that knows only
+    /// version 2 refuses version 3 by its number, so a bundle that claims an
+    /// older number with a newer format is refused here, and the number stays
+    /// a promise an older server can rely on.
+    public static func datasetFormatIssue(schemaVersion: Int, datasets: [BundledDataset]) -> String? {
+        guard schemaVersion < datasetFormatsSchemaVersion,
+            let dataset = datasets.first(where: { $0.format != .csv })
+        else { return nil }
+        return "The bundle is schemaVersion \(schemaVersion), but its dataset '\(dataset.slug)' is "
+            + "\(dataset.format.displayName). A bundle that carries a dataset other than CSV is schemaVersion "
+            + "\(datasetFormatsSchemaVersion)."
+    }
+
+    /// 1; 2 for a bundle that carries the dataset library; 3 when a dataset
+    /// in it is not a CSV.
     public let schemaVersion: Int
     public let exportedAt: Date
     /// Username of the admin who performed the export.
@@ -216,23 +244,17 @@ public struct BundledSection: Codable, Sendable {
     /// Stable cross-reference within this bundle (e.g. "section_1").
     public let bundleID: String
     public let name: String
-    /// The section's default `AssignmentType` raw value; nil = no default, or
-    /// a bundle written before sections carried a type.
-    public let defaultAssignmentType: String?
     /// "browser" | "worker": the grading-mode default sections carried before
-    /// the type replaced it (docs/assignment-types.md, phase 3). Still
-    /// written, derived from the type, so an older Chickadee can import a
-    /// newer bundle, and read only when `defaultAssignmentType` is absent.
+    /// grading followed each assignment's type (docs/assignment-types.md).
+    /// A section names no type or mode now; the export still writes "worker"
+    /// because an older Chickadee requires the field, and the import ignores
+    /// it, as it ignores the `defaultAssignmentType` an older bundle carries.
     public let defaultGradingMode: String?
     public let sortOrder: Int
 
-    public init(
-        bundleID: String, name: String, defaultAssignmentType: String?, defaultGradingMode: String?,
-        sortOrder: Int
-    ) {
+    public init(bundleID: String, name: String, defaultGradingMode: String?, sortOrder: Int) {
         self.bundleID = bundleID
         self.name = name
-        self.defaultAssignmentType = defaultAssignmentType
         self.defaultGradingMode = defaultGradingMode
         self.sortOrder = sortOrder
     }

@@ -68,7 +68,7 @@ import Vapor
     }
 
     /// A course, an Assignment-typed assignment on `manifest`, and a section
-    /// whose default type is Lab.
+    /// named "Labs".
     private func assignmentAndLabSection(
         manifest: String
     ) async throws -> (APIAssignment, APICourseSection) {
@@ -82,15 +82,15 @@ import Vapor
         assignment.assignmentType = .assignment
         try await assignment.save(on: app.db)
         let section = APICourseSection(
-            name: "Labs", defaultAssignmentType: .lab, sortOrder: 1, courseID: courseID)
+            name: "Labs", sortOrder: 1, courseID: courseID)
         try await section.save(on: app.db)
         return (assignment, section)
     }
 
-    /// A move into a Lab-default section changes neither the type nor the
-    /// grading mode (docs/assignment-types.md, phase 3). Before, it adopted the
-    /// section's browser default and shipped an Assignment's secret tests to
-    /// every student. The move reports the difference instead.
+    /// A move into a section changes neither the type nor the grading mode
+    /// (docs/assignment-types.md, phase 3). Before, it adopted the section's
+    /// browser default and shipped an Assignment's secret tests to every
+    /// student.
     @Test func aMoveChangesNeitherTheTypeNorTheGrading() async throws {
         try await withApp(app) { app in
             let (assignment, section) = try await assignmentAndLabSection(manifest: TestManifests.workerEmpty)
@@ -98,34 +98,11 @@ import Vapor
                 assignment, toSection: try section.requireID(), on: app.db)
 
             #expect(moved.gradingMode == "worker")
-            let note = try #require(moved.typeNote)
-            #expect(note.contains("an Assignment"))
-            #expect(note.contains("a Lab"))
             let stored = try #require(try await APIAssignment.find(assignment.id, on: app.db))
             #expect(stored.assignmentType == .assignment)
             #expect(stored.sectionID == section.id)
             let setup = try #require(try await APITestSetup.find(assignment.testSetupID, on: app.db))
             #expect(setup.decodedManifest()?.gradingMode == .worker)
-        }
-    }
-
-    /// No note when the types agree, or when the section names no default.
-    @Test func aMoveReportsNothingWhenTheTypesAgree() async throws {
-        try await withApp(app) { app in
-            let (assignment, section) = try await assignmentAndLabSection(manifest: TestManifests.workerEmpty)
-            assignment.assignmentType = .lab
-            try await assignment.save(on: app.db)
-            let moved = try await CourseSectionService.moveAssignment(
-                assignment, toSection: try section.requireID(), on: app.db)
-            #expect(moved.typeNote == nil)
-
-            section.defaultAssignmentType = nil
-            try await section.save(on: app.db)
-            assignment.assignmentType = .assignment
-            try await assignment.save(on: app.db)
-            let again = try await CourseSectionService.moveAssignment(
-                assignment, toSection: try section.requireID(), on: app.db)
-            #expect(again.typeNote == nil)
         }
     }
 }

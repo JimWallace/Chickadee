@@ -97,7 +97,8 @@ extension DraftAssignmentRoutes {
                     datasetSampleSize: row.datasetSampleSize,
                     datasetStratumColumn: row.datasetStratumColumn,
                     datasetTransforms: row.datasetTransforms,
-                    datasetPartCount: row.datasetPartCount
+                    datasetPartCount: row.datasetPartCount,
+                    datasetCapabilities: row.datasetCapabilities
                 )
             }
     }
@@ -210,7 +211,6 @@ extension DraftAssignmentRoutes {
                 CourseSectionRow(
                     sectionID: s.id?.uuidString ?? "",
                     name: s.name,
-                    defaultAssignmentType: s.defaultAssignmentType,
                     sortOrder: s.sortOrder,
                     items: []
                 )

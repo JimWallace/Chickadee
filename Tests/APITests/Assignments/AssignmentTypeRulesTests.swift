@@ -236,7 +236,7 @@ import Vapor
     @Test func aNewSectionGetsTheOldColumnsDefault() async throws {
         try await withTestApp { app in
             let courseID = try await makeTestCourse(on: app, code: "MIG_SECT").requireID()
-            let section = APICourseSection(name: "Labs", defaultAssignmentType: .lab, sortOrder: 1, courseID: courseID)
+            let section = APICourseSection(name: "Labs", sortOrder: 1, courseID: courseID)
             try await section.save(on: app.db)
             let sql = try #require(app.db as? any SQLDatabase)
             struct Row: Decodable {

@@ -164,7 +164,7 @@ enum MCPServerInstructions {
         - Course section — a named group of assignments within a course (e.g. "Labs", "Exams"); an \
         assignment belongs to at most one. Distinct from a test-suite section (which groups tests \
         inside one assignment). List with list_course_sections, create with create_course_section, \
-        rename or change its optional default assignment type with rename_course_section, reorder \
+        rename it with rename_course_section (a section names no type), reorder \
         with reorder_course_sections, delete with delete_course_section (assignments in it are \
         ungrouped, not deleted), and assign an assignment with set_assignment_course_section (which \
         changes neither its type nor its grading mode). get_assignment reports an assignment's current \
@@ -204,26 +204,38 @@ enum MCPServerInstructions {
         files only — a graded row belongs to delete_suite_item or its family/check, and the reserved \
         setup members are refused; any graderOnly / dataset mark naming the file is cleared with it); \
         write one with author_script(tier:"support") — \
-        passing the body inline as content, or, for a data file too large to inline faithfully (e.g. a \
-        big CSV), passing sourceUrl (an https URL the server fetches under an SSRF guard: https only, \
+        passing the body inline as content; or, for a file on your machine too large to inline faithfully \
+        (e.g. a big CSV or a helper module), staging it with begin_upload(courseCode) and passing the \
+        returned uploadID; or passing sourceUrl (an https URL the server fetches under an SSRF guard: https only, \
         no private/loopback/metadata hosts, no redirects, \(SupportFileURLFetcher.maxBytesText) cap, UTF-8 body). \
         Confirm a data file is bundled before authoring checks that load it. A support data file can \
         also be marked as a per-student DATASET with set_dataset: each student then receives a \
         deterministic per-seed sample of its rows under the same filename (the uploaded file becomes \
         the hidden server-side pool), so every student explores their own data; get_support_files \
         reports the mark (isDataset / datasetSampleSize) and remove:true clears it.
-        - Course dataset library — CSV datasets kept once per course, each with versions, a provenance, \
+        - Staged uploads — begin_upload(courseCode) returns an uploadID, an uploadURL on this server and a \
+        secret, single-use uploadToken. PUT the file's raw bytes there from a shell, with the token as a \
+        bearer header (curl -sS -T FILE -H "Authorization: Bearer <uploadToken>" "<uploadURL>"; the \
+        result's curlExample has both filled in); the response reports sizeBytes and sha256 so you can confirm the \
+        bytes arrived exactly. Then pass uploadID, in place of content or sourceUrl, to author_script, \
+        create_dataset or add_dataset_version in that course. The file must be UTF-8 text of at most \
+        \(MCPUploadService.maxBytesText); the upload belongs to your grant and that course only, is used up \
+        by the write that succeeds, and expires \(Int(MCPUploadService.lifetime / 60)) minutes after begin_upload.
+        - Course dataset library — datasets kept once per course, each with versions, a provenance, \
         a licence and a data dictionary, and copied into each assignment that attaches one. List with \
         list_datasets; read one, with the first rows of a version, with get_dataset. create_dataset \
-        makes one from a sourceUrl or from an assignment's support file; update_dataset edits its \
+        makes one from an uploadID (begin_upload), a sourceUrl or an assignment's support file; update_dataset edits its \
         metadata and column prose and publishes it to the course Data page students read (a provenance \
-        and a licence are required); add_dataset_version stores a new version. attach_dataset copies a \
+        and a licence are required); add_dataset_version stores a new version (from an uploadID or a sourceUrl). attach_dataset copies a \
         version into an assignment and pins it (scope "course" gives a student the same rows in every \
         assignment that attaches the dataset), and moves an attached file to another version; \
         detach_dataset ends an attachment. An attach, a version move, a scope change and a detach \
         re-grade and re-validate but never close the assignment; the library tools change no grade. \
         get_support_files reports each attached file's datasetSource and datasetScope, and \
-        get_assignment lists the attached datasets.
+        get_assignment lists the attached datasets. A dataset is CSV or FHIR NDJSON (create_dataset's \
+        format, fixed for every version): a FHIR dataset holds FHIR R4 resources one per line, is \
+        summarized by patients, resource types and codes, is described with update_dataset's entries, \
+        and is delivered whole to every student, so it takes no sample.
         - Global inputs (personalization) — assignment-scoped names that vary the assignment per \
         student: literal `variables` (a name + JSON value) and `expressions` (a name + source in the \
         ASSIGNMENT'S OWN LANGUAGE, evaluated server-side against the student's `seed`). An expression \
@@ -251,7 +263,8 @@ enum MCPServerInstructions {
         scope (an `individual` per-student badge, a `classWide` collaborative goal, or a single-holder \
         competitive `record`), a list of conditions over the graded signals \
         (\(MCPAchievementSignalProse.commaList)) combined with `match` (all/any), and the scope's \
-        reward (classPercent + points for a goal, recordDimension for a record). Read them with \
+        reward (classPercent + points for a goal, recordDimension for a record). \
+        \(MCPWardrobeItemProse.rewardClause). Read them with \
         get_achievements, replace the whole list with update_achievements. They are server-evaluated \
         and DISPLAY-ONLY — they never change what the suite grades, so editing them does not re-validate, \
         re-grade, or close the assignment (unlike every other content edit).

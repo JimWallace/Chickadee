@@ -46,7 +46,7 @@ private struct CourseDataSection: HTML {
             if let description = dataset.description {
                 p { description }
             }
-            dl(.class("detail-grid")) {
+            dl(.class("detail-grid section-gap")) {
                 if let provenance = dataset.provenance {
                     dt { "Provenance" }
                     dd { provenance }
@@ -55,13 +55,15 @@ private struct CourseDataSection: HTML {
                     dt { "Licence" }
                     dd { licence }
                 }
-                dt { "Rows" }
+                dt { dataset.fhir == nil ? "Rows" : "Patients" }
                 dd { dataset.rowsText }
             }
-            if !dataset.columns.isEmpty {
+            if let summary = dataset.fhir {
+                CourseFHIRSummary(summary: summary)
+            } else if !dataset.columns.isEmpty {
                 CourseDataDictionary(columns: dataset.columns)
             }
-            h3 { "Your rows" }
+            h3 { dataset.fhir == nil ? "Your rows" : "Your file" }
             if dataset.downloads.isEmpty {
                 p(.class("empty")) { "No assignment you can open uses this dataset yet." }
             } else {
@@ -102,6 +104,81 @@ private struct CourseDataDownloads: HTML {
                                     "Download"
                                 }
                             }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// A FHIR dataset's dictionary (docs/fhir-datasets-plan.md §5): its resource
+/// types, its codes grouped by system, and the example resource.
+private struct CourseFHIRSummary: HTML {
+    let summary: FHIRDatasetSummary
+
+    var body: some HTML {
+        h3 { "Resources" }
+        div(.class("table-scroll")) {
+            table(.class("results-table")) {
+                thead {
+                    tr {
+                        th { "Type" }
+                        th { "Count" }
+                        th { "Description" }
+                    }
+                }
+                tbody {
+                    for type in summary.resourceTypes {
+                        tr {
+                            td { code { type.resourceType } }
+                            td { String(type.count) }
+                            td { type.description ?? "" }
+                        }
+                    }
+                }
+            }
+        }
+        for group in summary.codeGroups {
+            h3 { "Codes: \(group.name)" }
+            CourseFHIRCodeTable(codes: group.codes)
+        }
+        if summary.omittedCodeCount > 0 {
+            p(.class("section-note")) { "\(summary.omittedCodeCount) more codes are not listed." }
+        }
+        if let text = summary.exampleText {
+            h3 { "Example resource" }
+            pre(.class("test-output-pre")) { text }
+        }
+    }
+}
+
+/// The codes of one system as a read-only table.
+private struct CourseFHIRCodeTable: HTML {
+    let codes: [FHIRDatasetSummary.CodeUse]
+
+    var body: some HTML {
+        div(.class("table-scroll")) {
+            table(.class("results-table")) {
+                thead {
+                    tr {
+                        th { "Code" }
+                        th { "Display" }
+                        th { "Resource" }
+                        th { "Unit" }
+                        th { "Count" }
+                        th { "Description" }
+                    }
+                }
+                tbody {
+                    for entry in codes {
+                        tr {
+                            td(.class("nowrap")) { code { entry.code } }
+                            td { entry.display ?? "" }
+                            td { entry.resourceType }
+                            td { entry.units.joined(separator: ", ") }
+                            td { String(entry.count) }
+                            td { entry.description ?? "" }
                         }
                     }
                 }

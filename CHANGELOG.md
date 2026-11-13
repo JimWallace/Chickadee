@@ -9,6 +9,179 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.924] - 2026-11-12
+
+### Added
+
+- **An assignment achievement can grant a wardrobe ring (#2619).** An individual achievement may now reward a ring for the student's bird instead of a badge: choose Reward → Wardrobe item in the assignment's Achievements editor, or set `rewardType` and `rewardItem` through `update_achievements`. The achievement stays hidden until a student earns it; the result page grants the ring once and names the achievement, and the account page says how it was earned. Items are account-wide, and a record, a class goal or a course achievement cannot grant one (docs/achievement-rewards.md, S2).
+- **The Cross-fade ring.** A new grantable ring in eight steps from blue to red, the Cross-fade pattern of the class activity "The Class Paints a Picture". Spectrum is grantable too.
+
+
+## [0.5.923] - 2026-11-12
+
+### Changed
+
+- **Dataset formats state what they allow.** Each dataset format now lists
+  the settings a spec of it accepts: a sample, a stratum, a partition and
+  transforms. The materializer, the save-time checks, the Files panel and its
+  script read that list instead of asking whether a file is a CSV. A spec with
+  a format this server does not know still loads, keeps its value and delivers
+  the file whole, and an edit of it is refused. A course bundle that carries
+  such a format is refused by name. This lets a later format ship without
+  breaking a blue-green switchover or a rollback
+  (docs/dataset-kinds-plan.md).
+- **The MCP dataset result reports a FHIR summary as `summary`.** It was
+  `fhir`. The value is a description that names its own format:
+  `{descriptionVersion, format, fhirNdjson}`. A later format adds its own key
+  inside it.
+
+
+## [0.5.922] - 2026-11-12
+
+### Added
+
+- **A FHIR feed and helper for HLTH 230.** `docs/examples/fhir/` holds four
+  files:
+  - a generator for a simulated emergency department feed, 300 patients as
+    FHIR R4 NDJSON, which writes the same bytes from the same seed;
+  - `chickadee_fhir.py`, a support-file helper with FHIR-style search, paging
+    and a simulated clock, which works offline when graded;
+  - the helper's checks;
+  - a proposed Assignment 3 question, a screen for the SIRS vital-sign
+    criteria, with its reference solution.
+
+
+## [0.5.921] - 2026-11-12
+
+### Fixed
+
+- **A whole-file library dataset sample is delivered as one shared copy.** A sample size at or above the file's data-row count gave every student the whole file, but as a private copy each. Saving a library attachment (the Files panel, MCP `set_dataset`, `attach_dataset`) now stores such a sample as no sample, and the Files panel says so in the row's status. MCP `set_dataset` takes `wholeFile: true` to give the whole file without a detach; `set_dataset` and `attach_dataset` report `datasetDelivery`, notes and warnings; and `check_assignment` warns about a whole-file sample that is still stored (`datasets.wholeFilePerStudent`), including one on a file not attached from the library, which is left as it is so an upload-only submit page keeps its download.
+
+
+## [0.5.920] - 2026-11-12
+
+### Added
+
+- **A dataset format, and FHIR NDJSON in Core.** A dataset spec now records its
+  format, CSV or FHIR NDJSON. A stored manifest keeps its bytes, because the
+  format is written only when it is not CSV. A FHIR NDJSON file is delivered
+  whole and byte for byte to every student. Saving a FHIR spec refuses a
+  sample, a partition, a stratum and transforms, and checks that each line is
+  a JSON object with a resource type and an id. Core also summarizes a FHIR
+  file (resource counts and the codes in use) and pretty-prints one resource
+  without reordering it. Nothing can attach a FHIR dataset yet; the course
+  library gains the format next (docs/fhir-datasets-plan.md).
+
+### Added
+
+- **The course dataset library records a format.** A library dataset is now
+  CSV or FHIR NDJSON, set when it is created and kept for every version. A FHIR
+  version is checked as FHIR at upload and stores a summary: its patient count,
+  its resource types and the codes in use. Attaching a FHIR dataset delivers
+  the whole file and refuses a sample. Moving a `.ndjson` support file into
+  the library makes a FHIR dataset. A course clone and a course bundle carry
+  the format; a bundle with a FHIR dataset is version 3, which an older server
+  refuses. The staff download names a FHIR version `.ndjson`. The pages and
+  the MCP tools offer the choice in a later release
+  (docs/fhir-datasets-plan.md).
+
+### Added
+
+- **The MCP dataset tools handle FHIR NDJSON.** `create_dataset` takes a
+  `format` of `csv` or `fhirNdjson`. It refuses a filename of the other format
+  with a message that names `format`. `list_datasets` reports each dataset's
+  format. `get_dataset` also reports a FHIR dataset's summary: patients,
+  resource types, codes in use, descriptions and the example resource. For a FHIR dataset,
+  `get_dataset` shows the first resource lines. `update_dataset` describes a
+  FHIR dataset by `entries`, which are resource types and codes, and by
+  `example`. `attach_dataset`, `get_assignment` and `get_support_files` report
+  the attached file's format. The `initialize` instructions describe FHIR
+  datasets (docs/fhir-datasets-plan.md §7).
+
+### Added
+
+- **The dataset pages handle FHIR NDJSON.** The Datasets tab's upload form asks
+  for the format. A FHIR dataset's page lists its resource types and codes, each
+  with a description field. It also shows the example resource that the Data
+  page displays, and the instructor can pick a different one. The student Data
+  page shows the patient count, the resource types and the codes grouped by
+  system (LOINC, SNOMED CT, ICD-10), with the example pretty-printed. The
+  student's copy downloads as `mine.ndjson`. In the assignment editor's Files
+  panel, a FHIR dataset has no sample fields, and a `.ndjson` support file can
+  be moved into the course library (docs/fhir-datasets-plan.md).
+
+
+## [0.5.919] - 2026-11-12
+
+### Changed
+
+- **Weekly Swift dependency update.** jwt-kit 5.8.0 to 5.9.0. fluent-postgres-driver 2.14.0 to 2.14.1. swift-collections 1.7.5 to 1.7.6.
+
+
+## [0.5.918] - 2026-11-12
+
+### Security
+
+- **fast-uri 3.1.9.** The lock file of the JupyterLite extension now pins fast-uri 3.1.9. This fixes an improper path equivalence in relative reference normalization.
+
+
+## [0.5.917] - 2026-11-11
+
+### Changed
+
+- **The staff-draft browser probe runs as a course instructor who is not an admin.** `authoring-draft-check.mjs` signed in as the first account, which is always an admin, so CI never met the `users` listing that the server drive refused to other staff and that left the Safari kernel at "starting". A throwaway admin now creates the course and adds a second, non-admin account as its instructor, and the probe fails unless the editor's kernel reaches idle within `SMOKE_KERNEL_MS`. Its saves press Ctrl+S or Cmd+S by platform, so the probe also passes on a Mac.
+
+
+## [0.5.916] - 2026-11-11
+
+### Fixed
+
+- **"Create Blank" works again on the new-assignment page.** The multipart form interceptor resent each submit with `new FormData(form)`, which leaves out the submit button, so the hidden draft-action buttons' `draftAction` never reached the server. "Create Blank", "Create from Assignment" and "Clear" saved the draft and did nothing else. The interceptor now sends the submitter's name and value, as a native submit does.
+
+
+## [0.5.915] - 2026-11-11
+
+### Fixed
+
+- **The authoring editor's kernel boots again in Safari for course staff who are not admins.** On the server drive the kernel's file system reads the `users` folder on its way to a staff draft, and the server refused that listing to everyone but admins. Safari's file transport never answered the kernel after the refusal, so the kernel stayed in "starting" until the stall notice. Non-admin staff now read `users` as a student does: one child, their own folder.
+- **An editor error that is not an `Error` object is reported by its fields.** The kernel diagnostics recorded such a rejection as "[object Object]"; they now record its type and a few fields, with the user's folder id removed.
+
+
+## [0.5.914] - 2026-11-11
+
+### Added
+
+- **MCP `begin_upload`: deliver a large local file byte for byte.** An agent calls `begin_upload` for a course, PUTs the file to the returned URL with `curl -T` and the single-use upload token as a bearer header, and passes the `uploadID` to `author_script`, `create_dataset` or `add_dataset_version` in place of `content` or `sourceUrl`. The upload belongs to the grant and course that began it, takes UTF-8 text up to the 8 MB `sourceUrl` cap, is used up by the write that succeeds, and expires after 30 minutes. See `docs/mcp-file-uploads.md`.
+
+
+## [0.5.913] - 2026-11-11
+
+### Changed
+
+- **The "+ Add" menu chooses a new item's type; sections no longer have a default type.** Each section's "+ Add" menu on the instructor Overview lists Assignment, Lab and Class activity beside the material types, and opens the create page with that type selected. Sections no longer show a "new items" type or offer a default-type select, the create page no longer follows a section, and moving an assignment no longer reports a type mismatch. MCP `create_course_section`, `rename_course_section` and `list_course_sections` drop `defaultAssignmentType` (`rename_course_section` now requires `name`), `set_assignment_course_section` drops `note`, and course clones and bundles no longer carry a section type. The database column stays, unmapped, until a later release drops it.
+
+
+## [0.5.912] - 2026-11-11
+
+### Fixed
+
+- **Moving an assignment moves its attached material.** A move to another course section (the dashboard drag and MCP `set_assignment_course_section`) now sets the section of every content item attached to the assignment in the same transaction, so the item's stored section matches its assignment's. Students saw no effect: their dashboard draws an attached item in its assignment's row and never reads the item's section. Staff could see the old section in `list_content_items`, and an edit that named the assignment's current section was refused as a move.
+
+
+## [0.5.911] - 2026-11-11
+
+### Changed
+
+- **Datasets have their own table in the Files panel.** A file attached from the course dataset library is no longer listed among the support files on the edit page and in the workbench's Files sheet. It sits in a separate Datasets table with the library's dataset icon, its name linked to the library page, the pinned version, and the library's Update, Detach and Remove actions. How a dataset is linked into the working copy and graded is unchanged.
+
+
+## [0.5.910] - 2026-11-11
+
+### Changed
+
+- **Hold back untarjs 5.4.0.** Dependabot ignores `@emscripten-forge/untarjs` 5.4.0. That version has no `lib/unpack.js`, so the vendor build fails.
+
+
 ## [0.5.909] - 2026-11-11
 
 ### Added

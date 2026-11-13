@@ -27,7 +27,7 @@ import VaporTesting
     @discardableResult
     private func makeSection(name: String, order: Int, courseID: UUID) async throws -> APICourseSection {
         let section = APICourseSection(
-            name: name, defaultAssignmentType: nil, sortOrder: order, courseID: courseID)
+            name: name, sortOrder: order, courseID: courseID)
         try await section.save(on: app.db)
         return section
     }

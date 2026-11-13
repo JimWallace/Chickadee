@@ -29,7 +29,9 @@ struct GetAchievementsTool: ContentTool {
         + "record), a list of conditions over a submission's graded signals ("
         + MCPAchievementSignalProse.commaList + ") combined with `match` (all/any), and the "
         + "scope's reward parameters (classPercent + points for a class goal, recordDimension for a "
-        + "record). Until the instructor first curates the list, the built-in defaults are returned as "
+        + "record), and rewardType (with rewardItem for a wardrobe item). "
+        + MCPWardrobeItemProse.rewardClause + ". "
+        + "Until the instructor first curates the list, the built-in defaults are returned as "
         + "editable rows. Read-only — use it to inspect achievements before editing with "
         + "update_achievements. Achievements are server-evaluated and display-only: they never change "
         + "what the suite grades."
@@ -148,6 +150,19 @@ let achievementRowSchema: JSONValue = .object([
             "type": .string("string"),
             "enum": .array(RecordDimension.allCases.map { .string($0.rawValue) }),
             "description": .string(RecordDimensionPresentation.schemaDescription),
+        ]),
+        "rewardType": .object([
+            "type": .string("string"),
+            "enum": MCPEnumProse<RewardType>.jsonEnum,
+            "description": .string(
+                "What the row awards. Omit for the scope's own reward (badge, points or title). "
+                    + "\"wardrobe\" is for an individual row only, with rewardItem."),
+        ]),
+        "rewardItem": .object([
+            "type": .string("string"),
+            "enum": .array(MCPWardrobeItemProse.values.map(JSONValue.string)),
+            "description": .string(
+                "rewardType wardrobe only: the item granted, one of " + MCPWardrobeItemProse.commaList + "."),
         ]),
     ]),
     "required": .array([.string("name"), .string("scope")]),

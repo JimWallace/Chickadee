@@ -171,7 +171,10 @@ because line numbers go out of date.
   `CourseContentService.attachTarget` and write with
   `CourseContentService.attach`, which also moves the item to the
   assignment's section. A new door calls those two; it does not set
-  `assignmentID` itself. `AssignmentDeletion` detaches it into the
+  `assignmentID` itself. `CourseSectionService.moveAssignment` (the
+  dashboard move and MCP `set_assignment_course_section`) moves it with its
+  assignment in the same transaction, leaving its `sortOrder`.
+  `AssignmentDeletion` detaches it into the
   assignment's section at that time, as a detach does. The course clone and
   the bundle export and import carry it. `CourseContentService.update`
   refuses to move an attached item to a section or make it a heading.
@@ -677,7 +680,8 @@ because line numbers go out of date.
   fixtures only) gets no type rule.
 - **Writers of the type:** every creator through
   `NewAssignmentFields.assignmentType` (no default): the new-assignment page
-  (its Type select, else the section's default type, else Assignment), MCP
+  (its Type select, which starts on the "+ Add" menu's `?type=`, else
+  Assignment), MCP
   `create_assignment` (its `assignmentType`, else the derivation), quick
   publish (the derivation). The clone and the bundle import carry the type
   through `admissibleAssignmentType`, which turns a browser-graded Assignment
@@ -707,25 +711,19 @@ because line numbers go out of date.
 - **Known gap:** the BrightSpace page (`BrightSpacePagePresenter`) still shows a
   Class activity's mapped grade item rather than "Do not sync", and "Push all"
   can still queue its rows, which the sweeps then drop without sending.
-- **Fact:** a section has no grading mode (phase 3). A section move changes
-  neither the type nor the grading mode; `CourseSectionService.typeNote`
-  reports a section default type that differs from the moved assignment's.
+- **Fact:** a section has no grading mode and no type. A section move changes
+  neither the type nor the grading mode.
 
-### A course section's default type: `course_sections.default_assignment_type`
+### A new item's type: the "+ Add" menu's `?type=`
 
-- **Rule:** the default only seeds creation. The new-assignment page selects it
-  until the author picks a type (`newAssignmentDeclaredType`), and nothing
-  else reads it for grading.
-- **Writers:** `CourseSectionService.create` and `.update` (the web section
-  forms and MCP `create_course_section` / `rename_course_section`), the
-  course clone, the bundle import (the bundled type, or "lab" from a legacy
-  "browser" grading mode) and the migration `AddSectionDefaultAssignmentType`.
-- **Readers:** the new-assignment page and its draft service, the `/instructor`
-  section header, MCP `list_course_sections`, the bundle export, and a move's
-  type note.
-- **Fact:** the old `default_grading_mode` column stays in the table with a
-  database default of "worker" so the old color of a blue-green deploy can
-  read it; the model no longer maps it. A later release drops it.
+- **Rule:** a section never chooses a type. The Overview's "+ Add" menu links
+  each graded type to `/instructor/new?type=…`; the create page's Type select
+  starts there, else on Assignment (`newAssignmentDeclaredType`).
+- **Writers:** `AssignmentsPage` (`AddItemMenu`).
+- **Readers:** `newAssignmentPage` (`DraftAssignmentRoutes+NewAssignment`).
+- **Fact:** the dead columns `course_sections.default_assignment_type` and
+  `default_grading_mode` stay in the table, unmapped, so the old color of a
+  blue-green deploy can read it. A later release drops them.
 
 ### What a runner receives: `RunnerManifest` and the cache key
 
@@ -969,6 +967,18 @@ coordination, and each must see every edit.
     `datasetDelivery`. A `shared` dataset is a link to the shared extraction
     in the working copy; a `perStudent` one is a real file
     (`docs/dataset-shared-delivery.md`).
+  - A library attachment's sample that covers its whole file is not stored:
+    `applyDatasetsEdit` (the web and `set_dataset`) and the library attach
+    pass it through `DatasetWholeFileNormalization.swift`, which drops the
+    sample and keeps the spec. The mode therefore turns `shared`, so the
+    working-copy writer links the file and a ranked activity (`isShared`)
+    accepts it. The coherence check runs on the normalized specs. A plain
+    file's spec is never dropped by this: `StudentDatasetDelivery` and the
+    submit page's dataset links (`SubmitDatasetLink`) read "a spec exists",
+    and an upload-only student receives the file only through them. The
+    update to another version keeps its sample. Any new door that saves a
+    library spec must call `normalizedForSave`. `WholeFileSampleCheck` and
+    the MCP warnings use the same rule (`DatasetWholeFileSample.deliversWholeFile`).
   - A write never goes through a dataset link:
     `DatasetWorkingCopyPlacement.write` removes the link first. A change of
     mode is reconciled on the next visit by `datasetTargetIsCurrent`, which
@@ -987,6 +997,107 @@ coordination, and each must see every edit.
     all three. Where a student's copy belongs is
     `DatasetLinkTargets.placement`, which both the writer and the skip check
     read.
+
+### Dataset format: `DatasetFormat`
+
+- **Objects:** `DatasetSpec.format` (`csv` or `fhirNdjson`), decoded as `csv`
+  and encoded only when it is not, so a stored manifest keeps its bytes
+  (`docs/fhir-datasets-plan.md`). `DatasetSpec.unknownFormat`: a stored value
+  this server does not know, kept as written. `DatasetFormat.capabilities`
+  (`DatasetCapabilities`: sample, stratum, partition, transforms, unit name),
+  read through `DatasetSpec.capabilities`, which selects nothing for an
+  unknown format (`docs/dataset-kinds-plan.md`).
+- **Readers that branch on the format:**
+  - **Selection reads `capabilities`, never `format`.**
+    `DatasetMaterializer.materialize`: a spec whose capabilities select
+    nothing is delivered as the source bytes, whatever it asks for.
+  - `DatasetDeliveryMode.init`: such a spec is always `shared`. The Files
+    panel row carries `datasetCapabilities` so its note reads the same rule.
+  - `DatasetSpec.part(forDeal:)`, `TestProperties.hasPartitionedDatasets` and
+    `DatasetDeals.withholdingUndealtParts` read `capabilities.partition`.
+  - Two copies that must agree: `SupportFileRow` writes the sample
+    capability on the row (`data-dataset-sample`), and
+    `Public/support-files.js` reads it to hide the sample fields. The view
+    also hides the per-student toggle and the "Course-wide rows" box of a
+    spec that selects nothing.
+  - **A name's format:** `DatasetFormat.candidates(forFilename:)` lists the
+    formats an extension could be; `entersThroughLibrary` says which formats
+    become datasets only through the library (FHIR). Promote, the save-time
+    checks and the Files panel read these, not "ends in `.ndjson`".
+  - **An unknown format** (written by a newer server): the spec decodes,
+    re-encodes as written, delivers whole and is refused at save
+    (`unknownFormatIssue`); every rebuild carries it (`set_dataset`,
+    `withScope`, `withoutLibraryFields`), and `libraryFieldIssue` compares
+    it. The zip upload carries such a spec through untouched. MCP and the
+    download report `formatName` and `mediaType`, never `csv`. A bundle
+    refuses an unknown format by name (`BundledDatasetFormatError`), so a new
+    format needs no new bundle `schemaVersion`.
+  - `DatasetSpecValidation.issue`: `capabilityIssue` refuses each setting
+    the format's capabilities lack (for FHIR: a sample, a partition, a stratum
+    and transforms); a FHIR spec needs a `.ndjson` name and a file that passes
+    `FHIRNdjsonProfile`; a CSV spec refuses a name of a format that enters
+    through the library.
+  - `datasetSpecRefusal` reads the file for every FHIR spec, and the zip
+    upload runs the same format checks (`datasetFormatRefusal`). Bundle
+    import, clone and restore copy the manifest as it is, as for every other
+    spec rule.
+  - `datasetDiagnosticsReports` skips a FHIR spec: there is nothing to
+    estimate when every student gets the whole file.
+  - `CourseDatasetService` (P2): `create` and `addVersion` check a file by
+    the dataset's format (`checkedFile`); a FHIR version stores a
+    `DatasetDescription` envelope in `summary_json` (a row written before the
+    envelope holds a bare summary, which reads the same), its patient count in `row_count` and no columns. Attach and
+    update take the format from the library dataset, promote from the file's
+    extension. `sourceIssue` refuses a spec whose format is not its dataset's,
+    so the whole-manifest doors drop that source.
+  - The clone (`copyLibrary`) copies the format and the summary. The bundle
+    writes `schemaVersion` 3 when a dataset is not CSV
+    (`CourseBundleManifest.schemaVersion(carrying:)`), and the import checks a
+    FHIR version's bytes and recomputes its summary.
+  - The staff download names the file and its type by the format; the
+    student download sends the spec's media type.
+  - A FHIR version's `row_count` is patients, not lines. MCP `get_dataset`
+    reads `truncated` from the file's lines for FHIR, not from `rowCount`.
+  - The pages (P3): the Datasets tab takes the format at create and words a
+    version's `row_count` by it (`InstructorDatasetDetail.countText`). The
+    dictionary route edits a FHIR version's summary
+    (`updateFHIRDictionary`): the prose of each type and code, and the
+    example. A new version and a bundle import carry that prose
+    (`carryingNotes`). The Data page shows the summary and the example, and
+    the student download is `mine.ndjson` for a FHIR spec (both names serve
+    the same bytes). The upload page's data line says "every patient". The
+    Files panel hides the sample fields on a FHIR spec, in the view and in
+    `Public/support-files.js`, and the "Course-wide rows" box on a FHIR
+    attachment. An `.ndjson` file that is not a dataset shows no per-student
+    control, only "Move to course library" (`withLibraryStates`).
+  - The MCP tools (P3): `create_dataset` takes `format` and refuses a
+    filename of the other format by name; `get_dataset` reports `format` and
+    the version's description (`DatasetDTO.summary`, the
+    `DatasetDescription` envelope), and
+    `get_dataset` shows resource lines with no header. `list_datasets`
+    reports the format but not the summary, which can be large. The write
+    tools return the summary of the one dataset they change.
+    `update_dataset` edits a FHIR dictionary by `entries` and `example` and
+    refuses `columns` on it, and the reverse. `attach_dataset` and
+    `get_assignment` report an attachment's format as `format`
+    (`AttachedDatasetDTO`); `get_support_files` reports it as
+    `datasetFormat`, beside its other `dataset*` fields.
+    The `DatasetToolSchema.format` enum derives from `DatasetFormat.allCases`.
+- **Rules:**
+  - A line of a FHIR file is never re-encoded on any delivery path.
+  - Every rebuild of a `DatasetSpec` carries `format`, as it carries the
+    library fields and `partCount`.
+  - Only the library attach path sets the format
+    (`DatasetSpecValidation.libraryFieldIssue`).
+  - A library dataset's format is fixed at create; a version of another
+    format is refused.
+  - FHIR dictionary prose sits on an entry of the summary, so it can name
+    only what the file holds. Anything that recomputes a summary carries the
+    prose and the example pick from the one before it.
+  - A place that must act differently per format switches over every
+    format, with no `default` and no `==`, so a new format does not compile
+    until it answers.
+  - A new format updates every reader above, or says why it does not.
 
 ### Dataset transform kinds: `DatasetTransform.Kind`
 
@@ -1063,6 +1174,13 @@ coordination, and each must see every edit.
     `subject_user_id` metadata key, so `AuditLogger.recordDatasetWrite` sets
     `title` to the dataset name. A new course-scoped audit action must set one
     of those keys, or its row shows a bare UUID.
+  - The edit page's Files panel, and the workbench's Files sheet, list an
+    attached file (`SupportFileLibraryState.attachment != nil`) in the
+    Datasets table, apart from the support files (`EditDatasetsBlock`), with
+    the library's actions only, because the delete door refuses an attached
+    file. A new action on a `SupportFileRow` must say which of the two kinds
+    it applies to. `Public/support-files.js` finds rows by
+    `tr[data-support-file]` in either table.
 
 ### The result: `TestOutcomeCollection` counts and the grade
 
@@ -1153,6 +1271,11 @@ coordination, and each must see every edit.
     `all.json`, which answers with the student's own folder. A change to one
     listing in `JupyterLiteContentsRoutes` must keep the other two consistent
     (`JupyterLiteContentsWriteRoutesTests`).
+  - Every non-admin caller, course staff included, reads `users` as
+    `[users/<id>]`, because a staff draft's kernel walks through it (#2925). A
+    403 there kept the kernel from booting on WebKit (2026-11). Another user's
+    folder is reached only by its path, through `mayReadUserFile`
+    (`JupyterLiteContentsUserFolderTests`).
   - The file's mtime is the only reset signal. JupyterLab's save compares it
     with its last save and raises "File changed". The page's IndexedDB reseed
     reads it too, so it is skipped when the server drive is on: a drive save
@@ -1748,7 +1871,8 @@ coordination, and each must see every edit.
   `set_activity` lock count, version v1 of `create_assignment` and
   `clone_assignment`, the copied reference solution of `clone_assignment`,
   the starter run of `get_suite`, the start of a `run_tournament` run, and
-  the reference render jobs of `set_activity` with `prepareReference`.
+  the reference render jobs of `set_activity` with `prepareReference`, and
+  the staged uploads of `begin_upload` (`mcp_uploads`).
 - **Rules:**
   - A step that the `chickadee_mcp` role is denied runs on `mainDB`, not on
     `ToolContext.db`. A new MCP step on an ungranted table needs a choice:
@@ -1760,6 +1884,30 @@ coordination, and each must see every edit.
   - `MCPRoleDatabase` models the role in tests. A tool that touches a table
     the role cannot use passes on the test databases unless a test runs it
     through the stand-in.
+
+### Staged MCP uploads: `mcp_uploads`
+
+- **Writers:** MCP `begin_upload` (`MCPUploadService.begin`), the upload URL
+  `PUT /mcp/uploads/:uploadID` (`MCPUploadRoutes`, `MCPUploadService.receive`),
+  the write tools that consume an upload (`consumeMCPUpload` in
+  `author_script`, `create_dataset`, `add_dataset_version`), the expiry purge
+  in `begin` and the hourly MCP OAuth reaper (`reapExpiredMCPOAuthRecords`).
+- **Readers:** `MCPUploadService.load`, from the same three write tools.
+- **Rules** (`docs/mcp-file-uploads.md`):
+  - An upload belongs to one grant (token subject plus OAuth client) and one
+    course. `load` answers another grant as if the id did not exist.
+  - The cap is `SupportFileURLFetcher.maxBytes`, shared with `sourceUrl`; a
+    change to one changes both. The route's body limit is the same constant.
+  - The bytes must be UTF-8. A write tool that later accepts binary bytes
+    must not rely on the PUT having checked anything else.
+  - A write consumes the upload only after it succeeds. A new consumer must
+    keep that order, or a refused write costs the agent its upload.
+  - The table is on the owner pool (`mainDB`). The `chickadee_mcp` role has no
+    grant on it.
+  - The upload token travels in the `Authorization` header, never in the
+    path. Vapor's route logger (into the admin `query_logs` buffer) and
+    `RequestTimingMiddleware` (into `request_metrics`) record paths, so a
+    secret in a path reaches the admin diagnostics surface.
 
 ### The avatar handle: `users.avatar_handle`
 
@@ -1783,22 +1931,36 @@ coordination, and each must see every edit.
   - `WardrobeUnlockStore.grantFound`, from `POST /account/wardrobe/found`
     (`Routes/Web/AccountRoutes+Found.swift`). The Konami script
     `Public/quantum-cats-egg.js` posts it.
+  - `AchievementAwardStore.grantWardrobeRewards`, when the student's own
+    result page loads and an individual assignment achievement with a
+    `wardrobe` reward is satisfied (docs/achievement-rewards.md, S2). It
+    writes `source` and `label`, and an award ledger row, which a course
+    `achievementsEarned` condition counts like any assignment award. It
+    does not grant while the submission is pending, because the page shows
+    no Earned toast then.
 - **Readers:**
   - The "Your bird" card (`AvatarPickerContext`) and the avatar save
     chokepoint (`AvatarCustomization.isOpen`), which offer and accept only
-    stored items.
+    stored items. The card reads `label` for "how you earned it"
+    (`WardrobeUnlockStore.grantLabels`).
   - The result page's Earned toast, which shows what `grantNew` stored.
   - The data export.
   - Indirectly, every page that draws a bird: a worn ring shows on
     leaderboards and rosters (`AvatarPresentation`).
 - **Also reads `WardrobeItem.allCases`:** the course Achievements tab's
-  "Built in" list (`BuiltInRuleRow`), found items included.
+  "Built in" list (`BuiltInRuleRow`), found items included and grantable
+  items left out.
 - **Rules** (`docs/student-wardrobe.md`, 6b and 6c):
   - A stored unlock is never taken back.
   - `earned(by:)` never returns a found item, and `grantFound` refuses an
     earned one. `grantEarned` counts only earnable items when it decides to
     skip the progress queries, and `grantNew` never returns a found item. A
     new found item needs no change to the grading path.
+  - A grantable item (`WardrobeItem.grantable`) has no built-in rule:
+    `earned(by:)` never returns one, `grantEarned` skips it when it decides
+    to skip the progress queries (`hasBuiltInRule`), and `grantNew` never
+    returns one. Only a `wardrobe` achievement grants it, and the result
+    page's toast shows it with the achievement's name.
   - Course staff wear the staff ring: no surface offers them a ring to wear.
     The result page's toast skips ring items for them, and the layout
     renders them no found-ring toast (`CurrentUserContext.foundRingToast`).

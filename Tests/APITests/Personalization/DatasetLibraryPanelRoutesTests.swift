@@ -133,7 +133,14 @@ import VaporTesting
             #expect(await zipEntries(fx).contains("lib.csv"))
 
             let after = try await editPage(fx)
-            #expect(after.contains("From Ward cases (v1)"))
+            // The attached file is a dataset: it leaves the Files table for
+            // the Datasets table, named with the version it pins.
+            let parts = after.components(separatedBy: #"id="assignment-datasets""#)
+            try #require(parts.count == 2, "the Datasets block renders once")
+            #expect(!parts[0].contains(#"data-support-file="lib.csv""#))
+            #expect(parts[1].contains(#"data-support-file="lib.csv""#))
+            #expect(parts[1].contains("Ward cases"))
+            #expect(parts[1].contains(">v1<"))
             #expect(after.contains("js-library-scope"))
             #expect(after.contains("js-library-remove"))
         }

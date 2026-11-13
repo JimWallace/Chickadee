@@ -140,32 +140,17 @@
     })();
 
     // ── Assignment type ─────────────────────────────────────────────────────
-    // The Type select follows the section's default type until the author
-    // picks one; the hint shows the selected type's rules, which the server
-    // put on each option (docs/assignment-types.md).
+    // The hint shows the selected type's rules, which the server put on each
+    // option (docs/assignment-types.md).
     (function () {
         var typeSelect = /** @type {HTMLSelectElement} */ (document.getElementById('assignmentTypeSelect'));
         var hint = document.getElementById('assignment-type-hint');
         if (!typeSelect || !hint) return;
-        var sectionSelect = /** @type {HTMLSelectElement} */ (document.getElementById('sectionID'));
-        var chosen = typeSelect.getAttribute('data-chosen') === 'true';
         function updateHint() {
             var selected = typeSelect.options[typeSelect.selectedIndex];
             hint.textContent = selected ? (selected.getAttribute('data-hint') || '') : '';
         }
-        typeSelect.addEventListener('change', function () {
-            chosen = true;
-            updateHint();
-        });
-        if (sectionSelect) {
-            sectionSelect.addEventListener('change', function () {
-                if (chosen) return;
-                var section = sectionSelect.options[sectionSelect.selectedIndex];
-                var type = (section && section.getAttribute('data-assignment-type')) || 'assignment';
-                typeSelect.value = type;
-                updateHint();
-            });
-        }
+        typeSelect.addEventListener('change', updateHint);
         updateHint();
     })();
 

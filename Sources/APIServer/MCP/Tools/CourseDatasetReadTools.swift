@@ -31,8 +31,12 @@ struct ListDatasetsTool: ContentTool {
         "List the course's dataset library: every dataset with its slug, name, provenance, licence, "
         + "whether students see it on the course Data page (isPublished), its versions, the newest "
         + "version's data dictionary, and the assignments that attach it with the version each one pins "
-        + "(isBehind is true when a newer version exists). A library dataset is a CSV file kept once "
-        + "per course and copied into each assignment that attaches it."
+        + "(isBehind is true when a newer version exists). A library dataset is a file kept once per course "
+        + "and copied into each assignment that attaches it. Its format is csv, with a column dictionary "
+        + "in columns, or fhirNdjson, FHIR R4 resources one per line, whose summary (patients, resource "
+        + "types, codes in use, the instructor's descriptions and the example resource) get_dataset "
+        + "returns as summary ({descriptionVersion, format, fhirNdjson}); a FHIR version's rowCount counts "
+        + "patients."
     static let inputSchema: JSONValue = MCPSchema.object(
         properties: ["courseCode": MCPSchema.courseCode], required: ["courseCode"])
     static let outputSchema: JSONValue? = MCPSchema.object(
@@ -57,7 +61,7 @@ struct ListDatasetsTool: ContentTool {
             datasets = try library.map { dataset in
                 datasetDTO(
                     dataset, versions: versionsByDataset[try dataset.requireID()] ?? [],
-                    usage: usageBySlug[dataset.slug] ?? [])
+                    usage: usageBySlug[dataset.slug] ?? [], includingSummary: false)
             }
         }
         return Output(
@@ -87,7 +91,8 @@ struct GetDatasetTool: ContentTool {
         /// That version's dictionary. `dataset.columns` is the newest one's.
         let columns: [DatasetColumnDTO]
         /// The header and the first data rows of that version, as CSV text,
-        /// at most `MCPContentByteCap.defaultBytes` bytes.
+        /// or the first resource lines of a FHIR version, at most
+        /// `MCPContentByteCap.defaultBytes` bytes.
         let rows: String
         let rowCount: Int
         /// True when `rows` holds fewer data rows than the version has.
@@ -95,6 +100,10 @@ struct GetDatasetTool: ContentTool {
     }
 
     static let rowLimit = MCPBoundedInt(default: 10, max: 200)
+    /// The default number of FHIR resource lines. A line is a whole
+    /// resource, so fewer are shown; `rowLimit` still bounds an explicit
+    /// `maxRows`.
+    static let defaultFHIRLines = 5
 
     static let name = "get_dataset"
     static let description =
@@ -103,7 +112,9 @@ struct GetDatasetTool: ContentTool {
         + "and that version's data dictionary, capped at \(MCPContentByteCap.defaultBytes) bytes. These are "
         + "the rows of the uploaded file. A student "
         + "receives a sample of them, or all of them, as the assignment that attaches the file says; "
-        + "preview_personalization shows one student's rows."
+        + "preview_personalization shows one student's rows. For a FHIR dataset, rows holds the first "
+        + "maxRows resource lines (default 5) and dataset.summary the newest version's description; every "
+        + "student receives the whole file."
     static let inputSchema: JSONValue = MCPSchema.object(
         properties: [
             "courseCode": MCPSchema.courseCode, "slug": DatasetToolSchema.slug,
@@ -111,7 +122,8 @@ struct GetDatasetTool: ContentTool {
                 "type": .string("integer"), "minimum": .int(1),
                 "description": .string("Optional. The version to read. Omitted, the newest."),
             ]),
-            "maxRows": rowLimit.property("Data rows to return"),
+            "maxRows": rowLimit.property(
+                "Data rows to return. For FHIR, resource lines, \(defaultFHIRLines) when omitted; for a CSV,"),
         ],
         required: ["courseCode", "slug"])
     static let outputSchema: JSONValue? = MCPSchema.object(
@@ -141,15 +153,29 @@ struct GetDatasetTool: ContentTool {
         else {
             throw MCPToolError.executionFailed(detail: "The bytes of version \(number) could not be read.")
         }
-        let limit = Self.rowLimit.resolve(input.maxRows)
-        // One row per line, as the materializer that samples the rows reads them.
+        // One row per line, as the materializer that samples the rows reads
+        // them. A CSV shows its header and `limit` rows; a FHIR file, which
+        // has no header, `limit` resource lines. A FHIR version's `rowCount`
+        // counts patients, not lines, so whether lines were left out is read
+        // from the lines themselves.
         let lines = text.split(omittingEmptySubsequences: true, whereSeparator: \.isNewline)
-        let head = lines.prefix(limit + 1).joined(separator: "\n") + "\n"
+        let shown: Int
+        let linesLeftOut: Bool
+        switch dataset.format {
+        case .csv:
+            let limit = Self.rowLimit.resolve(input.maxRows)
+            shown = limit + 1
+            linesLeftOut = version.rowCount > limit
+        case .fhirNdjson:
+            shown = input.maxRows.map { Self.rowLimit.resolve($0) } ?? Self.defaultFHIRLines
+            linesLeftOut = lines.count > shown
+        }
+        let head = lines.prefix(shown).joined(separator: "\n") + "\n"
         let capped = MCPContentByteCap.cappedUTF8(Data(head.utf8), cap: MCPContentByteCap.defaultBytes)
         return Output(
             courseCode: course.code, courseKey: course.urlKey, courseTerm: course.term?.displayName,
             dataset: try await datasetDTO(dataset, context: context), version: number,
             columns: version.columns.map(DatasetColumnDTO.init), rows: capped?.content ?? head,
-            rowCount: version.rowCount, truncated: version.rowCount > limit || capped?.truncated == true)
+            rowCount: version.rowCount, truncated: linesLeftOut || capped?.truncated == true)
     }
 }

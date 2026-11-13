@@ -58,7 +58,7 @@ extension InstructorDashboardRoutes {
                 signalOptions: AchievementSignalPresentation.all,
                 recordDimensionOptions: RecordDimensionPresentation.all,
                 targets: targets,
-                earned: earned, builtIn: WardrobeItem.allCases.map(BuiltInRuleRow.init))
+                earned: earned, builtIn: WardrobeItem.obtainedWithoutSetup.map(BuiltInRuleRow.init))
         }.encodeResponse(for: req)
     }
 

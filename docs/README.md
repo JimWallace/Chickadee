@@ -13,7 +13,7 @@ not exist.
 
 - [architecture.md](architecture.md) — system architecture: targets, grading pipeline, auth, sandboxing, MCP, deployment
 - [grading-integrity.md](grading-integrity.md) — what a submission can do to its own grade today, the decisions, and the four-phase plan (#2223)
-- [assignment-types.md](assignment-types.md) — a declared Assignment / Lab / Class activity type: what it controls, the rules each type carries, section default types, and the rows that break a rule (phases 1 to 3 shipped)
+- [assignment-types.md](assignment-types.md) — a declared Assignment / Lab / Class activity type: what it controls, the rules each type carries, how a new item gets its type, and the rows that break a rule (phases 1 to 3 shipped)
 - [failure-detail.md](failure-detail.md) — how much of a failing test a student sees: `full`, `actualOnly` and `verdictOnly`
 - [manifest-format-v2.md](manifest-format-v2.md) — proposed: the manifest (`TestProperties`) review, the v2 envelope and its phased rollout
 - [runner-capability-profiles.md](runner-capability-profiles.md) — runner capability matching, the language gate, `minimumRunnerVersion`
@@ -52,6 +52,7 @@ not exist.
 
 - [authoring-editors.md](authoring-editors.md) — the suite editor, the notebook write-back, the language seed and server-side auto-compute
 - [auto-compute.md](auto-compute.md) — auto-compute in the pattern-family editor
+- [mcp-file-uploads.md](mcp-file-uploads.md) — `begin_upload`: how an agent delivers a large local file byte for byte, and why its token is a header
 - [mcp-authoring-roadmap.md](mcp-authoring-roadmap.md) — the MCP authoring roadmap, largely delivered, and its tool index (`MCPRoadmapDocSyncTests` reads it)
 - [assignment-versioning.md](assignment-versioning.md) — content version history: capture, read, restore
 - [inputs.md](inputs.md) — global and section inputs: literals, `=` expressions, `$name` references
@@ -62,8 +63,11 @@ not exist.
 - [personalization-drift-prevention-plan.md](personalization-drift-prevention-plan.md) — the plan that prevents drift between personalization and the solution
 - [datasets.md](datasets.md) — per-student datasets (#1083)
 - [datasets-course-library.md](datasets-course-library.md) — the per-course dataset library: versions and dictionary, attachments, the course cohort seed, the student Data page, the MCP tools, clone and bundle, `formatNoise`, the ranked-activity refusal and the dealt partition; opens with a Status table
-- [dataset-shared-delivery.md](dataset-shared-delivery.md) — link a dataset that is the same for many students into the editor working copy instead of writing a copy per student: a whole file to the shared extraction (step 1), a partition part to a part stored once (step 2)
+- [fhir-datasets-plan.md](fhir-datasets-plan.md) — FHIR NDJSON datasets in the course library: P1–P3 built (shared, whole file); Bundle upload, sampling by patient and a live feed planned
+- [dataset-kinds-plan.md](dataset-kinds-plan.md) — plan: one dataset component for many kinds of data (tables, record lists, FHIR, graphs, signals); its "change now" items are built, the rest is planned
+- [dataset-shared-delivery.md](dataset-shared-delivery.md) — link a dataset that is the same for many students into the editor working copy instead of writing a copy per student: a whole file to the shared extraction (step 1), a partition part to a part stored once (step 2), and a sample that covers its whole file stored as no sample at save time (step 3)
 - [examples/r-lab9-trial/](examples/r-lab9-trial/) — a worked R lab: starter, solution, data and test scripts for each tier
+- [examples/fhir/](examples/fhir/) — the FHIR feed for HLTH 230 Assignment 3: a reproducible generator, the `chickadee_fhir.py` helper with its checks, and a proposed Question 4 with its reference solution and tests
 
 ## Courses, roles and students
 

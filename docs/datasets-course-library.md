@@ -456,11 +456,20 @@ Tests: `InstructorDatasetsTabTests`, `InstructorDatasetsAuditTests`, and the two
 
 **The Files panel (5b, built).** The edit page's Files panel reaches the
 library through five JSON routes, each answering with the panel state as the
-datasets PUT does (`PublishedAssignmentRoutes+DatasetLibrary.swift`):
+datasets PUT does (`PublishedAssignmentRoutes+DatasetLibrary.swift`).
+
+An attached file is listed apart from the support files, in the panel's own
+Datasets table (`EditDatasetsBlock` in `AssignmentEditBody.swift`, also the
+workbench's Files sheet). Each row names the dataset with the library's icon,
+links it to its library page in a new tab (the workbench shows the table over a
+live kernel) and shows the pinned version as a chip. Its
+actions are the library's (Update, Detach, Remove), never the support-file
+delete. Nothing about how the file is linked or graded depends on the table it
+sits in: the split is by `SupportFileLibraryState.attachment` only.
 
 | Control | Route | Does |
 |---|---|---|
-| A select and Attach, beside the upload (only when the course has datasets) | `POST …/datasets/library/attach` `{slug}` | Attaches the newest version under its own filename, with course scope and no sample (decision 1). The instructor then sets the sample as for any dataset. |
+| A select and Attach, in the Datasets head (only when the course has datasets) | `POST …/datasets/library/attach` `{slug}` | Attaches the newest version under its own filename, with course scope and no sample (decision 1). The instructor then sets the sample as for any dataset. |
 | "Update to v3", on an attached row that pins an older version | `…/update` `{file}` | Moves to the newest version. |
 | "Course-wide rows" | `…/scope` `{file, courseScoped}` | Sets the scope (`setAttachmentScope`). |
 | Detach | `…/detach` `{file}` | Ends the attachment and keeps the file and its sample. No confirm, because it is easy to undo. |
@@ -550,7 +559,7 @@ is not archived.
 | `get_dataset` | `content:read` | the same for one dataset, plus the header and first rows of one version |
 | `create_dataset` | `content:write` | version 1 from a `sourceUrl` under the SSRF guard, or by promoting an assignment's support file |
 | `update_dataset` | `content:write` | name, description, provenance, licence, column prose, published |
-| `add_dataset_version` | `content:write` | a new version from a `sourceUrl` with a note |
+| `add_dataset_version` | `content:write` | a new version from a `sourceUrl` or a `begin_upload` `uploadID`, with a note |
 | `attach_dataset` | `content:write` | attach to an assignment, with filename, version, scope and the sample fields; on an attached file, move it to another version or scope |
 | `detach_dataset` | `content:write` | end an attachment, keeping the file and its sample unless `removeFile` |
 
@@ -596,7 +605,12 @@ and `docs/mcp-authoring-roadmap.md` (`MCPRoadmapDocSyncTests`).
   the library is `schemaVersion` 2. Its manifest has a `datasets` list
   (`BundledDataset`), and each version's bytes are at `datasets/<sha256>`, one
   file per hash. A course with no dataset still exports version 1, so a
-  server that knows only version 1 reads it. An import accepts 1 and 2. It
+  server that knows only version 1 reads it. A bundle with a FHIR NDJSON
+  dataset is version 3, which adds each dataset's `format`
+  ([fhir-datasets-plan.md](fhir-datasets-plan.md) §6), and an import checks
+  such a version's bytes as FHIR and computes its summary from them, keeping
+  the bundled dictionary prose and example pick. An
+  import accepts 1 to 3. It
   creates the library before the test setups, for the same reason as the
   clone, and it refuses a dataset file that is missing or whose bytes do not
   hash to the name, a repeated slug or version number, and an oversized

@@ -16,8 +16,9 @@ source of truth; a census re-count is required whenever either changes
 (remediation P2-3).
 
 > **Note (2026-11):** the per-tool table stops at the 2026-07 refresh. At
-> v0.5.854 `MCPToolCatalog.live` registers 71 content tools; the 17 added since
-> are not yet inventoried here. The admin count (20) is current.
+> v0.5.854 `MCPToolCatalog.live` registered 71 content tools; the 17 added by
+> then are not yet inventoried here. `begin_upload` (73 tools) has its row. The
+> admin count (20) is current.
 
 ## How to read this table
 
@@ -70,6 +71,7 @@ source of truth; a census re-count is required whenever either changes
 | `set_activity` | `SetActivityTool.swift:16` | `assignmentPublicID` | course-enrol (`:96`) | `APITestSetup` manifest (activity block + seeded record achievement); with `prepareReference`, one reference grading job per composite slot from the reference solution (owner pool) |
 | `run_tournament` | `RunTournamentTool.swift:16` | `assignmentPublicID` | course-enrol (`:88`) | on the owner pool (`ToolContext.mainDB`): new `tournament_runs` / `tournament_matches` rows; new `tournamentMatch` `APISubmission` rows (frozen copies of entrants' uploads, never a grade of record) |
 | `update_suite` | `UpdateSuiteTool.swift:46` | `assignmentPublicID` | course-enrol (`:116`) | `APITestSetup` manifest (suite metadata, cell pins) |
+| `begin_upload` | `BeginUploadTool.swift` | `courseCode` | course-enrol write (TA+) | `MCPUpload` row on the owner pool; the bytes arrive later at `PUT /mcp/uploads/:uploadID` with the upload token as a bearer header | uploadID, the upload URL, the single-use upload token, cap, expiry |
 | `author_script` | `AuthorScriptTool.swift:58` | `assignmentPublicID` + `filename` | course-enrol (`:194`) | **verbatim file into setup zip** (escape hatch — see below) |
 | `delete_suite_item` | `DeleteSuiteItemTool.swift:49` | `assignmentPublicID` + item | course-enrol (`:103`) | `APITestSetup` manifest + zip |
 | `delete_support_file` | `DeleteSupportFileTool.swift:49` | `assignmentPublicID` + `filename` | course-enrol (`:110`) | `APITestSetup` manifest + zip |
@@ -180,11 +182,11 @@ blobs on disk. None reads a student's rows, a seed or a student-data model.
 
 | Tool | Handler (`file`) | Resource arg | Authz | Reads / touches | Output |
 |------|------------------|--------------|-------|-----------------|--------|
-| `list_datasets` | `CourseDatasetReadTools.swift` | `courseCode` | course-enrol (`resolveCourse`) | `APICourseDataset`, `APICourseDatasetVersion`, setup manifests (usage) | datasets with versions, dictionary, usage |
-| `get_dataset` | `CourseDatasetReadTools.swift` | `courseCode`, slug | course-enrol (`resolveCourse`) | as `list_datasets`, plus one version's blob | one dataset, plus the header and first rows of the uploaded file |
+| `list_datasets` | `CourseDatasetReadTools.swift` | `courseCode` | course-enrol (`resolveCourse`) | `APICourseDataset`, `APICourseDatasetVersion`, setup manifests (usage) | datasets with format, versions, dictionary (or the FHIR summary), usage |
+| `get_dataset` | `CourseDatasetReadTools.swift` | `courseCode`, slug | course-enrol (`resolveCourse`) | as `list_datasets`, plus one version's blob | one dataset, plus the header and first rows of the uploaded file (FHIR: the first resource lines) |
 | `create_dataset` | `CourseDatasetWriteTools.swift` | `courseCode` (and `assignmentPublicID` to promote) | course-enrol write (TA+) | `APICourseDataset`, `APICourseDatasetVersion`, blob store; a promote also writes the `APITestSetup` manifest | the new dataset |
-| `update_dataset` | `CourseDatasetWriteTools.swift` | `courseCode`, slug | course-enrol write (TA+) | `APICourseDataset`, `APICourseDatasetVersion` (dictionary prose) | the dataset after the edit |
-| `add_dataset_version` | `CourseDatasetWriteTools.swift` | `courseCode`, slug | course-enrol write (TA+) | `APICourseDatasetVersion`, blob store (fetch under the SSRF guard) | the new version number, dropped columns, the dataset |
+| `update_dataset` | `CourseDatasetWriteTools.swift` | `courseCode`, slug | course-enrol write (TA+) | `APICourseDataset`, `APICourseDatasetVersion` (dictionary prose; for FHIR, entry prose and the example in `summary_json`) | the dataset after the edit |
+| `add_dataset_version` | `CourseDatasetWriteTools.swift` | `courseCode`, slug | course-enrol write (TA+) | `APICourseDatasetVersion`, blob store (fetch under the SSRF guard, or a staged `begin_upload` upload) | the new version number, dropped columns, the dataset |
 | `attach_dataset` | `DatasetAttachmentTools.swift` | `assignmentPublicID`, slug | course-enrol write (TA+) | `APITestSetup` zip and manifest; re-grade and re-validate via `applyContentEditEffects` | the attached spec, action, re-queued count |
 | `detach_dataset` | `DatasetAttachmentTools.swift` | `assignmentPublicID`, filename | course-enrol write (TA+) | `APITestSetup` zip and manifest; re-grade and re-validate | file, removed flag, re-queued count |
 

@@ -258,28 +258,29 @@ private struct EditHeaderFields: HTML {
     }
 }
 
-/// The Files table: the two notebooks and the support files.
+/// The Files table: the two notebooks and the support files, then the
+/// datasets attached from the course library in a table of their own.
 private struct EditFilesBlock: HTML {
     let edit: EditAssignmentContext
     let csrfToken: String
 
     var body: some HTML {
+        filesBlock
+        if !edit.datasetLibraryOptions.isEmpty || !datasetRows.isEmpty {
+            EditDatasetsBlock(options: edit.datasetLibraryOptions, rows: datasetRows)
+        }
+    }
+
+    /// The files the assignment owns.
+    private var supportRows: [EditableSuiteRow] { edit.supportFileRows.filter { $0.library?.attachment == nil } }
+    /// The files linked from the course dataset library.
+    private var datasetRows: [EditableSuiteRow] { edit.supportFileRows.filter { $0.library?.attachment != nil } }
+
+    private var filesBlock: some HTML {
         div(.class("editor-block")) {
             div(.class("editor-block-head")) {
                 h2 { "Files" }
                 div(.class("toolbar toolbar--end")) {
-                    if !edit.datasetLibraryOptions.isEmpty {
-                        select(
-                            .class("form-input select-xs js-library-attach-select"),
-                            .ariaLabel("Dataset to attach from the course library")
-                        ) {
-                            for dataset in edit.datasetLibraryOptions {
-                                option(.value(dataset.slug)) { dataset.label }
-                            }
-                        }
-                        button(.class("btn action-btn js-library-attach"), .type(.button)) { "Attach" }
-                        " "
-                    }
                     button(
                         .class("btn action-btn"), .type(.button), .id("add-support-file-btn"),
                         .title("Upload a data file (CSV, JSON, etc.) bundled with the assignment")
@@ -317,7 +318,7 @@ private struct EditFilesBlock: HTML {
                         }
                     }
                     solutionRow
-                    for file in edit.supportFileRows {
+                    for file in supportRows {
                         SupportFileRow(file: file)
                     }
                 }
@@ -352,6 +353,53 @@ private struct EditFilesBlock: HTML {
                             .class("btn action-btn"), .type(.submit),
                             .title("Copy the assignment notebook as a starting point for the solution")
                         ) { "Create solution" }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// The Datasets table: the files attached from the course dataset library,
+/// with the attach control. A dataset is the library's file, linked into the
+/// working copy, so its row offers the library's actions, not a plain delete.
+private struct EditDatasetsBlock: HTML {
+    let options: [DatasetLibraryOption]
+    let rows: [EditableSuiteRow]
+
+    var body: some HTML {
+        div(.class("editor-block"), .id("assignment-datasets")) {
+            div(.class("editor-block-head")) {
+                h2 { "Datasets" }
+                if !options.isEmpty {
+                    div(.class("toolbar toolbar--end")) {
+                        select(
+                            .class("form-input select-xs js-library-attach-select"),
+                            .ariaLabel("Dataset to attach from the course library")
+                        ) {
+                            for dataset in options {
+                                option(.value(dataset.slug)) { dataset.label }
+                            }
+                        }
+                        button(.class("btn action-btn js-library-attach"), .type(.button)) { "Attach" }
+                    }
+                }
+            }
+            if rows.isEmpty {
+                p(.class("empty")) { "No datasets attached." }
+            } else {
+                table(.class("results-table"), .id("assignment-datasets-table")) {
+                    thead {
+                        tr {
+                            th { "Dataset" }
+                            th { "File" }
+                            th(.class("time")) { "Action" }
+                        }
+                    }
+                    tbody {
+                        for file in rows {
+                            SupportFileRow(file: file)
+                        }
                     }
                 }
             }
@@ -884,6 +932,41 @@ private struct EditAchievementsBlock: HTML {
     }
 }
 
+/// The Reward control of an individual assignment achievement
+/// (docs/achievement-rewards.md, S2): a badge, or a wardrobe item from
+/// `WardrobeItem.grantable`. The item select shows only for a wardrobe
+/// reward; achievements-editor.js reads both selects by id, and the table's
+/// summary names the item from the option text, so the script holds no item
+/// list.
+struct AchievementRewardFields: HTML {
+    var body: some HTML {
+        div(.class("js-am-scope-field"), .data("scope", value: "individual")) {
+            label(.class("form-label field-gap")) {
+                "Reward "
+                select(.class("form-input"), .id("am-rewardType")) {
+                    option(.value(RewardType.badge.rawValue)) { "Badge" }
+                    option(.value(RewardType.wardrobe.rawValue)) { "Wardrobe item" }
+                }
+                " "
+            }
+            div(.class("js-am-reward-item")) {
+                label(.class("form-label field-gap")) {
+                    "Item "
+                    select(.class("form-input"), .id("am-rewardItem")) {
+                        for item in WardrobeItem.grantable {
+                            option(.value(item.rawValue)) { item.displayName }
+                        }
+                    }
+                    " "
+                }
+                p(.class("field-note field-note--muted")) {
+                    "A student who already wears this item from another course earns nothing new here."
+                }
+            }
+        }
+    }
+}
+
 /// The inline achievement editor. Fields show and hide by scope. The course
 /// Achievements tab shares it through `AchievementsTable`. It stays in this
 /// file because `RecordDimensionCoverageTests` reads the "Ranked by" loop
@@ -934,6 +1017,9 @@ struct AchievementEditorFields: HTML {
             }
             div(.id("am-conditions"), .class("am-conditions")) {}
             button(.type(.button), .class("btn action-btn"), .id("am-add-condition")) { "+ Add condition" }
+        }
+        if !courseLevel {
+            AchievementRewardFields()
         }
         label(.class("form-label field-gap js-am-scope-field"), .data("scope", value: "classWide")) {
             "Class share ≥ (%) "

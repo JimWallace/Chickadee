@@ -33,8 +33,8 @@ struct SaveNewAssignmentForm {
     let requiredArchitecture: String
     let requiredLanguagesCSV: String
     let requiredCapabilitiesCSV: String
-    /// The Type select's value; empty or nil falls back to the section's
-    /// default type (`newAssignmentDeclaredType`).
+    /// The Type select's value; empty or nil means Assignment
+    /// (`newAssignmentDeclaredType`).
     let assignmentTypeRaw: String?
 }
 
@@ -180,7 +180,8 @@ extension DraftAssignmentRoutes {
             dueAt: dueAtRaw,
             startsAt: startsAtRaw,
             sectionID: sectionIDRaw,
-            draftID: draftID
+            draftID: draftID,
+            assignmentType: form.assignmentTypeRaw ?? ""
         )
 
         guard !title.isEmpty else {

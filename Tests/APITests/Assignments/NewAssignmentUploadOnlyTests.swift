@@ -34,7 +34,9 @@ import VaporTesting
         return setup
     }
 
-    /// Publishes the draft `draftID` into `sectionID` from the create page.
+    /// Publishes the draft `draftID` into `sectionID` from the create page,
+    /// with the Type select set to Lab, which grades in the browser, so the
+    /// type's mode differs from the `worker` an upload-only language requires.
     private func publish(
         draftID: String, title: String, sectionID: UUID, on app: Application
     ) async throws -> TestProperties {
@@ -53,7 +55,7 @@ import VaporTesting
                         boundary: boundary,
                         fields: [
                             ("_csrf", csrf), ("draftID", draftID), ("assignmentName", title),
-                            ("sectionID", sectionID.uuidString),
+                            ("sectionID", sectionID.uuidString), ("assignmentType", "lab"),
                         ],
                         files: [
                             ("assignmentNotebookFile", "assignment.ipynb", "application/json", notebook),
@@ -70,11 +72,9 @@ import VaporTesting
         return try #require(setup.decodedManifest())
     }
 
-    /// A section whose default type is Lab, which grades in the browser, so
-    /// the default differs from the `worker` an upload-only language requires.
-    private func browserSection(courseID: UUID, on app: Application) async throws -> UUID {
-        let section = APICourseSection(
-            name: "Labs", defaultAssignmentType: .lab, sortOrder: 1, courseID: courseID)
+    /// A section to publish into. A section names no type.
+    private func labsSection(courseID: UUID, on app: Application) async throws -> UUID {
+        let section = APICourseSection(name: "Labs", sortOrder: 1, courseID: courseID)
         try await section.save(on: app.db)
         return try section.requireID()
     }
@@ -82,7 +82,7 @@ import VaporTesting
     @Test func publishingACppDraftKeepsUploadOnlyAndWorker() async throws {
         try await withAssignmentRoutesApp { app in
             let courseID = try await app.testCourseID(enrollmentMode: .auto)
-            let sectionID = try await browserSection(courseID: courseID, on: app)
+            let sectionID = try await labsSection(courseID: courseID, on: app)
             _ = try await makeDraft(id: "setup_cpp_draft", language: .cpp, courseID: courseID, on: app)
 
             let props = try await publish(
@@ -95,11 +95,11 @@ import VaporTesting
     }
 
     /// The other half of the rule: a language with an editor kernel keeps the
-    /// notebook mode and takes the grading mode of the section's default type.
-    @Test func publishingAPythonDraftTakesTheSectionsDefaultType() async throws {
+    /// notebook mode and takes the grading mode of its declared type.
+    @Test func publishingAPythonDraftTakesTheDeclaredTypesMode() async throws {
         try await withAssignmentRoutesApp { app in
             let courseID = try await app.testCourseID(enrollmentMode: .auto)
-            let sectionID = try await browserSection(courseID: courseID, on: app)
+            let sectionID = try await labsSection(courseID: courseID, on: app)
             _ = try await makeDraft(id: "setup_py_draft", language: .python, courseID: courseID, on: app)
 
             let props = try await publish(

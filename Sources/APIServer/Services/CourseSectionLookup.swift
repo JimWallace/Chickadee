@@ -27,29 +27,18 @@ func resolveSectionID(_ raw: String?, courseID: UUID, db: any Database) async th
 }
 
 /// The type a new assignment declares on the create page: the type the author
-/// chose, else the default type of the section it goes into, else Assignment,
-/// the type whose secret tests stay on the worker (docs/assignment-types.md).
-/// An empty `requestedRaw` means no choice; an unknown one is refused.
-func newAssignmentDeclaredType(
-    requestedRaw: String?,
-    courseID: UUID,
-    sectionIDRaw: String,
-    on db: any Database
-) async throws -> AssignmentType {
+/// chose, else Assignment, the type whose secret tests stay on the worker. A
+/// section names no default type: the "+ Add" menu passes the author's choice
+/// (docs/assignment-types.md). An empty `requestedRaw` means no choice; an
+/// unknown one is refused.
+func newAssignmentDeclaredType(requestedRaw: String?) throws -> AssignmentType {
     let requested = requestedRaw?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-    if !requested.isEmpty {
-        guard let type = AssignmentType(rawValue: requested) else {
-            throw AppError.invalidParameter(
-                name: "assignmentType",
-                reason: "Unknown assignment type \"\(requested)\". Known types: "
-                    + AssignmentType.allCases.map(\.rawValue).joined(separator: ", ") + ".")
-        }
-        return type
+    guard !requested.isEmpty else { return .assignment }
+    guard let type = AssignmentType(rawValue: requested) else {
+        throw AppError.invalidParameter(
+            name: "assignmentType",
+            reason: "Unknown assignment type \"\(requested)\". Known types: "
+                + AssignmentType.allCases.map(\.rawValue).joined(separator: ", ") + ".")
     }
-    guard let sid = try await resolveSectionID(sectionIDRaw, courseID: courseID, db: db),
-        let section = try await APICourseSection.find(sid, on: db)
-    else {
-        return .assignment
-    }
-    return section.defaultAssignmentType ?? .assignment
+    return type
 }
