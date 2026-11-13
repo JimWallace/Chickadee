@@ -351,6 +351,9 @@ duplicate.
   result page's gain beside the grade ("+13%", result-celebration.md) uses
   it, because the gain is the student's own good news in the open colour,
   not a pass or fail count, which is what `.chip-ok` marks.
+- **`.due-relative`** — the relative reading inside a `DueDate`, after the
+  absolute time.  It is seeded empty, and its "·" separator is CSS that
+  shows only once `relative-time.js` has filled it ("Timestamps").
 - **`.account-identity`** — the account page's identity header: the resolved
   name and the username under it.  The bird is not here: it is in the
   `.bird-card` just below.  The name
@@ -1098,11 +1101,16 @@ Two renderings, chosen by what the reader is asking (UI audit S8):
   on every load before the script runs.  A hover `title` does not satisfy this: it is not a disclosure.
 
 - **Due dates** a student reads — the dashboard row, the submit page —
-  render through the `DueDate` view: the word "Due", the relative reading,
-  then the absolute time, with an optional note such as "(extension)".  The
+  render through the `DueDate` view: the word "Due", the absolute time,
+  then the relative reading, with an optional note such as "(extension)".  The
   reader asks both "how long do I have" and "when exactly", so both show,
-  and the label says which date it is (UI audit #3007).  Staff schedule
-  views (the Overview, the per-student page) still show the absolute date.
+  and the label says which date it is (UI audit #3007).  As in the audit
+  log, the absolute time is the no-JS fallback, so the relative span is
+  seeded **empty**, and its "·" separator comes from CSS only once the span
+  has text.  Seed it with the server string and the page prints the same
+  date twice before the script runs, and for good with JS off.  Staff
+  schedule views (the Overview, the per-student page) still show the
+  absolute date.
 
 The server-formatted string stays in the cell as the no-JS fallback, so a
 column degrades to an absolute date rather than to nothing.  Staleness

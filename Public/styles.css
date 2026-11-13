@@ -2325,10 +2325,22 @@ body:has(.notebook-header .nb-title-block) .nav {
 
 .submission-score-row .diagnostics-cards {
     flex: 1 1 24rem;
-    /* Always five across (passed, failed, errors, timed out, skipped): one
+    /* Five across (passed, failed, errors, timed out, skipped): one
        partition of the tests, not a responsive grid. Below the flex-basis the
-       whole block wraps under the grade rather than splitting 4+1. */
+       whole block wraps under the grade rather than splitting 4+1. A phone
+       is the one exception (the media query below). */
     grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+/* A phone has no room for five: at 375px each tile was about 49px wide, and
+   "Skipped", "Passed" and a three-digit count spilled out of it. Three across
+   (3 + 2) with tighter padding keeps every label and number inside its tile
+   down to 320px. */
+@media (max-width: 640px) {
+    .submission-score-row .diagnostics-cards {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: .5rem;
+    }
+    .submission-score-row .diagnostic-card { padding: .5rem .6rem; }
 }
 
 .score-delta {
@@ -3378,6 +3390,10 @@ body:has(.notebook-header .nb-title-block) .nav {
     line-height: 1.2;
 }
 .chip-row { display: flex; flex-wrap: wrap; gap: .45rem; }
+/* DueDate: the relative reading follows the absolute date. The span is
+   seeded empty (the date is the no-JS fallback), so the separator shows
+   only once relative-time.js has filled it. */
+.due-relative:not(:empty)::before { content: "· "; }
 
 /* Horizontal cluster of controls (button groups, inline actions). */
 .toolbar { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; }

@@ -1207,6 +1207,36 @@ coordination, and each must see every edit.
   - A browser result is authoritative, and a student can forge it
     (`docs/grading-integrity.md`). A feature that trusts a value in a result
     has the same risk.
+- **The result page's count tiles are not these counts.** `ResultCountTiles`
+  (`Routes/Web/SubmissionResultPresenter.swift`) puts each outcome in exactly one tile.
+  A test that the dependency gate skipped counts once, as Skipped, and not
+  also as Failed. The collection's `failCount` still counts it as a fail,
+  and the API and MCP report the collection's counts. The difference is
+  intended (UI audit #3007, finding 2). Do not "fix" one to match the other.
+  A collection with no outcomes keeps its own counts on the tiles.
+
+### Submission state words and "waiting": `SubmissionStatus.displayLabel`, `awaitsResult`
+
+- **Defined in:** `Utilities/SubmissionStatus+Display.swift`, next to the
+  enum's other `APIServer` code.
+- **Readers:**
+  - The result page. `SubmissionResultPresenter` sets `isPending` from
+    `awaitsResult`, which decides the pending band and the poll.
+  - The state poller. `SubmissionStateRegion` renders the band inline and as
+    the `?fragment=state` response that `Public/table-poll.js` swaps in; a
+    state that does not await a result renders the final marker that
+    `Public/app.js` answers with a reload.
+  - Both history tables (`SubmissionHistoryPage`,
+    `StudentAssignmentHistoryPage`), through `displayLabel(forRaw:)`.
+- **Rules:**
+  - There is one definition of "waiting". Do not test `status == .pending`
+    by hand on a page. If the page and the poller disagree, a page can
+    poll forever or never poll.
+  - A new `SubmissionStatus` case needs a `displayLabel` and an
+    `awaitsResult` answer. Student words name no "runner" or "worker".
+- **Trap:** the page once treated only `.pending` and `.assigned` as
+  waiting, while the poller also waited on `.running`. A page first loaded
+  in `.running` showed empty results and did not poll.
 
 ### Browser and native grades differ: `gradeSourceDisagreement`
 
@@ -1406,6 +1436,20 @@ coordination, and each must see every edit.
 - **Trap:** MCP `delete_support_file` ran the delete steps by hand and
   skipped the `dependsOn` check that the web delete ran (#2771). Both doors
   now call `deleteFileFromSetup` (`Services/SetupFileDeletion.swift`).
+
+### The Overview notice: `Request.setOverviewNotice`, `takeOverviewNotice`
+
+- **Writers:** "Create & Validate" (`DraftAssignmentRoutes+NewAssignment.swift`)
+  and "Save & Validate" (`PublishedAssignmentRoutes+SaveEdit.swift`). Each
+  leaves a one-shot notice in the session before it redirects to
+  `/instructor` (`Helpers/Request+OverviewNotice.swift`).
+- **Readers:** the Overview (`InstructorDashboardRoutes`), once.
+- **Rules:**
+  - The Overview always takes the session notice, then prefers a
+    `?notice=` query value when one is present. If the read is skipped, the
+    notice stays in the session and shows on a later, unrelated visit.
+  - The redirect location stays `/instructor`. Many tests pin it.
+- **Test:** `OverviewNoticeConsumptionTests`.
 
 ### Authoring checks: `AuthoringCheckCatalog`, `AuthoringFinding`
 

@@ -467,7 +467,9 @@ extension WebRoutes {
         let secretReveal = decorations.secretReveal
         let overrideGradePercent = decorations.overrideGradePercent
         let badges = decorations.badges
-        let isPending = submission.statusValue == .pending || submission.statusValue == .assigned
+        // The one definition of "waiting" (`SubmissionStatus.awaitsResult`),
+        // shared with the state poller, so the page and the poll agree.
+        let isPending = submission.statusValue?.awaitsResult ?? false
         let isBrowserComplete = false  // browser submissions now go straight to "complete"
         let pathExt = URL(fileURLWithPath: submission.zipPath).pathExtension.lowercased()
         let nameExt = (submission.filename ?? "").lowercased()
