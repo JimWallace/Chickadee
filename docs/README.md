@@ -129,7 +129,7 @@ not exist.
 - [mutation-trend.md](mutation-trend.md) — how to read a series of mutation runs
 - [mutation-triage.md](mutation-triage.md) — the protocol that turns mutation survivors into tests
 - [dead-code-scan.md](dead-code-scan.md) — the weekly Periphery Pro scan: reading its report, results that are not dead code, updating the tool and the token
-- [../Tools/maintenance/README.md](../Tools/maintenance/README.md) — the scheduled maintenance tasks on the maintainer's machine: what each does, when it runs, and the one-line prompt that points at its procedure
+- [../Tools/maintenance/README.md](../Tools/maintenance/README.md) — the nightly steward, the one scheduled maintenance task on the maintainer's machine: its jobs, its rules and how to set it up; [nightly.md](../Tools/maintenance/nightly.md) is the order of work and the calendar
 
 ## History
 
