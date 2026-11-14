@@ -1,0 +1,10 @@
+# An allowlist entry for a file that no longer polls must go, or the list
+# keeps a free pass for the next poller added to that file.
+guard="scripts/check-ui-vocabulary.sh"
+files="Public/idle-logout.js"
+description="a POLL_ALLOWLIST entry for a file without an interval timer"
+expect="names a file that is not a poller"
+apply() {
+    sed -i.bak 's/setInterval(evaluate, 1000);/setTimeout(evaluate, 1000);/' Public/idle-logout.js
+    rm -f Public/idle-logout.js.bak
+}

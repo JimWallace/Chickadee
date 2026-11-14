@@ -7,7 +7,8 @@
 // survive the process: a blue-green redeploy, crash, or OOM while an export
 // is still generating leaves its `data_exports` row stuck `pending` forever.
 // Nothing in the next process owns that orphaned row, and the account page's
-// status poll (`account-export.js`) only stops when the row leaves `pending`
+// status poll (`AccountExportStateRegion`, refreshed by `table-poll.js`)
+// only reloads the page when the row leaves `pending`
 // — so the user watches "your export is being prepared … this page will
 // refresh when it is ready" indefinitely and is never told their data is
 // ready or that it failed.
