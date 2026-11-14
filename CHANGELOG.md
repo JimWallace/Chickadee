@@ -9,6 +9,13 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.941] - 2026-11-14
+
+### Changed
+
+- **Tests for six pure-logic helpers.** New suites cover the submission output formatter, the legacy achievement kinds, the LEARN failure sentences, the kernel import guard, the non-Python solution extractor and the edge cases of the test-script variable prepender. These were the largest uncovered blocks of pure logic in the nightly coverage report. No product code changes.
+
+
 ## [0.5.940] - 2026-11-14
 
 ### Changed
