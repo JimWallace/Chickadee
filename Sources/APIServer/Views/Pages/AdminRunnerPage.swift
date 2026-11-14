@@ -33,7 +33,7 @@ struct AdminRunnerPage: HTML {
                     a(.href("/admin")) { "Overview" }
                     " › Runners"
                 }
-                div(.data("runner-id", value: runner.workerID), .class("page-titlebar")) {
+                div(.class("page-titlebar")) {
                     h1 {
                         code { runner.workerID }
                         " "

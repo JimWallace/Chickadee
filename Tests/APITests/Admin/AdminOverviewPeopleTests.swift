@@ -264,7 +264,6 @@ import VaporTesting
             ] {
                 #expect(html.contains("id=\"\(id)\""))
             }
-            #expect(html.contains("data-runner-id=\"detail-runner\""))
             // A fact with no value is left out, not shown as a dash.
             #expect(!html.contains("<dd>—</dd>"))
         }
