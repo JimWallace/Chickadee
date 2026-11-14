@@ -9,6 +9,13 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.943] - 2026-11-14
+
+### Fixed
+
+- **`scripts/mutation-run.sh` runs under macOS bash 3.2.** It used `mapfile`, which needs bash 4, so a local shard run failed on macOS. Read loops now fill the two arrays. Empty lines are dropped, and an empty build-argument list no longer trips `set -u`.
+
+
 ## [0.5.942] - 2026-11-14
 
 ### Changed
