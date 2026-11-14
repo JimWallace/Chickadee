@@ -5,5 +5,5 @@ files="Sources/APIServer/GitHub/GitHubTarball.swift"
 description="a Subprocess.run call with no environment: argument"
 expect="no environment:"
 apply() {
-    sed -i '/environment: .only(\["PATH"/d' Sources/APIServer/GitHub/GitHubTarball.swift
+    sed_inplace '/environment: .only(\["PATH"/d' Sources/APIServer/GitHub/GitHubTarball.swift
 }

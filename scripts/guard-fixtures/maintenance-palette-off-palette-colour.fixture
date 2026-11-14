@@ -5,5 +5,5 @@ files="deploy/error-pages/maintenance.html"
 description="a colour in the maintenance page that styles.css does not have"
 expect="uses a colour that does not exist"
 apply() {
-    sed -i 's|^    </style>$|      .guard-fixture { color: #123457; }\n    </style>|' deploy/error-pages/maintenance.html
+    sed_inplace 's|^    </style>$|      .guard-fixture { color: #123457; }\n    </style>|' deploy/error-pages/maintenance.html
 }

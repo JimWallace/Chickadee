@@ -6,5 +6,5 @@ files="Sources/APIServer/Helpers/ClientResponse+Body.swift"
 description="a Helpers file that names no request-layer type"
 expect="names no request-layer type"
 apply() {
-    sed -i 's/ClientResponse/ClientReply/g' Sources/APIServer/Helpers/ClientResponse+Body.swift
+    sed_inplace 's/ClientResponse/ClientReply/g' Sources/APIServer/Helpers/ClientResponse+Body.swift
 }

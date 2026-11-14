@@ -255,6 +255,9 @@ jobs:
       - name: Every guard has a fixture or a stated exemption
         run: scripts/check-guard-coverage.sh
 
+      - name: Guard fixtures edit files the same way on GNU and BSD sed
+        run: scripts/check-fixture-portable-sed.sh
+
       - name: Require a reason on every unchecked Sendable
         run: scripts/check-unchecked-sendable.sh
       - name: Shared code does not call up into the routes

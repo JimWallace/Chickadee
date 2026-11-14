@@ -1,0 +1,13 @@
+# GNU sed and BSD sed (macOS) do not agree on the in-place option, so a
+# fixture that calls it directly fails on macOS while CI stays green. The
+# defect is a new fixture that does so. Its text is built with printf, so
+# that this fixture does not hold the forbidden call itself.
+guard="scripts/check-fixture-portable-sed.sh"
+files=""
+created="scripts/guard-fixtures/fixture-portable-sed-probe.fixture"
+description="a fixture that calls sed with its in-place option directly"
+expect="calls sed with an in-place option directly"
+apply() {
+    printf 'apply() {\n    sed -%s %s Public/styles.css\n}\n' i "'s/a/b/'" \
+        >scripts/guard-fixtures/fixture-portable-sed-probe.fixture
+}
