@@ -1,0 +1,67 @@
+name,country,lat,lon
+Toronto,Canada,43.65,-79.38
+Vancouver,Canada,49.28,-123.12
+Mexico City,Mexico,19.43,-99.13
+Havana,Cuba,23.11,-82.37
+Bogotá,Colombia,4.71,-74.07
+Lima,Peru,-12.05,-77.04
+Santiago,Chile,-33.45,-70.67
+Buenos Aires,Argentina,-34.60,-58.38
+Montevideo,Uruguay,-34.90,-56.16
+São Paulo,Brazil,-23.55,-46.63
+Recife,Brazil,-8.05,-34.88
+Reykjavík,Iceland,64.15,-21.94
+Dublin,Ireland,53.35,-6.26
+Lisbon,Portugal,38.72,-9.14
+Madrid,Spain,40.42,-3.70
+Paris,France,48.86,2.35
+Amsterdam,Netherlands,52.37,4.90
+Oslo,Norway,59.91,10.75
+Berlin,Germany,52.52,13.40
+Rome,Italy,41.90,12.50
+Vienna,Austria,48.21,16.37
+Warsaw,Poland,52.23,21.01
+Athens,Greece,37.98,23.73
+Helsinki,Finland,60.17,24.94
+Kyiv,Ukraine,50.45,30.52
+Istanbul,Türkiye,41.01,28.98
+Cairo,Egypt,30.04,31.24
+Casablanca,Morocco,33.57,-7.59
+Dakar,Senegal,14.72,-17.47
+Lagos,Nigeria,6.52,3.38
+Accra,Ghana,5.60,-0.19
+Kinshasa,DR Congo,-4.32,15.31
+Luanda,Angola,-8.84,13.23
+Nairobi,Kenya,-1.29,36.82
+Addis Ababa,Ethiopia,9.03,38.74
+Dar es Salaam,Tanzania,-6.79,39.21
+Johannesburg,South Africa,-26.20,28.05
+Cape Town,South Africa,-33.92,18.42
+Antananarivo,Madagascar,-18.88,47.51
+Riyadh,Saudi Arabia,24.71,46.68
+Tehran,Iran,35.69,51.39
+Dubai,United Arab Emirates,25.20,55.27
+Tashkent,Uzbekistan,41.30,69.24
+Karachi,Pakistan,24.86,67.01
+Delhi,India,28.61,77.21
+Mumbai,India,19.08,72.88
+Kathmandu,Nepal,27.72,85.32
+Dhaka,Bangladesh,23.81,90.41
+Colombo,Sri Lanka,6.93,79.86
+Almaty,Kazakhstan,43.24,76.89
+Ulaanbaatar,Mongolia,47.89,106.91
+Bangkok,Thailand,13.76,100.50
+Hanoi,Vietnam,21.03,105.85
+Kuala Lumpur,Malaysia,3.14,101.69
+Singapore,Singapore,1.35,103.82
+Jakarta,Indonesia,-6.21,106.85
+Manila,Philippines,14.60,120.98
+Hong Kong,China,22.32,114.17
+Beijing,China,39.90,116.41
+Shanghai,China,31.23,121.47
+Seoul,South Korea,37.57,126.98
+Tokyo,Japan,35.68,139.69
+Perth,Australia,-31.95,115.86
+Darwin,Australia,-12.46,130.84
+Sydney,Australia,-33.87,151.21
+Melbourne,Australia,-37.81,144.96
