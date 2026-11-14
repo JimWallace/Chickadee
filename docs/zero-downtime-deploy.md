@@ -187,7 +187,9 @@ mechanism without moving any student traffic:
    prunes only untagged images, so a tag per release would fill the disk), and
    deploys it **by digest**. If the image is not published yet, the state is
    `waiting_for_image`: no snapshot, no swap, and a new check every poll. After
-   two hours of waiting the state becomes `stuck`.
+   two hours of waiting the state becomes `stuck`. Only the tag build in
+   `docker-build.yml` publishes this image (the push to `main` of a release
+   commit builds nothing), so if that build fails, re-run it.
 
    This replaced deploying `:latest`, which failed twice over. The release is
    published about 30 minutes before its own image build finishes, so the

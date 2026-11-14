@@ -421,6 +421,10 @@ Every push to `main` triggers `.github/workflows/docker-build.yml`, which:
    - `ghcr.io/jimwallace/chickadee:sha-<commit>` — immutable, used for rollback
 3. On version tags (`v0.x.y`): also pushes `ghcr.io/jimwallace/chickadee:v0.x.y`
 
+A release commit (`chore(release): ...`) is the exception: its push to `main`
+builds nothing, because its version tag build pushes the same `:latest` and
+`:sha-<commit>` tags.
+
 Pull requests build the image but do **not** push, catching build failures
 before they reach `main`.
 
