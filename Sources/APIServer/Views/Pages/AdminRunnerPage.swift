@@ -7,7 +7,7 @@
 // then recent jobs). The live part of the header is a region that
 // `table-poll.js` refreshes every 5 s from `?fragment=status`
 // (`AdminRunnerStatusRegion`). Public/admin-runner.js keeps the offline badge
-// in the heading honest between polls.
+// in the heading and the offline banner honest between polls.
 
 import Elementary
 
@@ -41,14 +41,22 @@ struct AdminRunnerPage: HTML {
                             .attributes(.hidden, when: !runner.isOffline)
                     }
                 }
+                // Outside the polled region: the banner is a `role="status"`
+                // live region, and a swap every poll would announce it again.
+                // admin-runner.js shows and hides it, as it does the badge.
+                FlashBanner(.warning) {
+                    strong { offlineForText.isEmpty ? "No heartbeat." : "No heartbeat for \(offlineForText)." }
+                    " Chickadee has stopped handing this runner work; queued jobs wait for a runner that is online."
+                }
+                .attributes(.id("runner-offline-status"))
+                .attributes(.hidden, when: !runner.isOffline)
                 div(
                     .class("js-runner-status"),
                     .data("poll-url", value: AdminRunnerStatusRegion.pollURL(forRunner: runner.workerID)),
                     .data("poll-swap", value: "region"), .data("poll-interval", value: "5000")
                 ) {
                     AdminRunnerStatusRegion(
-                        runner: runner, summary: summary, tags: tags, firstSeenAt: firstSeenAt,
-                        offlineForText: offlineForText)
+                        runner: runner, summary: summary, tags: tags, firstSeenAt: firstSeenAt)
                 }
             }
             utilization
@@ -141,17 +149,15 @@ struct AdminRunnerPage: HTML {
     }
 }
 
-/// The live part of the runner page's header: host and version, the offline
-/// notice, the status counts and the facts grid. Rendered inline and as the
-/// `?fragment=status` poll response, so the refresh cannot drift from the
-/// page. The heading stays outside it, as fixed chrome.
+/// The live part of the runner page's header: host and version, the status
+/// counts and the facts grid. Rendered inline and as the `?fragment=status`
+/// poll response, so the refresh cannot drift from the page. The heading and
+/// the offline banner stay outside it.
 struct AdminRunnerStatusRegion: HTML {
     let runner: AdminWorkerRow
     let summary: AdminRunnerSummary
     let tags: [String]
     let firstSeenAt: String?
-    /// "12m 3s" since the last heartbeat; empty while the runner is online.
-    let offlineForText: String
 
     /// The poll URL of one runner's region.
     static func pollURL(forRunner runnerID: String) -> String {
@@ -160,12 +166,6 @@ struct AdminRunnerStatusRegion: HTML {
 
     var body: some HTML {
         subtitle
-        FlashBanner(.warning) {
-            strong { offlineForText.isEmpty ? "No heartbeat." : "No heartbeat for \(offlineForText)." }
-            " Chickadee has stopped handing this runner work; queued jobs wait for a runner that is online."
-        }
-        .attributes(.id("runner-offline-status"))
-        .attributes(.hidden, when: !runner.isOffline)
         statusCards
         div(.class("card section-gap")) {
             RunnerFacts(runner: runner, summary: summary, tags: tags)

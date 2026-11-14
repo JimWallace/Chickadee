@@ -1249,6 +1249,24 @@ coordination, and each must see every edit.
   wardrobe grant still tested `.pending` and `.assigned` by hand, so a
   `.running` retest granted an item with no toast (#3018 review).
 
+### Data export state on the account page: `AccountExportStateRegion`
+
+- **Defined in:** `Views/Pages/AccountPage.swift`.
+- **Writers:** `APIDataExport.status`, set by the export task and by
+  `DataExportRecoveryService`, which moves a stuck `pending` row to `failed`.
+- **Readers:**
+  - The account page renders the region while the row is `pending`.
+  - `GET /account/export/status?fragment=state` renders it for
+    `Public/table-poll.js`. Any state that is not `pending` renders the
+    `data-export-final` marker.
+  - `Public/app.js` reloads `/account` when the marker appears.
+- **Rules:**
+  - The page and the fragment must agree on "pending". If the fragment
+    called a state pending that the page does not, the page would poll
+    forever. The recovery sweep exists so that no row stays `pending`.
+  - The plain JSON from `/account/export/status` is unchanged for any other
+    request (#3007).
+
 ### Browser and native grades differ: `gradeSourceDisagreement`
 
 - **Writers:** none. It reads the result rows: the browser path writes

@@ -54,8 +54,7 @@ extension AdminRoutes {
 
         if req.query[String.self, at: "fragment"] == "status" {
             let region = AdminRunnerStatusRegion(
-                runner: worker, summary: summary, tags: tags, firstSeenAt: firstSeenAt,
-                offlineForText: Self.offlineDuration(of: worker))
+                runner: worker, summary: summary, tags: tags, firstSeenAt: firstSeenAt)
             return Response.pollFragment(html: region.render(), for: req)
         }
 

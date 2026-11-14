@@ -84,9 +84,11 @@ import VaporTesting
             #expect(fragment.contains("<span id=\"runner-hostname\">grader.example</span>"))
             #expect(fragment.contains("<span id=\"runner-version\">0.5.9</span>"))
             #expect(fragment.contains("id=\"runner-last-active\""))
-            #expect(fragment.contains("id=\"runner-offline-status\""))
-            // The heading is fixed chrome, outside the region.
+            // The heading badge and the live offline banner are outside the
+            // region, so a swap does not announce the banner again.
             #expect(!fragment.contains("runner-offline-badge"))
+            #expect(!fragment.contains("runner-offline-status"))
+            #expect(!fragment.contains("role=\"status\""))
         }
     }
 }

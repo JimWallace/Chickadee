@@ -1033,8 +1033,8 @@ A page that must act on a new state (reload once a result or an export is
 ready) listens for `chickadee:table-repaint` on the region, as `app.js` does.
 `scripts/check-ui-vocabulary.sh` fails on a first-party `Public/*.js` file
 that calls both `setInterval` and `fetch(`, unless its poll allowlist says
-why that timer does not poll. Two card pollers on the admin and instructor
-Overview are on that list until they move.
+why that timer does not poll. A `role="status"` banner does not belong
+inside a region that changes on most polls: each swap announces it again.
 
 The affordances that say an element is interactive are a **closed registry**,
 enforced by `scripts/check-ui-vocabulary.sh`:

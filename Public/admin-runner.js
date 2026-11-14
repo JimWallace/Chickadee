@@ -1,12 +1,13 @@
 // @ts-check
 // Page wiring for the admin runner-detail page (AdminRunnerPage): keeps the
-// offline badge in the heading honest as the page ages.
+// offline badge and the offline banner honest as the page ages.
 //
 // This file does not poll. The live part of the header (host, version, last
-// active, the offline notice, the counts and the facts) is a region that
-// `table-poll.js` refreshes from `/admin/runners/:id?fragment=status`, the
-// one poller (docs/ui-design.md "Interaction idioms"). The heading is fixed
-// chrome outside that region, so its badge follows the region here: on each
+// active, the counts and the facts) is a region that `table-poll.js`
+// refreshes from `/admin/runners/:id?fragment=status`, the one poller
+// (docs/ui-design.md "Interaction idioms"). The heading badge and the banner
+// are outside that region: the banner is a live region, and a swap on every
+// poll would announce it again. So both follow the region here: on each
 // repaint, and on a timer that reads the last-active stamp the region holds.
 (function () {
     'use strict';
@@ -17,8 +18,8 @@
     // something is wrong, so it tracks the same answer — left behind, it would
     // still be explaining an outage minutes after the runner came back.
     //
-    // Each element is looked up on every call: a repaint replaces the status
-    // block and the last-active stamp with new nodes.
+    // Each element is looked up on every call: a repaint replaces the
+    // last-active stamp with a new node.
     function updateOfflineBadge() {
         var laEl = document.getElementById('runner-last-active');
         var laIso = laEl ? laEl.getAttribute('data-iso') : null;
