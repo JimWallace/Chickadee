@@ -58,7 +58,8 @@ by the same code that the `sum` compositor runs.
 ## Before class
 
 The seed decides the route, and this repository is public. Choose a private
-seed and do not commit the generated files. Set `--slots` to the number of
+seed and do not commit the generated files. This folder's `.gitignore`
+ignores them, and the `case` directory below. Set `--slots` to the number of
 composite slots, which is also the part count of each partition. Size it for
 the expected attendance (`docs/class-composite.md` §"Slot count"); 24 is a
 lab section. A second round of dealing covers a larger class.
@@ -92,7 +93,9 @@ for hop 3 (tolerance 30).
    the composite slot, so a student's evidence and slot agree.
 3. **Add the support files:** `chase_helpers.py`, `chase_grading.py`,
    `cities.csv`, `world_land.txt` and the four `practice_*` files. Mark
-   `route_key.json` and the four `decoy_*` files grader-only.
+   `route_key.json` and the four `decoy_*` files grader-only. Do not add
+   `reference_solution.py`: it defines the three functions, and the test
+   runtime could load them in place of a student's missing ones.
 4. **Add the five test scripts.** The four `publictest_*` scripts are in the
    public tier and `secrettest_decoy_case.py` is in the secret tier. A
    suggested weighting is 2 points for each hop, 1 for the route map and 1
@@ -116,7 +119,7 @@ for hop 3 (tolerance 30).
    ```
 
    One contribution is 64,800 bytes, inside the 64 KB cap. The limit of
-   4 MB for all slots allows up to 61 slots. `emptySlots: reference` is
+   4 MiB (4,194,304 bytes) for all slots allows up to 64 slots. `emptySlots: reference` is
    refused for `sum`, and no reference render is needed.
 6. **Upload `starter.ipynb` and `solution.ipynb`** and run validation.
 
