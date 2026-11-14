@@ -1029,6 +1029,12 @@ countdown all change with the table beside them. Reach for `json` only for somet
 renders: the class composite's canvas, whose pixels a region swap would throw
 away. It polls at once, then on the interval. Whatever the mode, keep a page's
 fixed chrome — its heading, its chips, its intro — OUTSIDE the polled element.
+A page that must act on a new state (reload once a result or an export is
+ready) listens for `chickadee:table-repaint` on the region, as `app.js` does.
+`scripts/check-ui-vocabulary.sh` fails on a first-party `Public/*.js` file
+that calls both `setInterval` and `fetch(`, unless its poll allowlist says
+why that timer does not poll. Two card pollers on the admin and instructor
+Overview are on that list until they move.
 
 The affordances that say an element is interactive are a **closed registry**,
 enforced by `scripts/check-ui-vocabulary.sh`:

@@ -17,8 +17,7 @@ extension AdminRoutes {
     @Sendable
     /// Two representations, one query: `?fragment=rows` renders `WorkerRows`
     /// — the SAME view the dashboard renders, so the poll cannot drift from
-    /// the page — and anything else keeps the JSON array unchanged (the
-    /// runner-detail page's poll reads it).
+    /// the page — and anything else keeps the JSON array unchanged.
     func runners(req: Request) async throws -> Response {
         let rows = try await makeWorkerRows(req: req)
         guard req.query[String.self, at: "fragment"] == "rows" else {
@@ -30,8 +29,12 @@ extension AdminRoutes {
 
     // MARK: - GET /admin/runners/:runnerID
 
+    /// Two representations, one query, as on every polled page:
+    /// `?fragment=status` renders the header's live region
+    /// (`AdminRunnerStatusRegion`) from the same view the page rendered
+    /// inline, for `table-poll.js`. Any other request renders the page.
     @Sendable
-    func runnerDetail(req: Request) async throws -> HTMLResponse<AdminRunnerPage> {
+    func runnerDetail(req: Request) async throws -> Response {
         guard let runnerID = req.parameters.get("runnerID"), !runnerID.isEmpty else {
             throw AppError.notFound(resource: "Runner")
         }
@@ -39,15 +42,26 @@ extension AdminRoutes {
         let worker = try await resolveWorkerRow(req: req, runnerID: runnerID)
         let runnerProfile = try? await req.application.runnerProfiles.profile(for: runnerID, on: req.db)
 
-        let snapshots = try await RunnerSnapshot.query(on: req.db)
-            .filter(\.$runnerID == runnerID)
-            .sort(\.$recordedAt, .descending)
-            .limit(50)
-            .all()
-
         let recentJobs = try await JobExecutionMetric.query(on: req.db)
             .filter(\.$runnerID == runnerID)
             .sort(\.$completedAt, .descending)
+            .limit(50)
+            .all()
+        let firstSeenAt = try await fetchFirstSeenAt(req: req, runnerID: runnerID)
+        let statusCounts = countStatuses(in: recentJobs)
+        let summary = makeRunnerSummary(worker: worker, recentJobs: recentJobs, statusCounts: statusCounts)
+        let tags = makeRunnerTags(profile: runnerProfile)
+
+        if req.query[String.self, at: "fragment"] == "status" {
+            let region = AdminRunnerStatusRegion(
+                runner: worker, summary: summary, tags: tags, firstSeenAt: firstSeenAt,
+                offlineForText: Self.offlineDuration(of: worker))
+            return Response.pollFragment(html: region.render(), for: req)
+        }
+
+        let snapshots = try await RunnerSnapshot.query(on: req.db)
+            .filter(\.$runnerID == runnerID)
+            .sort(\.$recordedAt, .descending)
             .limit(50)
             .all()
 
@@ -55,8 +69,6 @@ extension AdminRoutes {
         // A deployment-wide list that belongs to no course: staff anywhere wear
         // the staff ring, as on the account page (#1758).
         let staffIDs = try await AvatarStore.courseStaff(among: Array(usersByID.keys), on: req.db)
-        let firstSeenAt = try await fetchFirstSeenAt(req: req, runnerID: runnerID)
-        let statusCounts = countStatuses(in: recentJobs)
         let snapshotRows = snapshots.map(snapshotRow(for:))
         let limitBySetupID = await timeLimits(for: recentJobs, on: req.db)
         var jobRows: [AdminRunnerJobRow] = []
@@ -67,10 +79,8 @@ extension AdminRoutes {
                     on: req.db))
         }
         let chart = Self.utilizationChart(snapshots: snapshots)
-        let summary = makeRunnerSummary(worker: worker, recentJobs: recentJobs, statusCounts: statusCounts)
-        let tags = makeRunnerTags(profile: runnerProfile)
 
-        return HTMLResponse {
+        return try await HTMLResponse {
             AdminRunnerPage(
                 page: PageRequestContext(request: req),
                 runner: worker,
@@ -83,7 +93,7 @@ extension AdminRoutes {
                 chartLabels: chart.labels,
                 offlineForText: Self.offlineDuration(of: worker)
             )
-        }
+        }.encodeResponse(for: req)
     }
 
     // MARK: - runnerDetail helpers

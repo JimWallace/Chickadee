@@ -14,7 +14,7 @@ set -euo pipefail
 # makes a page-local re-implementation expensive — and it has a hole the width
 # of the global sheet: a new component costs nothing if you put it in
 # Public/styles.css, which carries no budget at all.  Everything below is what
-# went through that hole, generalized.  Three rules:
+# went through that hole, generalized.  Three rules, and a fourth below:
 #
 #   1. CATALOG.  A class with a rule in the global sheet should be named in
 #      the component vocabulary in docs/ui-design.md.  That rule is already
@@ -39,6 +39,10 @@ set -euo pipefail
 #      When it holds sentences, the sentences belong on the page or in the
 #      docs, and the guard's job is to make that trade visible at the moment
 #      it is made.
+#
+#   4. ONE POLLER (added for #3007).  A first-party Public/*.js file that
+#      calls the interval timer and the request function is a private poller,
+#      unless an allowlist entry says why it is not.  Section 4 has the detail.
 #
 # Scope: rules 1 and 2 read Public/styles.css, and rule 2 also reads the
 # Elementary views' PageStyle blocks, since an idiom hides just as well in one.
@@ -360,8 +364,73 @@ if [ -n "$long_titles" ]; then
   echo
 fi
 
+# ── 4. One poller ────────────────────────────────────────────────────────────
+#
+# Keeping a page current is one mechanism: Public/table-poll.js, driven by
+# data attributes (docs/ui-design.md "Interaction idioms"). A private poller
+# is a timer plus a request, and each one so far forgot something the shared
+# one does: a hidden tab, a stop on error, the background-refresh header that
+# lets a session expire, the conditional request (#3007).
+#
+# The scan is per file and coarse on purpose: a first-party Public/*.js file
+# that calls the interval timer AND the request function is a poller until
+# the list below says why it is not. Full-line comments are dropped first, so
+# prose about the old idiom does not match (the lesson in the root CLAUDE.md).
+#
+# One entry per line: file|reason. An entry for a file that no longer matches
+# is an error too, so the list cannot go stale. The last two entries are
+# pollers that are not on table-poll.js yet; remove each when it moves.
+POLL_ALLOWLIST='Public/table-poll.js|The one poller.
+Public/idle-logout.js|The timer is the idle countdown. The request is a keepalive sent on user activity.
+Public/notebook.js|The timers re-apply the editor lock and send freeze beats to a worker. No timer sends a request.
+Public/freeze-watchdog-worker.js|The timer checks for missed beats. The request reports a freeze once.
+Public/admin-dashboard.js|Not moved yet. The 60 s sparkline cards fetch JSON that the page draws (#3007).
+Public/assignments.js|Not moved yet. The 60 s metrics cards fetch JSON that the page draws (#3007).'
+
+# Full-line `//` and block-comment lines are dropped. A timer or request named
+# in a trailing comment still matches, which errs in the safe direction.
+js_code_without_comments() {
+  grep -vE '^[[:space:]]*(//|/\*|\*)' "$1" || true
+}
+
+pollers=""
+for f in Public/*.js; do
+  code="$(js_code_without_comments "$f")"
+  if grep -q 'setInterval' <<<"$code" && grep -q 'fetch(' <<<"$code"; then
+    pollers+="$f"$'\n'
+  fi
+done
+allowed_pollers="$(cut -d'|' -f1 <<<"$POLL_ALLOWLIST")"
+
+unlisted_pollers="$(comm -23 <(printf '%s' "$pollers" | grep . | sort -u) <(printf '%s\n' "$allowed_pollers" | sort -u))"
+stale_poll_entries="$(comm -13 <(printf '%s' "$pollers" | grep . | sort -u) <(printf '%s\n' "$allowed_pollers" | sort -u))"
+
+if [ -n "$unlisted_pollers" ]; then
+  status=1
+  echo "ERROR: a private poller outside table-poll.js."
+  printf '%s\n' "$unlisted_pollers" | sed 's/^/  /'
+  echo
+  echo "       This file calls setInterval and fetch(. Keeping a page current is one"
+  echo "       mechanism: put data-poll-url on the element and let Public/table-poll.js"
+  echo "       refresh it from a server fragment (\"Interaction idioms\" in $rulebook)."
+  echo "       A page that must act on the new state listens for chickadee:table-repaint,"
+  echo "       as app.js does for the results page."
+  echo
+  echo "       If the timer does not poll (a countdown, a heartbeat to a worker), add the"
+  echo "       file to POLL_ALLOWLIST in scripts/check-ui-vocabulary.sh with the reason."
+  echo
+fi
+if [ -n "$stale_poll_entries" ]; then
+  status=1
+  echo "ERROR: a POLL_ALLOWLIST entry names a file that is not a poller."
+  printf '%s\n' "$stale_poll_entries" | sed 's/^/  /'
+  echo
+  echo "       Remove the entry from scripts/check-ui-vocabulary.sh."
+  echo
+fi
+
 if [ "$status" -eq 0 ]; then
-  echo "check-ui-vocabulary: OK (catalog at $catalog_count/$CATALOG_BASELINE; affordances registered; hover text within $TITLE_WORD_CAP words)"
+  echo "check-ui-vocabulary: OK (catalog at $catalog_count/$CATALOG_BASELINE; affordances registered; hover text within $TITLE_WORD_CAP words; one poller)"
 fi
 
 exit "$status"

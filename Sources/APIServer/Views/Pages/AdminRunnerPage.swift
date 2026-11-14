@@ -4,8 +4,10 @@
 // shared with the course and user pages: titlebar (name, current state) →
 // subtitle (the identifiers you would paste into a ticket) → a status block
 // ONLY when something is wrong → the facts → the history (a utilization chart,
-// then recent jobs). The offline badge and the 5s live-status poll are wired
-// by Public/admin-runner.js.
+// then recent jobs). The live part of the header is a region that
+// `table-poll.js` refreshes every 5 s from `?fragment=status`
+// (`AdminRunnerStatusRegion`). Public/admin-runner.js keeps the offline badge
+// in the heading honest between polls.
 
 import Elementary
 
@@ -39,16 +41,14 @@ struct AdminRunnerPage: HTML {
                             .attributes(.hidden, when: !runner.isOffline)
                     }
                 }
-                subtitle
-                FlashBanner(.warning) {
-                    strong { offlineForText.isEmpty ? "No heartbeat." : "No heartbeat for \(offlineForText)." }
-                    " Chickadee has stopped handing this runner work; queued jobs wait for a runner that is online."
-                }
-                .attributes(.id("runner-offline-status"))
-                .attributes(.hidden, when: !runner.isOffline)
-                statusCards
-                div(.class("card section-gap")) {
-                    RunnerFacts(runner: runner, summary: summary, tags: tags)
+                div(
+                    .class("js-runner-status"),
+                    .data("poll-url", value: AdminRunnerStatusRegion.pollURL(forRunner: runner.workerID)),
+                    .data("poll-swap", value: "region"), .data("poll-interval", value: "5000")
+                ) {
+                    AdminRunnerStatusRegion(
+                        runner: runner, summary: summary, tags: tags, firstSeenAt: firstSeenAt,
+                        offlineForText: offlineForText)
                 }
             }
             utilization
@@ -60,30 +60,9 @@ struct AdminRunnerPage: HTML {
                     jobsTable
                 }
             }
+            script(.src(page.asset("/table-poll.js"))) {}
             script(.src(page.asset("/admin-runner.js"))) {}
             script(.src(page.asset("/sortable-table.js"))) {}
-        }
-    }
-
-    /// Host, version and first registration.
-    private var subtitle: some HTML {
-        p(.class("section-intro")) {
-            span(.id("runner-hostname")) { runner.hostname.isEmpty ? "Unknown host" : runner.hostname }
-            " · "
-            span(.id("runner-version")) { runner.runnerVersion.isEmpty ? "Unknown version" : runner.runnerVersion }
-            if let firstSeenAt {
-                " · registered "
-                span(.class("js-relative-time"), .data("iso", value: firstSeenAt)) { firstSeenAt }
-            }
-        }
-    }
-
-    private var statusCards: some HTML {
-        div(.class("diagnostics-cards section-gap")) {
-            StatusCard(label: "Passed", value: summary.passedCount)
-            StatusCard(label: "Failed", value: summary.failedCount)
-            StatusCard(label: "Errored", value: summary.errorCount)
-            StatusCard(label: "Timed Out", value: summary.timeoutCount)
         }
     }
 
@@ -158,6 +137,60 @@ struct AdminRunnerPage: HTML {
                     RunnerJobRow(job: job)
                 }
             }
+        }
+    }
+}
+
+/// The live part of the runner page's header: host and version, the offline
+/// notice, the status counts and the facts grid. Rendered inline and as the
+/// `?fragment=status` poll response, so the refresh cannot drift from the
+/// page. The heading stays outside it, as fixed chrome.
+struct AdminRunnerStatusRegion: HTML {
+    let runner: AdminWorkerRow
+    let summary: AdminRunnerSummary
+    let tags: [String]
+    let firstSeenAt: String?
+    /// "12m 3s" since the last heartbeat; empty while the runner is online.
+    let offlineForText: String
+
+    /// The poll URL of one runner's region.
+    static func pollURL(forRunner runnerID: String) -> String {
+        "/admin/runners/\(runnerID)?fragment=status"
+    }
+
+    var body: some HTML {
+        subtitle
+        FlashBanner(.warning) {
+            strong { offlineForText.isEmpty ? "No heartbeat." : "No heartbeat for \(offlineForText)." }
+            " Chickadee has stopped handing this runner work; queued jobs wait for a runner that is online."
+        }
+        .attributes(.id("runner-offline-status"))
+        .attributes(.hidden, when: !runner.isOffline)
+        statusCards
+        div(.class("card section-gap")) {
+            RunnerFacts(runner: runner, summary: summary, tags: tags)
+        }
+    }
+
+    /// Host, version and first registration.
+    private var subtitle: some HTML {
+        p(.class("section-intro")) {
+            span(.id("runner-hostname")) { runner.hostname.isEmpty ? "Unknown host" : runner.hostname }
+            " · "
+            span(.id("runner-version")) { runner.runnerVersion.isEmpty ? "Unknown version" : runner.runnerVersion }
+            if let firstSeenAt {
+                " · registered "
+                span(.class("js-relative-time"), .data("iso", value: firstSeenAt)) { firstSeenAt }
+            }
+        }
+    }
+
+    private var statusCards: some HTML {
+        div(.class("diagnostics-cards section-gap")) {
+            StatusCard(label: "Passed", value: summary.passedCount)
+            StatusCard(label: "Failed", value: summary.failedCount)
+            StatusCard(label: "Errored", value: summary.errorCount)
+            StatusCard(label: "Timed Out", value: summary.timeoutCount)
         }
     }
 }

@@ -1,0 +1,9 @@
+# A page keeps itself current through table-poll.js, the one poller. A timer
+# plus a request in another first-party file is a private poller (#3007).
+guard="scripts/check-ui-vocabulary.sh"
+files="Public/app.js"
+description="a setInterval that calls fetch in first-party JS other than table-poll.js"
+expect="a private poller outside table-poll.js"
+apply() {
+    printf "\nsetInterval(function () { fetch('/ck-guard-fixture'); }, 3000);\n" >> Public/app.js
+}
