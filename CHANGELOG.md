@@ -9,6 +9,13 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.946] - 2026-11-14
+
+### Changed
+
+- **More test coverage for pure logic.** New tests cover the bug hunt problem messages, the `TestItem` envelope and two Core labels, the BrightSpace sync configuration and error descriptions, the Lua and Octave personalization drivers with support files, and edge cases of the Python submission normalizer. No product code changed.
+
+
 ## [0.5.945] - 2026-11-14
 
 ### Changed
