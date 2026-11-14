@@ -9,6 +9,13 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.940] - 2026-11-14
+
+### Changed
+
+- **CI builds each release image once.** `docker-build.yml` no longer builds the push to `main` of a `chore(release):` commit. The tag build of the same commit pushes the same `:latest` and `:sha-` tags, so the second build cost about 29 runner minutes per release and held up the next merge's image build.
+
+
 ## [0.5.939] - 2026-11-14
 
 ### Changed
