@@ -9,6 +9,27 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.942] - 2026-11-14
+
+### Changed
+
+- **Two more pages refresh through the shared poller.** The account page's data-export state and the live header of the admin runner page are regions that `table-poll.js` refreshes from a server fragment. The two private pollers are gone. The export poll now stops while the tab is hidden and lets an idle session expire. The runner page now also refreshes its status counts and facts. `scripts/check-ui-vocabulary.sh` fails on a new private poller in `Public/*.js` (#3007).
+
+
+## [0.5.941] - 2026-11-14
+
+### Changed
+
+- **Tests for six pure-logic helpers.** New suites cover the submission output formatter, the legacy achievement kinds, the LEARN failure sentences, the kernel import guard, the non-Python solution extractor and the edge cases of the test-script variable prepender. These were the largest uncovered blocks of pure logic in the nightly coverage report. No product code changes.
+
+
+## [0.5.940] - 2026-11-14
+
+### Changed
+
+- **CI builds each release image once.** `docker-build.yml` no longer builds the push to `main` of a `chore(release):` commit. The tag build of the same commit pushes the same `:latest` and `:sha-` tags, so the second build cost about 29 runner minutes per release and held up the next merge's image build.
+
+
 ## [0.5.939] - 2026-11-14
 
 ### Changed
