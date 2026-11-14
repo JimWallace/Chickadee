@@ -9,6 +9,13 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.947] - 2026-11-14
+
+### Changed
+
+- **Tests for the result-visibility helpers.** A mutation run on the failure-detail mask and the tier filter found eight survivors. Two new suites kill all eight: they check the counts that a tier filter recomputes, which outcomes the mask changes, a headline behind a test label, the fingerprint order and the release gate at the deadline itself. No product code changes.
+
+
 ## [0.5.946] - 2026-11-14
 
 ### Changed
