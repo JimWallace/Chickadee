@@ -9,6 +9,13 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.945] - 2026-11-14
+
+### Changed
+
+- **Mutation run on the authoring validators and the notebook substitution.** The steward ran the mutation tool on six APIServer files that the weekly sweep does not cover (`IdentifierValidation`, `PatternFamilyValidator`, `PatternFamilyAuthoredGraph`, `NotebookCheckValidator`, `NotebookSubstitution`, `TestScriptVariablePrepender`). Three new test suites, `AuthoredGraphPhaseTests`, `PatternFamilyCrossFamilyValidationTests` and `NotebookSubstitutionCellShapeTests`, kill nine of the ten survivors. The tenth is an equivalent mutant in `NotebookSubstitution`, recorded with its argument in `Tools/mutation/equivalent-mutants.json`.
+
+
 ## [0.5.944] - 2026-11-14
 
 ### Fixed

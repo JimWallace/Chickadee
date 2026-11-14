@@ -1,3 +1,0 @@
-### Changed
-
-- **Mutation run on the authoring validators and the notebook substitution.** The steward ran the mutation tool on six APIServer files that the weekly sweep does not cover (`IdentifierValidation`, `PatternFamilyValidator`, `PatternFamilyAuthoredGraph`, `NotebookCheckValidator`, `NotebookSubstitution`, `TestScriptVariablePrepender`). Three new test suites, `AuthoredGraphPhaseTests`, `PatternFamilyCrossFamilyValidationTests` and `NotebookSubstitutionCellShapeTests`, kill nine of the ten survivors. The tenth is an equivalent mutant in `NotebookSubstitution`, recorded with its argument in `Tools/mutation/equivalent-mutants.json`.
