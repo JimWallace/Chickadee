@@ -6,5 +6,5 @@ files="Public/runner-support-sources.js"
 description="a runtime helper in runner-support-sources.js edited by hand"
 expect="runtime helpers are stale"
 apply() {
-    sed -i 's/"test_runtime.py": "/"test_runtime.py": "# hand edit\\n/' Public/runner-support-sources.js
+    sed_inplace 's/"test_runtime.py": "/"test_runtime.py": "# hand edit\\n/' Public/runner-support-sources.js
 }

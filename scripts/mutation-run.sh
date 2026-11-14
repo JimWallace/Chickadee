@@ -195,7 +195,7 @@ command -v swift >/dev/null || { echo "swift not on PATH" >&2; exit 1; }
 #     scripts/mutation-run.sh --check-build-flags
 check_warning_demotion() {
     local probe
-    local extra_args
+    local extra_args line
     probe="${TMPDIR:-/tmp}/chickadee-mutation-flag-probe"
     rm -rf "$probe"
     mkdir -p "$probe/Sources/Probe"
@@ -204,7 +204,12 @@ check_warning_demotion() {
     # build; everything else in testArgs is build configuration and belongs in
     # the probe. Derived rather than restated, so the probe measures whatever
     # the sweep is actually configured to use.
-    mapfile -t extra_args < <(python3 - "$config" "$repo_root" <<'ARGS'
+    # A read loop, not mapfile: mapfile needs bash 4, and macOS ships bash 3.2,
+    # where the nightly steward runs this script.
+    extra_args=()
+    while IFS= read -r line; do
+        if [ -n "$line" ]; then extra_args+=("$line"); fi
+    done < <(python3 - "$config" "$repo_root" <<'ARGS'
 import json, sys
 args = json.load(open(sys.argv[1]))["testArgs"]
 out, i = [], 0
@@ -241,7 +246,7 @@ public func probe() {
 }
 SOURCE
 
-    ( cd "$probe" && swift build "${extra_args[@]}" ) > "$probe/log.txt" 2>&1
+    ( cd "$probe" && swift build ${extra_args[@]+"${extra_args[@]}"} ) > "$probe/log.txt" 2>&1
 }
 
 echo "==> checking that a mutated copy's warnings are not errors"
@@ -275,7 +280,10 @@ else
         echo "shard $SHARD out of range (0..$((SHARD_COUNT - 1)))" >&2
         exit 2
     fi
-    mapfile -t shard_files < <(assign "$SHARD")
+    shard_files=()
+    while IFS= read -r line; do
+        if [ -n "$line" ]; then shard_files+=("$line"); fi
+    done < <(assign "$SHARD")
     [ "${#shard_files[@]}" -gt 0 ] || { echo "shard $SHARD is empty" >&2; exit 1; }
     label="shard $SHARD of $SHARD_COUNT"
     echo "==> $label: ${#shard_files[@]} files"

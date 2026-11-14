@@ -5,5 +5,5 @@ files="Public/jupyterlite/jupyter-lite.json"
 description="a default kernel other than xpython in the built config"
 expect="defaultKernelName must be 'xpython'"
 apply() {
-    sed -i 's|"defaultKernelName": "xpython"|"defaultKernelName": "xr"|' Public/jupyterlite/jupyter-lite.json
+    sed_inplace 's|"defaultKernelName": "xpython"|"defaultKernelName": "xr"|' Public/jupyterlite/jupyter-lite.json
 }

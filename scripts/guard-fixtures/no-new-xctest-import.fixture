@@ -6,5 +6,6 @@ files="Tests/APITests/Infrastructure/COEPMiddlewareTests.swift"
 description="a test file that imports XCTest"
 expect="import XCTest/XCTVapor"
 apply() {
-    sed -i '1i import XCTest' Tests/APITests/Infrastructure/COEPMiddlewareTests.swift
+    sed_inplace '1i\
+import XCTest' Tests/APITests/Infrastructure/COEPMiddlewareTests.swift
 }

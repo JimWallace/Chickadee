@@ -6,5 +6,5 @@ files=".swift-format"
 description="a swift-format configuration that does not name one rule"
 expect="does not list the rule UseEarlyExits"
 apply() {
-    sed -i '/"UseEarlyExits"/d' .swift-format
+    sed_inplace '/"UseEarlyExits"/d' .swift-format
 }

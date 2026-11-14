@@ -9,6 +9,34 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.946] - 2026-11-14
+
+### Changed
+
+- **More test coverage for pure logic.** New tests cover the bug hunt problem messages, the `TestItem` envelope and two Core labels, the BrightSpace sync configuration and error descriptions, the Lua and Octave personalization drivers with support files, and edge cases of the Python submission normalizer. No product code changed.
+
+
+## [0.5.945] - 2026-11-14
+
+### Changed
+
+- **Mutation run on the authoring validators and the notebook substitution.** The steward ran the mutation tool on six APIServer files that the weekly sweep does not cover (`IdentifierValidation`, `PatternFamilyValidator`, `PatternFamilyAuthoredGraph`, `NotebookCheckValidator`, `NotebookSubstitution`, `TestScriptVariablePrepender`). Three new test suites, `AuthoredGraphPhaseTests`, `PatternFamilyCrossFamilyValidationTests` and `NotebookSubstitutionCellShapeTests`, kill nine of the ten survivors. The tenth is an equivalent mutant in `NotebookSubstitution`, recorded with its argument in `Tools/mutation/equivalent-mutants.json`.
+
+
+## [0.5.944] - 2026-11-14
+
+### Fixed
+
+- **Guard fixtures run on macOS.** Nineteen guard fixtures called GNU-style `sed` in-place edits, which BSD `sed` on macOS refuses, so `scripts/check-guards.sh` failed on macOS (and one fixture left a stray backup file) while CI on Linux stayed green. `check-guards.sh` now defines `sed_inplace`, which writes to a temporary file and copies the result back, and every fixture uses it with the same defect. The new `scripts/check-fixture-portable-sed.sh` guard, with its own fixture, fails when a fixture calls `sed` in place directly.
+
+
+## [0.5.943] - 2026-11-14
+
+### Fixed
+
+- **`scripts/mutation-run.sh` runs under macOS bash 3.2.** It used `mapfile`, which needs bash 4, so a local shard run failed on macOS. Read loops now fill the two arrays. Empty lines are dropped, and an empty build-argument list no longer trips `set -u`.
+
+
 ## [0.5.942] - 2026-11-14
 
 ### Changed
