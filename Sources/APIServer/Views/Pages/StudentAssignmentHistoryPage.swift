@@ -82,7 +82,11 @@ struct StudentAssignmentHistoryRow: HTML {
         tr {
             td { "\(row.attemptNumber)" }
             SubmittedAtCell(row: row)
-            td { span(.class("tier")) { SubmissionStatus.displayLabel(forRaw: row.status) } }
+            td {
+                span(.class(SubmissionStatus.badgeClass(forRaw: row.status))) {
+                    SubmissionStatus.displayLabel(forRaw: row.status)
+                }
+            }
             td {
                 strong { row.gradeText }
                 // A signal for the instructor, not an accusation

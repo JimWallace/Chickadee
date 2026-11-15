@@ -16,7 +16,7 @@ struct WorkerRows: HTML {
         if workers.isEmpty {
             tr {
                 td(.custom(name: "colspan", value: "5"), .class("section-empty-cell")) {
-                    "No runners are connected. Submissions wait in the queue until one connects."
+                    "No runners are connected, so submissions wait in the queue."
                 }
             }
         }

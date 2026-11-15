@@ -23,6 +23,21 @@ extension SubmissionStatus {
         }
     }
 
+    /// The badge classes for this state. Only `.failed` is a state where
+    /// something went wrong, so only it takes `.tier-danger`; the rest are
+    /// the neutral `.tier` (UI audit #3007, review decision 3).
+    var badgeClass: String {
+        switch self {
+        case .failed: "tier tier-danger"
+        case .pending, .assigned, .running, .complete, .arena: "tier"
+        }
+    }
+
+    /// The badge classes for a stored raw value; an unknown value is neutral.
+    static func badgeClass(forRaw raw: String) -> String {
+        SubmissionStatus(rawValue: raw)?.badgeClass ?? "tier"
+    }
+
     /// True while the submission has no result yet, so its result page polls.
     var awaitsResult: Bool {
         switch self {
