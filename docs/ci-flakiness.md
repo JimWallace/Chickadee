@@ -1,7 +1,7 @@
 # CI flakiness — known families
 
-**Open: Families 2, 3, 4, 7 and 8.** These can still make a check red, and the
-cause is not fixed in this repository. **Mitigated: Family 5.** It is closed
+**Open: Families 2, 3, 4, 7, 8 and 9.** These can still make a check red, and
+the cause is not fixed in this repository. **Mitigated: Family 5.** It is closed
 for monitoring since 2026-09-28, but nobody found its cause. **Fixed: Families
 1 and 6.**
 
@@ -27,6 +27,7 @@ heading for each family.
 | 6 | `worker-tests` cancelled at its ceiling after the move to resolute | fixed | `worker-tests` reads `cancelled`. `[ci-pressure]` shows `scopes=0.0/min` with `self cpu=0.0%`. Some `WorkerDaemonTests` record "Time limit was exceeded". | It should not recur. If it does, read the printed wedge dump. |
 | 7 | `build` exits 139 as Swift Build starts planning (libdispatch, upstream) | open (upstream bug; in-job retry) | Step `Build all targets and tests` red within about 90 s. Exit 139. The last build line is `[Planning 1 / N]`. `DispatchWorker` crashed in `_dispatch_event_loop_drain`. A `::warning` "Family 7 retry" on a green job is one absorbed hit. | Not your diff: nothing compiled. One `/rerun-failed`. Never read the diff for it. |
 | 8 | A test lane misses the shared `.build` cache that `build` saved (cache eviction, inferred) | open (fails fast since the guard) | A `::error` "Family 8" in the `Swift test setup` step of a test lane, after "Cache not found for input keys". Before the guard: `[N / M]` compile lines inside a `Run …Tests` step, a timeout with no `Test run with` line, and "No wedge dump was written." Other lanes on the same run passed. | Not your diff. Do not use `/rerun-failed`: the cache is gone, so it misses again. Re-run all jobs, so `build` saves again. |
+| 9 | Workbench shell e2e: the toolbar insert after a save does not take effect, `smoke (chromium)` | open (cause unknown; diagnostics kept) | Step `Run workbench shell e2e (chromium)`: `SHELL FAIL — locator.click: Timeout 30000ms exceeded`, waiting for `.jp-Cell.jp-mod-active .cm-content`, which resolves to a `data-language="markdown"` editor that "is not visible". The selftest passed before it. | Not your diff if the diff cannot reach the workbench or the editor. Download the `smoke-diagnostics-chromium` artifact, then re-run the job once. |
 
 ## Before you chase a red check
 
@@ -384,6 +385,64 @@ re-run of a Docker-relevant PR rebuilds the release binaries cold. The `-build-`
 stays, because the PR's own test lanes read it. The `-probebuild-` save stays
 for now: without it, every probe build that loses the race with `build` is
 cold, and so is every probe re-run.
+
+## Family 9 — workbench shell e2e: the toolbar insert after a save does not take effect (`smoke (chromium)`) — OPEN, cause unknown
+
+**Tells.** `smoke (chromium)` in `browser-probes.yml` fails at the step
+"Run workbench shell e2e (chromium)", in step 4 of
+`Tools/editor-smoke-test/workbench-shell-check.mjs` ("A saved setting keeps
+the kernel"). The save succeeds. Then the probe clicks the toolbar button
+`notebook:insert-cell-below notebook:change-cell-to-code` and clicks the
+active cell's editor. The click finds a markdown editor that is not visible,
+and times out after 30 s:
+
+```
+SHELL FAIL — locator.click: Timeout 30000ms exceeded.
+  - waiting for locator('#jl-frame').contentFrame().locator('.jp-Cell.jp-mod-active .cm-content')
+    - locator resolved to <div ... contenteditable="true" data-language="markdown" ...>
+      - element is not visible
+```
+
+The active cell is probably the seed's rendered markdown cell
+`## Task 2: Total`, so the insert did not take effect. This is inferred from
+the log, not seen. The editor selftest earlier in the same job passes. The
+`INotebookTracker` "No provider" lines in the log come from the bare REPL,
+which has no notebook tracker (`Tools/editor-smoke-test/README.md`, "Notes").
+They also appear on green runs, and they are not this failure.
+
+**Seen.**
+
+| Date | Run | Ref |
+|---|---|---|
+| 2026-10-22 | 39784232421 | `main`, scheduled |
+| 2026-11-04 | 41860413720 | `main`, scheduled |
+| 2026-11-11 | Dependabot PR #2990, `dba8872` and `b082d1f` | a JupyterLab bump that did not change the served chunks |
+
+The triage of #2990 (issue #2991) said that `main` had not hit this failure,
+and so suspected the bump. The two scheduled runs on `main` show that the
+failure is ambient. #2990 merged later with green checks and no change.
+
+**Cause.** Not known. A race is the probable cause: the toolbar command
+goes through the iframe command bridge while the workbench finishes the save.
+Nobody has proved it. Locally the check passed 15 times out of 16 (#2991).
+
+**Diagnostics.** Since #3010 (2026-11-13) the job sets
+`SMOKE_SCREENSHOT_DIR`. On a failure it uploads the
+`smoke-diagnostics-<browser>` artifact for 3 days: a screenshot per step, a
+full-page and an editor-frame screenshot, the console of every frame and a
+Playwright trace. No hit has happened since then.
+
+**Handling.**
+
+1. If the diff cannot reach the workbench, the editor or the vendored
+   JupyterLite, the failure is not the diff.
+2. Download the `smoke-diagnostics-chromium` artifact of the failed run
+   before anything else. It is kept for 3 days, and a re-run overwrites it.
+3. One re-run of the failed job. Chromium has no automatic retry for this
+   step; webkit has one.
+4. Add the run to the "Seen" table above. When a trace exists, read the
+   order of the toolbar command and the post-save events in it. That
+   evidence is what this family lacks.
 
 ## Structural problems → current state
 
