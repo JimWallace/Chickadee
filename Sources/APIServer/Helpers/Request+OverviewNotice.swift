@@ -10,13 +10,18 @@ import Vapor
 extension Request {
     private static let overviewNoticeKey = "overview_notice"
 
-    /// The header that `Public/inplace-forms.js` sends on each workbench
-    /// pane save.
+    /// The header that `Public/inplace-forms.js` sends on every in-place form
+    /// submit in the workbench pane (Save & validate, sections, secret
+    /// reveal and the rest). `OverviewNoticeInPlaceTests` checks that the
+    /// script sends this name.
+    ///
+    /// It decides who may set the notice. `isPageNavigation` decides who may
+    /// read it.
     static let inPlaceSaveHeader = "X-Chickadee-Inplace"
 
     /// Sets the notice the next Overview render shows once.
     ///
-    /// A save from the workbench pane sets none. The pane follows the
+    /// A submit from the workbench pane sets none. The pane follows the
     /// redirect with `fetch`, reloads itself and never shows the Overview,
     /// so the notice would wait in the session and appear on a later,
     /// unrelated Overview visit.

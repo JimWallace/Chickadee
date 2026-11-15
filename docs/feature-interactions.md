@@ -1473,12 +1473,21 @@ coordination, and each must see every edit.
   leaves a one-shot notice in the session before it redirects to
   `/instructor` (`Helpers/Request+OverviewNotice.swift`).
 - **Readers:** the Overview (`InstructorDashboardRoutes`), once.
+  `Public/inplace-forms.js` sends the `X-Chickadee-Inplace` header that the
+  writer reads.
 - **Rules:**
-  - The Overview always takes the session notice, then prefers a
-    `?notice=` query value when one is present. If the read is skipped, the
-    notice stays in the session and shows on a later, unrelated visit.
+  - On a page navigation (`Sec-Fetch-Dest: document`, or no header) the
+    Overview takes the session notice, then prefers a `?notice=` query value
+    when one is present. A background `fetch` (`Sec-Fetch-Dest: empty`), as
+    `multipart-forms.js` makes when it follows the redirect, leaves the
+    notice for the navigation that follows (#3040).
+  - A request that carries `X-Chickadee-Inplace` sets no notice. Only
+    `inplace-forms.js` sends it, on every in-place form in the workbench
+    pane, which never shows the Overview. If a notice is set and no page
+    navigation reads it, it shows on a later, unrelated visit.
   - The redirect location stays `/instructor`. Many tests pin it.
-- **Test:** `OverviewNoticeConsumptionTests`.
+- **Test:** `OverviewNoticeConsumptionTests`, `OverviewNoticeFetchTests`,
+  `OverviewNoticeInPlaceTests`.
 
 ### Authoring checks: `AuthoringCheckCatalog`, `AuthoringFinding`
 
