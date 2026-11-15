@@ -10,8 +10,18 @@ import Vapor
 extension Request {
     private static let overviewNoticeKey = "overview_notice"
 
+    /// The header that `Public/inplace-forms.js` sends on each workbench
+    /// pane save.
+    static let inPlaceSaveHeader = "X-Chickadee-Inplace"
+
     /// Sets the notice the next Overview render shows once.
+    ///
+    /// A save from the workbench pane sets none. The pane follows the
+    /// redirect with `fetch`, reloads itself and never shows the Overview,
+    /// so the notice would wait in the session and appear on a later,
+    /// unrelated Overview visit.
     func setOverviewNotice(_ text: String) {
+        guard headers.first(name: Self.inPlaceSaveHeader) == nil else { return }
         session.data[Self.overviewNoticeKey] = text
     }
 

@@ -99,6 +99,11 @@
 
         var req = requestFor(form);
         req.headers['x-csrf-token'] = ChickadeeUI.getCsrfToken();
+        // Tells the server that this save stays in the pane. A save handler
+        // that redirects to the Overview sets a one-shot notice for it; this
+        // pane never goes there, so the server sets none, and a later Overview
+        // visit does not show a stale "Saved X" (#3040).
+        req.headers['X-Chickadee-Inplace'] = '1';
 
         return fetch(form.action, {
             method: (form.method || 'POST').toUpperCase(),
