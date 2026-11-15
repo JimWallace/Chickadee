@@ -176,6 +176,17 @@ jobs:
             -ignore-filename-regex='.build/|Tests/' \
             > coverage.lcov
 
+      # The per-file report. The step summary has only the total, so this is
+      # where the nightly steward finds coverage gaps (nightly.md, fill work).
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v7
+        with:
+          name: coverage-lcov
+          path: coverage.lcov
+          if-no-files-found: error
+          # The run is nightly: 8 days keeps a week of reports, plus a day.
+          retention-days: 8
+
       - name: Enforce coverage floor
         id: enforce_coverage_floor
         run: |
