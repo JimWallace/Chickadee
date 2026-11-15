@@ -9,6 +9,13 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.950] - 2026-11-15
+
+### Changed
+
+- **The nightly coverage run keeps its per-file report.** `test-coverage.yml` uploads `coverage.lcov` as the `coverage-lcov` artifact for 8 days. Before, the run kept only the total, so the nightly steward could not find coverage gaps.
+
+
 ## [0.5.949] - 2026-11-14
 
 ### Removed
