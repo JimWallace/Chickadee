@@ -196,8 +196,9 @@ struct InstructorDashboardRoutes: RouteCollection {
         let hasSections = !allSections.isEmpty
         let hasUngrouped = !ungroupedItems.isEmpty
         let page = try await PageRequestContext.courseAware(req)
-        // Always consume the one-shot session notice, even when a query notice
-        // wins, so it cannot show up again on a later, unrelated visit.
+        // On a page navigation, always consume the one-shot session notice,
+        // even when a query notice wins, so it cannot show up again on a later,
+        // unrelated visit. A background `fetch` leaves it for the page.
         let sessionNotice = req.takeOverviewNotice()
         let notice = req.query[String.self, at: "notice"] ?? sessionNotice
         return try await HTMLResponse {
