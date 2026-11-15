@@ -110,7 +110,9 @@ order. One work item is one pull request.
    first. Skip one that a comment says a person is handling.
 3. **Deeper sweeps.** Run the mutation tool on a tier that the weekly sweep
    does not cover, and answer the survivors. Find coverage gaps in
-   `test-coverage.yml`'s newest report and close them with new test files.
+   `test-coverage.yml`'s newest report (`gh run download RUN_ID -n
+   coverage-lcov -D SCRATCHPAD/coverage`) and close them with new test
+   files.
    Move npm dependencies that are behind, within their ranges. Leave the
    xeus kernels to `kernel-currency.yml` (`scheduled-checks.md`).
 4. **The nightly tests and this steward.** Find what made CI or tonight's
