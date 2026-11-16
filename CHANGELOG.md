@@ -9,6 +9,13 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.967] - 2026-11-16
+
+### Added
+
+- **A lecture scenario for the load test.** `chickadee-loadtest lecture` simulates one browser-graded class activity in a lecture (150 students by default). Each student signs in, joins the notebook page and fetches the kernel boot files (cold or warm), refreshes the live board, and posts a result. The report checks the targets of the live-lecture plan (W1). The deadline simulation is now the default `hot-paths` subcommand, so existing commands work unchanged. A local baseline is in `docs/load-testing.md`: at 27 refreshes per second, the board refresh reaches p95 1.6 s, ten times slower than any other stream.
+
+
 ## [0.5.966] - 2026-11-16
 
 ### Changed
