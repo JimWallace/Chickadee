@@ -56,6 +56,13 @@ concurrency:
   group: visual-regression-${{ github.event_name }}-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
+# Least privilege by default (#3067). A job that needs more names it in its
+# own `permissions:`. `packages: read` lets the job containers and services
+# pull the GHCR mirrors with GITHUB_TOKEN.
+permissions:
+  contents: read
+  packages: read
+
 jobs:
   visual:
     runs-on: ubuntu-latest
@@ -107,6 +114,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       # Shared scaffold: exact-match build-cache restore, server build,
       # Node + Playwright install (engine download cached).

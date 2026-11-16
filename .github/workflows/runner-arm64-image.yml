@@ -39,6 +39,13 @@ concurrency:
 env:
   IMAGE: ghcr.io/jimwallace/chickadee-runner
 
+# Least privilege by default (#3067). A job that needs more names it in its
+# own `permissions:`. `packages: read` lets the job containers and services
+# pull the GHCR mirrors with GITHUB_TOKEN.
+permissions:
+  contents: read
+  packages: read
+
 jobs:
   # ── Compile the runner on arm64 ───────────────────────────────────────────
   # Only chickadee-runner: the image is the Dockerfile's `runner` target, which
@@ -54,6 +61,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Resolve toolchain cache key
         id: setup
@@ -106,6 +115,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Free up runner disk space
         run: |

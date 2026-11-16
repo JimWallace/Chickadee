@@ -19,6 +19,13 @@ on:
     # 06:00 UTC is 2:00 AM in Toronto during daylight saving time.
     - cron: "0 6 * * *"
 
+# Least privilege by default (#3067). A job that needs more names it in its
+# own `permissions:`. `packages: read` lets the job containers and services
+# pull the GHCR mirrors with GITHUB_TOKEN.
+permissions:
+  contents: read
+  packages: read
+
 jobs:
   coverage:
     runs-on: ubuntu-latest
@@ -64,6 +71,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Compute SPM cache key
         id: spm-cache-key
