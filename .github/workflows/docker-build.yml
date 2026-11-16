@@ -204,6 +204,42 @@ jobs:
           --health-retries 10
 
     steps:
+      # Egress allowlist (#3075). This job holds a token that can push the
+      # production image, and signs it. The list covers git and the Actions
+      # cache and artifacts, GHCR and Docker Hub, the Ubuntu archive for the
+      # image build, the Trivy database (mirror.gcr.io) and Sigstore for the
+      # attestations. A step that reaches any other host fails, so a compromised
+      # dependency cannot send a token out. A new host that a change really
+      # needs goes on this list, in the same change.
+      - name: Restrict network egress
+        uses: step-security/harden-runner@1d88384fd173af6ecb012dfd0264a306b711241a # v2.22.4
+        with:
+          egress-policy: block
+          disable-telemetry: true
+          allowed-endpoints: >
+            github.com:443
+            api.github.com:443
+            results-receiver.actions.githubusercontent.com:443
+            *.blob.core.windows.net:443
+            *.actions.githubusercontent.com:443
+            ghcr.io:443
+            pkg-containers.githubusercontent.com:443
+            registry-1.docker.io:443
+            auth.docker.io:443
+            production.cloudflare.docker.com:443
+            *.r2.cloudflarestorage.com:443
+            docker.io:443
+            archive.ubuntu.com:80
+            security.ubuntu.com:80
+            archive.ubuntu.com:443
+            security.ubuntu.com:443
+            mirror.gcr.io:443
+            storage.googleapis.com:443
+            fulcio.sigstore.dev:443
+            rekor.sigstore.dev:443
+            tuf-repo-cdn.sigstore.dev:443
+            timestamp.sigstore.dev:443
+
       # Full history (without blobs) so the next step can read each file's
       # last commit.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
