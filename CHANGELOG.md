@@ -9,6 +9,31 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.973] - 2026-11-16
+
+### Security
+
+- **The pipeline files have an owner.** `.github/CODEOWNERS` names an owner
+  for the workflows, the deploy scripts, the Dockerfile and the release
+  script, so a pull request that changes them asks that owner for review.
+  The `v*` release tags are now protected by a ruleset: they cannot be
+  moved or deleted, and only an admin can create one (#3072).
+
+### Security
+
+- **The deploy daemon runs in a systemd sandbox.** `chickadee-deployer.service`
+  makes the file system read-only except the paths the deploy writes, and
+  closes the kernel interfaces it never uses. The unit takes effect when it
+  is installed again on the host; `docs/zero-downtime-deploy.md` gives the
+  steps and the way back (#3078).
+
+### Security
+
+- **OpenSSF Scorecard runs weekly.** It scores the repository's
+  supply-chain posture and sends each finding to the Security tab. The
+  README shows the score (#3076).
+
+
 ## [0.5.972] - 2026-11-16
 
 ### Security
