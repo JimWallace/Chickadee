@@ -1215,7 +1215,7 @@ coordination, and each must see every edit.
   intended (UI audit #3007, finding 2). Do not "fix" one to match the other.
   A collection with no outcomes keeps its own counts on the tiles.
 
-### Submission state words and "waiting": `SubmissionStatus.displayLabel`, `awaitsResult`
+### Submission state words and "waiting": `SubmissionStatus.displayLabel`, `awaitsResult`, `badgeClass`
 
 - **Defined in:** `Utilities/SubmissionStatus+Display.swift`, next to the
   enum's other `APIServer` code.
@@ -1227,7 +1227,8 @@ coordination, and each must see every edit.
     state that does not await a result renders the final marker that
     `Public/app.js` answers with a reload.
   - Both history tables (`SubmissionHistoryPage`,
-    `StudentAssignmentHistoryPage`), through `displayLabel(forRaw:)`.
+    `StudentAssignmentHistoryPage`), through `displayLabel(forRaw:)` and
+    `badgeClass(forRaw:)`.
   - The wardrobe grant in `WebRoutes+Submission`. It grants no item while
     the submission awaits a result, because the page shows no Earned toast
     then, and an item granted with no toast never gets one. The page and the
@@ -1241,8 +1242,9 @@ coordination, and each must see every edit.
     (`RunnerValidationService`) is not a "waiting" test. It asks whether the
     queue already holds the row (`.pending`, `.assigned`), and the server
     never writes `.running`.
-  - A new `SubmissionStatus` case needs a `displayLabel` and an
-    `awaitsResult` answer. Student words name no "runner" or "worker".
+  - A new `SubmissionStatus` case needs a `displayLabel`, an
+    `awaitsResult` and a `badgeClass` answer. Only a state where something
+    went wrong takes `tier-danger` (today `.failed`). Student words name no "runner" or "worker".
 - **Trap:** the page once treated only `.pending` and `.assigned` as
   waiting, while the poller also waited on `.running`. A page first loaded
   in `.running` showed empty results and did not poll. After that fix, the
