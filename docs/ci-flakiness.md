@@ -3,7 +3,7 @@
 **Open: Families 2, 3, 4, 7, 8 and 9.** These can still make a check red, and
 the cause is not fixed in this repository. **Mitigated: Family 5.** It is closed
 for monitoring since 2026-09-28, but nobody found its cause. **Fixed: Families
-1 and 6.**
+1, 6 and 10.**
 
 Read this file before you diagnose a red check on a PR that did not touch the
 failing area. Each family keeps its original number, because code comments
@@ -28,6 +28,7 @@ heading for each family.
 | 7 | `build` exits 139 as Swift Build starts planning (libdispatch, upstream) | open (upstream bug; in-job retry) | Step `Build all targets and tests` red within about 90 s. Exit 139. The last build line is `[Planning 1 / N]`. `DispatchWorker` crashed in `_dispatch_event_loop_drain`. A `::warning` "Family 7 retry" on a green job is one absorbed hit. | Not your diff: nothing compiled. One `/rerun-failed`. Never read the diff for it. |
 | 8 | A test lane misses the shared `.build` cache that `build` saved (cache eviction, inferred) | open (fails fast since the guard) | A `::error` "Family 8" in the `Swift test setup` step of a test lane, after "Cache not found for input keys". Before the guard: `[N / M]` compile lines inside a `Run …Tests` step, a timeout with no `Test run with` line, and "No wedge dump was written." Other lanes on the same run passed. | Not your diff. Do not use `/rerun-failed`: the cache is gone, so it misses again. Re-run all jobs, so `build` saves again. |
 | 9 | Workbench shell e2e: the toolbar insert after a save does not take effect, `smoke (chromium)` | open (cause unknown; diagnostics kept) | Step `Run workbench shell e2e (chromium)`: `SHELL FAIL — locator.click: Timeout 30000ms exceeded`, waiting for `.jp-Cell.jp-mod-active .cm-content`, which resolves to a `data-language="markdown"` editor that "is not visible". The selftest passed before it. | Not your diff if the diff cannot reach the workbench or the editor. Download the `smoke-diagnostics-chromium` artifact, then re-run the job once. |
+| 10 | `api-tests` statement timeout from stale planner statistics in a recycled pooled schema | fixed | A `PSQLError` in a test that seeds many rows (first seen: `CourseWideResultQueryBindLimitTests.theLearnTabSummaryReadsACoursePastTheBindLimit`). The Postgres log in the job shows `canceling statement due to statement timeout` on a query that takes under 1 s locally. | It should not recur. If it does, check that the schema came from `MigratedPostgresSchemaPool` and still has autovacuum off. |
 
 ## Before you chase a red check
 
@@ -443,6 +444,65 @@ Playwright trace. No hit has happened since then.
 4. Add the run to the "Seen" table above. When a trace exists, read the
    order of the toolbar command and the post-save events in it. That
    evidence is what this family lacks.
+
+## Family 10 — `api-tests` statement timeout from stale planner statistics in a recycled schema — ROOT-CAUSED & FIXED
+
+**Tells.** One `api-tests` test fails with a `PSQLError`. The Postgres log
+printed at the end of the job shows `ERROR: canceling statement due to
+statement timeout` (the test database sets 60 s), and the next `STATEMENT:`
+line is a join that takes well under a second locally. The first case was the
+`DISTINCT ON` query of
+`BrightSpacePagePresenter+LatestResultSync.swift`, from
+`CourseWideResultQueryBindLimitTests.theLearnTabSummaryReadsACoursePastTheBindLimit`,
+which seeds 65,536 submissions and 65,536 results.
+
+**Seen.**
+
+| Date | Run | Ref |
+|---|---|---|
+| 2026-11-14 | 43563616637 | `main` |
+| 2026-11-14 | 43569094796 | PR #3034 |
+| 2026-11-14 | 43575574733 | `main` |
+| 2026-11-16 | 43883006848 (job 133367667477) | PR #3040 |
+
+**Cause.** The test schemas come from `MigratedPostgresSchemaPool`, which
+empties a returned schema with a DELETE sweep. A DELETE leaves the table's
+pages in place. When autovacuum then ANALYZEs an emptied table, `pg_class`
+records `relpages > 0, reltuples = 0`. The planner scales `reltuples /
+relpages` by the table's current size, so a density of zero estimates one row
+however many rows the next borrower inserts. Without column statistics from an
+earlier analyze of real data, which a pooled table almost never has, the planner
+then joins `submissions` and `results` with a nested loop. It applies
+`r.submission_id = s.id` as a join filter, not as an index condition: 65,536 ×
+65,536 comparisons. The earlier test on that schema need only have left
+one page behind.
+Whether autovacuum (naptime 1 min) reaches the table between the sweep and the
+query is a matter of timing. That is why the failure was intermittent and did
+not line up with a change.
+
+Reproduced on Postgres 16 with the two tables and their indexes, 65,536 rows
+each: seed, DELETE, ANALYZE, seed again, then the query. It is cancelled at
+60 s in every run. The same sequence with TRUNCATE in place of the DELETE, or
+with no ANALYZE, runs in about 0.2 s. #3042 ruled out "no statistics" and
+"after ANALYZE". Both of those plan well. The bad state is the one between
+them: statistics taken while the table was empty, then read after it was
+filled.
+
+**Fix.** A pooled schema turns autovacuum off on its tables when it is built,
+so a table that the sweep has emptied is never ANALYZEd. A table that is never
+analyzed has `reltuples = -1`. The planner then estimates from the table's
+real size. The return sweep TRUNCATEs every table instead of deleting from
+it when any table's heap has passed 1 MiB
+(`MigratedPostgresSchemaPool.truncateThresholdBytes`). That frees the dead
+rows that no vacuum now removes, and it resets the table to "never analyzed".
+`PostgresSchemaPoolTests` pins both halves.
+
+**If it recurs.** A schema that does not come from the pool
+(`SchemaMutatingSuites`) is migrated fresh and was never swept, so it cannot
+reach this state. A test that runs `ANALYZE` or `VACUUM` itself on a pooled
+schema can. To see the plan, run `EXPLAIN` on the statement from the log
+against a schema in the same state. `auto_explain` cannot log a cancelled
+statement.
 
 ## Structural problems → current state
 
