@@ -9,6 +9,17 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.976] - 2026-11-16
+
+### Security
+
+- **The deploy daemon deploys only signed images.** Before it stages a
+  release, `chickadee-deployer.sh` checks with cosign that the image digest
+  carries a build-provenance attestation signed by `docker-build.yml` at the
+  release tag. An unsigned or wrongly signed image is refused and the release
+  waits with the reason (#3069).
+
+
 ## [0.5.975] - 2026-11-16
 
 ### Security
