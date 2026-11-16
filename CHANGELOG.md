@@ -9,6 +9,37 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.952] - 2026-11-16
+
+### Removed
+
+- **Dead code from the 2026-11-15 Periphery scan.** Removed the unused
+  `fetchGroupCategories` requirement and default from `BrightSpaceGrading`,
+  `Flashes.none`, `MultipartFileList.init(files:)`,
+  `MCPProgramIOProse.tokens`, `FailureDetail.default`,
+  `BuiltInAchievements.byID`, the `testSetupID:` overload of
+  `declaredContributionSlotCount` and two unused `GradeValueCarrying`
+  requirements. Dropped ten parameters that no function body read, and one
+  more that the removal left unused. Made five declarations internal that no
+  other module uses. No behaviour changes.
+
+### Fixed
+
+- **The weekly performance benchmark reaches its database without a manual password.** `Tools/perf-bench/env.sh` gives `psql` the same default password that `start-server.sh` gives the server. The weekly task also says how to start Docker Desktop when the benchmark Postgres is down.
+
+### Changed
+
+- **The grades CSV export uses less server CPU.** It reads only the three roster columns that it writes, and it decodes the best-grade rows by column name. On the benchmark data set (300 students, 12 assignments), server CPU per export goes from 58 ms to 36 ms. The file does not change.
+
+### Changed
+
+- **Tests for six more pure-logic gaps.** New suites cover the authoring-validation sentences that no test read, the Octave identifier and type helpers, the Lua pattern-case and notebook-check renderers, the per-language kernel asset lists, and the footer parser's rejection paths. These were uncovered blocks of pure logic in the nightly coverage report. No product code changes.
+
+### Changed
+
+- **Three review decisions from UI audit #3007.** An admin's own row in the users list shows the role as a plain badge instead of a disabled select, whose only explanation was a tooltip. A submission whose grading failed now has the danger badge in both history tables, so it no longer looks like "Graded". The empty Runners table explains itself in one sentence.
+
+
 ## [0.5.951] - 2026-11-15
 
 ### Changed
