@@ -76,7 +76,7 @@ private struct AdminRetentionCourseRow: HTML {
                 }
                 div(.class("item-details")) {
                     if let term = row.termLabel { "\(term) · " }
-                    " archived \(row.archivedAt) · \(row.submissionCount) submissions"
+                    " archived \(row.archivedAt) · \(row.submissionCount) \(row.submissionCount == 1 ? "submission" : "submissions")"
                 }
             }
             td(.class("item-status")) {

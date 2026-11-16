@@ -125,7 +125,7 @@ private struct GroupSetSection: HTML {
                 h2 {
                     "\(panel.name) "
                     span(.class("text-muted")) {
-                        "\(panel.studentCount) students · \(panel.ungroupedCount) in no group"
+                        "\(panel.studentCount) \(panel.studentCount == 1 ? "student" : "students") · \(panel.ungroupedCount) in no group"
                     }
                 }
                 if canEdit {

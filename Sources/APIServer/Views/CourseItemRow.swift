@@ -333,7 +333,11 @@ private struct CourseAssignmentItemRow: HTML {
             td(.class("col-hide-phone nowrap")) {
                 if row.assignmentID != nil {
                     let submitted = row.submittedStudentCount.map(String.init) ?? ""
-                    span(.title("\(submitted) / \(enrolledStudentCount) students submitted")) {
+                    span(
+                        .title(
+                            "\(submitted) / \(enrolledStudentCount) \(enrolledStudentCount == 1 ? "student" : "students") submitted"
+                        )
+                    ) {
                         "\(submitted) / \(enrolledStudentCount)"
                     }
                     div(.class("item-details")) { "submitted" }
@@ -396,7 +400,9 @@ private struct CourseAssignmentItemRow: HTML {
             }
         } else {
             div(.class("item-title text-muted")) { em { "Unpublished" } }
-            div(.class("item-details")) { "Uploaded \(row.createdAt) · \(row.suiteCount) tests" }
+            div(.class("item-details")) {
+                "Uploaded \(row.createdAt) · \(row.suiteCount) \(row.suiteCount == 1 ? "test" : "tests")"
+            }
         }
     }
 
