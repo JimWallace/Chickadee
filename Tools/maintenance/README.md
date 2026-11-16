@@ -4,7 +4,7 @@ CI runs no model (root `CLAUDE.md`, "Subagents and Hooks"), and cloud
 scheduled tasks are off for the organization. So every recurring job that
 needs judgement runs on the maintainer's work machine, in one Claude Code
 scheduled task: the **nightly steward**. It starts at 23:30
-America/Toronto, uses the night's 5-hour usage window, and decides what to
+America/Toronto, works a full night shift until 07:30, and decides what to
 do in the order that `nightly.md` sets. Its prompt only points at a file in
 the repository, so a change to a procedure is a reviewed change to a file,
 not an edit to a prompt that nobody else can see.
