@@ -9,6 +9,23 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.975] - 2026-11-16
+
+### Security
+
+- **CodeQL also scans the workflows and the Python scripts.** The `actions`
+  analysis looks for untrusted input that reaches a shell, privileged
+  triggers and over-wide token permissions. The `python` analysis covers
+  `scripts/` and `Tools/` (#3073).
+
+### Security
+
+- **The image gate also fails on HIGH.** A CRITICAL or HIGH vulnerability
+  with a fix now stops the server image and the arm64 runner image before
+  they are pushed. An accepted finding goes in `.trivyignore.yaml` with a
+  reason and an expiry date (#3077).
+
+
 ## [0.5.974] - 2026-11-16
 
 ### Changed
