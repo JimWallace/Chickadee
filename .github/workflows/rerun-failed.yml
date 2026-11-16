@@ -12,6 +12,7 @@ name: Rerun failed jobs
 # so an issue_comment trigger with a write token is safe here.
 
 on:
+  # zizmor: ignore[dangerous-triggers] -- limited to OWNER/MEMBER/COLLABORATOR comments; never checks out or runs PR code.
   issue_comment:
     types: [created]
 
