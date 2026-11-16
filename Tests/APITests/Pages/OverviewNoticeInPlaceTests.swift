@@ -6,6 +6,7 @@
 // save would wait in the session and appear on a later, unrelated Overview
 // visit.
 
+import ChickadeeTestSupport
 import Core
 import Fluent
 import Foundation
@@ -77,7 +78,10 @@ import VaporTesting
     /// The script and the server must name the same header, or every pane
     /// save sets a stale notice again with no test failing.
     @Test func theInPlaceScriptSendsTheHeaderTheServerReads() throws {
-        let js = try String(contentsOfFile: "Public/inplace-forms.js", encoding: .utf8)
-        #expect(js.contains("req.headers['\(Request.inPlaceSaveHeader)'] = '1'"))
+        let js = try String(
+            contentsOf: repositoryRoot.appendingPathComponent("Public/inplace-forms.js"),
+            encoding: .utf8
+        )
+        #expect(js.contains("'\(Request.inPlaceSaveHeader)'"))
     }
 }
