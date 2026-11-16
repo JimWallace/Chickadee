@@ -90,6 +90,25 @@ enum PostgresSchemaPoolError: Error, CustomStringConvertible {
 /// few pages of WAL. So a returned schema is emptied and handed straight back
 /// out, and the per-test cost stops depending on the migration count at all.
 ///
+/// **Why autovacuum is off in a pooled schema, and when the sweep truncates.**
+/// A DELETE leaves a table's pages in place. If autovacuum then ANALYZEs the
+/// emptied table, `pg_class` records `relpages > 0, reltuples = 0`: a density
+/// of zero rows per page. The planner multiplies that density by the table's
+/// size, so the next borrower's tables look like one row each, however many
+/// rows it inserts. On a join, it then picks a nested loop with the join
+/// condition as a filter. With 65,536 rows on each side that is 4.3 billion
+/// comparisons, and it is cancelled by the 60 s `statement_timeout`. The query
+/// itself takes 0.2 s (`CourseWideResultQueryBindLimitTests`, Family 10 in
+/// `docs/ci-flakiness.md`). Whether autovacuum reached the table between the
+/// sweep and the query is a matter of timing, so the failure was intermittent.
+/// A table that is never analyzed has `reltuples = -1`. The planner then
+/// estimates from the table's real size, so a pooled schema turns autovacuum
+/// off on its tables. Without vacuum, each DELETE sweep leaves dead rows
+/// behind. When any table grows past `truncateThresholdBytes`, the sweep
+/// TRUNCATEs every table instead. That costs the 139 ms measured above, but only on
+/// the rare return that passes the bound. That frees
+/// the space and also resets the table to "never analyzed".
+///
 /// An actor because the first caller pays for a migration run and every other
 /// caller must wait for that result rather than racing to build its own.
 actor MigratedPostgresSchemaPool {
@@ -135,6 +154,16 @@ actor MigratedPostgresSchemaPool {
 
     /// This pool's wait bound. See `capacity` for why it is per-instance.
     let checkoutTimeout: Duration
+
+    /// The total size of one pooled table (heap, indexes and TOAST) above
+    /// which the sweep TRUNCATEs the schema instead of DELETE-sweeping it (see
+    /// the type comment).
+    ///
+    /// With autovacuum off, nothing reclaims the dead rows and index entries
+    /// that a DELETE leaves, so this bound caps that growth. A test that inserts a few
+    /// dozen rows takes many returns to reach 1 MiB (128 pages). A suite
+    /// that seeds tens of thousands of rows reaches it on its first return.
+    static let truncateThresholdBytes = 1 << 20
 
     init(
         capacity: Int = MigratedPostgresSchemaPool.defaultCapacity,
@@ -343,6 +372,7 @@ actor MigratedPostgresSchemaPool {
         try await sql.raw("CREATE SCHEMA \(unsafeRaw: quotedIdentifier(name))").run()
         do {
             try await migrate(schemaNamed: name, settings: settings)
+            try await sql.raw("\(unsafeRaw: Self.autovacuumOffStatement(for: name))").run()
             return PreparedSchema(name: name, sweep: try await sweepStatement(for: name, on: sql))
         } catch {
             try? await dropSchema(named: name)
@@ -373,6 +403,28 @@ actor MigratedPostgresSchemaPool {
         }
     }
 
+    /// Turns autovacuum off on every table of `schema`, so that nothing
+    /// ANALYZEs a table that the sweep has just emptied (see the type comment).
+    ///
+    /// The loop runs in the database, so the table list is the catalog's own
+    /// and cannot miss a table that a later migration adds.
+    static func autovacuumOffStatement(for schema: String) -> String {
+        """
+        DO $chickadee_pool$
+        DECLARE
+            ck_pool_table regclass;
+        BEGIN
+            FOR ck_pool_table IN
+                SELECT c.oid::regclass FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+                 WHERE n.nspname = \(quotedLiteral(schema)) AND c.relkind = 'r'
+            LOOP
+                EXECUTE format('ALTER TABLE %s SET (autovacuum_enabled = false)', ck_pool_table);
+            END LOOP;
+        END
+        $chickadee_pool$
+        """
+    }
+
     private func sweep(_ schema: PreparedSchema) async throws {
         let sql = try await maintenanceSQL()
         try await sql.raw("\(unsafeRaw: schema.sweep)").run()
@@ -391,7 +443,8 @@ actor MigratedPostgresSchemaPool {
     /// the schema's relations plus its migration-log rows, taken the moment the
     /// schema was migrated. Anything that would make a recycled schema
     /// different from a freshly migrated one — a dropped or added table, a new
-    /// sequence, a rewritten or deleted migration-log row — changes it, and
+    /// sequence, a rewritten or deleted migration-log row, a table whose
+    /// storage options (the autovacuum setting) were reset — changes it, and
     /// `checkIn` then drops the schema, builds a replacement and rethrows so
     /// the test that did it fails. A suite nobody anticipated therefore cannot
     /// quietly poison the pool for everything scheduled after it.
@@ -457,6 +510,12 @@ actor MigratedPostgresSchemaPool {
             .map { "sweep\($0.offset) AS (DELETE FROM \(qualifiedIdentifier(schema, $0.element)))" }
             .joined(separator: ", ")
         let sweepSQL = tables.isEmpty ? "SELECT 1" : "WITH \(sweepDeletes) SELECT 1"
+        // One TRUNCATE names every table, so the foreign keys between them
+        // need no order, for the same reason as the single DELETE above.
+        let truncateSQL =
+            tables.isEmpty
+            ? "SELECT 1"
+            : "TRUNCATE " + tables.map { qualifiedIdentifier(schema, $0) }.joined(separator: ", ")
 
         return """
             DO $chickadee_pool$
@@ -475,7 +534,19 @@ actor MigratedPostgresSchemaPool {
             listed in SchemaMutatingSuites in Tests/APITests/SchemaMutatingSuites.swift so it gets a \
             freshly migrated schema of its own.', \(quotedLiteral(schema));
                 END IF;
-                EXECUTE \(quotedLiteral(sweepSQL));
+                -- A table past the bound is TRUNCATEd, with all the others:
+                -- that frees the dead rows that a DELETE leaves (autovacuum is
+                -- off here) and resets each table to "never analyzed".
+                IF EXISTS (
+                    SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+                     WHERE n.nspname = \(quotedLiteral(schema)) AND c.relkind = 'r'
+                       AND c.relname <> \(quotedLiteral(fluentMigrationsTable))
+                       AND pg_total_relation_size(c.oid) > \(Self.truncateThresholdBytes)
+                ) THEN
+                    EXECUTE \(quotedLiteral(truncateSQL));
+                ELSE
+                    EXECUTE \(quotedLiteral(sweepSQL));
+                END IF;
             END
             $chickadee_pool$
             """
@@ -488,7 +559,8 @@ actor MigratedPostgresSchemaPool {
     private static func fingerprintQuery(for schema: String) -> String {
         """
         SELECT md5(coalesce(string_agg(shape, chr(10) ORDER BY shape), '')) AS fingerprint
-          FROM (SELECT c.relkind::text || ' ' || c.relname AS shape
+          FROM (SELECT c.relkind::text || ' ' || c.relname || ' '
+                       || coalesce(array_to_string(c.reloptions, ','), '') AS shape
                   FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
                  WHERE n.nspname = \(quotedLiteral(schema))
                    AND c.relkind IN ('r', 'p', 'S', 'v', 'm')

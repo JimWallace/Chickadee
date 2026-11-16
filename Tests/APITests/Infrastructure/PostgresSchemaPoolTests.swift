@@ -25,7 +25,7 @@ import Vapor
 
 @testable import APIServer
 
-@Suite struct PostgresSchemaPoolTests {
+@Suite(.timeLimit(.minutes(5))) struct PostgresSchemaPoolTests {
 
     // MARK: - The declared-suite guard
 
@@ -280,6 +280,80 @@ import Vapor
                 let migrations = try await rowCount("_fluent_migrations", on: app)
                 #expect(courses == 0)
                 #expect(migrations == migrationsBefore)
+            }
+            try await pool.checkIn(second)
+        }
+    }
+
+    /// Hazard: autovacuum ANALYZEs a table that the DELETE sweep emptied and
+    /// records zero rows on a non-zero number of pages. The next borrower's
+    /// joins are then planned as if each table held one row, and a 0.2 s
+    /// query ran into the 60 s `statement_timeout` (Family 10 in
+    /// `docs/ci-flakiness.md`). Every table of a pooled schema must have
+    /// autovacuum off.
+    @Test func aPooledSchemaHasAutovacuumOffOnEveryTable() async throws {
+        struct TableRow: Decodable {
+            let relname: String
+            let autovacuumOff: Bool
+        }
+        try await withPrivatePool(capacity: 1) { pool, settings in
+            let lease = try await pool.checkOut(settings: settings, logLevel: .warning)
+            try await withSchemaConnection(lease.schemaName, settings: settings) { app in
+                let sql = try #require(app.db as? any SQLDatabase)
+                let tables = try await sql.raw(
+                    """
+                    SELECT c.relname,
+                           coalesce('autovacuum_enabled=false' = ANY(c.reloptions), false) AS "autovacuumOff"
+                      FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+                     WHERE n.nspname = \(bind: lease.schemaName) AND c.relkind = 'r'
+                    """
+                ).all(decoding: TableRow.self)
+                #expect(tables.count > 40)  // the query saw the migrated tables
+                let stillOn = tables.filter { !$0.autovacuumOff }.map(\.relname)
+                #expect(stillOn.isEmpty, "autovacuum is still on for \(stillOn)")
+            }
+            try await pool.checkIn(lease)
+        }
+    }
+
+    /// With autovacuum off, nothing frees the dead rows that a DELETE sweep
+    /// leaves. A table past `truncateThresholdBytes` must come back
+    /// TRUNCATEd: empty on disk, and "never analyzed" (`reltuples = -1`).
+    @Test func aTablePastTheBoundIsTruncatedOnReturn() async throws {
+        struct SizeRow: Decodable {
+            let bytes: Int
+            let reltuples: Double
+        }
+        try await withPrivatePool(capacity: 1) { pool, settings in
+            let first = try await pool.checkOut(settings: settings, logLevel: .warning)
+            try await withSchemaConnection(first.schemaName, settings: settings) { app in
+                let sql = try #require(app.db as? any SQLDatabase)
+                // About 3 MiB of heap: well past the 1 MiB bound.
+                try await sql.raw(
+                    """
+                    INSERT INTO worker_nonces (nonce_key, expires_at)
+                    SELECT 'pool-bound-' || g || repeat('x', 200), now()
+                      FROM generate_series(1, 12000) g
+                    """
+                ).run()
+            }
+            try await pool.checkIn(first)
+
+            let second = try await pool.checkOut(settings: settings, logLevel: .warning)
+            #expect(second.schemaName == first.schemaName)  // recycled, not rebuilt
+            try await withSchemaConnection(second.schemaName, settings: settings) { app in
+                let sql = try #require(app.db as? any SQLDatabase)
+                let row = try #require(
+                    try await sql.raw(
+                        """
+                        SELECT pg_relation_size(c.oid)::int AS bytes, c.reltuples::float8 AS reltuples
+                          FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+                         WHERE n.nspname = \(bind: second.schemaName) AND c.relname = 'worker_nonces'
+                        """
+                    ).first(decoding: SizeRow.self))
+                #expect(row.bytes == 0)
+                #expect(row.reltuples == -1)
+                #expect(try await rowCount("worker_nonces", on: app) == 0)
             }
             try await pool.checkIn(second)
         }
