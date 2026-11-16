@@ -227,6 +227,33 @@ jobs:
           echo "all seven languages detected on arm64"
           docker compose down
 
+      # The same gate as docker-build.yml (#3077): CRITICAL or HIGH with a
+      # fix fails the build before the push. This image runs student code on
+      # other people's machines. Installed as in docker-build.yml, from the
+      # GitHub release with a pinned SHA-256; change both values to upgrade.
+      - name: Install Trivy
+        env:
+          TRIVY_VERSION: "0.70.0"
+          TRIVY_SHA256: "2f6bb988b553a1bbac6bdd1ce890f5e412439564e17522b88a4541b4f364fc8d"
+        run: |
+          set -euo pipefail
+          tarball="trivy_${TRIVY_VERSION}_Linux-ARM64.tar.gz"
+          dir="$RUNNER_TEMP/trivy"
+          mkdir -p "$dir"
+          curl -fsSL --retry 4 --retry-all-errors -o "$dir/$tarball" \
+            "https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/${tarball}"
+          echo "${TRIVY_SHA256}  $dir/$tarball" | sha256sum -c -
+          tar -xzf "$dir/$tarball" -C "$dir" trivy
+          echo "$dir" >> "$GITHUB_PATH"
+          "$dir/trivy" --version
+
+      - name: Scan image for vulnerabilities
+        env:
+          IMAGE_REF: ${{ fromJSON(steps.meta.outputs.json).tags[0] }}
+        run: |
+          trivy image --exit-code 1 --ignore-unfixed --severity CRITICAL,HIGH \
+            --ignorefile .trivyignore.yaml --format table "$IMAGE_REF"
+
       - name: Push the tested image
         if: github.event_name != 'pull_request'
         env:
