@@ -114,11 +114,6 @@ enum BuiltInAchievements {
     /// Every built-in award.
     static let all = perSubmission + classRecords
 
-    /// The built-in award with this id, if any.
-    static func byID(_ id: String) -> Achievement? {
-        all.first { $0.id == id }
-    }
-
     /// The set of built-in award ids this assignment has disabled (empty when
     /// the manifest can't be decoded or disables nothing — the common case).
     static func disabled(in setup: APITestSetup) -> Set<String> {

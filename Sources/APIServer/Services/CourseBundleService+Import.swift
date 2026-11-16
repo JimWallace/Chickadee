@@ -266,7 +266,7 @@ extension CourseBundleService {
                 // 6f. Create test setups → setupIDMap[bundleID] = new live ID
                 let setupIDMap = try await importBundledTestSetups(
                     manifest: manifest, dirs: dirs, courseID: t.courseID,
-                    app: app, db: db, tally: &t)
+                    db: db, tally: &t)
 
                 // 6g. Create assignments
                 let assignmentIDMap = try await importBundledAssignments(
@@ -464,7 +464,6 @@ private func importBundledTestSetups(
     manifest: CourseBundleManifest,
     dirs: BundleImportDirectories,
     courseID: UUID,
-    app: Application,
     db: any Database,
     tally: inout ImportTally
 ) async throws -> [String: String] {

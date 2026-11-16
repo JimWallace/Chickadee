@@ -152,7 +152,7 @@ public struct NotebookFunctionScanEntry: Sendable {
 /// other language. Production code calls the language-aware overload
 /// `scanNotebookForSectionsAndFunctions(_:language:)` instead, which answers
 /// "cannot read this language" rather than "found nothing".
-public func scanNotebookForSectionsAndFunctions(
+func scanNotebookForSectionsAndFunctions(
     _ notebookData: Data, parsing language: AssignmentLanguage
 ) -> NotebookScanResult {
     guard let cells = NotebookCellView.cells(from: notebookData) else {

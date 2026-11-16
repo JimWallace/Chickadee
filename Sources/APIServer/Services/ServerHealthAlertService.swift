@@ -745,7 +745,7 @@ actor ServerHealthAlertMonitor {
         ruleStates
     }
 
-    private func notifier(for application: Application) -> any AlertNotifier {
+    private func notifier() -> any AlertNotifier {
         guard let url = effectiveWebhookURL(), !url.isEmpty else {
             return NoopNotifier()
         }
@@ -775,7 +775,7 @@ actor ServerHealthAlertMonitor {
             deliveryError: nil
         )
         do {
-            try await notifier(for: application).send(alert, on: application)
+            try await notifier().send(alert, on: application)
             record = AlertFiringRecord(
                 rule: alert.rule,
                 resolved: false,
@@ -818,7 +818,7 @@ actor ServerHealthAlertMonitor {
         )
         ruleStates = newStates
 
-        let activeNotifier = notifier(for: application)
+        let activeNotifier = notifier()
         for transition in transitions {
             let alert = makeAlertMessage(
                 rule: transition.rule,

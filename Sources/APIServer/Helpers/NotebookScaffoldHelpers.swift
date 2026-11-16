@@ -57,7 +57,6 @@ func submissionFilenameForStorage(uploadedName: String?, fallback: String) -> St
 func autoScaffoldFromSolutionNotebook(
     setup: APITestSetup,
     notebookData: Data,
-    zipPath: String,
     on db: any Database
 ) async throws -> (sections: Int, functions: Int) {
     // Decode the existing manifest so we know whether to scaffold.
