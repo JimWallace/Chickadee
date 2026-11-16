@@ -366,6 +366,86 @@ update_own_scripts() {  # $1 = version tag, $2 = the release commit
 }
 
 # ---------------------------------------------------------------------------
+# Verify that a release image was built by this repository's own pipeline
+# (#3069).
+#
+# docker-build.yml signs every image it pushes: a Sigstore build-provenance
+# attestation, stored beside the image in GHCR, that names the workflow, the
+# ref and the commit that built the digest. The revision label checked in
+# stage_release_image is written by whoever builds the image, so anyone who
+# can push to the registry can forge it. The signature cannot be forged
+# without GitHub's OIDC token for this repository's workflow.
+#
+# So the image digest must carry a provenance attestation signed by
+# docker-build.yml at refs/tags/<the release tag>. A main-branch build, a
+# build from any other workflow or repository, or an unsigned image is
+# refused, and the release waits (state waiting_for_image) with the reason.
+#
+# cosign does the check. It needs no GitHub token. It is installed once into
+# the state directory from its GitHub release, with the SHA-256 pinned here,
+# not read from the release, so a replaced asset is refused. To upgrade,
+# change the version and both hashes (the cosign-linux-* lines of the
+# release's cosign_checksums.txt). Sigstore's trust root is cached under the
+# state directory too: the systemd sandbox keeps /root read-only.
+# ---------------------------------------------------------------------------
+COSIGN_VERSION="3.1.4"
+COSIGN_SHA256_AMD64="424e2c97d0b45fd7a6b608a87f090f35633f4c23ece5f092d48bba11aaf4bbfa"
+COSIGN_SHA256_ARM64="ade83b7aac62e131cacfe96d958948b2150cc9efec46a570a2649b8e27dedad2"
+COSIGN=""
+SIGNER_WORKFLOW="https://github.com/$REPO/.github/workflows/docker-build.yml"
+OIDC_ISSUER="https://token.actions.githubusercontent.com"
+
+# Sets COSIGN to a verified binary. Returns 1 with WAIT_REASON set.
+ensure_cosign() {
+  local arch want dir bin tmp
+  case "$(uname -m)" in
+    x86_64|amd64) arch=amd64; want="$COSIGN_SHA256_AMD64" ;;
+    aarch64|arm64) arch=arm64; want="$COSIGN_SHA256_ARM64" ;;
+    *) WAIT_REASON="no pinned cosign for architecture $(uname -m)"; return 1 ;;
+  esac
+  dir="$STATE_DIR/bin"
+  bin="$dir/cosign-$COSIGN_VERSION-$arch"
+  if [ -x "$bin" ] && [ "$(sha256sum "$bin" | cut -d' ' -f1)" = "$want" ]; then
+    COSIGN="$bin"
+    return 0
+  fi
+  mkdir -p "$dir"
+  tmp="$(mktemp "$dir/cosign.XXXXXX")"
+  if ! curl -fsSL --max-time 120 -o "$tmp" \
+      "https://github.com/sigstore/cosign/releases/download/v$COSIGN_VERSION/cosign-linux-$arch"; then
+    rm -f "$tmp"
+    WAIT_REASON="could not download cosign $COSIGN_VERSION to verify the image signature"
+    return 1
+  fi
+  if [ "$(sha256sum "$tmp" | cut -d' ' -f1)" != "$want" ]; then
+    rm -f "$tmp"
+    WAIT_REASON="the cosign $COSIGN_VERSION download does not match its pinned SHA-256"
+    return 1
+  fi
+  chmod 755 "$tmp" && mv "$tmp" "$bin"
+  COSIGN="$bin"
+  return 0
+}
+
+# $1 = the image digest reference, $2 = the release tag.
+# Returns 0 when docker-build.yml at refs/tags/<tag> signed a provenance
+# attestation for that digest. Returns 1 with WAIT_REASON set.
+verify_release_image() {
+  local ref="$1" ver="$2" out
+  ensure_cosign || return 1
+  mkdir -p "$STATE_DIR/sigstore"
+  if out="$(TUF_ROOT="$STATE_DIR/sigstore" "$COSIGN" verify-attestation \
+      --type slsaprovenance1 \
+      --certificate-oidc-issuer "$OIDC_ISSUER" \
+      --certificate-identity "$SIGNER_WORKFLOW@refs/tags/$ver" \
+      "$ref" 2>&1 >/dev/null)"; then
+    return 0
+  fi
+  WAIT_REASON="image $ref has no provenance signed by docker-build.yml at $ver: $(printf '%s' "$out" | tail -n 1 | cut -c1-200)"
+  return 1
+}
+
+# ---------------------------------------------------------------------------
 # Stage the exact image of a release before deploying it.
 #
 # The daemon used to deploy whatever :latest was. :latest is pushed by every
@@ -406,6 +486,12 @@ stage_release_image() {  # $1 = version tag
   digest="$(docker image inspect -f '{{index .RepoDigests 0}}' "$ref" 2>/dev/null)"
   if [ -z "$digest" ]; then
     WAIT_REASON="image $ref has no registry digest"
+    return 1
+  fi
+  # The signature is checked on the digest, which is what gets deployed, and
+  # before the image gets the :latest tag that the Compose runner uses.
+  if ! verify_release_image "$digest" "$ver"; then
+    docker rmi "$ref" >/dev/null 2>&1 || true
     return 1
   fi
   if ! docker tag "$ref" "$IMAGE_REPO:latest" >/dev/null 2>&1; then
