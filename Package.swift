@@ -278,6 +278,7 @@ let package = Package(
             dependencies: [
                 .target(name: "chickadee-loadtest"),
                 .target(name: "Core"),
+                .product(name: "NIOHTTP1", package: "swift-nio"),
             ],
             path: "Tests/LoadTestTests",
             swiftSettings: sourceSettings
