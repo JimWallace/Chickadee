@@ -34,13 +34,23 @@ IMAGE="ghcr.io/jimwallace/chickadee"
 cat > "$BIN/docker" <<'SH'
 #!/usr/bin/env bash
 printf 'docker %s\n' "$*" >> "$STUB/calls"
+# An image is published when the case says every image is (image_published), or
+# names its short commit (published_<sha7>).
+ref="${*: -1}"
+short="${ref##*:sha-}"
+published() { [ -f "$STUB/image_published" ] || [ -f "$STUB/published_$short" ]; }
 case "$1" in
   pull)
-    [ -f "$STUB/image_published" ] || { echo "manifest unknown" >&2; exit 1; }
+    published || { echo "manifest unknown" >&2; exit 1; }
+    ;;
+  manifest)
+    published || { echo "manifest unknown" >&2; exit 1; }
     ;;
   image)
     case "$*" in
-      *revision*) cat "$STUB/image_revision" ;;
+      *revision*)
+        if [ -f "$STUB/revision_$short" ]; then cat "$STUB/revision_$short"; else cat "$STUB/image_revision"; fi
+        ;;
       *RepoDigests*) echo "ghcr.io/jimwallace/chickadee@sha256:0123abcd" ;;
       # Reclaiming space frees enough when the case says so.
       *prune*) [ -f "$STUB/prune_frees" ] && echo $(( 50 * 1024 * 1024 )) > "$STUB/free_kib" ;;
@@ -81,7 +91,12 @@ done
 printf 'curl insecure=%s %s\n' "$insecure" "$url" >> "$STUB/calls"
 case "$url" in
   */releases/latest) printf '{"tag_name": "%s"}\n' "$(cat "$STUB/latest_release")" ;;
-  */commits/*) printf '{"sha": "%s"}\n' "$(cat "$STUB/release_sha")" ;;
+  */commits/*)
+    tag="${url##*/}"
+    if [ -f "$STUB/sha_$tag" ]; then sha="$(cat "$STUB/sha_$tag")"; else sha="$(cat "$STUB/release_sha")"; fi
+    printf '{"sha": "%s"}\n' "$sha"
+    ;;
+  */tags\?*) cat "$STUB/tags" 2>/dev/null || echo '[]' ;;
   */health)
     mode="$(cat "$STUB/health")"
     if [ "$mode" = "tls" ] && [ "$insecure" = "0" ]; then
@@ -209,6 +224,8 @@ start_case() {
   DEPLOYED_VERSION="0.5.231"
   PAUSED=0
   APPROVED_VERSION=""
+  REFUSED_FALLBACKS=""
+  REFUSED_FALLBACKS_FOR=""
   clear_failures
 }
 
@@ -457,6 +474,115 @@ run_cycle
 expect_calls "deploy-script deploy" 1
 expect_calls "docker image prune -a -f" 1
 expect_state idle
+
+# ---------------------------------------------------------------------------
+# While the newest release waits for its image, the newest older release that
+# has one goes out. Production stayed on 0.5.964 for hours on 2026-11-16
+# because every merge moved the target before its image existed.
+# ---------------------------------------------------------------------------
+OLD_SHA="03df65cfb5cd97613bf7356a7204e88c866ca107"
+MID_SHA="5f1e2d3c4b5a69788796a5b4c3d2e1f0a9b8c7d6"
+
+fallback_case() {  # $1 = case name. v0.5.234 waits; v0.5.233 is built.
+  start_case "$1"
+  echo "v0.5.234" > "$STUB/latest_release"
+  echo "$RELEASE_SHA" > "$STUB/sha_v0.5.234"
+  echo "$OLD_SHA" > "$STUB/sha_v0.5.233"
+  echo "$MID_SHA" > "$STUB/sha_v0.5.232"
+  cat > "$STUB/tags" <<JSON
+[{"name": "v0.5.232", "commit": {"sha": "$MID_SHA"}},
+ {"name": "v0.5.234", "commit": {"sha": "$RELEASE_SHA"}},
+ {"name": "not-a-release", "commit": {"sha": "$OLD_SHA"}},
+ {"name": "v0.5.233", "commit": {"sha": "$OLD_SHA"}},
+ {"name": "v0.5.231", "commit": {"sha": "$MID_SHA"}}]
+JSON
+  rm "$STUB/image_published"
+  touch "$STUB/published_${OLD_SHA:0:7}" "$STUB/published_${MID_SHA:0:7}"
+  echo "$OLD_SHA" > "$STUB/revision_${OLD_SHA:0:7}"
+  echo "$MID_SHA" > "$STUB/revision_${MID_SHA:0:7}"
+  echo "0.5.233" > "$STUB/target_version"
+  echo "$OLD_SHA" > "$STUB/git_head"
+  echo "$OLD_SHA" > "$STUB/git_tag_commit"
+}
+
+# ---------------------------------------------------------------------------
+fallback_case "a newest release without an image does not hold back an older one that has one"
+run_cycle
+expect_calls "deploy-script deploy --yes" 1
+expect_calls "docker pull -q $IMAGE:sha-${OLD_SHA:0:7}" 1
+expect_calls "docker pull -q $IMAGE:sha-${MID_SHA:0:7}" 0
+expect_history fallback chosen
+[ "$DEPLOYED_VERSION" = "0.5.233" ] || fail "expected the fallback 0.5.233 deployed, saw $DEPLOYED_VERSION"
+[ "$LATEST_SEEN" = "v0.5.234" ] || fail "expected v0.5.234 still reported as the latest seen, saw $LATEST_SEEN"
+[ "$WAITING_VERSION" = "v0.5.234" ] || fail "the newest release lost its wait clock: $WAITING_VERSION"
+run_cycle
+expect_calls "deploy-script deploy --yes" 1
+expect_state waiting_for_image
+touch "$STUB/published_${RELEASE_SHA:0:7}"
+echo "0.5.234" > "$STUB/target_version"
+echo "$RELEASE_SHA" > "$STUB/git_head"
+echo "$RELEASE_SHA" > "$STUB/git_tag_commit"
+run_cycle
+expect_calls "deploy-script deploy --yes" 2
+expect_state idle
+[ "$DEPLOYED_VERSION" = "0.5.234" ] || fail "expected 0.5.234 deployed once built, saw $DEPLOYED_VERSION"
+
+# ---------------------------------------------------------------------------
+fallback_case "a newest release that never builds still becomes stuck after a fallback"
+run_cycle
+[ "$DEPLOYED_VERSION" = "0.5.233" ] || fail "expected the fallback 0.5.233 deployed, saw $DEPLOYED_VERSION"
+FAKE_NOW=$(( FAKE_NOW + 7200 ))
+run_cycle
+expect_state stuck
+
+# ---------------------------------------------------------------------------
+fallback_case "no fallback when no older release has an image"
+rm "$STUB/published_${OLD_SHA:0:7}" "$STUB/published_${MID_SHA:0:7}"
+run_cycle
+expect_calls "deploy-script" 0
+expect_calls "docker manifest inspect" 2
+expect_state waiting_for_image
+[ "$DEPLOYED_VERSION" = "0.5.231" ] || fail "a deploy happened without an image: $DEPLOYED_VERSION"
+
+# ---------------------------------------------------------------------------
+fallback_case "a fallback that is backed off after a failure is skipped"
+FAILING_VERSION="v0.5.233"
+RETRY_AT=$(( FAKE_NOW + 600 ))
+echo "0.5.232" > "$STUB/target_version"
+echo "$MID_SHA" > "$STUB/git_head"
+echo "$MID_SHA" > "$STUB/git_tag_commit"
+run_cycle
+expect_calls "docker pull -q $IMAGE:sha-${OLD_SHA:0:7}" 0
+[ "$DEPLOYED_VERSION" = "0.5.232" ] || fail "expected 0.5.232 deployed past the backed-off 0.5.233, saw $DEPLOYED_VERSION"
+
+# ---------------------------------------------------------------------------
+fallback_case "a disk hold does not send a fallback out"
+echo $(( 4 * 1024 * 1024 )) > "$STUB/free_kib"
+run_cycle
+expect_calls "docker manifest" 0
+expect_calls "deploy-script" 0
+expect_state disk_low
+
+# ---------------------------------------------------------------------------
+fallback_case "a fallback whose image fails to stage is tried once, then the next one goes out"
+echo "03df65c0000000000000000000000000000000ff" > "$STUB/revision_${OLD_SHA:0:7}"
+run_cycle
+expect_calls "deploy-script" 0
+expect_history fallback refused
+echo "0.5.232" > "$STUB/target_version"
+echo "$MID_SHA" > "$STUB/git_head"
+echo "$MID_SHA" > "$STUB/git_tag_commit"
+run_cycle
+expect_calls "docker pull -q $IMAGE:sha-${OLD_SHA:0:7}" 1
+[ "$DEPLOYED_VERSION" = "0.5.232" ] || fail "expected 0.5.232 deployed after 0.5.233 was refused, saw $DEPLOYED_VERSION"
+
+# ---------------------------------------------------------------------------
+start_case "a newest image that is published but refused sends no fallback out"
+echo "03df65cfb5cd97613bf7356a7204e88c866ca107" > "$STUB/image_revision"
+run_cycle
+expect_calls "docker manifest" 0
+expect_calls "deploy-script" 0
+expect_state waiting_for_image
 
 # ---------------------------------------------------------------------------
 if [ "$FAILURES" -gt 0 ]; then
