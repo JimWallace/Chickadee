@@ -1,0 +1,6 @@
+# zizmor configuration (#3074). Each entry says why.
+rules:
+  # The `$/` self-repository syntax for local actions is newer than the
+  # `./` form used throughout, and it changes nothing about security here.
+  self-repository:
+    disable: true

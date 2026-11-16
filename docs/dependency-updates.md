@@ -9,7 +9,7 @@ update fails.
    other are grouped, so each PR resolves on its own. The pip
    `jupyterlite` / `jupyterlite-core` split in #2863 is why.
    Each entry has a `cooldown`. Dependabot offers a version only when it is
-   3 days old, and a new major version only when it is 14 days old. A merge
+   7 days old, and a new major version only when it is 14 days old. A merge
    reaches production with no person involved, and most compromised releases
    are withdrawn within those days. A security update is not delayed.
 2. **`dependabot-auto.yml` lands it.** When the bump feeds committed output, the

@@ -61,7 +61,7 @@ jobs:
     steps:
       # This checkout keeps its credentials (no persist-credentials: false):
       # a later step in this job pushes with git through them (#3068).
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1  # zizmor: ignore[artipacked]
         with:
           fetch-depth: 0
           token: ${{ secrets.RELEASE_TOKEN || github.token }}
@@ -143,7 +143,8 @@ jobs:
           scripts/runnercore-source-hash.sh > Public/runner-wasm/source.sha
           # Refresh the size baseline so the delta note in check-runner-wasm-size.sh
           # tracks the new artifact (informational only; it never fails on growth).
-          wasm="$(ls Public/runner-wasm/RunnerWasm.*.wasm | head -1)"
+          set -- Public/runner-wasm/RunnerWasm.*.wasm
+          wasm="$1"
           gzip -9 -c "$wasm" | wc -c | tr -d ' ' > runner-size-baseline.txt
 
       # build-runner-wasm.sh only reports the size check, so a local build can

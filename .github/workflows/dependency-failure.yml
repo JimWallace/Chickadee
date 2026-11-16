@@ -16,6 +16,7 @@ name: Dependency update failure
 # from that run and never checks out or executes the PR's code.
 
 on:
+  # zizmor: ignore[dangerous-triggers] -- reads only the watched run's metadata and logs; never checks out or runs its code.
   workflow_run:
     # The workflows that test a pull request, plus the two that land
     # Dependabot's. Names, not file names: workflow_run matches on `name:`.

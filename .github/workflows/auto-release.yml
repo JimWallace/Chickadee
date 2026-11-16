@@ -52,7 +52,7 @@ jobs:
     steps:
       # This checkout keeps its credentials (no persist-credentials: false):
       # a later step in this job pushes with git through them (#3068).
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1  # zizmor: ignore[artipacked]
         with:
           fetch-depth: 0
           # Prefer a PAT so the tag triggers release.yml + docker-build; fall
