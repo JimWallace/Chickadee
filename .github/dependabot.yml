@@ -113,8 +113,17 @@ updates:
     cooldown:
       default-days: 3
 
+  # Every action is pinned to a full commit SHA with a `# vX.Y.Z` comment
+  # (#3064). A tag can be moved to new code; a SHA cannot. Dependabot reads the
+  # comment, so it still offers updates and rewrites both the SHA and the
+  # comment. The repository setting `sha_pinning_required` refuses a tag pin.
+  #
+  # `directory: "/"` covers .github/workflows only. The composite actions under
+  # .github/actions/ call actions too, so they are named explicitly.
   - package-ecosystem: "github-actions"
-    directory: "/"
+    directories:
+      - "/"
+      - "/.github/actions/*"
     schedule:
       interval: "weekly"
       day: "monday"
