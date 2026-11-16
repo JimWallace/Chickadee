@@ -70,10 +70,15 @@ Measured on v0.5.876 (2026-11-09) with `Tools/perf-bench/weekly.sh` on the
 | Student history | 9 | 0.4 | 19 | 19–23 ms |
 | Status poll `GET /api/v1/submissions/:id` | 3 | 0.07 | 3 | 4–11 ms |
 | Staff view of a submission | 19 | 0.6 | 16 | 27–33 ms |
-| Instructor assignment submissions | 20 | 36 | 4,810 | 167–191 ms |
+| Instructor assignment submissions | 19 | 36 | 4,510 | 167–191 ms |
 | Grades CSV export | 12 | 30 | 4,232 | 157–195 ms |
 | Instructor assignment list | 14 | 29 | 652 | 93–109 ms |
 | Admin dashboard | 11 | 11 | 4,653 | 60–77 ms |
+
+On 2026-11-13 the instructor assignment submissions page dropped from 20
+statements and 4,810 rows to 19 and 4,510: the per-student summary returns
+the latest submission's time, so the page no longer re-reads those rows by
+id. Its times above are still the 2026-11-09 ones.
 
 **Runner claims.** There is a backlog of 20,000 pending jobs. Each runner polls
 every second for 30 s.
