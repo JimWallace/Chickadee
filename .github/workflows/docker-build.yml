@@ -640,15 +640,18 @@ jobs:
           echo "$dir" >> "$GITHUB_PATH"
           "$dir/trivy" --version
 
+      # The gate (#3077): a CRITICAL or HIGH finding that has a fix fails the
+      # build, and nothing is pushed. An accepted finding goes in
+      # .trivyignore.yaml with a statement and an expiry date; once it expires,
+      # the build fails again until someone looks. Trivy runs directly: the
+      # action only wrapped this binary, and its ignore-file handling cannot
+      # read the YAML format that carries the expiry.
       - name: Scan image for vulnerabilities
-        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
-        with:
-          skip-setup-trivy: true
-          image-ref: ${{ fromJSON(steps.meta.outputs.json).tags[0] }}
-          format: table
-          exit-code: "1"
-          ignore-unfixed: true
-          severity: CRITICAL
+        env:
+          IMAGE_REF: ${{ fromJSON(steps.meta.outputs.json).tags[0] }}
+        run: |
+          trivy image --exit-code 1 --ignore-unfixed --severity CRITICAL,HIGH \
+            --ignorefile .trivyignore.yaml --format table "$IMAGE_REF"
 
       # Push the image that the steps above booted and scanned. A second
       # build-push-action run here rebuilt the image instead, and the gha cache
