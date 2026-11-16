@@ -68,7 +68,7 @@ jobs:
     # find any cache evicted), then the tests.
     timeout-minutes: 120
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
@@ -173,7 +173,7 @@ jobs:
       ISSUE_LABEL: scheduled-check-failed
       ISSUE_LABEL_DESCRIPTION: "A scheduled check on main failed; see scripts/dependency-issue.sh"
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
