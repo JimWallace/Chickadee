@@ -9,6 +9,13 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.956] - 2026-11-16
+
+### Removed
+
+- **An unused parameter on the per-student staff actions.** `resolveStudentAssignmentAction` took an `action` phrase that no error message used after the dead-code review (#3047). The parameter and its seven arguments are gone, and the doc comment no longer names a removed `isInstructor` guard.
+
+
 ## [0.5.955] - 2026-11-16
 
 ### Changed
