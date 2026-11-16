@@ -1,20 +1,19 @@
 // LoadTest/LoadTestCommand.swift
 //
-// The chickadee-loadtest CLI. It simulates deadline traffic on the server's
-// hot paths (runner polls and result-view status polls) for a fixed time,
-// then prints the latency each stream saw. See docs/load-testing.md.
+// `chickadee-loadtest hot-paths`, the default subcommand: simulates deadline
+// traffic on the server's hot paths (runner polls and result-view status
+// polls) for a fixed time, then prints the latency each stream saw. See
+// docs/load-testing.md.
 
 import ArgumentParser
 import AsyncHTTPClient
 import Core
 import Foundation
 
-@main
 struct LoadTestCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "chickadee-loadtest",
-        abstract: "Simulate deadline traffic on the server's hot paths and report the latency",
-        version: ChickadeeVersion.current
+        commandName: "hot-paths",
+        abstract: "Simulate deadline traffic on the server's hot paths and report the latency"
     )
 
     @Option(name: .long, help: "Base URL of the server to load")
