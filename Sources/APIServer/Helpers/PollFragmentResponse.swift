@@ -45,8 +45,12 @@ extension Response {
 
     /// `csrfToken` is the token the rows were rendered with. It is left out
     /// of the ETag, so unchanged rows get the same ETag on every poll.
-    static func pollFragment(html: String, csrfToken: String? = nil, for req: Request) -> Response {
-        let etag = Self.weakETag(for: html, ignoring: csrfToken)
+    /// `etag`, when given, replaces the hash of `html`: a caller that knows
+    /// what the fragment depends on computes it before building the
+    /// fragment, and has already answered 304 with it (`LiveBoardETag`).
+    static func pollFragment(html: String, csrfToken: String? = nil, etag: String? = nil, for req: Request) -> Response
+    {
+        let etag = etag ?? Self.weakETag(for: html, ignoring: csrfToken)
         if let notModified = notModified(etag: etag, for: req) { return notModified }
 
         var headers = HTTPHeaders()

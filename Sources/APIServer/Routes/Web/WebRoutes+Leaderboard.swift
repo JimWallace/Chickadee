@@ -38,6 +38,13 @@ extension WebRoutes {
             return try await presentModeResponse(req: req, user: user, setup: setup, activity: activity)
         }
 
+        // A refresh of a metric board takes the fast path
+        // (docs/live-board-cache.md): a 304 from the fingerprint, else a
+        // build from the shared roster snapshot.
+        let refresh = try await liveBoardRefresh(
+            req: req, fragment: "body", user: user, setup: setup, activity: activity, readsAsStaff: isStaff)
+        if case .notModified(let response) = refresh { return response }
+
         let assignment = try await assignmentByTestSetupID(setupID, on: req.db)
         let course = try await APICourse.find(setup.courseID, on: req.db)
         // Each flag names its own aggregation. The metric board used to be
@@ -52,23 +59,12 @@ extension WebRoutes {
         // Staff always read the whole list; a student reads a window of it
         // unless they ask for the rest.
         let showingAll = isStaff || req.query[String.self, at: "all"] == "1"
-        let reader = LeaderboardReader.page(user: user, isStaff: isStaff)
+        var reader = LeaderboardReader.page(user: user, isStaff: isStaff)
+        reader.roster = refresh.roster
         let (board, standingsBoard, groupScope) = try await rankingBoards(
             req: req, reader: reader, setup: setup, activity: activity, assignment: assignment, showAll: showingAll)
-        let champion = try await buildChampionPresentation(
-            setup: setup, activity: activity, groupID: groupScope?.groupID, viewerID: user.id,
-            includeNames: isStaff, on: req.db)
-        let tournament =
-            showsBracket
-            ? try await buildTournamentPresentation(
-                setup: setup, viewerID: user.id, includeNames: isStaff, scope: groupScope, on: req.db)
-            : nil
-        let union =
-            showsUnion
-            ? try await buildUnionPresentation(
-                setup: setup, reader: reader, showAll: showingAll,
-                allURL: "\(boardURL)?all=1", on: req.db)
-            : nil
+        let (champion, tournament, union) = try await kindPresentations(
+            req: req, reader: reader, setup: setup, activity: activity, scope: groupScope, showAll: showingAll)
 
         let pollsLive =
             groupScope?.isLive ?? activity.window.map { $0.state(at: Date()) != .afterClose } ?? false
@@ -144,7 +140,32 @@ extension WebRoutes {
             let page = LeaderboardPage(page: PageRequestContext(request: req), board: presentation)
             return try await HTMLResponse { page }.encodeResponse(for: req)
         }
-        return Response.pollFragment(html: LeaderboardBody(board: presentation).render(), for: req)
+        return Response.pollFragment(
+            html: LeaderboardBody(board: presentation).render(), etag: refresh.etag, for: req)
+    }
+
+    /// The parts a kind adds to the board: the hill's holder, the bracket and
+    /// the tests-and-code lists, each nil for a kind without it.
+    private func kindPresentations(
+        req: Request, reader: LeaderboardReader, setup: APITestSetup, activity: ClassActivity,
+        scope: LeaderboardGroupScope?, showAll: Bool
+    ) async throws -> (ChampionPresentation?, TournamentPresentation?, UnionPresentation?) {
+        let (user, isStaff) = (reader.user, reader.isStaff)
+        let champion = try await buildChampionPresentation(
+            setup: setup, activity: activity, groupID: scope?.groupID, viewerID: user.id,
+            includeNames: isStaff, on: req.db)
+        let tournament =
+            activity.kind.aggregation == .bracket
+            ? try await buildTournamentPresentation(
+                setup: setup, viewerID: user.id, includeNames: isStaff, scope: scope, on: req.db)
+            : nil
+        let union =
+            activity.kind.aggregation == .union
+            ? try await buildUnionPresentation(
+                setup: setup, reader: reader, showAll: showAll,
+                allURL: "/testsetups/\(setup.id ?? "")/leaderboard?all=1", on: req.db)
+            : nil
+        return (champion, tournament, union)
     }
 
     /// Every lab's image, for staff on the full page only: it sits outside
@@ -163,6 +184,9 @@ extension WebRoutes {
 struct LeaderboardReader {
     let user: APIUser
     let isStaff: Bool
+    /// The shared roster snapshot a refresh on the fast path reads the
+    /// students from (docs/live-board-cache.md); nil loads them per request.
+    var roster: RosterSnapshot?
 
     /// A classmate or a staff member reading the leaderboard page.
     static func page(user: APIUser, isStaff: Bool) -> LeaderboardReader {
@@ -455,7 +479,7 @@ extension WebRoutes {
         switch activity.kind.aggregation {
         case .leaderboard:
             let board = try await buildLeaderboard(
-                setup: setup, reader: reader, showAll: showAll, scope: scope, on: req.db)
+                setup: setup, reader: reader, showAll: showAll, scope: scope, roster: reader.roster, on: req.db)
             return (board, .empty, scope)
         case .standings:
             let standings = try await buildStandingsBoard(
@@ -471,11 +495,14 @@ extension WebRoutes {
 /// board for a student in no lab group. Every other activity's whole board.
 func buildLeaderboard(
     setup: APITestSetup, reader: LeaderboardReader, showAll: Bool, scope: LeaderboardGroupScope?,
-    on db: any Database
+    roster: RosterSnapshot? = nil, on db: any Database
 ) async throws -> LeaderboardBoard {
-    guard let scope else { return try await buildLeaderboard(setup: setup, reader: reader, showAll: showAll, on: db) }
+    guard let scope else {
+        return try await buildLeaderboard(setup: setup, reader: reader, showAll: showAll, roster: roster, on: db)
+    }
     guard let groupID = scope.groupID else { return .empty }
-    return try await buildLeaderboard(setup: setup, reader: reader, showAll: showAll, groupID: groupID, on: db)
+    return try await buildLeaderboard(
+        setup: setup, reader: reader, showAll: showAll, groupID: groupID, roster: roster, on: db)
 }
 
 /// The metric board for `setup`: the ranked rows, the list a viewer is shown,
@@ -489,16 +516,24 @@ func buildLeaderboard(
 ///
 /// `isStaff` decides whether names, usernames and submission counts are built
 /// at all — a student's page never holds them. With `groupID`, one lab
-/// group's board (docs/lab-groups.md, slice 3).
+/// group's board (docs/lab-groups.md, slice 3). With `roster`, the students'
+/// handles and birds come from a snapshot shared by every refresh of the
+/// board (docs/live-board-cache.md), when it covers every ranked student.
 func buildLeaderboard(
-    setup: APITestSetup, reader: LeaderboardReader, showAll: Bool, groupID: UUID? = nil, on db: any Database
+    setup: APITestSetup, reader: LeaderboardReader, showAll: Bool, groupID: UUID? = nil,
+    roster: RosterSnapshot? = nil, on db: any Database
 ) async throws -> LeaderboardBoard {
     let viewer = reader.user
     let isStaff = reader.isStaff
     let setupID = setup.id ?? ""
     let allEntries = try await leaderboardEntries(testSetupID: setupID, groupID: groupID, on: db)
-    let identities = try await AvatarIdentity.load(
-        userIDs: allEntries.map(\.userID), courseID: setup.courseID, on: db)
+    let identities: any BoardIdentities
+    if let roster, roster.covers(allEntries.map(\.userID)) {
+        identities = roster
+    } else {
+        identities = try await AvatarIdentity.load(
+            userIDs: allEntries.map(\.userID), courseID: setup.courseID, on: db)
+    }
     // Ranked against the roster: a student who has dropped takes no place.
     let entries = allEntries.filter { identities.isOnRoster($0.userID) }
     let counts = isStaff ? try await leaderboardSubmissionCounts(setupID: setupID, on: db) : [:]
@@ -557,7 +592,7 @@ func buildLeaderboard(
                 rankTier: LeaderboardStandingText.tier(rank: rank),
                 handle: identity.handle,
                 name: identity.name,
-                username: isStaff ? (identities.userByID[entry.userID]?.username ?? "") : "",
+                username: isStaff ? (identities.username(of: entry.userID) ?? "") : "",
                 metricText: formatLeaderboardMetric(entry.metric),
                 isViewer: entry.userID == viewer.id,
                 avatar: identity.avatar,

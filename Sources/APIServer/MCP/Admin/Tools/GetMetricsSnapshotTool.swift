@@ -25,7 +25,7 @@ struct GetMetricsSnapshotTool: DiagnosticTool {
         + "timeout), queue-wait and execution duration summaries (avg/p50/p95), and runner-"
         + "compatibility counters, over the server's recent window. Also hotPaths: in-memory "
         + "request counts and latency (p50/p95/p99/max, peak per minute) for the runner poll, "
-        + "runner heartbeat and submission status poll, which get_request_metrics does not "
+        + "runner heartbeat, submission status poll and leaderboard refresh, which get_request_metrics does not "
         + "record on success; counted per process since countingSince and over the last 60 "
         + "minutes. Use it to diagnose runner health, throughput, queue pressure, and hot-path "
         + "load. Read-only; aggregates only — no student, submission, course, or assignment "
