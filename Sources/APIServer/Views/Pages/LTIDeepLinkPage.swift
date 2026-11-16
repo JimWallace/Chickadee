@@ -14,6 +14,10 @@ struct LTIDeepLinkPage: HTML {
     let acceptMultiple: Bool
     let assignments: [LTIDeepLinkOption]
     let error: String?
+    /// Whether the launching user may create an assignment (an instructor of
+    /// a course that is not archived). Only then does an empty course link
+    /// to the new-assignment form.
+    var canCreateAssignment = false
 
     var body: some HTML {
         BaseLayout(title: "Add to LMS", page: page, embedded: true) {
@@ -27,8 +31,12 @@ struct LTIDeepLinkPage: HTML {
             if assignments.isEmpty {
                 p(.class("empty")) { "This course has no assignments yet." }
                 p(.class("section-note")) {
-                    NewTabLink(href: "/instructor/new", text: "Create an assignment ")
-                    ", then open the LMS content picker again."
+                    if canCreateAssignment {
+                        NewTabLink(href: "/instructor/new", text: "Create an assignment ")
+                        ", then open the LMS content picker again."
+                    } else {
+                        "A course instructor creates assignments."
+                    }
                 }
             } else {
                 form(.method(.post), .action("/lti/deep-link"), .class("form-stack")) {
