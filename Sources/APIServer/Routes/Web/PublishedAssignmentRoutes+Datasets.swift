@@ -26,7 +26,7 @@ extension PublishedAssignmentRoutes {
     @Sendable
     func getDatasets(req: Request) async throws -> DatasetsResponse {
         let (_, setup) = try await loadAssignmentAndSetupForStaffRead(req)
-        return try await datasetsPanelResponse(req: req, setup: setup)
+        return try await datasetsPanelResponse(setup: setup)
     }
 
     // MARK: - PUT /instructor/:assignmentID/datasets
@@ -40,6 +40,6 @@ extension PublishedAssignmentRoutes {
         // Files panel renders its controls from, so it has to be the state the
         // manifest now holds. A sample the save dropped is named, so the
         // field does not empty without a word.
-        return try await datasetsPanelResponse(req: req, setup: setup, saved: normalized)
+        return try await datasetsPanelResponse(setup: setup, saved: normalized)
     }
 }

@@ -222,13 +222,13 @@ public func rCellBoundaryMarker(cellNumber: Int) -> String {
 /// The Lua counterpart, split back out by `chickadee_student_cells()` in
 /// `Tools/runner-support/test_runtime.lua`. `Tests/CoreTests/LuaCellMarkerExtractionTests`
 /// pins the two against each other, as the R pair is pinned.
-public func luaCellBoundaryMarker(cellNumber: Int) -> String {
+func luaCellBoundaryMarker(cellNumber: Int) -> String {
     cellBoundaryMarker(cellNumber: cellNumber, comment: "--")
 }
 
 /// The Octave counterpart, split back out by `chickadee.student_cells()` in
 /// `Tools/runner-support/test_runtime.m`.
-public func octaveCellBoundaryMarker(cellNumber: Int) -> String {
+func octaveCellBoundaryMarker(cellNumber: Int) -> String {
     cellBoundaryMarker(cellNumber: cellNumber, comment: "%")
 }
 
@@ -239,7 +239,7 @@ public let rCellBoundaryMarkerPattern = "^# ---- chickadee:cell [0-9]+ ----$"
 
 /// The Lua equivalent. Spelled out literally for the same reason: the runtime
 /// that consumes it cannot import this.
-public let luaCellBoundaryMarkerPattern = "^%-%- ---- chickadee:cell %d+ ----$"
+let luaCellBoundaryMarkerPattern = "^%-%- ---- chickadee:cell %d+ ----$"
 
 // MARK: - Per-cell transforms (shared by both runners)
 

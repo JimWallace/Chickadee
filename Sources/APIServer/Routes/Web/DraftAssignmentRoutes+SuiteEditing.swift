@@ -124,7 +124,7 @@ extension DraftAssignmentRoutes {
     @Sendable
     func getDraftDatasets(req: Request) async throws -> DatasetsResponse {
         let setup = try await loadDraftSetupForRead(req)
-        return try await datasetsPanelResponse(req: req, setup: setup)
+        return try await datasetsPanelResponse(setup: setup)
     }
 
     // MARK: - PUT /instructor/new/draft/datasets
@@ -134,7 +134,7 @@ extension DraftAssignmentRoutes {
         let setup = try await loadDraftSetupForWrite(req)
         let body = try await req.decodeContent(DatasetsBody.self)
         let normalized = try await applyDatasetsEdit(setup: setup, datasets: body.datasets, on: req.db)
-        return try await datasetsPanelResponse(req: req, setup: setup, saved: normalized)
+        return try await datasetsPanelResponse(setup: setup, saved: normalized)
     }
 
     // MARK: - GET /instructor/new/draft/files/item?draftID=<id>&name=<filename>

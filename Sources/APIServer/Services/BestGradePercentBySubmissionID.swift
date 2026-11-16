@@ -20,14 +20,12 @@ import SQLKit
 
 // MARK: - Grade-carrying abstraction (#1157)
 
-/// The three grade accessors the folds below need. `APIResult` conforms via
-/// its column-first accessors; `GradeResultSummary` carries the same values
-/// without ever loading `collection_json` — the audit found one CSV export
-/// pulling hundreds of MB of blobs to read four scalar columns.
+/// The grade accessor the folds below need. `APIResult` conforms via its
+/// column-first accessor; `GradeResultSummary` carries the same value without
+/// ever loading `collection_json` — the audit found one CSV export pulling
+/// hundreds of MB of blobs to read four scalar columns.
 protocol GradeValueCarrying {
     var gradePercentValue: Int? { get }
-    var gradePointsValue: Double? { get }
-    var gradeTotalPointsValue: Double? { get }
 }
 
 extension APIResult: GradeValueCarrying {}

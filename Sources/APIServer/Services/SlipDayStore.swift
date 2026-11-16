@@ -116,8 +116,7 @@ enum SlipDayStore {
         userID: UUID,
         assignment: APIAssignment,
         policy: SlipDayPolicy,
-        on db: any Database,
-        now: Date = Date()
+        on db: any Database
     ) async throws -> SlipDaySpendReceipt {
         guard let assignmentID = assignment.id else { throw SlipDayError.spendNotFound }
         guard let dueAt = assignment.dueAt else { throw SlipDayError.assignmentHasNoDeadline }

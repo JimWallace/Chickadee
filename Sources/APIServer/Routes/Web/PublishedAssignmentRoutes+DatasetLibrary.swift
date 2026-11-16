@@ -65,7 +65,7 @@ extension PublishedAssignmentRoutes {
         await applyContentEditEffects(
             .gradeAffecting, assignment: assignment, setup: setup, actingUserID: req.auth.get(APIUser.self)?.id,
             context: req)
-        return try await datasetsPanelResponse(req: req, setup: setup)
+        return try await datasetsPanelResponse(setup: setup)
     }
 
     // MARK: - Update to the newest version
@@ -82,7 +82,7 @@ extension PublishedAssignmentRoutes {
         await applyContentEditEffects(
             .gradeAffecting, assignment: assignment, setup: setup, actingUserID: req.auth.get(APIUser.self)?.id,
             context: req)
-        return try await datasetsPanelResponse(req: req, setup: setup)
+        return try await datasetsPanelResponse(setup: setup)
     }
 
     // MARK: - Detach
@@ -103,7 +103,7 @@ extension PublishedAssignmentRoutes {
         await applyContentEditEffects(
             .gradeAffecting, assignment: assignment, setup: setup, actingUserID: req.auth.get(APIUser.self)?.id,
             context: req)
-        return try await datasetsPanelResponse(req: req, setup: setup)
+        return try await datasetsPanelResponse(setup: setup)
     }
 
     // MARK: - Scope
@@ -121,7 +121,7 @@ extension PublishedAssignmentRoutes {
         await applyContentEditEffects(
             .gradeAffecting, assignment: assignment, setup: setup, actingUserID: req.auth.get(APIUser.self)?.id,
             context: req)
-        return try await datasetsPanelResponse(req: req, setup: setup)
+        return try await datasetsPanelResponse(setup: setup)
     }
 
     // MARK: - Promote
@@ -140,7 +140,7 @@ extension PublishedAssignmentRoutes {
                 file: body.file, from: setup, dataset: .init(name: name, slug: slug),
                 testSetupsDirectory: req.application.testSetupsDirectory, on: req.db)
         }
-        return try await datasetsPanelResponse(req: req, setup: setup)
+        return try await datasetsPanelResponse(setup: setup)
     }
 
     /// A slug made from `name` that the course does not use yet: the plain

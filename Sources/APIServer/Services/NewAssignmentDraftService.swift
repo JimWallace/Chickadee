@@ -286,7 +286,6 @@ struct NewAssignmentDraftService {
             let result = try await autoScaffoldFromSolutionNotebook(
                 setup: setup,
                 notebookData: normalized,
-                zipPath: setup.zipPath,
                 on: db
             )
             if result.functions > 0 {
