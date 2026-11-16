@@ -1,0 +1,98 @@
+name: Workflow lint
+
+# Two linters for the files that run the pipeline itself (#3074).
+#
+# - actionlint: syntax, expression types, unknown inputs and outputs, and
+#   shellcheck on every `run:` block.
+# - zizmor: security. It finds template injection (an untrusted value pasted
+#   into a shell script), unpinned actions, persisted checkout credentials,
+#   excessive token permissions, dangerous triggers and cache poisoning.
+#
+# Both fail the job on a finding, so a workflow change cannot bring back what
+# #3064, #3067 and #3068 removed. zizmor also sends its findings to the
+# Security tab. To accept a finding on purpose, put an inline
+# `# zizmor: ignore[<audit>]` on the line, with the reason beside it; never
+# lower the threshold for the whole repository.
+#
+# The schedule runs zizmor's new audits against unchanged workflows.
+
+on:
+  pull_request:
+    paths:
+      - ".github/**"
+  push:
+    branches: [main]
+    paths:
+      - ".github/**"
+  schedule:
+    - cron: "41 6 * * 1"
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  actionlint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # From the GitHub release, with the SHA-256 pinned here and not read
+      # from the release, so a replaced asset fails the job. To upgrade,
+      # change both values: the hash is the linux_amd64 line of the
+      # release checksums file.
+      - name: Install actionlint
+        env:
+          ACTIONLINT_VERSION: "1.7.12"
+          ACTIONLINT_SHA256: "8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8"
+        run: |
+          set -euo pipefail
+          tarball="actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz"
+          dir="$RUNNER_TEMP/actionlint"
+          mkdir -p "$dir"
+          curl -fsSL --retry 4 --retry-all-errors -o "$dir/$tarball" \
+            "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/${tarball}"
+          echo "${ACTIONLINT_SHA256}  $dir/$tarball" | sha256sum -c -
+          tar -xzf "$dir/$tarball" -C "$dir" actionlint
+          "$dir/actionlint" -version
+          echo "$dir" >> "$GITHUB_PATH"
+
+      - name: Run actionlint
+        run: actionlint -color
+
+  zizmor:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      # Upload the SARIF to the Security tab.
+      security-events: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # The findings, to the Security tab. This step does not fail on a
+      # finding; the next one does.
+      - name: zizmor (Security tab)
+        uses: zizmorcore/zizmor-action@45d7276c9ca790aabd705e31ca99c6185c3e76dd # v0.8.1
+        with:
+          version: "1.32.0"
+          advanced-security: true
+
+      - name: zizmor (gate)
+        uses: zizmorcore/zizmor-action@45d7276c9ca790aabd705e31ca99c6185c3e76dd # v0.8.1
+        with:
+          version: "1.32.0"
+          advanced-security: false
+          # Informational findings (for example a value from a trusted
+          # context in a template) do not fail the job; low and above do.
+          min-severity: low

@@ -21,10 +21,7 @@ on:
   schedule:
     - cron: '0 6 * * 1'
 
-permissions:
-  security-events: write
-  contents: read
-  actions: read
+permissions: {}
 
 # Cancel superseded PR runs; main pushes / merge-queue / scheduled runs are
 # never cancelled (their group key is the unique ref).
@@ -37,6 +34,11 @@ jobs:
     name: Analyze (javascript-typescript)
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    permissions:
+      # Upload the results to code scanning.
+      security-events: write
+      contents: read
+      actions: read
 
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -78,6 +80,11 @@ jobs:
     name: Analyze (${{ matrix.language }})
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    permissions:
+      # Upload the results to code scanning.
+      security-events: write
+      contents: read
+      actions: read
     strategy:
       fail-fast: false
       matrix:

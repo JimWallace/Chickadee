@@ -115,12 +115,15 @@ jobs:
           xcodebuild -version || true
 
       - name: Build Muter from source
+        env:
+          MUTER_REF: ${{ inputs.muter_ref || '7f1f258' }}
+          APPLY_PATCHES: ${{ inputs.apply_patches }}
         run: |
           git clone https://github.com/muter-mutation-testing/muter.git "$RUNNER_TEMP/muter"
           cd "$RUNNER_TEMP/muter"
-          git checkout "${{ inputs.muter_ref || '7f1f258' }}"
+          git checkout "$MUTER_REF"
           git log -1 --format='muter @ %h %ad %s' --date=short
-          if [ "${{ inputs.apply_patches }}" != "false" ]; then
+          if [ "$APPLY_PATCHES" != "false" ]; then
             for patch_file in "$GITHUB_WORKSPACE"/Tools/mutation/[0-9][0-9][0-9][0-9]-*.patch; do
               git apply "$patch_file"
               echo "applied $(basename "$patch_file")"

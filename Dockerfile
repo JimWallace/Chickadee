@@ -17,7 +17,7 @@
 # by digest as well as by tag (#3079). A tag can be pushed over; a digest
 # cannot. The digest wins over the tag, so change both together.
 #
-# Dependabot (docker ecosystem, weekly, 3-day cooldown) moves the digests
+# Dependabot (docker ecosystem, weekly, 7-day cooldown) moves the digests
 # of the FROM lines. It does not read the `# syntax=` line, so that digest
 # is moved by hand. Take the digest of the multi-arch index, so the arm64
 # runner image still resolves:

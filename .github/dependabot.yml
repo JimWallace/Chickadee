@@ -11,9 +11,11 @@
 #
 # WAIT BEFORE TAKING A RELEASE. A merged update reaches production in about
 # 15 minutes with no person involved, so every entry has a `cooldown`: a new
-# version is offered only once it is 3 days old, and a new major version only
+# version is offered only once it is 7 days old, and a new major version only
 # once it is 14 days old. Most compromised releases of a package are found and
-# withdrawn within that time. Cooldown delays version updates only; a security
+# withdrawn within that time. Seven days is the floor that zizmor's
+# dependabot-cooldown audit enforces (#3074); it was 3 days before.
+# Cooldown delays version updates only; a security
 # update is offered at once. Docker and GitHub Actions take `default-days` only,
 # because Dependabot does not read their tags as SemVer.
 #
@@ -49,7 +51,7 @@ updates:
       interval: "weekly"
       day: "monday"
     cooldown:
-      default-days: 3
+      default-days: 7
       semver-major-days: 14
     open-pull-requests-limit: 5
     groups:
@@ -82,7 +84,7 @@ updates:
       interval: "weekly"
       day: "monday"
     cooldown:
-      default-days: 3
+      default-days: 7
       semver-major-days: 14
     open-pull-requests-limit: 3
 
@@ -111,7 +113,7 @@ updates:
       interval: "weekly"
       day: "monday"
     cooldown:
-      default-days: 3
+      default-days: 7
 
   # Every action is pinned to a full commit SHA with a `# vX.Y.Z` comment
   # (#3064). A tag can be moved to new code; a SHA cannot. Dependabot reads the
@@ -128,7 +130,7 @@ updates:
       interval: "weekly"
       day: "monday"
     cooldown:
-      default-days: 3
+      default-days: 7
     groups:
       github-actions:
         patterns:
@@ -157,7 +159,7 @@ updates:
       interval: "weekly"
       day: "monday"
     cooldown:
-      default-days: 3
+      default-days: 7
       semver-major-days: 14
     open-pull-requests-limit: 5
     # untarjs 5.4.0 was published without lib/unpack.js, so the esbuild step
@@ -191,7 +193,7 @@ updates:
       interval: "weekly"
       day: "monday"
     cooldown:
-      default-days: 3
+      default-days: 7
       semver-major-days: 14
     open-pull-requests-limit: 2
     groups:
@@ -224,7 +226,7 @@ updates:
       interval: "weekly"
       day: "monday"
     cooldown:
-      default-days: 3
+      default-days: 7
       semver-major-days: 14
     open-pull-requests-limit: 3
     groups:

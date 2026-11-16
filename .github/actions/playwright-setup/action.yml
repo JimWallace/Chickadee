@@ -35,4 +35,6 @@ runs:
     - name: Install the Playwright ${{ inputs.browser }} engine
       shell: bash
       working-directory: ${{ inputs.node-project }}
-      run: npx playwright install --with-deps ${{ inputs.browser }}
+      env:
+        BROWSER: ${{ inputs.browser }}
+      run: npx playwright install --with-deps "$BROWSER"
