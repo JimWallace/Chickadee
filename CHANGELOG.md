@@ -9,6 +9,13 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.958] - 2026-11-16
+
+### Added
+
+- **"Use a different account" on the agent consent screen.** The OAuth consent screen now shows which account is signed in and offers a switch: it signs the browser out and returns the new account to the same authorize request. One person can now authorize the content MCP with an instructor account and the admin diagnostics MCP with an admin account without a private window.
+
+
 ## [0.5.957] - 2026-11-16
 
 ### Fixed
