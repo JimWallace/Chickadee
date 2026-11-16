@@ -38,6 +38,10 @@ jobs:
   release:
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    # The `release` environment admits only `main` and `v*` tags (#3071). A
+    # secret stored in it, not in the repository, cannot be read by a job on
+    # any other branch. RELEASE_TOKEN belongs there.
+    environment: release
     env:
       RELEASE_TOKEN: ${{ secrets.RELEASE_TOKEN }}
     # Never re-trigger on our own release commit, and never let the weekly
