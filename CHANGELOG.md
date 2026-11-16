@@ -9,6 +9,25 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.969] - 2026-11-16
+
+### Security
+
+- **GitHub Actions are pinned to commit SHAs.** Every `uses:` in the workflows
+  and the composite actions names a full commit SHA, with the version in a
+  comment. A moved tag can no longer run new code in the pipeline. Dependabot
+  now also updates the composite actions under `.github/actions/` (#3064).
+
+
+## [0.5.968] - 2026-11-16
+
+### Security
+
+- **A security policy.** `SECURITY.md` says how to report a vulnerability in
+  private, what is in scope, and what response to expect. GitHub private
+  vulnerability reporting is now on (#3066).
+
+
 ## [0.5.967] - 2026-11-16
 
 ### Added

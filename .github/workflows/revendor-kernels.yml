@@ -166,7 +166,7 @@ jobs:
             echo "skip=false" >> "$GITHUB_OUTPUT"
           fi
 
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         if: steps.gate.outputs.skip != 'true'
         with:
           # Publish mode builds from main. Otherwise this is the branch the
@@ -182,7 +182,7 @@ jobs:
         if: steps.gate.outputs.skip != 'true'
         run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
-      - uses: actions/setup-python@v7
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         if: steps.gate.outputs.skip != 'true'
         with:
           # Must match the kernel's own Python (currently 3.13). The derived
@@ -206,7 +206,7 @@ jobs:
       # env files so a rebuild triggered by anything else reuses the packages.
       - name: Cache the empack package downloads
         if: steps.gate.outputs.skip != 'true'
-        uses: actions/cache@v6
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.cache/empack
           key: empack-${{ hashFiles('Tools/jupyterlite/environment-*.yml') }}
@@ -293,7 +293,7 @@ jobs:
           scripts/regenerated-patch.sh make "$RUNNER_TEMP/revendor.patch" \
             Public/jupyterlite Tools/jupyterlite/jupyter-lite.json
 
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: >-
           steps.diff.outputs.changed == 'true'
           && github.event_name == 'workflow_dispatch'
@@ -335,14 +335,14 @@ jobs:
     env:
       PUBLISH: ${{ github.event_name == 'workflow_dispatch' && inputs.publish }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         if: needs.revendor.outputs.changed == 'true'
         with:
           ref: ${{ needs.revendor.outputs.sha }}
           persist-credentials: false
 
       # The checker from main, not from the branch being pushed to.
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         if: needs.revendor.outputs.changed == 'true'
         with:
           ref: main
@@ -351,7 +351,7 @@ jobs:
           sparse-checkout-cone-mode: false
           persist-credentials: false
 
-      - uses: actions/download-artifact@v8
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         if: >-
           needs.revendor.outputs.changed == 'true'
           && (env.PUBLISH == 'true' || inputs.commit)

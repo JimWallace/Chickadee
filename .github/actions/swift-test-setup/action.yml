@@ -90,7 +90,7 @@ runs:
     - name: Restore and save the build cache
       id: save
       if: inputs.build-cache == 'save'
-      uses: actions/cache@v6
+      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: .build
         key: ${{ steps.build-key.outputs.key }}
@@ -98,7 +98,7 @@ runs:
     - name: Restore the build cache
       id: restore
       if: inputs.build-cache == 'restore' || inputs.build-cache == 'require'
-      uses: actions/cache/restore@v6
+      uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: .build
         key: ${{ steps.build-key.outputs.key }}
