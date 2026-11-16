@@ -2,6 +2,8 @@
 
 # Chickadee
 
+[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/JimWallace/Chickadee/badge)](https://scorecard.dev/viewer/?uri=github.com/JimWallace/Chickadee)
+
 A clean-break rewrite of [Marmoset](https://marmoset.cs.umd.edu), the student code submission and autograding system originally built at the University of Maryland. Written in Swift using [Vapor](https://vapor.codes), targeting macOS and Linux.
 
 
