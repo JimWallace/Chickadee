@@ -200,10 +200,12 @@ check_warning_demotion() {
     rm -rf "$probe"
     mkdir -p "$probe/Sources/Probe"
 
-    # `test`, and each `--skip <suite>`, select tests rather than affect the
-    # build; everything else in testArgs is build configuration and belongs in
-    # the probe. Derived rather than restated, so the probe measures whatever
-    # the sweep is actually configured to use.
+    # `test`, and each `--skip <suite>` or `--filter <suite>`, select tests
+    # rather than affect the build (`swift build` refuses `--filter`, so a
+    # steward run that narrows the suite would fail here); everything else in
+    # testArgs is build configuration and belongs in the probe. Derived rather
+    # than restated, so the probe measures whatever the sweep is actually
+    # configured to use.
     # A read loop, not mapfile: mapfile needs bash 4, and macOS ships bash 3.2,
     # where the nightly steward runs this script.
     extra_args=()
@@ -216,7 +218,7 @@ out, i = [], 0
 while i < len(args):
     if args[i] == "test":
         i += 1
-    elif args[i] == "--skip":
+    elif args[i] in ("--skip", "--filter"):
         i += 2
     else:
         out.append(args[i].replace("{repoRoot}", sys.argv[2]))
