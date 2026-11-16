@@ -77,15 +77,21 @@ struct AvatarIdentity {
         let accessibility: AvatarAccessibility = handle.isEmpty ? .labelled(fallbackLabel) : .decorative
         return Presentation(
             handle: handle,
-            name: includeName ? staffFacingName(user) : "",
+            name: includeName ? Self.staffFacingName(user) : "",
             avatar: AvatarPresentation(
                 for: spec, size: size, accessibility: accessibility, isStaff: enrollment.role >= .ta))
     }
 }
 
-/// The name staff see beside a handle: the display name when the roster has
-/// one, else the username.
-private func staffFacingName(_ user: APIUser) -> String {
-    let display = user.displayName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-    return display.isEmpty ? user.username : display
+extension AvatarIdentity: BoardIdentities {
+    func username(of userID: UUID) -> String? {
+        userByID[userID]?.username
+    }
+
+    /// The name staff see beside a handle: the display name when the roster
+    /// has one, else the username.
+    static func staffFacingName(_ user: APIUser) -> String {
+        let display = user.displayName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return display.isEmpty ? user.username : display
+    }
 }

@@ -247,8 +247,11 @@ extension OperationalDiagnosticsService {
         // The result view's status poll is the same amplification from the
         // other side: `Public/app.js` polls `GET /api/v1/submissions/<id>`
         // every two seconds while a submission is pending, which during a
-        // deadline is the highest-frequency request the server takes.
-        // `HotPathRequestStats` still counts all three routes in memory.
+        // deadline is the highest-frequency request the server takes. A live
+        // leaderboard is the same again in a lecture: every viewer refreshes
+        // it every 5 s, and most refreshes are answered 304. A built board
+        // (200) still records. `HotPathRequestStats` still counts all four
+        // routes in memory.
         if let route = HotPathRoute(method: method, path: path), route.isRoutineSuccess(statusCode: statusCode) {
             return false
         }

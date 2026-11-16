@@ -52,7 +52,8 @@ struct LeaderboardPresentPage: HTML {
                 }
                 .attributes(
                     .data("poll-swap", value: "region"), .data("poll-url", value: board.pollURL),
-                    .data("poll-interval", value: "5000"), when: board.pollsLive)
+                    .data("poll-interval", value: "5000"), .data("poll-until", value: board.pollUntilISO),
+                    when: board.pollsLive)
                 // A class composite draws outside the polled region, so a
                 // refresh does not replace its canvas; the footer follows it.
                 if let stage = board.compositeStage {

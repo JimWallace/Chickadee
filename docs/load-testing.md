@@ -206,5 +206,6 @@ public test and a Python kernel of 51 boot files (64.6 MB).
 
 No request failed. The board refresh is the slowest stream by a factor of
 ten, as risk R2 of the plan predicts: every refresh rebuilds the whole board
-for its viewer. Loopback hides the network, so a cold join here does not show
+for its viewer. The board's fast path (`docs/live-board-cache.md`)
+brought the same run's refresh to p50 74 ms and p95 449 ms. Loopback hides the network, so a cold join here does not show
 what 9.7 GB costs on a lecture hall's shared Wi-Fi.
