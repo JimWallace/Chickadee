@@ -9,6 +9,17 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.971] - 2026-11-16
+
+### Security
+
+- **Release images are signed.** Each pushed server image carries a
+  Sigstore-signed build-provenance attestation and an SBOM attestation. The
+  arm64 runner image carries a provenance attestation. Each one names the
+  workflow, ref and commit that built the digest, and is stored beside the
+  image in GHCR (#3069).
+
+
 ## [0.5.970] - 2026-11-16
 
 ### Security
