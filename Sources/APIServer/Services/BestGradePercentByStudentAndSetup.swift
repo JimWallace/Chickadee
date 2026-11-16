@@ -35,21 +35,6 @@ func bestGradePercentByStudentAndSetup(
         return try await bestGradePercentByStudentAndSetupViaFluent(
             setupIDs: setupIDs, studentIDs: studentIDs, on: db)
     }
-    struct BestRow: Decodable {
-        let userID: UUID
-        let testSetupID: String
-        let bestFull: Double?
-        let bestPartial: Double?
-        let hasLegacy: Bool
-        enum CodingKeys: String, CodingKey {
-            case userID = "user_id"
-            case testSetupID = "test_setup_id"
-            case bestFull = "best_full"
-            case bestPartial = "best_partial"
-            case hasLegacy = "has_legacy"
-        }
-    }
-
     var best: [StudentSetupKey: Int] = [:]
     var legacyKeys: Set<StudentSetupKey> = []
     for chunk in chunkedForInFilter(studentIDs) {
@@ -67,13 +52,19 @@ func bestGradePercentByStudentAndSetup(
               AND s.user_id IN (\(binds: chunk))
             GROUP BY s.user_id, s.test_setup_id
             """
-        ).all(decoding: BestRow.self)
+        ).all()
+        // Each column is decoded by name, not through a `Decodable` row type:
+        // the keyed decoding container cost more server CPU than the rest of
+        // the grades export (docs/database-performance.md, "What it found").
         for row in rows {
-            let key = StudentSetupKey(userID: row.userID, setupID: row.testSetupID)
-            if let percent = GradePercentSQL.percent(bestFull: row.bestFull, bestPartial: row.bestPartial) {
-                best[key] = percent
-            }
-            if row.hasLegacy { legacyKeys.insert(key) }
+            let key = StudentSetupKey(
+                userID: try row.decode(column: "user_id", as: UUID.self),
+                setupID: try row.decode(column: "test_setup_id", as: String.self))
+            let percent = GradePercentSQL.percent(
+                bestFull: try row.decode(column: "best_full", as: Double?.self),
+                bestPartial: try row.decode(column: "best_partial", as: Double?.self))
+            if let percent { best[key] = percent }
+            if try row.decode(column: "has_legacy", as: Bool.self) { legacyKeys.insert(key) }
         }
     }
 

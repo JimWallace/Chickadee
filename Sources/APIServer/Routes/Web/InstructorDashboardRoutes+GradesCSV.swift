@@ -7,6 +7,7 @@
 import Core
 import Fluent
 import Foundation
+import SQLKit
 import Vapor
 
 extension InstructorDashboardRoutes {
@@ -31,7 +32,7 @@ extension InstructorDashboardRoutes {
         let sections = try await sectionsFuture
 
         let setupIDs = Set(assignments.map(\.testSetupID))
-        let studentIDs = Set(students.compactMap(\.id))
+        let studentIDs = Set(students.map(\.id))
 
         // Phase 2: setups-by-id + best grades in parallel.  Both depend on
         // phase 1 (setupIDs / studentIDs), but neither depends on the other.
@@ -127,18 +128,22 @@ extension InstructorDashboardRoutes {
 
     // MARK: - exportGradesCSV helpers
 
+    /// One roster row of the export: the three columns it writes. A plain
+    /// value, not a Fluent model.
+    struct GradesCSVStudent: Sendable {
+        let id: UUID
+        let username: String
+        let studentID: String?
+    }
+
     /// Only include students enrolled in the active course (if one is set).
     private func loadGradesCSVStudents(
         req: Request, activeCourseUUID: UUID?
-    ) async throws -> [APIUser] {
+    ) async throws -> [GradesCSVStudent] {
         if let activeCourseUUID {
             // Students are `.student`-role enrollments now (#417 Slice G2).
             let studentUserIDs = try await CourseRoster.studentIDs(in: activeCourseUUID, on: req.db)
-            guard !studentUserIDs.isEmpty else { return [] }
-            return try await APIUser.query(on: req.db)
-                .filter(\.$id ~~ Array(studentUserIDs))
-                .sort(\.$username, .ascending)
-                .all()
+            return try await loadGradesCSVStudentRows(ids: Array(studentUserIDs), on: req.db)
         }
         // No active course: every student across the deployment — the union of
         // all `.student`-role enrollments (#417 Slice G2; the global role no
@@ -151,11 +156,40 @@ extension InstructorDashboardRoutes {
             .field(\.$roleRaw)
             .all()
         let studentUserIDs = Set(studentEnrollments.filter(CourseRoster.isStudent).map(\.userID))
-        guard !studentUserIDs.isEmpty else { return [] }
-        return try await APIUser.query(on: req.db)
-            .filter(\.$id ~~ Array(studentUserIDs))
-            .sort(\.$username, .ascending)
+        return try await loadGradesCSVStudentRows(ids: Array(studentUserIDs), on: req.db)
+    }
+
+    /// The roster rows for `ids`, sorted by username in the database. The
+    /// export writes three columns per student, so it reads only those three
+    /// and decodes each by name: hydrating a full `APIUser` per student took
+    /// most of the export's server CPU (docs/database-performance.md, "What it found").
+    private func loadGradesCSVStudentRows(
+        ids: [UUID], on db: any Database
+    ) async throws -> [GradesCSVStudent] {
+        guard !ids.isEmpty else { return [] }
+        guard let sql = db as? (any SQLDatabase) else {
+            return try await APIUser.query(on: db)
+                .filter(\.$id ~~ ids)
+                .sort(\.$username, .ascending)
+                .all()
+                .compactMap { user in
+                    user.id.map { GradesCSVStudent(id: $0, username: user.username, studentID: user.studentID) }
+                }
+        }
+        let rows = try await sql.select()
+            .column("id")
+            .column("username")
+            .column("student_id")
+            .from(APIUser.schema)
+            .where("id", .in, SQLBind.group(ids))
+            .orderBy("username", .ascending)
             .all()
+        return try rows.map { row in
+            GradesCSVStudent(
+                id: try row.decode(column: "id", as: UUID.self),
+                username: try row.decode(column: "username", as: String.self),
+                studentID: try row.decode(column: "student_id", as: String?.self))
+        }
     }
 
     private func loadGradesCSVAssignments(
@@ -207,7 +241,7 @@ extension InstructorDashboardRoutes {
     }
 
     private func renderGradesCSV(
-        students: [APIUser],
+        students: [GradesCSVStudent],
         sortedAssignments: [APIAssignment],
         bestPointsByUserAndSetup: [String: Double]
     ) -> String {
@@ -219,7 +253,7 @@ extension InstructorDashboardRoutes {
         lines.append(header.map(csvEscaped).joined(separator: ","))
 
         for student in students {
-            guard let userID = student.id else { continue }
+            let userID = student.id
             var row: [String] = [student.studentID ?? "", "#\(student.username)"]
             for assignment in sortedAssignments {
                 let key = "\(userID.uuidString.lowercased())::\(assignment.testSetupID)"
