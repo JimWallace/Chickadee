@@ -277,6 +277,44 @@ sudo systemctl enable --now chickadee-deployer
 journalctl -u chickadee-deployer -f
 ```
 
+### The systemd sandbox
+
+The unit runs the daemon as root inside a systemd sandbox (#3078). The file
+system is read-only except the state directory, the clone, the nginx upstream
+directory and the nginx log, temp and cache paths. The unit file lists each
+path and the script that writes it.
+
+Check three things before you install it:
+
+- The clone is at `/home/jrwallac/Chickadee`. If it is elsewhere, change
+  `WorkingDirectory`, `ExecStart` and the clone path in `ReadWritePaths`.
+- If `/etc/chickadee-deployer.env` sets `CHICKADEE_STATE_DIR` or
+  `CHICKADEE_NGINX_UPSTREAM`, add that path to `ReadWritePaths`. The path must
+  exist.
+- `nginx -t` must be able to write every log, temp and cache path that the
+  host nginx configuration names. List them with the first command below. Add
+  any path outside `/var/log/nginx`, `/var/lib/nginx` and `/var/cache/nginx`.
+
+The daemon updates its own scripts, but not its unit. A unit change reaches the
+host only when it is installed again. Install it between deploys: check that
+`get_deploy_status` does not report a deploy in progress. Then install it, and
+check the sandbox score and the log:
+
+```
+sudo nginx -T | grep -E "cache_path|temp_path|error_log|access_log|pid"
+sudo cp deploy/chickadee-deployer.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl restart chickadee-deployer
+systemd-analyze security chickadee-deployer
+journalctl -u chickadee-deployer -f
+```
+
+Then watch the next deploy in `get_deploy_history`. A sandbox fault shows as a
+`Read-only file system` error in the journal, or as status 226/NAMESPACE if a
+path is missing. To undo the sandbox, delete the lines from the
+`# --- Sandbox` heading to `[Install]` in the installed unit. Then run
+`daemon-reload` and `restart` again.
+
 ### Safe first run (recommended before enabling the service)
 
 Run it in the foreground with a short interval. Since the deployed version equals
