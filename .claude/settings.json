@@ -47,6 +47,8 @@
   "permissions": {
     "allow": [
       "Bash",
+      "Bash(gh pr merge *)",
+      "Bash(gh label create *)",
       "Read",
       "Edit",
       "Write",
@@ -61,6 +63,8 @@
       "mcp__github"
     ],
     "deny": [
+      "Bash(gh pr merge *--admin*)",
+      "Bash(gh * pr merge *--admin*)",
       "Edit(/VERSION)",
       "Edit(/Sources/Core/ChickadeeVersion.swift)",
       "Edit(/CHANGELOG.md)",

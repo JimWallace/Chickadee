@@ -75,6 +75,20 @@ worktree from `main` for each run, the GitHub connector and the
 `Chickadee_Admin` connector. Run it once by hand and approve the tools it
 asks for, so that unattended runs do not stop on a prompt.
 
+In auto mode, Claude Code drops the broad `Bash` allow rule in
+`.claude/settings.json`, and its safety check reviews each command. On
+2026-11-15 that check refused `gh pr merge --squash`, so the run merged
+nothing. The project settings therefore allow `gh pr merge` and
+`gh label create` by name: a narrow rule stays in force in auto mode. The
+`mcp__github` rule already covers the GitHub merge tools.
+
+The settings do not decide which pull requests the steward may merge. The
+"Rules" section above does. Branch protection on `main` keeps every merge
+behind the required checks. Deny rules for `gh pr merge` with `--admin`
+are a second guard against a bypass, not the main one. Claude Code does
+not read an `autoMode` block from project settings, so do not add one
+there.
+
 The performance job needs a local Postgres 16 with `pg_stat_statements`
 loaded (`docs/database-performance.md`, "Re-run the measurements"), and it
 must run on the same machine every week, because its wall times are
