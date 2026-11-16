@@ -196,7 +196,7 @@ func registerMCPRoutes(_ app: Application) throws {
 /// a cookie) and the machine `/oauth/token`/`/revoke`/`/register`.  A no-op
 /// otherwise.
 func registerMCPOAuthRoutes(
-    _ app: Application, sessionAuth: UserSessionAuthenticator
+    _ app: Application, sessionAuth: UserSessionAuthenticator, csrf: CSRFMiddleware
 ) throws {
     let mcp = app.appConfig.mcp
     guard mcp.mode.isMounted,
@@ -214,6 +214,10 @@ func registerMCPOAuthRoutes(
     // consent token bound to them. The submit is handled separately below.
     let consentForm = app.grouped(sessionAuth)
     consentForm.get("oauth", "authorize", use: oauth.authorizeForm)
+    // "Use a different account" on the consent screen: a same-origin form
+    // carrying the page's CSRF token, so it is a session route, not a
+    // back-channel one.
+    consentForm.grouped(csrf).post("oauth", "authorize", "switch-account", use: oauth.switchAccount)
     // Back-channel POSTs — rate-limited per IP, no session/CSRF middleware:
     //   • /authorize submit is guarded by the single-use consent token (not a
     //     cookie), so it survives Safari/ITP dropping the cross-site cookie;
