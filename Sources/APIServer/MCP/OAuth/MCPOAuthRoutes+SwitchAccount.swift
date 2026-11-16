@@ -36,7 +36,7 @@ extension MCPOAuthRoutes {
 
     @Sendable
     func switchAccount(req: Request) async throws -> Response {
-        let body = try req.content.decode(SwitchAccountBody.self)
+        let body = try await req.decodeContent(SwitchAccountBody.self)
         guard Self.isAuthorizeReturnPath(body.returnTo) else {
             throw AppError.badRequest(reason: "return_to must be an /oauth/authorize request.")
         }
