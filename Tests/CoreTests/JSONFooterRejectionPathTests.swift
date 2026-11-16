@@ -2,8 +2,7 @@
 //
 // Paths of RunnerCore's footer parser (JSONLite) that the grammar and number
 // suites do not reach: an empty object as a value, an unknown escape, an
-// unterminated string, and a misspelled `null` or
-// boolean.
+// unterminated string, and a misspelled `null` or boolean.
 //
 // `parseJSON` is internal to RunnerCore, so these tests drive it through the
 // public `interpretScriptOutput`, as `JSONFooterGrammarTests` does. A last line
@@ -30,9 +29,11 @@ import Testing
 
     @Test func anEmptyObjectIsAValidFooterWithNoFields() {
         let result = interpret(stdout: "{}")
-        // A footer with no shortResult falls back to the exit-code text,
-        // never to the raw "{}".
-        #expect(result.shortResult != "{}")
+        // The line parses, so it is a footer, not the raw "{}". With no
+        // shortResult and no score, exit code 0 gives the synthesized
+        // "passed" and full credit.
+        #expect(result.shortResult == "passed")
+        #expect(result.score == 1.0)
     }
 
     /// JSON allows eight one-letter escapes and `\u`. Any other letter after
