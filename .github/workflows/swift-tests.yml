@@ -30,6 +30,13 @@ concurrency:
   group: swift-tests-${{ github.event_name }}-${{ github.event_name == 'push' && github.sha || github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
+# Least privilege by default (#3067). A job that needs more names it in its
+# own `permissions:`. `packages: read` lets the job containers and services
+# pull the GHCR mirrors with GITHUB_TOKEN.
+permissions:
+  contents: read
+  packages: read
+
 jobs:
   # Decides how much of the Swift suite this change needs: `full`, `build`
   # (the build job alone, for the release commit) or `skip`.
@@ -54,6 +61,7 @@ jobs:
       # limit and timed out (#2812).
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          persist-credentials: false
           fetch-depth: 2
 
       # pull_request checks out the merge commit, so its first parent is the
@@ -122,6 +130,8 @@ jobs:
         password: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - name: Every guard fails on its own defect
         run: scripts/check-guards.sh
       - name: Claude Code hook behaviour tests
@@ -143,6 +153,8 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Mutation tooling self-tests
         # `*_test.py`, not one named file: report_test.py existed for a week
@@ -211,6 +223,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Compute SPM cache key
         id: spm-cache-key
@@ -337,6 +351,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       # The toolchain key and the shared `.build` cache. This job is the only
       # one that SAVES the cache. The cache is exact-match only, and the
@@ -407,6 +423,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Swift test setup
         id: setup
@@ -484,6 +502,8 @@ jobs:
       TEST_DATABASE_PASSWORD: postgres
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       # The swift-ci image has the test dependencies, so the probe normally
       # only does a check. The action tells why each lane probes for EVERY
@@ -546,6 +566,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       # Pinned rather than taking the image's node: the suite targets 24 and
       # `node --test` semantics move between majors. `.node-version` is the
@@ -608,6 +630,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Swift test setup
         id: setup
@@ -694,6 +718,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          persist-credentials: false
           sparse-checkout: .github/actions/gate
       - uses: ./.github/actions/gate
         with:

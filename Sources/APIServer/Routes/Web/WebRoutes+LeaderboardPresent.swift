@@ -20,7 +20,8 @@ extension WebRoutes {
     /// The ranked places, the board's title and, for a bracket, the
     /// tournament, by the activity's aggregation.
     private func presentPlaces(
-        req: Request, user: APIUser, setup: APITestSetup, aggregation: ActivityAggregation, groupID: UUID?
+        req: Request, user: APIUser, setup: APITestSetup, aggregation: ActivityAggregation, groupID: UUID?,
+        roster: RosterSnapshot?
     ) async throws -> (places: [PresentPlace], title: String, tournament: TournamentPresentation?) {
         // Nameless like a student view, locking no handle like a staff one.
         // Staff decide what they project and when, and opening the page to
@@ -63,7 +64,7 @@ extension WebRoutes {
             // Named rather than left to a catch-all arm, so a fifth
             // aggregation does not render the metric board silently (#1745).
             let board = try await buildLeaderboard(
-                setup: setup, reader: reader, showAll: true, groupID: groupID, on: req.db)
+                setup: setup, reader: reader, showAll: true, groupID: groupID, roster: roster, on: req.db)
             places = board.rows.map {
                 PresentPlace(
                     rank: $0.rank, rankText: $0.rankText, rankTier: $0.rankTier, handle: $0.handle,
@@ -80,13 +81,24 @@ extension WebRoutes {
         req: Request, user: APIUser, setup: APITestSetup, activity: ClassActivity, groupSession: GroupSessionPanel?
     ) async throws -> Response {
         let setupID = setup.id ?? ""
+        let groupID = groupSession.flatMap { UUID(uuidString: $0.selectedGroupID) }
+
+        // The wall's refresh takes the board's fast path too
+        // (docs/live-board-cache.md). The wall reads nameless, as a student.
+        let refresh: LiveBoardRefresh =
+            groupID == nil
+            ? try await liveBoardRefresh(
+                req: req, fragment: "present", user: user, setup: setup, activity: activity, readsAsStaff: false)
+            : .ordinary
+        if case .notModified(let response) = refresh { return response }
+
         let assignment = try await assignmentByTestSetupID(setupID, on: req.db)
         let course = try await APICourse.find(setup.courseID, on: req.db)
         let aggregation = activity.kind.aggregation
-        let groupID = groupSession.flatMap { UUID(uuidString: $0.selectedGroupID) }
 
         var (places, title, tournament) = try await presentPlaces(
-            req: req, user: user, setup: setup, aggregation: aggregation, groupID: groupID)
+            req: req, user: user, setup: setup, aggregation: aggregation, groupID: groupID,
+            roster: refresh.roster)
         let champion = try await buildChampionPresentation(
             setup: setup, activity: activity, groupID: groupID, viewerID: nil, includeNames: false, on: req.db)
         // The hill's holder is not always first on the metric board, so the
@@ -142,7 +154,8 @@ extension WebRoutes {
             pollURL: "\(boardURL)?present=1&fragment=present\(groupID.map { "&group=\($0)" } ?? "")",
             boardURL: boardURL,
             arenaSetupID: aggregation == .bracket && playsInArena(setup) ? setupID : nil,
-            compositeStage: compositeProgress?.stage, bugHunt: bugHunt)
+            compositeStage: compositeProgress?.stage, bugHunt: bugHunt,
+            pollUntilISO: PresentModePresentation.pollUntil(activity))
 
         // `?fragment=present` renders the SAME view the page renders inline,
         // so the refresh cannot drift from what it replaces.
@@ -156,7 +169,7 @@ extension WebRoutes {
         let html = LeaderboardPresentBody(board: presentation).render()
         // The fragment refreshes the board only; the session panel sits
         // outside it, so the code on the wall does not flicker.
-        return Response.pollFragment(html: html, for: req)
+        return Response.pollFragment(html: html, etag: refresh.etag, for: req)
     }
 
     /// Present mode: the join code box for `&fragment=join`, else the page or
@@ -298,4 +311,22 @@ struct PresentModePresentation {
     /// A bug hunt's coverage and code map, in the podium's place; nil on
     /// every other kind.
     var bugHunt: BugHuntPresentation?
+    /// When the wall stops refreshing for good:
+    /// `PresentModePresentation.longestWall` after the page was opened, or
+    /// the session window's close when that is later. A wall left on after
+    /// the lecture otherwise polls until its tab closes. Never the window's
+    /// close alone: the attribute is read once, so a window that staff extend
+    /// during the lecture would freeze the wall at the old close. After the
+    /// close the refresh is a cheap 304.
+    var pollUntilISO = ""
+
+    /// The shortest time a wall refreshes for.
+    static let longestWall: TimeInterval = 4 * 60 * 60
+
+    /// The wall's stop time for `activity`, opened at `now`.
+    static func pollUntil(_ activity: ClassActivity, now: Date = Date()) -> String {
+        let cap = now.addingTimeInterval(longestWall)
+        let close = activity.window?.closesAt
+        return iso8601String(close.map { max($0, cap) } ?? cap)
+    }
 }

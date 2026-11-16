@@ -1,4 +1,4 @@
-# syntax=docker/dockerfile:1
+# syntax=docker/dockerfile:1@sha256:4edf897a3ffa55b89f906fc8cc78afdb3f1834cc9c7083565e611a8a7d5fe99e
 # ============================================================
 # Binary source — selectable so CI can skip the in-image compile.
 #
@@ -12,6 +12,17 @@
 # statically-linked-stdlib binaries match the runtime glibc.
 # To update Swift: change the tag here and in the runtime stage.
 # Current: Swift 6.4 on Ubuntu 26.04 (resolute).
+#
+# Every base image, and the BuildKit frontend on the first line, is pinned
+# by digest as well as by tag (#3079). A tag can be pushed over; a digest
+# cannot. The digest wins over the tag, so change both together.
+#
+# Dependabot (docker ecosystem, weekly, 3-day cooldown) moves the digests
+# of the FROM lines. It does not read the `# syntax=` line, so that digest
+# is moved by hand. Take the digest of the multi-arch index, so the arm64
+# runner image still resolves:
+#   docker buildx imagetools inspect docker.io/docker/dockerfile:1
+#   docker buildx imagetools inspect docker.io/library/ubuntu:26.04
 # ============================================================
 
 # Global ARG — must be declared before the first FROM so it can be used in
@@ -26,7 +37,7 @@ ARG BINARIES=compile
 ARG RUNNER_BINARIES=compile-runner
 
 # ── Compile from source ─────────────────────────────────────
-FROM swift:6.4-resolute AS compile-runner
+FROM swift:6.4-resolute@sha256:0384f00cf80f81064a907c249a0ad56a1648906f65075a95b1827e88de666e21 AS compile-runner
 
 WORKDIR /build
 
@@ -80,7 +91,7 @@ RUN strip --strip-debug -o /out/chickadee-server .build/release/chickadee-server
 # ── Prebuilt binaries from the build context ────────────────
 # Only built when BINARIES=prebuilt; its COPY paths are not evaluated
 # otherwise.  CI downloads the `build-release` artifact into ./artifacts/.
-FROM ubuntu:26.04 AS prebuilt
+FROM ubuntu:26.04@sha256:d66b366dac61b575bee2aef07e9c26e8070096fbe84a3d4d3eb0da069b5d76db AS prebuilt
 
 WORKDIR /out
 COPY artifacts/chickadee-server artifacts/chickadee-runner /out/
@@ -98,7 +109,7 @@ RUN ls -lh /out/chickadee-server /out/chickadee-runner
 # Only built for `--target runner`. BuildKit builds only the stages a target
 # reaches, so the server image never evaluates these, and the runner image
 # never compiles or copies the server.
-FROM ubuntu:26.04 AS prebuilt-runner
+FROM ubuntu:26.04@sha256:d66b366dac61b575bee2aef07e9c26e8070096fbe84a3d4d3eb0da069b5d76db AS prebuilt-runner
 
 WORKDIR /out
 COPY artifacts/chickadee-runner /out/
@@ -114,7 +125,7 @@ RUN ls -lh /out/chickadee-runner
 # ~95 s for one 27 MB file, against ~5 s. Each copy keeps its original's mtime,
 # which CI set from the last commit, so its ETag changes only with the file.
 # The kernel_packages tarballs are gzip already and are excluded.
-FROM ubuntu:26.04 AS kernel-assets
+FROM ubuntu:26.04@sha256:d66b366dac61b575bee2aef07e9c26e8070096fbe84a3d4d3eb0da069b5d76db AS kernel-assets
 
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 RUN apt-get update \
@@ -142,7 +153,7 @@ RUN cd /src \
 # default target, adds everything else. Keep it last: production and
 # `docker build .` build the default target.
 # ============================================================
-FROM ubuntu:26.04 AS runtime-base
+FROM ubuntu:26.04@sha256:d66b366dac61b575bee2aef07e9c26e8070096fbe84a3d4d3eb0da069b5d76db AS runtime-base
 
 ENV DEBIAN_FRONTEND=noninteractive
 

@@ -108,12 +108,15 @@ result write-back, and general API traffic over time.
 
 ### Hot-path counts (in memory)
 
-Three routes do not persist a `request_metrics` row for a routine success,
+Four routes do not persist a `request_metrics` row for a routine success,
 because one INSERT per poll is too much write load:
 
 - `POST /api/v1/worker/request` when the response is 204 (no job)
 - `POST /api/v1/worker/heartbeat`
 - `GET /api/v1/submissions/:id` (the result view polls it every 2 s)
+- `GET /testsetups/:id/leaderboard` when the response is 304 (a live board:
+  every viewer and the projector refresh it every 5 s, see
+  `docs/live-board-cache.md`)
 
 `HotPathRequestStats` counts every request on these routes in memory, with
 all status codes. It keeps a fixed-bucket latency histogram since the process

@@ -89,7 +89,7 @@ The pins live in these places:
 |---|---|
 | `Package.swift` line 1 | the swift-tools-version |
 | `wasm/Package.swift` line 1 | the swift-tools-version of the wasm bridge, the same as the root |
-| `Dockerfile` `compile-runner` stage | `swift:<X.Y>-resolute` |
+| `Dockerfile` `compile-runner` stage | `swift:<X.Y>-resolute@sha256:<digest>`. Change the digest with the tag: the digest wins, so a new tag with the old digest still builds the old toolchain. Take the digest of the multi-arch index with `docker buildx imagetools inspect docker.io/library/swift:<X.Y>-resolute` |
 | `.github/docker/ci-image/Dockerfile` | `BASE_IMAGE`, and the comment above it |
 | `.github/workflows/mirror-images.yml` | the mirror source, the derived tag, the comments |
 | 11 workflow files | approximately 23 job images, `swift:` and `swift-ci:` |

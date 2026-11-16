@@ -1566,6 +1566,10 @@ coordination, and each must see every edit.
   - `ActivityMatches` and `Tournaments`.
   - `Sources/Worker/MatrixAggregation.swift`.
   - The leaderboard routes.
+  - The live board's fast path (`docs/live-board-cache.md`):
+    `LiveBoardFingerprint` aggregates `leaderboard_entries`, and
+    `RosterSnapshot`, which `LiveBoardSnapshots` shares between refreshes,
+    holds the ranked students' handles and birds.
   - The `activity.noMetric` authoring check (MCP `check_assignment`), which
     reads a leaderboard kind as `kind.aggregation == .leaderboard`.
 - **Rules** (`docs/class-activities.md`):
@@ -1585,6 +1589,19 @@ coordination, and each must see every edit.
     row was written: ties and `LeaderboardGroupScope.studentGroup` read it.
   - `ResultIngestEffects.bestEffort` returns whether its effect succeeded,
     for an effect that has a repair. Only the leaderboard has one.
+  - A metric board's refresh is answered 304 when its ETag
+    (`LiveBoardETag`) has not changed. A new input to the rows of a board
+    that takes the fast path (`WebRoutes.takesLiveBoardFastPath`) must enter
+    the fingerprint, the roster snapshot or the tag, or the refresh shows the
+    old board until the tag's 30-second bucket turns over. A kind whose board
+    reads another table stays off the fast path.
+  - `HotPathRoute.leaderboardRefresh` matches the board's path whatever the
+    kind, the page load included. Only a 304 skips its `request_metrics`
+    row, so a built board stays visible to `get_request_metrics` and the
+    request series.
+  - The wall's `data-poll-until` is read once when the page loads. Its value
+    must never be earlier than a window that staff could extend
+    (`PresentModePresentation.pollUntil`).
   - Connect a new accumulator at both ingest paths. An accumulator on one
     path shows only the half of the class that one substrate grades, as if it
     were the whole class.

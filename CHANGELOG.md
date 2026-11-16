@@ -9,6 +9,73 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.974] - 2026-11-16
+
+### Changed
+
+- **A live board's refresh answers 304 from one query while nothing changes.** A metric board's refresh (`?fragment=body`, and the projector wall's) computes its ETag from one aggregate query over the ranked entries and a shared roster snapshot, and answers 304 before building anything. A refresh that must build reads the students' handles and birds from that snapshot, which every refresh at the same fingerprint shares, instead of loading and decoding every ranked student's rows for each viewer. In the 150-student lecture load test the refresh's p95 fell from 1.6 s to 0.45 s and its p50 from 293 ms to 74 ms (work items W2 to W4 of the live-lecture plan, `docs/live-board-cache.md`).
+- **The board refresh is a hot path.** A `GET /testsetups/:id/leaderboard` answered 304 no longer inserts a `request_metrics` row; `hotPaths` counts every refresh in memory. A built board still records its row.
+- **The projector wall stops refreshing.** Present mode now stops four hours after it was opened, or at the session window's close when that is later.
+
+
+## [0.5.973] - 2026-11-16
+
+### Security
+
+- **The pipeline files have an owner.** `.github/CODEOWNERS` names an owner
+  for the workflows, the deploy scripts, the Dockerfile and the release
+  script, so a pull request that changes them asks that owner for review.
+  The `v*` release tags are now protected by a ruleset: they cannot be
+  moved or deleted, and only an admin can create one (#3072).
+
+### Security
+
+- **The deploy daemon runs in a systemd sandbox.** `chickadee-deployer.service`
+  makes the file system read-only except the paths the deploy writes, and
+  closes the kernel interfaces it never uses. The unit takes effect when it
+  is installed again on the host; `docs/zero-downtime-deploy.md` gives the
+  steps and the way back (#3078).
+
+### Security
+
+- **OpenSSF Scorecard runs weekly.** It scores the repository's
+  supply-chain posture and sends each finding to the Security tab. The
+  README shows the score (#3076).
+
+
+## [0.5.972] - 2026-11-16
+
+### Security
+
+- **The image base layers are pinned by digest.** Each `FROM` in the
+  Dockerfile, and the BuildKit frontend, names a digest as well as a tag. A
+  base image that is pushed over under the same tag no longer reaches the
+  build. Dependabot moves the `FROM` digests; the frontend digest is moved
+  by hand (#3079).
+
+
+## [0.5.971] - 2026-11-16
+
+### Security
+
+- **Release images are signed.** Each pushed server image carries a
+  Sigstore-signed build-provenance attestation and an SBOM attestation. The
+  arm64 runner image carries a provenance attestation. Each one names the
+  workflow, ref and commit that built the digest, and is stored beside the
+  image in GHCR (#3069).
+
+
+## [0.5.970] - 2026-11-16
+
+### Security
+
+- **Workflows run with least privilege.** Every workflow now sets its
+  token permissions at the top, and a job that needs more names it. Every
+  checkout drops its credentials after the checkout, except the three jobs
+  that push with git, so a later build or install step cannot read the
+  token from `.git/config` (#3067, #3068).
+
+
 ## [0.5.969] - 2026-11-16
 
 ### Security

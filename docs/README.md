@@ -118,6 +118,7 @@ not exist.
 - [mac-runner.md](mac-runner.md) — a bonus runner on an Apple Silicon Mac under Docker Desktop: the arm64 runner image, sizing, the launchd updater
 - [operational-diagnostics.md](operational-diagnostics.md) — observability tables, log events, metrics endpoint, ops runbook
 - [lecture-day-runbook.md](lecture-day-runbook.md) — before, during and after a lecture in which the whole class does one class activity: caches, the deployer pause, what to watch, what to record
+- [live-board-cache.md](live-board-cache.md) — the live board's refresh: the fingerprint 304, the shared roster snapshot, the hot-path count and the wall's stop time
 - [load-testing.md](load-testing.md) — `chickadee-loadtest`: simulated deadline traffic on the runner poll and the status poll, and one class activity in a lecture
 - [database-performance.md](database-performance.md) — query counts, load and plans measured at one course's scale; the rules that came out of them; the baseline and the weekly check (`Tools/perf-bench/`)
 - [performance-program.md](performance-program.md) — the weekly performance cycle, the count-based ratchets, and how to tune the production server, Postgres and runners
