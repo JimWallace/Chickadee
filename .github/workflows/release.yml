@@ -40,8 +40,9 @@ jobs:
 
       - name: Extract release notes from CHANGELOG
         id: notes
+        env:
+          TAG: ${{ steps.tag.outputs.name }}
         run: |
-          TAG="${{ steps.tag.outputs.name }}"
           VERSION="${TAG#v}"
 
           # Pull the section for this version out of CHANGELOG.md.
@@ -68,12 +69,22 @@ jobs:
             echo "RELEASE_NOTES_EOF"
           } >> "$GITHUB_OUTPUT"
 
+      # The runner's own `gh`, not a third-party action (#3074). The deployer
+      # follows `releases/latest`, so the release is always marked latest. A
+      # re-run of this workflow updates the release it already made.
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@8a0cd651e5b2365bd640854a3fa5dfc70e4875f3 # v3.0.4
-        with:
-          tag_name: ${{ steps.tag.outputs.name }}
-          name: Chickadee ${{ steps.tag.outputs.name }}
-          body: ${{ steps.notes.outputs.body }}
-          make_latest: true
-          draft: false
-          prerelease: false
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.tag.outputs.name }}
+          NOTES: ${{ steps.notes.outputs.body }}
+        run: |
+          set -euo pipefail
+          notes="$RUNNER_TEMP/release-notes.md"
+          printf '%s\n' "$NOTES" > "$notes"
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" \
+              --title "Chickadee $TAG" --notes-file "$notes" --latest --draft=false --prerelease=false
+          else
+            gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --verify-tag \
+              --title "Chickadee $TAG" --notes-file "$notes" --latest
+          fi
