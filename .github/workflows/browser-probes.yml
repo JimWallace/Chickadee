@@ -61,7 +61,7 @@ jobs:
       probes: ${{ steps.decide.outputs.probes }}
       any: ${{ steps.decide.outputs.any }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 1
       - id: smoke
@@ -165,7 +165,7 @@ jobs:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ./.github/actions/build-probe-server
         with:
           artifact-name: probe-server
@@ -249,7 +249,7 @@ jobs:
       TEST_DATABASE_PASSWORD: postgres
 
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       # Shared scaffold: exact-match build-cache restore,
       # server build, Node + Playwright install (engine download cached). See
@@ -551,7 +551,7 @@ jobs:
       # of the leg uploads under the same name.
       - name: Upload smoke diagnostics (${{ matrix.browser }})
         if: failure()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: smoke-diagnostics-${{ matrix.browser }}
           path: smoke-diagnostics/
@@ -577,7 +577,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           sparse-checkout: .github/actions/gate
       - uses: ./.github/actions/gate
@@ -656,7 +656,7 @@ jobs:
       TEST_DATABASE_PASSWORD: postgres
 
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - uses: ./.github/actions/browser-probe-setup
         with:
@@ -748,7 +748,7 @@ jobs:
       TEST_DATABASE_PASSWORD: postgres
 
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       # Shared scaffold: exact-match build-cache restore, server build,
       # Node + Playwright install (engine download cached).
