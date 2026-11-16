@@ -163,7 +163,8 @@ swift build -c release --product chickadee-loadtest
 ```
 
 Replace `SETUP_ID` and `COURSE_ID` with your values. Then run again with
-`--join warm`, which is the case the join target is written for.
+`--join warm`, which is the case the join target is written for. The
+rehearsal before a real lecture is in `docs/lecture-day-runbook.md`.
 
 ### Read the report
 
