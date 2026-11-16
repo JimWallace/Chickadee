@@ -9,6 +9,17 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.970] - 2026-11-16
+
+### Security
+
+- **Workflows run with least privilege.** Every workflow now sets its
+  token permissions at the top, and a job that needs more names it. Every
+  checkout drops its credentials after the checkout, except the three jobs
+  that push with git, so a later build or install step cannot read the
+  token from `.git/config` (#3067, #3068).
+
+
 ## [0.5.969] - 2026-11-16
 
 ### Security
