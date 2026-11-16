@@ -42,8 +42,10 @@ exact edit in the night report, as `Tools/maintenance/README.md` says.
   repeatable.
 - **`kernel-currency.yml` red.** Red there means that the kernels are
   behind; the job dispatches `revendor-kernels.yml`, which opens its own
-  auto-merging pull request. Find that pull request. If it is red, fix it on
-  its branch, as `Tools/jupyterlite/CLAUDE.md` says. Read that file before
+  pull request, labelled `minor-release`. Find that pull request. If it is
+  red, fix it on its branch, as `Tools/jupyterlite/CLAUDE.md` says. Do not
+  merge it or enable auto-merge: it waits for the next minor
+  (`docs/release-gate.md`). Read that file before
   you change anything under `Public/jupyterlite/` or `Public/vendor/`.
 - **`visual-regression.yml` red.** A changed screenshot is a fix only when
   the change on `main` was intended: name the pull request that made it.

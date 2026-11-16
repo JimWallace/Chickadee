@@ -8,7 +8,7 @@
 #
 # Configuration (optional) lives in /etc/chickadee-deployer.env, e.g.:
 #   CHICKADEE_POLL_INTERVAL_SECS=300
-#   CHICKADEE_DEPLOY_GATE_LEVEL=major
+#   (The deploy mode is not set here: it is $STATE_DIR/mode, set from the admin page; docs/release-gate.md.)
 #   CHICKADEE_PUBLIC_HEALTH_URL=https://chickadee.uwaterloo.ca/health
 #
 # Adjust WorkingDirectory, ExecStart and the clone path in ReadWritePaths if

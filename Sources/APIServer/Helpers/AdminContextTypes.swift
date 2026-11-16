@@ -319,7 +319,7 @@ enum AuditCategoryTile {
         switch category {
         case AuditCategory.users.rawValue, AuditCategory.courses.rawValue,
             AuditCategory.runner.rawValue, AuditCategory.brightspace.rawValue,
-            AuditCategory.lti.rawValue, AuditCategory.github.rawValue:
+            AuditCategory.lti.rawValue, AuditCategory.github.rawValue, AuditCategory.deploy.rawValue:
             return ("admin", "outline", "#i-shield")
         case AuditCategory.authentication.rawValue:
             return ("auth", "slides", "#i-log-in")

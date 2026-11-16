@@ -3,16 +3,29 @@
 # chickadee-deployer.sh — zero-downtime auto-deploy daemon (Phase 2).
 #
 # Polls GitHub Releases for a new version and blue-green-deploys it via
-# scripts/bluegreen-deploy.sh, fully automatically. MAJOR version bumps are held
-# for human approval (SemVer gate); non-major bumps deploy on their own. Each
-# deploy is preceded by a snapshot and followed by a short health verification
-# that auto-rolls-back if the new release degrades after the cutover.
+# scripts/bluegreen-deploy.sh. The deploy mode (docs/release-gate.md) decides
+# which releases deploy on their own and which wait for an admin's approval:
+#   autonomous    — a patch or a minor deploys; a major waits
+#   gated-minors  — a patch deploys; a minor or a major waits (the default)
+#   manual        — every release waits
+# Each deploy is preceded by a snapshot and followed by a short health
+# verification that auto-rolls-back if the new release degrades after the
+# cutover.
 #
 # State / IPC lives in $STATE_DIR (shared with bluegreen-deploy.sh):
-#   status.json       — current state, written every cycle (read by the admin MCP surface)
-#   history.jsonl     — append-only deploy log
-#   deployed_version  — the version currently live (the daemon's source of truth)
-#   command.json      — commands FROM the operator/MCP: {"command":"pause|resume|approve|rollback|deploy","version":"vX.Y.Z"}
+#   status.json        — current state, written every cycle (read by the app)
+#   history.jsonl      — append-only deploy log
+#   deployed_version   — the version currently live (the daemon's source of truth)
+#   mode               — the deploy mode; absent means gated-minors
+#   paused             — present while auto-deploy is paused
+#   approved           — the release that was approved, until it deploys
+#   pending-notes.json — the release notes of what the held release would ship
+#   command.json       — commands FROM the host operator:
+#                        {"command":"pause|resume|approve|rollback|deploy|mode","version":"vX.Y.Z","mode":"..."}
+#   requests/*.json    — requests FROM the app (the admin page), the one
+#                        directory the app may write. Only approve-the-held-
+#                        release, mode, pause and resume are accepted; see
+#                        handle_requests.
 #
 # Runs as root via systemd (needs docker + nginx). See chickadee-deployer.service.
 #
@@ -50,7 +63,6 @@ STATE_DIR="${CHICKADEE_STATE_DIR:-/var/lib/chickadee-deploy}"
 PUBLIC_HEALTH_URL="${CHICKADEE_PUBLIC_HEALTH_URL:-https://chickadee.uwaterloo.ca/health}"
 
 POLL_INTERVAL_SECS="${CHICKADEE_POLL_INTERVAL_SECS:-300}"
-DEPLOY_GATE_LEVEL="${CHICKADEE_DEPLOY_GATE_LEVEL:-major}"     # major | minor
 SNAPSHOT_BEFORE_DEPLOY="${CHICKADEE_SNAPSHOT_BEFORE_DEPLOY:-1}"
 SNAPSHOT_REQUIRED="${CHICKADEE_SNAPSHOT_REQUIRED:-0}"
 POST_DEPLOY_VERIFY_SECS="${CHICKADEE_POST_DEPLOY_VERIFY_SECS:-30}"
@@ -61,8 +73,29 @@ STATUS_FILE="$STATE_DIR/status.json"
 HISTORY_FILE="$STATE_DIR/history.jsonl"
 COMMAND_FILE="$STATE_DIR/command.json"
 DEPLOYED_VERSION_FILE="$STATE_DIR/deployed_version"
+# The deploy mode, set from the admin page (a request) or by the host. It
+# replaced CHICKADEE_DEPLOY_GATE_LEVEL (docs/release-gate.md), which is no
+# longer read: a file the admin page can change, not an environment variable.
+MODE_FILE="$STATE_DIR/mode"
+DEFAULT_MODE="gated-minors"
+# Pause and approval outlive a restart, including the one after the daemon
+# updates its own scripts. Before, a pause lived only in the shell, and an
+# approved release was held again after that restart.
+PAUSED_FILE="$STATE_DIR/paused"
+APPROVED_FILE="$STATE_DIR/approved"
+PENDING_NOTES_FILE="$STATE_DIR/pending-notes.json"
+REQUESTS_DIR="$STATE_DIR/requests"
+# A request file larger than this is refused unread.
+MAX_REQUEST_BYTES=4096
+# Requests read per poll. The rest wait, so a flood of files cannot flood the
+# history.
+MAX_REQUESTS_PER_POLL=50
 
 PAUSED=0
+# The release this daemon holds for approval, or empty.
+HELD_VERSION=""
+# The held release whose notes pending-notes.json carries.
+NOTES_FOR=""
 
 # Consecutive failed deploys of the same version. A deploy that fails once is
 # ordinary; one that fails identically for hours is a condition no rule here used
@@ -137,18 +170,68 @@ is_newer() {
   [ "$top" = "$a" ]
 }
 
-# True (0) if deploying $1 over current $2 crosses the configured gate.
+valid_mode() {
+  case "$1" in
+    autonomous | gated-minors | manual) return 0 ;;
+  esac
+  return 1
+}
+
+# The deploy mode from $MODE_FILE. An absent or unreadable file, or one that
+# names no mode, means the default.
+current_mode() {
+  local mode=""
+  [ -f "$MODE_FILE" ] && mode="$(tr -d '[:space:]' < "$MODE_FILE" 2>/dev/null)"
+  if valid_mode "$mode"; then printf '%s' "$mode"; else printf '%s' "$DEFAULT_MODE"; fi
+}
+
+set_mode() {  # $1 = a valid mode
+  mkdir -p "$STATE_DIR"
+  printf '%s\n' "$1" > "$MODE_FILE"
+}
+
+set_paused() {  # $1 = 1 or 0
+  PAUSED="$1"
+  mkdir -p "$STATE_DIR"
+  if [ "$1" = "1" ]; then : > "$PAUSED_FILE"; else rm -f "$PAUSED_FILE"; fi
+}
+
+set_approved() {  # $1 = version tag, or empty to clear
+  APPROVED_VERSION="$1"
+  if [ -n "$1" ]; then
+    mkdir -p "$STATE_DIR"
+    printf '%s\n' "$1" > "$APPROVED_FILE"
+  else
+    rm -f "$APPROVED_FILE"
+  fi
+}
+
+# True (0) if deploying $1 over current $2 waits for approval in the current
+# mode. A major always waits. In manual every newer release waits; in
+# gated-minors a minor waits too; in autonomous only a major waits.
 is_gated() {
   local new="$1" cur="$2"
   if [ "$(major_of "$new")" -gt "$(major_of "$cur")" ]; then
     return 0
   fi
-  if [ "$DEPLOY_GATE_LEVEL" = "minor" ] \
-     && [ "$(major_of "$new")" -eq "$(major_of "$cur")" ] \
+  case "$(current_mode)" in
+    manual) return 0 ;;
+    autonomous) return 1 ;;
+  esac
+  if [ "$(major_of "$new")" -eq "$(major_of "$cur")" ] \
      && [ "$(minor_of "$new")" -gt "$(minor_of "$cur")" ]; then
     return 0
   fi
   return 1
+}
+
+# The kind of bump from $2 to $1, for the status detail.
+bump_kind() {
+  local new="$1" cur="$2"
+  if [ "$(major_of "$new")" -gt "$(major_of "$cur")" ]; then echo major
+  elif [ "$(minor_of "$new")" -gt "$(minor_of "$cur")" ]; then echo minor
+  else echo patch
+  fi
 }
 
 fetch_latest_release() {
@@ -222,31 +305,39 @@ probe_public_health() {
 
 write_status() {  # $1=state $2=detail
   mkdir -p "$STATE_DIR"
-  python3 - "$STATUS_FILE" "$1" "$DEPLOYED_VERSION" "$LATEST_SEEN" "$2" "$PAUSED" "$(scripts_revision)" <<'PY' 2>/dev/null || true
-import json, sys, datetime
-path, state, deployed, latest, detail, paused, scripts = sys.argv[1:8]
+  python3 - "$STATUS_FILE" "$1" "$DEPLOYED_VERSION" "$LATEST_SEEN" "$2" "$PAUSED" "$(scripts_revision)" \
+    "$(current_mode)" "$HELD_VERSION" "$APPROVED_VERSION" <<'PY' 2>/dev/null || true
+import json, os, sys, datetime
+path, state, deployed, latest, detail, paused, scripts, mode, held, approved = sys.argv[1:11]
+tmp = path + ".tmp"
 json.dump({
     "state": state,
     "deployedVersion": deployed,
     "latestSeen": latest,
     "detail": detail,
     "paused": paused == "1",
+    "mode": mode,
+    "heldVersion": held or None,
+    "approvedVersion": approved or None,
     "scriptsRevision": scripts,
     "updatedAt": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
-}, open(path, "w"), indent=2)
+}, open(tmp, "w"), indent=2)
+os.replace(tmp, path)
 PY
 }
 
-append_history() {  # $1=version $2=action $3=result $4=detail
+append_history() {  # $1=version $2=action $3=result $4=detail [$5=user]
   mkdir -p "$STATE_DIR"
-  python3 - "$HISTORY_FILE" "$1" "$2" "$3" "$4" <<'PY' 2>/dev/null || true
+  python3 - "$HISTORY_FILE" "$1" "$2" "$3" "$4" "${5:-}" <<'PY' 2>/dev/null || true
 import json, sys, datetime
-path, version, action, result, detail = sys.argv[1:6]
-line = json.dumps({
+path, version, action, result, detail, user = sys.argv[1:7]
+entry = {
     "ts": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
     "version": version, "action": action, "result": result, "detail": detail,
-})
-open(path, "a").write(line + "\n")
+}
+if user:
+    entry["user"] = user
+open(path, "a").write(json.dumps(entry) + "\n")
 PY
 }
 
@@ -269,23 +360,290 @@ json_field() {  # $1=file $2=key
 }
 
 # ---------------------------------------------------------------------------
-# Command handling (operator / MCP -> daemon, via command.json)
+# Command handling (host operator -> daemon, via command.json). Only the host
+# can write command.json, so it keeps the commands the app may not send:
+# rollback, and approving any version (deploy).
 # ---------------------------------------------------------------------------
 handle_commands() {
   [ -f "$COMMAND_FILE" ] || return 0
-  local cmd ver
+  local cmd ver mode
   cmd="$(json_field "$COMMAND_FILE" command)"
   ver="$(json_field "$COMMAND_FILE" version)"
+  mode="$(json_field "$COMMAND_FILE" mode)"
   rm -f "$COMMAND_FILE"
   case "$cmd" in
-    pause)    PAUSED=1; log "paused by command"; append_history "" pause ok "" ;;
-    resume)   PAUSED=0; log "resumed by command"; append_history "" resume ok "" ;;
-    approve)  APPROVED_VERSION="$ver"; log "approved $ver for the next cycle" ;;
+    pause)    set_paused 1; log "paused by command"; append_history "" pause ok "host command" ;;
+    resume)   set_paused 0; log "resumed by command"; append_history "" resume ok "host command" ;;
+    approve)  set_approved "$ver"; log "approved $ver for the next cycle"; append_history "$ver" approve ok "host command" ;;
     rollback) log "rollback requested"; "$DEPLOY_SCRIPT" rollback --yes && append_history "" rollback ok "" || append_history "" rollback failed "" ;;
-    deploy)   APPROVED_VERSION="$ver"; log "manual deploy requested for $ver" ;;
+    deploy)   set_approved "$ver"; log "manual deploy requested for $ver"; append_history "$ver" approve ok "host deploy command" ;;
+    mode)
+      if valid_mode "$mode"; then
+        set_mode "$mode"; log "mode set to $mode by command"; append_history "" mode ok "$mode (host command)"
+      else
+        log "unknown mode in command: $mode"; append_history "" mode refused "unknown mode in host command"
+      fi
+      ;;
     "")       ;;
     *)        log "unknown command: $cmd" ;;
   esac
+}
+
+# ---------------------------------------------------------------------------
+# Requests from the app (the admin page -> daemon, via requests/*.json).
+#
+# The app mounts $STATE_DIR read-only, so it can never move traffic, except
+# for this one directory, which it may write (bluegreen-deploy.sh). A request
+# is a request, not a command: the daemon validates each one and accepts
+# exactly these (docs/release-gate.md, "The admin page asks; the daemon
+# decides"):
+#   {"request":"approve","version":"vX.Y.Z","user":"..."}  only the held release
+#   {"request":"mode","mode":"autonomous|gated-minors|manual","user":"..."}
+#   {"request":"pause","user":"..."}, {"request":"resume","user":"..."}
+# Everything else is refused: an unknown request, a rollback or a deploy, a
+# version that is not the held one, a file over $MAX_REQUEST_BYTES bytes, an
+# entry that is not a regular file. Each request, accepted or refused, is one
+# line in the history with the username the app wrote into it. So a
+# compromised app can deploy sooner a release that CI built and this daemon
+# would deploy anyway, change the mode, or pause. It cannot name an image,
+# choose an older version, or roll back.
+# ---------------------------------------------------------------------------
+
+# Prints one line per request file, oldest first, and removes each file:
+#   accept US request US argument US user US file
+#   refuse US reason US (empty) US user US file
+# US is the ASCII unit separator (0x1f), not a tab: read collapses adjacent
+# whitespace separators, so an empty field would shift the rest. Every field
+# is cleaned of control characters, the separator included. Only names that end
+# in .json are read, so the app writes a .tmp file and renames it.
+read_requests() {
+  python3 - "$REQUESTS_DIR" "$MAX_REQUEST_BYTES" "$MAX_REQUESTS_PER_POLL" <<'PY' 2>/dev/null
+import json, os, re, shutil, stat, sys, time
+folder, limit, per_poll = sys.argv[1], int(sys.argv[2]), int(sys.argv[3])
+stale_after = 3600
+
+def clean(value, size=64):
+    return re.sub(r"[\x00-\x1f\x7f]", " ", str(value))[:size].strip()
+
+def read_regular(path):
+    """The file's bytes, or a refusal. The app owns this folder and can swap
+    an entry between two looks at it, so the file is opened without following
+    a link and without blocking on a FIFO, and checked again once open."""
+    try:
+        fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+    except OSError:
+        return None, "not a regular file"
+    try:
+        info = os.fstat(fd)
+        if not stat.S_ISREG(info.st_mode):
+            return None, "not a regular file"
+        if info.st_size > limit:
+            return None, "larger than %d bytes" % limit
+        data = os.read(fd, limit + 1)
+        if len(data) > limit:
+            return None, "larger than %d bytes" % limit
+        return data, None
+    finally:
+        os.close(fd)
+
+def decide(path, info):
+    if not stat.S_ISREG(info.st_mode):
+        return ("refuse", "not a regular file", ""), ""
+    if info.st_size > limit:
+        return ("refuse", "larger than %d bytes" % limit, ""), ""
+    data, refusal = read_regular(path)
+    if refusal:
+        return ("refuse", refusal, ""), ""
+    try:
+        body = json.loads(data.decode("utf-8"))
+    except ValueError:
+        body = None
+    if not isinstance(body, dict):
+        return ("refuse", "not a JSON object", ""), ""
+    user = clean(body.get("user", ""))
+    kind = body.get("request")
+    if kind == "approve":
+        version = body.get("version")
+        if isinstance(version, str) and re.fullmatch(r"v\d+\.\d+\.\d+", version):
+            return ("accept", "approve", version), user
+        return ("refuse", "approve names no version of the form vX.Y.Z", ""), user
+    if kind == "mode":
+        if body.get("mode") in ("autonomous", "gated-minors", "manual"):
+            return ("accept", "mode", body["mode"]), user
+        return ("refuse", "mode names no known mode", ""), user
+    if kind in ("pause", "resume"):
+        return ("accept", kind, ""), user
+    if kind in ("rollback", "deploy"):
+        return ("refuse", "%s is a host action, not a request" % kind, ""), user
+    return ("refuse", "unknown request %s" % clean(kind, 32), ""), user
+
+def remove(path, info):
+    try:
+        if stat.S_ISDIR(info.st_mode):
+            shutil.rmtree(path)
+        else:
+            os.unlink(path)
+    except OSError:
+        pass
+
+try:
+    names = os.listdir(folder)
+except OSError:
+    sys.exit(0)
+now = time.time()
+entries = []
+for name in names:
+    path = os.path.join(folder, name)
+    try:
+        info = os.lstat(path)
+    except OSError:
+        continue
+    if name.endswith(".json"):
+        entries.append((info.st_mtime, name, path, info))
+    elif now - info.st_mtime > stale_after:
+        # A .tmp the app never renamed, or anything else left behind.
+        remove(path, info)
+entries.sort(key=lambda e: (e[0], e[1]))
+for _, name, path, info in entries[:per_poll]:
+    verdict, user = decide(path, info)
+    remove(path, info)
+    print("\x1f".join([verdict[0], verdict[1], verdict[2], user, clean(name, 128)]))
+if len(entries) > per_poll:
+    # The rest wait for the next poll, so a flood cannot fill the history.
+    print("\x1f".join(["refuse", "%d more requests wait for the next poll" % (len(entries) - per_poll), "", "", "-"]))
+PY
+}
+
+handle_requests() {
+  [ -d "$REQUESTS_DIR" ] || return 0
+  local status what arg user file by
+  while IFS=$'\x1f' read -r status what arg user file; do
+    [ -n "$status" ] || continue
+    by="${user:-unknown}"
+    if [ "$status" != "accept" ]; then
+      log "refused request $file from $by: $what"
+      append_history "" request refused "$what ($file)" "$by"
+      continue
+    fi
+    case "$what" in
+      approve)
+        if [ -n "$HELD_VERSION" ] && [ "$arg" = "$HELD_VERSION" ]; then
+          set_approved "$arg"
+          log "approved $arg by $by"
+          append_history "$arg" approve accepted "admin page" "$by"
+        else
+          log "refused approval of $arg from $by: held is ${HELD_VERSION:-nothing}"
+          append_history "$arg" approve refused "not the held release (held: ${HELD_VERSION:-nothing})" "$by"
+        fi
+        ;;
+      mode)
+        set_mode "$arg"
+        log "mode set to $arg by $by"
+        append_history "" mode accepted "$arg" "$by"
+        ;;
+      pause)
+        set_paused 1
+        log "paused by $by"
+        append_history "" pause accepted "admin page" "$by"
+        ;;
+      resume)
+        set_paused 0
+        log "resumed by $by"
+        append_history "" resume accepted "admin page" "$by"
+        ;;
+    esac
+  done < <(read_requests)
+}
+
+# ---------------------------------------------------------------------------
+# The held release's notes, for the admin page: every GitHub release after the
+# deployed version up to the held one, and the merged pull requests labelled
+# minor-release among the commits between them. The app shows this file and
+# never calls GitHub itself. Written once per held release, and again on the
+# next poll while a fetch fails. GitHub's compare lists at most 250 commits,
+# so a hold longer than that can miss a contract flag; the release notes are
+# complete either way.
+# ---------------------------------------------------------------------------
+write_pending_notes() {  # $1 = held version tag
+  local held="$1" releases compare minor
+  releases="$(mktemp)"; compare="$(mktemp)"; minor="$(mktemp)"
+  local fetched=1
+  curl -fsS --max-time 30 "https://api.github.com/repos/$REPO/releases?per_page=100" > "$releases" 2>/dev/null || fetched=0
+  curl -fsS --max-time 30 "https://api.github.com/repos/$REPO/compare/v$(strip_v "$DEPLOYED_VERSION")...$held" > "$compare" 2>/dev/null || fetched=0
+  curl -fsS --max-time 30 "https://api.github.com/search/issues?q=repo:$REPO+is:pr+is:merged+label:minor-release&per_page=100" > "$minor" 2>/dev/null || fetched=0
+  mkdir -p "$STATE_DIR"
+  python3 - "$PENDING_NOTES_FILE" "$DEPLOYED_VERSION" "$held" "$releases" "$compare" "$minor" "$fetched" <<'PY' 2>/dev/null || true
+import datetime, json, os, re, sys
+path, deployed, held, releases_file, compare_file, minor_file, complete = sys.argv[1:8]
+
+def load(name):
+    try:
+        with open(name) as handle:
+            return json.load(handle)
+    except (OSError, ValueError):
+        return None
+
+def key(tag):
+    try:
+        return tuple(int(part) for part in str(tag).lstrip("v").split("."))
+    except ValueError:
+        return None
+
+low, high = key(deployed), key(held)
+releases = []
+listed = load(releases_file)
+for release in listed if isinstance(listed, list) else []:
+    tag = release.get("tag_name") or ""
+    version = key(tag)
+    if None in (version, low, high) or not (low < version <= high):
+        continue
+    releases.append({
+        "tag": tag,
+        "name": release.get("name") or tag,
+        "publishedAt": release.get("published_at"),
+        "url": release.get("html_url"),
+        "body": (release.get("body") or "")[:20000],
+    })
+releases.sort(key=lambda r: key(r["tag"]), reverse=True)
+
+# The pull requests the commits between the two versions came from: a squash
+# merge ends its subject with "(#N)", a merge commit starts "Merge pull request #N".
+numbers = set()
+compare = load(compare_file)
+for commit in (compare or {}).get("commits") or []:
+    lines = ((commit.get("commit") or {}).get("message") or "").splitlines()
+    subject = lines[0] if lines else ""
+    for found in re.findall(r"\(#(\d+)\)\s*$|^Merge pull request #(\d+)", subject):
+        numbers.update(int(n) for n in found if n)
+contract = []
+search = load(minor_file)
+for item in (search or {}).get("items") or []:
+    if item.get("number") in numbers:
+        contract.append({"number": item["number"], "title": item.get("title") or "", "url": item.get("html_url")})
+contract.sort(key=lambda p: p["number"])
+
+tmp = path + ".tmp"
+json.dump({
+    "deployedVersion": deployed,
+    "heldVersion": held,
+    "releases": releases,
+    "minorReleasePullRequests": contract,
+    "complete": complete == "1",
+    "writtenAt": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+}, open(tmp, "w"), indent=2)
+os.replace(tmp, path)
+PY
+  rm -f "$releases" "$compare" "$minor"
+  # A failed fetch (a rate limit, a timeout) is tried again on the next poll,
+  # so the admin page does not show partial notes for the whole hold.
+  if [ "$fetched" = "1" ]; then NOTES_FOR="$held"; else NOTES_FOR=""; fi
+}
+
+# Nothing is held: forget the held release and its notes.
+clear_held() {
+  HELD_VERSION=""
+  NOTES_FOR=""
+  rm -f "$PENDING_NOTES_FILE"
 }
 
 # ---------------------------------------------------------------------------
@@ -836,8 +1194,9 @@ main() {
     printf '%s\n' "$DEPLOYED_VERSION" > "$DEPLOYED_VERSION_FILE"
   fi
   LATEST_SEEN="$DEPLOYED_VERSION"
+  load_state
 
-  log "started: repo=$REPO baseline=$DEPLOYED_VERSION gate=$DEPLOY_GATE_LEVEL interval=${POLL_INTERVAL_SECS}s"
+  log "started: repo=$REPO baseline=$DEPLOYED_VERSION mode=$(current_mode) paused=$PAUSED interval=${POLL_INTERVAL_SECS}s"
   write_status idle "started; baseline $DEPLOYED_VERSION"
 
   while true; do
@@ -846,12 +1205,34 @@ main() {
   done
 }
 
-# One poll: commands, then at most one deploy attempt.
+# What the files remember across a restart: pause, the approval, and the
+# release held for approval (from the last status, so an approval sent just
+# before a restart still finds it).
+load_state() {
+  if [ -f "$PAUSED_FILE" ]; then PAUSED=1; else PAUSED=0; fi
+  APPROVED_VERSION=""
+  [ -f "$APPROVED_FILE" ] && APPROVED_VERSION="$(tr -d '[:space:]' < "$APPROVED_FILE" 2>/dev/null)"
+  HELD_VERSION=""
+  [ -f "$STATUS_FILE" ] && HELD_VERSION="$(json_field "$STATUS_FILE" heldVersion)"
+  [ "$HELD_VERSION" = "None" ] && HELD_VERSION=""
+  NOTES_FOR=""
+  if [ -f "$PENDING_NOTES_FILE" ] && [ "$(json_field "$PENDING_NOTES_FILE" complete)" = "True" ]; then
+    NOTES_FOR="$(json_field "$PENDING_NOTES_FILE" heldVersion)"
+  fi
+  return 0
+}
+
+# One poll: host commands, app requests, then at most one deploy attempt.
 run_cycle() {
   handle_commands
+  handle_requests
 
   if [ "$PAUSED" = "1" ]; then
-    write_status paused "auto-deploy paused"
+    if [ -n "$HELD_VERSION" ]; then
+      write_status paused "auto-deploy paused; $HELD_VERSION waits for approval"
+    else
+      write_status paused "auto-deploy paused"
+    fi
     return
   fi
 
@@ -864,16 +1245,29 @@ run_cycle() {
   LATEST_SEEN="$latest"
 
   if ! is_newer "$latest" "$DEPLOYED_VERSION"; then
+    clear_held
+    [ -z "$APPROVED_VERSION" ] || set_approved ""
     write_status idle "up to date ($DEPLOYED_VERSION)"
     return
   fi
 
   if is_gated "$latest" "$DEPLOYED_VERSION" && [ "$APPROVED_VERSION" != "$latest" ]; then
-    log "release $latest crosses the $DEPLOY_GATE_LEVEL gate — holding for approval"
-    write_status pending_approval "release $latest needs approval ($DEPLOY_GATE_LEVEL bump)"
-    append_history "$latest" gate held "awaiting approval"
+    local kind mode
+    kind="$(bump_kind "$latest" "$DEPLOYED_VERSION")"
+    mode="$(current_mode)"
+    # The history says so once per held release, not once per poll.
+    if [ "$HELD_VERSION" != "$latest" ]; then
+      HELD_VERSION="$latest"
+      log "release $latest ($kind) waits for approval in mode $mode"
+      append_history "$latest" gate held "$kind release; awaiting approval (mode $mode)"
+    fi
+    if [ "$NOTES_FOR" != "$latest" ] || [ ! -f "$PENDING_NOTES_FILE" ]; then
+      write_pending_notes "$latest"
+    fi
+    write_status pending_approval "release $latest needs approval ($kind release, mode $mode)"
     return
   fi
+  clear_held
 
   # Back off a version that keeps failing. A newer release, or an operator's
   # approve/deploy command for this one, is attempted at once. The status the
@@ -887,7 +1281,7 @@ run_cycle() {
   local rc=$?
   # An approval is kept while the image is still being built: clearing it would
   # send a gated release back to pending_approval.
-  [ "$rc" -eq 2 ] || APPROVED_VERSION=""
+  [ "$rc" -eq 2 ] || set_approved ""
 
   if [ "$rc" -eq 2 ] && [ "$IMAGE_NOT_READY" = "1" ]; then
     deploy_newest_published "$latest"

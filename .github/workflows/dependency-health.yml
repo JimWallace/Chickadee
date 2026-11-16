@@ -152,15 +152,19 @@ jobs:
         run: |
           set -euo pipefail
           gh pr list --repo "$R" --author "app/dependabot" --state open --limit 100 \
-            --json number,title,url,createdAt,autoMergeRequest,headRefName,mergeable,mergeStateStatus > prs.json
+            --json number,title,url,createdAt,autoMergeRequest,headRefName,mergeable,mergeStateStatus,labels > prs.json
           # Every Dependabot PR older than three days is stuck, whatever its
           # auto-merge state: a green PR with auto-merge on merges within the
           # hour. Auto-merge on does not mean it will land. A conflicted
           # branch runs no CI, and a required check that never reports is
           # not a failure, so dependency-failure.yml reports neither.
+          # A pull request labelled `minor-release` changes the student
+          # contract and waits, on purpose, for the next minor
+          # (docs/release-gate.md), so it is not stalled.
           cutoff="$(date -u -d '3 days ago' +%s)"
           jq -c --argjson cutoff "$cutoff" \
-            '.[] | select((.createdAt | fromdate) < $cutoff)' prs.json |
+            '.[] | select((.createdAt | fromdate) < $cutoff)
+                 | select([.labels[].name] | index("minor-release") | not)' prs.json |
           while read -r pr; do
             number="$(jq -r .number <<<"$pr")"
             branch="$(jq -r .headRefName <<<"$pr")"

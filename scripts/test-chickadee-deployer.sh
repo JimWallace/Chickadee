@@ -97,6 +97,9 @@ case "$url" in
     printf '{"sha": "%s"}\n' "$sha"
     ;;
   */tags\?*) cat "$STUB/tags" 2>/dev/null || echo '[]' ;;
+  */releases\?*) [ -f "$STUB/releases_fail" ] && exit 22; cat "$STUB/releases_json" 2>/dev/null ;;
+  */compare/*) cat "$STUB/compare_json" 2>/dev/null ;;
+  */search/issues*) cat "$STUB/search_json" 2>/dev/null ;;
   */health)
     mode="$(cat "$STUB/health")"
     if [ "$mode" = "tls" ] && [ "$insecure" = "0" ]; then
@@ -245,6 +248,8 @@ start_case() {
   APPROVED_VERSION=""
   REFUSED_FALLBACKS=""
   REFUSED_FALLBACKS_FOR=""
+  HELD_VERSION=""
+  NOTES_FOR=""
   clear_failures
 }
 
@@ -637,6 +642,231 @@ run_cycle
 expect_calls "docker manifest" 0
 expect_calls "deploy-script" 0
 expect_state waiting_for_image
+
+# ---------------------------------------------------------------------------
+# The release gate (docs/release-gate.md): deploy modes, the admin page's
+# request channel, and what survives a restart.
+# ---------------------------------------------------------------------------
+REQ="$CHICKADEE_STATE_DIR/requests"
+
+request() {  # $1 = file name, $2 = JSON body
+  mkdir -p "$REQ"
+  printf '%s' "$2" > "$REQ/$1"
+}
+
+expect_history_line() {  # $1 = a regex one history line must match
+  grep -qE -- "$1" "$HISTORY_FILE" 2>/dev/null || fail "expected a history line matching '$1'"
+}
+
+expect_status_field() {  # $1 = key, $2 = expected value
+  local v; v="$(json_field "$STATUS_FILE" "$1")"
+  [ "$v" = "$2" ] || fail "expected status $1='$2', saw '$v'"
+}
+
+minor_release() {  # the next release is the minor v0.6.0
+  echo "v0.6.0" > "$STUB/latest_release"
+  echo "0.6.0" > "$STUB/target_version"
+}
+
+# ---------------------------------------------------------------------------
+start_case "with no mode file, a patch deploys (gated-minors is the default)"
+run_cycle
+expect_calls "deploy-script deploy" 1
+expect_status_field mode gated-minors
+
+# ---------------------------------------------------------------------------
+start_case "with no mode file, a minor is held once and its notes are written"
+minor_release
+cat > "$STUB/releases_json" <<'JSON'
+[{"tag_name": "v0.6.0", "name": "Chickadee v0.6.0", "body": "- **Kernels.** Re-vendored (#3100).", "html_url": "https://example/r/600", "published_at": "2026-11-20T00:00:00Z"},
+ {"tag_name": "v0.5.232", "name": "Chickadee v0.5.232", "body": "- A fix (#3099).", "html_url": "https://example/r/5232", "published_at": "2026-11-19T00:00:00Z"},
+ {"tag_name": "v0.5.231", "name": "Chickadee v0.5.231", "body": "- Already live.", "html_url": "https://example/r/5231", "published_at": "2026-11-18T00:00:00Z"}]
+JSON
+cat > "$STUB/compare_json" <<'JSON'
+{"commits": [{"commit": {"message": "A fix (#3099)"}}, {"commit": {"message": "Re-vendor the xeus kernels (#3100)\n\nbody"}}]}
+JSON
+cat > "$STUB/search_json" <<'JSON'
+{"items": [{"number": 3100, "title": "Re-vendor the xeus kernels", "html_url": "https://example/pull/3100"}, {"number": 2000, "title": "An older minor", "html_url": "https://example/pull/2000"}]}
+JSON
+run_cycle
+run_cycle
+expect_calls "deploy-script" 0
+expect_state pending_approval
+expect_status_field heldVersion v0.6.0
+[ "$(grep -c '"action": "gate"' "$HISTORY_FILE")" = "1" ] || fail "expected one gate-held history entry for two held cycles"
+[ -f "$PENDING_NOTES_FILE" ] || fail "no pending-notes.json while holding"
+python3 - "$PENDING_NOTES_FILE" <<'PY' || fail "pending-notes.json does not carry the releases in range and the minor-release pull request"
+import json, sys
+notes = json.load(open(sys.argv[1]))
+assert notes["heldVersion"] == "v0.6.0", notes
+assert [r["tag"] for r in notes["releases"]] == ["v0.6.0", "v0.5.232"], notes["releases"]
+assert [p["number"] for p in notes["minorReleasePullRequests"]] == [3100], notes["minorReleasePullRequests"]
+PY
+expect_calls "curl insecure=0 https://api.github.com/repos/.*/releases?per_page" 1
+
+# ---------------------------------------------------------------------------
+start_case "autonomous deploys a minor"
+minor_release
+echo "autonomous" > "$CHICKADEE_STATE_DIR/mode"
+run_cycle
+expect_calls "deploy-script deploy" 1
+expect_status_field mode autonomous
+
+# ---------------------------------------------------------------------------
+start_case "autonomous still holds a major"
+echo "v1.0.0" > "$STUB/latest_release"
+echo "autonomous" > "$CHICKADEE_STATE_DIR/mode"
+run_cycle
+expect_calls "deploy-script" 0
+expect_state pending_approval
+
+# ---------------------------------------------------------------------------
+start_case "manual holds a patch"
+echo "manual" > "$CHICKADEE_STATE_DIR/mode"
+run_cycle
+expect_calls "deploy-script" 0
+expect_state pending_approval
+expect_status_field heldVersion v0.5.232
+
+# ---------------------------------------------------------------------------
+start_case "a mode file that names no mode means gated-minors"
+minor_release
+echo "yolo" > "$CHICKADEE_STATE_DIR/mode"
+run_cycle
+expect_calls "deploy-script" 0
+expect_status_field mode gated-minors
+
+# ---------------------------------------------------------------------------
+start_case "an approve request for the held release deploys it and is recorded with its user"
+minor_release
+run_cycle
+request "001-approve.json" '{"request": "approve", "version": "v0.6.0", "user": "alice"}'
+run_cycle
+expect_calls "deploy-script deploy" 1
+expect_history_line '"action": "approve", "result": "accepted".*"user": "alice"'
+[ -z "$(ls -A "$REQ")" ] || fail "the request file was not removed"
+[ ! -f "$APPROVED_FILE" ] || fail "the approval was not cleared after the deploy"
+[ ! -f "$PENDING_NOTES_FILE" ] || fail "pending-notes.json outlived the deploy"
+
+# ---------------------------------------------------------------------------
+start_case "an approve request for another version is refused"
+minor_release
+run_cycle
+request "001-approve.json" '{"request": "approve", "version": "v0.5.232", "user": "mallory"}'
+run_cycle
+expect_calls "deploy-script" 0
+expect_state pending_approval
+expect_history_line '"version": "v0.5.232", "action": "approve", "result": "refused".*"user": "mallory"'
+
+# ---------------------------------------------------------------------------
+start_case "a newer release that appears after an approval is held for its own approval"
+minor_release
+run_cycle
+request "001-approve.json" '{"request": "approve", "version": "v0.6.0", "user": "alice"}'
+echo "v0.6.1" > "$STUB/latest_release"
+run_cycle
+expect_calls "deploy-script" 0
+expect_status_field heldVersion v0.6.1
+
+# ---------------------------------------------------------------------------
+start_case "rollback, deploy, unknown, oversized, malformed and symlinked requests are refused and removed"
+request "01.json" '{"request": "rollback", "user": "mallory"}'
+request "02.json" '{"request": "deploy", "version": "v0.5.100", "user": "mallory"}'
+request "03.json" '{"request": "shell", "user": "mallory"}'
+request "04.json" "{\"request\": \"pause\", \"user\": \"mallory\", \"pad\": \"$(head -c 5000 /dev/zero | tr '\0' x)\"}"
+request "05.json" 'not json'
+ln -s /etc/passwd "$REQ/06.json"
+request "07.txt" '{"request": "pause"}'
+run_cycle
+expect_calls "deploy-script rollback" 0
+[ "$PAUSED" = "0" ] || fail "an oversized pause request was accepted"
+[ "$(grep -c '"action": "request", "result": "refused"' "$HISTORY_FILE")" = "6" ] || fail "expected six refused requests in the history"
+expect_history_line 'rollback is a host action'
+expect_history_line 'larger than 4096 bytes'
+expect_history_line 'not a regular file'
+[ "$(ls -A "$REQ")" = "07.txt" ] || fail "expected only the non-.json file to remain, saw: $(ls -A "$REQ" | tr '\n' ' ')"
+[ "$DEPLOYED_VERSION" = "0.5.232" ] || fail "refused requests stopped the ordinary patch deploy"
+
+# ---------------------------------------------------------------------------
+start_case "a FIFO or a directory named .json does not hang or repeat, and a flood waits"
+mkdir -p "$REQ"
+mkfifo "$REQ/01.json"
+mkdir -p "$REQ/02.json/inside"
+for n in $(seq 10 70); do request "$n.json" '{"request": "resume", "user": "flood"}'; done
+run_cycle
+expect_history_line 'not a regular file \(01.json\)'
+expect_history_line 'not a regular file \(02.json\)'
+expect_history_line '13 more requests wait for the next poll'
+[ ! -e "$REQ/01.json" ] && [ ! -e "$REQ/02.json" ] || fail "the FIFO or the directory was not removed"
+before="$(grep -c 'not a regular file' "$HISTORY_FILE")"
+run_cycle
+[ "$(grep -c 'not a regular file' "$HISTORY_FILE")" = "$before" ] || fail "a removed entry was refused again"
+[ -z "$(ls -A "$REQ")" ] || fail "the waiting requests were not read on the next poll"
+
+# ---------------------------------------------------------------------------
+start_case "notes whose fetch failed are fetched again on the next poll"
+minor_release
+touch "$STUB/releases_fail"
+run_cycle
+rm "$STUB/releases_fail"
+run_cycle
+expect_calls "curl insecure=0 https://api.github.com/repos/.*/releases?per_page" 2
+run_cycle
+expect_calls "curl insecure=0 https://api.github.com/repos/.*/releases?per_page" 2
+
+# ---------------------------------------------------------------------------
+start_case "a pause request persists, holds an approved release, and resume releases it"
+minor_release
+run_cycle
+request "001-approve.json" '{"request": "approve", "version": "v0.6.0", "user": "alice"}'
+request "002-pause.json" '{"request": "pause", "user": "alice"}'
+touch -t 202601010000 "$REQ/001-approve.json"
+run_cycle
+expect_state paused
+expect_calls "deploy-script" 0
+[ -f "$PAUSED_FILE" ] || fail "pause was not written to the state folder"
+[ "$(cat "$APPROVED_FILE" 2>/dev/null)" = "v0.6.0" ] || fail "the approval was not written to the state folder"
+# A restart (the daemon updating its own scripts) keeps both.
+PAUSED=0; APPROVED_VERSION=""; HELD_VERSION=""
+load_state
+[ "$PAUSED" = "1" ] || fail "pause did not survive a restart"
+[ "$APPROVED_VERSION" = "v0.6.0" ] || fail "the approval did not survive a restart"
+[ "$HELD_VERSION" = "v0.6.0" ] || fail "the held release did not survive a restart"
+run_cycle
+expect_calls "deploy-script" 0
+request "003-resume.json" '{"request": "resume", "user": "bob"}'
+run_cycle
+expect_calls "deploy-script deploy" 1
+[ ! -f "$PAUSED_FILE" ] || fail "resume did not remove the paused file"
+expect_history_line '"action": "resume", "result": "accepted".*"user": "bob"'
+
+# ---------------------------------------------------------------------------
+start_case "a mode request writes the mode file, in both directions"
+request "001-mode.json" '{"request": "mode", "mode": "autonomous", "user": "alice"}'
+run_cycle
+[ "$(cat "$CHICKADEE_STATE_DIR/mode")" = "autonomous" ] || fail "the mode request did not write the mode file"
+expect_history_line '"action": "mode", "result": "accepted", "detail": "autonomous".*"user": "alice"'
+request "002-mode.json" '{"request": "mode", "mode": "manual", "user": "alice"}'
+request "003-mode.json" '{"request": "mode", "mode": "anything", "user": "alice"}'
+touch -t 202601010000 "$REQ/002-mode.json"
+run_cycle
+[ "$(cat "$CHICKADEE_STATE_DIR/mode")" = "manual" ] || fail "a later invalid mode request changed the mode"
+expect_history_line 'mode names no known mode'
+
+# ---------------------------------------------------------------------------
+start_case "a host command can still approve any version and persists the pause"
+printf '{"command": "pause"}' > "$COMMAND_FILE"
+run_cycle
+[ -f "$PAUSED_FILE" ] || fail "a host pause was not written to the state folder"
+printf '{"command": "mode", "mode": "manual"}' > "$COMMAND_FILE"
+run_cycle
+[ "$(cat "$CHICKADEE_STATE_DIR/mode")" = "manual" ] || fail "a host mode command did not write the mode file"
+printf '{"command": "resume"}' > "$COMMAND_FILE"
+run_cycle
+expect_state pending_approval
+printf '{"command": "approve", "version": "v0.5.232"}' > "$COMMAND_FILE"
+run_cycle
+expect_calls "deploy-script deploy" 1
 
 # ---------------------------------------------------------------------------
 if [ "$FAILURES" -gt 0 ]; then

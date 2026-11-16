@@ -2263,6 +2263,52 @@ coordination, and each must see every edit.
   - The CSP permits no inline script (#1516;
     `ContentSecurityPolicyInlineScriptTests`).
 
+### The deploy state folder: `status.json`, `pending-notes.json`, `requests/`
+
+- **Writers:** the host deploy daemon (`deploy/chickadee-deployer.sh`) writes
+  `status.json`, `history.jsonl`, `pending-notes.json`, `mode`, `paused` and
+  `approved`. The admin Deployment page (`AdminRoutes+Deployment.swift`,
+  `DeployStateFolder.write`) writes one file per request into `requests/`,
+  the only path the app may write (`bluegreen-deploy.sh` mounts it read-write
+  over the read-only `/deploy-state`). A host operator writes
+  `command.json`.
+- **Readers:** the daemon reads `requests/` and `command.json` each poll. The
+  app reads `status.json` in three places: `DeployStateFolder` (the
+  Deployment page), `GetDeployStatusTool` (MCP `get_deploy_status`) and
+  `DeployerHealthRule` (the `deployerUnhealthy` alert, which does not fire on
+  `paused` or `pending_approval`). `GetDeployHistoryTool` and the page read
+  `history.jsonl`.
+- **Parallel paths:** two Swift decoders of `status.json`: `DeployStatusFile`
+  (the page and `GetDeployStatusTool`) and `DeployerStatus` (the alert).
+  A field the daemon adds or renames goes in each that needs it; every field
+  stays optional, because an older daemon writes fewer.
+- **Rules:**
+  - The app only asks. The daemon accepts approve-the-held-release, mode,
+    pause and resume, and refuses everything else, rollback included
+    (`docs/release-gate.md`; `scripts/test-chickadee-deployer.sh`). No
+    route or MCP tool may write anywhere else in the folder.
+  - The mode's raw values (`DeployMode`) and the daemon's `valid_mode` are
+    the same three strings.
+  - The approval names a version, and the daemon accepts it only for the
+    release it holds, so a newer release is held anew.
+
+### The student contract: `scripts/contract-paths.txt`
+
+- **Writers:** a pull request that edits the list. The `minor-release` label
+  that goes with it is set by the author, by `revendor-kernels.yml`, and by
+  `dependabot-auto.yml` (only on a Dependabot pull request).
+- **Readers:** `scripts/contract-changes.sh`, run by the `contract-change`
+  check (`.github/workflows/contract-change.yml`), the release gate in
+  `auto-release.yml`, and `dependabot-auto.yml`. The label is read by
+  `contract-change.yml` (as the author's consent), `dependabot-auto.yml` and
+  `dependency-health.yml` (which leaves a labelled pull request alone), and by
+  the steward, which never merges one (`Tools/maintenance/README.md`).
+- **Rule:** a path joins the list when a change to it would break a student
+  who has the old version open or cached. While a commit that touched a
+  listed path is on `main` after the last release tag, auto-release cuts no
+  release, so the labelled pull requests merge together just before a minor
+  is cut by hand (`docs/release-gate.md`).
+
 ---
 
 ## Checks that already guard an intersection

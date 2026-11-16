@@ -34,6 +34,23 @@ scripts/assemble-release.sh --dry-run
 3. The tag triggers the existing `release.yml` (GitHub Release from the
    CHANGELOG section) and the tag build in `docker-build.yml`.
 
+**Auto-release stops at a contract change** (`docs/release-gate.md`). Before
+step 1 it lists the files that every commit since the last release tag
+changed and matches them against `scripts/contract-paths.txt`, the student
+contract: the vendored kernels and editor, the runner wasm, the kernel pins,
+`Sources/RunnerCore/` and the output-contract fixture. If any matched, it cuts
+no release, neither a patch nor a minor. It writes why in the job summary and
+opens (or updates) one issue labelled `minor-needed` that names the pull
+requests. Fragments keep accumulating in `changelog.d/` until the minor is cut
+by hand (below); after its tag, auto-release resumes.
+
+At merge time, the `contract-change` check fails a pull request that changes
+a contract path unless it carries the `minor-release` label, which says "this
+ships in the next minor". The kernel re-vendor pull requests
+(`revendor-kernels.yml`) and the Dependabot updates that regenerate
+`Public/vendor` or `Public/jupyterlite` are opened with that label and do not
+auto-merge.
+
 A merge with **no** fragments doesn't cut a release — nothing is tagged. So a
 docs-only or trivial PR can either skip a fragment (no release) or include one
 (rolls into the next version). Version assignment is the single, serialized
@@ -91,14 +108,17 @@ rather than left to convention:
   item — if a PR retires something, it is not a patch (see the next bullet)
   and must wait.
 - **Minor — deliberate and manual.** An era boundary, a batch of
-  compatibility removals, or both. 0.5.0 was both: the capstone on the first
+  compatibility removals, a change to the student contract, or more than one
+  of these. A contract change (a kernel re-vendor, a change to how a grade is
+  computed; `scripts/contract-paths.txt`) ships only in a minor, because a
+  student may have the old version open or cached (`docs/release-gate.md`). 0.5.0 was both: the capstone on the first
   full course offering *and* the retirement of the pre-0.5 shims
   (`WORKER_SHARED_SECRET`, `/admin/workers`, the bundle `isOpen` write side,
   …). Removals accumulate behind deprecation warnings on patches and land
   together at the next minor, where the changelog announces them in one
   place.
 - **Major — manual, and deployer-gated.** Reserved. The deploy daemon holds
-  major bumps for human approval, so 1.0.0 will be the first release that
+  major bumps for human approval in every deploy mode, so 1.0.0 will be the first release that
   cannot reach production without an explicit operator sign-off. 1.0 is also
   the point where external contracts — the `.chickadee` bundle format, the
   MCP surfaces, the runner wire protocol — would become promises to parties
@@ -115,8 +135,10 @@ bump semantics — and there is no marker, label, or commit-prefix scan. No
 sequence of merges can ever produce `0.5.0` on its own; that is a deliberate
 human decision, made like this:
 
-1. Make sure at least one fragment exists in `changelog.d/` — usually a short
-   milestone note written for the occasion. (The script refuses to release an
+1. If the minor carries contract changes, merge the labelled `minor-release`
+   pull requests together, just before the cut: while one is on `main`, no
+   release of any kind is cut. Then make sure at least one fragment exists in
+   `changelog.d/` — usually a short milestone note written for the occasion. (The script refuses to release an
    empty fragment set, `--version` or not.)
 2. On an up-to-date local `main`:
 
@@ -140,9 +162,10 @@ git push origin main v0.5.0
    human-pushed tag triggers `release.yml` and the `docker-build.yml` tag build
    normally. (Only tags pushed with the workflow `GITHUB_TOKEN` are suppressed
    by GitHub's loop prevention.)
-5. Done — the deployer treats a minor bump as auto-deployable (only **major**
-   bumps are held for approval), and auto-release resumes at `0.5.1` on the
-   next merged fragment.
+5. The deployer holds the minor in the default mode (`gated-minors`). An admin
+   approves it on the admin page (Deployment), at a time with no lecture
+   running, by typing its version. Close the `minor-needed` issue. Auto-release
+   resumes at `0.5.1` on the next merged fragment.
 
 ## Merge queue (optional, requires repo settings)
 

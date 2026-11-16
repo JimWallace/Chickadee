@@ -33,6 +33,8 @@ concurrency:
 permissions:
   contents: write
   actions: write
+  # The release gate opens or updates the `minor-needed` issue.
+  issues: write
 
 jobs:
   release:
@@ -76,8 +78,93 @@ jobs:
           # back to GITHUB_TOKEN (tag won't auto-trigger — handled below).
           token: ${{ secrets.RELEASE_TOKEN || github.token }}
 
+      # The release gate (docs/release-gate.md). A contract change ships only
+      # in a minor, which is cut by hand. So when any commit since the last
+      # release tag touched a path in scripts/contract-paths.txt, this cuts
+      # no release, neither a patch nor a minor: it says why in the job
+      # summary and opens or updates one issue labelled `minor-needed` that
+      # names the pull requests. Fragments keep accumulating in changelog.d/,
+      # and the hand-cut minor folds them all. After the minor's tag, the
+      # commits since the last tag are clean again and auto-release resumes.
+      - name: Refuse past a contract change
+        id: gate
+        env:
+          GH_TOKEN: ${{ github.token }}
+          R: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          if ! last="$(git describe --tags --abbrev=0 --match 'v[0-9]*' HEAD 2>/dev/null)"; then
+            echo "No release tag is reachable from HEAD, so the gate has nothing to compare." >> "$GITHUB_STEP_SUMMARY"
+            echo "blocked=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          git log --format= --name-only "$last..HEAD" | sed '/^$/d' | sort -u \
+            | scripts/contract-changes.sh > contract.txt
+          if [ ! -s contract.txt ]; then
+            echo "blocked=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "blocked=true" >> "$GITHUB_OUTPUT"
+          # The commits that touched a contract path, and the pull requests
+          # that brought them. GitHub knows the pull request of a squash merge
+          # and of each commit inside a merge commit (a Dependabot merge); a
+          # commit pushed straight to main has none.
+          : > commits.txt
+          : > prs.txt
+          for commit in $(git rev-list "$last..HEAD"); do
+            if [ -n "$(git show --format= --name-only "$commit" | scripts/contract-changes.sh)" ]; then
+              git log -1 --format='%h %s' "$commit" >> commits.txt
+              gh api "repos/$R/commits/$commit/pulls" --jq '.[] | "#\(.number)"' >> prs.txt 2>/dev/null || true
+            fi
+          done
+          prs="$(sort -u prs.txt | paste -sd' ' - || true)"
+          {
+            echo "## No release: a contract change is waiting for a minor"
+            echo ""
+            echo "Since \`$last\`, these commits changed the student contract (scripts/contract-paths.txt):"
+            echo ""
+            echo '```'
+            cat commits.txt
+            echo '```'
+            echo ""
+            echo "A contract change ships only in a minor, which is cut by hand (docs/release-process.md, \"Cutting a minor (or major) release\"). Until then no release is cut, and the changelog fragments stay in changelog.d/."
+          } > body.md
+          cat body.md >> "$GITHUB_STEP_SUMMARY"
+          gh label create minor-needed --repo "$R" --color B60205 \
+            --description "A contract change is on main; auto-release waits for a minor cut by hand" \
+            >/dev/null 2>&1 || true
+          {
+            echo "Auto-release cut no release after \`$(git rev-parse --short HEAD)\`, because commits since \`$last\` changed the student contract (docs/release-gate.md)."
+            echo ""
+            echo "Pull requests: ${prs:-none named in the commit subjects}"
+            echo ""
+            echo "Commits:"
+            echo ""
+            echo '```'
+            cat commits.txt
+            echo '```'
+            echo ""
+            echo "Contract paths changed:"
+            echo ""
+            echo '```'
+            head -40 contract.txt
+            echo '```'
+            echo ""
+            echo "To release: cut the minor by hand (docs/release-process.md, \"Cutting a minor (or major) release\"). The deployer then holds it until an admin approves it on the admin page. Close this issue after the minor's tag is pushed."
+          } > issue.md
+          existing="$(gh issue list --repo "$R" --state open --label minor-needed --limit 1 \
+            --json number --jq '.[0].number // empty')"
+          if [ -n "$existing" ]; then
+            gh issue edit "$existing" --repo "$R" --body-file issue.md >/dev/null
+            echo "Updated issue #$existing." >> "$GITHUB_STEP_SUMMARY"
+          else
+            gh issue create --repo "$R" --label minor-needed \
+              --title "A contract change is waiting for a minor release" --body-file issue.md
+          fi
+
       - name: Assemble release from changelog fragments
         id: assemble
+        if: steps.gate.outputs.blocked != 'true'
         run: |
           set +e
           version="$(scripts/assemble-release.sh)"
