@@ -37,6 +37,13 @@ concurrency:
 env:
   IMAGE: ghcr.io/jimwallace/chickadee
 
+# Least privilege by default (#3067). A job that needs more names it in its
+# own `permissions:`. `packages: read` lets the job containers and services
+# pull the GHCR mirrors with GITHUB_TOKEN.
+permissions:
+  contents: read
+  packages: read
+
 jobs:
   # ── Compile the release binaries once, with caching ───────────────────────
   # The image build used to `swift build -c release` inside the Dockerfile, so
@@ -71,6 +78,8 @@ jobs:
     steps:
       # A shallow checkout is enough: no step here reads the git history.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       # Only the toolchain key. This job does not use the shared debug
       # `-build-` cache, so `build-cache` is none.
@@ -195,6 +204,7 @@ jobs:
       # last commit.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          persist-credentials: false
           fetch-depth: 0
           filter: blob:none
 
