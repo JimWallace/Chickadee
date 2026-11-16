@@ -9,6 +9,13 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.966] - 2026-11-16
+
+### Changed
+
+- **`scripts/mutation-run.sh` is executable.** It was the only script in `scripts/` without the executable bit, so a direct call failed with "permission denied". The workflows call it with `bash`, so they do not change.
+
+
 ## [0.5.965] - 2026-11-16
 
 ### Changed
