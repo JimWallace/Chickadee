@@ -1,9 +1,9 @@
 # CI flakiness — known families
 
-**Open: Families 2, 3, 4, 7, 8 and 9.** These can still make a check red, and
+**Open: Families 2, 3, 4, 7 and 8.** These can still make a check red, and
 the cause is not fixed in this repository. **Mitigated: Family 5.** It is closed
 for monitoring since 2026-09-28, but nobody found its cause. **Fixed: Families
-1, 6 and 10.**
+1, 6, 9 and 10.**
 
 Read this file before you diagnose a red check on a PR that did not touch the
 failing area. Each family keeps its original number, because code comments
@@ -27,7 +27,7 @@ heading for each family.
 | 6 | `worker-tests` cancelled at its ceiling after the move to resolute | fixed | `worker-tests` reads `cancelled`. `[ci-pressure]` shows `scopes=0.0/min` with `self cpu=0.0%`. Some `WorkerDaemonTests` record "Time limit was exceeded". | It should not recur. If it does, read the printed wedge dump. |
 | 7 | `build` exits 139 as Swift Build starts planning (libdispatch, upstream) | open (upstream bug; in-job retry) | Step `Build all targets and tests` red within about 90 s. Exit 139. The last build line is `[Planning 1 / N]`. `DispatchWorker` crashed in `_dispatch_event_loop_drain`. A `::warning` "Family 7 retry" on a green job is one absorbed hit. | Not your diff: nothing compiled. One `/rerun-failed`. Never read the diff for it. |
 | 8 | A test lane misses the shared `.build` cache that `build` saved (cache eviction, inferred) | open (fails fast since the guard) | A `::error` "Family 8" in the `Swift test setup` step of a test lane, after "Cache not found for input keys". Before the guard: `[N / M]` compile lines inside a `Run …Tests` step, a timeout with no `Test run with` line, and "No wedge dump was written." Other lanes on the same run passed. | Not your diff. Do not use `/rerun-failed`: the cache is gone, so it misses again. Re-run all jobs, so `build` saves again. |
-| 9 | Workbench shell e2e: the toolbar insert after a save does not take effect, `smoke (chromium)` | open (cause unknown; diagnostics kept) | Step `Run workbench shell e2e (chromium)`: `SHELL FAIL — locator.click: Timeout 30000ms exceeded`, waiting for `.jp-Cell.jp-mod-active .cm-content`, which resolves to a `data-language="markdown"` editor that "is not visible". The selftest passed before it. | Not your diff if the diff cannot reach the workbench or the editor. Download the `smoke-diagnostics-chromium` artifact, then re-run the job once. |
+| 9 | Workbench shell e2e: the editor click after the toolbar insert latched onto a hidden cell, `smoke (chromium)` | fixed | Step `Run workbench shell e2e (chromium)`: `SHELL FAIL — locator.click: Timeout 30000ms exceeded`, waiting for `.jp-Cell.jp-mod-active .cm-content`, which resolves to a `data-language="markdown"` editor that "is not visible". Since the fix the probe fails at "timed out: the inserted code cell is active" instead. | It should not recur. A new hit means that the insert did not land: read the `smoke-diagnostics-chromium` trace. |
 | 10 | `api-tests` statement timeout from stale planner statistics in a recycled pooled schema | fixed | A `PSQLError` in a test that seeds many rows (first seen: `CourseWideResultQueryBindLimitTests.theLearnTabSummaryReadsACoursePastTheBindLimit`). The Postgres log in the job shows `canceling statement due to statement timeout` on a query that takes under 1 s locally. | It should not recur. If it does, check that the schema came from `MigratedPostgresSchemaPool` and still has autovacuum off. |
 
 ## Before you chase a red check
@@ -387,15 +387,15 @@ stays, because the PR's own test lanes read it. The `-probebuild-` save stays
 for now: without it, every probe build that loses the race with `build` is
 cold, and so is every probe re-run.
 
-## Family 9 — workbench shell e2e: the toolbar insert after a save does not take effect (`smoke (chromium)`) — OPEN, cause unknown
+## Family 9 — workbench shell e2e: the editor click after the toolbar insert latched onto a hidden cell (`smoke (chromium)`) — ROOT-CAUSED & FIXED
 
-**Tells.** `smoke (chromium)` in `browser-probes.yml` fails at the step
+**Tells.** `smoke (chromium)` in `browser-probes.yml` failed at the step
 "Run workbench shell e2e (chromium)", in step 4 of
 `Tools/editor-smoke-test/workbench-shell-check.mjs` ("A saved setting keeps
-the kernel"). The save succeeds. Then the probe clicks the toolbar button
-`notebook:insert-cell-below notebook:change-cell-to-code` and clicks the
-active cell's editor. The click finds a markdown editor that is not visible,
-and times out after 30 s:
+the kernel"). The save succeeded. Then the probe clicked the toolbar button
+`notebook:insert-cell-below notebook:change-cell-to-code` and clicked the
+active cell's editor. The click found a markdown editor that was not
+visible, and timed out after 30 s:
 
 ```
 SHELL FAIL — locator.click: Timeout 30000ms exceeded.
@@ -404,46 +404,59 @@ SHELL FAIL — locator.click: Timeout 30000ms exceeded.
       - element is not visible
 ```
 
-The active cell is probably the seed's rendered markdown cell
-`## Task 2: Total`, so the insert did not take effect. This is inferred from
-the log, not seen. The editor selftest earlier in the same job passes. The
-`INotebookTracker` "No provider" lines in the log come from the bare REPL,
-which has no notebook tracker (`Tools/editor-smoke-test/README.md`, "Notes").
-They also appear on green runs, and they are not this failure.
+**Cause.** A race in the probe, not in the product. The toolbar click
+returns when the DOM click is sent. `notebook-toolbar.js` then sends the two
+commands through the iframe command bridge, and the insert lands about
+20–40 ms later on a local machine (more on a loaded runner). The editor click
+started at once. When its locator resolved before the insert landed, it found
+the old active cell: the rendered markdown heading `## Task 2: Total`
+(`run-cell-and-select-next` had selected it), whose editor is hidden.
+Playwright re-resolves a locator only when its element leaves the DOM. A
+hidden element stays attached, so Playwright retried the same element for
+30 s and never saw the new code cell, which was active by then.
+
+**Evidence (2026-11-16).** An ad hoc instrumented copy of the probe (not kept in the repository) showed the
+notebook state 2 ms after the toolbar click returned: 4 cells, the active
+cell the rendered heading. 250 ms later: 5 cells, the active cell the new
+code cell. The bridge round trip of the insert took 20–25 ms. A copy that adds
+100 ms before each bridge command reproduced the CI log exactly, on the
+first run. The fixed probe passed with 100 ms and with 1000 ms added.
+
+**Fix.** The probe counts the cells before the toolbar click, then waits
+(the usual 30 s step limit) until there is one more cell and the active cell
+is a code cell. Only then does it click the editor. This is a stronger check
+than before: it now says when the insert does not take effect.
 
 **Seen.**
 
 | Date | Run | Ref |
 |---|---|---|
+| 2026-10-19 | 39184416569, 39341547738 | PR branches |
 | 2026-10-22 | 39784232421 | `main`, scheduled |
 | 2026-11-04 | 41860413720 | `main`, scheduled |
-| 2026-11-11 | Dependabot PR #2990, `dba8872` and `b082d1f` | a JupyterLab bump that did not change the served chunks |
+| 2026-11-10 | 42882492301, attempt 1 | PR branch; attempt 3 passed, so the tally did not count it |
+| 2026-11-11 | 42976666655 | Dependabot PR #2990 |
+| 2026-11-13 | 43346727113 | Dependabot PR |
 
-The triage of #2990 (issue #2991) said that `main` had not hit this failure,
-and so suspected the bump. The two scheduled runs on `main` show that the
-failure is ambient. #2990 merged later with green checks and no change.
+**The 2026-11-16 tally.** Issue #1178 reported 8 red `smoke` runs for the
+week. Only 2 of them were this family. The full job logs give:
 
-**Cause.** Not known. A race is the probable cause: the toolbar command
-goes through the iframe command bridge while the workbench finishes the save.
-Nobody has proved it. Locally the check passed 15 times out of 16 (#2991).
+| Count | Signature | Runs |
+|---|---|---|
+| 3 | Cancelled by the concurrency group ("Canceling since a higher priority waiting request ... exists"), not a failure | 42707971965, 42857670044, 42906403109 |
+| 2 | Family 9 | 42976666655, 43346727113 |
+| 1 | `GUIDE FAIL — the rows do not name the tasks`, both engines: the PR's own change | 42876740324 |
+| 1 | `playwright install-deps` could not resolve `archive.ubuntu.com` (runner DNS) | 43049512385 (`main`, scheduled) |
+| 1 | `AUTHORING-DRAFT FAIL — the kernel did not reach idle within 120000ms`, webkit, after its retry | 43102715975 |
 
-**Diagnostics.** Since #3010 (2026-11-13) the job sets
-`SMOKE_SCREENSHOT_DIR`. On a failure it uploads the
-`smoke-diagnostics-<browser>` artifact for 3 days: a screenshot per step, a
-full-page and an editor-frame screenshot, the console of every frame and a
-Playwright trace. No hit has happened since then.
+`flake-telemetry.yml` now leaves out a leg that the concurrency group
+cancelled, and counts every attempt of a run (`filter=all`), so a re-run
+that passes no longer hides the red attempt before it.
 
-**Handling.**
-
-1. If the diff cannot reach the workbench, the editor or the vendored
-   JupyterLite, the failure is not the diff.
-2. Download the `smoke-diagnostics-chromium` artifact of the failed run
-   before anything else. It is kept for 3 days, and a re-run overwrites it.
-3. One re-run of the failed job. Chromium has no automatic retry for this
-   step; webkit has one.
-4. Add the run to the "Seen" table above. When a trace exists, read the
-   order of the toolbar command and the post-save events in it. That
-   evidence is what this family lacks.
+**Handling.** It should not recur. If the same signature comes back, the
+insert did not take effect within 30 s: the probe now fails at "timed out:
+the inserted code cell is active". Download the `smoke-diagnostics-chromium`
+artifact and read the order of the toolbar commands in the trace.
 
 ## Family 10 — `api-tests` statement timeout from stale planner statistics in a recycled schema — ROOT-CAUSED & FIXED
 

@@ -200,7 +200,18 @@ async function main() {
       return failWithDiagnostics("the save restarted the kernel");
     }
     await page.keyboard.press("Escape");
+    const cells = editor().locator(".jp-Notebook .jp-Cell");
+    const cellsBefore = await cells.count();
     await page.locator('[data-nb-commands="notebook:insert-cell-below notebook:change-cell-to-code"]').click();
+    // The toolbar sends its commands through the iframe bridge after the
+    // click returns, so the insert lands some milliseconds later. Wait for
+    // it before the editor click. A locator that resolves first finds the
+    // old active cell, the rendered "## Task 2: Total" heading, whose editor
+    // is hidden; Playwright then retries that same element until its
+    // timeout and never sees the new cell (docs/ci-flakiness.md, Family 9).
+    await waitFor("the inserted code cell is active", async () =>
+      (await cells.count()) === cellsBefore + 1 &&
+      (await editor().locator(".jp-Notebook .jp-Cell.jp-mod-active.jp-CodeCell").count()) === 1);
     await editor().locator(".jp-Cell.jp-mod-active .cm-content").click();
     await page.keyboard.type("print(count_to(3))");
     n = await ran();
