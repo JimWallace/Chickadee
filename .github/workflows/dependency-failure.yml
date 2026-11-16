@@ -24,7 +24,7 @@ on:
       - JupyterLite
       - Browser probes
       - Browser grading smoke test
-      - CodeQL (JS/TS)
+      - CodeQL
       - Re-vendor xeus kernels
       - Dependabot auto-merge
     types: [completed]
