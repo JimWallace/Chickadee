@@ -95,6 +95,19 @@ jobs:
       kernels: ${{ steps.plan.outputs.kernels }}
       merge: ${{ steps.plan.outputs.merge }}
     steps:
+      # Egress allowlist (#3075). This job holds DEPENDABOT_MERGE_TOKEN. A step
+      # that reaches any other host fails, so a compromised dependency cannot
+      # send a token out. A new host that a change really needs goes on this
+      # list, in the same change.
+      - name: Restrict network egress
+        uses: step-security/harden-runner@1d88384fd173af6ecb012dfd0264a306b711241a # v2.22.4
+        with:
+          egress-policy: block
+          disable-telemetry: true
+          allowed-endpoints: >
+            github.com:443
+            api.github.com:443
+
       - name: Check the merge token
         env:
           GH_TOKEN: ${{ secrets.DEPENDABOT_MERGE_TOKEN || secrets.RELEASE_TOKEN }}
@@ -268,6 +281,21 @@ jobs:
       R: ${{ github.repository }}
       PUSH: ${{ needs.rebuild.outputs.changed == 'true' }}
     steps:
+      # Egress allowlist (#3075). This job holds DEPENDABOT_MERGE_TOKEN and
+      # pushes with it. A step that reaches any other host fails, so a
+      # compromised dependency cannot send a token out. A new host that a change
+      # really needs goes on this list, in the same change.
+      - name: Restrict network egress
+        uses: step-security/harden-runner@1d88384fd173af6ecb012dfd0264a306b711241a # v2.22.4
+        with:
+          egress-policy: block
+          disable-telemetry: true
+          allowed-endpoints: >
+            github.com:443
+            api.github.com:443
+            results-receiver.actions.githubusercontent.com:443
+            *.blob.core.windows.net:443
+
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         if: env.PUSH == 'true'
         with:
