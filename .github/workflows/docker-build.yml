@@ -177,6 +177,10 @@ jobs:
     permissions:
       contents: read
       packages: write
+      # Sign the image attestations with this run's OIDC identity, and
+      # store them (#3069).
+      id-token: write
+      attestations: write
 
     # Postgres for the smoke test below: the server's only backend. Its
     # /health answers 503 whenever its database check fails, which is the
@@ -661,3 +665,62 @@ jobs:
             [ -n "$tag" ] || continue
             docker push "$tag"
           done <<< "$TAGS"
+
+      # Sign what was pushed (#3069). The digest is the registry's own name for
+      # the bytes; a tag can be moved, a digest cannot. The attestation is a
+      # Sigstore-signed statement: this digest was built by THIS workflow, at
+      # THIS ref and commit, in this repository. The signing identity is the
+      # run's OIDC token, so no key is stored anywhere. push-to-registry puts
+      # the signed bundle beside the image in GHCR, where a verifier reads it
+      # with no GitHub API token. To check an image by hand:
+      #   gh attestation verify oci://ghcr.io/jimwallace/chickadee:<tag> --repo JimWallace/Chickadee --bundle-from-oci
+      # These steps run after the push, so a failure here leaves a pushed
+      # image without an attestation and the job red. A consumer that requires
+      # the attestation refuses that image, which is the intended result.
+      - name: Read the pushed digest
+        id: digest
+        if: github.event_name != 'pull_request'
+        env:
+          TAGS: ${{ steps.meta.outputs.tags }}
+        # Ask the registry, not the local image store, and ask by the
+        # :sha-<commit> tag: that is the tag the deployer pulls. :latest can
+        # be moved by a later build before this step runs.
+        run: |
+          set -euo pipefail
+          ref="$(grep -m1 ':sha-' <<< "$TAGS")"
+          [ -n "$ref" ] || { echo "::error::No :sha- tag in the pushed tags."; exit 1; }
+          digest="$(docker buildx imagetools inspect "$ref" --format '{{json .Manifest}}' \
+            | python3 -c 'import json,sys; print(json.load(sys.stdin)["digest"])')"
+          case "$digest" in
+            sha256:????????????????????????????????????????????????????????????????) ;;
+            *) echo "::error::No registry digest for $ref: '$digest'."; exit 1 ;;
+          esac
+          echo "digest=$digest" >> "$GITHUB_OUTPUT"
+          echo "Pushed $ref = $IMAGE@$digest"
+
+      - name: Attest build provenance
+        if: github.event_name != 'pull_request'
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-name: ${{ env.IMAGE }}
+          subject-digest: ${{ steps.digest.outputs.digest }}
+          push-to-registry: true
+
+      # The SBOM: every OS package and library in the image, by the same Trivy
+      # that gated it above. It reads the local image, which is the image that
+      # was scanned and pushed, and it is attested to the pushed digest, so a
+      # later CVE can be traced to the exact images that carry it.
+      - name: Generate the SBOM
+        if: github.event_name != 'pull_request'
+        env:
+          IMAGE_REF: ${{ fromJSON(steps.meta.outputs.json).tags[0] }}
+        run: trivy image --format cyclonedx --output "$RUNNER_TEMP/sbom.cdx.json" "$IMAGE_REF"
+
+      - name: Attest the SBOM
+        if: github.event_name != 'pull_request'
+        uses: actions/attest-sbom@c604332985a26aa8cf1bdc465b92731239ec6b9e # v4.1.0
+        with:
+          subject-name: ${{ env.IMAGE }}
+          subject-digest: ${{ steps.digest.outputs.digest }}
+          sbom-path: ${{ runner.temp }}/sbom.cdx.json
+          push-to-registry: true
