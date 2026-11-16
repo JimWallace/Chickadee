@@ -191,6 +191,23 @@ mechanism without moving any student traffic:
    `docker-build.yml` publishes this image (the push to `main` of a release
    commit builds nothing), so if that build fails, re-run it.
 
+   **The image must be signed (#3069).** Before it tags the image, the daemon
+   runs `cosign verify-attestation` on the digest. The digest must carry a
+   Sigstore build-provenance attestation that `docker-build.yml` signed at
+   `refs/tags/<the release tag>`. The revision label alone is not enough: the
+   builder writes it, so anyone who can push to the registry can forge it. An
+   unsigned image, or one signed by a main-branch build or by another workflow,
+   is refused: the state is `waiting_for_image` and the detail names the
+   reason. cosign needs no GitHub token. The daemon installs it once into
+   `<state dir>/bin` from its GitHub release, with a pinned SHA-256, and keeps
+   Sigstore's trust root in `<state dir>/sigstore`. The host must reach
+   `github.com` and its release-asset host (the first time only), `ghcr.io`
+   and `tuf-repo-cdn.sigstore.dev`. To check an image by hand:
+
+   ```
+   cosign verify-attestation --type slsaprovenance1 --certificate-oidc-issuer https://token.actions.githubusercontent.com --certificate-identity https://github.com/JimWallace/Chickadee/.github/workflows/docker-build.yml@refs/tags/vX.Y.Z ghcr.io/jimwallace/chickadee@sha256:DIGEST
+   ```
+
    This replaced deploying `:latest`, which failed twice over. The release is
    published about 30 minutes before its own image build finishes, so the
    first swaps of every release ran the *previous* version, reported success

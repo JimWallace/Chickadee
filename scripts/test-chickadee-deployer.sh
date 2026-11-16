@@ -122,7 +122,15 @@ cat > "$WORK/snapshot-script" <<'SH'
 printf 'snapshot %s\n' "$*" >> "$STUB/calls"
 SH
 
-chmod +x "$BIN/docker" "$BIN/curl" "$BIN/df" "$WORK/deploy-script" "$WORK/snapshot-script"
+# cosign verifies the image signature. It fails when the case says the image
+# is unsigned.
+cat > "$BIN/cosign" <<'SH'
+#!/usr/bin/env bash
+printf 'cosign %s\n' "$*" >> "$STUB/calls"
+[ ! -f "$STUB/unsigned" ] || { echo "Error: no matching attestations" >&2; exit 1; }
+SH
+
+chmod +x "$BIN/docker" "$BIN/curl" "$BIN/df" "$BIN/cosign" "$WORK/deploy-script" "$WORK/snapshot-script"
 touch "$WORK/docker-compose.yml"
 
 export STUB
@@ -154,6 +162,17 @@ repo_git() {
   esac
 }
 restart_self() { printf 'restart-self\n' >> "$STUB/calls"; }
+
+# The real installer downloads from GitHub. Keep it under another name for the
+# case that tests its hash check, and use the stub everywhere else.
+eval "real_$(declare -f ensure_cosign)"
+ensure_cosign() {
+  if [ -f "$STUB/cosign_missing" ]; then
+    WAIT_REASON="could not download cosign"
+    return 1
+  fi
+  COSIGN="$BIN/cosign"
+}
 
 # The fake clock. `sleep` advances it instead of waiting.
 FAKE_NOW=1000000
@@ -224,6 +243,41 @@ expect_calls "docker compose .* up -d --no-deps runner" 1
 expect_calls "docker compose .* pull" 0
 expect_state idle
 [ "$DEPLOYED_VERSION" = "0.5.232" ] || fail "expected 0.5.232 deployed, saw $DEPLOYED_VERSION"
+expect_calls "cosign verify-attestation --type slsaprovenance1 --certificate-oidc-issuer https://token.actions.githubusercontent.com --certificate-identity https://github.com/JimWallace/Chickadee/.github/workflows/docker-build.yml@refs/tags/v0.5.232 $IMAGE@sha256:0123abcd" 1
+
+# ---------------------------------------------------------------------------
+start_case "an image without a signed provenance is not deployed"
+touch "$STUB/unsigned"
+run_cycle
+expect_calls "cosign verify-attestation" 1
+expect_calls "docker tag" 0
+expect_calls "docker rmi $IMAGE:sha-b485699" 1
+expect_calls "deploy-script" 0
+expect_calls "snapshot" 0
+expect_state waiting_for_image
+grep -q "no provenance signed by docker-build.yml at v0.5.232" "$STATUS_FILE" \
+  || fail "expected the status to name the missing signature"
+
+# ---------------------------------------------------------------------------
+start_case "no cosign means no deploy"
+touch "$STUB/cosign_missing"
+run_cycle
+expect_calls "docker tag" 0
+expect_calls "deploy-script" 0
+expect_state waiting_for_image
+
+# ---------------------------------------------------------------------------
+start_case "a cosign download that does not match the pinned hash is refused"
+# The curl stub writes nothing, so the download is empty and its hash is wrong.
+if real_ensure_cosign; then
+  fail "expected the installer to refuse a download with the wrong hash"
+fi
+case "$WAIT_REASON" in
+  *"does not match its pinned SHA-256"*) ;;
+  *) fail "expected a hash mismatch, saw: $WAIT_REASON" ;;
+esac
+[ -z "$(find "$CHICKADEE_STATE_DIR/bin" -name 'cosign-*' 2>/dev/null)" ] \
+  || fail "a refused download must not be installed"
 
 # ---------------------------------------------------------------------------
 start_case "an unpublished release image waits without a swap or snapshot"
