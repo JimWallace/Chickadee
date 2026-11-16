@@ -117,7 +117,7 @@ not exist.
 - [zero-downtime-deploy.md](zero-downtime-deploy.md) — blue-green deploys, the `chickadee-deployer` daemon, read-only deploy oversight
 - [mac-runner.md](mac-runner.md) — a bonus runner on an Apple Silicon Mac under Docker Desktop: the arm64 runner image, sizing, the launchd updater
 - [operational-diagnostics.md](operational-diagnostics.md) — observability tables, log events, metrics endpoint, ops runbook
-- [load-testing.md](load-testing.md) — `chickadee-loadtest`: simulated deadline traffic on the runner poll and the status poll
+- [load-testing.md](load-testing.md) — `chickadee-loadtest`: simulated deadline traffic on the runner poll and the status poll, and one class activity in a lecture
 - [database-performance.md](database-performance.md) — query counts, load and plans measured at one course's scale; the rules that came out of them; the baseline and the weekly check (`Tools/perf-bench/`)
 - [performance-program.md](performance-program.md) — the weekly performance cycle, the count-based ratchets, and how to tune the production server, Postgres and runners
 - [perf-log.md](perf-log.md) — the weekly performance numbers, one section a week, written by the task in `Tools/perf-bench/weekly-task.md`

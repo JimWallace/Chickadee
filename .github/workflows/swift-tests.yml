@@ -52,7 +52,7 @@ jobs:
       # merge commit included. That is all a pull_request compares. A full
       # history fetch of every branch and tag came to the job's 5-minute
       # limit and timed out (#2812).
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 2
 
@@ -121,7 +121,7 @@ jobs:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Every guard fails on its own defect
         run: scripts/check-guards.sh
       - name: Claude Code hook behaviour tests
@@ -142,7 +142,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Mutation tooling self-tests
         # `*_test.py`, not one named file: report_test.py existed for a week
@@ -210,14 +210,14 @@ jobs:
         password: ${{ secrets.GITHUB_TOKEN }}
 
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Compute SPM cache key
         id: spm-cache-key
         run: echo "value=$(sha256sum Package.resolved | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
 
       - name: Cache SPM checkouts
-        uses: actions/cache@v6
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: .build/checkouts
           key: ${{ runner.os }}-spm-${{ steps.spm-cache-key.outputs.value }}
@@ -336,7 +336,7 @@ jobs:
         password: ${{ secrets.GITHUB_TOKEN }}
 
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       # The toolchain key and the shared `.build` cache. This job is the only
       # one that SAVES the cache. The cache is exact-match only, and the
@@ -359,7 +359,7 @@ jobs:
       - name: Restore SwiftPM package mirrors
         id: spm-mirrors
         if: steps.setup.outputs.cache-hit != 'true'
-        uses: actions/cache/restore@v6
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: .build/repositories
           key: ${{ runner.os }}-spm-mirrors-v1-${{ hashFiles('Package.resolved') }}
@@ -383,7 +383,7 @@ jobs:
           github.event_name == 'push'
           && steps.setup.outputs.cache-hit != 'true'
           && steps.spm-mirrors.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v6
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: .build/repositories
           key: ${{ steps.spm-mirrors.outputs.cache-primary-key }}
@@ -406,7 +406,7 @@ jobs:
       options: --privileged
 
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Swift test setup
         id: setup
@@ -483,7 +483,7 @@ jobs:
       TEST_DATABASE_USER: postgres
       TEST_DATABASE_PASSWORD: postgres
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       # The swift-ci image has the test dependencies, so the probe normally
       # only does a check. The action tells why each lane probes for EVERY
@@ -545,13 +545,13 @@ jobs:
         password: ${{ secrets.GITHUB_TOKEN }}
 
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       # Pinned rather than taking the image's node: the suite targets 24 and
       # `node --test` semantics move between majors. `.node-version` is the
       # one Node pin of the repository. It is the exact version that the
       # swift-ci image installs, not only the major (#1985).
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version-file: .node-version
 
@@ -607,7 +607,7 @@ jobs:
       options: --privileged
 
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Swift test setup
         id: setup
@@ -692,7 +692,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           sparse-checkout: .github/actions/gate
       - uses: ./.github/actions/gate

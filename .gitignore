@@ -23,6 +23,8 @@ Tools/jupyterlite/.jupyterlite.doit.db
 # Local runtime state / secrets
 .local-runner-autostart
 .worker-secret
+# chickadee-loadtest lecture: the simulated students' session cookies
+.loadtest-lecture-sessions
 .mcp-signing-key
 .lti-tool-key
 .github-app-secrets

@@ -63,14 +63,14 @@ jobs:
       MIN_COVERAGE_PERCENT: "80.0"
 
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Compute SPM cache key
         id: spm-cache-key
         run: echo "value=$(sha256sum Package.resolved | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
 
       - name: Cache SPM checkouts
-        uses: actions/cache@v6
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: .build/checkouts
           key: ${{ runner.os }}-spm-${{ steps.spm-cache-key.outputs.value }}
@@ -179,7 +179,7 @@ jobs:
       # The per-file report. The step summary has only the total, so this is
       # where the nightly steward finds coverage gaps (nightly.md, fill work).
       - name: Upload coverage report
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: coverage-lcov
           path: coverage.lcov
@@ -231,7 +231,7 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload to Codecov
-        uses: codecov/codecov-action@v7
+        uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7.1.1
         with:
           files: coverage.lcov
           fail_ci_if_error: false
