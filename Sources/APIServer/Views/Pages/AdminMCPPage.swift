@@ -292,7 +292,14 @@ private struct AdminMCPAccountRowView: HTML {
                 }
             }
             for course in account.enrolledCourses {
-                form(.method(.post), .action("/admin/mcp/accounts/\(account.id)/unenroll")) {
+                form(
+                    .method(.post), .action("/admin/mcp/accounts/\(account.id)/unenroll"),
+                    .data(
+                        "confirm",
+                        value:
+                            "Remove \(account.username) from \(course.code)\(course.termLabel.map { " \($0)" } ?? "")?"
+                    )
+                ) {
                     CSRFField(token: csrfToken)
                     input(.type(.hidden), .name("courseID"), .value(course.id))
                     button(.class("row-menu-item"), .type(.submit), .role("menuitem")) {

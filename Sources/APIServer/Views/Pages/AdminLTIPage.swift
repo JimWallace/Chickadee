@@ -154,7 +154,7 @@ private struct LTIPlatformRow: HTML {
             td(.class("item-main")) {
                 div(.class("item-title")) { platform.displayName }
                 div(.class("item-details")) {
-                    "\(platform.deploymentCount) deployments · "
+                    "\(platform.deploymentCount) \(platform.deploymentCount == 1 ? "deployment" : "deployments") · "
                     code { platform.issuer }
                     " · client "
                     code { platform.clientID }
