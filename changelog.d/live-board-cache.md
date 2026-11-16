@@ -1,5 +1,0 @@
-### Changed
-
-- **A live board's refresh answers 304 from one query while nothing changes.** A metric board's refresh (`?fragment=body`, and the projector wall's) computes its ETag from one aggregate query over the ranked entries and a shared roster snapshot, and answers 304 before building anything. A refresh that must build reads the students' handles and birds from that snapshot, which every refresh at the same fingerprint shares, instead of loading and decoding every ranked student's rows for each viewer. In the 150-student lecture load test the refresh's p95 fell from 1.6 s to 0.45 s and its p50 from 293 ms to 74 ms (work items W2 to W4 of the live-lecture plan, `docs/live-board-cache.md`).
-- **The board refresh is a hot path.** A `GET /testsetups/:id/leaderboard` answered 304 no longer inserts a `request_metrics` row; `hotPaths` counts every refresh in memory. A built board still records its row.
-- **The projector wall stops refreshing.** Present mode now stops four hours after it was opened, or at the session window's close when that is later.
