@@ -15,6 +15,11 @@ concurrency:
   group: jupyterlite-${{ github.event_name }}-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
+# Least privilege by default (#3067). A job that needs more names it in its
+# own `permissions:`.
+permissions:
+  contents: read
+
 jobs:
   build-and-verify:
     runs-on: ubuntu-latest
@@ -23,6 +28,8 @@ jobs:
       # The default shallow checkout: every guard below reads committed files
       # only, and none reads git history.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       # EVERY step below runs on EVERY event, deliberately.
       #
