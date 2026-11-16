@@ -24,7 +24,6 @@
 #   flake.json          the newest flake-telemetry tally: {tally}, or {} when there is none
 #   dependabot.json     the open Dependabot PRs: [{number, title, url}]
 #   swift-currency-run.json  the newest swift-currency.yml run on main
-#   macos-run.json      the newest macos-build.yml run on main
 #   visual-run.json     the newest scheduled visual-regression.yml run
 #                       (each of the three: [{conclusion, status, createdAt, url}])
 #
@@ -226,7 +225,6 @@ render() {
   local spec c_file c_name c_workflow c_issue c_state c_at c_url
   for spec in \
     "swift-currency-run.json|Swift package currency|swift-currency.yml|dependency-update-failed, key swift-currency" \
-    "macos-run.json|macOS build|macos-build.yml|scheduled-check-failed, key macos-build" \
     "visual-run.json|Visual regression on main|visual-regression.yml|scheduled-check-failed, key visual-main"; do
     IFS='|' read -r c_file c_name c_workflow c_issue <<< "$spec"
     err="$(source_error "$dir/$c_file")"
@@ -316,7 +314,7 @@ self_test() {
     jq -n '{tally: "Week ending 2026-11-02:\n- smoke: 1 red run(s)"}' > "$tmp/d/flake.json"
     echo '[]' > "$tmp/d/dependabot.json"
     local f
-    for f in swift-currency-run macos-run visual-run; do
+    for f in swift-currency-run visual-run; do
       echo "[{\"conclusion\":\"success\",\"status\":\"completed\",\"createdAt\":\"2026-11-04T05:00:00Z\",\"url\":\"https://example.com/$f/1\"}]" > "$tmp/d/$f.json"
     done
   }
@@ -329,7 +327,7 @@ self_test() {
     && grep -q 'ended success: https://example.com/zap/1' <<< "$body" \
     && grep -q '1 open alert(s). None was created this week.' <<< "$body" \
     && grep -q 'The kernels are current' <<< "$body" && grep -q 'smoke: 1 red run' <<< "$body" \
-    && grep -q 'The newest run started 2026-11-04T05:00:00Z and is success: https://example.com/macos-run/1' <<< "$body"; then
+    && grep -q 'The newest run started 2026-11-04T05:00:00Z and is success: https://example.com/visual-run/1' <<< "$body"; then
     pass "a quiet week asks nobody for anything"
   else
     fail "a quiet week asks nobody for anything (count $count)"
@@ -471,9 +469,9 @@ self_test() {
   fi
 
   fixture
-  echo '[{"conclusion":"failure","status":"completed","createdAt":"2026-11-04T05:00:00Z","url":"https://example.com/macos/2"}]' > "$tmp/d/macos-run.json"
+  echo '[{"conclusion":"failure","status":"completed","createdAt":"2026-11-04T05:00:00Z","url":"https://example.com/visual/2"}]' > "$tmp/d/visual-run.json"
   run
-  if [ "$count" = "1" ] && grep -q 'macOS build ended failure: https://example.com/macos/2. Its issue (scheduled-check-failed, key macos-build)' <<< "$body"; then
+  if [ "$count" = "1" ] && grep -q 'Visual regression on main ended failure: https://example.com/visual/2. Its issue (scheduled-check-failed, key visual-main)' <<< "$body"; then
     pass "flags a red weekly check and names its issue"
   else
     fail "flags a red weekly check and names its issue (count $count)"
@@ -482,14 +480,22 @@ self_test() {
   fixture
   echo '[{"conclusion":"success","status":"completed","createdAt":"2026-10-20T05:00:00Z","url":"https://example.com/visual/0"}]' > "$tmp/d/visual-run.json"
   echo '[]' > "$tmp/d/swift-currency-run.json"
-  rm "$tmp/d/macos-run.json"
   run
-  if [ "$count" = "3" ] && grep -q 'newest Visual regression on main run is from 2026-10-20' <<< "$body" \
-    && grep -q 'No Swift package currency run was found' <<< "$body" \
-    && grep -q 'macOS build runs could not be read: macos-run.json is missing' <<< "$body"; then
-    pass "a weekly check that is stale, absent or unreadable asks a person"
+  if [ "$count" = "2" ] && grep -q 'newest Visual regression on main run is from 2026-10-20' <<< "$body" \
+    && grep -q 'No Swift package currency run was found' <<< "$body"; then
+    pass "a weekly check that is stale or absent asks a person"
   else
-    fail "a weekly check that is stale, absent or unreadable asks a person (count $count)"
+    fail "a weekly check that is stale or absent asks a person (count $count)"
+  fi
+
+  fixture
+  rm "$tmp/d/swift-currency-run.json"
+  run
+  if [ "$count" = "1" ] \
+    && grep -q 'Swift package currency runs could not be read: swift-currency-run.json is missing' <<< "$body"; then
+    pass "a weekly check that cannot be read asks a person"
+  else
+    fail "a weekly check that cannot be read asks a person (count $count)"
   fi
 
   fixture

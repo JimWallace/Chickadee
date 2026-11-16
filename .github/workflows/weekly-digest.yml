@@ -14,8 +14,9 @@ name: Weekly digest
 #   * Flake telemetry: the week's tally (flake-telemetry.yml, 06:41).
 #   * Dependabot: the open Dependabot pull requests.
 #   * Weekly checks on main: the newest run of swift-currency.yml (Mondays
-#     07:15), macos-build.yml (Wednesdays) and the scheduled
-#     visual-regression.yml (Thursdays). A red one has its own issue with a
+#     07:15) and the scheduled visual-regression.yml (Thursdays).
+#     macos-build.yml is dispatch-only until a hosted runner has the macOS 27
+#     SDK, so the digest does not list it (see that workflow's header). A red one has its own issue with a
 #     brief; the digest names it.
 #
 # NO MODEL. scripts/weekly-digest-render.sh writes every line from rules
@@ -137,9 +138,6 @@ jobs:
           gh run list --repo "$R" --workflow swift-currency.yml --branch main --limit 1 \
               --json conclusion,status,createdAt,url > digest/swift-currency-run.json 2> err.txt \
             || gap > digest/swift-currency-run.json
-          gh run list --repo "$R" --workflow macos-build.yml --branch main --limit 1 \
-              --json conclusion,status,createdAt,url > digest/macos-run.json 2> err.txt \
-            || gap > digest/macos-run.json
           gh run list --repo "$R" --workflow visual-regression.yml --branch main --event schedule --limit 1 \
               --json conclusion,status,createdAt,url > digest/visual-run.json 2> err.txt \
             || gap > digest/visual-run.json

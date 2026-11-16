@@ -408,16 +408,19 @@ or audit that a session does not run does not happen.
   change affects. Run it with no filter once before a push.
 - After a change to an Elementary view, `Public/styles.css` or a `Public/*.js` file, run `lint-guard` and `test-runner` with the filter `ElementaryPageGuardTests`. Run `ui-review` too.
 - For the state of the whole UI, run `ui-audit`. It applies the usability
-  heuristics in `docs/ui-design.md` across all pages. Run it once a month,
-  when the maintainer asks, and file the report as an issue labelled
-  `ui-audit`.
-- For drift between the docs and the code, run `docs-audit`. Run it once a
-  month, when the maintainer asks, and file the report as an issue labelled
-  `docs-audit`.
-- The recurring jobs that need judgement (failed dependency updates, Swift
-  pin bumps, mutation survivor triage, the performance check, the dead-code
-  review) are scheduled tasks on the maintainer's machine, listed in
-  `Tools/maintenance/README.md`.
+  heuristics in `docs/ui-design.md` across all pages. The nightly steward
+  runs it once a month (`Tools/maintenance/audit-rotation.md`) and files the
+  report as an issue labelled `ui-audit`. Run it also when the maintainer
+  asks.
+- For drift between the docs and the code, run `docs-audit`. The nightly
+  steward runs it once a month and files the report as an issue labelled
+  `docs-audit`. Run it also when the maintainer asks.
+- The recurring jobs that need judgement (failed dependency updates and
+  scheduled checks, Swift pin bumps, mutation survivor triage, the
+  performance check, the dead-code review, the audits) run in one nightly
+  scheduled task on the maintainer's machine, the steward:
+  `Tools/maintenance/nightly.md`. Its pull requests carry the `steward`
+  label and merge themselves when CI is green.
 - Before a commit, run `diff-reviewer` on the uncommitted diff.
 - Before a commit on a change under `Sources/` or to a `Public/*.js` file, run
   `interaction-review`. It checks the change for side effects on other

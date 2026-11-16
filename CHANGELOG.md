@@ -9,6 +9,161 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.951] - 2026-11-15
+
+### Changed
+
+- **`docs/ci-flakiness.md` records Family 9.** The workbench shell e2e on chromium sometimes times out after a save, because the toolbar insert does not take effect. Two scheduled runs on `main` hit it, so it is not caused by a diff. The entry gives the tells and the handling.
+
+
+## [0.5.950] - 2026-11-15
+
+### Changed
+
+- **The nightly coverage run keeps its per-file report.** `test-coverage.yml` uploads `coverage.lcov` as the `coverage-lcov` artifact for 8 days. Before, the run kept only the total, so the nightly steward could not find coverage gaps.
+
+
+## [0.5.949] - 2026-11-14
+
+### Removed
+
+- **Unused `data-runner-id` attribute on the admin runner page.** No script
+  reads it after the runner poller moved onto `table-poll.js` (#3029). A test
+  comment that still named the deleted `account-export.js` now names the
+  account page's polled region.
+
+
+## [0.5.948] - 2026-11-14
+
+### Changed
+
+- **Mutation tests for the kernel import scanners.** A mutation run on `PythonImportScanner` and `RLibraryScanner` found cases where a scanner that lost track of a string or a comment still passed every test. Two new test suites now cover those string, escape and comment rules. No product code changed.
+
+
+## [0.5.947] - 2026-11-14
+
+### Changed
+
+- **Tests for the result-visibility helpers.** A mutation run on the failure-detail mask and the tier filter found eight survivors. Two new suites kill all eight: they check the counts that a tier filter recomputes, which outcomes the mask changes, a headline behind a test label, the fingerprint order and the release gate at the deadline itself. No product code changes.
+
+
+## [0.5.946] - 2026-11-14
+
+### Changed
+
+- **More test coverage for pure logic.** New tests cover the bug hunt problem messages, the `TestItem` envelope and two Core labels, the BrightSpace sync configuration and error descriptions, the Lua and Octave personalization drivers with support files, and edge cases of the Python submission normalizer. No product code changed.
+
+
+## [0.5.945] - 2026-11-14
+
+### Changed
+
+- **Mutation run on the authoring validators and the notebook substitution.** The steward ran the mutation tool on six APIServer files that the weekly sweep does not cover (`IdentifierValidation`, `PatternFamilyValidator`, `PatternFamilyAuthoredGraph`, `NotebookCheckValidator`, `NotebookSubstitution`, `TestScriptVariablePrepender`). Three new test suites, `AuthoredGraphPhaseTests`, `PatternFamilyCrossFamilyValidationTests` and `NotebookSubstitutionCellShapeTests`, kill nine of the ten survivors. The tenth is an equivalent mutant in `NotebookSubstitution`, recorded with its argument in `Tools/mutation/equivalent-mutants.json`.
+
+
+## [0.5.944] - 2026-11-14
+
+### Fixed
+
+- **Guard fixtures run on macOS.** Nineteen guard fixtures called GNU-style `sed` in-place edits, which BSD `sed` on macOS refuses, so `scripts/check-guards.sh` failed on macOS (and one fixture left a stray backup file) while CI on Linux stayed green. `check-guards.sh` now defines `sed_inplace`, which writes to a temporary file and copies the result back, and every fixture uses it with the same defect. The new `scripts/check-fixture-portable-sed.sh` guard, with its own fixture, fails when a fixture calls `sed` in place directly.
+
+
+## [0.5.943] - 2026-11-14
+
+### Fixed
+
+- **`scripts/mutation-run.sh` runs under macOS bash 3.2.** It used `mapfile`, which needs bash 4, so a local shard run failed on macOS. Read loops now fill the two arrays. Empty lines are dropped, and an empty build-argument list no longer trips `set -u`.
+
+
+## [0.5.942] - 2026-11-14
+
+### Changed
+
+- **Two more pages refresh through the shared poller.** The account page's data-export state and the live header of the admin runner page are regions that `table-poll.js` refreshes from a server fragment. The two private pollers are gone. The export poll now stops while the tab is hidden and lets an idle session expire. The runner page now also refreshes its status counts and facts. `scripts/check-ui-vocabulary.sh` fails on a new private poller in `Public/*.js` (#3007).
+
+
+## [0.5.941] - 2026-11-14
+
+### Changed
+
+- **Tests for six pure-logic helpers.** New suites cover the submission output formatter, the legacy achievement kinds, the LEARN failure sentences, the kernel import guard, the non-Python solution extractor and the edge cases of the test-script variable prepender. These were the largest uncovered blocks of pure logic in the nightly coverage report. No product code changes.
+
+
+## [0.5.940] - 2026-11-14
+
+### Changed
+
+- **CI builds each release image once.** `docker-build.yml` no longer builds the push to `main` of a `chore(release):` commit. The tag build of the same commit pushes the same `:latest` and `:sha-` tags, so the second build cost about 29 runner minutes per release and held up the next merge's image build.
+
+
+## [0.5.939] - 2026-11-14
+
+### Changed
+
+- **npm lockfiles move to the newest versions that their ranges permit.** The root lockfile (eslint tooling) and `Tools/vendor` move within their declared ranges, and take only releases at least 3 days old, as the cooldown in `.github/dependabot.yml` does. `@emscripten-forge/untarjs` goes from 5.3.3 to 5.4.1, and `Public/vendor` is rebuilt with `scripts/setup-vendor.sh`. No range in a `package.json` changes.
+
+
+## [0.5.938] - 2026-11-13
+
+### Fixed
+
+- **No wardrobe item without its toast during a retest.** The result page grants a wardrobe item only when the submission does not await a result. It now uses `SubmissionStatus.awaitsResult`, the same test as the page, so a `.running` retest no longer grants an item that never shows a toast (#3018 review).
+
+### Changed
+
+- **Admin course page state words.** The assignment state badge reads "open", "staff only" and "closed" in lower case, as the dashboard does. Before #3018 it read "Open", "Preview" and "Closed". The three badge branches are now one span.
+- **One result-page URL.** The result page and its state poll response build the "View results" link from one helper. The docs say that the poller skip of identical markup is best-effort, and that `.due-relative` modifies `DueDate`.
+
+
+## [0.5.937] - 2026-11-13
+
+### Security
+
+- **Section delete in the suite editor checks the form target.** The delete button's `data-action` must resolve to a same-origin path before it becomes a form target. The check is now one shared helper, `ChickadeeUI.sameOriginURL`, used by the suite editor and the assignments page. This closes CodeQL alert 24 (js/xss-through-dom).
+
+
+## [0.5.936] - 2026-11-13
+
+### Added
+
+- **Design note: custom wardrobe items.** `docs/custom-wardrobe-items.md` proposes letting course instructors compose their own rings, backdrops, faces and wearables from site templates and a checked palette, granted by their course's achievements. Docs only.
+
+
+## [0.5.935] - 2026-11-13
+
+### Changed
+
+- **One nightly steward replaces the separate maintenance tasks.** A single scheduled task on the maintainer's machine starts at 23:30 America/Toronto and follows `Tools/maintenance/nightly.md`: production health first, then its own open pull requests, then the jobs due that night, then fill work (audit findings, maintenance issues, deeper sweeps, and improvements to the nightly tests and to itself) until 04:00, and a `Steward night report` issue each morning. Its pull requests carry the `steward` label and auto-merge on green, except a change to its own rules. The dead-code review and the audit rotation move into the repository (`dead-code-review.md`, `audit-rotation.md`), and the new `scheduled-checks.md` triages red scheduled CI runs, CodeQL alerts and ZAP findings.
+
+### Fixed
+
+- **UI audit follow-ups (#3014, #3007).** The Overview now always consumes its one-shot session notice, so it does not show again on a later visit. The error page gives no "Go back" link for a referer path that starts with `//` or holds a backslash. A due date shows its absolute time once, with the relative reading seeded empty as in the audit log. The result page's final state has a plain "View results" link in case the reload does not happen. A polled region that already shows the same markup is not rewritten, so a screen reader does not announce an unchanged state again. The result page and its poller share one definition of "waiting", so a page first loaded while grading runs also polls. The dashboard and the admin course page use the assignment state display words.
+
+
+## [0.5.934] - 2026-11-13
+
+### Changed
+
+- **Mutation survivors from the 2026-11-13 sweep triaged (#3015).** All 15 survivors of the first complete twelve-shard run are now killed by new tests in `Tests/CoreTests`, where the sweep can see them. The tests pin the five rules each assignment type carries, that any one dataset capability selects, that a partition or stratum setting is refused on either of its two terms, the dataset description version boundary, empty containers with inner whitespace in the JSON re-indenter, and the type and system tie-breaks in the FHIR code order. No production code changed.
+
+
+## [0.5.933] - 2026-11-13
+
+### Changed
+
+- **macOS build is dispatch-only for now.** No GitHub-hosted image has the macOS 27 SDK that `Package.swift` requires, so the weekly `macos-build.yml` run could only fail. Its schedule and its weekly-digest row are removed until such an image exists; the workflow header says how to restore both.
+
+
+## [0.5.932] - 2026-11-13
+
+### Fixed
+
+- **The performance bench kit runs on macOS.** `Tools/perf-bench/run-load.sh`
+  read the server's CPU time from `/proc`, which macOS does not have, so the
+  weekly check stopped after the page measurements. It now falls back to `ps`
+  where `/proc` is missing.
+
+
 ## [0.5.931] - 2026-11-13
 
 ### Added

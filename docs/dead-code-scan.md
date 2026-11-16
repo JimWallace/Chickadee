@@ -4,8 +4,9 @@
 lists the Swift declarations that nothing uses. The job is a report. No result
 fails it.
 
-The weekly dead-code review reads the report. That review is a Claude Code
-scheduled task on the maintainer's machine. CI runs no model (root
+The weekly dead-code review reads the report. That review runs on Sunday
+nights in the nightly steward, a Claude Code scheduled task on the
+maintainer's machine (`Tools/maintenance/dead-code-review.md`). CI runs no model (root
 `CLAUDE.md`, "Subagents and Hooks"), so the review does not run in CI.
 
 ## What the job does
@@ -71,8 +72,9 @@ targets left out. A result in that file that is not in `results.json` is used
 only by tests.
 
 Removing such code means editing tests, which needs the maintainer's approval.
-So the weekly review does not touch it. The `monthly-audit-rotation` scheduled
-task does, on its third Saturday of the month. It sorts the list into test
+So the weekly review does not touch it. The audit rotation
+(`Tools/maintenance/audit-rotation.md`) does, on the third Saturday night of
+the month. It sorts the list into test
 seams to keep and code to remove. Then it files the list as one issue labelled
 `dead-code` for the maintainer.
 

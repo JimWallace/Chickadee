@@ -1,9 +1,11 @@
 // APIServer/Views/DueDate.swift
 //
 // The one rendering of a student's due date (docs/ui-design.md §"Timestamps",
-// "Due dates"; UI audit #3007, finding 10): the word "Due", the relative
-// reading ("in 3 days"), then the absolute time. The relative span is seeded
-// with the absolute text as its no-JS fallback.
+// "Due dates"; UI audit #3007, finding 10): the word "Due", the absolute time,
+// then the relative reading ("in 3 days"). The absolute text is the no-JS
+// fallback, so the relative span is seeded empty, as in the audit log. Its
+// "·" separator comes from CSS (`.due-relative:not(:empty)::before`), so a
+// page without JS shows the date once and no stray separator.
 
 import Elementary
 
@@ -16,9 +18,11 @@ struct DueDate: HTML {
     var note: String?
 
     var body: some HTML {
-        "Due "
-        span(.class("js-relative-time"), .data("iso", value: iso)) { text }
-        " · \(text)"
+        "Due \(text)"
+        if !iso.isEmpty {
+            " "
+            span(.class("due-relative js-relative-time"), .data("iso", value: iso)) {}
+        }
         if let note {
             " "
             span(.class("card-meta")) { note }

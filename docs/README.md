@@ -91,7 +91,8 @@ not exist.
 ## Achievements and avatars
 
 - [achievements-unification.md](achievements-unification.md) — one achievements model, endpoint and editor; phases A to C shipped, phase D not finished
-- [achievement-rewards.md](achievement-rewards.md) — partly shipped (S1, S3 to S5): achievements at the assignment, course and site levels, one award ledger, and a wardrobe item as a reward
+- [achievement-rewards.md](achievement-rewards.md) — partly shipped (S1 to S5): achievements at the assignment, course and site levels, one award ledger, and a wardrobe item as a reward
+- [custom-wardrobe-items.md](custom-wardrobe-items.md) — proposed: instructors compose their own rings, backdrops, faces and wearables from site templates and a checked palette, granted by their course's achievements
 - [result-celebration.md](result-celebration.md) — the result-page celebration: the 100% moment, the bird, and the Earned toast
 - [student-avatars.md](student-avatars.md) — generated avatars and the per-course pseudonymous handle
 - [avatar-species.md](avatar-species.md) — eleven avatar species on one shared skeleton, the colourway decides the species, the trait weights, the prototype findings; opens with a Status table
@@ -129,7 +130,7 @@ not exist.
 - [mutation-trend.md](mutation-trend.md) — how to read a series of mutation runs
 - [mutation-triage.md](mutation-triage.md) — the protocol that turns mutation survivors into tests
 - [dead-code-scan.md](dead-code-scan.md) — the weekly Periphery Pro scan: reading its report, results that are not dead code, updating the tool and the token
-- [../Tools/maintenance/README.md](../Tools/maintenance/README.md) — the scheduled maintenance tasks on the maintainer's machine: what each does, when it runs, and the one-line prompt that points at its procedure
+- [../Tools/maintenance/README.md](../Tools/maintenance/README.md) — the nightly steward, the one scheduled maintenance task on the maintainer's machine: its jobs, its rules and how to set it up; [nightly.md](../Tools/maintenance/nightly.md) is the order of work and the calendar
 
 ## History
 

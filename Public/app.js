@@ -128,6 +128,20 @@ document.querySelectorAll('.js-submission-state').forEach((region) => {
     });
 });
 
+// Account page: reload once the personal-data export has finished.
+//
+// The same shape as the results page above. The export's state is a region
+// `table-poll.js` refreshes from `/account/export/status?fragment=state`.
+// When it reports a finished export it carries `data-export-final`, and the
+// download button (or the failure notice) is part of the page, so the page
+// loads again. `replace` drops the `?exportNotice=` query, so the "being
+// prepared" banner does not come back with it.
+document.querySelectorAll('.js-export-state').forEach((region) => {
+    region.addEventListener('chickadee:table-repaint', () => {
+        if (region.querySelector('[data-export-final]')) window.location.replace('/account');
+    });
+});
+
 // ── Destructive-action confirmation ────────────────────────────────────────
 // One seam for "are you sure?" (UI audit S5). A form or control declares the
 // question in markup:

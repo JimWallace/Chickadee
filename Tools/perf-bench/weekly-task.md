@@ -14,7 +14,8 @@ A green merge to `main` deploys to production in 10 to 15 minutes
 (CLAUDE.md, "Deployment & CI/CD"). So every merge this task makes is a
 production change, and the rules below are what make that safe.
 
-Run on Mondays, before the weekly digest (15:13 UTC).
+The nightly steward (`Tools/maintenance/nightly.md`) runs it first on
+Sunday nights, alone, before the Monday weekly digest (15:13 UTC).
 
 ## Rules
 
@@ -23,6 +24,9 @@ Run on Mondays, before the weekly digest (15:13 UTC).
   anything in this folder against production. A production setting that
   should change (runner `--max-jobs`, a Postgres setting) is a recommendation
   in the log, never an action.
+- **Label every pull request `steward`.** The nightly steward finds its own
+  open work by that label (`Tools/maintenance/README.md`). This file keeps
+  its own branch names (`perf-log/...` and one branch per fix).
 - **Merge only your own green pull requests.** Every change goes in a pull
   request from its own branch, opened by this run. Merge it (squash) only
   when every check on its current head has passed: no failed, cancelled or

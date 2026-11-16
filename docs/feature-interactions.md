@@ -1207,6 +1207,65 @@ coordination, and each must see every edit.
   - A browser result is authoritative, and a student can forge it
     (`docs/grading-integrity.md`). A feature that trusts a value in a result
     has the same risk.
+- **The result page's count tiles are not these counts.** `ResultCountTiles`
+  (`Routes/Web/SubmissionResultPresenter.swift`) puts each outcome in exactly one tile.
+  A test that the dependency gate skipped counts once, as Skipped, and not
+  also as Failed. The collection's `failCount` still counts it as a fail,
+  and the API and MCP report the collection's counts. The difference is
+  intended (UI audit #3007, finding 2). Do not "fix" one to match the other.
+  A collection with no outcomes keeps its own counts on the tiles.
+
+### Submission state words and "waiting": `SubmissionStatus.displayLabel`, `awaitsResult`
+
+- **Defined in:** `Utilities/SubmissionStatus+Display.swift`, next to the
+  enum's other `APIServer` code.
+- **Readers:**
+  - The result page. `SubmissionResultPresenter` sets `isPending` from
+    `awaitsResult`, which decides the pending band and the poll.
+  - The state poller. `SubmissionStateRegion` renders the band inline and as
+    the `?fragment=state` response that `Public/table-poll.js` swaps in; a
+    state that does not await a result renders the final marker that
+    `Public/app.js` answers with a reload.
+  - Both history tables (`SubmissionHistoryPage`,
+    `StudentAssignmentHistoryPage`), through `displayLabel(forRaw:)`.
+  - The wardrobe grant in `WebRoutes+Submission`. It grants no item while
+    the submission awaits a result, because the page shows no Earned toast
+    then, and an item granted with no toast never gets one. The page and the
+    grant must agree.
+- **Rules:**
+  - `awaitsResult` is the only "waiting" test. Do not test
+    `status == .pending` by hand on a page or before a grant. If the page
+    and the poller disagree, a page can poll forever or never poll. If the
+    page and the grant disagree, an item is granted with no toast.
+  - The re-queue guard in `flipSubmissionToPending`
+    (`RunnerValidationService`) is not a "waiting" test. It asks whether the
+    queue already holds the row (`.pending`, `.assigned`), and the server
+    never writes `.running`.
+  - A new `SubmissionStatus` case needs a `displayLabel` and an
+    `awaitsResult` answer. Student words name no "runner" or "worker".
+- **Trap:** the page once treated only `.pending` and `.assigned` as
+  waiting, while the poller also waited on `.running`. A page first loaded
+  in `.running` showed empty results and did not poll. After that fix, the
+  wardrobe grant still tested `.pending` and `.assigned` by hand, so a
+  `.running` retest granted an item with no toast (#3018 review).
+
+### Data export state on the account page: `AccountExportStateRegion`
+
+- **Defined in:** `Views/Pages/AccountPage.swift`.
+- **Writers:** `APIDataExport.status`, set by the export task and by
+  `DataExportRecoveryService`, which moves a stuck `pending` row to `failed`.
+- **Readers:**
+  - The account page renders the region while the row is `pending`.
+  - `GET /account/export/status?fragment=state` renders it for
+    `Public/table-poll.js`. Any state that is not `pending` renders the
+    `data-export-final` marker.
+  - `Public/app.js` reloads `/account` when the marker appears.
+- **Rules:**
+  - The page and the fragment must agree on "pending". If the fragment
+    called a state pending that the page does not, the page would poll
+    forever. The recovery sweep exists so that no row stays `pending`.
+  - The plain JSON from `/account/export/status` is unchanged for any other
+    request (#3007).
 
 ### Browser and native grades differ: `gradeSourceDisagreement`
 
@@ -1406,6 +1465,20 @@ coordination, and each must see every edit.
 - **Trap:** MCP `delete_support_file` ran the delete steps by hand and
   skipped the `dependsOn` check that the web delete ran (#2771). Both doors
   now call `deleteFileFromSetup` (`Services/SetupFileDeletion.swift`).
+
+### The Overview notice: `Request.setOverviewNotice`, `takeOverviewNotice`
+
+- **Writers:** "Create & Validate" (`DraftAssignmentRoutes+NewAssignment.swift`)
+  and "Save & Validate" (`PublishedAssignmentRoutes+SaveEdit.swift`). Each
+  leaves a one-shot notice in the session before it redirects to
+  `/instructor` (`Helpers/Request+OverviewNotice.swift`).
+- **Readers:** the Overview (`InstructorDashboardRoutes`), once.
+- **Rules:**
+  - The Overview always takes the session notice, then prefers a
+    `?notice=` query value when one is present. If the read is skipped, the
+    notice stays in the session and shows on a later, unrelated visit.
+  - The redirect location stays `/instructor`. Many tests pin it.
+- **Test:** `OverviewNoticeConsumptionTests`.
 
 ### Authoring checks: `AuthoringCheckCatalog`, `AuthoringFinding`
 

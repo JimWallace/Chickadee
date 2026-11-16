@@ -17,7 +17,7 @@ Follow the rules in `Tools/maintenance/README.md`.
         reachable input tells the two versions apart (a label is not an
         argument);
       - if it shows a real bug, fix the bug minimally and add a test.
-3. Branch `claude/mutation-survivors-<sweep date>` from `origin/main`. Add a
+3. Branch `steward/mutation-survivors-<sweep date>` from `origin/main`. Add a
    changelog fragment, run `scripts/format.sh` and
    `scripts/format-lint.sh`, and run the new suites.
 4. Open a pull request with a table: survivor, then "killed by <test>",

@@ -51,10 +51,14 @@ struct SubmissionPage: HTML {
                 if result.isPending {
                     div(
                         .class("pending-box js-submission-state"), .role("status"),
-                        .data("poll-url", value: "/submissions/\(result.submissionID)?fragment=state"),
+                        .data(
+                            "poll-url",
+                            value: SubmissionStateRegion.resultsURL(forSubmission: result.submissionID)
+                                + "?fragment=state"),
                         .data("poll-swap", value: "region"), .data("poll-interval", value: "2000")
                     ) {
-                        SubmissionStateRegion(status: SubmissionStatus(rawValue: result.status))
+                        SubmissionStateRegion(
+                            status: SubmissionStatus(rawValue: result.status), submissionID: result.submissionID)
                     }
                 } else {
                     results
@@ -493,15 +497,41 @@ private struct SubmissionOutcomeRows: HTML {
 /// spinner. Rendered inline and as the `?fragment=state` poll response, so
 /// the refresh cannot drift from the page. A final state carries
 /// `data-submission-final`, which `app.js` answers by reloading the page.
+/// When the reload does not happen (JS stopped, the reload failed), the final
+/// state also carries a plain link to the results.
 struct SubmissionStateRegion: HTML {
     let status: SubmissionStatus?
+    /// The result page, for the final state's fallback link; nil omits it.
+    var resultsURL: String?
+
+    init(status: SubmissionStatus?, resultsURL: String? = nil) {
+        self.status = status
+        self.resultsURL = resultsURL
+    }
+
+    /// The region for one submission, linking to its result page. The page
+    /// and the `?fragment=state` poll response both build it this way, so
+    /// the fallback link cannot drift between them.
+    init(status: SubmissionStatus?, submissionID: String) {
+        self.init(status: status, resultsURL: Self.resultsURL(forSubmission: submissionID))
+    }
+
+    /// The result page of one submission.
+    static func resultsURL(forSubmission submissionID: String) -> String {
+        "/submissions/\(submissionID)"
+    }
 
     var body: some HTML {
         if let status, status.awaitsResult {
             div(.class("spinner")) {}
             p { status.displayLabel }
         } else {
-            p(.data("submission-final", value: "true")) { "Loading results" }
+            p(.data("submission-final", value: "true")) {
+                "Loading results. "
+                if let resultsURL {
+                    a(.href(resultsURL)) { "View results" }
+                }
+            }
         }
     }
 }

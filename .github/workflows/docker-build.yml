@@ -46,6 +46,20 @@ jobs:
   # same tree skip the compile on an exact cache hit.  Debug-for-tests and
   # release-for-ship stay two separate caches; tests are never built in release.
   build-release:
+    # Skip the push to main of a release commit. auto-release.yml pushes that
+    # commit and its `v*` tag together, with the same token, so the tag build
+    # always runs for the same commit. It pushes the same `:latest` and
+    # `:sha-<commit>` tags (the deployer pulls `:sha-` of the release commit),
+    # plus the version tag and the debug symbols. The main build of the same
+    # commit was a second cold build of about 29 runner minutes per release,
+    # and it held the main concurrency group, so the next merge waited for it.
+    # With no tag (the GITHUB_TOKEN fallback), the release commit push starts
+    # no workflow either, so this skips nothing that would run.
+    # build-and-push needs this job, so it skips too.
+    if: >-
+      ${{ !(github.event_name == 'push'
+            && github.ref == 'refs/heads/main'
+            && startsWith(github.event.head_commit.message, 'chore(release):')) }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     container:
@@ -82,9 +96,9 @@ jobs:
       # on a PR ref is readable only by that PR, so a PR save served nothing
       # but its own re-runs, and each one (~0.66 GB) pushed other entries out
       # of the repository's 10 GB cache budget (docs/ci-flakiness.md, Family
-      # 8). Pushes to main and tags save it. The tag build hits only when the
-      # run for the release commit on main has already saved; the two runs
-      # start together, so the tag build usually builds cold, as it did before.
+      # 8). Pushes to main and tags save it. The release commit itself is
+      # built only by its tag build (see the `if` on this job), and it changes
+      # Sources/Core/ChickadeeVersion.swift, so that build is cold.
       # The cost on a PR: a re-run rebuilds cold unless main saved this tree.
       - name: Restore release build artifacts
         id: build-cache

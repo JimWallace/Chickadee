@@ -1,6 +1,6 @@
 name: macOS build
 
-# Proves once a week that the package still builds on macOS, and runs the
+# Proves that the package still builds on macOS, and runs the
 # DB-free tests there. Chickadee targets macOS and Linux, but every other
 # workflow runs on Ubuntu, so a macOS-only break (a Darwin API, a Foundation
 # difference, the `sandbox-exec` path of SandboxedScriptRunner) would reach
@@ -45,10 +45,13 @@ name: macOS build
 # digest lists the newest run.
 
 on:
-  schedule:
-    # Wednesdays at 04:47 UTC: away from the Monday cluster of weekly reports
-    # and from the Tuesday mutation sweep.
-    - cron: "47 4 * * 3"
+  # NO SCHEDULE YET. The weekly run is paused until a GitHub-hosted image has
+  # the macOS 27 SDK (see "KNOWN RED" above): a run that can only fail every
+  # week is noise, not a signal. Dispatch it by hand to check whether an image
+  # has arrived. When one has, point runs-on at it, restore the schedule
+  # (Wednesdays at 04:47 UTC, away from the Monday reports and the Tuesday
+  # mutation sweep), and add the macOS row back to the weekly digest
+  # (scripts/weekly-digest-render.sh and weekly-digest.yml).
   workflow_dispatch:
 
 concurrency:

@@ -6,5 +6,5 @@ files="Tools/jupyterlite/overrides.json"
 description="a settings override changed at its source but not vendored into the bundle"
 expect="Run scripts/vendor-chickadee-extension.sh"
 apply() {
-    sed -i 's|"theme": "Chickadee"|"theme": "JupyterLab Light"|' Tools/jupyterlite/overrides.json
+    sed_inplace 's|"theme": "Chickadee"|"theme": "JupyterLab Light"|' Tools/jupyterlite/overrides.json
 }

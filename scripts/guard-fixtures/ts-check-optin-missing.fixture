@@ -5,5 +5,5 @@ files="Public/sparkline.js"
 description="a Public/*.js file without its // @ts-check line"
 expect="does not opt in to type checking"
 apply() {
-    sed -i '1d' Public/sparkline.js
+    sed_inplace '1d' Public/sparkline.js
 }

@@ -4,6 +4,7 @@
 // or one course with its settings, clone and staff forms, its facts, its
 // assignments and its enrolled people.
 
+import Core
 import Elementary
 
 struct AdminCoursePage: HTML {
@@ -343,10 +344,14 @@ private struct AdminCourseAssignmentItem: HTML {
                 }
             }
             td(.class("item-status")) {
-                switch assignment.visibility {
-                case "open": span(.class("tier tier-open")) { "Open" }
-                case "preview": span(.class("tier tier-preview")) { "Preview" }
-                default: span(.class("tier tier-closed")) { "Closed" }
+                let tierClass =
+                    switch assignment.visibility {
+                    case "open": "tier-open"
+                    case "preview": "tier-preview"
+                    default: "tier-closed"
+                    }
+                span(.class("tier \(tierClass)")) {
+                    AssignmentVisibility.displayLabel(forRaw: assignment.visibility)
                 }
             }
         }

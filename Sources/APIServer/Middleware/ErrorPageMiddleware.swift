@@ -104,14 +104,26 @@ func errorPageTitle(for status: HTTPStatus) -> String {
 
 /// The referring page's path when it is on this server, for the error page's
 /// "Go back" link; nil for no referer, another origin or the failing page.
+///
+/// The path must start with exactly one `/` and hold no backslash. A path
+/// such as `//evil.example` would make the href protocol-relative, and a
+/// browser reads `/\evil.example` the same way, so either one gets no link.
 func sameOriginReferer(of request: Request) -> String? {
     guard let referer = request.headers.first(name: .referer),
         let url = URL(string: referer), let host = url.host,
         let requestHost = request.headers.first(name: .host)
     else { return nil }
     let origin = url.port.map { "\(host):\($0)" } ?? host
-    guard origin == requestHost, !url.path.isEmpty, url.path != request.url.path else { return nil }
-    return url.query.map { "\(url.path)?\($0)" } ?? url.path
+    let path = url.path
+    guard origin == requestHost, isSafeLocalPath(path), path != request.url.path else { return nil }
+    return url.query.map { "\(path)?\($0)" } ?? path
+}
+
+/// True when `path` is a plain server-relative path: one leading `/`, then
+/// neither a second `/` nor a backslash anywhere.
+func isSafeLocalPath(_ path: String) -> Bool {
+    guard path.hasPrefix("/"), !path.contains("\\") else { return false }
+    return !path.dropFirst().hasPrefix("/")
 }
 
 /// Returns a humane user-facing message for an HTTP error.  When the caller

@@ -51,9 +51,10 @@ Monday, so it lands in the same week as the weekly digest
 
 ### Step 1: the production snapshot
 
-This runs as a Claude Code scheduled task on the maintainer's work machine,
-with the `Chickadee_Admin` MCP connected, as the weekly dead-code review does
-(`docs/dead-code-scan.md`). It is not set up yet. The task:
+This runs first on Sunday nights in the nightly steward, a Claude Code
+scheduled task on the maintainer's work machine with the `Chickadee_Admin`
+MCP connected (`Tools/maintenance/nightly.md`). The procedure is
+`Tools/perf-bench/weekly-task.md`. The task:
 
 1. Calls the tools in the table below, read-only.
 2. Appends one dated section to `docs/perf-log.md` on a branch, with the
