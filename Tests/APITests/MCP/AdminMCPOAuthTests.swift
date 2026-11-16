@@ -169,6 +169,113 @@ import VaporTesting
         }
     }
 
+    /// POSTs the consent screen's switch-account form in `cookie`'s session.
+    private func switchAccount(
+        _ app: Application, cookie: String, returnTo: String, csrf: String?
+    ) async throws -> TestResponse {
+        try await app.asyncSendRequest(
+            .POST, MCPOAuthRoutes.switchAccountPath,
+            beforeRequest: { req in
+                req.headers.add(name: .cookie, value: cookie)
+                var fields = ["return_to": returnTo]
+                if let csrf { fields["_csrf"] = csrf }
+                try req.content.encode(fields, as: .urlEncodedForm)
+            })
+    }
+
+    @Test func instructorSwitchesToAdminAndReturnsToTheSameConsent() async throws {
+        // One person, two accounts: the browser is signed in as the instructor,
+        // so the admin consent refuses. "Use a different account" signs the
+        // browser out and brings the admin back to this same authorize request.
+        let app = try await makeApp()
+        try await withApp(app) { app in
+            try await seedClient(app)
+            _ = try await loginUser(
+                username: "the-admin", password: "testpassword", role: "admin", on: app)
+            let cookie = try await loginUser(
+                username: "prof", password: "testpassword", role: "instructor", on: app)
+            let path = authorizePath(scope: "diagnostics:read", resource: adminResource)
+
+            var csrf = ""
+            try await app.asyncTest(
+                .GET, path,
+                beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
+                afterResponse: { res in
+                    let body = res.body.string
+                    #expect(body.contains("Signed in as <strong>prof</strong>"))
+                    #expect(body.contains("action=\"\(MCPOAuthRoutes.switchAccountPath)\""))
+                    csrf = extractCSRFToken(from: body)
+                })
+            #expect(!csrf.isEmpty)
+
+            let switched = try await switchAccount(app, cookie: cookie, returnTo: path, csrf: csrf)
+            #expect(switched.status == .seeOther)
+            #expect(switched.headers.first(name: .location) == "/login")
+            #expect(switched.headers[.setCookie].contains { $0.hasPrefix("\(reauthMarkerCookieName)=") })
+
+            // The browser is signed out: the consent screen now bounces to /login.
+            try await app.asyncTest(
+                .GET, path,
+                beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
+                afterResponse: { res in #expect(res.headers.first(name: .location) == "/login") })
+
+            // Signing in as the admin in that same browser session returns to
+            // the queued authorize request, which now offers Authorize.
+            let (loginToken, loginCookie) = try await csrfFields(for: "/login", cookie: cookie, on: app)
+            var adminCookie = loginCookie
+            try await app.asyncTest(
+                .POST, "/login",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: loginCookie)
+                    try req.content.encode(
+                        ["username": "the-admin", "password": "testpassword", "_csrf": loginToken],
+                        as: .urlEncodedForm)
+                },
+                afterResponse: { res in
+                    #expect(res.headers.first(name: .location) == path)
+                    if let c = res.headers.first(name: .setCookie) { adminCookie = c }
+                })
+            try await app.asyncTest(
+                .GET, path,
+                beforeRequest: { req in req.headers.add(name: .cookie, value: adminCookie) },
+                afterResponse: { res in
+                    let body = res.body.string
+                    #expect(body.contains("value=\"authorize\""))
+                    #expect(body.contains("Signed in as <strong>the-admin</strong>"))
+                })
+        }
+    }
+
+    @Test func switchAccountRefusesAReturnPathOutsideAuthorize() async throws {
+        // The form cannot become an open redirect or a sign-out to any page.
+        let app = try await makeApp()
+        try await withApp(app) { app in
+            try await seedClient(app)
+            let cookie = try await loginUser(
+                username: "prof", password: "testpassword", role: "instructor", on: app)
+            let (csrf, _) = try await csrfFields(
+                for: authorizePath(scope: "diagnostics:read", resource: adminResource),
+                cookie: cookie, on: app)
+            for bad in ["https://evil.example/oauth/authorize?x=1", "//evil.example/", "/admin"] {
+                let res = try await switchAccount(app, cookie: cookie, returnTo: bad, csrf: csrf)
+                #expect(res.status == .badRequest, "return_to \(bad)")
+            }
+        }
+    }
+
+    @Test func switchAccountRequiresTheCSRFToken() async throws {
+        let app = try await makeApp()
+        try await withApp(app) { app in
+            try await seedClient(app)
+            let cookie = try await loginUser(
+                username: "prof", password: "testpassword", role: "instructor", on: app)
+            let res = try await switchAccount(
+                app, cookie: cookie,
+                returnTo: authorizePath(scope: "diagnostics:read", resource: adminResource), csrf: nil)
+            #expect(res.status == .forbidden)
+        }
+    }
+
     @Test func adminTokenIsRejectedByContentMcp() async throws {
         // Cross-surface isolation: an admin-audience token must not authenticate
         // against the content /mcp endpoint.

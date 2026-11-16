@@ -1876,6 +1876,14 @@ body:has(.notebook-header .nb-title-block) .nav {
     text-align: center;
 }
 
+/* A POST action inside the footer line (the consent screen's account switch):
+   a button, so it needs the link colour an <a> gets for free. */
+.auth-alt .btn-link {
+    color: var(--blue);
+    font-size: inherit;
+    text-decoration: underline;
+}
+
 /* ── Nav username + logout button ────────────────────── */
 
 /* Applied alongside .nav-link on the account-menu toggle; color intentionally
