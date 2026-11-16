@@ -4,7 +4,7 @@
   "description": "Dev tooling for Chickadee's first-party frontend JS (ESLint, tsc --noEmit). The app itself has no npm build step; Public/*.js is served as-is.",
   "devDependencies": {
     "@eslint/js": "^10.0.1",
-    "eslint": "^10.14.0",
+    "eslint": "^10.15.0",
     "typescript": "^7.0.2"
   },
   "overrides": {
