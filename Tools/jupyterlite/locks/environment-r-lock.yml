@@ -1,0 +1,740 @@
+{
+ "version": 1,
+ "metadata": {
+  "content_hash": {
+   "emscripten-wasm32": "d90fa6f58a0d216a62421b004578152f8c675043e5db20cd17e93a796e8fe626"
+  },
+  "channels": [
+   {
+    "url": "https://repo.prefix.dev/emscripten-forge-4x",
+    "used_env_vars": []
+   },
+   {
+    "url": "https://repo.prefix.dev/conda-forge",
+    "used_env_vars": []
+   }
+  ],
+  "platforms": [
+   "emscripten-wasm32"
+  ],
+  "sources": [
+   "Tools/jupyterlite/environment-r.yml"
+  ]
+ },
+ "package": [
+  {
+   "name": "emscripten-abi",
+   "version": "4.0.9",
+   "manager": "conda",
+   "platform": "emscripten-wasm32",
+   "dependencies": {},
+   "url": "https://repo.prefix.dev/emscripten-forge-4x/noarch/emscripten-abi-4.0.9-h267e887_9.tar.bz2",
+   "hash": {
+    "md5": "25efc842dad2785871310cfa3499ca33",
+    "sha256": "0dd4620a5b4f2ec7d492b4162afd609eda221ef066bac3e7fe9210ae27a37318"
+   },
+   "category": "main",
+   "optional": false
+  },
+  {
+   "name": "font-ttf-dejavu",
+   "version": "2.37",
+   "manager": "conda",
+   "platform": "emscripten-wasm32",
+   "dependencies": {},
+   "url": "https://repo.prefix.dev/conda-forge/noarch/font-ttf-dejavu-2.37-hd8ed1ab_1.tar.bz2",
+   "hash": {
+    "md5": "4ecf455d267726fb1e27b1e1365337e8",
+    "sha256": "d4f939d9559104e07de895eec70df7e6a891ec135412a7cd2083242eb4fc4d11"
+   },
+   "category": "main",
+   "optional": false
+  },
+  {
+   "name": "font-ttf-dejavu-sans-mono",
+   "version": "2.37",
+   "manager": "conda",
+   "platform": "emscripten-wasm32",
+   "dependencies": {},
+   "url": "https://repo.prefix.dev/conda-forge/noarch/font-ttf-dejavu-sans-mono-2.37-hab24e00_0.tar.bz2",
+   "hash": {
+    "md5": "0c96522c6bdaed4b1566d11387caaf45",
+    "sha256": "58d7f40d2940dd0a8aa28651239adbf5613254df0f75789919c4e6762054403b"
+   },
+   "category": "main",
+   "optional": false
+  },
+  {
+   "name": "nlohmann_json-abi",
+   "version": "3.12.0",
+   "manager": "conda",
+   "platform": "emscripten-wasm32",
+   "dependencies": {},
+   "url": "https://repo.prefix.dev/conda-forge/noarch/nlohmann_json-abi-3.12.0-h0f90c79_2.conda",
+   "hash": {
+    "md5": "849b8852621992c3f3a1901c939a0399",
+    "sha256": "30d271dd63391e053aa3c393c5d93fb622dec5d50a64107171ee28242660608e"
+   },
+   "category": "main",
+   "optional": false
+  },
+  {
+   "name": "r-assertthat",
+   "version": "0.2.1",
+   "manager": "conda",
+   "platform": "emscripten-wasm32",
+   "dependencies": {},
+   "url": "https://repo.prefix.dev/conda-forge/noarch/r-assertthat-0.2.1-r45hc72bb7e_6.conda",
+   "hash": {
+    "md5": "b5291c60f52b43108a2973ba6f5885d1",
+    "sha256": "90e7ae8aa427274d7d2e510060b68925e60e897ecaa5ea135bb33afa7eb12134"
+   },
+   "category": "main",
+   "optional": false
+  },
+  {
+   "name": "r-base",
+   "version": "4.5.3",
+   "manager": "conda",
+   "platform": "emscripten-wasm32",
+   "dependencies": {},
+   "url": "https://repo.prefix.dev/emscripten-forge-4x/emscripten-wasm32/r-base-4.5.3-h1590c74_9.tar.bz2",
+   "hash": {
+    "md5": "efb05dfad3647e3fe8c3740e6da8f274",
+    "sha256": "8f028ddb6b99e904cdcce6eff2527fe7a7d6823170adcedc2f2f2df0db2831ac"
+   },
+   "category": "main",
+   "optional": false
+  },
+  {
+   "name": "r-base64enc",
+   "version": "0.1_6",
+   "manager": "conda",
+   "platform": "emscripten-wasm32",
+   "dependencies": {},
+   "url": "https://repo.prefix.dev/emscripten-forge-4x/emscripten-wasm32/r-base64enc-0.1_6-r45h6b09a92_5.tar.bz2",
+   "hash": {
+    "md5": "a5cc448fe01f8ca643303c040edf402e",
+    "sha256": "0df94332aafae029912be68eee4f5858854616a5542f8a2c0745baad787f1cf1"
+   },
+   "category": "main",
+   "optional": false
+  },
+  {
+   "name": "r-bit",
+   "version": "4.6.0",
+   "manager": "conda",
+   "platform": "emscripten-wasm32",
+   "dependencies": {},
+   "url": "https://repo.prefix.dev/emscripten-forge-4x/emscripten-wasm32/r-bit-4.6.0-r45h6b09a92_8.tar.bz2",
+   "hash": {
+    "md5": "73263e241708191edd096aebb210d1fb",
+    "sha256": "70c334b1a2e66de2c4f6b2a6d9e3129ee941bcd38cdc23023bd3b5286a0b0b22"
+   },
+   "category": "main",
+   "optional": false
+  },
+  {
+   "name": "r-bit64",
+   "version": "4.8.6",
+   "manager": "conda",
+   "platform": "emscripten-wasm32",
+   "dependencies": {},
+   "url": "https://repo.prefix.dev/emscripten-forge-4x/emscripten-wasm32/r-bit64-4.8.6-r45h6b09a92_0.tar.bz2",
+   "hash": {
+    "md5": "4a91076c89d17d378d9ab455a364792f",
+    "sha256": "bc5885f40348249497f644f33aee3117d63fa0080e31c36485df6b4eab530616"
+   },
+   "category": "main",
+   "optional": false
+  },
+  {
+   "name": "r-cli",
+   "version": "3.6.6",
+   "manager": "conda",
+   "platform": "emscripten-wasm32",
+   "dependencies": {},
+   "url": "https://repo.prefix.dev/emscripten-forge-4x/emscripten-wasm32/r-cli-3.6.6-r45h6b09a92_2.tar.bz2",
+   "hash": {
+    "md5": "720246221bfd97264b83fa827382082f",
+    "sha256": "72f69aa1086d6834cd7bef44b4b11dc1a8bc9fa4b174e6a0f044a91bb6b163b1"
+   },
+   "category": "main",
+   "optional": false
+  },
+  {
+   "name": "r-clipr",
+   "version": "0.8.1",
+   "manager": "conda",
+   "platform": "emscripten-wasm32",
+   "dependencies": {},
+   "url": "https://repo.prefix.dev/conda-forge/noarch/r-clipr-0.8.1-r45hc72bb7e_0.conda",
+   "hash": {
+    "md5": "6d3690eb86e7fdea974915a5ce963561",
+    "sha256": "4a956729c98dc05bce7bbef52755b6d3a9cc25655f3b7f05b129d97dfb132b4c"
+   },
+   "category": "main",
+   "optional": false
+  },
+  {
+   "name": "r-cpp11",
+   "version": "0.5.5",
+   "manager": "conda",
+   "platform": "emscripten-wasm32",
+   "dependencies": {},
+   "url": "https://repo.prefix.dev/conda-forge/noarch/r-cpp11-0.5.5-r45h785f33e_0.conda",
+   "hash": {
+    "md5": "71c68a3993a696b6b75f7a6550b3750f",
+    "sha256": "5993a1b5c08c78a35cdbcf20376773eb7c4def2d28615e49f96008b43a4c05c0"
+   },
+   "category": "main",
+   "optional": false
+  },
+  {
+   "name": "r-crayon",
+   "version": "1.5.3",
+   "manager": "conda",
+   "platform": "emscripten-wasm32",
+   "dependencies": {},
+   "url": "https://repo.prefix.dev/conda-forge/noarch/r-crayon-1.5.3-r45hc72bb7e_2.conda",
+   "hash": {
+    "md5": "4f111ce078b9690abaad6248b831a370",
+    "sha256": "9126a0408696133893e674549ca7aef317768dba503765a7ed032616aabe5b49"
+   },
+   "category": "main",
+   "optional": false
+  },
+  {
+   "name": "r-digest",
+   "version": "0.6.39",
+   "manager": "conda",
+   "platform": "emscripten-wasm32",
+   "dependencies": {},
+   "url": "https://repo.prefix.dev/emscripten-forge-4x/emscripten-wasm32/r-digest-0.6.39-r45h202ccb8_7.tar.bz2",
+   "hash": {
+    "md5": "ec3443637d1cdac3391134654e0cc5b4",
+    "sha256": "0a49433d8a41f104611a964273181b65ab6059f5b0c75200ea2ea0a810411b81"
+   },
+   "category": "main",
+   "optional": false
+  },
+  {
+   "name": "r-dplyr",
+   "version": "1.2.1",
+   "manager": "conda",
+   "platform": "emscripten-wasm32",
+   "dependencies": {},
+   "url": "https://repo.prefix.dev/emscripten-forge-4x/emscripten-wasm32/r-dplyr-1.2.1-r45h6b09a92_3.tar.bz2",
+   "hash": {
+    "md5": "e6125d3cb36930ce60589c06ed64b51b",
+    "sha256": "073561baecac9f8c14b98aa2c7a09127e179671c79b92ffa42554b856bd6a951"
+   },
+   "category": "main",
+   "optional": false
+  },
+  {
+   "name": "r-ellipsis",
+   "version": "0.3.3",
+   "manager": "conda",
+   "platform": "emscripten-wasm32",
+   "dependencies": {},
+   "url": "https://repo.prefix.dev/emscripten-forge-4x/noarch/r-ellipsis-0.3.3-r45h0e10311_3.tar.bz2",
+   "hash": {
+    "md5": "a837b6af8f6a54202471509cba4e960d",
+    "sha256": "6c36a9dc8a45c759f9837c5d0e9c66f1e119287ae8005cb0251d95302143889d"
+   },
+   "category": "main",
+   "optional": false
+  },
+  {
+   "name": "r-evaluate",
+   "version": "1.0.5",
+   "manager": "conda",
+   "platform": "emscripten-wasm32",
+   "dependencies": {},
+   "url": "https://repo.prefix.dev/conda-forge/noarch/r-evaluate-1.0.5-r45hc72bb7e_1.conda",
+   "hash": {
+    "md5": "4e0c71ab78d7292372a89d4daecb49af",
+    "sha256": "d3accfeab1416151515c37e5edc94b18868998db4936183459f8040117d5c83c"
+   },
+   "category": "main",
+   "optional": false
+  },
+  {
+   "name": "r-fansi",
+   "version": "1.0.7",
+   "manager": "conda",
+   "platform": "emscripten-wasm32",
+   "dependencies": {},
+   "url": "https://repo.prefix.dev/emscripten-forge-4x/emscripten-wasm32/r-fansi-1.0.7-r45h6b09a92_7.tar.bz2",
+   "hash": {
+    "md5": "d6a31c1ced1580aeefc5438b03321293",
+    "sha256": "d0977599b5d1965950c472e62a731330c11c5cc0dcca6313e6c9423a3ba339ce"
+   },
+   "category": "main",
+   "optional": false
+  },
+  {
+   "name": "r-fastmap",
+   "version": "1.2.0",
+   "manager": "conda",
+   "platform": "emscripten-wasm32",
+   "dependencies": {},
+   "url": "https://repo.prefix.dev/emscripten-forge-4x/emscripten-wasm32/r-fastmap-1.2.0-r45h202ccb8_7.tar.bz2",
+   "hash": {
+    "md5": "b3a639bae883b05ecee6a393eee8f076",
+    "sha256": "6ab89cbcfb25845a1aba41bb6e113176695145124418c457a399b8ce7e7d5b76"
+   },
+   "category": "main",
+   "optional": false
+  },
+  {
+   "name": "r-forcats",
+   "version": "1.0.1",
+   "manager": "conda",
+   "platform": "emscripten-wasm32",
+   "dependencies": {},
+   "url": "https://repo.prefix.dev/conda-forge/noarch/r-forcats-1.0.1-r45hc72bb7e_0.conda",
+   "hash": {
+    "md5": "193070c66f09692b1ebf065bcbc06f49",
+    "sha256": "c7ef68e66598fc1e22e49bce9a9d309334517d334bd5846f4a90cfe3f49eb33b"
+   },
+   "category": "main",
+   "optional": false
+  },
+  {
+   "name": "r-generics",
+   "version": "0.1.4",
+   "manager": "conda",
+   "platform": "emscripten-wasm32",
+   "dependencies": {},
+   "url": "https://repo.prefix.dev/conda-forge/noarch/r-generics-0.1.4-r45hc72bb7e_1.conda",
+   "hash": {
+    "md5": "f19c9493b80f63a41fa017ec3b27bc2e",
+    "sha256": "88a5cf4bac0a553943996bc930b1ea28f2635c262c1b2c5a42b026b69f227f02"
+   },
+   "category": "main",
+   "optional": false
+  },
+  {
+   "name": "r-glue",
+   "version": "1.8.1",
+   "manager": "conda",
+   "platform": "emscripten-wasm32",
+   "dependencies": {},
+   "url": "https://repo.prefix.dev/emscripten-forge-4x/emscripten-wasm32/r-glue-1.8.1-r45h6b09a92_2.tar.bz2",
+   "hash": {
+    "md5": "21560873248461b941ea44d2a5838430",
+    "sha256": "a1d977a0d17733fb5b8c1bf4583bdcddf19befc109d613571770f1e51081009f"
+   },
+   "category": "main",
+   "optional": false
+  },
+  {
+   "name": "r-hms",
+   "version": "1.1.4",
+   "manager": "conda",
+   "platform": "emscripten-wasm32",
+   "dependencies": {},
+   "url": "https://repo.prefix.dev/conda-forge/noarch/r-hms-1.1.4-r45hc72bb7e_0.conda",
+   "hash": {
+    "md5": "4677c1ad37a9452e27e27d9ed1b8ae90",
+    "sha256": "be67527b52f98832ab2871d0182fb76499538ca7eb333506084620b7489ce6a0"
+   },
+   "category": "main",
+   "optional": false
+  },
+  {
+   "name": "r-htmltools",
+   "version": "0.5.9",
+   "manager": "conda",
+   "platform": "emscripten-wasm32",
+   "dependencies": {},
+   "url": "https://repo.prefix.dev/emscripten-forge-4x/emscripten-wasm32/r-htmltools-0.5.9-r45h6b09a92_5.tar.bz2",
+   "hash": {
+    "md5": "7b292db75973917ddc23a9090cae1737",
+    "sha256": "9fd64514b90ed770cff88153393d14a28c9275aa3c3c5f9ca281e270e6e2ded1"
+   },
+   "category": "main",
+   "optional": false
+  },
+  {
+   "name": "r-irdisplay",
+   "version": "1.1",
+   "manager": "conda",
+   "platform": "emscripten-wasm32",
+   "dependencies": {},
+   "url": "https://repo.prefix.dev/conda-forge/noarch/r-irdisplay-1.1-r45hd8ed1ab_4.conda",
+   "hash": {
+    "md5": "d6ca14e639c018bbdaa60e000c81552c",
+    "sha256": "df6bf7dc11b49c96a8238459db5e8e883ce8eb4bbcf5497f57fc461cea517b71"
+   },
+   "category": "main",
+   "optional": false
+  },
+  {
+   "name": "r-jsonlite",
+   "version": "2.0.0",
+   "manager": "conda",
+   "platform": "emscripten-wasm32",
+   "dependencies": {},
+   "url": "https://repo.prefix.dev/emscripten-forge-4x/emscripten-wasm32/r-jsonlite-2.0.0-r45h202ccb8_7.tar.bz2",
+   "hash": {
+    "md5": "8b0889bb531ebd4595f95ed94d95daa1",
+    "sha256": "fb4ad82237139fbc1b4b4b6e0889bc9fdb654258ff14a30c651c04ecceea0bd8"
+   },
+   "category": "main",
+   "optional": false
+  },
+  {
+   "name": "r-lifecycle",
+   "version": "1.0.5",
+   "manager": "conda",
+   "platform": "emscripten-wasm32",
+   "dependencies": {},
+   "url": "https://repo.prefix.dev/conda-forge/noarch/r-lifecycle-1.0.5-r45hc72bb7e_0.conda",
+   "hash": {
+    "md5": "5f8369dfbdff08878e58bf15529fca3a",
+    "sha256": "b7a4d8d98a96d17d18c80fb7e1c8e6cb09b9bd2542e74d91a7f483afccb30ee6"
+   },
+   "category": "main",
+   "optional": false
+  },
+  {
+   "name": "r-magrittr",
+   "version": "2.0.5",
+   "manager": "conda",
+   "platform": "emscripten-wasm32",
+   "dependencies": {},
+   "url": "https://repo.prefix.dev/emscripten-forge-4x/emscripten-wasm32/r-magrittr-2.0.5-r45h6b09a92_3.tar.bz2",
+   "hash": {
+    "md5": "885294b15f5e85d48f982578c9606f1a",
+    "sha256": "36807b5e35ce5e878c0958c6dd4911a6dc20cf5f4e7068d8a58cd89d96df71a2"
+   },
+   "category": "main",
+   "optional": false
+  },
+  {
+   "name": "r-main-module-abi",
+   "version": "0.1.0",
+   "manager": "conda",
+   "platform": "emscripten-wasm32",
+   "dependencies": {},
+   "url": "https://repo.prefix.dev/emscripten-forge-4x/emscripten-wasm32/r-main-module-abi-0.1.0-vanilla_ha99ebfa_0.tar.bz2",
+   "hash": {
+    "md5": "2d579ec7631addf5016bf14d1f49ed9c",
+    "sha256": "79f5f982ad4c46ca83fe6b9055b52488c6431cb50655586b4c06e37252de3885"
+   },
+   "category": "main",
+   "optional": false
+  },
+  {
+   "name": "r-pillar",
+   "version": "1.11.1",
+   "manager": "conda",
+   "platform": "emscripten-wasm32",
+   "dependencies": {},
+   "url": "https://repo.prefix.dev/conda-forge/noarch/r-pillar-1.11.1-r45hc72bb7e_0.conda",
+   "hash": {
+    "md5": "807ef77a70fc5156f830d6c683d07a29",
+    "sha256": "b3f281041ecff2d4a9f40073ad5e7ec6fa7e0c841068ce85c550bcce0ff8938d"
+   },
+   "category": "main",
+   "optional": false
+  },
+  {
+   "name": "r-pkgconfig",
+   "version": "2.0.3",
+   "manager": "conda",
+   "platform": "emscripten-wasm32",
+   "dependencies": {},
+   "url": "https://repo.prefix.dev/conda-forge/noarch/r-pkgconfig-2.0.3-r45hc72bb7e_5.conda",
+   "hash": {
+    "md5": "40a5fdd06c7e7880758a021cf2df6c12",
+    "sha256": "fda425435a533e86da5f0fc89cf45c9f889a4e6f1e2ed536ca23662a8461602c"
+   },
+   "category": "main",
+   "optional": false
+  },
+  {
+   "name": "r-prettyunits",
+   "version": "1.2.0",
+   "manager": "conda",
+   "platform": "emscripten-wasm32",
+   "dependencies": {},
+   "url": "https://repo.prefix.dev/conda-forge/noarch/r-prettyunits-1.2.0-r45hc72bb7e_2.conda",
+   "hash": {
+    "md5": "07465728b1fd99d28b286156dac895a3",
+    "sha256": "0306580de6e867b9060595f5eedde4dbf531ee89c16dd3738dde995b30f3fe14"
+   },
+   "category": "main",
+   "optional": false
+  },
+  {
+   "name": "r-progress",
+   "version": "1.2.3",
+   "manager": "conda",
+   "platform": "emscripten-wasm32",
+   "dependencies": {},
+   "url": "https://repo.prefix.dev/conda-forge/noarch/r-progress-1.2.3-r45hc72bb7e_2.conda",
+   "hash": {
+    "md5": "619b691b0965c6894eb99d3851857df7",
+    "sha256": "7dc34860af66a0305601d70714269d8e24766bc9780a43683c1b7989970a61a3"
+   },
+   "category": "main",
+   "optional": false
+  },
+  {
+   "name": "r-purrr",
+   "version": "1.2.2",
+   "manager": "conda",
+   "platform": "emscripten-wasm32",
+   "dependencies": {},
+   "url": "https://repo.prefix.dev/emscripten-forge-4x/emscripten-wasm32/r-purrr-1.2.2-r45h6b09a92_2.tar.bz2",
+   "hash": {
+    "md5": "862b8f99afe1d6eb9a4d9043f7b0137b",
+    "sha256": "ea0dafaf1bb5d47bd550104ec05e7bd1e3008e5907e360b6abd03627b79ea699"
+   },
+   "category": "main",
+   "optional": false
+  },
+  {
+   "name": "r-r6",
+   "version": "2.6.1",
+   "manager": "conda",
+   "platform": "emscripten-wasm32",
+   "dependencies": {},
+   "url": "https://repo.prefix.dev/conda-forge/noarch/r-r6-2.6.1-r45hc72bb7e_1.conda",
+   "hash": {
+    "md5": "750802806d7d640c286ed8491bb395dc",
+    "sha256": "bd92e91332eba5f0c689583e80adec85ef272c4e0d0b36ee17cb7c11b5693cf2"
+   },
+   "category": "main",
+   "optional": false
+  },
+  {
+   "name": "r-readr",
+   "version": "2.2.0",
+   "manager": "conda",
+   "platform": "emscripten-wasm32",
+   "dependencies": {},
+   "url": "https://repo.prefix.dev/emscripten-forge-4x/emscripten-wasm32/r-readr-2.2.0-r45h202ccb8_4.tar.bz2",
+   "hash": {
+    "md5": "b3ad1ed62de56f059207aa80c8854b7b",
+    "sha256": "f5bd47b08ec53ecc42e04b520a49ab2f2676b328da9d8c3612a3ed2999c7f260"
+   },
+   "category": "main",
+   "optional": false
+  },
+  {
+   "name": "r-repr",
+   "version": "1.1.7",
+   "manager": "conda",
+   "platform": "emscripten-wasm32",
+   "dependencies": {},
+   "url": "https://repo.prefix.dev/conda-forge/noarch/r-repr-1.1.7-r45h785f33e_2.conda",
+   "hash": {
+    "md5": "0442a7f2ecc741e142466a7edb5a606f",
+    "sha256": "d8229a064695b7a0c36c70b148a76628f180693161bd35a77a9692481794ff37"
+   },
+   "category": "main",
+   "optional": false
+  },
+  {
+   "name": "r-rlang",
+   "version": "1.3.0",
+   "manager": "conda",
+   "platform": "emscripten-wasm32",
+   "dependencies": {},
+   "url": "https://repo.prefix.dev/emscripten-forge-4x/emscripten-wasm32/r-rlang-1.3.0-r45h6b09a92_0.tar.bz2",
+   "hash": {
+    "md5": "c759bda00a653eaebd61388cfe0a7487",
+    "sha256": "4d0e6a6efe59c3b17ec68df814f35a8bf48e8719a16dd0f18a6e26137e8dfed0"
+   },
+   "category": "main",
+   "optional": false
+  },
+  {
+   "name": "r-stringi",
+   "version": "1.8.9",
+   "manager": "conda",
+   "platform": "emscripten-wasm32",
+   "dependencies": {},
+   "url": "https://repo.prefix.dev/emscripten-forge-4x/emscripten-wasm32/r-stringi-1.8.9-r45h1ab2525_0.tar.bz2",
+   "hash": {
+    "md5": "437ea40d140fd3c9a011f2425a434c70",
+    "sha256": "f405597ce58c960e05dce4890e5d405327a386e32c48fb4d53df1b00f82aea5a"
+   },
+   "category": "main",
+   "optional": false
+  },
+  {
+   "name": "r-stringr",
+   "version": "1.6.0",
+   "manager": "conda",
+   "platform": "emscripten-wasm32",
+   "dependencies": {},
+   "url": "https://repo.prefix.dev/conda-forge/noarch/r-stringr-1.6.0-r45h785f33e_0.conda",
+   "hash": {
+    "md5": "8db438d8aa370726ee1ce8bf458f2e6d",
+    "sha256": "dea2a7676dd03ed93fa0ec961883c5075c361c8522659a1bc1e6b5c16525cb24"
+   },
+   "category": "main",
+   "optional": false
+  },
+  {
+   "name": "r-tibble",
+   "version": "3.3.1",
+   "manager": "conda",
+   "platform": "emscripten-wasm32",
+   "dependencies": {},
+   "url": "https://repo.prefix.dev/emscripten-forge-4x/emscripten-wasm32/r-tibble-3.3.1-r45h6b09a92_4.tar.bz2",
+   "hash": {
+    "md5": "09e2b7c8611f80230af4c5992b5bbdff",
+    "sha256": "91730e2f79af25ef2be018bb21cc29b53e5b5d4d77fa426bba7eed8166755111"
+   },
+   "category": "main",
+   "optional": false
+  },
+  {
+   "name": "r-tidyr",
+   "version": "1.3.2",
+   "manager": "conda",
+   "platform": "emscripten-wasm32",
+   "dependencies": {},
+   "url": "https://repo.prefix.dev/emscripten-forge-4x/emscripten-wasm32/r-tidyr-1.3.2-r45h6b09a92_4.tar.bz2",
+   "hash": {
+    "md5": "0948cbec1aa4c5bbe68bf2d897072d72",
+    "sha256": "6ab33de340d816544bb0a9a4805672522494a5d21a8e50e5394a7809a2c6f548"
+   },
+   "category": "main",
+   "optional": false
+  },
+  {
+   "name": "r-tidyselect",
+   "version": "1.2.1",
+   "manager": "conda",
+   "platform": "emscripten-wasm32",
+   "dependencies": {},
+   "url": "https://repo.prefix.dev/conda-forge/noarch/r-tidyselect-1.2.1-r45hc72bb7e_2.conda",
+   "hash": {
+    "md5": "15aa0f323385403fe182e46a1d095e1b",
+    "sha256": "fca09d6b9940f1e1cda0425a0f55716bba202d6f55d6bd25fedec391006c7dc7"
+   },
+   "category": "main",
+   "optional": false
+  },
+  {
+   "name": "r-tzdb",
+   "version": "0.5.0",
+   "manager": "conda",
+   "platform": "emscripten-wasm32",
+   "dependencies": {},
+   "url": "https://repo.prefix.dev/emscripten-forge-4x/emscripten-wasm32/r-tzdb-0.5.0-r45h1ab2525_7.tar.bz2",
+   "hash": {
+    "md5": "8944289d3ead6cfff533631b2e6e0140",
+    "sha256": "2e5ea8a4d9acc72630987ad83f99686e70eacdb6579c2487f1dc3ea1781406cb"
+   },
+   "category": "main",
+   "optional": false
+  },
+  {
+   "name": "r-utf8",
+   "version": "1.2.6",
+   "manager": "conda",
+   "platform": "emscripten-wasm32",
+   "dependencies": {},
+   "url": "https://repo.prefix.dev/emscripten-forge-4x/emscripten-wasm32/r-utf8-1.2.6-r45h6b09a92_7.tar.bz2",
+   "hash": {
+    "md5": "d982e167f8150ed2e3a401627da91ea7",
+    "sha256": "883f55cf1de85919a0f5bfed05c31bbc413585abeb2c60af6e6b617cb752059c"
+   },
+   "category": "main",
+   "optional": false
+  },
+  {
+   "name": "r-vctrs",
+   "version": "0.7.3",
+   "manager": "conda",
+   "platform": "emscripten-wasm32",
+   "dependencies": {},
+   "url": "https://repo.prefix.dev/emscripten-forge-4x/emscripten-wasm32/r-vctrs-0.7.3-r45h6b09a92_2.tar.bz2",
+   "hash": {
+    "md5": "42c26c7df6cea7237e86bff8572e7783",
+    "sha256": "7d4acdf8f85ac2c4176e0dc927de4c1223f2b7652704e6640959fb2e4087e52c"
+   },
+   "category": "main",
+   "optional": false
+  },
+  {
+   "name": "r-vroom",
+   "version": "1.7.1",
+   "manager": "conda",
+   "platform": "emscripten-wasm32",
+   "dependencies": {},
+   "url": "https://repo.prefix.dev/emscripten-forge-4x/emscripten-wasm32/r-vroom-1.7.1-r45h202ccb8_3.tar.bz2",
+   "hash": {
+    "md5": "a9895a547787b62eee27f5fa2c7f2098",
+    "sha256": "c4266ecfe57bf2962fda00415dd50693ee6705af6e173f8c865a928958e17e98"
+   },
+   "category": "main",
+   "optional": false
+  },
+  {
+   "name": "r-withr",
+   "version": "3.0.3",
+   "manager": "conda",
+   "platform": "emscripten-wasm32",
+   "dependencies": {},
+   "url": "https://repo.prefix.dev/conda-forge/noarch/r-withr-3.0.3-r45hc72bb7e_0.conda",
+   "hash": {
+    "md5": "388d25e67f93a5fec2aebe56d6a0a1d9",
+    "sha256": "56f318c90bfc74f01339c83f0e1d0817c1b762ea46cd9e527fec9dcf244c5900"
+   },
+   "category": "main",
+   "optional": false
+  },
+  {
+   "name": "xeus",
+   "version": "6.0.6",
+   "manager": "conda",
+   "platform": "emscripten-wasm32",
+   "dependencies": {},
+   "url": "https://repo.prefix.dev/emscripten-forge-4x/emscripten-wasm32/xeus-6.0.6-hc780342_0.tar.bz2",
+   "hash": {
+    "md5": "02920c9fadcc096f6654223f19e3f3d0",
+    "sha256": "d4813a4a74563da5a6823d0768c21ce3cf4cd5cf773878b8221cb992e72224de"
+   },
+   "category": "main",
+   "optional": false
+  },
+  {
+   "name": "xeus-r",
+   "version": "0.11.2",
+   "manager": "conda",
+   "platform": "emscripten-wasm32",
+   "dependencies": {},
+   "url": "https://repo.prefix.dev/emscripten-forge-4x/emscripten-wasm32/xeus-r-0.11.2-r45h01c9e3f_2.tar.bz2",
+   "hash": {
+    "md5": "c7c2afcd387d046cac8f19314cd3fb7d",
+    "sha256": "3856ca22322af42303d010014d653570fdc7e15d4a37533c2cac66cd14b77645"
+   },
+   "category": "main",
+   "optional": false
+  },
+  {
+   "name": "zlib",
+   "version": "1.3.2",
+   "manager": "conda",
+   "platform": "emscripten-wasm32",
+   "dependencies": {},
+   "url": "https://repo.prefix.dev/emscripten-forge-4x/emscripten-wasm32/zlib-1.3.2-h8b79025_0.tar.bz2",
+   "hash": {
+    "md5": "651e098a93f31fe5302c19a912944d5d",
+    "sha256": "4b9ba9a6bf69330ebbd337269613f1db3614edb00485c471b54b2993e8a97054"
+   },
+   "category": "main",
+   "optional": false
+  }
+ ]
+}

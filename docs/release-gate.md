@@ -34,7 +34,9 @@ Public/lua-grading-shared.js
 Public/octave-grading-shared.js
 Public/xeus-kernel-shared.js
 Tools/jupyterlite/environment-*.yml
+Tools/jupyterlite/requirements.in
 Tools/jupyterlite/requirements.txt
+Tools/jupyterlite/locks/
 Tools/jupyterlite/jupyter-lite.json
 Sources/RunnerCore/
 Tests/Fixtures/output-contract.json

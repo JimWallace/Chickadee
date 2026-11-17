@@ -42,7 +42,7 @@
       "version": "3.13.1",
       "build": "h_2efca29_11_cp313",
       "filename_stem": "python-3.13.1-h_2efca29_11_cp313",
-      "filename": "python-3.13.1-h_2efca29_11_cp313.chickadee.af14cf076b27.tar.gz",
+      "filename": "python-3.13.1-h_2efca29_11_cp313.chickadee.ee8736b08172.tar.gz",
       "channel": "https://repo.prefix.dev/emscripten-forge-4x",
       "depends": [
         "python_abi 3.13.* *_cp313",
@@ -192,7 +192,7 @@
       "version": "2020.2",
       "build": "h0b0027f_1",
       "filename_stem": "qhull-2020.2-h0b0027f_1",
-      "filename": "qhull-2020.2-h0b0027f_1.chickadee.f03d4f7cff9f.tar.gz",
+      "filename": "qhull-2020.2-h0b0027f_1.chickadee.dbd9dabd86c5.tar.gz",
       "channel": "https://repo.prefix.dev/emscripten-forge-4x",
       "depends": [
         "emscripten-abi >=4,<5.0a0"
@@ -257,14 +257,14 @@
       "version": "0.19.0",
       "build": "py313he5686da_4",
       "filename_stem": "xeus-python-0.19.0-py313he5686da_4",
-      "filename": "xeus-python-0.19.0-py313he5686da_4.chickadee.4a83c592452d.tar.gz",
+      "filename": "xeus-python-0.19.0-py313he5686da_4.chickadee.5a93a7a03495.tar.gz",
       "channel": "https://repo.prefix.dev/emscripten-forge-4x",
       "depends": [
         "python",
         "xeus-python-shell-lite >=0.8,<0.9",
         "pyjs-rt >=4.0.6",
         "emscripten-abi >=4,<5.0a0",
-        "nlohmann_json-abi 3.12.0",
+        "nlohmann_json-abi ==3.12.0",
         "python_abi 3.13.* *_cp313",
         "xeus >=6.0.6,<6.1.0a0"
       ],
@@ -348,7 +348,7 @@
       "version": "0.2.2",
       "build": "pyhcf101f3_0",
       "filename_stem": "pyodide-http-0.2.2-pyhcf101f3_0",
-      "filename": "pyodide-http-0.2.2-pyhcf101f3_0.chickadee.e9b20e68c0eb.tar.gz",
+      "filename": "pyodide-http-0.2.2-pyhcf101f3_0.chickadee.4be40d8cd8a7.tar.gz",
       "channel": "https://repo.prefix.dev/conda-forge",
       "depends": [
         "python >=3.10",
@@ -386,7 +386,7 @@
       "version": "0.3.34",
       "build": "h69b678e_4",
       "filename_stem": "openblas-0.3.34-h69b678e_4",
-      "filename": "openblas-0.3.34-h69b678e_4.chickadee.7bb4d345ecff.tar.gz",
+      "filename": "openblas-0.3.34-h69b678e_4.chickadee.707e1816377e.tar.gz",
       "channel": "https://repo.prefix.dev/emscripten-forge-4x",
       "depends": [
         "emscripten-abi >=4,<5.0a0"
@@ -477,7 +477,7 @@
       "version": "1.3.2",
       "build": "h8b79025_0",
       "filename_stem": "zlib-1.3.2-h8b79025_0",
-      "filename": "zlib-1.3.2-h8b79025_0.chickadee.83a1eca4da12.tar.gz",
+      "filename": "zlib-1.3.2-h8b79025_0.chickadee.a7c99170f574.tar.gz",
       "channel": "https://repo.prefix.dev/emscripten-forge-4x",
       "depends": [
         "emscripten-abi >=4,<5.0a0"
@@ -502,7 +502,7 @@
       "version": "2.5.2",
       "build": "py313hcf5bae3_0",
       "filename_stem": "numpy-2.5.2-py313hcf5bae3_0",
-      "filename": "numpy-2.5.2-py313hcf5bae3_0.chickadee.b4aec3f19928.tar.gz",
+      "filename": "numpy-2.5.2-py313hcf5bae3_0.chickadee.a4da784a2b69.tar.gz",
       "channel": "https://repo.prefix.dev/emscripten-forge-4x",
       "depends": [
         "emscripten-abi >=4,<5.0a0",
@@ -577,7 +577,7 @@
       "version": "9.14.0",
       "build": "py313hb2fbb1a_0",
       "filename_stem": "ipython-9.14.0-py313hb2fbb1a_0",
-      "filename": "ipython-9.14.0-py313hb2fbb1a_0.chickadee.0307eb57186d.tar.gz",
+      "filename": "ipython-9.14.0-py313hb2fbb1a_0.chickadee.ebb12720abed.tar.gz",
       "channel": "https://repo.prefix.dev/emscripten-forge-4x",
       "depends": [
         "python",
@@ -601,11 +601,11 @@
       "version": "6.0.6",
       "build": "hc780342_0",
       "filename_stem": "xeus-6.0.6-hc780342_0",
-      "filename": "xeus-6.0.6-hc780342_0.chickadee.2a3f57451d5b.tar.gz",
+      "filename": "xeus-6.0.6-hc780342_0.chickadee.b1997a5c4222.tar.gz",
       "channel": "https://repo.prefix.dev/emscripten-forge-4x",
       "depends": [
         "emscripten-abi >=4,<5.0a0",
-        "nlohmann_json-abi 3.12.0"
+        "nlohmann_json-abi ==3.12.0"
       ],
       "subdir": "emscripten-wasm32"
     },

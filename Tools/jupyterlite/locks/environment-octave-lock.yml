@@ -1,0 +1,180 @@
+{
+ "version": 1,
+ "metadata": {
+  "content_hash": {
+   "emscripten-wasm32": "4d1eb981ee91ca665794edde1a3c7b1e9129f8d4c8341fbb149d08eb2f4411cd"
+  },
+  "channels": [
+   {
+    "url": "https://repo.prefix.dev/emscripten-forge-4x",
+    "used_env_vars": []
+   },
+   {
+    "url": "https://repo.prefix.dev/conda-forge",
+    "used_env_vars": []
+   }
+  ],
+  "platforms": [
+   "emscripten-wasm32"
+  ],
+  "sources": [
+   "Tools/jupyterlite/environment-octave.yml"
+  ]
+ },
+ "package": [
+  {
+   "name": "emscripten-abi",
+   "version": "4.0.9",
+   "manager": "conda",
+   "platform": "emscripten-wasm32",
+   "dependencies": {},
+   "url": "https://repo.prefix.dev/emscripten-forge-4x/noarch/emscripten-abi-4.0.9-h267e887_9.tar.bz2",
+   "hash": {
+    "md5": "25efc842dad2785871310cfa3499ca33",
+    "sha256": "0dd4620a5b4f2ec7d492b4162afd609eda221ef066bac3e7fe9210ae27a37318"
+   },
+   "category": "main",
+   "optional": false
+  },
+  {
+   "name": "narwhals",
+   "version": "2.28.0",
+   "manager": "conda",
+   "platform": "emscripten-wasm32",
+   "dependencies": {},
+   "url": "https://repo.prefix.dev/conda-forge/noarch/narwhals-2.28.0-pyh5ded981_0.conda",
+   "hash": {
+    "md5": "0854bb3ee7fc73ce67edae458ead7abf",
+    "sha256": "d69b3266672eb731d5a92efdffa5e17bef4f08f08ccfb11053eb537a8a6686da"
+   },
+   "category": "main",
+   "optional": false
+  },
+  {
+   "name": "nlohmann_json-abi",
+   "version": "3.12.0",
+   "manager": "conda",
+   "platform": "emscripten-wasm32",
+   "dependencies": {},
+   "url": "https://repo.prefix.dev/conda-forge/noarch/nlohmann_json-abi-3.12.0-h0f90c79_2.conda",
+   "hash": {
+    "md5": "849b8852621992c3f3a1901c939a0399",
+    "sha256": "30d271dd63391e053aa3c393c5d93fb622dec5d50a64107171ee28242660608e"
+   },
+   "category": "main",
+   "optional": false
+  },
+  {
+   "name": "octave",
+   "version": "10.3.0",
+   "manager": "conda",
+   "platform": "emscripten-wasm32",
+   "dependencies": {},
+   "url": "https://repo.prefix.dev/emscripten-forge-4x/emscripten-wasm32/octave-10.3.0-pl5321h996e327_3.tar.bz2",
+   "hash": {
+    "md5": "eadab65a76184674fc827b39ebb8549f",
+    "sha256": "51226adc11c3216878a3e3dd34cafaa5ae50844fe5707ad06ce30fd1739ee1bb"
+   },
+   "category": "main",
+   "optional": false
+  },
+  {
+   "name": "packaging",
+   "version": "26.3",
+   "manager": "conda",
+   "platform": "emscripten-wasm32",
+   "dependencies": {},
+   "url": "https://repo.prefix.dev/conda-forge/noarch/packaging-26.3-pyhc364b38_0.conda",
+   "hash": {
+    "md5": "936687ed80f295a1f5dbcf8bd34c252c",
+    "sha256": "c432626b16768b8dab228bfb706f7060c2d462a21c516d240f68f2f902b5a044"
+   },
+   "category": "main",
+   "optional": false
+  },
+  {
+   "name": "plotly",
+   "version": "7.1.0",
+   "manager": "conda",
+   "platform": "emscripten-wasm32",
+   "dependencies": {},
+   "url": "https://repo.prefix.dev/conda-forge/noarch/plotly-7.1.0-pyhd8ed1ab_0.conda",
+   "hash": {
+    "md5": "7842399da4895e5c5174cf6b44ef1c36",
+    "sha256": "156c3109d9fbe41b61b1b4001d59ebedbec17c803ee1dab878444bce0516bd44"
+   },
+   "category": "main",
+   "optional": false
+  },
+  {
+   "name": "python",
+   "version": "3.14.3",
+   "manager": "conda",
+   "platform": "emscripten-wasm32",
+   "dependencies": {},
+   "url": "https://repo.prefix.dev/emscripten-forge-4x/emscripten-wasm32/python-3.14.3-h_f1beecf_1_cp314.tar.bz2",
+   "hash": {
+    "md5": "ad7bf1aa55e3357e80455109154f52fa",
+    "sha256": "97b16cdf1ff4be4047d77d52401319e6f7b8770c69036360cb7342c0e044643d"
+   },
+   "category": "main",
+   "optional": false
+  },
+  {
+   "name": "python_abi",
+   "version": "3.14",
+   "manager": "conda",
+   "platform": "emscripten-wasm32",
+   "dependencies": {},
+   "url": "https://repo.prefix.dev/conda-forge/noarch/python_abi-3.14-9_cp314.conda",
+   "hash": {
+    "md5": "350d89b50d7de805abf2e63e29dee451",
+    "sha256": "e7f8e965bbfb98e08feb2365cacdad8bb218fa5b5a0a2752f747287f425f213c"
+   },
+   "category": "main",
+   "optional": false
+  },
+  {
+   "name": "xeus",
+   "version": "6.0.6",
+   "manager": "conda",
+   "platform": "emscripten-wasm32",
+   "dependencies": {},
+   "url": "https://repo.prefix.dev/emscripten-forge-4x/emscripten-wasm32/xeus-6.0.6-hc780342_0.tar.bz2",
+   "hash": {
+    "md5": "02920c9fadcc096f6654223f19e3f3d0",
+    "sha256": "d4813a4a74563da5a6823d0768c21ce3cf4cd5cf773878b8221cb992e72224de"
+   },
+   "category": "main",
+   "optional": false
+  },
+  {
+   "name": "xeus-octave",
+   "version": "0.7.0",
+   "manager": "conda",
+   "platform": "emscripten-wasm32",
+   "dependencies": {},
+   "url": "https://repo.prefix.dev/emscripten-forge-4x/emscripten-wasm32/xeus-octave-0.7.0-h6cd6e3e_0.tar.bz2",
+   "hash": {
+    "md5": "ddce0e98e2e77f457228d96457fc7760",
+    "sha256": "af0fe50e3d2d638eacbec095441eb25cfc194ed4b0eeb11db483a74059fb55bc"
+   },
+   "category": "main",
+   "optional": false
+  },
+  {
+   "name": "zlib",
+   "version": "1.3.2",
+   "manager": "conda",
+   "platform": "emscripten-wasm32",
+   "dependencies": {},
+   "url": "https://repo.prefix.dev/emscripten-forge-4x/emscripten-wasm32/zlib-1.3.2-h8b79025_0.tar.bz2",
+   "hash": {
+    "md5": "651e098a93f31fe5302c19a912944d5d",
+    "sha256": "4b9ba9a6bf69330ebbd337269613f1db3614edb00485c471b54b2993e8a97054"
+   },
+   "category": "main",
+   "optional": false
+  }
+ ]
+}

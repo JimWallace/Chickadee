@@ -378,6 +378,9 @@ PY
 #    REWRITES (scripts/patch-xeus-python-http.py) must carry the hash of its own
 #    bytes in its name (`.chickadee.<12 hex>.tar.gz`), or a re-vendor that changed
 #    the patch would ship new bytes under a name that students have cached.
+#    An archive that scripts/prune-kernel-packages.py only NORMALIZES (no time,
+#    no owner) keeps its upstream name: its files are the upstream files, so
+#    the name still maps to one set of files.
 #    And each env's empack_env_meta.json must name exactly the files on disk,
 #    since every reader fetches `kernel_packages/<filename>` from it.
 python3 - "$BUILD_DIR" "$ROOT_DIR" <<'PY'
