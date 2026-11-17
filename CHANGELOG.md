@@ -9,6 +9,13 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.978] - 2026-11-17
+
+### Changed
+
+- **The deployer no longer waits for the newest release's image while an older release is ready.** When the newest release has no published image yet, the deployer deploys the newest older release that is newer than production and has one. On 2026-11-16 quick merges kept production on 0.5.964 for hours. The newest release keeps its wait clock, so a build that never publishes still reports `stuck`.
+
+
 ## [0.5.977] - 2026-11-16
 
 ### Security
