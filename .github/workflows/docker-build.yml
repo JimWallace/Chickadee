@@ -433,9 +433,10 @@ jobs:
       # the deployer would abort, rather than passing on a slower-but-tolerated
       # boot and letting the difference reach the host.
       - name: Smoke-test the image (boot it and probe /health)
+        env:
+          IMAGE: ${{ fromJSON(steps.meta.outputs.json).tags[0] }}
         run: |
           set -euo pipefail
-          IMAGE='${{ fromJSON(steps.meta.outputs.json).tags[0] }}'
 
           # `--network host`: the container must reach the postgres SERVICE,
           # which Actions maps onto the runner's own localhost. Host networking
@@ -592,9 +593,10 @@ jobs:
       # not root, as Ubuntu 23.10 and later do by default. deploy/README.md
       # tells an operator to relax it for the sandbox; this does the same.
       - name: "Runner container: job cgroups and the drop to uid 999"
+        env:
+          IMAGE: ${{ fromJSON(steps.meta.outputs.json).tags[0] }}
         run: |
           set -euo pipefail
-          IMAGE='${{ fromJSON(steps.meta.outputs.json).tags[0] }}'
           sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 || true
           docker tag "$IMAGE" ghcr.io/jimwallace/chickadee:latest
           export RUNNER_SHARED_SECRET=ci-placeholder-secret
