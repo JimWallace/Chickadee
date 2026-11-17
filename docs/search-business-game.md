@@ -22,8 +22,8 @@ the history lecture tells them.
 
 | Year | The web (dataset version) | Lab stages that build the capability | What the year grades | Leaderboard metric |
 |---|---|---|---|---|
-| 1996: the crawler | about 80 pages; `robots.txt` appears | 1 to 3: normalize, extract links, crawl | the stages' tests, and a polite crawl within the budget | hosts reached |
-| 1998: PageRank | about 140 pages; the link farm appears | 4 to 6: graph, PageRank, search, then the `score` contest | the stages' tests | search quality (nDCG@5) times coverage |
+| 1996: the crawler | about 70 pages; `robots.txt` appears | 1 to 3: normalize, extract links, crawl | the stages' tests, and a polite crawl within the budget | pages indexed, as a percent |
+| 1998: PageRank | about 120 pages; the link farm appears, and the directory lists it | 4 to 6: graph, PageRank, search, then the `score` contest | the stages' tests | search quality (nDCG@5) |
 | 2000: the crash | whole sites return 404 | none new: the 1998 engine, run again | whether the engine stays above a quality bar | search quality on the shrunken web |
 
 Each company carries a **generated name**, a parody of a 1990s search company,
@@ -128,14 +128,17 @@ counterpart: pages added, pages removed, and pages changed.
 grading script imports the student's `crawl(seed, fetch)` and runs it with a
 fetch the script owns.
 
-- The metered fetch counts each call. It returns 404 once the year's budget
-  is spent.
+- The metered fetch counts each call. It returns 429 ("too many requests")
+  once the year's budget is spent, so a crawler can tell a spent budget from
+  a missing page (404).
 - Only pages that were returned through the metered fetch count as crawled.
   A page the crawler claims without fetching it scores nothing.
-- A fetch of a path that the host's `robots.txt` forbids counts against
-  politeness. `robots.txt` is an ordinary key in the dataset, such as
-  `https://jhi.example/robots.txt`, and fetching it costs budget, as it did
-  for real crawlers.
+- A fetch of a path that the host's `robots.txt` forbids costs 5 points.
+  `robots.txt` is an ordinary key in the dataset, such as
+  `https://jhi.example/robots.txt`. Fetching it costs no budget. The first
+  prototype charged for it, and a polite crawler then lost about a third of
+  its 1996 budget to asking, which taught the wrong lesson
+  ([house/](examples/miniweb/house/README.md)).
 
 So a "fixed crawl rate" is a fixed budget per game year. No clock is needed.
 
@@ -224,12 +227,13 @@ are. The Market is a new course page that reads the three years together and
 shows each company's valuation (decided 2026-11-13).
 
 **The metric scale.** Every game year reports its `metric` on 0 to 100, so the
-years can be added. 1996 reports the percent of hosts reached within the
-budget. 1998 reports search quality times coverage, as a percent. 2000
-reports search quality on the shrunken web, as a percent. `metric` is
-unclamped in the contract, so this scale is a rule of the game's scripts,
-checked by the generator's story checks (§7, slice 3), and not a platform
-rule.
+years can be added. 1996 reports the percent of the web's pages indexed within
+the budget. 1998 and 2000 report search quality (nDCG@5 times 100) on that
+year's judged queries. Coverage needs no separate factor: a relevant page the
+crawler never fetched cannot be returned, so it already costs quality. Each
+year subtracts 5 points per forbidden fetch. `metric` is unclamped in the
+contract, so this scale is a rule of the game's scripts, checked by the story
+checks (`examples/miniweb/house/market.py`), and not a platform rule.
 
 **The valuation.** A company's points are its best metric in each year,
 weighted toward the later years, because a company proves itself over time:
@@ -336,8 +340,12 @@ on the same web with the same budget. Nothing about grading is special.
 
 | House company | Ticker | Its engine | 1996 | 1998 | 2000 |
 |---|---|---|---|---|---|
-| Lycrawl | LYCR | breadth-first crawl to the budget, obeys `robots.txt`, ranks by word count | the winner | strong coverage, but the link farm takes its flu results | below the bar: bust |
-| Googolplex | GOOG | the 1998 crawler, PageRank, and text match with the farm penalty (the in-class activity's instructor entry) | not founded | arrives at the reveal | survives the crash and leads the Market |
+| Lycrawl | LYCR | breadth-first crawl to the budget, obeys `robots.txt`, ranks by word count | wins (47.9) | the link farm takes its flu results (58.0) | busts (59.1, bar 62) |
+| Googolplex | GOOG | crawls in order of estimated PageRank, skips dead sites, ranks by words and PageRank, penalizes keyword stuffing and link farms | not founded | arrives at the reveal and leads (69.2) | survives (64.8) and leads the Market |
+
+The engines and the prototype that produced these numbers are in
+[examples/miniweb/house/](examples/miniweb/house/README.md). Its `market.py`
+plays the three years and fails unless the story holds.
 
 - **Revealed, not live.** A house company is hidden until the instructor
   reveals it, by year, in the debrief. Then it enters the Market at its
@@ -363,9 +371,9 @@ on the same web with the same budget. Nothing about grading is special.
   per year.
 - **The engines are teaching material.** Each is a short notebook, written
   for the debrief, that shows the historical approach and nothing more. They
-  live with the generator (`examples/miniweb/house/`) and are checked by the
-  story checks: LYCR must win 1996 among the reference companies and bust in
-  2000, and GOOG must lead the Market at the end.
+  live in `examples/miniweb/house/`, and `market.py` there is their story
+  check: LYCR must win 1996 and bust in 2000, the farm must reach LYCR's 1998
+  flu results and not GOOG's, and GOOG must lead the Market at the end.
 
 The debrief for each year then has the same shape: show the class's Market,
 reveal the house company, and explain what happened in that year and why the
@@ -438,7 +446,8 @@ search engine earns full marks whether their company wins or not.
    names and ticker symbols, and the course page with its Present mode.
 7. **House companies.** The `house` list on the block, "Use as house company"
    on the submission page, the reveal, and the Market's historical rows. The
-   LYCR and GOOG notebooks and their story checks come with slice 3.
+   The LYCR and GOOG notebooks and their story check exist as a prototype
+   (`examples/miniweb/house/`); slice 3 reruns them on the real year webs.
 8. **The map.** The D7 kind (or the two-assignment form), coverage counts
    and the SVG layout.
 9. **Later:** per-page coverage items, the three new achievements in §4,
@@ -469,8 +478,9 @@ Decided by the maintainer on 2026-11-13:
 Still open:
 
 1. **The valuation's weights and the crash:** 1, 2 and 3 for the three
-   years, and a 99% loss below the 2000 bar, are proposals. Tune them once
-   the reference companies exist.
+   years, and a 99% loss below the 2000 bar, are proposals. The bar is now
+   62, set from the house engines (`house/market.py`), with two points of
+   margin on each side. The weights are untested against a real class.
 2. **Budget size:** a budget below the web's size makes the crawl order
    matter. The proposal is about half the web each year, tuned by the
    generator's checks.
