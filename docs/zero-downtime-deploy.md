@@ -215,6 +215,18 @@ mechanism without moving any student traffic:
    a snapshot and a runner restart). And `:latest` is pushed in the order
    builds *finish*, so it can move backwards: on 2026-09-22 the build of the
    commit before the release finished after the release's own tag build.
+
+   **While the newest release waits, an older built release goes out.** Each
+   merge to `main` makes a release, so on a day of quick merges the newest
+   release moved before its image existed, and production waited for hours:
+   on 2026-11-16 it stayed on 0.5.964 from 19:57 to after 22:32 UTC. Now,
+   when the newest release waits for its image, the daemon reads the release
+   tags (one `/repos/<repo>/tags` call) and deploys the newest older release
+   that is newer than production and has a published image (`docker manifest
+   inspect`, at most five checked). It skips a release held at the gate or
+   backed off after a failure. The history records `fallback chosen`. The
+   newest release keeps its own wait clock, so a tag build that never
+   publishes still becomes `stuck`. A disk hold sends nothing out.
 6. Runs `scripts/snapshot.sh --label predeploy-<ver>` (Postgres dump +
    artifacts) as a safety net. `SNAPSHOT_REQUIRED=1` makes a failed snapshot
    abort the deploy; the default warns and continues.

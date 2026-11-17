@@ -107,6 +107,9 @@ STAGED_COMMIT=""
 # The release whose self-update was skipped, so the history says so once.
 SELF_UPDATE_SKIPPED_FOR=""
 WAIT_REASON=""
+# Set by do_deploy: 1 when the attempt waits because the release image is not
+# published, which is when a fallback release may go out instead.
+IMAGE_NOT_READY=0
 # Set by verify_post_deploy when the public URL failed TLS verification while
 # the application behind it answered.
 CERT_PROBLEM=""
@@ -151,6 +154,22 @@ is_gated() {
 fetch_latest_release() {
   curl -fsS --max-time 30 "https://api.github.com/repos/$REPO/releases/latest" 2>/dev/null \
     | python3 -c 'import json,sys; print(json.load(sys.stdin).get("tag_name",""))' 2>/dev/null
+}
+
+# The release tags (vX.Y.Z only) with the commit each names, one
+# "tag<TAB>commit" per line, newest first. One API call for all of them, so the
+# fallback below costs one request a poll, not one per release: the API is
+# unauthenticated and allows 60 requests an hour.
+fetch_release_tags() {
+  curl -fsS --max-time 30 "https://api.github.com/repos/$REPO/tags?per_page=100" 2>/dev/null \
+    | python3 -c '
+import json, re, sys
+for t in json.load(sys.stdin):
+    name = t.get("name", "")
+    sha = (t.get("commit") or {}).get("sha", "")
+    if re.fullmatch(r"v[0-9]+\.[0-9]+\.[0-9]+", name) and sha:
+        print(name + "\t" + sha)
+' 2>/dev/null | sort -t "$(printf '\t')" -k1,1Vr
 }
 
 # The commit a release tag points at. The image built from that commit is the
@@ -678,7 +697,12 @@ ensure_disk_for_deploy() {
 # A deploy is also held (2) while the host is too short of disk space to pull.
 do_deploy() {  # $1 = version tag
   local ver="$1"
-  LATEST_SEEN="$ver"
+  IMAGE_NOT_READY=0
+  # A fallback deploy is older than the newest release, which stays the one
+  # the status reports as seen.
+  if [ -z "$LATEST_SEEN" ] || is_newer "$ver" "$LATEST_SEEN"; then
+    LATEST_SEEN="$ver"
+  fi
 
   if ! ensure_disk_for_deploy; then
     if [ "$DISK_LOW_VERSION" != "$ver" ]; then
@@ -692,6 +716,12 @@ do_deploy() {  # $1 = version tag
   DISK_LOW_VERSION=""
 
   if ! stage_release_image "$ver"; then
+    # Only an image that is not published yet lets an older release go out. An
+    # image that is published but refused (another revision, no digest) holds
+    # the deploy as before.
+    case "$WAIT_REASON" in
+      *"is not published yet") IMAGE_NOT_READY=1 ;;
+    esac
     if [ "$WAITING_VERSION" != "$ver" ]; then
       WAITING_VERSION="$ver"
       WAITING_SINCE="$(now_epoch)"
@@ -854,9 +884,82 @@ run_cycle() {
   fi
 
   do_deploy "$latest"
+  local rc=$?
   # An approval is kept while the image is still being built: clearing it would
   # send a gated release back to pending_approval.
-  [ "$?" -eq 2 ] || APPROVED_VERSION=""
+  [ "$rc" -eq 2 ] || APPROVED_VERSION=""
+
+  if [ "$rc" -eq 2 ] && [ "$IMAGE_NOT_READY" = "1" ]; then
+    deploy_newest_published "$latest"
+  fi
+}
+
+# ---------------------------------------------------------------------------
+# Deploy the newest release that has an image while the newest release waits.
+#
+# The daemon used to target only the newest release. Each merge to main makes a
+# release, and its image takes about 30 minutes to build, so on a day of quick
+# merges the target moved before its image existed and production waited for
+# hours: on 2026-11-16 it stayed on 0.5.964 from 19:57 to after 22:32 UTC while
+# v0.5.965 to v0.5.969 were built. A tag build that failed held it the same way.
+#
+# So while the newest release waits for its image, the daemon deploys the
+# newest older release that is newer than production, has a published image,
+# is not held at the gate and is not backed off after a failure. The newest
+# release keeps its own wait clock, so a build that never publishes still
+# becomes `stuck`.
+# ---------------------------------------------------------------------------
+MAX_FALLBACK_CANDIDATES=5
+# Fallback releases whose image was published but failed to stage, so each is
+# tried once while the same newest release waits, not on every poll.
+REFUSED_FALLBACKS=""
+REFUSED_FALLBACKS_FOR=""
+
+pick_fallback_release() {  # $1 = the newest release; prints the tag
+  local latest="$1" tag sha checked=0
+  while IFS="$(printf '\t')" read -r tag sha; do
+    [ -n "$tag" ] && [ -n "$sha" ] || continue
+    is_newer "$latest" "$tag" || continue
+    is_newer "$tag" "$DEPLOYED_VERSION" || continue
+    if is_gated "$tag" "$DEPLOYED_VERSION" && [ "$APPROVED_VERSION" != "$tag" ]; then
+      continue
+    fi
+    if [ "$tag" = "$FAILING_VERSION" ] && [ "$(now_epoch)" -lt "$RETRY_AT" ]; then
+      continue
+    fi
+    case " $REFUSED_FALLBACKS " in
+      *" $tag "*) continue ;;
+    esac
+    [ "$checked" -lt "$MAX_FALLBACK_CANDIDATES" ] || return 1
+    checked=$(( checked + 1 ))
+    if timeout 30 docker manifest inspect "$IMAGE_REPO:sha-${sha:0:7}" >/dev/null 2>&1; then
+      printf '%s\n' "$tag"
+      return 0
+    fi
+  done < <(fetch_release_tags)
+  return 1
+}
+
+deploy_newest_published() {  # $1 = the newest release, which waits
+  local latest="$1" fallback waiting_version waiting_since rc
+  if [ "$REFUSED_FALLBACKS_FOR" != "$latest" ]; then
+    REFUSED_FALLBACKS_FOR="$latest"
+    REFUSED_FALLBACKS=""
+  fi
+  fallback="$(pick_fallback_release "$latest")" || return 0
+  [ -n "$fallback" ] || return 0
+  log "the image of $latest is not published yet; deploying $fallback, the newest release that has one"
+  append_history "$fallback" fallback chosen "the image of $latest is not published yet"
+  waiting_version="$WAITING_VERSION"
+  waiting_since="$WAITING_SINCE"
+  do_deploy "$fallback"
+  rc=$?
+  if [ "$rc" -eq 2 ] && [ -z "$STAGED_IMAGE" ]; then
+    REFUSED_FALLBACKS="$REFUSED_FALLBACKS $fallback"
+    append_history "$fallback" fallback refused "$WAIT_REASON"
+  fi
+  WAITING_VERSION="$waiting_version"
+  WAITING_SINCE="$waiting_since"
 }
 
 # Run the daemon only when executed. The tests source this file for its
