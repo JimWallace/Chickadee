@@ -41,13 +41,16 @@ concurrency:
   group: kernel-currency
   cancel-in-progress: true
 
-permissions:
-  contents: read
-  # To dispatch revendor-kernels.yml. A dispatch is allowed under GITHUB_TOKEN.
-  actions: write
+# Write scopes are granted per job, not here, so a job added later starts
+# with none (OpenSSF Scorecard TokenPermissions).
+permissions: {}
 
 jobs:
   currency:
+    permissions:
+      contents: read
+      # To dispatch revendor-kernels.yml. A dispatch is allowed under GITHUB_TOKEN.
+      actions: write
     runs-on: ubuntu-latest
     # Four environment solves against a remote channel, measured at a few
     # minutes in total. The ceiling sits above 4 x the script's own 600s
@@ -100,6 +103,8 @@ jobs:
 
       - name: Summarise
         if: always()
+        env:
+          DISPATCHED: ${{ steps.publish.outputs.dispatched }}
         run: |
           {
             echo "### Kernel currency"
@@ -107,7 +112,7 @@ jobs:
             echo '```'
             cat /tmp/currency.txt 2>/dev/null || echo "the check produced no output"
             echo '```'
-            if [ "${{ steps.publish.outputs.dispatched }}" = "true" ]; then
+            if [ "$DISPATCHED" = "true" ]; then
               echo ""
               echo "Dispatched **Re-vendor xeus kernels** in publish mode. It opens"
               echo "an auto-merging pull request unless one is already open."

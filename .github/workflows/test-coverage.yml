@@ -231,11 +231,13 @@ jobs:
           '
 
       - name: Write coverage summary
+        env:
+          COVERAGE_PERCENT: ${{ steps.enforce_coverage_floor.outputs.coverage_percent }}
         run: |
           {
             echo "## Coverage"
             echo
-            echo "- Total line coverage: ${{ steps.enforce_coverage_floor.outputs.coverage_percent }}%"
+            echo "- Total line coverage: ${COVERAGE_PERCENT}%"
             echo "- Required floor: ${MIN_COVERAGE_PERCENT}%"
           } >> "$GITHUB_STEP_SUMMARY"
 

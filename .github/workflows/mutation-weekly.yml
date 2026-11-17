@@ -272,9 +272,10 @@ jobs:
         if: steps.record.outputs.recorded == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RECORD_FILE: ${{ steps.record.outputs.file }}
         run: |
           date="$(date -u +%Y-%m-%d)"
-          record="${{ steps.record.outputs.file }}"
+          record="${RECORD_FILE}"
           remote="https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
           work=/tmp/mutation-reports
           rm -rf "$work"
@@ -322,6 +323,8 @@ jobs:
 
       - name: Merge the shards and file the issue
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          EXPECTED_SHARD_COUNT: ${{ needs.plan.outputs.count }}
         with:
           script: |
             const fs = require('fs');
@@ -344,9 +347,9 @@ jobs:
             // dispatch may override the count, and a denominator that disagrees
             // with the matrix is exactly the arithmetic that made a partial sweep
             // read as a whole one.
-            const expected = Number('${{ needs.plan.outputs.count }}');
+            const expected = Number(process.env.EXPECTED_SHARD_COUNT);
             if (!Number.isInteger(expected) || expected < 1) {
-              core.setFailed(`plan job produced no usable shard count (got '${{ needs.plan.outputs.count }}')`);
+              core.setFailed(`plan job produced no usable shard count (got '${process.env.EXPECTED_SHARD_COUNT}')`);
               return;
             }
 

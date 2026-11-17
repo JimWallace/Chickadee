@@ -9,6 +9,42 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.987] - 2026-11-17
+
+### Changed
+
+- **Auto-release holds on the `minor-release` label, not only on contract paths** (#3061). A pull request labelled `minor-release` now stops auto-release exactly as a change to a contract path does: no patch, a pre-release for the dev server instead, and the `minor-needed` issue naming it. Before, a labelled compatibility removal that touched no contract path, such as removing a runner flag, would have shipped in a patch, which deploys on its own in `gated-minors`. If GitHub cannot be asked for a commit's pull request, the job fails rather than release.
+
+
+## [0.5.986] - 2026-11-17
+
+### Security
+
+- **Workflow write scopes move to the job.** `auto-release`, `runner-wasm-vendor`, `kernel-currency`, `mirror-images` and `rerun-failed` now declare `permissions: {}` at the top and grant each write on the one job that needs it, so a job added later starts with no write token. This clears the five workflow-level OpenSSF Scorecard `TokenPermissions` alerts.
+- **The vendor and smoke scripts install from their lockfiles.** `scripts/setup-vendor.sh` and `scripts/browser-grading-smoke.sh` run `npm ci`, not `npm install`, so they install exactly what `package-lock.json` pins (Scorecard `PinnedDependencies`).
+
+
+## [0.5.985] - 2026-11-17
+
+### Added
+
+- **Tests for six more uncovered helpers.** New unit tests cover `ProseParagraphs.split`, the `SuiteConfigDecodingError` message and status, the `ContentAttachmentStore.StoreError` reasons, `FamilySuiteRow.caseCountText` and its encoding, the `WebhookNotifierError` messages and `AvatarCap.displayName`.
+
+
+## [0.5.984] - 2026-11-17
+
+### Added
+
+- **Eight more test suites for pure-logic gaps from the coverage report.** They cover a dataset transform or partition on a file that is not UTF-8 text, a scope change through a non-library door, a footer JSON line with no comma between members, the item scopes that name no set of items, an escaped quote in a CSV field span, a C++ object that holds a null, a notebook with a raw cell or bad bytes, the save-time check of an `exceptionExpected` family and the Lua identifier fallback.
+
+
+## [0.5.983] - 2026-11-17
+
+### Security
+
+- **No step output pasted into a workflow script.** Eleven `run:` and `github-script` steps now read step outputs through an `env:` value, not a `${{ }}` template in the script text. This clears every zizmor `template-injection` finding in the Security tab.
+
+
 ## [0.5.982] - 2026-11-17
 
 ### Added

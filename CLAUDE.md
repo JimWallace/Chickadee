@@ -517,9 +517,10 @@ requests that the daemon validates. Rollback stays a host action.
 
 **A contract change waits for a minor.** A pull request that changes a path in
 `scripts/contract-paths.txt` (the vendored kernels and editor, the runner wasm,
-the kernel pins, `Sources/RunnerCore/`) needs the `minor-release` label, and
-while one is on `main`, auto-release cuts no release and opens a `minor-needed`
-issue. It cuts a pre-release of the next minor (`v0.X.0-rc.N`) instead, which
+the kernel pins, `Sources/RunnerCore/`) needs the `minor-release` label. So
+does a compatibility removal, which no path list can see. While a contract
+change or a labelled pull request is on `main`, auto-release cuts no release
+and opens a `minor-needed` issue. It cuts a pre-release of the next minor (`v0.X.0-rc.N`) instead, which
 only the dev server takes: its deployer runs the host-only `prereleases`
 channel, production's the default `releases`. The minor is cut by hand (`docs/release-process.md`). Kernel re-vendor
 and JupyterLab dependency pull requests carry the label and never auto-merge.

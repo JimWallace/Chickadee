@@ -22,7 +22,7 @@ language="${1:-r}"
 engine="${2:-chromium}"
 
 cd "$repo_root/Tools/browser-grading-smoke"
-npm install --silent --no-audit --no-fund
+npm ci --silent --no-audit --no-fund
 
 cd "$repo_root"
 node Tools/browser-grading-smoke/smoke.mjs --language "$language" --browser "$engine"
