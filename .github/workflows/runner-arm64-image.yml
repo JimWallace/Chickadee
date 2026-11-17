@@ -187,9 +187,10 @@ jobs:
       # There is no server: the runner fails to poll, which is expected, and
       # the checks read its startup log and its process.
       - name: "Runner container: job cgroups, uid 999, no capability, languages"
+        env:
+          IMAGE: ${{ fromJSON(steps.meta.outputs.json).tags[0] }}
         run: |
           set -euo pipefail
-          IMAGE='${{ fromJSON(steps.meta.outputs.json).tags[0] }}'
           sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 || true
           # For Compose only: the runner service names the production image.
           # This tag stays on this job's Docker; nothing pushes it.
