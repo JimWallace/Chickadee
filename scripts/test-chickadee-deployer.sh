@@ -412,8 +412,8 @@ expect_calls "docker inspect" 2
 # ---------------------------------------------------------------------------
 start_case "a runner that exits at startup records the refresh as failed, with its error"
 touch "$STUB/runner_crashing"
-printf '%s\n' "Error: --sandbox is set, but this host cannot start the sandbox: unshare: write failed /proc/self/uid_map: Operation not permitted" \
-  "A container that drops capabilities or uses the default seccomp profile refuses user and mount namespaces. Remove --sandbox, or allow them." \
+printf '%s\n' "Error: the sandbox is on, but this host cannot start the sandbox: unshare: write failed /proc/self/uid_map: Operation not permitted" \
+  "A container that drops capabilities or uses the default seccomp profile refuses user and mount namespaces. Allow them, or start the runner with --no-sandbox." \
   > "$STUB/runner_logs"
 run_cycle
 expect_history runner-refresh failed

@@ -54,6 +54,23 @@ import Testing
         #expect(message.contains("worker-secret"), "\(message)")
     }
 
+    // MARK: - --sandbox
+
+    /// The sandbox is on by default since 0.6.0 (#2348). A start command
+    /// written for 0.5 still passes `--sandbox`, and it must change nothing;
+    /// `--no-sandbox` is the one way off, and the last of the two wins.
+    @Test(arguments: [
+        ([String](), true),
+        (["--sandbox"], true),
+        (["--sandbox", "--sandbox"], true),
+        (["--no-sandbox"], false),
+        (["--sandbox", "--no-sandbox"], false),
+        (["--no-sandbox", "--sandbox"], true),
+    ])
+    func theSandboxIsOnUnlessTurnedOff(arguments: [String], sandboxed: Bool) throws {
+        #expect(try WorkerCommand.parse(arguments).sandbox == sandboxed)
+    }
+
     // MARK: - The job limits
 
     /// Survivors `:244`, `:247` and `:250 RelationalOperatorReplacement`
@@ -76,7 +93,7 @@ import Testing
     @Test func theDefaultLimitsPassAndAnUnsandboxedRunnerChecksNothingElse() async throws {
         let workRoot = try Self.temporaryWorkRoot()
         defer { try? FileManager.default.removeItem(at: workRoot) }
-        let check = try await WorkerCommand.parse([]).checkSandbox(workRoot: workRoot)
+        let check = try await WorkerCommand.parse(["--no-sandbox"]).checkSandbox(workRoot: workRoot)
         #expect(check.processLimitEnforced == false)
         #expect(check.cgroups == nil)
         #expect(check.cgroupsStatus == "not sandboxed")
@@ -106,7 +123,7 @@ import Testing
     }
 
     @Test func withoutTheSandboxEveryLimitIsReportedAsNone() throws {
-        let command = try WorkerCommand.parse(["--job-process-limit", "7", "--job-disk-limit", "9"])
+        let command = try WorkerCommand.parse(["--no-sandbox", "--job-process-limit", "7", "--job-disk-limit", "9"])
         let fields = command.jobLimitLogFields(
             WorkerCommand.SandboxCheck(processLimitEnforced: false, cgroups: nil, cgroupsStatus: "not sandboxed"))
         #expect(fields["job_process_limit"] as? String == "none")

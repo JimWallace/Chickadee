@@ -109,7 +109,7 @@ the systemd units, the deploy runbook and the operator's head — and is
 silently absent everywhere it was not added, which is the failure mode env
 vars are worst at surfacing.
 
-Use a CLI flag on `chickadee-runner` (as `--sandbox` and `--max-jobs` do),
+Use a CLI flag on `chickadee-runner` (as `--no-sandbox` and `--max-jobs` do),
 derive the value from something already known, or detect the condition at
 runtime. If one looks genuinely unavoidable, ask — do not add it and mention
 it afterwards.

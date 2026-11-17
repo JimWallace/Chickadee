@@ -87,7 +87,8 @@ env var takes precedence over it.
 
 ### Test-script sandbox
 
-The Compose runner starts with `--sandbox`. Each test script then runs in its
+The runner sandboxes test scripts by default since 0.6.0; the Compose file
+still passes `--sandbox`, which changes nothing. Each test script runs in its
 own user, network and mount namespace: it has no network, no real privileges,
 and no view of the other jobs on the runner, because the work root is covered
 inside the namespace and only the job's own directories are bound back.
@@ -110,7 +111,7 @@ Everything a test script writes, in its working directory, `/tmp`,
 ends, so one job cannot fill the work root for the others. That tmpfs is
 memory, and it counts against the job's memory limit (see "Job cgroups"
 below). The overlay that holds it needs Linux 5.11 or later; on
-an older kernel the runner refuses to start with `--sandbox` and says why.
+an older kernel the sandboxed runner refuses to start and says why.
 
 The host must also allow unprivileged user namespaces, with mounts inside
 them. Check it before the first `docker compose up` with this file. The check
@@ -151,10 +152,10 @@ runner container its own AppArmor profile that permits `userns`, and use that
 profile in place of `apparmor=unconfined`.
 
 Then run the check again. It must print `sandbox OK` before you start the
-runner with `--sandbox`.
+runner.
 
 A runner that cannot start the sandbox does not start at all. Its log
-says `--sandbox is set, but this host cannot start the sandbox`, and the admin
+says `the sandbox is on, but this host cannot start the sandbox`, and the admin
 runner page shows it offline. It never grades without the sandbox it was told
 to use. When the deployer refreshes such a runner after a release, it records
 `runner-refresh failed` in its deploy history, with that log line.
@@ -172,15 +173,16 @@ docker compose logs runner | grep sandbox_mode
 The second command must show `"sandbox_mode":"sandboxed"`.
 
 A `docker-compose.override.yml` that sets `command:` for the runner replaces
-the command in this file. Add `--sandbox` to that command too. Look at the
-command that Compose will use:
+the command in this file. That command sandboxes too unless it passes
+`--no-sandbox`, so keep the two `unconfined` lines in `security_opt`. Look at
+the command that Compose will use:
 
 ```bash
 docker compose config | grep -n -e sandbox -e unconfined
 ```
 
-To run without the sandbox, remove `--sandbox` from the runner command and the
-two `unconfined` lines from its `security_opt`.
+To run without the sandbox, replace `--sandbox` with `--no-sandbox` in the
+runner command and remove the two `unconfined` lines from its `security_opt`.
 
 ### Job cgroups
 
@@ -914,6 +916,11 @@ sudo systemctl daemon-reload
 sudo systemctl enable chickadee-server chickadee-runner
 sudo systemctl start chickadee-server chickadee-runner
 ```
+
+The runner sandboxes test scripts by default, so the host must allow
+unprivileged user namespaces (see "Test-script sandbox" above). On a host that
+does not, the runner refuses to start and says why; add `--no-sandbox` to
+`ExecStart` only if running student code unsandboxed is acceptable there.
 
 Check status:
 ```bash

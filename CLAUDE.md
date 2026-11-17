@@ -569,7 +569,7 @@ beyond First-Try Perfect).
   deploy runbook and the operator's head — and one that is silently absent
   everywhere it was not added, which is the failure mode env vars are worst at
   surfacing. Configure new runner behaviour with a **CLI flag** on
-  `chickadee-runner` (as `--sandbox` and `--max-jobs` do), derive it from
+  `chickadee-runner` (as `--no-sandbox` and `--max-jobs` do), derive it from
   something already known, or make the code detect the condition at runtime.
   If a new variable ever looks genuinely unavoidable, ask first — do not add it
   and mention it afterwards.

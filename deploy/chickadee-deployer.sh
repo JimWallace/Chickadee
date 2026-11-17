@@ -138,7 +138,7 @@ DISK_LOW_VERSION=""
 DISK_REASON=""
 # How long refresh_runner waits after `compose up` before it asks Docker whether
 # the runner is still up. The runner checks its own command at startup (the
-# `--sandbox` probe) and exits within a few seconds when the check fails.
+# sandbox probe) and exits within a few seconds when the check fails.
 RUNNER_SETTLE_SECS=15
 # Set by stage_release_image: the digest reference bluegreen-deploy.sh deploys,
 # and the commit the release names.
@@ -1063,7 +1063,7 @@ refresh_runner() {  # $1 = version tag (history label only)
   fi
 
   # `compose up` returns when the container starts, not when the runner works.
-  # A runner that cannot keep a promise its command makes (`--sandbox` on a
+  # A runner that cannot keep a promise its command makes (the sandbox on a
   # host that refuses user namespaces) exits at startup, and Docker restarts it
   # in a loop. Before this check, that loop was recorded here as "ok".
   local before after reason
