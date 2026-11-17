@@ -536,9 +536,11 @@ back is host-side by design. See [docs/zero-downtime-deploy.md](docs/zero-downti
 
 ## Current State
 
-**The 0.4 series is closed.** v0.5.0 marks the end of the first full course
-offering on Chickadee. The 0.4 arc is at the top of `CHANGELOG-0.4.md`; the
-0.5-boundary cleanup is in the 0.5.0 entry of `CHANGELOG.md`. BrightSpace grade
+**The 0.5 series is closed.** v0.6.0 opens the multi-course pilot: several
+courses run live class activities, so production deploys are gated
+(`docs/release-gate.md`). The 0.5 arc is at the top of `CHANGELOG-0.5.md` and
+the 0.4 arc at the top of `CHANGELOG-0.4.md`; the 0.6-boundary cleanup is in
+the 0.6.0 entry of `CHANGELOG.md`. BrightSpace grade
 sync waits for UW IST production credentials. `MCPToolCatalog.live` holds the
 MCP tool count.
 
@@ -549,8 +551,7 @@ MCP tool count.
 **Feature backlog:** more personalization and notebook checks (for example
 per-student refs in pattern kinds beyond the three equality kinds); pattern
 kinds beyond the ten in `PatternKind`; SSO tests with providers other than
-UWaterloo DUO; refresh-token handling; more gamification (badges
-beyond First-Try Perfect).
+UWaterloo DUO; refresh-token handling.
 
 ---
 

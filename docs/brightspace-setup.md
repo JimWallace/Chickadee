@@ -280,8 +280,8 @@ in the LEARN classlist and no usable student number).
 ## Step 7 — End-to-end test
 
 1. Submit as a test student and let it grade.
-2. `ResultRoutes` flags the result row pending; `BrightSpaceGradeSyncMonitor`
-   sweeps every 60 s and pushes the **best (max) points** per
+2. `ResultRoutes` flags the result row pending; the BrightSpace sync sweep
+   (`BrightSpaceSyncSweep`) runs every 60 s and pushes the **best (max) points** per
    (student, assignment) once past the debounce window. Click **"Sync now"**
    on the tab to bypass the debounce immediately.
 3. Confirm the grade appears in the **`learntest` gradebook**.
