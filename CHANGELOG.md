@@ -9,6 +9,13 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.985] - 2026-11-17
+
+### Added
+
+- **Tests for six more uncovered helpers.** New unit tests cover `ProseParagraphs.split`, the `SuiteConfigDecodingError` message and status, the `ContentAttachmentStore.StoreError` reasons, `FamilySuiteRow.caseCountText` and its encoding, the `WebhookNotifierError` messages and `AvatarCap.displayName`.
+
+
 ## [0.5.984] - 2026-11-17
 
 ### Added
