@@ -2267,7 +2267,7 @@ coordination, and each must see every edit.
 
 - **Writers:** the host deploy daemon (`deploy/chickadee-deployer.sh`) writes
   `status.json`, `history.jsonl`, `pending-notes.json`, `mode`, `paused` and
-  `approved`. The admin Deployment page (`AdminRoutes+Deployment.swift`,
+  `approved`. Only the host writes `channel`. The admin Deployment page (`AdminRoutes+Deployment.swift`,
   `DeployStateFolder.write`) writes one file per request into `requests/`,
   the only path the app may write (`bluegreen-deploy.sh` mounts it read-write
   over the read-only `/deploy-state`). A host operator writes
@@ -2289,8 +2289,29 @@ coordination, and each must see every edit.
     route or MCP tool may write anywhere else in the folder.
   - The mode's raw values (`DeployMode`) and the daemon's `valid_mode` are
     the same three strings.
+  - The release channel is host-only. The request reader refuses a
+    `channel` request, and the page shows the channel without a control, so
+    nothing in the app can point production at pre-releases.
   - The approval names a version, and the daemon accepts it only for the
     release it holds, so a newer release is held anew.
+
+### The version string: `ChickadeeVersion.current` and `v*` tags
+
+- **Writers:** `scripts/assemble-release.sh` (a patch or a hand-cut minor, on
+  `main`), and `auto-release.yml` for a pre-release, which stamps
+  `0.X.0-rc.N` on a commit reached only by its tag (`docs/release-gate.md`).
+- **Readers:** `/health` (the deployer checks it after a deploy), the admin
+  banner, the `?v=` asset cache key, `LiveBoardETag`, alert text, the bundle
+  manifest's `chickadeeVersion`, `get_server_info`, and the runner's
+  advertised version, compared by `VersionComparator` in the runner gates and
+  the version skew alert.
+- **Rules:**
+  - `VersionComparator` reads only the leading `X.Y.Z`, so an rc and its final
+    release compare equal on the server. Only the deployer orders rcs
+    (`version_key`).
+  - Every workflow that reacts to a `v*` tag (`docker-build.yml`,
+    `runner-arm64-image.yml`, `release.yml`) treats a `-rc.` tag as a
+    pre-release: never `:latest`, never the latest release.
 
 ### The student contract: `scripts/contract-paths.txt`
 

@@ -15,6 +15,9 @@ struct DeployStatusFile: Decodable, Sendable {
     let detail: String?
     let paused: Bool?
     let mode: String?
+    /// The release channel: `releases` (production) or `prereleases` (the
+    /// dev server). Set only on the host; nil from an older daemon.
+    let channel: String?
     let heldVersion: String?
     let approvedVersion: String?
     let scriptsRevision: String?

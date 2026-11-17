@@ -70,6 +70,8 @@ private struct DeploymentRunningSection: HTML {
                         dd { code { view.deployedVersion ?? "unknown" } }
                         dt { "Mode" }
                         dd { view.mode.label }
+                        dt { "Channel (host)" }
+                        dd { code { view.channel } }
                         dt { "Daemon" }
                         dd {
                             code { view.state ?? "unknown" }

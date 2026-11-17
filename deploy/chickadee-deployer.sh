@@ -21,7 +21,9 @@
 #   approved           — the release that was approved, until it deploys
 #   pending-notes.json — the release notes of what the held release would ship
 #   command.json       — commands FROM the host operator:
-#                        {"command":"pause|resume|approve|rollback|deploy|mode","version":"vX.Y.Z","mode":"..."}
+#                        {"command":"pause|resume|approve|rollback|deploy|mode|channel","version":"vX.Y.Z","mode":"...","channel":"..."}
+#   channel            — the release channel: releases (absent, production) or
+#                        prereleases (the dev server). Host-only.
 #   requests/*.json    — requests FROM the app (the admin page), the one
 #                        directory the app may write. Only approve-the-held-
 #                        release, mode, pause and resume are accepted; see
@@ -78,6 +80,11 @@ DEPLOYED_VERSION_FILE="$STATE_DIR/deployed_version"
 # longer read: a file the admin page can change, not an environment variable.
 MODE_FILE="$STATE_DIR/mode"
 DEFAULT_MODE="gated-minors"
+# The release channel (docs/release-gate.md, "Pre-release channel"):
+# `releases` (absent file) or `prereleases`. Set only on the host: production
+# stays on `releases`, the dev server runs `prereleases`.
+CHANNEL_FILE="$STATE_DIR/channel"
+DEFAULT_CHANNEL="releases"
 # Pause and approval outlive a restart, including the one after the daemon
 # updates its own scripts. Before, a pause lived only in the shell, and an
 # approved release was held again after that restart.
@@ -161,9 +168,37 @@ strip_v()  { printf '%s' "${1#v}"; }
 major_of() { strip_v "$1" | cut -d. -f1; }
 minor_of() { strip_v "$1" | cut -d. -f2; }
 
-# True (0) if $1 is a strictly newer semver than $2.
+# "major minor patch final rc" for X.Y.Z (final 1, rc 0) or X.Y.Z-rc.N
+# (final 0, rc N), with or without the v; nothing for any other form. A
+# pre-release sorts before its final release and after every earlier
+# version: 0.7.0-rc.3 > 0.6.12, 0.7.0-rc.10 > 0.7.0-rc.9, 0.7.0 > 0.7.0-rc.3.
+# Plain `sort -V` gets the last one wrong.
+version_key() {
+  local v; v="$(strip_v "$1")"
+  if [[ "$v" =~ ^([0-9]+)\.([0-9]+)\.([0-9]+)(-rc\.([0-9]+))?$ ]]; then
+    if [ -n "${BASH_REMATCH[4]}" ]; then
+      printf '%s %s %s 0 %s' "${BASH_REMATCH[1]}" "${BASH_REMATCH[2]}" "${BASH_REMATCH[3]}" "${BASH_REMATCH[5]}"
+    else
+      printf '%s %s %s 1 0' "${BASH_REMATCH[1]}" "${BASH_REMATCH[2]}" "${BASH_REMATCH[3]}"
+    fi
+  fi
+}
+
+# True (0) if $1 is a strictly newer version than $2.
 is_newer() {
-  local a b top
+  local a b top i
+  local -a ka kb
+  a="$(version_key "$1")"; b="$(version_key "$2")"
+  if [ -n "$a" ] && [ -n "$b" ]; then
+    read -r -a ka <<< "$a"
+    read -r -a kb <<< "$b"
+    for i in 0 1 2 3 4; do
+      [ "${ka[$i]}" -gt "${kb[$i]}" ] && return 0
+      [ "${ka[$i]}" -lt "${kb[$i]}" ] && return 1
+    done
+    return 1
+  fi
+  # Not a form version_key knows: the old comparison.
   a="$(strip_v "$1")"; b="$(strip_v "$2")"
   [ "$a" = "$b" ] && return 1
   top="$(printf '%s\n%s\n' "$a" "$b" | sort -V | tail -1)"
@@ -194,6 +229,27 @@ set_paused() {  # $1 = 1 or 0
   PAUSED="$1"
   mkdir -p "$STATE_DIR"
   if [ "$1" = "1" ]; then : > "$PAUSED_FILE"; else rm -f "$PAUSED_FILE"; fi
+}
+
+valid_channel() {
+  case "$1" in
+    releases | prereleases) return 0 ;;
+  esac
+  return 1
+}
+
+# The release channel from $CHANNEL_FILE: `releases` (the default, and
+# production's) or `prereleases` (the dev server). Host-only: the app's
+# request channel refuses any change to it.
+current_channel() {
+  local channel=""
+  [ -f "$CHANNEL_FILE" ] && channel="$(tr -d '[:space:]' < "$CHANNEL_FILE" 2>/dev/null)"
+  if valid_channel "$channel"; then printf '%s' "$channel"; else printf '%s' "$DEFAULT_CHANNEL"; fi
+}
+
+set_channel() {  # $1 = a valid channel
+  mkdir -p "$STATE_DIR"
+  printf '%s\n' "$1" > "$CHANNEL_FILE"
 }
 
 set_approved() {  # $1 = version tag, or empty to clear
@@ -234,25 +290,52 @@ bump_kind() {
   fi
 }
 
+# The newest release on this daemon's channel. On `releases`, GitHub's
+# releases/latest, which never names a pre-release or a draft: production
+# cannot see a pre-release however new it is. On `prereleases`, the newest
+# non-draft release in the releases list, pre-releases (vX.Y.0-rc.N)
+# included, by version_key order.
 fetch_latest_release() {
-  curl -fsS --max-time 30 "https://api.github.com/repos/$REPO/releases/latest" 2>/dev/null \
-    | python3 -c 'import json,sys; print(json.load(sys.stdin).get("tag_name",""))' 2>/dev/null
+  if [ "$(current_channel)" != "prereleases" ]; then
+    curl -fsS --max-time 30 "https://api.github.com/repos/$REPO/releases/latest" 2>/dev/null \
+      | python3 -c 'import json,sys; print(json.load(sys.stdin).get("tag_name",""))' 2>/dev/null
+    return
+  fi
+  curl -fsS --max-time 30 "https://api.github.com/repos/$REPO/releases?per_page=30" 2>/dev/null \
+    | python3 -c '
+import json, re, sys
+def key(tag):
+    m = re.fullmatch(r"v([0-9]+)\.([0-9]+)\.([0-9]+)(-rc\.([0-9]+))?", tag)
+    if not m:
+        return None
+    return (int(m[1]), int(m[2]), int(m[3]), 0 if m[4] else 1, int(m[5] or 0))
+tags = [r.get("tag_name", "") for r in json.load(sys.stdin) if not r.get("draft")]
+tags = [t for t in tags if key(t)]
+print(max(tags, key=key) if tags else "")
+' 2>/dev/null
 }
 
-# The release tags (vX.Y.Z only) with the commit each names, one
-# "tag<TAB>commit" per line, newest first. One API call for all of them, so the
-# fallback below costs one request a poll, not one per release: the API is
-# unauthenticated and allows 60 requests an hour.
+# The release tags with the commit each names, one "tag<TAB>commit" per line,
+# newest first: vX.Y.Z, and on the `prereleases` channel vX.Y.Z-rc.N too. One
+# API call for all of them, so the fallback below costs one request a poll,
+# not one per release: the API is unauthenticated and allows 60 requests an
+# hour.
 fetch_release_tags() {
   curl -fsS --max-time 30 "https://api.github.com/repos/$REPO/tags?per_page=100" 2>/dev/null \
     | python3 -c '
 import json, re, sys
+pre = sys.argv[1] == "prereleases"
+pattern = r"v([0-9]+)\.([0-9]+)\.([0-9]+)(-rc\.([0-9]+))?" if pre else r"v([0-9]+)\.([0-9]+)\.([0-9]+)()()"
+rows = []
 for t in json.load(sys.stdin):
     name = t.get("name", "")
     sha = (t.get("commit") or {}).get("sha", "")
-    if re.fullmatch(r"v[0-9]+\.[0-9]+\.[0-9]+", name) and sha:
-        print(name + "\t" + sha)
-' 2>/dev/null | sort -t "$(printf '\t')" -k1,1Vr
+    m = re.fullmatch(pattern, name)
+    if m and sha:
+        rows.append(((int(m[1]), int(m[2]), int(m[3]), 0 if m[4] else 1, int(m[5] or 0)), name, sha))
+for _, name, sha in sorted(rows, reverse=True):
+    print(name + "\t" + sha)
+' "$(current_channel)" 2>/dev/null
 }
 
 # The commit a release tag points at. The image built from that commit is the
@@ -306,9 +389,9 @@ probe_public_health() {
 write_status() {  # $1=state $2=detail
   mkdir -p "$STATE_DIR"
   python3 - "$STATUS_FILE" "$1" "$DEPLOYED_VERSION" "$LATEST_SEEN" "$2" "$PAUSED" "$(scripts_revision)" \
-    "$(current_mode)" "$HELD_VERSION" "$APPROVED_VERSION" <<'PY' 2>/dev/null || true
+    "$(current_mode)" "$HELD_VERSION" "$APPROVED_VERSION" "$(current_channel)" <<'PY' 2>/dev/null || true
 import json, os, sys, datetime
-path, state, deployed, latest, detail, paused, scripts, mode, held, approved = sys.argv[1:11]
+path, state, deployed, latest, detail, paused, scripts, mode, held, approved, channel = sys.argv[1:12]
 tmp = path + ".tmp"
 json.dump({
     "state": state,
@@ -317,6 +400,7 @@ json.dump({
     "detail": detail,
     "paused": paused == "1",
     "mode": mode,
+    "channel": channel,
     "heldVersion": held or None,
     "approvedVersion": approved or None,
     "scriptsRevision": scripts,
@@ -362,14 +446,15 @@ json_field() {  # $1=file $2=key
 # ---------------------------------------------------------------------------
 # Command handling (host operator -> daemon, via command.json). Only the host
 # can write command.json, so it keeps the commands the app may not send:
-# rollback, and approving any version (deploy).
+# rollback, approving any version (deploy), and the release channel.
 # ---------------------------------------------------------------------------
 handle_commands() {
   [ -f "$COMMAND_FILE" ] || return 0
-  local cmd ver mode
+  local cmd ver mode channel
   cmd="$(json_field "$COMMAND_FILE" command)"
   ver="$(json_field "$COMMAND_FILE" version)"
   mode="$(json_field "$COMMAND_FILE" mode)"
+  channel="$(json_field "$COMMAND_FILE" channel)"
   rm -f "$COMMAND_FILE"
   case "$cmd" in
     pause)    set_paused 1; log "paused by command"; append_history "" pause ok "host command" ;;
@@ -382,6 +467,13 @@ handle_commands() {
         set_mode "$mode"; log "mode set to $mode by command"; append_history "" mode ok "$mode (host command)"
       else
         log "unknown mode in command: $mode"; append_history "" mode refused "unknown mode in host command"
+      fi
+      ;;
+    channel)
+      if valid_channel "$channel"; then
+        set_channel "$channel"; log "channel set to $channel by command"; append_history "" channel ok "$channel (host command)"
+      else
+        log "unknown channel in command: $channel"; append_history "" channel refused "unknown channel in host command"
       fi
       ;;
     "")       ;;
@@ -464,7 +556,7 @@ def decide(path, info):
     kind = body.get("request")
     if kind == "approve":
         version = body.get("version")
-        if isinstance(version, str) and re.fullmatch(r"v\d+\.\d+\.\d+", version):
+        if isinstance(version, str) and re.fullmatch(r"v\d+\.\d+\.\d+(-rc\.\d+)?", version):
             return ("accept", "approve", version), user
         return ("refuse", "approve names no version of the form vX.Y.Z", ""), user
     if kind == "mode":
@@ -475,6 +567,9 @@ def decide(path, info):
         return ("accept", kind, ""), user
     if kind in ("rollback", "deploy"):
         return ("refuse", "%s is a host action, not a request" % kind, ""), user
+    if kind == "channel":
+        # The admin page must never point production at pre-releases.
+        return ("refuse", "the release channel is a host setting, not a request", ""), user
     return ("refuse", "unknown request %s" % clean(kind, 32), ""), user
 
 def remove(path, info):
@@ -584,18 +679,24 @@ def load(name):
         return None
 
 def key(tag):
-    try:
-        return tuple(int(part) for part in str(tag).lstrip("v").split("."))
-    except ValueError:
+    m = re.fullmatch(r"v?([0-9]+)\.([0-9]+)\.([0-9]+)(-rc\.([0-9]+))?", str(tag))
+    if not m:
         return None
+    return (int(m[1]), int(m[2]), int(m[3]), 0 if m[4] else 1, int(m[5] or 0))
 
 low, high = key(deployed), key(held)
+held_is_prerelease = "-rc." in held
 releases = []
 listed = load(releases_file)
 for release in listed if isinstance(listed, list) else []:
     tag = release.get("tag_name") or ""
     version = key(tag)
     if None in (version, low, high) or not (low < version <= high):
+        continue
+    # A final release's notes already hold what its pre-releases carried,
+    # and each rc's notes hold every pending fragment, so of the
+    # pre-releases only the held rc itself is listed.
+    if release.get("prerelease") and tag != held:
         continue
     releases.append({
         "tag": tag,
@@ -1196,7 +1297,7 @@ main() {
   LATEST_SEEN="$DEPLOYED_VERSION"
   load_state
 
-  log "started: repo=$REPO baseline=$DEPLOYED_VERSION mode=$(current_mode) paused=$PAUSED interval=${POLL_INTERVAL_SECS}s"
+  log "started: repo=$REPO baseline=$DEPLOYED_VERSION mode=$(current_mode) channel=$(current_channel) paused=$PAUSED interval=${POLL_INTERVAL_SECS}s"
   write_status idle "started; baseline $DEPLOYED_VERSION"
 
   while true; do

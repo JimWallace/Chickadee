@@ -34,7 +34,8 @@ final class AdminDeploymentRoutesTests {
     }
 
     private func writeStatus(
-        held: String?, approved: String? = nil, paused: Bool = false, mode: String = "gated-minors"
+        held: String?, approved: String? = nil, paused: Bool = false, mode: String = "gated-minors",
+        channel: String = "releases"
     )
         throws
     {
@@ -43,7 +44,7 @@ final class AdminDeploymentRoutesTests {
         let status = """
             {"state":"\(held == nil ? "idle" : "pending_approval")","deployedVersion":"0.5.980",\
             "latestSeen":"v0.6.0","detail":"release v0.6.0 needs approval","paused":\(paused),\
-            "mode":"\(mode)","heldVersion":\(heldJSON),"approvedVersion":\(approvedJSON),\
+            "mode":"\(mode)","channel":"\(channel)","heldVersion":\(heldJSON),"approvedVersion":\(approvedJSON),\
             "updatedAt":"2026-11-20T10:00:00Z"}
             """
         try status.write(
@@ -121,6 +122,20 @@ final class AdminDeploymentRoutesTests {
         }
     }
 
+    @Test func thePageShowsTheChannelReadOnly() async throws {
+        try await withApp(app) { app in
+            try writeStatus(held: "v0.7.0-rc.2", mode: "autonomous", channel: "prereleases")
+            let cookie = try await loginAsAdmin("deploy_admin_channel", on: app)
+            let html = try await getHTML("/admin/deployment", cookie: cookie, on: app)
+            #expect(html.contains("<code>prereleases</code>"))
+            #expect(!html.contains("name=\"channel\""))
+            let result = try await post(
+                "/admin/deployment/approve", fields: ["version": "v0.7.0-rc.2"], cookie: cookie)
+            #expect(result.location == "/admin/deployment?notice=approved")
+            #expect(try requests().first?["version"] == "v0.7.0-rc.2")
+        }
+    }
+
     // MARK: - The admin MCP status
 
     @Test func getDeployStatusReportsTheModeAndTheHeldRelease() async throws {
@@ -133,6 +148,7 @@ final class AdminDeploymentRoutesTests {
             #expect(output.mode == "manual")
             #expect(output.heldVersion == "v0.6.0")
             #expect(output.approvedVersion == "v0.6.0")
+            #expect(output.channel == "releases")
         }
     }
 
@@ -233,6 +249,9 @@ final class AdminDeploymentRoutesTests {
         #expect(!DeployStateFolder.isReleaseTag("0.6.0"))
         #expect(!DeployStateFolder.isReleaseTag("v0.6"))
         #expect(!DeployStateFolder.isReleaseTag("v0.6.0; rm"))
+        #expect(DeployStateFolder.isReleaseTag("v0.7.0-rc.12"))
+        #expect(!DeployStateFolder.isReleaseTag("v0.7.0-rc"))
+        #expect(!DeployStateFolder.isReleaseTag("v0.7.0-beta.1"))
     }
 
     @Test func notesForAnotherReleaseAreNotShown() {

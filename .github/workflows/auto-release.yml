@@ -83,7 +83,7 @@ jobs:
       # release tag touched a path in scripts/contract-paths.txt, this cuts
       # no release, neither a patch nor a minor: it says why in the job
       # summary and opens or updates one issue labelled `minor-needed` that
-      # names the pull requests. Fragments keep accumulating in changelog.d/,
+      # names the pull requests. The next step cuts a pre-release instead. Fragments keep accumulating in changelog.d/,
       # and the hand-cut minor folds them all. After the minor's tag, the
       # commits since the last tag are clean again and auto-release resumes.
       - name: Refuse past a contract change
@@ -150,6 +150,8 @@ jobs:
             head -40 contract.txt
             echo '```'
             echo ""
+            echo "Meanwhile each merge with fragments cuts a pre-release of the next minor (v0.X.0-rc.N) for the dev server, which runs ahead of production (docs/release-gate.md, \"Pre-release channel\")."
+            echo ""
             echo "To release: cut the minor by hand (docs/release-process.md, \"Cutting a minor (or major) release\"). The deployer then holds it until an admin approves it on the admin page. Close this issue after the minor's tag is pushed."
           } > issue.md
           existing="$(gh issue list --repo "$R" --state open --label minor-needed --limit 1 \
@@ -161,6 +163,79 @@ jobs:
             gh issue create --repo "$R" --label minor-needed \
               --title "A contract change is waiting for a minor release" --body-file issue.md
           fi
+
+      # The pre-release channel (docs/release-gate.md). Production waits for
+      # the minor, but the dev server should run ahead of it, and a contract
+      # change (a kernel re-vendor) is exactly what dev must try first. So
+      # where the gate refuses a release, this cuts a GitHub pre-release of
+      # the next minor instead: v0.X.0-rc.N, N one more than the last rc of
+      # that minor.
+      #
+      # The rc is a commit of its own on top of HEAD that stamps only
+      # Sources/Core/ChickadeeVersion.swift with the rc version, and it is
+      # pushed only as its tag, never to main. So VERSION, CHANGELOG.md and
+      # the fragments on main stay as they are (the fragments fold into the
+      # real minor), the running build reports which rc it is, and the rc's
+      # :sha-<commit> image is its own: the main build of HEAD pushes
+      # :sha-<HEAD>, which never names the rc. docker-build.yml builds the
+      # tag and never moves :latest for an rc; release.yml marks it a
+      # pre-release, which the production deployer never reads.
+      #
+      # An rc is cut only by a push that adds a changelog fragment. The rc
+      # does not consume the fragments, so "fragments are pending" stays true
+      # until the minor is cut, and a test-only or docs-only merge must not
+      # cut a new rc, a build and a dev deploy.
+      #
+      # Without RELEASE_TOKEN the tag push starts no workflow: release.yml is
+      # dispatched below, but docker-build.yml has no dispatch, so no rc image
+      # is built and the dev deployer waits for it. Pre-releases need
+      # RELEASE_TOKEN, as stable releases need it for their image.
+      - name: Cut a pre-release of the next minor
+        id: prerelease
+        if: steps.gate.outputs.blocked == 'true'
+        env:
+          BEFORE: ${{ github.event.before }}
+        run: |
+          set -euo pipefail
+          added=""
+          if git cat-file -e "${BEFORE}^{commit}" 2>/dev/null; then
+            added="$(git diff --diff-filter=A --name-only "$BEFORE" HEAD -- 'changelog.d/*.md' | grep -v '/README\.md$' || true)"
+          fi
+          if [ -z "$added" ]; then
+            echo "This push adds no changelog fragment, so no pre-release." >> "$GITHUB_STEP_SUMMARY"
+            echo "cut=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          current="$(tr -d '[:space:]' < VERSION)"
+          major="${current%%.*}"
+          rest="${current#*.}"
+          minor="${rest%%.*}"
+          base="${major}.$((minor + 1)).0"
+          git fetch --quiet --tags origin
+          last="$(git tag -l "v${base}-rc.*" | sed -n "s/^v${base}-rc\.\([0-9][0-9]*\)$/\1/p" | sort -n | tail -1)"
+          version="${base}-rc.$(( ${last:-0} + 1 ))"
+          git config user.name "chickadee-release[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git switch --quiet --detach
+          printf 'public enum ChickadeeVersion {\n    public static let current = "%s"\n}\n' \
+            "$version" > Sources/Core/ChickadeeVersion.swift
+          git add Sources/Core/ChickadeeVersion.swift
+          git commit --quiet -m "chore(prerelease): v${version}
+
+          A pre-release of the next minor, for the dev server (docs/release-gate.md).
+          This commit is reached only by its tag; main is not changed."
+          git tag -a "v${version}" -m "Chickadee v${version} (pre-release)"
+          git push origin "v${version}"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "cut=true" >> "$GITHUB_OUTPUT"
+          echo "Cut the pre-release v${version} for the dev server. Production does not take pre-releases." >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Dispatch the pre-release (only when no RELEASE_TOKEN)
+        if: ${{ steps.prerelease.outputs.cut == 'true' && env.RELEASE_TOKEN == '' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh workflow run release.yml -f tag="v${{ steps.prerelease.outputs.version }}"
 
       - name: Assemble release from changelog fragments
         id: assemble

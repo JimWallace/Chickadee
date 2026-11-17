@@ -81,10 +81,11 @@ struct DeployStateFolder: Sendable {
         return name
     }
 
-    /// True for a release tag of the form the daemon accepts, `vX.Y.Z`.
+    /// True for a release tag of the form the daemon accepts, `vX.Y.Z` or a
+    /// pre-release `vX.Y.Z-rc.N`.
     static func isReleaseTag(_ text: String) -> Bool {
         text.wholeMatch(of: releaseTagPattern) != nil
     }
 
-    private static var releaseTagPattern: Regex<Substring> { /v[0-9]+\.[0-9]+\.[0-9]+/ }
+    private static var releaseTagPattern: Regex<Substring> { /v[0-9]+\.[0-9]+\.[0-9]+(?:-rc\.[0-9]+)?/ }
 }

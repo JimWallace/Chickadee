@@ -58,6 +58,10 @@ struct AdminDeploymentView: Sendable {
     let latestSeen: String?
     let paused: Bool
     let mode: DeployMode
+    /// The release channel, shown read-only: the host sets it. A daemon that
+    /// reports none predates the channel and reads only releases/latest, so
+    /// `releases` is true of it.
+    let channel: String
     let updatedAt: String?
     let held: Held?
     /// Requests written and not yet read by the daemon, which reads them on
@@ -92,6 +96,7 @@ struct AdminDeploymentView: Sendable {
             latestSeen: status?.latestSeen,
             paused: status?.paused ?? false,
             mode: mode,
+            channel: status?.channel ?? "releases",
             updatedAt: status?.updatedAt,
             held: held,
             waitingRequests: folder.waitingRequestCount(),

@@ -399,17 +399,22 @@ server's `deployerUnhealthy` rule pages on `disk_low`.
 
 ### App ⇄ daemon IPC (files in `STATE_DIR`)
 
-- `command.json` — host operator → daemon: `{"command":"pause|resume|approve|rollback|deploy|mode","version":"vX.Y.Z","mode":"..."}` (consumed each cycle). Only the host can write it.
+- `command.json` — host operator → daemon: `{"command":"pause|resume|approve|rollback|deploy|mode|channel","version":"vX.Y.Z","mode":"...","channel":"..."}` (consumed each cycle). Only the host can write it.
 - `requests/*.json` — admin page → daemon, one file per request (see "The
   request channel" below).
 - `mode` — the deploy mode (`autonomous`, `gated-minors`, `manual`); absent
   means `gated-minors`.
+- `channel` — the release channel: `releases` (absent; production reads
+  GitHub `releases/latest`, which never names a pre-release) or
+  `prereleases` (the dev server reads the newest release including
+  `vX.Y.0-rc.N`). Host-only: the request channel refuses a change to it.
+  See `docs/release-gate.md`, "Pre-release channel".
 - `paused` — present while auto-deploy is paused. Pause survives a restart,
   including the one after the daemon updates its own scripts.
 - `approved` — the release an admin approved, until it deploys. It survives
   the same restart.
 - `pending-notes.json` — the held release's notes, for the admin page.
-- `status.json` — daemon → readers: `state`, `deployedVersion`, `latestSeen`, `detail`, `paused`, `mode`, `heldVersion`, `approvedVersion`, `scriptsRevision`, `updatedAt`.
+- `status.json` — daemon → readers: `state`, `deployedVersion`, `latestSeen`, `detail`, `paused`, `mode`, `channel`, `heldVersion`, `approvedVersion`, `scriptsRevision`, `updatedAt`.
   `state` is one of `idle`, `deploying`, `waiting_for_image` (step 5),
   `pending_approval` (step 4), `paused`, `error` (a failed attempt; the detail
   says when the next one is), `stuck` (five failures in a row, or two hours
@@ -439,7 +444,7 @@ accepts exactly these:
 | `{"request":"pause"}`, `{"request":"resume"}` | always |
 
 Anything else is refused and written to the history: an unknown request, a
-`rollback` or `deploy`, a version that is not the held one, a file over 4 KB,
+`rollback` or `deploy`, a change of channel, a version that is not the held one, a file over 4 KB,
 an entry that is not a regular file. Each request, accepted or refused, is a
 line in `history.jsonl` with the admin's username, which the app writes into
 the request. The app also records each request it writes in the audit log
@@ -482,6 +487,7 @@ echo '{"command":"pause"}'    | sudo tee /var/lib/chickadee-deploy/command.json
 echo '{"command":"resume"}'   | sudo tee /var/lib/chickadee-deploy/command.json
 echo '{"command":"approve","version":"vX.Y.Z"}' | sudo tee /var/lib/chickadee-deploy/command.json
 echo '{"command":"mode","mode":"gated-minors"}' | sudo tee /var/lib/chickadee-deploy/command.json
+echo '{"command":"channel","channel":"prereleases"}' | sudo tee /var/lib/chickadee-deploy/command.json
 echo '{"command":"rollback"}' | sudo tee /var/lib/chickadee-deploy/command.json
 ```
 

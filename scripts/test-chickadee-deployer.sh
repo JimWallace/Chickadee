@@ -869,6 +869,106 @@ run_cycle
 expect_calls "deploy-script deploy" 1
 
 # ---------------------------------------------------------------------------
+# The pre-release channel (docs/release-gate.md, "Pre-release channel").
+# ---------------------------------------------------------------------------
+start_case "versions order rc suffixes correctly"
+newer() { is_newer "$1" "$2" || fail "expected $1 > $2"; }
+not_newer() { ! is_newer "$1" "$2" || fail "expected $1 not > $2"; }
+newer v0.7.0-rc.3 0.6.12
+newer v0.7.0-rc.10 v0.7.0-rc.9
+newer v0.7.0 0.7.0-rc.3
+newer v0.7.1 v0.7.0
+not_newer v0.7.0-rc.3 0.7.0
+not_newer v0.7.0-rc.9 v0.7.0-rc.10
+not_newer v0.6.12 0.7.0-rc.1
+not_newer v0.7.0-rc.2 0.7.0-rc.2
+[ "$(bump_kind v0.7.0-rc.1 0.6.12)" = "minor" ] || fail "an rc of the next minor is not a minor bump"
+
+PRERELEASES_JSON='[{"tag_name": "v0.6.0-rc.2", "prerelease": true},
+ {"tag_name": "v0.6.0-rc.10", "prerelease": true},
+ {"tag_name": "v0.6.0-rc.9", "prerelease": true},
+ {"tag_name": "v0.6.1-rc.1", "prerelease": true, "draft": true},
+ {"tag_name": "v0.5.232", "prerelease": false}]'
+
+# ---------------------------------------------------------------------------
+start_case "the default channel never deploys a pre-release, however new"
+printf '%s' "$PRERELEASES_JSON" > "$STUB/releases_json"
+cat > "$STUB/tags" <<JSON
+[{"name": "v0.6.0-rc.10", "commit": {"sha": "$RELEASE_SHA"}},
+ {"name": "v0.5.232", "commit": {"sha": "$RELEASE_SHA"}}]
+JSON
+echo "autonomous" > "$CHICKADEE_STATE_DIR/mode"
+run_cycle
+expect_calls "curl insecure=0 https://api.github.com/repos/.*/releases/latest" 1
+expect_calls "releases?per_page=30" 0
+expect_calls "deploy-script deploy" 1
+[ "$DEPLOYED_VERSION" = "0.5.232" ] || fail "expected 0.5.232 deployed, saw $DEPLOYED_VERSION"
+expect_status_field channel releases
+[ -z "$(fetch_release_tags | grep -- '-rc\.')" ] || fail "the default channel lists a pre-release tag as a fallback"
+
+# ---------------------------------------------------------------------------
+start_case "the prereleases channel deploys the newest pre-release"
+printf '%s' "$PRERELEASES_JSON" > "$STUB/releases_json"
+echo "prereleases" > "$CHICKADEE_STATE_DIR/channel"
+echo "autonomous" > "$CHICKADEE_STATE_DIR/mode"
+echo "0.6.0-rc.10" > "$STUB/target_version"
+run_cycle
+expect_calls "curl insecure=0 https://api.github.com/repos/.*/releases/latest" 0
+expect_calls "deploy-script deploy" 1
+[ "$DEPLOYED_VERSION" = "0.6.0-rc.10" ] || fail "expected 0.6.0-rc.10 deployed, saw $DEPLOYED_VERSION"
+expect_status_field channel prereleases
+cat > "$STUB/tags" <<JSON
+[{"name": "v0.6.0-rc.9", "commit": {"sha": "a"}},
+ {"name": "v0.6.0", "commit": {"sha": "b"}},
+ {"name": "v0.6.0-rc.10", "commit": {"sha": "c"}},
+ {"name": "v0.5.232", "commit": {"sha": "d"}}]
+JSON
+[ "$(fetch_release_tags | cut -f1 | tr '\n' ' ')" = "v0.6.0 v0.6.0-rc.10 v0.6.0-rc.9 v0.5.232 " ] \
+  || fail "the prereleases channel orders its fallback tags wrongly: $(fetch_release_tags | cut -f1 | tr '\n' ' ')"
+
+# ---------------------------------------------------------------------------
+start_case "on the prereleases channel in gated-minors, an rc of the next minor is held"
+printf '%s' "$PRERELEASES_JSON" > "$STUB/releases_json"
+echo "prereleases" > "$CHICKADEE_STATE_DIR/channel"
+run_cycle
+expect_calls "deploy-script" 0
+expect_state pending_approval
+expect_status_field heldVersion v0.6.0-rc.10
+request "001-approve.json" '{"request": "approve", "version": "v0.6.0-rc.10", "user": "alice"}'
+echo "0.6.0-rc.10" > "$STUB/target_version"
+run_cycle
+expect_calls "deploy-script deploy" 1
+
+# ---------------------------------------------------------------------------
+start_case "a held rc lists its own notes, not every earlier rc"
+cat > "$STUB/releases_json" <<'JSON'
+[{"tag_name": "v0.6.0-rc.2", "prerelease": true, "body": "- Fragments (#3100)."},
+ {"tag_name": "v0.6.0-rc.1", "prerelease": true, "body": "- Fragments (#3100)."},
+ {"tag_name": "v0.5.232", "prerelease": false, "body": "- A fix."}]
+JSON
+echo "prereleases" > "$CHICKADEE_STATE_DIR/channel"
+run_cycle
+expect_status_field heldVersion v0.6.0-rc.2
+python3 - "$PENDING_NOTES_FILE" <<'PY' || fail "the notes of a held rc list other pre-releases"
+import json, sys
+notes = json.load(open(sys.argv[1]))
+assert [r["tag"] for r in notes["releases"]] == ["v0.6.0-rc.2", "v0.5.232"], notes["releases"]
+PY
+
+# ---------------------------------------------------------------------------
+start_case "the channel is host-only: a request to change it is refused"
+request "001-channel.json" '{"request": "channel", "channel": "prereleases", "user": "mallory"}'
+run_cycle
+[ ! -f "$CHICKADEE_STATE_DIR/channel" ] || fail "a request changed the channel"
+expect_history_line 'the release channel is a host setting.*"user": "mallory"'
+printf '{"command": "channel", "channel": "prereleases"}' > "$COMMAND_FILE"
+run_cycle
+[ "$(cat "$CHICKADEE_STATE_DIR/channel")" = "prereleases" ] || fail "a host channel command did not write the channel file"
+printf '{"command": "channel", "channel": "nightly"}' > "$COMMAND_FILE"
+run_cycle
+[ "$(cat "$CHICKADEE_STATE_DIR/channel")" = "prereleases" ] || fail "an unknown channel replaced the channel"
+
+# ---------------------------------------------------------------------------
 if [ "$FAILURES" -gt 0 ]; then
   printf '%s deployer test failure(s)\n' "$FAILURES"
   exit 1

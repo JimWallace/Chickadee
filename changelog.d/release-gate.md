@@ -20,6 +20,16 @@
   dependency pull requests are labelled `minor-release` and no longer
   auto-merge.
 
+- **A pre-release channel, so the dev server runs ahead of production.**
+  Where auto-release refuses past a contract change, it cuts a GitHub
+  pre-release of the next minor (`v0.X.0-rc.N`) on a tag of its own, which
+  stamps only the version, so `main`, `VERSION` and the fragments are
+  untouched. The rc image is published as `:sha-<commit>` and never moves
+  `:latest`. The deployer gains a host-only release channel
+  (`$STATE_DIR/channel`: `releases`, the default, or `prereleases`); the
+  admin page shows it and cannot change it, and production never deploys a
+  pre-release. Version ordering handles rc suffixes.
+
 ### Changed
 
 - **The deployer remembers pause and approval across a restart,** including

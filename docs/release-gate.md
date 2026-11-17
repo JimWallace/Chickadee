@@ -97,6 +97,8 @@ from what runs to what was approved. Rollback returns to what ran before.
 
 `deploy/chickadee-deployer.sh` gains:
 
+- **A release channel,** stored in `$STATE_DIR/channel` (see "Pre-release
+  channel" above). Host-only.
 - **A mode,** stored in `$STATE_DIR/mode` (`autonomous`, `gated-minors`,
   `manual`). An absent file means `gated-minors`. `is_gated` reads it: in
   `manual` every newer release is gated; in `gated-minors` a minor or major
@@ -120,6 +122,75 @@ ordinary patch: the old daemon deploys it as usual, then restarts as the new
 one, in `gated-minors`. It must land before the 0.6.0 cut, so that 0.6.0 is the
 first minor the gate holds.
 
+## Pre-release channel
+
+Added on 2026-11-16, in the same change: production stays gated, and the dev
+server runs ahead of it. `chickadee-dev` restores a production snapshot every
+night so that it can try what comes next. Without a pre-release, auto-release
+cuts nothing after a contract change, so dev would stall exactly when a kernel
+re-vendor most needs trying.
+
+**A pre-release where the gate refuses.** Where `auto-release.yml` refuses a
+release because a contract path changed since the last release tag, it cuts a
+GitHub **pre-release** of the next minor instead: `v0.7.0-rc.1`, then
+`rc.2`, and so on, one more than the last rc of that minor, on each push that
+adds a changelog fragment (a docs-only or test-only merge cuts none). It
+still opens or updates the `minor-needed` issue. An rc image is built only
+when the tag push carries `RELEASE_TOKEN`, as for a stable release.
+
+- The rc is a commit of its own on top of `main`'s head that changes only
+  `Sources/Core/ChickadeeVersion.swift` to the rc version. Only its tag
+  reaches GitHub; `main` is not changed. So `VERSION`, `CHANGELOG.md` and
+  the fragments in `changelog.d/` stay where they are, and the fragments
+  fold into the real minor.
+- The running build reports the rc it is: `/health`, the admin banner and
+  the image's `org.opencontainers.image.version` label all say
+  `0.7.0-rc.N`. The server's version comparisons (`VersionComparator`) read
+  only the leading `X.Y.Z`, so nothing crashes on the suffix, but they treat
+  every rc of a minor and the minor itself as equal: the runner version skew
+  alert does not see a dev runner one rc behind, and a `minimumRunnerVersion`
+  of `0.7.0` admits an rc runner. That is acceptable on dev, the only place
+  an rc runs. The deployer orders rcs correctly (below).
+- `docker-build.yml` builds the tag and publishes `:sha-<commit>` of the rc
+  commit, which no build of `main` publishes, and `:0.7.0-rc.N`. An rc never
+  moves `:latest`, of the server image or of the arm64 runner image
+  (`runner-arm64-image.yml`), because production's runners follow it. A new
+  workflow that reacts to a `v*` tag must make the same exception.
+- `release.yml` marks it a pre-release, never latest, with the pending
+  fragments as its notes.
+
+**A release channel on the deployer**, in `$STATE_DIR/channel`:
+
+| Channel | Reads | Used by |
+|---|---|---|
+| `releases` (absent file) | GitHub `releases/latest`, which never names a pre-release | production |
+| `prereleases` | the newest non-draft release in the releases list, pre-releases included | the dev server |
+
+The channel is **host-only**. It is set by a host command
+(`{"command":"channel","channel":"prereleases"}` in `command.json`) or by
+writing the file. The app's request channel refuses any request to change it,
+so the admin page can never point production at pre-releases. The page shows
+the channel read-only.
+
+Versions order with their rc suffix: `0.7.0-rc.3` > `0.6.12`,
+`0.7.0-rc.10` > `0.7.0-rc.9`, and `0.7.0` > `0.7.0-rc.3` (plain `sort -V`
+gets the last one wrong). In `gated-minors` an rc of the next minor counts as
+a minor bump.
+
+**Dev runs `channel=prereleases`, `mode=autonomous`.** Both are needed: in
+`gated-minors` the first rc of a minor counts as a minor and waits for
+approval, so dev would stall on it. It takes each rc as it
+is cut, on top of the nightly production snapshot it already restores. Dev is
+where a minor is validated before an admin approves it on production. The
+order of a minor becomes:
+
+1. The labelled contract pull requests merge; each merge with fragments cuts
+   an rc, and dev deploys it.
+2. The rc is validated on dev.
+3. The minor is cut by hand, and production holds it.
+4. An admin approves it on production's admin page, at a time with no
+   lecture running.
+
 ## The admin page asks; the daemon decides
 
 The app reads the state folder through a read-only mount (`/deploy-state`), so
@@ -138,7 +209,7 @@ oldest first, deletes each, and accepts exactly these:
 | `{"request":"pause"}`, `{"request":"resume"}` | always |
 
 Anything else is refused and written to the history: an unknown request, a
-`rollback` or `deploy`, a version that is not the held one, a file over 4 KB.
+`rollback` or `deploy`, a change of channel, a version that is not the held one, a file over 4 KB.
 Each accepted or refused request is a line in `history.jsonl`, with the admin's
 username, which the app writes into the request.
 
@@ -151,7 +222,8 @@ version, or roll back.
 
 A "Deployment" section on the admin panel, for admins only:
 
-- **What runs:** the deployed version, the mode, paused or not, the daemon's
+- **What runs:** the deployed version, the mode, the channel (read-only),
+  paused or not, the daemon's
   state and its last update (`status.json`).
 - **What waits:** the held release, the release notes between the deployed
   version and it (`pending-notes.json`), and a flag on every entry that came

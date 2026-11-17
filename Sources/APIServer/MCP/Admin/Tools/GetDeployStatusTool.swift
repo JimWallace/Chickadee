@@ -39,6 +39,9 @@ struct GetDeployStatusTool: DiagnosticTool {
         /// no mode file runs in gated-minors; nil from a daemon older than the
         /// release gate.
         let mode: String?
+        /// The release channel: releases (production) or prereleases (the dev
+        /// server). Host-only; nil from a daemon older than the channel.
+        let channel: String?
         /// The release the daemon holds for approval, or nil when none waits.
         let heldVersion: String?
         /// The held release an admin approved, which deploys on the next poll.
@@ -58,7 +61,7 @@ struct GetDeployStatusTool: DiagnosticTool {
         "Report the zero-downtime auto-deploy daemon's current state from the status file it "
         + "writes: which version is live (deployedVersion), the latest release it has seen "
         + "(latestSeen), whether auto-deploy is paused, the deploy mode (autonomous, gated-minors "
-        + "or manual), the release held for approval (heldVersion, with state=pending_approval) and "
+        + "or manual), the release channel (releases or prereleases), the release held for approval (heldVersion, with state=pending_approval) and "
         + "whether an admin approved it (approvedVersion), the last update time, and the commit of the "
         + "daemon's own scripts on the host (scriptsRevision). Returns available=false "
         + "if the daemon is not running or its state dir is not mounted. Read-only; reads a small "
@@ -74,7 +77,8 @@ struct GetDeployStatusTool: DiagnosticTool {
         guard let data = try? Data(contentsOf: path) else {
             return Output(
                 available: false, state: nil, deployedVersion: nil, latestSeen: nil,
-                detail: nil, paused: nil, mode: nil, heldVersion: nil, approvedVersion: nil, updatedAt: nil,
+                detail: nil, paused: nil, mode: nil, channel: nil, heldVersion: nil, approvedVersion: nil,
+                updatedAt: nil,
                 scriptsRevision: nil,
                 note: "No deploy status at \(path.path) — the auto-deploy daemon may not be "
                     + "running, or its state directory is not mounted into this container.")
@@ -82,7 +86,8 @@ struct GetDeployStatusTool: DiagnosticTool {
         guard let status = try? JSONDecoder().decode(DeployStatusFile.self, from: data) else {
             return Output(
                 available: false, state: nil, deployedVersion: nil, latestSeen: nil,
-                detail: nil, paused: nil, mode: nil, heldVersion: nil, approvedVersion: nil, updatedAt: nil,
+                detail: nil, paused: nil, mode: nil, channel: nil, heldVersion: nil, approvedVersion: nil,
+                updatedAt: nil,
                 scriptsRevision: nil,
                 note: "Deploy status file at \(path.path) could not be parsed.")
         }
@@ -94,6 +99,7 @@ struct GetDeployStatusTool: DiagnosticTool {
             detail: status.detail,
             paused: status.paused,
             mode: status.mode,
+            channel: status.channel,
             heldVersion: status.heldVersion,
             approvedVersion: status.approvedVersion,
             updatedAt: status.updatedAt,

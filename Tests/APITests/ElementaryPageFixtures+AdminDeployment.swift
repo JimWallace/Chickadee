@@ -39,7 +39,8 @@ extension ElementaryPageFixtures {
             AdminDeploymentView(
                 available: available, stateDirectory: "/deploy-state", state: held == nil ? "idle" : "pending_approval",
                 detail: "release v0.6.0 needs approval", deployedVersion: "0.5.980", latestSeen: "v0.6.0",
-                paused: paused, mode: mode, updatedAt: "2026-11-20T10:00:00Z", held: held,
+                paused: paused, mode: mode, channel: paused ? "prereleases" : "releases",
+                updatedAt: "2026-11-20T10:00:00Z", held: held,
                 waitingRequests: paused ? 1 : 0, canSendRequests: available, history: available ? history : [])
         }
         func render(_ view: AdminDeploymentView, flash: FlashMessages = FlashMessages()) -> String {

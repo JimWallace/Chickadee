@@ -44,6 +44,13 @@ opens (or updates) one issue labelled `minor-needed` that names the pull
 requests. Fragments keep accumulating in `changelog.d/` until the minor is cut
 by hand (below); after its tag, auto-release resumes.
 
+Meanwhile it cuts a **pre-release** of the next minor (`v0.X.0-rc.N`) on each
+such merge with fragments, for the dev server, which runs ahead of production
+on the `prereleases` channel. The rc is a tag on a commit of its own that
+stamps only `ChickadeeVersion.swift`; `main`, `VERSION` and the fragments are
+not touched, the image never becomes `:latest`, and production never deploys a
+pre-release (`docs/release-gate.md`, "Pre-release channel").
+
 At merge time, the `contract-change` check fails a pull request that changes
 a contract path unless it carries the `minor-release` label, which says "this
 ships in the next minor". The kernel re-vendor pull requests
@@ -137,7 +144,8 @@ human decision, made like this:
 
 1. If the minor carries contract changes, merge the labelled `minor-release`
    pull requests together, just before the cut: while one is on `main`, no
-   release of any kind is cut. Then make sure at least one fragment exists in
+   release is cut, only pre-releases for the dev server. Validate the newest
+   rc on dev before the cut. Then make sure at least one fragment exists in
    `changelog.d/` — usually a short milestone note written for the occasion. (The script refuses to release an
    empty fragment set, `--version` or not.)
 2. On an up-to-date local `main`:

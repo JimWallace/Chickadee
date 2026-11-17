@@ -519,7 +519,9 @@ requests that the daemon validates. Rollback stays a host action.
 `scripts/contract-paths.txt` (the vendored kernels and editor, the runner wasm,
 the kernel pins, `Sources/RunnerCore/`) needs the `minor-release` label, and
 while one is on `main`, auto-release cuts no release and opens a `minor-needed`
-issue. The minor is cut by hand (`docs/release-process.md`). Kernel re-vendor
+issue. It cuts a pre-release of the next minor (`v0.X.0-rc.N`) instead, which
+only the dev server takes: its deployer runs the host-only `prereleases`
+channel, production's the default `releases`. The minor is cut by hand (`docs/release-process.md`). Kernel re-vendor
 and JupyterLab dependency pull requests carry the label and never auto-merge.
 
 **Verify a fix is live with the read-only admin diagnostics MCP**
