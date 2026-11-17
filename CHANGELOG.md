@@ -9,6 +9,13 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.979] - 2026-11-17
+
+### Changed
+
+- **The grade total cases live with the other grade-field tests.** The three `gradeTotalPoints` cases from the 2026-11-16 mutation run moved from their own file into `CollectionGradeFieldsTests`. The steward had put them in a new file because it does not edit an existing test file.
+
+
 ## [0.5.978] - 2026-11-17
 
 ### Changed
