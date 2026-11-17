@@ -38,8 +38,10 @@ scripts/assemble-release.sh --dry-run
 step 1 it lists the files that every commit since the last release tag
 changed and matches them against `scripts/contract-paths.txt`, the student
 contract: the vendored kernels and editor, the runner wasm, the kernel pins,
-`Sources/RunnerCore/` and the output-contract fixture. If any matched, it cuts
-no release, neither a patch nor a minor. It writes why in the job summary and
+`Sources/RunnerCore/` and the output-contract fixture. It also stops at a
+commit whose pull request carries the `minor-release` label, which is how a
+compatibility removal that touches no contract path waits for the minor. If
+either matched, it cuts no release, neither a patch nor a minor. It writes why in the job summary and
 opens (or updates) one issue labelled `minor-needed` that names the pull
 requests. Fragments keep accumulating in `changelog.d/` until the minor is cut
 by hand (below); after its tag, auto-release resumes.
@@ -138,12 +140,12 @@ Auto-release is **patch-only by construction**: `assemble-release.sh` computes
 `major.minor.(patch + 1)` whenever it is invoked without `--version`, and
 `auto-release.yml` never passes one. Fragment categories (`### Added`,
 `### Removed`, …) are folded into the changelog verbatim — they carry **no**
-bump semantics — and there is no marker, label, or commit-prefix scan. No
+bump semantics — and no marker, label, or commit-prefix scan picks the bump (the `minor-release` label only holds a release; it never cuts one). No
 sequence of merges can ever produce `0.5.0` on its own; that is a deliberate
 human decision, made like this:
 
-1. If the minor carries contract changes, merge the labelled `minor-release`
-   pull requests together, just before the cut: while one is on `main`, no
+1. If the minor carries contract changes or compatibility removals, merge the
+   labelled `minor-release` pull requests together, just before the cut: while one is on `main`, no
    release is cut, only pre-releases for the dev server. Validate the newest
    rc on dev before the cut. Then make sure at least one fragment exists in
    `changelog.d/` — usually a short milestone note written for the occasion. (The script refuses to release an
