@@ -2,7 +2,7 @@
  "version": 1,
  "metadata": {
   "content_hash": {
-   "emscripten-wasm32": "81a6358e50eddd5b2a0ba8b8a0c29e8aa6353fc3a77aab087506cf87f3805265"
+   "emscripten-wasm32": "c320f5f647845352452391188698276a98955085895c6e4f8bd6e20e319cce45"
   },
   "channels": [
    {
@@ -233,20 +233,6 @@
    "optional": false
   },
   {
-   "name": "openblas",
-   "version": "0.3.34",
-   "manager": "conda",
-   "platform": "emscripten-wasm32",
-   "dependencies": {},
-   "url": "https://repo.prefix.dev/emscripten-forge-4x/emscripten-wasm32/openblas-0.3.34-h69b678e_4.tar.bz2",
-   "hash": {
-    "md5": "095501d496cd69a1c930dc9ede0f5508",
-    "sha256": "e3aa6215e72864c1367362331e353cdbfe981d35e0ffe07069d90460e396f476"
-   },
-   "category": "main",
-   "optional": false
-  },
-  {
    "name": "packaging",
    "version": "26.3",
    "manager": "conda",
@@ -270,20 +256,6 @@
    "hash": {
     "md5": "38eb5d208daadfec0edba41bde9bd451",
     "sha256": "f63adf8a5998a59a15a8904e8e07401038dbee06b02fb2fd38a822f5cb9ee472"
-   },
-   "category": "main",
-   "optional": false
-  },
-  {
-   "name": "patsy",
-   "version": "1.0.3",
-   "manager": "conda",
-   "platform": "emscripten-wasm32",
-   "dependencies": {},
-   "url": "https://repo.prefix.dev/emscripten-forge-4x/emscripten-wasm32/patsy-1.0.3-py313h1804a44_0.tar.bz2",
-   "hash": {
-    "md5": "d238615eba79f6b4b7d3cf7db949c084",
-    "sha256": "fb0b8b19c194617c826f4b0bf118e5bd05a3091f26a4a8cf04b64b9100e0b7b0"
    },
    "category": "main",
    "optional": false
@@ -513,34 +485,6 @@
    "optional": false
   },
   {
-   "name": "scipy",
-   "version": "1.18.0",
-   "manager": "conda",
-   "platform": "emscripten-wasm32",
-   "dependencies": {},
-   "url": "https://repo.prefix.dev/emscripten-forge-4x/emscripten-wasm32/scipy-1.18.0-np23py313h8db5e5d_4.tar.bz2",
-   "hash": {
-    "md5": "ae860beb98ed1376f64408992991bbe1",
-    "sha256": "e5f153f06826ccf88f754e764f3650fb7bf26e0d9330965cb388a95b3e12d72a"
-   },
-   "category": "main",
-   "optional": false
-  },
-  {
-   "name": "six",
-   "version": "1.17.0",
-   "manager": "conda",
-   "platform": "emscripten-wasm32",
-   "dependencies": {},
-   "url": "https://repo.prefix.dev/conda-forge/noarch/six-1.17.0-pyhe01879c_1.conda",
-   "hash": {
-    "md5": "3339e3b65d58accf4ca4fb8748ab16b3",
-    "sha256": "458227f759d5e3fcec5d9b7acce54e10c9e1f4f4b7ec978f3bfd54ce4ee9853d"
-   },
-   "category": "main",
-   "optional": false
-  },
-  {
    "name": "stack_data",
    "version": "0.6.3",
    "manager": "conda",
@@ -550,20 +494,6 @@
    "hash": {
     "md5": "b1b505328da7a6b246787df4b5a49fbc",
     "sha256": "570da295d421661af487f1595045760526964f41471021056e993e73089e9c41"
-   },
-   "category": "main",
-   "optional": false
-  },
-  {
-   "name": "statsmodels",
-   "version": "0.15.0",
-   "manager": "conda",
-   "platform": "emscripten-wasm32",
-   "dependencies": {},
-   "url": "https://repo.prefix.dev/emscripten-forge-4x/emscripten-wasm32/statsmodels-0.15.0-np23py313h07ed413_0.tar.bz2",
-   "hash": {
-    "md5": "8ed96043c8edcb01eb67bc5d74a92505",
-    "sha256": "602f851d89156509d5cc9029f236822b967131022839e092c934dd99a43eae32"
    },
    "category": "main",
    "optional": false
