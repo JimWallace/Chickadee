@@ -19,6 +19,8 @@ if [ "${1:-}" = "--self-test" ]; then
 Public/vendorish/x.js
 Public/vendor/marked/marked.min.js
 Public/runner-wasm/RunnerWasm.abc.wasm
+Public/python-grading-shared.js
+Public/python-grading-worker.js
 Tools/jupyterlite/environment-r.yml
 Tools/jupyterlite/environment.yml
 Tools/jupyterlite/requirements.txt
@@ -32,6 +34,7 @@ docs/release-gate.md'
   expected='Public/jupyterlite/build/kernel.wasm
 Public/vendor/marked/marked.min.js
 Public/runner-wasm/RunnerWasm.abc.wasm
+Public/python-grading-shared.js
 Tools/jupyterlite/environment-r.yml
 Tools/jupyterlite/requirements.txt
 Tools/jupyterlite/jupyter-lite.json
