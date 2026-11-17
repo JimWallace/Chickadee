@@ -90,4 +90,23 @@ import Testing
         #expect(winter27.ordinal == fall26.ordinal + 1)
         #expect(spring27.ordinal == winter27.ordinal + 1)
     }
+
+    @Test func shortLabelRoundTrips() throws {
+        let fall26 = try #require(AcademicTerm(year: 2026, season: .fall))
+        #expect(AcademicTerm(shortLabel: "F26") == fall26)
+        #expect(AcademicTerm(shortLabel: " f26 ") == fall26)
+        #expect(AcademicTerm(shortLabel: fall26.shortLabel) == fall26)
+        #expect(AcademicTerm(shortLabel: "W05") == AcademicTerm(year: 2005, season: .winter))
+    }
+
+    @Test(arguments: ["", "F", "F2026", "X26", "Fall 2026", "F2a", "26F"])
+    func malformedShortLabelsAreRefused(label: String) {
+        #expect(AcademicTerm(shortLabel: label) == nil)
+    }
+
+    @Test func calendarYearHasThreeTermsInOrder() {
+        let terms = AcademicTerm.terms(ofCalendarYear: 2026)
+        #expect(terms.map(\.shortLabel) == ["W26", "S26", "F26"])
+        #expect(AcademicTerm.terms(ofCalendarYear: 99).isEmpty)
+    }
 }

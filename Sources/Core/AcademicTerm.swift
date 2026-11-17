@@ -106,6 +106,25 @@ public struct AcademicTerm: Codable, Sendable, Hashable, Comparable {
         return season.initial + (twoDigits < 10 ? "0\(twoDigits)" : "\(twoDigits)")
     }
 
+    /// Parses `shortLabel` back: "F26" is Fall 2026. The season initial is
+    /// case-insensitive and the two digits name a year in 2000–2099. Returns
+    /// nil for anything else (a four-digit year, a full season name).
+    public init?(shortLabel: String) {
+        let trimmed = shortLabel.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        guard trimmed.count == 3, let initial = trimmed.first else { return nil }
+        let digits = trimmed.dropFirst()
+        guard digits.allSatisfy(\.isASCII), let twoDigits = Int(digits),
+            let season = TermSeason.allCases.first(where: { $0.initial == String(initial) })
+        else { return nil }
+        self.init(year: 2000 + twoDigits, season: season)
+    }
+
+    /// The Winter, Spring and Fall terms of a calendar year, in that order.
+    /// Empty when `year` is not a four-digit year.
+    public static func terms(ofCalendarYear year: Int) -> [AcademicTerm] {
+        TermSeason.allCases.compactMap { AcademicTerm(year: year, season: $0) }
+    }
+
     /// A number that increases by one per term, in calendar order. Use it
     /// as a sort value where a `Comparable` value cannot go (a table cell).
     public var ordinal: Int {

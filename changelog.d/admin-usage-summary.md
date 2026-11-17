@@ -1,0 +1,3 @@
+### Added
+
+- **Usage statistics on the admin MCP surface.** A new read-only tool, `get_usage_summary`, reports how much Chickadee was used across a set of academic terms, for annual reports such as an APR. It covers course offerings, enrolled and active students, instructors and TAs, assignments by type and language, student submissions, lab openings, AI-feedback releases, tournaments and integration use. Results come with a per-term breakdown and optional per-course rows. It covers a calendar year by default, or takes explicit terms, and `scope: "mine"` limits it to the caller's own courses. Counts only: per-course student counts below 5 are withheld.
