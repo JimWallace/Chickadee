@@ -143,3 +143,19 @@ test('an older test_runtime without the check keeps the old behaviour', { skip: 
     }, { runtime: older })['publictest_quit.py'];
     assert.equal(result.exitCode, 0, 'the exit code stands, and nothing crashes');
 });
+
+// `sys.exit(x)` with x not an int: python3 prints str(x) to stderr and exits 1.
+// An object JSON cannot hold used to stop the cell printing its payload at all.
+test('sys.exit with a value that is not an int exits 1 with it on stderr', { skip: !PYTHON }, () => {
+    const results = grade({
+        'publictest_object.py': 'import sys\nsys.exit(object())\n',
+        'publictest_text.py': 'import sys\nsys.exit("bad input")\n',
+    });
+    const object = results['publictest_object.py'];
+    assert.ok(object, 'the cell printed its payload');
+    assert.equal(object.exitCode, 1);
+    assert.match(object.stderr, /^<object object at 0x[0-9a-f]+>$/m);
+    const text = results['publictest_text.py'];
+    assert.equal(text.exitCode, 1);
+    assert.match(text.stderr, /^bad input$/m);
+});
