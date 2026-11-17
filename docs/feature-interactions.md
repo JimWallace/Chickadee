@@ -2250,6 +2250,26 @@ coordination, and each must see every edit.
 - **Rule:** a change to the vendored layout changes all of them.
   `KernelAssetListTests` fails when a listed file is missing or a package is
   not listed.
+- **Fields the browser reads in `empack_env_meta.json`:** each package's
+  `depends` (`dependencyName` in `xeus-kernel-shared.js`, which splits on
+  `[\s<>=!]`, so `name 1.2` and `name ==1.2` both work) and `channel` (mambajs
+  matches it against the channel list; `scripts/create-kernel-prefix.py`
+  keeps it the channel's own URL).
+- **Rule:** a `kernel_packages/` name maps to one set of files. An archive the
+  build changes gets a content-hash name; one it only normalizes keeps its
+  upstream name (`scripts/check-xeus-vendored.sh` section 9).
+
+### A kernel environment's lock: `Tools/jupyterlite/locks/*-lock.yml`
+
+- **Writers:** `scripts/lock-kernel-envs.py`, by hand or in the re-vendor
+  workflow's publish mode.
+- **Readers:** `scripts/create-kernel-prefix.py` (the build installs each kernel
+  from its lock), `scripts/lock-kernel-envs.py --check` (the JupyterLite job),
+  and the re-vendor workflow's pull request run, which fails when the committed
+  kernels are not what the locks build.
+- **Rule:** an environment file, its lock and the vendored packages agree. Edit
+  the environment file, lock it again, then re-vendor; each step without the
+  next fails a check.
 
 ### The cache-warm marker: `ck-kernel-warm:<env>`
 

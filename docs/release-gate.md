@@ -28,7 +28,9 @@ Public/jupyterlite/
 Public/vendor/
 Public/runner-wasm/
 Tools/jupyterlite/environment-*.yml
+Tools/jupyterlite/requirements.in
 Tools/jupyterlite/requirements.txt
+Tools/jupyterlite/locks/
 Tools/jupyterlite/jupyter-lite.json
 Sources/RunnerCore/
 Tests/Fixtures/output-contract.json

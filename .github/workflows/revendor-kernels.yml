@@ -26,9 +26,9 @@ name: Re-vendor xeus kernels
 # channels.
 #
 # PUBLISH MODE (`publish: true`). This is how kernels ship without a person.
-# kernel-currency.yml dispatches it only when the channels have moved, because
-# a diff cannot decide that: xpython.wasm differs by 16 bytes on every build
-# (see below). It rebuilds from `main`, verifies, puts the rebuild and a
+# kernel-currency.yml dispatches it only when the channels have moved, which
+# only a solve can tell. It locks the environments again, rebuilds from
+# `main`, verifies, puts the new locks, the rebuild and a
 # changelog fragment on a new `kernels/revendor-<run id>` branch, and opens a
 # pull request labelled `minor-release`. The pull request's CI, the browser
 # grading and editor smoke included, tests the new kernels. It does NOT enable
@@ -59,25 +59,27 @@ name: Re-vendor xeus kernels
 # redirect a push with `url.<base>.insteadOf`. So `revendor` builds and
 # verifies with no secret and a read-only GITHUB_TOKEN, and writes the rebuild
 # as a patch artifact. `land`, on a new runner, refuses the patch unless every
-# file in it is under Public/jupyterlite or is Tools/jupyterlite/jupyter-lite.json
-# (scripts/regenerated-patch.sh), then commits, pushes and opens the pull
+# file in it is under Public/jupyterlite or Tools/jupyterlite/locks, or is
+# Tools/jupyterlite/jupyter-lite.json (scripts/regenerated-patch.sh), then commits, pushes and opens the pull
 # request.
 #
 # ONLY `workflow_dispatch` commits. A pull_request run rebuilds and verifies but
-# never pushes, and that is not caution — it is required for termination.
-# `xpython.wasm` embeds the absolute path of the temp directory it was built in
-# (`/tmp/tmpXXXXXXXX/_env/envs/chickadee-python`), which `tempfile` randomises
-# per run. The kernel is therefore NOT byte-reproducible: two builds of the same
-# environment differ, by exactly those 16 bytes and nothing else. An
-# auto-committing PR trigger would push a new commit, which would re-trigger
-# itself, which would produce a different path again — forever.
+# never pushes. Pushing from it would also need a token in a job that runs
+# third-party code (see THE TOKEN STAYS OUT OF THE BUILD above).
 #
-# A PR run is still worth its minutes: it proves the environment still solves and
-# the kernel still boots, which is how the urllib3 import crash was found. When
-# it reports a diff, dispatch the workflow to land one.
+# A PR RUN NOW PROVES THE COMMITTED BYTES. The build is byte-reproducible: each
+# kernel is installed from its lock at a fixed path, and every archive is
+# written with no time or owner (docs/jupyterlite.md). It used to differ on
+# every run, by the random build directory written into `xpython.wasm`, so a
+# PR run could only say that the environments still solved. Now it rebuilds
+# from the locks and FAILS when the result is not exactly what is committed:
+# a lock, a pin or a build script changed and the kernels were not re-vendored,
+# or something in the build stopped being reproducible. Either way, dispatch
+# this workflow on the branch to land a rebuild, and if the next PR run still
+# differs, the build has lost its reproducibility. That is a bug to fix, not
+# a diff to land again.
 #
-# Fork PRs additionally cannot be pushed to from here at all, so they are
-# verify-only by both rules.
+# Fork PRs cannot be pushed to from here at all.
 
 on:
   workflow_dispatch:
@@ -97,7 +99,11 @@ on:
   pull_request:
     paths:
       - "Tools/jupyterlite/environment-*.yml"
+      - "Tools/jupyterlite/requirements.in"
       - "Tools/jupyterlite/requirements.txt"
+      - "Tools/jupyterlite/locks/**"
+      - "scripts/lock-kernel-envs.py"
+      - "scripts/create-kernel-prefix.py"
       - "Tools/jupyterlite/jupyter-lite.json"
       - "scripts/build-jupyterlite.sh"
       - "scripts/setup-jupyterlite.sh"
@@ -197,6 +203,14 @@ jobs:
         if: steps.gate.outputs.skip != 'true'
         run: scripts/install-micromamba.sh
 
+      # Publish mode exists to move the kernels to their channels' current
+      # builds. The build installs only what the locks name, so lock again
+      # first; the new locks travel in the patch with the rebuilt bytes. Every
+      # other mode builds the committed locks unchanged.
+      - name: Lock the environments again (publish mode)
+        if: steps.gate.outputs.skip != 'true' && env.PUBLISH == 'true'
+        run: scripts/lock-kernel-envs.py
+
       - name: Report the toolchain
         if: steps.gate.outputs.skip != 'true'
         run: |
@@ -224,7 +238,7 @@ jobs:
           python3 - <<'PY'
           import pathlib, re
           pin = re.search(r"^jupyterlite==(\S+)$",
-                          pathlib.Path("Tools/jupyterlite/requirements.txt").read_text(),
+                          pathlib.Path("Tools/jupyterlite/requirements.in").read_text(),
                           re.M).group(1)
           path = pathlib.Path("Tools/jupyterlite/jupyter-lite.json")
           text = path.read_text()
@@ -262,15 +276,11 @@ jobs:
         id: diff
         run: |
           set -euo pipefail
-          if git diff --quiet -- Public/jupyterlite Tools/jupyterlite; then
+          # `git status`, not `git diff`: a rebuild that renames an archive
+          # writes it as a new, untracked file, which `git diff` does not see.
+          if [ -z "$(git status --porcelain -- Public/jupyterlite Tools/jupyterlite)" ]; then
             echo "changed=false" >> "$GITHUB_OUTPUT"
-            {
-              echo "The rebuild reproduced the committed bytes exactly."
-              echo ""
-              echo "Note this is unexpected for the Python kernel: xpython.wasm"
-              echo "embeds its build temp path, so it normally differs by 16 bytes"
-              echo "between any two builds."
-            } >> "$GITHUB_STEP_SUMMARY"
+            echo "The rebuild reproduced the committed bytes exactly." >> "$GITHUB_STEP_SUMMARY"
             exit 0
           fi
           echo "changed=true" >> "$GITHUB_OUTPUT"
@@ -278,7 +288,7 @@ jobs:
             echo "### Re-vendored kernel diff"
             echo ""
             echo '```'
-            git diff --stat -- Public/jupyterlite | tail -25
+            git status --short -- Public/jupyterlite Tools/jupyterlite | tail -25
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
 
@@ -292,7 +302,7 @@ jobs:
         run: |
           set -euo pipefail
           scripts/regenerated-patch.sh make "$RUNNER_TEMP/revendor.patch" \
-            Public/jupyterlite Tools/jupyterlite/jupyter-lite.json
+            Public/jupyterlite Tools/jupyterlite/locks Tools/jupyterlite/jupyter-lite.json
 
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: >-
@@ -305,18 +315,21 @@ jobs:
           retention-days: 3
           if-no-files-found: error
 
-      - name: Report a verify-only run
-        if: steps.diff.outputs.changed != 'false' && github.event_name == 'pull_request'
+      # The committed kernels must be exactly what this branch's locks, pins
+      # and build scripts produce. See A PR RUN NOW PROVES THE COMMITTED BYTES.
+      - name: The committed kernels are what the locks build
+        if: steps.diff.outputs.changed == 'true' && github.event_name == 'pull_request'
         run: |
           {
-            echo "### Verify-only run"
+            echo "### The committed kernels are not what this branch builds"
             echo ""
-            echo "The environment solved and the kernel built and verified."
-            echo "Nothing was committed — see the header of this workflow for why"
-            echo "a pull_request trigger must not push."
-            echo ""
-            echo "To land a rebuild, run this workflow manually on this branch."
+            echo "The rebuild from the locks differs from the committed bytes (the"
+            echo "file list is above). Run this workflow manually on this branch to"
+            echo "commit the rebuild. If a PR run still differs after that, the"
+            echo "build is no longer reproducible; see the header of this workflow."
           } >> "$GITHUB_STEP_SUMMARY"
+          echo "::error::The committed Public/jupyterlite is not what this branch builds. Dispatch revendor-kernels.yml on this branch to land the rebuild."
+          exit 1
 
   # Commits, pushes and opens the pull request. Holds the push token, and runs
   # no third-party code: it checks out the commit the build started from,
@@ -399,11 +412,11 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           .trusted/scripts/regenerated-patch.sh apply "$RUNNER_TEMP/revendor/revendor.patch" \
-            Public/jupyterlite Tools/jupyterlite/jupyter-lite.json
+            Public/jupyterlite Tools/jupyterlite/locks Tools/jupyterlite/jupyter-lite.json
           git commit -m "chore(jupyterlite): re-vendor the xeus kernels
 
           Rebuilt by .github/workflows/revendor-kernels.yml from
-          Tools/jupyterlite/environment-*.yml. Regenerated bytes only."
+          Tools/jupyterlite/locks/. Regenerated bytes only."
           for attempt in 1 2 3 4; do
             if git push origin HEAD:"$TARGET"; then
               exit 0
@@ -445,21 +458,22 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git switch -c "$BRANCH"
           .trusted/scripts/regenerated-patch.sh apply "$RUNNER_TEMP/revendor/revendor.patch" \
-            Public/jupyterlite Tools/jupyterlite/jupyter-lite.json
+            Public/jupyterlite Tools/jupyterlite/locks Tools/jupyterlite/jupyter-lite.json
           cat > "changelog.d/revendor-kernels-${GITHUB_RUN_ID}.md" <<'EOF'
           ### Changed
 
           - **The xeus kernels are re-vendored to their channels' current builds.**
-            `.github/workflows/revendor-kernels.yml` rebuilt
-            `Public/jupyterlite/` from the unchanged `Tools/jupyterlite/environment-*.yml`
-            files and verified it before this pull request was opened.
+            `.github/workflows/revendor-kernels.yml` locked the unchanged
+            `Tools/jupyterlite/environment-*.yml` files again
+            (`Tools/jupyterlite/locks/`), rebuilt `Public/jupyterlite/` from the new
+            locks and verified it before this pull request was opened.
           EOF
           git add "changelog.d/revendor-kernels-${GITHUB_RUN_ID}.md"
           git commit -m "chore(jupyterlite): re-vendor the xeus kernels
 
-          Rebuilt by .github/workflows/revendor-kernels.yml (publish mode) from
-          Tools/jupyterlite/environment-*.yml. Regenerated bytes and a changelog
-          fragment only."
+          Locked again and rebuilt by .github/workflows/revendor-kernels.yml
+          (publish mode) from Tools/jupyterlite/environment-*.yml. New locks,
+          regenerated bytes and a changelog fragment only."
           git push origin "HEAD:refs/heads/$BRANCH"
           {
             echo "This workflow rebuilt the vendored kernels from \`main\` against their channels and verified them with \`check-env-vendored-sync.sh\`, \`check-xeus-vendored.sh\` and \`verify-jupyterlite.sh\`."

@@ -17,6 +17,7 @@ name: Dependabot auto-merge
 #                                            (jlpm build, then
 #                                            scripts/vendor-chickadee-extension.sh)
 #   Tools/jupyterlite/requirements.txt    -> Public/jupyterlite/ (revendor-kernels.yml)
+#     (compiled from requirements.in; a Dependabot bump changes both)
 #
 # When Dependabot pushes one of those, this job rebuilds the output and pushes
 # it onto the Dependabot branch, or, for the kernels, dispatches
@@ -30,8 +31,8 @@ name: Dependabot auto-merge
 #
 # TERMINATION. Regeneration runs only when Dependabot itself pushed
 # (`github.event.sender.login`). The regenerated commit is pushed by the merge
-# token's owner, so the run it starts never regenerates again, even though a
-# rebuild is not byte-reproducible (revendor-kernels.yml explains the 16 bytes).
+# token's owner, so the run it starts never regenerates again. (The kernel
+# rebuild is byte-reproducible now, but termination does not rely on that.)
 #
 # NO BARE BUMP MERGES. A run whose sender is not Dependabot enables auto-merge
 # on an update that feeds committed output only when the head commit is a
@@ -158,7 +159,7 @@ jobs:
           vendor=false extension=false kernels=false
           if has '^Tools/vendor/package(-lock)?\.json$'; then vendor=true; fi
           if has '^Tools/jupyterlite/chickadee-extension/(package\.json|yarn\.lock)$'; then extension=true; fi
-          if has '^Tools/jupyterlite/requirements\.txt$'; then kernels=true; fi
+          if has '^Tools/jupyterlite/requirements\.(txt|in)$'; then kernels=true; fi
           feeds_output=false
           if [ "$vendor$extension$kernels" != "falsefalsefalse" ]; then feeds_output=true; fi
           # Every surface that feeds output regenerates into a contract path.

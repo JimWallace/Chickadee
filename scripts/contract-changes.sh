@@ -22,6 +22,8 @@ Public/runner-wasm/RunnerWasm.abc.wasm
 Tools/jupyterlite/environment-r.yml
 Tools/jupyterlite/environment.yml
 Tools/jupyterlite/requirements.txt
+Tools/jupyterlite/requirements.in
+Tools/jupyterlite/locks/environment-python-lock.yml
 Tools/jupyterlite/chickadee-extension/package.json
 Tools/jupyterlite/jupyter-lite.json
 Sources/RunnerCore/TestOutcome.swift
@@ -34,6 +36,8 @@ Public/vendor/marked/marked.min.js
 Public/runner-wasm/RunnerWasm.abc.wasm
 Tools/jupyterlite/environment-r.yml
 Tools/jupyterlite/requirements.txt
+Tools/jupyterlite/requirements.in
+Tools/jupyterlite/locks/environment-python-lock.yml
 Tools/jupyterlite/jupyter-lite.json
 Sources/RunnerCore/TestOutcome.swift
 Tests/Fixtures/output-contract.json'
