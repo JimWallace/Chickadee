@@ -9,6 +9,16 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.980] - 2026-11-17
+
+### Security
+
+- **The release job runs in a protected environment.** `auto-release.yml`
+  uses the `release` environment, which admits only `main` and `v*` tags.
+  A secret stored there cannot be read by a workflow on any other branch
+  (#3071).
+
+
 ## [0.5.979] - 2026-11-17
 
 ### Changed
