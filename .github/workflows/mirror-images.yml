@@ -45,9 +45,9 @@ on:
       - ".github/workflows/mirror-images.yml"
       - ".github/docker/ci-image/**"
 
-permissions:
-  contents: read
-  packages: write
+# Write scopes are granted per job, not here, so a job added later starts
+# with none (OpenSSF Scorecard TokenPermissions).
+permissions: {}
 
 concurrency:
   group: mirror-ci-images
@@ -55,6 +55,9 @@ concurrency:
 
 jobs:
   mirror:
+    permissions:
+      contents: read
+      packages: write
     runs-on: ubuntu-latest
     # 60, not 30: the derived-image build apt-installs a heavy set (r-base,
     # python3-pandas, python3-matplotlib, and now nodejs/npm's ~40-package
