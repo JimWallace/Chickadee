@@ -82,8 +82,8 @@ the cut, because while one sits on `main` no release of any kind is cut:
 | Manual | waits for approval | waits for approval | waits for approval |
 
 **Pause** is a switch beside the mode, not a fourth mode. While paused, nothing
-deploys, an approved release included. It replaces the host command that
-`docs/lecture-day-runbook.md` uses before a lecture.
+deploys, an approved release included. Pause on the admin page before a
+lecture so that no cutover lands during it, and resume afterwards.
 
 A major always waits, whatever the mode: the deployer's existing gate.
 
@@ -98,7 +98,7 @@ from what runs to what was approved. Rollback returns to what ran before.
 `deploy/chickadee-deployer.sh` gains:
 
 - **A release channel,** stored in `$STATE_DIR/channel` (see "Pre-release
-  channel" above). Host-only.
+  channel" below). Host-only.
 - **A mode,** stored in `$STATE_DIR/mode` (`autonomous`, `gated-minors`,
   `manual`). An absent file means `gated-minors`. `is_gated` reads it: in
   `manual` every newer release is gated; in `gated-minors` a minor or major
@@ -249,7 +249,6 @@ and the held release.
   auto-release stops at a contract change.
 - `docs/zero-downtime-deploy.md`: the modes, the request channel, the second
   mount.
-- `docs/lecture-day-runbook.md`: pause and resume on the admin page.
 
 ## Not in this design
 
