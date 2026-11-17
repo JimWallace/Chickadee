@@ -87,7 +87,7 @@ on:
         type: boolean
         default: true
       publish:
-        description: "Instead: rebuild from main and open an auto-merging pull request"
+        description: "Instead: rebuild from main and open a minor-release pull request (it does not auto-merge)"
         type: boolean
         default: false
       branch:
@@ -241,7 +241,7 @@ jobs:
         if: steps.gate.outputs.skip != 'true'
         run: scripts/setup-jupyterlite.sh
 
-      - name: Rebuild the bundle and both xeus kernels
+      - name: Rebuild the bundle and the xeus kernels
         if: steps.gate.outputs.skip != 'true'
         env:
           MAMBA_ROOT_PREFIX: ${{ runner.temp }}/mamba
@@ -450,8 +450,7 @@ jobs:
           ### Changed
 
           - **The xeus kernels are re-vendored to their channels' current builds.**
-            The weekly kernel currency check found the vendored kernels behind
-            `emscripten-forge-4x`. `.github/workflows/revendor-kernels.yml` rebuilt
+            `.github/workflows/revendor-kernels.yml` rebuilt
             `Public/jupyterlite/` from the unchanged `Tools/jupyterlite/environment-*.yml`
             files and verified it before this pull request was opened.
           EOF
@@ -463,7 +462,7 @@ jobs:
           fragment only."
           git push origin "HEAD:refs/heads/$BRANCH"
           {
-            echo "The weekly kernel currency check found the vendored kernels behind their channels, so this workflow rebuilt them from \`main\` and verified them with \`check-env-vendored-sync.sh\`, \`check-xeus-vendored.sh\` and \`verify-jupyterlite.sh\`."
+            echo "This workflow rebuilt the vendored kernels from \`main\` against their channels and verified them with \`check-env-vendored-sync.sh\`, \`check-xeus-vendored.sh\` and \`verify-jupyterlite.sh\`."
             echo ""
             echo "This pull request's CI, the browser grading and editor smoke included, tests the new kernels. A kernel re-vendor changes the student contract, so this pull request carries the \`minor-release\` label and does not auto-merge. Merge it just before the next minor is cut by hand (docs/release-gate.md)."
             echo ""

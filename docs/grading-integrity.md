@@ -40,6 +40,10 @@ happens only on a browser failover or an instructor retest.
   change on the runner can fix this.
 - The browser receives every suite script except grader-only files, so release
   and secret tests are readable in the developer tools.
+- The browser Python grader treats a submission's exit as the native runner
+  does: a `SystemExit` raised in the submission's own code is an error.
+  Both call `_check_submission_exit` in `Tools/runner-support/test_runtime.py`.
+  Before this, the browser read a submission's `sys.exit(0)` as a pass.
 
 ### The native runner
 
@@ -62,7 +66,10 @@ The last row is what phase 2 leaves open. It needs phase 3.
 The result of a test is its exit code and its last stdout line
 (`interpretScriptOutput`). Nothing authenticates either one. The browser
 kernels use a per-run nonce, but it only delimits the wrapper's own report: a
-submission that exits with status 0 still reads as a pass.
+submission that exits with status 0 still reads as a pass. The nonce is not a
+secret from the submission either. In Python it is a constant in the grading
+cell's code, so a submission that walks its call frames can read it, print a
+report of its own and stop the real one from printing.
 
 ## Decisions
 
