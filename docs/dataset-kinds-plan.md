@@ -6,12 +6,11 @@ formats (CSV, FHIR NDJSON) to the other kinds of data a health-informatics
 course uses, through one component, and what to change now so that a later
 kind is an addition and not a rewrite.
 
-Status: **a design study, not built.** It reads the FHIR work on
-`claude/fhir-dataset-plan-315ecb` (P1 to P3 of
-[fhir-datasets-plan.md](fhir-datasets-plan.md)) and the mini web of PR #2998
-(`docs/examples/miniweb/`). Nothing on the FHIR branch is on `main` yet, so
-its stored shapes (the migration, the bundle field, the MCP result keys) can
-still change at no cost. That fact drives most of §6.
+Status: **Stage A built (2026-11-12, see §5 "As built"); the rest is
+planned.** It was written against the FHIR work (P1 to P3 of
+[fhir-datasets-plan.md](fhir-datasets-plan.md)), before that work merged, and
+against the mini web of PR #2998, which is not merged: the `miniweb` files
+that §7 describes are in that pull request, not on `main`.
 
 ---
 
@@ -287,8 +286,8 @@ itself, when it meets a third value.
 
 ## 6. What to change now, ranked
 
-Each item is small, and each is cheaper before the FHIR branch merges than
-after.
+Each item was small, and each was cheaper before the FHIR branch merged than
+after. The FHIR branch has since merged; Stage A took the items it needed.
 
 | Rank | Change | Why now | Size |
 |---|---|---|---|

@@ -1,8 +1,7 @@
 # Chickadee — Architecture
 
-Status: current as of the 0.5.0 cleanup pass (2026-07). The browser grading
-and vendored-library sections were corrected in 2026-10, after Pyodide was
-removed (v0.5.19).
+Status: current as of the 0.6.0 cleanup pass (2026-11). Every browser grader
+is a xeus kernel, routed per script (#1271); Pyodide was removed in v0.5.19.
 
 ## Overview
 
@@ -127,6 +126,9 @@ Sources/
     SubmissionNormalizer.swift · NotebookExtractor.swift · MimeTypeDetector.swift
     TestRuntimeSources.swift    Embedded runtime helper sources, one set per language
     TestSetupCache.swift    LRU cache of prepared test setup directories
+  CProcessHardening/        C shim: runner and server refuse process inspection
+  LoadTest/                 chickadee-loadtest: hot paths and a lecture
+                            (docs/load-testing.md)
 wasm/                       SwiftPM sub-package: RunnerCore → wasm32 bridge
 Public/runner-wasm/         Vendored wasm artifact + JS bridge (checked in)
 ```
@@ -730,7 +732,7 @@ with no resolvable account surface in the BrightSpace tab's "unmapped students"
 list.
 
 **Sync engine.** On a worker result save, `ResultRoutes` flags the `APIResult`
-row pending. `BrightSpaceGradeSyncMonitor` sweeps every 60 s and pushes the
+row pending. The BrightSpace sync sweep (`BrightSpaceSyncSweep`) runs every 60 s and pushes the
 **best (max) points** per (student, assignment) past a debounce window
 (`BRIGHTSPACE_SYNC_DEBOUNCE_SECS`, default 90 s). Each meaningful event
 (success, push failure, or skipped-no-account) appends a row to
@@ -825,8 +827,8 @@ and [`personalization-eval-runtime.md`](personalization-eval-runtime.md).
 function, shared defaults, and a table of cases; `applyPatternFamilies`
 expands each enabled case into an ordinary generated test script at save time
 (deterministic filenames, a `spec_hash` header, and a `generatedBy` marker so
-the raw-script edit endpoints refuse to mutate them). Eight kinds ship, from
-`boundaryEquality` to `unorderedEquality`. Notebook checks (ten
+the raw-script edit endpoints refuse to mutate them). Ten kinds ship, from
+`boundaryEquality` to `programIO` (`PatternKind`). Notebook checks (ten
 `NotebookCheckKind`s, e.g. `variableExists`, `astStructure`) render the same
 way. The grading path never knows: workers and the browser runner only see
 scripts.
@@ -906,10 +908,16 @@ publishes an image; a host-side daemon, `chickadee-deployer`
 each release via `scripts/bluegreen-deploy.sh` — the new "color" container
 boots beside the live one, is health-gated, the nginx upstream flips with no
 dropped requests, and the old color drains and stays for instant rollback.
-Non-major bumps deploy unattended; major bumps hold for human approval. Each
-deploy snapshots first and auto-rolls-back if the new version degrades after
-cutover. The admin-MCP deploy tools are strictly read-only; deploy control is
-host-side by design. See [`zero-downtime-deploy.md`](zero-downtime-deploy.md).
+Which releases deploy unattended is a mode an admin sets on the admin page:
+in the default, `gated-minors`, a patch deploys on its own and a minor waits for
+approval; a major always waits. A change to the student contract (the vendored
+kernels, the runner wasm, `Sources/RunnerCore/`) ships only in a minor, cut by
+hand, and the dev server runs ahead on pre-releases. Each deploy snapshots first
+and auto-rolls-back if the new version degrades after cutover. The admin page
+only sends requests that the daemon validates; rollback stays host-side, and the
+admin-MCP deploy tools are strictly read-only. See
+[`release-gate.md`](release-gate.md) and
+[`zero-downtime-deploy.md`](zero-downtime-deploy.md).
 
 ### VM / systemd
 
