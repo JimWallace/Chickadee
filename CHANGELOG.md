@@ -9,6 +9,13 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.983] - 2026-11-17
+
+### Security
+
+- **No step output pasted into a workflow script.** Eleven `run:` and `github-script` steps now read step outputs through an `env:` value, not a `${{ }}` template in the script text. This clears every zizmor `template-injection` finding in the Security tab.
+
+
 ## [0.5.982] - 2026-11-17
 
 ### Added
