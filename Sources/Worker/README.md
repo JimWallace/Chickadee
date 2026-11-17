@@ -8,9 +8,10 @@ server hands it only the jobs it can grade.
 
 Run `chickadee-runner --help` for the flags. The shared secret comes from the
 `RUNNER_SHARED_SECRET` variable, or from the `.worker-secret` file the server
-writes. The `--worker-secret` flag is deprecated: it puts the secret in the
-runner's command line, where every test script can read it. The runner refuses
-it together with `--sandbox`, and the next minor release removes it.
+writes. There is no command-line flag for it: `--worker-secret` was removed
+at 0.6.0, because it put the secret in the runner's command line, where every
+test script can read it. A runner started with it exits at once with
+ArgumentParser's "unknown option" error.
 
 Read [CLAUDE.md](../../CLAUDE.md) for the test-script contract and the
 sandbox boundary,
