@@ -6,7 +6,7 @@
       "version": "3.12.0",
       "build": "h0b0027f_0",
       "filename_stem": "nlohmann_json-3.12.0-h0b0027f_0",
-      "filename": "nlohmann_json-3.12.0-h0b0027f_0.chickadee.c41e7d140261.tar.gz",
+      "filename": "nlohmann_json-3.12.0-h0b0027f_0.chickadee.fd26a3dc12a6.tar.gz",
       "channel": "https://repo.prefix.dev/emscripten-forge-4x",
       "depends": [
         "emscripten-abi >=4,<5.0a0"
@@ -31,7 +31,7 @@
       "version": "0.30.0",
       "build": "h0b0027f_1",
       "filename_stem": "xwidgets-0.30.0-h0b0027f_1",
-      "filename": "xwidgets-0.30.0-h0b0027f_1.chickadee.ab2ce4410684.tar.gz",
+      "filename": "xwidgets-0.30.0-h0b0027f_1.chickadee.45cb316fcae1.tar.gz",
       "channel": "https://repo.prefix.dev/emscripten-forge-4x",
       "depends": [
         "nlohmann_json >=3.12",
@@ -48,7 +48,7 @@
       "version": "0.12.1",
       "build": "h0b0027f_0",
       "filename_stem": "xproperty-0.12.1-h0b0027f_0",
-      "filename": "xproperty-0.12.1-h0b0027f_0.chickadee.f1653f350047.tar.gz",
+      "filename": "xproperty-0.12.1-h0b0027f_0.chickadee.1b9676ddcc77.tar.gz",
       "channel": "https://repo.prefix.dev/emscripten-forge-4x",
       "depends": [
         "nlohmann_json",
@@ -61,7 +61,7 @@
       "version": "0.10.1",
       "build": "h0b0027f_0",
       "filename_stem": "xeus-lua-0.10.1-h0b0027f_0",
-      "filename": "xeus-lua-0.10.1-h0b0027f_0.chickadee.438291366581.tar.gz",
+      "filename": "xeus-lua-0.10.1-h0b0027f_0.chickadee.4ab6dafcad26.tar.gz",
       "channel": "https://repo.prefix.dev/emscripten-forge-4x",
       "depends": [
         "emscripten-abi >=4,<5.0a0",
@@ -75,7 +75,7 @@
       "version": "3.14.3",
       "build": "h_f1beecf_1_cp314",
       "filename_stem": "python-3.14.3-h_f1beecf_1_cp314",
-      "filename": "python-3.14.3-h_f1beecf_1_cp314.chickadee.f613326a67ab.tar.gz",
+      "filename": "python-3.14.3-h_f1beecf_1_cp314.chickadee.7cb865d6adf4.tar.gz",
       "channel": "https://repo.prefix.dev/emscripten-forge-4x",
       "depends": [
         "python_abi 3.14.* *_cp314",
@@ -108,11 +108,11 @@
       "version": "6.0.6",
       "build": "hc780342_0",
       "filename_stem": "xeus-6.0.6-hc780342_0",
-      "filename": "xeus-6.0.6-hc780342_0.chickadee.b2e51de0fa13.tar.gz",
+      "filename": "xeus-6.0.6-hc780342_0.chickadee.b1997a5c4222.tar.gz",
       "channel": "https://repo.prefix.dev/emscripten-forge-4x",
       "depends": [
         "emscripten-abi >=4,<5.0a0",
-        "nlohmann_json-abi 3.12.0"
+        "nlohmann_json-abi ==3.12.0"
       ],
       "subdir": "emscripten-wasm32"
     },

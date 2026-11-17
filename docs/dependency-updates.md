@@ -19,7 +19,7 @@ update fails.
    |---|---|---|
    | `Tools/vendor/package*.json` | `Public/vendor/` | `scripts/setup-vendor.sh` |
    | `Tools/jupyterlite/chickadee-extension` | its labextension and `Public/jupyterlite/extensions/@chickadee/` | `jlpm build`, then `scripts/vendor-chickadee-extension.sh` |
-   | `Tools/jupyterlite/requirements.txt` | `Public/jupyterlite/`, and the `appVersion` label in `Tools/jupyterlite/jupyter-lite.json` | `revendor-kernels.yml`, dispatched with `commit: true` |
+   | `Tools/jupyterlite/requirements.in` and the `requirements.txt` compiled from it | `Public/jupyterlite/`, and the `appVersion` label in `Tools/jupyterlite/jupyter-lite.json` | `revendor-kernels.yml`, dispatched with `commit: true` |
 
    The rebuild runs the bumped packages' own install and build scripts, so it
    runs in a job with no secret and a read-only `GITHUB_TOKEN`. It writes its
