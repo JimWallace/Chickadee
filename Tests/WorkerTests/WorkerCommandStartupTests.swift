@@ -4,8 +4,8 @@
 // 2026-10-13 (#2535) changed without a test noticing. Each one is reached
 // through the parsed command, so the flag a test names is the flag the
 // operator types. Where `run()` was the only caller, the rule moved into a
-// function the test can call: `processInspectionStatus`, `workerSecretFlagUse`
-// and `memoryBudgetWarning`.
+// function the test can call: `processInspectionStatus` and
+// `memoryBudgetWarning`. (`workerSecretFlagUse` went with the flag at 0.6.0.)
 //
 // Protocol: docs/mutation-triage.md -- SURVIVED confirmed before, KILLED after.
 
@@ -40,23 +40,18 @@ import Testing
 
     // MARK: - --worker-secret
 
-    /// Survivor `:88 RelationalOperatorReplacement` (`workerSecret != nil` to
-    /// `== nil`). The flag read as set when it was absent, so every sandboxed
-    /// runner without `--worker-secret` would have refused to start, and
-    /// every unsandboxed one would have warned about a flag nobody passed.
-    @Test func theFlagUseComesFromTheParsedFlag() throws {
-        #expect(try WorkerCommand.parse([]).workerSecretFlagUse == .notUsed)
-        #expect(try WorkerCommand.parse(["--sandbox"]).workerSecretFlagUse == .notUsed)
-
-        guard case .deprecated = try WorkerCommand.parse(["--worker-secret", "s"]).workerSecretFlagUse else {
-            Issue.record("--worker-secret without --sandbox did not warn")
-            return
+    /// The flag was removed at 0.6.0 (#2226): it put the secret in the
+    /// runner's command line, where every test script can read it. A runner
+    /// started with it must fail to parse rather than quietly ignore it.
+    @Test(arguments: [["--worker-secret", "s"], ["--worker-secret=s"], ["--worker-secret", "s", "--sandbox"]])
+    func theRemovedWorkerSecretFlagIsRejected(arguments: [String]) throws {
+        // The same arguments without the flag parse, so the refusal is the flag's.
+        _ = try WorkerCommand.parse(arguments.filter { !$0.hasPrefix("--worker-secret") && $0 != "s" })
+        let error = #expect(throws: (any Error).self) {
+            try WorkerCommand.parse(arguments)
         }
-        guard case .refused = try WorkerCommand.parse(["--worker-secret", "s", "--sandbox"]).workerSecretFlagUse
-        else {
-            Issue.record("--worker-secret with --sandbox was not refused")
-            return
-        }
+        let message = error.map { WorkerCommand.message(for: $0) } ?? ""
+        #expect(message.contains("worker-secret"), "\(message)")
     }
 
     // MARK: - The job limits
