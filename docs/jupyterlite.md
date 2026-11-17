@@ -121,8 +121,8 @@ environment file. It never commits onto unrelated work, because the output is
 ~100 MB of content-hashed binary assets. When the weekly
 `kernel-currency.yml` finds the kernels behind their channels, it dispatches
 the workflow in publish mode: a rebuild from `main` on its own
-`kernels/revendor-*` branch, opened as an auto-merging pull request whose CI
-tests the new kernels. Publishing needs the `RELEASE_TOKEN` secret; the header
+`kernels/revendor-*` branch, opened as a pull request whose CI tests the new
+kernels. It carries the `minor-release` label and does not auto-merge. Publishing needs the `RELEASE_TOKEN` secret; the header
 of the workflow says why.
 
 That false belief had a cost worth remembering. Adding a name to

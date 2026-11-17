@@ -1,0 +1,10 @@
+# The numpy pin is what keeps browser-graded Python booting. A vendored kernel
+# solved under a different constraint than the file states is not the kernel
+# the file describes, even when every name is present.
+guard="scripts/check-env-vendored-sync.sh"
+files="Tools/jupyterlite/environment-python.yml"
+description="an environment file changes a constraint the vendored env was not built from"
+expect="but the vendored chickadee-python was built from"
+apply() {
+    sed_inplace 's/^  - numpy <2.5.3$/  - numpy <2.6/' Tools/jupyterlite/environment-python.yml
+}

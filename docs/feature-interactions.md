@@ -508,6 +508,25 @@ because line numbers go out of date.
   made family dependencies "sticky", with references to deleted files that no
   edit could remove.
 
+### A Python submission's own exit: `_check_submission_exit`
+
+- **Writer:** `_check_submission_exit` in `Tools/runner-support/test_runtime.py`.
+  A `SystemExit` raised in a student file becomes an error (`SystemExit(2)`).
+- **Callers:** the native bootstrap (`Sources/Worker/ScriptInvocation.swift`)
+  and the browser grading cell (`runScriptCellPython` in
+  `Public/python-grading-shared.js`).
+- **Readers:** notebook checks that call `student_main_state`, whose exit
+  reaches the test script. The `programIO` family catches the student's exit
+  itself, so the check never sees it.
+- **Rules:**
+  - Both graders call this one function, so they cannot disagree about which
+    exits count. Change the rule there, not in either caller.
+  - The browser cell skips the check when the loaded helper lacks it, so it is
+    only as strict as the helper it loads.
+- **Parallel paths:** the R, Lua, Octave and Racket runtimes each carry their
+  own exit check, with no shared function. A change to the rule for one
+  language does not reach the others.
+
 ### Does a pattern kind call a function: `PatternKind.callsFunction`
 
 - **Writer:** only the exhaustive switch in

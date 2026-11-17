@@ -21,8 +21,9 @@ name: Kernel currency
 # produces no bytes to review.
 #
 # When the scheduled run finds the kernels behind, it dispatches
-# revendor-kernels.yml in publish mode, which rebuilds from main and opens an
-# auto-merging pull request whose CI tests the new kernels. It dispatches only
+# revendor-kernels.yml in publish mode, which rebuilds from main and opens a
+# pull request whose CI tests the new kernels. That pull request carries the
+# `minor-release` label and does not auto-merge (docs/release-gate.md). It dispatches only
 # on the script's "behind their channels" verdict. The script exits 1 for a
 # failed solve too, and a broken check must never start a publish. A manual
 # run reports and does not publish.
@@ -115,7 +116,7 @@ jobs:
             if [ "$DISPATCHED" = "true" ]; then
               echo ""
               echo "Dispatched **Re-vendor xeus kernels** in publish mode. It opens"
-              echo "an auto-merging pull request unless one is already open."
+              echo "a minor-release pull request unless one is already open."
             elif [ "${{ steps.currency.outcome }}" != "success" ]; then
               echo ""
               echo "Run **Re-vendor xeus kernels** with \`publish\` checked to open"
