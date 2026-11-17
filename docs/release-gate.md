@@ -27,6 +27,9 @@ every check below:
 Public/jupyterlite/
 Public/vendor/
 Public/runner-wasm/
+Public/grading-shared.js
+Public/python-grading-shared.js
+Public/xeus-kernel-shared.js
 Tools/jupyterlite/environment-*.yml
 Tools/jupyterlite/requirements.txt
 Tools/jupyterlite/jupyter-lite.json
