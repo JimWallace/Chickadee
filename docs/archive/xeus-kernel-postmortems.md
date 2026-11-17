@@ -42,7 +42,8 @@ pick the new env up for free.
 (Point-in-time, as postmortems here are: `expected_language` was a literal map
 when Lua was added. It has since been derived from the language descriptors, so
 that half of the trap no longer applies to a seventh language — see the traps
-section above, including what deriving it did *not* fix.)
+section above, including what deriving it did *not* fix. The `XEUS_ENVS` array
+has since been replaced by a glob of `environment-*.yml`.)
 
 ### What did not hold — R's two expensive lessons do not generalise
 

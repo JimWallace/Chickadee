@@ -321,8 +321,9 @@ public struct TestProperties: Codable, Equatable, Sendable {
     ///
     /// Legacy manifests (pre-`testItems`) carry separate `patternFamilies`
     /// and `notebookChecks` arrays; `init(from:)` migrates them into
-    /// `testItems` on read, and `encode(to:)` mirrors both legacy keys back
-    /// out (derived from `testItems`) so cross-version readers stay happy.
+    /// `testItems` on read. `encode(to:)` no longer writes them: every
+    /// supported reader has read `testItems` since 0.4.206, and the write-side
+    /// mirror was removed at 0.6.0.
     public var testItems: [TestItem]
 
     /// Pattern-family specs, derived from `testItems`.  Order follows the
@@ -777,15 +778,12 @@ public struct TestProperties: Codable, Equatable, Sendable {
         // absent key as the default, and omitting them keeps a manifest's
         // bytes the same whichever writer produced them.
         try encodeIfNonEmpty(testItems, forKey: .testItems, into: &c)
-        // Mirror the legacy arrays (derived from `testItems`, so they can
-        // never drift) for cross-version readers that predate `testItems`.
-        // DEPRECATED write-side mirroring — remove in the v0.7.0 cleanup,
-        // once no supported reader (runner binary or course-bundle importer)
-        // predates `testItems`.  The read-side migration in `init(from:)`
-        // stays forever: old manifests on disk / in exported bundles carry
-        // only the legacy arrays and must keep decoding.
-        try encodeIfNonEmpty(patternFamilies, forKey: .patternFamilies, into: &c)
-        try encodeIfNonEmpty(notebookChecks, forKey: .notebookChecks, into: &c)
+        // The legacy `patternFamilies` and `notebookChecks` arrays are no
+        // longer written (removed at 0.6.0): every supported reader, runner
+        // binary or course-bundle importer, reads `testItems`. The read-side
+        // migration in `init(from:)` stays forever: old manifests on disk and
+        // in exported bundles carry only the legacy arrays and must keep
+        // decoding.
         try encodeIfNonEmpty(sections, forKey: .sections, into: &c)
         try encodeIfNonEmpty(globalVariables, forKey: .globalVariables, into: &c)
         try encodeIfNonEmpty(globalExpressions, forKey: .globalExpressions, into: &c)
