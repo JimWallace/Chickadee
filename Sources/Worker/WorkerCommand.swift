@@ -1,8 +1,9 @@
 // Worker/WorkerCommand.swift
 //
 // The chickadee-runner CLI entry point (`@main`) plus worker-secret
-// resolution (CLI flag → env var → .worker-secret file fallbacks). The CLI
-// flag is deprecated; see `workerSecretFlagUse(flagSet:sandboxed:)`.
+// resolution (the RUNNER_SHARED_SECRET env var, then the .worker-secret file
+// fallbacks). The `--worker-secret` flag was removed at 0.6.0: it put the
+// secret in the runner's command line, where every test script can read it.
 // Split from RunnerDaemon.swift (June 2026 audit); the WorkerDaemon
 // actor itself stays in RunnerDaemon.swift.
 
@@ -57,13 +58,6 @@ struct WorkerCommand: AsyncParsableCommand {
     @Option(
         name: .long,
         help:
-            "Deprecated, and refused with --sandbox: test scripts can read it. Set the RUNNER_SHARED_SECRET env var instead"
-    )
-    var workerSecret: String?
-
-    @Option(
-        name: .long,
-        help:
             "Directory used for the runner test-setup cache (default: /tmp/chickadee-runner-cache; env: RUNNER_TEST_SETUP_CACHE_DIR)"
     )
     var testSetupCacheDir: String?
@@ -84,15 +78,6 @@ struct WorkerCommand: AsyncParsableCommand {
         // API calls, for example to report its own result. `--sandbox` blocks
         // the read too, but only where the host allows user namespaces.
         let processInspection = Self.processInspectionStatus(chickadee_refuse_process_inspection())
-
-        switch workerSecretFlagUse {
-        case .notUsed:
-            break
-        case .deprecated(let warning):
-            writeToStandardError(warning)
-        case .refused(let reason):
-            throw Self.startupFailure(reason)
-        }
 
         guard let baseURL = URL(string: apiBaseURL) else {
             throw Self.startupFailure("Error: invalid --api-base-url '\(apiBaseURL)'\n")
@@ -128,10 +113,7 @@ struct WorkerCommand: AsyncParsableCommand {
             workRoot: workRoot
         ).detect()
         guard
-            let effectiveWorkerSecret = resolveWorkerSharedSecret(
-                cliWorkerSecret: workerSecret,
-                environment: env
-            )
+            let effectiveWorkerSecret = resolveWorkerSharedSecret(environment: env)
         else {
             throw Self.startupFailure(
                 "Error: missing runner secret. Set RUNNER_SHARED_SECRET.\n")
@@ -210,11 +192,6 @@ struct WorkerCommand: AsyncParsableCommand {
     /// `chickadee_refuse_process_inspection()` returned 0, else `allowed`.
     static func processInspectionStatus(_ returnCode: Int32) -> String {
         returnCode == 0 ? "refused" : "allowed"
-    }
-
-    /// What the runner does with this command's `--worker-secret`.
-    var workerSecretFlagUse: WorkerSecretFlagUse {
-        Self.workerSecretFlagUse(flagSet: workerSecret != nil, sandboxed: sandbox)
     }
 
     /// Makes SIGTERM drain the runner rather than stop it (`WorkerDaemon.drain`).
@@ -365,45 +342,12 @@ struct WorkerCommand: AsyncParsableCommand {
             )
             : (UnsandboxedScriptRunner(), "unsandboxed")
     }
-
-    /// What the runner does when `--worker-secret` is set.
-    enum WorkerSecretFlagUse: Equatable {
-        case notUsed
-        case deprecated(warning: String)
-        case refused(reason: String)
-    }
-
-    /// `--worker-secret` puts the secret in the runner's command line, and any
-    /// process of the same user can read `/proc/<pid>/cmdline`, whatever the
-    /// runner's dumpable flag. That includes every test script, also inside
-    /// the sandbox, which has no PID namespace. With the secret, a script can
-    /// sign worker API calls, for example to report its own result.
-    ///
-    /// With `--sandbox`, the operator asked for isolation that the flag
-    /// defeats, so the runner refuses to start. Without it, the flag only
-    /// warns: a patch may not remove it (docs/release-process.md), so it is
-    /// removed at the next minor release.
-    static func workerSecretFlagUse(flagSet: Bool, sandboxed: Bool) -> WorkerSecretFlagUse {
-        guard flagSet else { return .notUsed }
-        let why =
-            "--worker-secret puts the secret in the runner's command line, "
-            + "where every test script can read it. Set RUNNER_SHARED_SECRET instead.\n"
-        if sandboxed {
-            return .refused(reason: "Error: --worker-secret cannot be used with --sandbox. " + why)
-        }
-        return .deprecated(
-            warning: "Warning: --worker-secret is deprecated and will be removed in the next minor release. " + why)
-    }
 }
 
 func resolveWorkerSharedSecret(
-    cliWorkerSecret: String?,
     environment: [String: String],
     currentDirectory: String = FileManager.default.currentDirectoryPath
 ) -> String? {
-    let cliSecret = cliWorkerSecret?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-    if !cliSecret.isEmpty { return cliSecret }
-
     let envSecret = (environment["RUNNER_SHARED_SECRET"] ?? "")
         .trimmingCharacters(in: .whitespacesAndNewlines)
     if !envSecret.isEmpty { return envSecret }
