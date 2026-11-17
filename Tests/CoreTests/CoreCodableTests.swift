@@ -415,7 +415,9 @@ struct CoreCodableTests {
         #expect(props.notebookChecks == [chk])
     }
 
-    @Test func testPropertiesEncodeMirrorsLegacyKeysAndEmitsTestItems() throws {
+    /// The legacy arrays are read (next test) but no longer written: the
+    /// write-side mirror was removed at 0.6.0.
+    @Test func testPropertiesEncodeEmitsTestItemsWithoutTheLegacyKeys() throws {
         let props = TestProperties(
             language: nil,
             patternFamilies: [
@@ -424,9 +426,13 @@ struct CoreCodableTests {
             notebookChecks: [NotebookCheck(id: "c", kind: .figureCount, minFigures: 1)])
         let obj =
             try JSONSerialization.jsonObject(with: try encoder.encode(props)) as? [String: Any]
-        #expect(obj?["testItems"] != nil)
-        #expect((obj?["patternFamilies"] as? [Any])?.count == 1)
-        #expect((obj?["notebookChecks"] as? [Any])?.count == 1)
+        #expect((obj?["testItems"] as? [Any])?.count == 2)
+        #expect(obj?["patternFamilies"] == nil)
+        #expect(obj?["notebookChecks"] == nil)
+        // And the bytes still decode to the same families and checks.
+        let decoded = try decoder.decode(TestProperties.self, from: try encoder.encode(props))
+        #expect(decoded.patternFamilies == props.patternFamilies)
+        #expect(decoded.notebookChecks == props.notebookChecks)
     }
 
     @Test func testPropertiesMigratesLegacyManifestOnRead() throws {
