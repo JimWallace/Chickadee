@@ -9,6 +9,43 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.988] - 2026-11-17
+
+### Fixed
+
+- **Browser-graded Python treats a submission's `sys.exit()` as the native
+  runner does.** A `SystemExit` raised in the submission's own code is now an
+  error in the browser too; before, a submission's `sys.exit(0)` read as a
+  pass there. Both graders call one check, `_check_submission_exit` in
+  `test_runtime.py`, and the native error now names the test rather than
+  `<string>`. The browser cell also sets `sys.argv[0]` and `__file__` to the
+  script, as `python3 script.py` does.
+
+### Changed
+
+- **The kernel environment guard compares whole specs, both ways.**
+  `check-env-vendored-sync.sh` now fails on a changed constraint and on a
+  package dropped from an environment file but still vendored, not only on a
+  missing name. It and `build-jupyterlite.sh` find the environments by glob.
+  `check-xeus-vendored.sh` fails when a Python module index was derived on a
+  different Python minor version than the kernel's.
+
+
+## [0.5.987] - 2026-11-17
+
+### Changed
+
+- **Auto-release holds on the `minor-release` label, not only on contract paths** (#3061). A pull request labelled `minor-release` now stops auto-release exactly as a change to a contract path does: no patch, a pre-release for the dev server instead, and the `minor-needed` issue naming it. Before, a labelled compatibility removal that touched no contract path, such as removing a runner flag, would have shipped in a patch, which deploys on its own in `gated-minors`. If GitHub cannot be asked for a commit's pull request, the job fails rather than release.
+
+
+## [0.5.986] - 2026-11-17
+
+### Security
+
+- **Workflow write scopes move to the job.** `auto-release`, `runner-wasm-vendor`, `kernel-currency`, `mirror-images` and `rerun-failed` now declare `permissions: {}` at the top and grant each write on the one job that needs it, so a job added later starts with no write token. This clears the five workflow-level OpenSSF Scorecard `TokenPermissions` alerts.
+- **The vendor and smoke scripts install from their lockfiles.** `scripts/setup-vendor.sh` and `scripts/browser-grading-smoke.sh` run `npm ci`, not `npm install`, so they install exactly what `package-lock.json` pins (Scorecard `PinnedDependencies`).
+
+
 ## [0.5.985] - 2026-11-17
 
 ### Added

@@ -51,11 +51,14 @@ concurrency:
   group: runner-wasm-vendor
   cancel-in-progress: false
 
-permissions:
-  contents: write
+# Write scopes are granted per job, not here, so a job added later starts
+# with none (OpenSSF Scorecard TokenPermissions).
+permissions: {}
 
 jobs:
   vendor:
+    permissions:
+      contents: write
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:

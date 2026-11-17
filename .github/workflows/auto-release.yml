@@ -30,14 +30,20 @@ concurrency:
   group: auto-release
   cancel-in-progress: false
 
-permissions:
-  contents: write
-  actions: write
-  # The release gate opens or updates the `minor-needed` issue.
-  issues: write
+# Write scopes are granted per job, not here, so a job added later starts
+# with none (OpenSSF Scorecard TokenPermissions).
+permissions: {}
 
 jobs:
   release:
+    permissions:
+      contents: write
+      actions: write
+      # The release gate opens or updates the `minor-needed` issue.
+      issues: write
+      # The release gate reads each commit's pull request and its labels.
+      # Without this the lookup is refused, and the gate fails closed.
+      pull-requests: read
     runs-on: ubuntu-latest
     timeout-minutes: 15
     # The `release` environment admits only `main` and `v*` tags (#3071). A
@@ -80,10 +86,11 @@ jobs:
 
       # The release gate (docs/release-gate.md). A contract change ships only
       # in a minor, which is cut by hand. So when any commit since the last
-      # release tag touched a path in scripts/contract-paths.txt, this cuts
-      # no release, neither a patch nor a minor: it says why in the job
-      # summary and opens or updates one issue labelled `minor-needed` that
-      # names the pull requests. The next step cuts a pre-release instead. Fragments keep accumulating in changelog.d/,
+      # release tag touched a path in scripts/contract-paths.txt, or came from
+      # a pull request labelled `minor-release` (a compatibility removal that
+      # no path list can see, #3061), this cuts no release, neither a patch
+      # nor a minor: it says why in the job summary and opens or updates one
+      # issue labelled `minor-needed` that names the pull requests. The next step cuts a pre-release instead. Fragments keep accumulating in changelog.d/,
       # and the hand-cut minor folds them all. After the minor's tag, the
       # commits since the last tag are clean again and auto-release resumes.
       - name: Refuse past a contract change
@@ -100,41 +107,60 @@ jobs:
           fi
           git log --format= --name-only "$last..HEAD" | sed '/^$/d' | sort -u \
             | scripts/contract-changes.sh > contract.txt
-          if [ ! -s contract.txt ]; then
+          # The commits that touched a contract path or came from a pull
+          # request labelled `minor-release`, and those pull requests. GitHub
+          # knows the pull request of a squash merge and of each commit inside
+          # a merge commit (a Dependabot merge); a commit pushed straight to
+          # main has none. The label lookup tries three times, then fails the
+          # job rather than release: a gate that opens when it cannot see is
+          # no gate, and the next merge, or a re-run, tries again.
+          pulls_of() {
+            local attempt out
+            for attempt in 1 2 3; do
+              if out="$(gh api "repos/$R/commits/$1/pulls")"; then
+                printf '%s' "$out"
+                return 0
+              fi
+              sleep $((attempt * 5))
+            done
+            echo "Could not read the pull request of $1 after three tries." >&2
+            return 1
+          }
+          : > commits.txt
+          : > prs.txt
+          : > labelled.txt
+          for commit in $(git rev-list "$last..HEAD"); do
+            pulls="$(pulls_of "$commit")"
+            held="$(jq -r '.[] | select(any(.labels[]; .name == "minor-release")) | "#\(.number) \(.title)"' <<<"$pulls")"
+            if [ -n "$held" ] || [ -n "$(git show --format= --name-only "$commit" | scripts/contract-changes.sh)" ]; then
+              git log -1 --format='%h %s' "$commit" >> commits.txt
+              jq -r '.[] | "#\(.number)"' <<<"$pulls" >> prs.txt
+              [ -z "$held" ] || printf '%s\n' "$held" >> labelled.txt
+            fi
+          done
+          if [ ! -s commits.txt ]; then
             echo "blocked=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
           echo "blocked=true" >> "$GITHUB_OUTPUT"
-          # The commits that touched a contract path, and the pull requests
-          # that brought them. GitHub knows the pull request of a squash merge
-          # and of each commit inside a merge commit (a Dependabot merge); a
-          # commit pushed straight to main has none.
-          : > commits.txt
-          : > prs.txt
-          for commit in $(git rev-list "$last..HEAD"); do
-            if [ -n "$(git show --format= --name-only "$commit" | scripts/contract-changes.sh)" ]; then
-              git log -1 --format='%h %s' "$commit" >> commits.txt
-              gh api "repos/$R/commits/$commit/pulls" --jq '.[] | "#\(.number)"' >> prs.txt 2>/dev/null || true
-            fi
-          done
           prs="$(sort -u prs.txt | paste -sd' ' - || true)"
           {
-            echo "## No release: a contract change is waiting for a minor"
+            echo "## No release: a change is waiting for a minor"
             echo ""
-            echo "Since \`$last\`, these commits changed the student contract (scripts/contract-paths.txt):"
+            echo "Since \`$last\`, these commits changed the student contract (scripts/contract-paths.txt) or came from a pull request labelled \`minor-release\`:"
             echo ""
             echo '```'
             cat commits.txt
             echo '```'
             echo ""
-            echo "A contract change ships only in a minor, which is cut by hand (docs/release-process.md, \"Cutting a minor (or major) release\"). Until then no release is cut, and the changelog fragments stay in changelog.d/."
+            echo "A contract change, or a pull request labelled \`minor-release\`, ships only in a minor, which is cut by hand (docs/release-process.md, \"Cutting a minor (or major) release\"). Until then no release is cut, and the changelog fragments stay in changelog.d/."
           } > body.md
           cat body.md >> "$GITHUB_STEP_SUMMARY"
           gh label create minor-needed --repo "$R" --color B60205 \
-            --description "A contract change is on main; auto-release waits for a minor cut by hand" \
+            --description "A change held for a minor is on main; auto-release waits for a minor cut by hand" \
             >/dev/null 2>&1 || true
           {
-            echo "Auto-release cut no release after \`$(git rev-parse --short HEAD)\`, because commits since \`$last\` changed the student contract (docs/release-gate.md)."
+            echo "Auto-release cut no release after \`$(git rev-parse --short HEAD)\`, because commits since \`$last\` changed the student contract or came from a pull request labelled \`minor-release\` (docs/release-gate.md)."
             echo ""
             echo "Pull requests: ${prs:-none named in the commit subjects}"
             echo ""
@@ -144,11 +170,19 @@ jobs:
             cat commits.txt
             echo '```'
             echo ""
-            echo "Contract paths changed:"
-            echo ""
-            echo '```'
-            head -40 contract.txt
-            echo '```'
+            if [ -s labelled.txt ]; then
+              echo "Pull requests labelled \`minor-release\`:"
+              echo ""
+              sort -u labelled.txt | sed 's/^/- /'
+              echo ""
+            fi
+            if [ -s contract.txt ]; then
+              echo "Contract paths changed:"
+              echo ""
+              echo '```'
+              head -40 contract.txt
+              echo '```'
+            fi
             echo ""
             echo "Meanwhile each merge with fragments cuts a pre-release of the next minor (v0.X.0-rc.N) for the dev server, which runs ahead of production (docs/release-gate.md, \"Pre-release channel\")."
             echo ""
@@ -157,11 +191,12 @@ jobs:
           existing="$(gh issue list --repo "$R" --state open --label minor-needed --limit 1 \
             --json number --jq '.[0].number // empty')"
           if [ -n "$existing" ]; then
-            gh issue edit "$existing" --repo "$R" --body-file issue.md >/dev/null
+            gh issue edit "$existing" --repo "$R" \
+              --title "A change is waiting for a minor release" --body-file issue.md >/dev/null
             echo "Updated issue #$existing." >> "$GITHUB_STEP_SUMMARY"
           else
             gh issue create --repo "$R" --label minor-needed \
-              --title "A contract change is waiting for a minor release" --body-file issue.md
+              --title "A change is waiting for a minor release" --body-file issue.md
           fi
 
       # The pre-release channel (docs/release-gate.md). Production waits for
