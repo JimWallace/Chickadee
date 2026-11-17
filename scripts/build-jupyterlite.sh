@@ -50,9 +50,9 @@ if [[ -n "$SOURCE_DATE_EPOCH" ]]; then
   BUILD_ARGS+=(--source-date-epoch "$SOURCE_DATE_EPOCH")
 fi
 
-# Kernels via jupyterlite-xeus: xpython (Python), xr (R), xlua (Lua) and
-# xoctave (Octave), each from its OWN emscripten-forge env —
-# Tools/jupyterlite/environment-{python,r,lua,octave}.yml.
+# Kernels via jupyterlite-xeus, each from its OWN emscripten-forge env —
+# Tools/jupyterlite/environment-<language>.yml (today xpython, xr, xlua and
+# xoctave).
 #
 # The envs are separate on purpose. jupyterlite-xeus packs one
 # `kernel_packages` payload per env and a kernel fetches its whole env at boot,
@@ -80,10 +80,13 @@ fi
 #
 # NOTE: --XeusAddon.environment_file is resolved RELATIVE TO --lite-dir, so each
 # must be passed as a bare filename, not the absolute path it was copied to.
-XEUS_ENVS=(environment-python.yml environment-r.yml environment-lua.yml environment-octave.yml)
+#
+# The environments are FOUND, not listed: every environment-*.yml in
+# $LITE_SRC_DIR is built. A hand-written list here would let a new environment
+# file be checked by the guards and never built.
 XEUS_ENVS_PRESENT=()
-for env_file in "${XEUS_ENVS[@]}"; do
-  [[ -f "$LITE_SRC_DIR/$env_file" ]] && XEUS_ENVS_PRESENT+=("$env_file")
+for env_path in "$LITE_SRC_DIR"/environment-*.yml; do
+  [[ -f "$env_path" ]] && XEUS_ENVS_PRESENT+=("$(basename "$env_path")")
 done
 if [[ ${#XEUS_ENVS_PRESENT[@]} -gt 0 ]] && command -v micromamba >/dev/null 2>&1; then
   for env_file in "${XEUS_ENVS_PRESENT[@]}"; do
