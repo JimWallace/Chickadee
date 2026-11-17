@@ -30,14 +30,17 @@ concurrency:
   group: auto-release
   cancel-in-progress: false
 
-permissions:
-  contents: write
-  actions: write
-  # The release gate opens or updates the `minor-needed` issue.
-  issues: write
+# Write scopes are granted per job, not here, so a job added later starts
+# with none (OpenSSF Scorecard TokenPermissions).
+permissions: {}
 
 jobs:
   release:
+    permissions:
+      contents: write
+      actions: write
+      # The release gate opens or updates the `minor-needed` issue.
+      issues: write
     runs-on: ubuntu-latest
     timeout-minutes: 15
     # The `release` environment admits only `main` and `v*` tags (#3071). A

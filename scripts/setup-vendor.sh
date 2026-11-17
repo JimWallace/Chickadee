@@ -40,7 +40,7 @@ curl -fsSL \
 # ── CodeMirror bundle ─────────────────────────────────────────────────
 echo "==> Bundling CodeMirror via npm + esbuild"
 cd "$repo_root/Tools/vendor"
-npm install --silent --no-audit --no-fund
+npm ci --silent --no-audit --no-fund
 npx esbuild codemirror-entry.js \
     --bundle \
     --format=esm \
