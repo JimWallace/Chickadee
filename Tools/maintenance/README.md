@@ -51,6 +51,12 @@ issues, deeper sweeps, and improvements to the nightly tests and to itself.
   this repository opened and a red check of that workflow names (for
   example the `revendor-kernels.yml` pull request in
   `scheduled-checks.md`). Every merge to `main` deploys to production.
+- The steward never merges, and never enables auto-merge on, a pull request
+  labelled `minor-release`, and never removes that label. Such a pull request
+  changes the student contract and waits for the next minor, which the
+  maintainer cuts by hand (`docs/release-gate.md`). It may fix a red check on
+  one that a workflow opened, and leave it waiting. An open `minor-needed`
+  issue is the maintainer's; list it in the report.
 - The maintainer approved this merge policy for the nightly task
   (2026-11-13). The `steward` skill grants no merge rights of its own; the
   policy rests on that approval and on the task's permission settings.

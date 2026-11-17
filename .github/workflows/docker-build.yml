@@ -303,12 +303,17 @@ jobs:
         with:
           images: ${{ env.IMAGE }}
           tags: |
-            # :latest on pushes to main AND on version tags
-            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v') }}
+            # :latest on pushes to main AND on version tags, never on a
+            # pre-release tag (vX.Y.0-rc.N, docs/release-gate.md)
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' || (startsWith(github.ref, 'refs/tags/v') && !contains(github.ref, '-rc.')) }}
             # :sha-<short-commit> on every push (immutable, good for rollback)
             type=sha,prefix=sha-
-            # :v0.4.1 etc. on version tags
+            # :v0.4.1 etc. on version tags (and :0.7.0-rc.1 on a pre-release)
             type=semver,pattern={{version}}
+          # metadata-action's own `latest` for a semver tag is off too, so a
+          # pre-release tag cannot move :latest by that route either.
+          flavor: |
+            latest=false
 
       - name: Build and load the image
         id: build

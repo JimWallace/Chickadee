@@ -29,11 +29,12 @@ name: Re-vendor xeus kernels
 # kernel-currency.yml dispatches it only when the channels have moved, because
 # a diff cannot decide that: xpython.wasm differs by 16 bytes on every build
 # (see below). It rebuilds from `main`, verifies, puts the rebuild and a
-# changelog fragment on a new `kernels/revendor-<run id>` branch, opens a pull
-# request and enables auto-merge. The pull request's CI, the browser grading
-# and editor smoke included, tests the new kernels before they merge, and
-# auto-release then deploys them like any other merge. If a re-vendor pull
-# request is already open, it does nothing.
+# changelog fragment on a new `kernels/revendor-<run id>` branch, and opens a
+# pull request labelled `minor-release`. The pull request's CI, the browser
+# grading and editor smoke included, tests the new kernels. It does NOT enable
+# auto-merge: a kernel re-vendor changes the student contract, so it waits to
+# merge just before a minor is cut by hand (docs/release-gate.md). If a
+# re-vendor pull request is already open, it does nothing.
 #
 # WHOSE TOKEN. Both pushing modes push with the RELEASE_TOKEN secret, the one
 # auto-release.yml uses. A commit run on a Dependabot branch, which
@@ -41,12 +42,12 @@ name: Re-vendor xeus kernels
 # only Dependabot secrets, so the commit step tries DEPENDABOT_MERGE_TOKEN
 # first. GITHUB_TOKEN cannot do either job: the branch ruleset
 # rejects its push (GH013, "Required status check editor-smoke-gate is
-# expected"), and a pull request opened with it starts no CI, so auto-merge
-# would merge untested kernels or wait forever. Publish mode refuses to run
+# expected"), and a pull request opened with it starts no CI, so its kernels
+# would never be tested. Publish mode refuses to run
 # without RELEASE_TOKEN.
 #
 # Auto-release needs only Contents: read & write from that token. Publish mode
-# also opens a pull request and enables auto-merge, so it needs Pull requests:
+# also opens and labels a pull request, so it needs Pull requests:
 # read & write too. Without it the branch push succeeds and `gh pr create`
 # fails with "Resource not accessible by personal access token
 # (createPullRequest)" (docs/release-process.md).
@@ -158,8 +159,8 @@ jobs:
           if [ -n "$open" ]; then
             echo "skip=true" >> "$GITHUB_OUTPUT"
             # A warning, not only a summary line: an open re-vendor pull request
-            # that is red, or whose auto-merge failed, holds every later
-            # publish, and nothing else would say so.
+            # waits for the next minor (docs/release-gate.md) and holds every
+            # later publish until then, and nothing else would say so.
             echo "::warning::A re-vendor pull request is still open, so no new one is published: $open"
             echo "A re-vendor pull request is still open, so this run publishes nothing: $open" >> "$GITHUB_STEP_SUMMARY"
           else
@@ -414,9 +415,11 @@ jobs:
           exit 1
 
       # A Dependabot branch whose rebuild reproduced the committed bytes gets no
-      # commit, so no run of dependabot-auto.yml follows to enable auto-merge.
-      # Enable it here instead; the required checks still decide.
-      - name: Enable auto-merge on an unchanged Dependabot branch
+      # commit. Its pin bump still changes the student contract
+      # (Tools/jupyterlite/requirements.txt), so it gets the `minor-release`
+      # label and waits for the next minor; auto-merge stays off
+      # (docs/release-gate.md).
+      - name: Label an unchanged Dependabot branch minor-release
         if: >-
           needs.revendor.outputs.changed == 'false'
           && startsWith(inputs.branch, 'dependabot/')
@@ -425,7 +428,7 @@ jobs:
           BRANCH: ${{ inputs.branch }}
         run: |
           set -euo pipefail
-          gh pr merge "$BRANCH" --repo "$GITHUB_REPOSITORY" --auto --merge
+          gh pr edit "$BRANCH" --repo "$GITHUB_REPOSITORY" --add-label minor-release
 
       # Publish mode: the rebuild goes onto its own branch from main, with the
       # changelog fragment every merge to main needs, and reaches main only
@@ -462,7 +465,7 @@ jobs:
           {
             echo "The weekly kernel currency check found the vendored kernels behind their channels, so this workflow rebuilt them from \`main\` and verified them with \`check-env-vendored-sync.sh\`, \`check-xeus-vendored.sh\` and \`verify-jupyterlite.sh\`."
             echo ""
-            echo "This pull request's CI, the browser grading and editor smoke included, tests the new kernels. Auto-merge is on; a red check holds it."
+            echo "This pull request's CI, the browser grading and editor smoke included, tests the new kernels. A kernel re-vendor changes the student contract, so this pull request carries the \`minor-release\` label and does not auto-merge. Merge it just before the next minor is cut by hand (docs/release-gate.md)."
             echo ""
             echo "Workflow run: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
             echo ""
@@ -470,13 +473,12 @@ jobs:
             git diff --stat HEAD~1 -- Public/jupyterlite | tail -25
             echo '```'
           } > /tmp/pr-body.md
-          if ! url="$(gh pr create --base main --head "$BRANCH" \
+          gh label create minor-release --repo "$GITHUB_REPOSITORY" --color 5319E7 \
+            --description "Changes the student contract; ships in the next minor (docs/release-gate.md)" \
+            >/dev/null 2>&1 || true
+          if ! url="$(gh pr create --base main --head "$BRANCH" --label minor-release \
             --title "Re-vendor the xeus kernels" --body-file /tmp/pr-body.md)"; then
             echo "::error::Pushed $BRANCH but could not open its pull request. RELEASE_TOKEN needs Pull requests: read & write as well as Contents: read & write (docs/release-process.md). Open the pull request from $BRANCH by hand, or grant the permission, delete $BRANCH and dispatch a new run."
             exit 1
           fi
-          if ! gh pr merge --auto --merge "$url"; then
-            echo "::error::Opened $url but could not enable auto-merge. It holds every later publish until it is merged or closed."
-            exit 1
-          fi
-          echo "Opened $url with auto-merge on." >> "$GITHUB_STEP_SUMMARY"
+          echo "Opened $url with the minor-release label. It waits for the next minor (docs/release-gate.md)." >> "$GITHUB_STEP_SUMMARY"

@@ -505,18 +505,31 @@ also tells how to enable the optional merge queue.
 
 ## Deployment & CI/CD (production)
 
-**A green merge to `main` reaches production on its own,** in about 10 to 15
-minutes, with zero downtime. `auto-release.yml` tags the release,
+**A green merge to `main` reaches production on its own only where the deploy
+mode allows it** (`docs/release-gate.md`). `auto-release.yml` tags a patch,
 `docker-build.yml` publishes `:latest` and `:sha-<commit>`, and the host-side
-`chickadee-deployer` daemon deploys it blue-green (`scripts/bluegreen-deploy.sh`).
-A major bump waits for a human. There is no SSH and no manual deploy step.
+`chickadee-deployer` daemon deploys it blue-green (`scripts/bluegreen-deploy.sh`)
+in about 10 to 15 minutes, with zero downtime. In the default mode
+(`gated-minors`) a patch deploys on its own and a minor waits for an admin to
+approve it on the admin page; a major always waits. The mode (`autonomous`,
+`gated-minors`, `manual`) and pause are set on the admin page, which only sends
+requests that the daemon validates. Rollback stays a host action.
+
+**A contract change waits for a minor.** A pull request that changes a path in
+`scripts/contract-paths.txt` (the vendored kernels and editor, the runner wasm,
+the kernel pins, `Sources/RunnerCore/`) needs the `minor-release` label, and
+while one is on `main`, auto-release cuts no release and opens a `minor-needed`
+issue. It cuts a pre-release of the next minor (`v0.X.0-rc.N`) instead, which
+only the dev server takes: its deployer runs the host-only `prereleases`
+channel, production's the default `releases`. The minor is cut by hand (`docs/release-process.md`). Kernel re-vendor
+and JupyterLab dependency pull requests carry the label and never auto-merge.
 
 **Verify a fix is live with the read-only admin diagnostics MCP**
 (`Chickadee_Admin`): `get_deployment_info` for the running version,
 `get_deploy_status` / `get_deploy_history` for the daemon, and `list_runners` /
 `get_health_alerts` / `query_logs` / `get_browser_diagnostics` for the
-behaviour. Deploy control (pause, approve a major, roll back) is host-side by
-design. See [docs/zero-downtime-deploy.md](docs/zero-downtime-deploy.md).
+behaviour. Approve, mode and pause are on the admin page (Deployment); roll
+back is host-side by design. See [docs/zero-downtime-deploy.md](docs/zero-downtime-deploy.md).
 
 ---
 

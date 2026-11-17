@@ -2263,6 +2263,73 @@ coordination, and each must see every edit.
   - The CSP permits no inline script (#1516;
     `ContentSecurityPolicyInlineScriptTests`).
 
+### The deploy state folder: `status.json`, `pending-notes.json`, `requests/`
+
+- **Writers:** the host deploy daemon (`deploy/chickadee-deployer.sh`) writes
+  `status.json`, `history.jsonl`, `pending-notes.json`, `mode`, `paused` and
+  `approved`. Only the host writes `channel`. The admin Deployment page (`AdminRoutes+Deployment.swift`,
+  `DeployStateFolder.write`) writes one file per request into `requests/`,
+  the only path the app may write (`bluegreen-deploy.sh` mounts it read-write
+  over the read-only `/deploy-state`). A host operator writes
+  `command.json`.
+- **Readers:** the daemon reads `requests/` and `command.json` each poll. The
+  app reads `status.json` in three places: `DeployStateFolder` (the
+  Deployment page), `GetDeployStatusTool` (MCP `get_deploy_status`) and
+  `DeployerHealthRule` (the `deployerUnhealthy` alert, which does not fire on
+  `paused` or `pending_approval`). `GetDeployHistoryTool` and the page read
+  `history.jsonl`.
+- **Parallel paths:** two Swift decoders of `status.json`: `DeployStatusFile`
+  (the page and `GetDeployStatusTool`) and `DeployerStatus` (the alert).
+  A field the daemon adds or renames goes in each that needs it; every field
+  stays optional, because an older daemon writes fewer.
+- **Rules:**
+  - The app only asks. The daemon accepts approve-the-held-release, mode,
+    pause and resume, and refuses everything else, rollback included
+    (`docs/release-gate.md`; `scripts/test-chickadee-deployer.sh`). No
+    route or MCP tool may write anywhere else in the folder.
+  - The mode's raw values (`DeployMode`) and the daemon's `valid_mode` are
+    the same three strings.
+  - The release channel is host-only. The request reader refuses a
+    `channel` request, and the page shows the channel without a control, so
+    nothing in the app can point production at pre-releases.
+  - The approval names a version, and the daemon accepts it only for the
+    release it holds, so a newer release is held anew.
+
+### The version string: `ChickadeeVersion.current` and `v*` tags
+
+- **Writers:** `scripts/assemble-release.sh` (a patch or a hand-cut minor, on
+  `main`), and `auto-release.yml` for a pre-release, which stamps
+  `0.X.0-rc.N` on a commit reached only by its tag (`docs/release-gate.md`).
+- **Readers:** `/health` (the deployer checks it after a deploy), the admin
+  banner, the `?v=` asset cache key, `LiveBoardETag`, alert text, the bundle
+  manifest's `chickadeeVersion`, `get_server_info`, and the runner's
+  advertised version, compared by `VersionComparator` in the runner gates and
+  the version skew alert.
+- **Rules:**
+  - `VersionComparator` reads only the leading `X.Y.Z`, so an rc and its final
+    release compare equal on the server. Only the deployer orders rcs
+    (`version_key`).
+  - Every workflow that reacts to a `v*` tag (`docker-build.yml`,
+    `runner-arm64-image.yml`, `release.yml`) treats a `-rc.` tag as a
+    pre-release: never `:latest`, never the latest release.
+
+### The student contract: `scripts/contract-paths.txt`
+
+- **Writers:** a pull request that edits the list. The `minor-release` label
+  that goes with it is set by the author, by `revendor-kernels.yml`, and by
+  `dependabot-auto.yml` (only on a Dependabot pull request).
+- **Readers:** `scripts/contract-changes.sh`, run by the `contract-change`
+  check (`.github/workflows/contract-change.yml`), the release gate in
+  `auto-release.yml`, and `dependabot-auto.yml`. The label is read by
+  `contract-change.yml` (as the author's consent), `dependabot-auto.yml` and
+  `dependency-health.yml` (which leaves a labelled pull request alone), and by
+  the steward, which never merges one (`Tools/maintenance/README.md`).
+- **Rule:** a path joins the list when a change to it would break a student
+  who has the old version open or cached. While a commit that touched a
+  listed path is on `main` after the last release tag, auto-release cuts no
+  release, so the labelled pull requests merge together just before a minor
+  is cut by hand (`docs/release-gate.md`).
+
 ---
 
 ## Checks that already guard an intersection

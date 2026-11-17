@@ -20,6 +20,9 @@ recorded reason. Follow the rules in `Tools/maintenance/README.md`.
 4. If the new version cannot work here, add an `ignore` entry with the reason
    to `.github/dependabot.yml` in its own pull request (auto-merge on), close
    the Dependabot pull request with an explanation, and say so on the issue.
-5. Check that auto-merge is on for each Dependabot pull request you fixed.
+5. Check that auto-merge is on for each Dependabot pull request you fixed,
+   except one labelled `minor-release`: that one changes the student
+   contract and waits for the next minor, with auto-merge off
+   (`docs/release-gate.md`).
 6. Comment on each issue you worked on: the root cause, the change, and the
    pull request.

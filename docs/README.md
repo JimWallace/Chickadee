@@ -114,6 +114,7 @@ not exist.
 ## Operations, CI and releases
 
 - [release-process.md](release-process.md) — versions at merge time, `changelog.d/` fragments, and cutting a minor release
+- [release-gate.md](release-gate.md) — deploy modes set on the admin page, admin approval of held releases, and contract changes (kernels, grading) only in a minor
 - [zero-downtime-deploy.md](zero-downtime-deploy.md) — blue-green deploys, the `chickadee-deployer` daemon, read-only deploy oversight
 - [mac-runner.md](mac-runner.md) — a bonus runner on an Apple Silicon Mac under Docker Desktop: the arm64 runner image, sizing, the launchd updater
 - [operational-diagnostics.md](operational-diagnostics.md) — observability tables, log events, metrics endpoint, ops runbook
