@@ -2,7 +2,7 @@
 
 The runner daemon. It polls the server for jobs, prepares a workspace from the
 cached test setup and the submission, runs each test script in a subprocess
-(inside a sandbox with `--sandbox`), and reports a `TestOutcomeCollection`
+(inside a sandbox, unless it is started with `--no-sandbox`), and reports a `TestOutcomeCollection`
 back over HMAC-signed requests. It advertises a capability profile, so the
 server hands it only the jobs it can grade.
 

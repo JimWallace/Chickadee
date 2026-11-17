@@ -411,8 +411,8 @@ protocol ScriptRunner: Sendable {
     func run(script: URL, workDir: URL, timeLimitSeconds: Int, env: [String: String]) async -> ScriptOutput
 }
 
-struct UnsandboxedScriptRunner: ScriptRunner { … }   // default in development
-struct SandboxedScriptRunner: ScriptRunner { … }     // --sandbox flag
+struct UnsandboxedScriptRunner: ScriptRunner { … }   // --no-sandbox
+struct SandboxedScriptRunner: ScriptRunner { … }     // the default since 0.6.0
 ```
 
 `SandboxedScriptRunner` uses platform-specific primitives:
@@ -463,19 +463,19 @@ these protections:
   runner's shared secret (`Sources/Worker/ScriptRunner.swift`). The runner
   also marks itself non-dumpable at start, so a script cannot read the
   secret from the runner's own `/proc` entries.
-- **The host, with `--sandbox`.** The script cannot reach the network. On
+- **The host, in the sandbox (the default since 0.6.0).** The script cannot reach the network. On
   Linux it has no real privileges, and it starts with no capability at all,
   not even inside its own namespace (#2268): the prelude that builds the
   mounts needs them, but a script that kept them could `umount` the covers
   below and read every other job and every cached test setup. On macOS it can write only in its working
-  directory. Without `--sandbox`, the script runs as the runner's user, with
+  directory. With `--no-sandbox`, the script runs as the runner's user, with
   network access. The manifest's `make` step runs in the same sandbox as the
-  scripts (#2250); until then it ran outside it, even with `--sandbox`. When
+  scripts (#2250); until then it ran outside it, even in the sandbox. When
   the manifest has a make step, a submission cannot supply `Makefile`,
   `makefile` or `GNUmakefile` (`protectedWorkspaceFilenames`), because the
   submission is merged before `make` runs and GNU make reads `GNUmakefile`
   first.
-- **Other jobs on the same runner, with `--sandbox`.** Every job on a runner
+- **Other jobs on the same runner, in the sandbox.** Every job on a runner
   runs as the same user, and every job directory is a child of one work root.
   So while two jobs run at the same time (`--max-jobs` above 1), a script
   could read the other job's workspace, which holds another student's
@@ -485,10 +485,10 @@ these protections:
   environment names (`CHICKADEE_OPPONENT_DIR`) are bound back. On macOS the
   profile denies the work root and allows the same directories. Nothing is
   configured: the work root is the parent of the working directory, because
-  the runner creates both. Without `--sandbox`, the workspaces are shared. A
+  the runner creates both. With `--no-sandbox`, the workspaces are shared. A
   class-activity match job stages a classmate's submission as the opponent,
   by design (see [class-activities.md](class-activities.md)).
-- **The job's other test scripts, with `--sandbox`.** While one suite script
+- **The job's other test scripts, in the sandbox.** While one suite script
   runs, the job's other suite scripts read as empty on Linux (each is covered
   with `/dev/null` in the script's mount namespace) and are denied on macOS. A
   public test's submission can then no longer read the release and secret test
@@ -496,7 +496,7 @@ these protections:
   included, because tests use them) and the per-student inputs stay readable
   (`NativeScriptExecutor.scriptsHidden`; [grading-integrity.md](grading-integrity.md),
   phase 2).
-- **The processes of other jobs on the same runner, with `--sandbox` on
+- **The processes of other jobs on the same runner, in the sandbox on
   Linux.** Every job runs as the same user, so one job could once fork until
   the container's `pids_limit` was used up, and the jobs beside it could then
   not start a process. Each script now starts under its own `RLIMIT_NPROC`
@@ -508,7 +508,7 @@ these protections:
   kernel does not apply the limit then; and the container's `pids_limit` must
   hold every job at its limit (`--max-jobs` x limit + 64,
   `JobProcessBudget`).
-- **The disk of other jobs on the same runner, with `--sandbox` on Linux.**
+- **The disk of other jobs on the same runner, in the sandbox on Linux.**
   Every job directory lives on one mount that the jobs on a runner share, so
   one script that wrote without bound in its working directory once filled it
   for every job. Now an overlay covers the working directory: the script reads
@@ -521,7 +521,7 @@ these protections:
   use what it builds. An opponent directory is read-only. The overlay needs
   Linux 5.11 or later, and the startup probe includes it. The work root above
   the working directory is read-only, so a script cannot write into `..`.
-- **Memory, with `--sandbox` on Linux, in part.** A script's `/tmp`,
+- **Memory, in the sandbox on Linux, in part.** A script's `/tmp`,
   `/var/tmp`, `/dev/shm`, `HOME` and working directory are folders in one
   private tmpfs of `--job-disk-limit` (#2252), not one mount each, which added
   up to about 1.1 GB. A tmpfs is memory that belongs to no process, so the

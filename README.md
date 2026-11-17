@@ -111,6 +111,10 @@ RUNNER_SHARED_SECRET=dev-secret \
     --max-jobs     2
 ```
 
+The runner sandboxes test scripts by default. Inside a container or another
+sandbox, where it cannot start its own, it refuses to start and says why; add
+`--no-sandbox` for local development there.
+
 The admin dashboard also supports a **local runner autostart** toggle that spawns a runner subprocess automatically — useful for development without a second terminal.
 
 For backend observability details, retention settings, and the protected

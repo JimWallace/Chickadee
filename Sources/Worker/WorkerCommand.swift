@@ -31,27 +31,34 @@ struct WorkerCommand: AsyncParsableCommand {
     @Option(name: .long, help: "Maximum number of concurrent jobs")
     var maxJobs: Int = 4
 
-    @Flag(name: .long, help: "Run test scripts inside a sandbox (network-isolated, privilege-dropped)")
-    var sandbox: Bool = false
+    /// On by default since 0.6.0 (#2348). `--sandbox` is still accepted and
+    /// changes nothing, so a start command written for 0.5 keeps working;
+    /// `--no-sandbox` turns it off. With both, the last one wins.
+    @Flag(
+        name: .long, inversion: .prefixedNo, exclusivity: .chooseLast,
+        help:
+            "Run test scripts inside a sandbox (network-isolated, privilege-dropped). On by default; --no-sandbox turns it off"
+    )
+    var sandbox: Bool = true
 
     @Option(
         name: .long,
         help:
-            "With --sandbox, the most processes and threads one test script may start at once"
+            "With the sandbox, the most processes and threads one test script may start at once"
     )
     var jobProcessLimit: Int = SandboxedScriptRunner.defaultProcessLimit
 
     @Option(
         name: .long,
         help:
-            "With --sandbox on Linux, the megabytes one test script may write in its working directory; the writes are discarded when it ends"
+            "With the sandbox on Linux, the megabytes one test script may write in its working directory; the writes are discarded when it ends"
     )
     var jobDiskLimit: Int = SandboxedScriptRunner.defaultDiskLimitMegabytes
 
     @Option(
         name: .long,
         help:
-            "With --sandbox on Linux, the megabytes of memory one test script may use, its files included; needs the job cgroups that runner-entrypoint.sh delegates"
+            "With the sandbox on Linux, the megabytes of memory one test script may use, its files included; needs the job cgroups that runner-entrypoint.sh delegates"
     )
     var jobMemoryLimit: Int = JobCgroups.defaultMemoryLimitMegabytes
 
@@ -75,7 +82,7 @@ struct WorkerCommand: AsyncParsableCommand {
     mutating func run() async throws {
         // A test script runs as the runner's user. Without this it can read
         // RUNNER_SHARED_SECRET from /proc/<runner pid>/environ and sign worker
-        // API calls, for example to report its own result. `--sandbox` blocks
+        // API calls, for example to report its own result. The sandbox blocks
         // the read too, but only where the host allows user namespaces.
         let processInspection = Self.processInspectionStatus(chickadee_refuse_process_inspection())
 
@@ -232,7 +239,7 @@ struct WorkerCommand: AsyncParsableCommand {
     /// Checks the sandbox at startup: whether the kernel applies
     /// `--job-process-limit`, and whether each job can have its own cgroup.
     ///
-    /// It refuses to start with `--sandbox` on a host that cannot sandbox. The
+    /// It refuses to start with the sandbox on a host that cannot sandbox. The
     /// alternative is a runner that claims jobs and fails every one of them.
     /// The process limit isolates the jobs from each other only when the
     /// kernel applies it and the container can hold every job at its limit,
@@ -253,7 +260,7 @@ struct WorkerCommand: AsyncParsableCommand {
         }
         if let reason = await SandboxedScriptRunner.probe(workDir: workRoot) {
             throw Self.startupFailure(
-                "Error: --sandbox is set, but this host cannot start the sandbox: \(reason)\n"
+                "Error: the sandbox is on, but this host cannot start the sandbox: \(reason)\n"
                     + SandboxedScriptRunner.probeFailureAdvice + "\n")
         }
         let enforced = await SandboxedScriptRunner.processLimitIsEnforced(workDir: workRoot)
@@ -323,7 +330,7 @@ struct WorkerCommand: AsyncParsableCommand {
         return (nil, "unavailable: \(reason)")
     }
 
-    /// The script runner `--sandbox` selects, with the label the startup log
+    /// The script runner the sandbox setting selects, with the label the startup log
     /// reports for it. One decision for both, so the log cannot describe a
     /// different runner from the one that grades.
     static func scriptRunner(
