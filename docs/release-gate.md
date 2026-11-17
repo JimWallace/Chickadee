@@ -35,8 +35,10 @@ Tests/Fixtures/output-contract.json
 ```
 
 Compatibility removals (a route, a wire field, a stored format, an env var) are
-part of the contract too. `docs/release-process.md` already reserves them for a
-minor, and a reviewer enforces that; the path list cannot.
+part of the contract too. `docs/release-process.md` reserves them for a minor.
+No path list can see them, so their author labels the pull request
+`minor-release`, and auto-release holds on the label as it holds on a path
+(below). A reviewer checks that the label is there.
 
 A new path joins the list when a change to it would break a student who has the
 old version open or cached.
@@ -53,10 +55,15 @@ JupyterLab dependency updates no longer enable auto-merge. They are opened with
 the `minor-release` label and wait. The steward leaves them alone.
 
 **At release time.** `auto-release.yml` compares the commits since the last
-release tag with `scripts/contract-paths.txt`. When any of them changed a
-contract path, it cuts no release: no patch, no minor. It writes why in the job
+release tag with `scripts/contract-paths.txt`, and asks GitHub for the pull
+request of each. When any of them changed a contract path, or came from a pull
+request labelled `minor-release`, it cuts no release: no patch, no minor. Added
+on 2026-11-17 (#3061): before, the label was only read at merge time, so a
+labelled removal that touched no contract path would have shipped in a patch,
+and in `gated-minors` a patch deploys on its own. If GitHub cannot be asked,
+the job fails rather than release. It writes why in the job
 summary and opens (or updates) one issue labelled `minor-needed`, which names the
-pull requests that carry the contract change. Fragments keep accumulating in
+pull requests that carry the change. Fragments keep accumulating in
 `changelog.d/`.
 
 **Cutting the minor** is the manual step in `docs/release-process.md`
@@ -65,10 +72,10 @@ pull requests that carry the contract change. Fragments keep accumulating in
 `chore(release):` prefix, and the tag pushed from a human account. Auto-release
 resumes at `0.X.1` on the next merge.
 
-**The order of a minor.** Contract pull requests merge together, just before
+**The order of a minor.** Labelled pull requests merge together, just before
 the cut, because while one sits on `main` no release of any kind is cut:
 
-1. Merge the labelled contract pull requests.
+1. Merge the labelled pull requests.
 2. Cut the minor by hand.
 3. The deployer holds it (in the default mode).
 4. An admin approves it on the admin page, at a time with no lecture running.
