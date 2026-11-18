@@ -124,7 +124,10 @@ private struct DeploymentHeldSection: HTML {
             if held.isApproved {
                 p(.class("section-intro")) { "Deploys on the daemon’s next poll." }
             } else if canSend {
-                form(.method(.post), .action("/admin/deployment/approve"), .class("form card section-gap")) {
+                form(
+                    .method(.post), .action("/admin/deployment/approve"),
+                    .class("form form--wide card card--padded section-gap")
+                ) {
                     CSRFField(token: csrfToken)
                     label(.class("form-label"), .for("deploy-approve-version")) {
                         "Type \(held.version) to approve it"
@@ -141,18 +144,18 @@ private struct DeploymentHeldSection: HTML {
                 }
             }
             if !held.contractPullRequests.isEmpty {
-                h3 { "Contract changes" }
-                ul {
-                    for pull in held.contractPullRequests {
-                        li {
-                            span(.class("tier tier-preview")) { "Contract change" }
-                            " "
-                            if let url = pull.url {
-                                a(.href(url)) { "#\(pull.number)" }
-                            } else {
-                                "#\(pull.number)"
+                div(.class("card card--padded section-gap")) {
+                    h3 { "Contract changes" }
+                    ul {
+                        for pull in held.contractPullRequests {
+                            li {
+                                if let url = pull.url {
+                                    a(.href(url)) { "#\(pull.number)" }
+                                } else {
+                                    "#\(pull.number)"
+                                }
+                                " \(pull.title)"
                             }
-                            " \(pull.title)"
                         }
                     }
                 }
@@ -167,26 +170,30 @@ private struct DeploymentHeldSection: HTML {
     }
 }
 
-/// One release's notes, with every contract change flagged.
+/// One release's notes as a card: its name, then each `### Changed`-style
+/// heading above its own list, with every contract change flagged.
 private struct DeploymentReleaseNotes: HTML {
     let release: AdminDeploymentView.ReleaseNotes
 
     var body: some HTML {
-        h3 {
-            if let url = release.url {
-                a(.href(url)) { release.name }
-            } else {
-                release.name
+        div(.class("card card--padded section-gap")) {
+            h3 {
+                if let url = release.url {
+                    a(.href(url)) { release.name }
+                } else {
+                    release.name
+                }
             }
-        }
-        if release.entries.isEmpty {
-            p(.class("text-muted")) { "No notes." }
-        } else {
-            ul {
-                for entry in release.entries {
-                    if entry.isHeading {
-                        li { strong { entry.text } }
-                    } else {
+            let sections = DeployReleaseNotes.sections(of: release.entries)
+            if sections.isEmpty {
+                p(.class("text-muted")) { "No notes." }
+            }
+            for section in sections {
+                if let heading = section.heading {
+                    h4 { heading }
+                }
+                ul {
+                    for entry in section.items {
                         li {
                             if entry.isContractChange {
                                 span(.class("tier tier-preview")) { "Contract change" }
