@@ -190,10 +190,10 @@ def main(argv: list[str] | None = None) -> int:
     print(f"### Survived every one of the last {len(comparable)} comparable runs ({len(persistent)})")
     print()
     print(
-        "This is the standing backlog. Expect a good fraction to be EQUIVALENT MUTANTS --\n"
-        "unkillable by construction, because no input reaching that code can tell the\n"
-        "difference. Those are closed with a reason, not with a test. A survivor is a\n"
-        "question; 'correctly, no test' is a legitimate answer."
+        "This is the standing backlog, and it should be empty. Recorded equivalent\n"
+        "mutants are already filtered out (Tools/mutation/equivalent-mutants.json), so\n"
+        "each survivor here was left untriaged: kill it with a test, or, if no reachable\n"
+        "input can tell the difference, record it in the ledger with the argument."
     )
     print()
     current_file = None
