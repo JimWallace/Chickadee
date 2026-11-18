@@ -73,9 +73,11 @@ capture in the same PR.
 `Sources/APIServer/Views/`, `Public/styles.css`, or a page-wiring
 `Public/*.js`.** It reviews the layer the guards structurally cannot: whether a
 construct duplicates the vocabulary, whether the idiom is the lightest that
-fits, whether the copy is at house length, and whether a page steps outside
-its archetype. Green guards are necessary, not
-sufficient — every style regression so far has been mechanically legal.
+fits, whether the copy is at house length, whether a page steps outside
+its archetype, and whether the control is the right one for the reader's
+task (a choice of one is a radio group, not a row of buttons). Green guards
+are necessary, not sufficient — every style regression so far has been
+mechanically legal.
 
 **This is unconditional and needs no confirmation.** The agent is checked in
 at `.claude/agents/ui-review.md`, so every Claude Code session has it. Run it

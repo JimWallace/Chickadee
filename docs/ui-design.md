@@ -345,7 +345,10 @@ duplicate.
   badges (defined variants only:
   open/closed/extended/preview/unpublished/danger).  A bare `.tier` is the
   neutral state badge, for a state with no status colour ("Secret tests
-  revealed", or a submission whose browser and native grades differ).  `.tier-danger` is the one
+  revealed", or a submission whose browser and native grades differ).  Its
+  fill, and `.tier-unpublished`'s, is `--badge-neutral-bg`, one step up from
+  `--surface` in dark mode (dark `--gray-100` is `--surface`, so the badge
+  vanished).  `.tier-danger` is the one
   that means something went wrong; `.tier-closed` is a neutral inactive grey
   and must not be borrowed for it.  One `.tier-open` is not a state: the
   result page's gain beside the grade ("+13%", result-celebration.md) uses
@@ -532,8 +535,14 @@ duplicate.
   which sets the room's sizes.
 - **`.fieldset-plain`** — the unstyled `<fieldset>` + bold `<legend>` that
   wraps a group of radio or checkbox choices (enroll, the LTI grade
-  transport, LTI deep linking, the bird picker).  Use it for any group
-  of choices rather than restyling a fieldset.
+  transport, LTI deep linking, the bird picker, the deploy mode).  Use it
+  for any group of choices rather than restyling a fieldset.  A choice of
+  one of a few options is a radio group with one submit button, never a
+  row of buttons, one per option.  Where each option needs a one-line
+  description, the row is `.checkbox-row .checkbox-row--described`: the
+  name in `<strong>`, the description in `.field-note--muted` under it, and
+  the radio aligned with the name.  When a section heading already names
+  the group, as on the Deployment page, the legend is `visually-hidden`.
 - **`.swatch-row`**, `.swatch`, `.swatch-sample`, `.swatch-name` — a choice of
   one colour, inside a `.fieldset-plain`: each option is a radio input shown
   as a round sample with its name under it.  The input is invisible but stays
