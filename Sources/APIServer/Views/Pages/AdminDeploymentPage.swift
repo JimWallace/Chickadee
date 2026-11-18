@@ -124,7 +124,10 @@ private struct DeploymentHeldSection: HTML {
             if held.isApproved {
                 p(.class("section-intro")) { "Deploys on the daemon’s next poll." }
             } else if canSend {
-                form(.method(.post), .action("/admin/deployment/approve"), .class("form form--wide card card--padded section-gap")) {
+                form(
+                    .method(.post), .action("/admin/deployment/approve"),
+                    .class("form form--wide card card--padded section-gap")
+                ) {
                     CSRFField(token: csrfToken)
                     label(.class("form-label"), .for("deploy-approve-version")) {
                         "Type \(held.version) to approve it"
