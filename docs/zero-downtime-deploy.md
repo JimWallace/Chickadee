@@ -278,7 +278,7 @@ mechanism without moving any student traffic:
    drain): on SIGTERM it claims no new job and finishes the jobs it is running,
    for up to its `stop_grace_period` of 10 minutes, while other runners take new
    jobs. A job still running after that is killed and re-queued by the server's
-   `StuckSubmissionReaperMonitor`. Best-effort: this
+   `StuckSubmissionReaperService`. Best-effort: this
    runs only after the server swap is already verified healthy, so a runner hiccup
    is logged to `history.jsonl` (`runner-refresh`) but never rolls back the deploy.
    Disable with `CHICKADEE_REFRESH_RUNNER=0`. Because this step is best-effort, a

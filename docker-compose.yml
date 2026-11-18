@@ -135,7 +135,8 @@ services:
         --worker-id "${RUNNER_WORKER_ID:-runner-${HOSTNAME}}"
         --max-jobs "${RUNNER_MAX_JOBS:-4}"
         --sandbox
-      # --sandbox runs each test script in its own user, network and mount
+      # The sandbox (the default since 0.6.0; --sandbox is a no-op kept for
+      # clarity, --no-sandbox turns it off) runs each test script in its own user, network and mount
       # namespace (unshare). The script then has no network, so it cannot
       # reach the server or the internet, no real privileges, and no view of
       # the other jobs on this runner: the work root is covered inside the
@@ -171,7 +172,7 @@ services:
     # Least privilege. This container executes untrusted student code, so it
     # gets no capabilities, cannot acquire new ones, and cannot fork without
     # bound. None of the three costs anything a test script legitimately needs.
-    # The two unconfined profiles are the price of --sandbox: Docker's default
+    # The two unconfined profiles are the price of the sandbox: Docker's default
     # seccomp profile allows unshare and mount only with CAP_SYS_ADMIN, and
     # its default AppArmor profile does not allow a user namespace. The
     # namespaces then isolate each script; the capability drop still applies

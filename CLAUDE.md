@@ -517,7 +517,7 @@ requests that the daemon validates. Rollback stays a host action.
 
 **A contract change waits for a minor.** A pull request that changes a path in
 `scripts/contract-paths.txt` (the vendored kernels and editor, the runner wasm,
-the kernel pins, `Sources/RunnerCore/`) needs the `minor-release` label. So
+the kernel pins, the browser grading cells, `Sources/RunnerCore/`) needs the `minor-release` label. So
 does a compatibility removal, which no path list can see. While a contract
 change or a labelled pull request is on `main`, auto-release cuts no release
 and opens a `minor-needed` issue. It cuts a pre-release of the next minor (`v0.X.0-rc.N`) instead, which
@@ -538,9 +538,11 @@ back is host-side by design. See [docs/zero-downtime-deploy.md](docs/zero-downti
 
 ## Current State
 
-**The 0.4 series is closed.** v0.5.0 marks the end of the first full course
-offering on Chickadee. The 0.4 arc is at the top of `CHANGELOG-0.4.md`; the
-0.5-boundary cleanup is in the 0.5.0 entry of `CHANGELOG.md`. BrightSpace grade
+**The 0.5 series is closed.** v0.6.0 opens the multi-course pilot: several
+courses run live class activities, so production deploys are gated
+(`docs/release-gate.md`). The 0.5 arc is at the top of `CHANGELOG-0.5.md` and
+the 0.4 arc at the top of `CHANGELOG-0.4.md`; the 0.6-boundary cleanup is in
+the 0.6.0 entry of `CHANGELOG.md`. BrightSpace grade
 sync waits for UW IST production credentials. `MCPToolCatalog.live` holds the
 MCP tool count.
 
@@ -551,8 +553,7 @@ MCP tool count.
 **Feature backlog:** more personalization and notebook checks (for example
 per-student refs in pattern kinds beyond the three equality kinds); pattern
 kinds beyond the ten in `PatternKind`; SSO tests with providers other than
-UWaterloo DUO; refresh-token handling; more gamification (badges
-beyond First-Try Perfect).
+UWaterloo DUO; refresh-token handling.
 
 ---
 
@@ -572,7 +573,7 @@ beyond First-Try Perfect).
   deploy runbook and the operator's head — and one that is silently absent
   everywhere it was not added, which is the failure mode env vars are worst at
   surfacing. Configure new runner behaviour with a **CLI flag** on
-  `chickadee-runner` (as `--sandbox` and `--max-jobs` do), derive it from
+  `chickadee-runner` (as `--no-sandbox` and `--max-jobs` do), derive it from
   something already known, or make the code detect the condition at runtime.
   If a new variable ever looks genuinely unavoidable, ask first — do not add it
   and mention it afterwards.

@@ -30,8 +30,8 @@ chickadee-r        51 packages   62.1 MB
   everything else — the tidyverse set           23 pkgs   22.2 MB   (36%)
 ```
 
-Marginal cost of each package the Python env file declares, over the bare
-kernel. These **overlap** — scipy pulls openblas and numpy, statsmodels pulls
+Marginal cost of each package the Python env file declared, over the bare
+kernel, measured before v0.6 dropped scipy and statsmodels (#3122). These **overlap** — scipy pulls openblas and numpy, statsmodels pulls
 scipy and pandas — so they are not additive:
 
 ```
@@ -83,7 +83,10 @@ untar, FS write, `dlopen` — with download time near zero. Two things follow:
   51 MB of optional packages also has to arrive.
 
 Dropping just scipy and statsmodels from the boot takes 48 → 44 packages and
-8.6 s → 6.1 s, a 30% cut, and ~26 MB less to download.
+8.6 s → 6.1 s, a 30% cut, and ~26 MB less to download. **v0.6 dropped them**
+from the environment altogether (48 → 43 packages: scipy, statsmodels,
+openblas, patsy and six), because no course needed them in the browser. #3122
+revisits that at the next minor.
 
 ## Packages can be added to a live kernel
 

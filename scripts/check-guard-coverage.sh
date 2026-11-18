@@ -65,6 +65,7 @@ scripts/mutation-run.sh|Not a check. It runs the weekly mutation report.
 scripts/setup-jupyterlite.sh|Not a check. It installs the JupyterLite build tools.
 scripts/install-micromamba.sh|Not a check. It installs micromamba for the kernel workflows.
 scripts/build-jupyterlite.sh|Not a check. It builds the vendored bundle.
+scripts/lock-kernel-envs.py|Not a check without --check. It solves the kernel environments and writes their locks, which needs the network.
 scripts/build-runner-wasm.sh|Not a check. It builds the vendored runner wasm.
 scripts/runnercore-source-hash.sh|Not a check. It prints the source hash that the runner wasm vendor records.
 scripts/restore-asset-mtimes.py|Not a check. It sets the Public file times before the image build; the next step in docker-build.yml checks the result in the image.

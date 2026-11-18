@@ -97,6 +97,12 @@ jobs:
       - name: Environment files match the vendored kernels
         run: scripts/check-env-vendored-sync.sh
 
+      # Each kernel is installed from its lock (scripts/create-kernel-prefix.py).
+      # Offline: a lock must exist for every environment file, match that file,
+      # and name exactly the packages that are vendored.
+      - name: The kernel locks match the environment files and the vendored kernels
+        run: scripts/lock-kernel-envs.py --check
+
       # Offline and instantaneous: proves the weekly currency check's
       # comparator still reports a difference. That check runs on a schedule
       # with network and micromamba, so nothing on the pull request path would

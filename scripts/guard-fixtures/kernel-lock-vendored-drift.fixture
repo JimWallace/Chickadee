@@ -1,0 +1,10 @@
+# A lock that names packages other than the vendored ones means the bytes that
+# ship are not the bytes the lock describes.
+guard="scripts/lock-kernel-envs.py"
+args="--check"
+files="Tools/jupyterlite/locks/environment-lua-lock.yml"
+description="a lock names a package version that is not vendored"
+expect="the vendored chickadee-lua is not what"
+apply() {
+    sed_inplace 's|/nlohmann_json-3.12.0-|/nlohmann_json-3.12.1-|' Tools/jupyterlite/locks/environment-lua-lock.yml
+}

@@ -153,10 +153,22 @@ kernel itself.
 silently and ships with no index at all — on-demand loading then resolves nothing
 and the authoring import guard has no package list to check against.
 
-### 2. Vendor it
+### 2. Lock it, then vendor it
 
-Run `.github/workflows/revendor-kernels.yml` (workflow_dispatch). It installs
-micromamba, builds, and commits the result. **Do not hand-edit anything under
+The build installs each kernel from its lock and never solves an environment
+file. Lock the new environment, with micromamba on PATH and network to
+`repo.prefix.dev`:
+
+```bash
+scripts/lock-kernel-envs.py
+```
+
+Commit the new `Tools/jupyterlite/locks/environment-<lang>-lock.yml` with the
+environment file. Without it the build stops and `scripts/lock-kernel-envs.py
+--check` fails the JupyterLite job.
+
+Then run `.github/workflows/revendor-kernels.yml` (workflow_dispatch). It installs
+micromamba, builds from the locks, and commits the result. **Do not hand-edit anything under
 `Public/jupyterlite/`** — it is generated output.
 
 Locally, if you have micromamba and network to `repo.prefix.dev`:

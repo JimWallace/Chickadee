@@ -4,8 +4,8 @@
 // 2026-10-13 (#2535) changed without a test noticing. Each one is reached
 // through the parsed command, so the flag a test names is the flag the
 // operator types. Where `run()` was the only caller, the rule moved into a
-// function the test can call: `processInspectionStatus`, `workerSecretFlagUse`
-// and `memoryBudgetWarning`.
+// function the test can call: `processInspectionStatus` and
+// `memoryBudgetWarning`. (`workerSecretFlagUse` went with the flag at 0.6.0.)
 //
 // Protocol: docs/mutation-triage.md -- SURVIVED confirmed before, KILLED after.
 
@@ -40,23 +40,35 @@ import Testing
 
     // MARK: - --worker-secret
 
-    /// Survivor `:88 RelationalOperatorReplacement` (`workerSecret != nil` to
-    /// `== nil`). The flag read as set when it was absent, so every sandboxed
-    /// runner without `--worker-secret` would have refused to start, and
-    /// every unsandboxed one would have warned about a flag nobody passed.
-    @Test func theFlagUseComesFromTheParsedFlag() throws {
-        #expect(try WorkerCommand.parse([]).workerSecretFlagUse == .notUsed)
-        #expect(try WorkerCommand.parse(["--sandbox"]).workerSecretFlagUse == .notUsed)
+    /// The flag was removed at 0.6.0 (#2226): it put the secret in the
+    /// runner's command line, where every test script can read it. A runner
+    /// started with it must fail to parse rather than quietly ignore it.
+    @Test(arguments: [["--worker-secret", "s"], ["--worker-secret=s"], ["--worker-secret", "s", "--sandbox"]])
+    func theRemovedWorkerSecretFlagIsRejected(arguments: [String]) throws {
+        // The same arguments without the flag parse, so the refusal is the flag's.
+        _ = try WorkerCommand.parse(arguments.filter { !$0.hasPrefix("--worker-secret") && $0 != "s" })
+        let error = #expect(throws: (any Error).self) {
+            try WorkerCommand.parse(arguments)
+        }
+        let message = error.map { WorkerCommand.message(for: $0) } ?? ""
+        #expect(message.contains("worker-secret"), "\(message)")
+    }
 
-        guard case .deprecated = try WorkerCommand.parse(["--worker-secret", "s"]).workerSecretFlagUse else {
-            Issue.record("--worker-secret without --sandbox did not warn")
-            return
-        }
-        guard case .refused = try WorkerCommand.parse(["--worker-secret", "s", "--sandbox"]).workerSecretFlagUse
-        else {
-            Issue.record("--worker-secret with --sandbox was not refused")
-            return
-        }
+    // MARK: - --sandbox
+
+    /// The sandbox is on by default since 0.6.0 (#2348). A start command
+    /// written for 0.5 still passes `--sandbox`, and it must change nothing;
+    /// `--no-sandbox` is the one way off, and the last of the two wins.
+    @Test(arguments: [
+        ([String](), true),
+        (["--sandbox"], true),
+        (["--sandbox", "--sandbox"], true),
+        (["--no-sandbox"], false),
+        (["--sandbox", "--no-sandbox"], false),
+        (["--no-sandbox", "--sandbox"], true),
+    ])
+    func theSandboxIsOnUnlessTurnedOff(arguments: [String], sandboxed: Bool) throws {
+        #expect(try WorkerCommand.parse(arguments).sandbox == sandboxed)
     }
 
     // MARK: - The job limits
@@ -81,7 +93,7 @@ import Testing
     @Test func theDefaultLimitsPassAndAnUnsandboxedRunnerChecksNothingElse() async throws {
         let workRoot = try Self.temporaryWorkRoot()
         defer { try? FileManager.default.removeItem(at: workRoot) }
-        let check = try await WorkerCommand.parse([]).checkSandbox(workRoot: workRoot)
+        let check = try await WorkerCommand.parse(["--no-sandbox"]).checkSandbox(workRoot: workRoot)
         #expect(check.processLimitEnforced == false)
         #expect(check.cgroups == nil)
         #expect(check.cgroupsStatus == "not sandboxed")
@@ -111,7 +123,7 @@ import Testing
     }
 
     @Test func withoutTheSandboxEveryLimitIsReportedAsNone() throws {
-        let command = try WorkerCommand.parse(["--job-process-limit", "7", "--job-disk-limit", "9"])
+        let command = try WorkerCommand.parse(["--no-sandbox", "--job-process-limit", "7", "--job-disk-limit", "9"])
         let fields = command.jobLimitLogFields(
             WorkerCommand.SandboxCheck(processLimitEnforced: false, cgroups: nil, cgroupsStatus: "not sandboxed"))
         #expect(fields["job_process_limit"] as? String == "none")

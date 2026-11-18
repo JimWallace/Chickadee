@@ -189,8 +189,11 @@ updates:
   # dispatches it on the Dependabot branch, and enables auto-merge once its
   # commit is pushed.
   #
+  # requirements.txt is compiled from requirements.in by pip-compile, with
+  # hashes; Dependabot recognises the pair and updates both.
+  #
   # jupyterlite is a metapackage that requires the jupyterlite-core of its own
-  # version, and requirements.txt pins both exactly. Bumped one at a time, each
+  # version, and requirements.in pins both exactly. Bumped one at a time, each
   # PR is unresolvable by pip (run 41916509055, PR #2863), so they are grouped
   # and always move together.
   - package-ecosystem: "pip"

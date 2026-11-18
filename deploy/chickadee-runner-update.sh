@@ -62,7 +62,7 @@ SERVICE="runner"
 LOCK_DIR=/tmp/chickadee-runner-update.lock
 [ -d /run/lock ] && [ -w /run/lock ] && LOCK_DIR=/run/lock/chickadee-runner-update.lock
 # How long to wait after `compose up` before asking Docker whether the runner
-# is still up. The runner checks its own command at startup (the `--sandbox`
+# is still up. The runner checks its own command at startup (the sandbox
 # probe) and exits within a few seconds when the check fails.
 SETTLE_SECS=15
 
