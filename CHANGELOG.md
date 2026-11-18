@@ -9,6 +9,25 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.989] - 2026-11-18
+
+### Changed
+
+- **The deploy mode is a radio group on the admin Deployment page.** It was a list of the three modes with a "Switch" button on each row except the current one, which a badge marked. Now the current mode is the checked radio, each mode has its one-line summary, the default says "(default)" in its name, and one "Save mode" button asks before it sends the request.
+
+### Fixed
+
+- **The neutral `.tier` badge shows in dark mode.** Its fill was `--gray-100`, which dark mode sets to the page surface, so "Current", "Approved" and every other bare badge read as loose words. It now uses `--badge-neutral-bg`, one step up in dark mode and unchanged in light.
+
+### Added
+
+- **A Coming next card on production's Deployment page.** Production's deployer still never deploys a pre-release on its own, in any mode. It now offers the newest one (`v0.X.0-rc.N`) on the admin page, with its notes and the `minor-release` pull requests it carries, and deploys it only when an admin types its version and approves it. While production runs an approved rc, the release that follows it in the same minor waits for approval in `gated-minors`, because it carries whatever merged after that rc. `get_deploy_status` reports the offered pre-release (`prereleaseVersion`). See "Approving a pre-release on production" in `docs/release-gate.md`.
+
+### Changed
+
+- **The held release's notes read as notes on the admin Deployment page.** Each release is a card, and each category (Changed, Fixed) is a small heading above its own list, where before it was a bold bullet of one flat list. The bullets sit inside the text column instead of hanging outside it. The contract changes and the approval form are padded cards too (`.card--padded`), and the contract-change list no longer repeats its heading as a badge on every line.
+
+
 ## [0.5.988] - 2026-11-17
 
 ### Fixed

@@ -1,3 +1,0 @@
-### Added
-
-- **A Coming next card on production's Deployment page.** Production's deployer still never deploys a pre-release on its own, in any mode. It now offers the newest one (`v0.X.0-rc.N`) on the admin page, with its notes and the `minor-release` pull requests it carries, and deploys it only when an admin types its version and approves it. While production runs an approved rc, the release that follows it in the same minor waits for approval in `gated-minors`, because it carries whatever merged after that rc. `get_deploy_status` reports the offered pre-release (`prereleaseVersion`). See "Approving a pre-release on production" in `docs/release-gate.md`.
