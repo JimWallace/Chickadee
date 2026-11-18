@@ -136,7 +136,7 @@ private struct DeploymentHeldSection: HTML {
                         }
                     }
                     div(.class("toolbar")) {
-                        button(.class("btn btn-primary btn-compact"), .type(.submit)) { "Approve" }
+                        button(.class("btn btn-primary btn-compact"), .type(.submit)) { "Approve \(held.version)" }
                     }
                 }
             }
@@ -201,7 +201,11 @@ private struct DeploymentReleaseNotes: HTML {
     }
 }
 
-/// The three modes, changeable in both directions.
+/// The three modes, changeable in both directions: one choice of three, so a
+/// radio group with one Save button, not a row of buttons. Saving asks first,
+/// because the daemon acts on the new mode at its next poll. Where no request
+/// can be sent, the same radios show, disabled, so the other modes stay
+/// readable.
 private struct DeploymentModeSection: HTML {
     let view: AdminDeploymentView
     let csrfToken: String
@@ -209,46 +213,57 @@ private struct DeploymentModeSection: HTML {
     var body: some HTML {
         section(.class("page-section")) {
             h2 { "Mode" }
-            table(.class("results-table section-items section-items--manage")) {
-                colgroup {
-                    col()
-                    col(.class("section-items-actions"))
-                }
-                thead(.class("visually-hidden")) {
-                    tr {
-                        th(.custom(name: "scope", value: "col")) { "Mode" }
-                        th(.custom(name: "scope", value: "col")) { "Action" }
+            if view.available && view.canSendRequests {
+                form(
+                    .method(.post), .action("/admin/deployment/mode"), .class("form-stack"),
+                    .data("confirm", value: "Save the deploy mode? The deployer follows it at its next poll.")
+                ) {
+                    CSRFField(token: csrfToken)
+                    DeploymentModeChoices(current: view.mode, isEnabled: true)
+                    div(.class("toolbar")) {
+                        button(.class("btn btn-primary"), .type(.submit)) { "Save mode" }
                     }
                 }
-                tbody {
-                    for mode in DeployMode.allCases {
-                        tr {
-                            td(.class("item-main")) {
-                                div(.class("item-title")) {
-                                    strong { mode.label }
-                                    if mode == view.mode {
-                                        " "
-                                        span(.class("tier")) { "Current" }
-                                    }
-                                    if mode == .daemonDefault {
-                                        " "
-                                        span(.class("tier")) { "Default" }
-                                    }
-                                }
-                                div(.class("item-details")) { mode.summary }
-                            }
-                            td(.class("item-actions-td")) {
-                                if mode != view.mode && view.available && view.canSendRequests {
-                                    form(.method(.post), .action("/admin/deployment/mode"), .class("inline-form")) {
-                                        CSRFField(token: csrfToken)
-                                        input(.type(.hidden), .name("mode"), .value(mode.rawValue))
-                                        button(.class("btn action-btn"), .type(.submit)) { "Switch" }
-                                    }
-                                }
-                            }
-                        }
-                    }
+            } else {
+                DeploymentModeChoices(current: view.mode, isEnabled: false)
+            }
+        }
+    }
+}
+
+/// The three modes as radios, the current one checked. The `h2` above names
+/// the group, so its legend is for screen readers only. Disabled, it still
+/// shows every mode and which one is in force.
+private struct DeploymentModeChoices: HTML {
+    let current: DeployMode
+    let isEnabled: Bool
+
+    var body: some HTML {
+        fieldset(.class("fieldset-plain")) {
+            legend(.class("visually-hidden")) { "Deploy mode" }
+            div(.class("checkbox-list")) {
+                for mode in DeployMode.allCases {
+                    DeploymentModeOption(mode: mode, isCurrent: mode == current)
                 }
+            }
+        }
+        .attributes(.disabled, when: !isEnabled)
+    }
+}
+
+/// One mode as a radio: its name, with "(default)" on the daemon's default,
+/// and its one-line summary under it.
+private struct DeploymentModeOption: HTML {
+    let mode: DeployMode
+    let isCurrent: Bool
+
+    var body: some HTML {
+        label(.class("checkbox-row checkbox-row--described")) {
+            input(.type(.radio), .name("mode"), .value(mode.rawValue))
+                .attributes(.checked, when: isCurrent)
+            span {
+                strong { mode == .daemonDefault ? "\(mode.label) (default)" : mode.label }
+                span(.class("field-note field-note--muted")) { mode.summary }
             }
         }
     }
