@@ -17,6 +17,36 @@ enum DeployReleaseNotes {
         let isContractChange: Bool
     }
 
+    /// The entries under one heading. `heading` is nil for the entries before
+    /// the first heading.
+    struct Section: Sendable, Equatable {
+        let heading: String?
+        let items: [Entry]
+    }
+
+    /// Groups `entries` under their headings, so a page can show each heading
+    /// above its own list rather than as a bullet of the list. A heading with
+    /// no entries under it is dropped.
+    static func sections(of entries: [Entry]) -> [Section] {
+        var sections: [Section] = []
+        var heading: String?
+        var items: [Entry] = []
+        func close() {
+            if !items.isEmpty { sections.append(Section(heading: heading, items: items)) }
+            items = []
+        }
+        for entry in entries {
+            if entry.isHeading {
+                close()
+                heading = entry.text
+            } else {
+                items.append(entry)
+            }
+        }
+        close()
+        return sections
+    }
+
     /// Splits a release body (a CHANGELOG section) into its headings and
     /// bullets. A bullet's indented continuation lines join it. An entry is
     /// flagged when it names one of `contractPullRequests` as `#N`.
