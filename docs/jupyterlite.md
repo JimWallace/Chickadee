@@ -92,7 +92,8 @@ back at it.
 Anything a student imports must be baked into the matching env: the editor's CSP is
 `connect-src 'self'`, so there is no runtime pip/piplite escape hatch and a
 missing package is an ImportError with no recovery. The Python set is currently
-numpy / pandas / matplotlib / scipy / sympy / scikit-learn / statsmodels / PIL;
+numpy / pandas / matplotlib / PIL (scipy and statsmodels were dropped for v0.6,
+#3122; worker-graded assignments still have them through the runner's Python);
 the R side is the tidyverse core (dplyr, tidyr, readr, stringr, tibble, purrr,
 forcats).
 
@@ -202,8 +203,9 @@ both engines because the transports fail independently.
 ## What a kernel boot downloads
 
 A student's first editor boot downloads about 50–60 MB for Python: the
-`kernel_packages/` tarballs (~48 MB gzipped, scipy, openblas, matplotlib-base,
-pandas and statsmodels the largest), `bin/xpython.wasm` (15 MB, 4.4 MB as
+`kernel_packages/` tarballs (~48 MB gzipped before v0.6 dropped scipy, openblas
+and statsmodels, which were about 27 MB of it; matplotlib-base and pandas are
+now the largest), `bin/xpython.wasm` (15 MB, 4.4 MB as
 brotli) and the JupyterLite shell. A class of 150 that opens notebooks at once
 pulls 8–9 GB. Every one of those files is cached afterwards (the tarballs
 immutably for a year), so the load falls on a course's first week, on a

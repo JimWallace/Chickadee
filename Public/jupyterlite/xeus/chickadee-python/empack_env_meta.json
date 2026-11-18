@@ -129,26 +129,6 @@
       "subdir": "noarch"
     },
     {
-      "name": "statsmodels",
-      "version": "0.15.0",
-      "build": "np23py313h07ed413_0",
-      "filename_stem": "statsmodels-0.15.0-np23py313h07ed413_0",
-      "filename": "statsmodels-0.15.0-np23py313h07ed413_0.tar.gz",
-      "channel": "https://repo.prefix.dev/emscripten-forge-4x",
-      "depends": [
-        "python",
-        "numpy",
-        "scipy >=1.3",
-        "pandas >=1.0",
-        "patsy >=0.5.2",
-        "packaging",
-        "emscripten-abi >=4,<5.0a0",
-        "numpy >=2.2,<3",
-        "python_abi 3.13.* *_cp313"
-      ],
-      "subdir": "emscripten-wasm32"
-    },
-    {
       "name": "contourpy",
       "version": "1.4.0",
       "build": "py313hb0228bc_0",
@@ -329,21 +309,6 @@
       "subdir": "noarch"
     },
     {
-      "name": "patsy",
-      "version": "1.0.3",
-      "build": "py313h1804a44_0",
-      "filename_stem": "patsy-1.0.3-py313h1804a44_0",
-      "filename": "patsy-1.0.3-py313h1804a44_0.tar.gz",
-      "channel": "https://repo.prefix.dev/emscripten-forge-4x",
-      "depends": [
-        "numpy",
-        "six",
-        "emscripten-abi >=4,<5.0a0",
-        "python_abi 3.13.* *_cp313"
-      ],
-      "subdir": "emscripten-wasm32"
-    },
-    {
       "name": "pyodide-http",
       "version": "0.2.2",
       "build": "pyhcf101f3_0",
@@ -380,18 +345,6 @@
         "python"
       ],
       "subdir": "noarch"
-    },
-    {
-      "name": "openblas",
-      "version": "0.3.34",
-      "build": "h69b678e_4",
-      "filename_stem": "openblas-0.3.34-h69b678e_4",
-      "filename": "openblas-0.3.34-h69b678e_4.chickadee.707e1816377e.tar.gz",
-      "channel": "https://repo.prefix.dev/emscripten-forge-4x",
-      "depends": [
-        "emscripten-abi >=4,<5.0a0"
-      ],
-      "subdir": "emscripten-wasm32"
     },
     {
       "name": "pyparsing",
@@ -483,19 +436,6 @@
         "emscripten-abi >=4,<5.0a0"
       ],
       "subdir": "emscripten-wasm32"
-    },
-    {
-      "name": "six",
-      "version": "1.17.0",
-      "build": "pyhe01879c_1",
-      "filename_stem": "six-1.17.0-pyhe01879c_1",
-      "filename": "six-1.17.0-pyhe01879c_1.tar.gz",
-      "channel": "https://repo.prefix.dev/conda-forge",
-      "depends": [
-        "python >=3.9",
-        "python"
-      ],
-      "subdir": "noarch"
     },
     {
       "name": "numpy",
@@ -623,23 +563,6 @@
       "subdir": "noarch"
     },
     {
-      "name": "scipy",
-      "version": "1.18.0",
-      "build": "np23py313h8db5e5d_4",
-      "filename_stem": "scipy-1.18.0-np23py313h8db5e5d_4",
-      "filename": "scipy-1.18.0-np23py313h8db5e5d_4.tar.gz",
-      "channel": "https://repo.prefix.dev/emscripten-forge-4x",
-      "depends": [
-        "python",
-        "numpy",
-        "openblas",
-        "emscripten-abi >=4,<5.0a0",
-        "numpy >=2.2,<3",
-        "python_abi 3.13.* *_cp313"
-      ],
-      "subdir": "emscripten-wasm32"
-    },
-    {
       "name": "nlohmann_json-abi",
       "version": "3.12.0",
       "build": "h0f90c79_2",
@@ -667,8 +590,6 @@
     "numpy <2.5.3",
     "pandas",
     "matplotlib",
-    "scipy",
-    "statsmodels",
     "pillow"
   ],
   "channels": [
