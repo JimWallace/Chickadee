@@ -59,6 +59,12 @@ struct UserRow: HTML {
             td(.class("item-status"), .data("sort-value", value: user.role)) {
                 if user.role == "mcp" {
                     span(.class("tier tier-preview")) { "MCP service" }
+                } else if user.isCurrentUser {
+                    // No control on your own row: you cannot change your own
+                    // role (`AdminRoutes` refuses it), and a disabled select
+                    // explained only by a `title` tells touch, keyboard and
+                    // Safari users nothing (UI audit #3007, review decision 2).
+                    span(.class("tier")) { user.role == "admin" ? "Admin" : "User" }
                 } else {
                     roleForm
                 }
@@ -91,7 +97,6 @@ struct UserRow: HTML {
                     option(.value("admin")) { "Admin" }
                         .attributes(.selected, when: user.role == "admin")
                 }
-                .attributes(.disabled, .title("You cannot change your own role"), when: user.isCurrentUser)
             }
         }
     }

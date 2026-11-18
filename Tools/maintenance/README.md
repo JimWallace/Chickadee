@@ -4,7 +4,7 @@ CI runs no model (root `CLAUDE.md`, "Subagents and Hooks"), and cloud
 scheduled tasks are off for the organization. So every recurring job that
 needs judgement runs on the maintainer's work machine, in one Claude Code
 scheduled task: the **nightly steward**. It starts at 23:30
-America/Toronto, uses the night's 5-hour usage window, and decides what to
+America/Toronto, works a full night shift until 07:30, and decides what to
 do in the order that `nightly.md` sets. Its prompt only points at a file in
 the repository, so a change to a procedure is a reviewed change to a file,
 not an edit to a prompt that nobody else can see.
@@ -51,6 +51,12 @@ issues, deeper sweeps, and improvements to the nightly tests and to itself.
   this repository opened and a red check of that workflow names (for
   example the `revendor-kernels.yml` pull request in
   `scheduled-checks.md`). Every merge to `main` deploys to production.
+- The steward never merges, and never enables auto-merge on, a pull request
+  labelled `minor-release`, and never removes that label. Such a pull request
+  changes the student contract and waits for the next minor, which the
+  maintainer cuts by hand (`docs/release-gate.md`). It may fix a red check on
+  one that a workflow opened, and leave it waiting. An open `minor-needed`
+  issue is the maintainer's; list it in the report.
 - The maintainer approved this merge policy for the nightly task
   (2026-11-13). The `steward` skill grants no merge rights of its own; the
   policy rests on that approval and on the task's permission settings.
@@ -74,6 +80,20 @@ the schedule and prompt above, the Chickadee checkout as its folder, a fresh
 worktree from `main` for each run, the GitHub connector and the
 `Chickadee_Admin` connector. Run it once by hand and approve the tools it
 asks for, so that unattended runs do not stop on a prompt.
+
+In auto mode, Claude Code drops the broad `Bash` allow rule in
+`.claude/settings.json`, and its safety check reviews each command. On
+2026-11-15 that check refused `gh pr merge --squash`, so the run merged
+nothing. The project settings therefore allow `gh pr merge` and
+`gh label create` by name: a narrow rule stays in force in auto mode. The
+`mcp__github` rule already covers the GitHub merge tools.
+
+The settings do not decide which pull requests the steward may merge. The
+"Rules" section above does. Branch protection on `main` keeps every merge
+behind the required checks. Deny rules for `gh pr merge` with `--admin`
+are a second guard against a bypass, not the main one. Claude Code does
+not read an `autoMode` block from project settings, so do not add one
+there.
 
 The performance job needs a local Postgres 16 with `pg_stat_statements`
 loaded (`docs/database-performance.md`, "Re-run the measurements"), and it

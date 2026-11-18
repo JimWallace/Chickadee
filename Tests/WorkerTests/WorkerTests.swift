@@ -369,20 +369,9 @@ import Testing
 
     // MARK: - Worker secret resolution
 
-    @Test func resolveWorkerSharedSecretPrefersCLISecret() throws {
-        _ = try writeSecretFile("file-secret")
-        let resolved = resolveWorkerSharedSecret(
-            cliWorkerSecret: " cli-secret ",
-            environment: ["RUNNER_SHARED_SECRET": "env-secret"]
-        )
-
-        #expect(resolved == "cli-secret")
-    }
-
     @Test func resolveWorkerSharedSecretUsesEnvSecretBeforeFile() throws {
         _ = try writeSecretFile("file-secret")
         let resolved = resolveWorkerSharedSecret(
-            cliWorkerSecret: nil,
             environment: ["RUNNER_SHARED_SECRET": "env-secret"]
         )
 
@@ -397,7 +386,6 @@ import Testing
     @Test func resolveWorkerSharedSecretUsesDefaultFileWhenSecretsUnset() throws {
         _ = try writeSecretFile("shared-file-secret\n")
         let resolved = resolveWorkerSharedSecret(
-            cliWorkerSecret: nil,
             environment: [:],
             currentDirectory: tmpDir.path
         )
@@ -421,7 +409,6 @@ import Testing
         try? FileManager.default.createDirectory(at: emptyDir, withIntermediateDirectories: true)
 
         let resolved = resolveWorkerSharedSecret(
-            cliWorkerSecret: nil,
             environment: [:],
             currentDirectory: emptyDir.path
         )

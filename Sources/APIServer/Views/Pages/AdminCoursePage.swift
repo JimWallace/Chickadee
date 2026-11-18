@@ -148,7 +148,7 @@ private struct AdminCourseHeader: HTML {
                 .data(
                     "confirm",
                     value:
-                        "Unarchive \(course.code)? \(course.enrollmentCount) students regain access immediately, and the retention clock stops."
+                        "Unarchive \(course.code)? \(course.enrollmentCount) \(course.enrollmentCount == 1 ? "student regains" : "students regain") access immediately, and the retention clock stops."
                 )
             ) {
                 CSRFField(token: csrfToken)
@@ -163,7 +163,7 @@ private struct AdminCourseHeader: HTML {
                 .data(
                     "confirm",
                     value:
-                        "Archive \(course.code)? \(course.enrollmentCount) students lose access immediately. Submissions, grades and audit records are kept, and Unarchive on this page puts it back."
+                        "Archive \(course.code)? \(course.enrollmentCount) \(course.enrollmentCount == 1 ? "student loses" : "students lose") access immediately. Submissions, grades and audit records are kept, and Unarchive on this page puts it back."
                 )
             ) {
                 CSRFField(token: csrfToken)

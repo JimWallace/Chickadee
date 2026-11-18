@@ -43,7 +43,7 @@ not exist.
 - [jupyterlite.md](jupyterlite.md) — the vendored editor and kernels: environments, import checks, re-vendoring, patches, stdin transports
 - [kernel-boot-cost.md](kernel-boot-cost.md) — what a kernel boot costs, and on-demand package loading
 - [notebook-editor-extension.md](notebook-editor-extension.md) — the Chickadee JupyterLite extension: theme, hidden chrome, bridge commands, page events, build and vendor
-- [notebook-editor-kernel-boot.md](notebook-editor-kernel-boot.md) — the "Kernel Unknown" boot failure, its mitigation and the plan for the root-cause fix
+- [notebook-editor-kernel-boot.md](notebook-editor-kernel-boot.md) — the "Kernel Unknown" boot failure, its mitigation and the shipped isolation fix
 - [notebook-editor-smoke-test.md](notebook-editor-smoke-test.md) — the pre-merge browser smoke test for the editor
 - [notebook-editor-help.md](notebook-editor-help.md) — student help: what each editor notice means and what to do
 - [notebook-guide.md](notebook-guide.md) — tests anchored to notebook cells by name, and the student guide the editor reads
@@ -64,7 +64,7 @@ not exist.
 - [datasets.md](datasets.md) — per-student datasets (#1083)
 - [datasets-course-library.md](datasets-course-library.md) — the per-course dataset library: versions and dictionary, attachments, the course cohort seed, the student Data page, the MCP tools, clone and bundle, `formatNoise`, the ranked-activity refusal and the dealt partition; opens with a Status table
 - [fhir-datasets-plan.md](fhir-datasets-plan.md) — FHIR NDJSON datasets in the course library: P1–P3 built (shared, whole file); Bundle upload, sampling by patient and a live feed planned
-- [dataset-kinds-plan.md](dataset-kinds-plan.md) — plan: one dataset component for many kinds of data (tables, record lists, FHIR, graphs, geospatial, signals); its "change now" items are built, the rest is planned
+- [dataset-kinds-plan.md](dataset-kinds-plan.md) — plan: one dataset component for many kinds of data (tables, record lists, FHIR, graphs, geospatial, signals); Stage A is built, the rest is planned
 - [dataset-shared-delivery.md](dataset-shared-delivery.md) — link a dataset that is the same for many students into the editor working copy instead of writing a copy per student: a whole file to the shared extraction (step 1), a partition part to a part stored once (step 2), and a sample that covers its whole file stored as no sample at save time (step 3)
 - [examples/r-lab9-trial/](examples/r-lab9-trial/) — a worked R lab: starter, solution, data and test scripts for each tier
 - [examples/fhir/](examples/fhir/) — the FHIR feed for HLTH 230 Assignment 3: a reproducible generator, the `chickadee_fhir.py` helper with its checks, and a proposed Question 4 with its reference solution and tests
@@ -115,10 +115,12 @@ not exist.
 ## Operations, CI and releases
 
 - [release-process.md](release-process.md) — versions at merge time, `changelog.d/` fragments, and cutting a minor release
+- [release-gate.md](release-gate.md) — deploy modes set on the admin page, admin approval of held releases, and contract changes (kernels, grading) only in a minor
 - [zero-downtime-deploy.md](zero-downtime-deploy.md) — blue-green deploys, the `chickadee-deployer` daemon, read-only deploy oversight
 - [mac-runner.md](mac-runner.md) — a bonus runner on an Apple Silicon Mac under Docker Desktop: the arm64 runner image, sizing, the launchd updater
 - [operational-diagnostics.md](operational-diagnostics.md) — observability tables, log events, metrics endpoint, ops runbook
-- [load-testing.md](load-testing.md) — `chickadee-loadtest`: simulated deadline traffic on the runner poll and the status poll
+- [live-board-cache.md](live-board-cache.md) — the live board's refresh: the fingerprint 304, the shared roster snapshot, the hot-path count and the wall's stop time
+- [load-testing.md](load-testing.md) — `chickadee-loadtest`: simulated deadline traffic on the runner poll and the status poll, and one class activity in a lecture
 - [database-performance.md](database-performance.md) — query counts, load and plans measured at one course's scale; the rules that came out of them; the baseline and the weekly check (`Tools/perf-bench/`)
 - [performance-program.md](performance-program.md) — the weekly performance cycle, the count-based ratchets, and how to tune the production server, Postgres and runners
 - [perf-log.md](perf-log.md) — the weekly performance numbers, one section a week, written by the task in `Tools/perf-bench/weekly-task.md`
@@ -136,4 +138,4 @@ not exist.
 ## History
 
 - [archive/](archive/) — finished-era documents; nothing there describes current behaviour. Among them: the Pyodide-to-xeus migration (`xeus-python-grading-*`), the RunnerCore wasm migration, the language-handling review, the 2026-08 UI consistency audit, the editor freeze investigation, the 2026-10 abstraction survey, the per-language kernel postmortems and the CI flake history
-- `CHANGELOG.md` (from 0.5.0) and `CHANGELOG-0.4.md` (0.1.0 to 0.4.x), at the repository root — release history
+- `CHANGELOG.md` (from 0.6.0), `CHANGELOG-0.5.md` (the 0.5 series) and `CHANGELOG-0.4.md` (0.1.0 to 0.4.x), at the repository root — release history

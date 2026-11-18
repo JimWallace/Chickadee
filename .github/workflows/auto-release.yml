@@ -30,14 +30,26 @@ concurrency:
   group: auto-release
   cancel-in-progress: false
 
-permissions:
-  contents: write
-  actions: write
+# Write scopes are granted per job, not here, so a job added later starts
+# with none (OpenSSF Scorecard TokenPermissions).
+permissions: {}
 
 jobs:
   release:
+    permissions:
+      contents: write
+      actions: write
+      # The release gate opens or updates the `minor-needed` issue.
+      issues: write
+      # The release gate reads each commit's pull request and its labels.
+      # Without this the lookup is refused, and the gate fails closed.
+      pull-requests: read
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    # The `release` environment admits only `main` and `v*` tags (#3071). A
+    # secret stored in it, not in the repository, cannot be read by a job on
+    # any other branch. RELEASE_TOKEN belongs there.
+    environment: release
     env:
       RELEASE_TOKEN: ${{ secrets.RELEASE_TOKEN }}
     # Never re-trigger on our own release commit, and never let the weekly
@@ -50,15 +62,220 @@ jobs:
       ${{ !startsWith(github.event.head_commit.message, 'chore(release):')
        && !startsWith(github.event.head_commit.message, 'chore(mutation):') }}
     steps:
-      - uses: actions/checkout@v7
+      # Egress allowlist (#3075). This job holds RELEASE_TOKEN, which can push
+      # to main. A step that reaches any other host fails, so a compromised
+      # dependency cannot send a token out. A new host that a change really
+      # needs goes on this list, in the same change.
+      - name: Restrict network egress
+        uses: step-security/harden-runner@1d88384fd173af6ecb012dfd0264a306b711241a # v2.22.4
+        with:
+          egress-policy: block
+          disable-telemetry: true
+          allowed-endpoints: >
+            github.com:443
+            api.github.com:443
+
+      # This checkout keeps its credentials (no persist-credentials: false):
+      # a later step in this job pushes with git through them (#3068).
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1  # zizmor: ignore[artipacked]
         with:
           fetch-depth: 0
           # Prefer a PAT so the tag triggers release.yml + docker-build; fall
           # back to GITHUB_TOKEN (tag won't auto-trigger — handled below).
           token: ${{ secrets.RELEASE_TOKEN || github.token }}
 
+      # The release gate (docs/release-gate.md). A contract change ships only
+      # in a minor, which is cut by hand. So when any commit since the last
+      # release tag touched a path in scripts/contract-paths.txt, or came from
+      # a pull request labelled `minor-release` (a compatibility removal that
+      # no path list can see, #3061), this cuts no release, neither a patch
+      # nor a minor: it says why in the job summary and opens or updates one
+      # issue labelled `minor-needed` that names the pull requests. The next step cuts a pre-release instead. Fragments keep accumulating in changelog.d/,
+      # and the hand-cut minor folds them all. After the minor's tag, the
+      # commits since the last tag are clean again and auto-release resumes.
+      - name: Refuse past a contract change
+        id: gate
+        env:
+          GH_TOKEN: ${{ github.token }}
+          R: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          if ! last="$(git describe --tags --abbrev=0 --match 'v[0-9]*' HEAD 2>/dev/null)"; then
+            echo "No release tag is reachable from HEAD, so the gate has nothing to compare." >> "$GITHUB_STEP_SUMMARY"
+            echo "blocked=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          git log --format= --name-only "$last..HEAD" | sed '/^$/d' | sort -u \
+            | scripts/contract-changes.sh > contract.txt
+          # The commits that touched a contract path or came from a pull
+          # request labelled `minor-release`, and those pull requests. GitHub
+          # knows the pull request of a squash merge and of each commit inside
+          # a merge commit (a Dependabot merge); a commit pushed straight to
+          # main has none. The label lookup tries three times, then fails the
+          # job rather than release: a gate that opens when it cannot see is
+          # no gate, and the next merge, or a re-run, tries again.
+          pulls_of() {
+            local attempt out
+            for attempt in 1 2 3; do
+              if out="$(gh api "repos/$R/commits/$1/pulls")"; then
+                printf '%s' "$out"
+                return 0
+              fi
+              sleep $((attempt * 5))
+            done
+            echo "Could not read the pull request of $1 after three tries." >&2
+            return 1
+          }
+          : > commits.txt
+          : > prs.txt
+          : > labelled.txt
+          for commit in $(git rev-list "$last..HEAD"); do
+            pulls="$(pulls_of "$commit")"
+            held="$(jq -r '.[] | select(any(.labels[]; .name == "minor-release")) | "#\(.number) \(.title)"' <<<"$pulls")"
+            if [ -n "$held" ] || [ -n "$(git show --format= --name-only "$commit" | scripts/contract-changes.sh)" ]; then
+              git log -1 --format='%h %s' "$commit" >> commits.txt
+              jq -r '.[] | "#\(.number)"' <<<"$pulls" >> prs.txt
+              [ -z "$held" ] || printf '%s\n' "$held" >> labelled.txt
+            fi
+          done
+          if [ ! -s commits.txt ]; then
+            echo "blocked=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "blocked=true" >> "$GITHUB_OUTPUT"
+          prs="$(sort -u prs.txt | paste -sd' ' - || true)"
+          {
+            echo "## No release: a change is waiting for a minor"
+            echo ""
+            echo "Since \`$last\`, these commits changed the student contract (scripts/contract-paths.txt) or came from a pull request labelled \`minor-release\`:"
+            echo ""
+            echo '```'
+            cat commits.txt
+            echo '```'
+            echo ""
+            echo "A contract change, or a pull request labelled \`minor-release\`, ships only in a minor, which is cut by hand (docs/release-process.md, \"Cutting a minor (or major) release\"). Until then no release is cut, and the changelog fragments stay in changelog.d/."
+          } > body.md
+          cat body.md >> "$GITHUB_STEP_SUMMARY"
+          gh label create minor-needed --repo "$R" --color B60205 \
+            --description "A change held for a minor is on main; auto-release waits for a minor cut by hand" \
+            >/dev/null 2>&1 || true
+          {
+            echo "Auto-release cut no release after \`$(git rev-parse --short HEAD)\`, because commits since \`$last\` changed the student contract or came from a pull request labelled \`minor-release\` (docs/release-gate.md)."
+            echo ""
+            echo "Pull requests: ${prs:-none named in the commit subjects}"
+            echo ""
+            echo "Commits:"
+            echo ""
+            echo '```'
+            cat commits.txt
+            echo '```'
+            echo ""
+            if [ -s labelled.txt ]; then
+              echo "Pull requests labelled \`minor-release\`:"
+              echo ""
+              sort -u labelled.txt | sed 's/^/- /'
+              echo ""
+            fi
+            if [ -s contract.txt ]; then
+              echo "Contract paths changed:"
+              echo ""
+              echo '```'
+              head -40 contract.txt
+              echo '```'
+            fi
+            echo ""
+            echo "Meanwhile each merge with fragments cuts a pre-release of the next minor (v0.X.0-rc.N) for the dev server, which runs ahead of production (docs/release-gate.md, \"Pre-release channel\")."
+            echo ""
+            echo "To release: cut the minor by hand (docs/release-process.md, \"Cutting a minor (or major) release\"). The deployer then holds it until an admin approves it on the admin page. Close this issue after the minor's tag is pushed."
+          } > issue.md
+          existing="$(gh issue list --repo "$R" --state open --label minor-needed --limit 1 \
+            --json number --jq '.[0].number // empty')"
+          if [ -n "$existing" ]; then
+            gh issue edit "$existing" --repo "$R" \
+              --title "A change is waiting for a minor release" --body-file issue.md >/dev/null
+            echo "Updated issue #$existing." >> "$GITHUB_STEP_SUMMARY"
+          else
+            gh issue create --repo "$R" --label minor-needed \
+              --title "A change is waiting for a minor release" --body-file issue.md
+          fi
+
+      # The pre-release channel (docs/release-gate.md). Production waits for
+      # the minor, but the dev server should run ahead of it, and a contract
+      # change (a kernel re-vendor) is exactly what dev must try first. So
+      # where the gate refuses a release, this cuts a GitHub pre-release of
+      # the next minor instead: v0.X.0-rc.N, N one more than the last rc of
+      # that minor.
+      #
+      # The rc is a commit of its own on top of HEAD that stamps only
+      # Sources/Core/ChickadeeVersion.swift with the rc version, and it is
+      # pushed only as its tag, never to main. So VERSION, CHANGELOG.md and
+      # the fragments on main stay as they are (the fragments fold into the
+      # real minor), the running build reports which rc it is, and the rc's
+      # :sha-<commit> image is its own: the main build of HEAD pushes
+      # :sha-<HEAD>, which never names the rc. docker-build.yml builds the
+      # tag and never moves :latest for an rc; release.yml marks it a
+      # pre-release, which the production deployer never reads.
+      #
+      # An rc is cut only by a push that adds a changelog fragment. The rc
+      # does not consume the fragments, so "fragments are pending" stays true
+      # until the minor is cut, and a test-only or docs-only merge must not
+      # cut a new rc, a build and a dev deploy.
+      #
+      # Without RELEASE_TOKEN the tag push starts no workflow: release.yml is
+      # dispatched below, but docker-build.yml has no dispatch, so no rc image
+      # is built and the dev deployer waits for it. Pre-releases need
+      # RELEASE_TOKEN, as stable releases need it for their image.
+      - name: Cut a pre-release of the next minor
+        id: prerelease
+        if: steps.gate.outputs.blocked == 'true'
+        env:
+          BEFORE: ${{ github.event.before }}
+        run: |
+          set -euo pipefail
+          added=""
+          if git cat-file -e "${BEFORE}^{commit}" 2>/dev/null; then
+            added="$(git diff --diff-filter=A --name-only "$BEFORE" HEAD -- 'changelog.d/*.md' | grep -v '/README\.md$' || true)"
+          fi
+          if [ -z "$added" ]; then
+            echo "This push adds no changelog fragment, so no pre-release." >> "$GITHUB_STEP_SUMMARY"
+            echo "cut=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          current="$(tr -d '[:space:]' < VERSION)"
+          major="${current%%.*}"
+          rest="${current#*.}"
+          minor="${rest%%.*}"
+          base="${major}.$((minor + 1)).0"
+          git fetch --quiet --tags origin
+          last="$(git tag -l "v${base}-rc.*" | sed -n "s/^v${base}-rc\.\([0-9][0-9]*\)$/\1/p" | sort -n | tail -1)"
+          version="${base}-rc.$(( ${last:-0} + 1 ))"
+          git config user.name "chickadee-release[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git switch --quiet --detach
+          printf 'public enum ChickadeeVersion {\n    public static let current = "%s"\n}\n' \
+            "$version" > Sources/Core/ChickadeeVersion.swift
+          git add Sources/Core/ChickadeeVersion.swift
+          git commit --quiet -m "chore(prerelease): v${version}
+
+          A pre-release of the next minor, for the dev server (docs/release-gate.md).
+          This commit is reached only by its tag; main is not changed."
+          git tag -a "v${version}" -m "Chickadee v${version} (pre-release)"
+          git push origin "v${version}"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "cut=true" >> "$GITHUB_OUTPUT"
+          echo "Cut the pre-release v${version} for the dev server. Production does not take pre-releases." >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Dispatch the pre-release (only when no RELEASE_TOKEN)
+        if: ${{ steps.prerelease.outputs.cut == 'true' && env.RELEASE_TOKEN == '' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.prerelease.outputs.version }}
+        run: |
+          gh workflow run release.yml -f tag="v${VERSION}"
+
       - name: Assemble release from changelog fragments
         id: assemble
+        if: steps.gate.outputs.blocked != 'true'
         run: |
           set +e
           version="$(scripts/assemble-release.sh)"
@@ -78,8 +295,10 @@ jobs:
 
       - name: Commit, tag, and push
         if: steps.assemble.outputs.released == 'true'
+        env:
+          VERSION: ${{ steps.assemble.outputs.version }}
         run: |
-          version="${{ steps.assemble.outputs.version }}"
+          version="${VERSION}"
           git config user.name "chickadee-release[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -A
@@ -94,5 +313,6 @@ jobs:
         if: ${{ steps.assemble.outputs.released == 'true' && env.RELEASE_TOKEN == '' }}
         env:
           GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.assemble.outputs.version }}
         run: |
-          gh workflow run release.yml -f tag="v${{ steps.assemble.outputs.version }}"
+          gh workflow run release.yml -f tag="v${VERSION}"

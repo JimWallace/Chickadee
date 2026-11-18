@@ -35,6 +35,9 @@
     --gray-900: #111827;
     --surface: #FFFFFF;
     --surface-muted: #F8FAFC;
+    /* The bare .tier badge. In dark mode --gray-100 is --surface, so the
+       badge needs the next step up to show at all. */
+    --badge-neutral-bg: var(--gray-100);
     --danger-bg: #FEF2F2;
     --danger-border: #FECACA;
     --accent-bg: #FEF9DB;   /* gold tint — grade pills / score badges */
@@ -426,6 +429,7 @@
         --gray-900: #E5E7EB;
         --surface: #111827;
         --surface-muted: #0F172A;
+        --badge-neutral-bg: var(--gray-200);
         --danger-bg: #3B1217;
         --danger-border: #7F1D1D;
         --accent-bg: #3D2800;   /* dark gold tint */
@@ -512,6 +516,7 @@
     --gray-900: #E5E7EB;
     --surface: #111827;
     --surface-muted: #0F172A;
+    --badge-neutral-bg: var(--gray-200);
     --danger-bg: #3B1217;
     --danger-border: #7F1D1D;
     --accent-bg: #3D2800;   /* dark gold tint */
@@ -1160,7 +1165,7 @@ th.sort-desc .sort-header::after { content: "↓"; }
     font-size: var(--text-2xs);
     padding: .1rem .4rem;
     border-radius: var(--radius-full);
-    background: var(--gray-100);
+    background: var(--badge-neutral-bg);
     color: var(--gray-600);
     font-weight: 500;
 }
@@ -1876,6 +1881,14 @@ body:has(.notebook-header .nb-title-block) .nav {
     text-align: center;
 }
 
+/* A POST action inside the footer line (the consent screen's account switch):
+   a button, so it needs the link colour an <a> gets for free. */
+.auth-alt .btn-link {
+    color: var(--blue);
+    font-size: inherit;
+    text-decoration: underline;
+}
+
 /* ── Nav username + logout button ────────────────────── */
 
 /* Applied alongside .nav-link on the account-menu toggle; color intentionally
@@ -2111,7 +2124,7 @@ body:has(.notebook-header .nb-title-block) .nav {
 }
 
 .tier-unpublished {
-    background: var(--gray-100);
+    background: var(--badge-neutral-bg);
     color: var(--gray-600);
 }
 
@@ -3299,6 +3312,25 @@ body:has(.notebook-header .nb-title-block) .nav {
 .fieldset-plain > legend { margin-bottom: .75rem; font-weight: 600; }
 .checkbox-list { display: flex; flex-direction: column; gap: .6rem; }
 .checkbox-row { display: flex; align-items: center; gap: .6rem; cursor: pointer; }
+/* A choice with a one-line description under its name (the deploy mode).
+   The radio sits beside the name, not centred on the two lines. */
+.checkbox-row--described { align-items: flex-start; }
+.checkbox-row--described > input { margin-top: .3rem; }
+
+/* A .card with its own padding, for a card whose content is a form or a
+   heading over lists (the admin Deployment page: the approval form, the
+   contract changes, each release's notes).  An <h4> is a small category
+   heading above its own list.  The reset at the top zeroes list padding,
+   so a bare <ul> hangs its bullets outside the text column. */
+.card--padded { padding: 1rem 1.25rem; }
+.card--padded > h3 { margin-bottom: .5rem; font-size: var(--text-md); }
+.card--padded > h4 {
+    margin: .75rem 0 .25rem;
+    font-size: var(--text-sm);
+    color: var(--gray-600);
+}
+.card--padded > ul { padding-left: 1.25rem; }
+.card--padded > ul > li + li { margin-top: .25rem; }
 
 .field-note { margin-top: .25rem; font-size: var(--text-sm); }
 

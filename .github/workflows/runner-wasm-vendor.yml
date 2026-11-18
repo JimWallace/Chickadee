@@ -51,15 +51,20 @@ concurrency:
   group: runner-wasm-vendor
   cancel-in-progress: false
 
-permissions:
-  contents: write
+# Write scopes are granted per job, not here, so a job added later starts
+# with none (OpenSSF Scorecard TokenPermissions).
+permissions: {}
 
 jobs:
   vendor:
+    permissions:
+      contents: write
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v7
+      # This checkout keeps its credentials (no persist-credentials: false):
+      # a later step in this job pushes with git through them (#3068).
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1  # zizmor: ignore[artipacked]
         with:
           fetch-depth: 0
           token: ${{ secrets.RELEASE_TOKEN || github.token }}
@@ -129,7 +134,7 @@ jobs:
       # also the Node that browser-runner-tests uses on this artifact.
       - name: Setup Node (esbuild + wasm-opt via npx)
         if: steps.gate.outputs.changed == 'true'
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version-file: .node-version
 
@@ -141,7 +146,8 @@ jobs:
           scripts/runnercore-source-hash.sh > Public/runner-wasm/source.sha
           # Refresh the size baseline so the delta note in check-runner-wasm-size.sh
           # tracks the new artifact (informational only; it never fails on growth).
-          wasm="$(ls Public/runner-wasm/RunnerWasm.*.wasm | head -1)"
+          set -- Public/runner-wasm/RunnerWasm.*.wasm
+          wasm="$1"
           gzip -9 -c "$wasm" | wc -c | tr -d ' ' > runner-size-baseline.txt
 
       # build-runner-wasm.sh only reports the size check, so a local build can

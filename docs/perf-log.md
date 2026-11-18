@@ -34,6 +34,87 @@ A number that could not be read says `not read:` and the reason.
 
 <!-- New sections go below this line. -->
 
+## Week of 2026-11-15 (v0.5.951)
+
+Measured on the same Mac as last week (Apple silicon, Postgres 16 in
+Docker), so the times compare with last week's section directly.
+
+### Flagged
+- None that is real. Every page statement and row count is the same as last
+  week, and the foreign-key count is still 50.
+- Claim latency moved more than 25% in two scenarios, but did not repeat as
+  a code change. Over three runs, twelve assignments at 100 runners gave p50
+  72, 74 and 56 ms (last week 54 ms), and one assignment at 100 runners gave
+  49, 49 and 57 ms (last week 37–42 ms). Claim rate and server CPU per run
+  did not move (96/s at 92–94% of one core; 96/s at 116–119%). No file in
+  the claim path, and no package pin, changed between v0.5.930 and v0.5.951.
+  So this is machine noise: this run started Docker Desktop cold, and the
+  machine load average was about 3.
+- Improvement (week 3, APIServer): the grades CSV export spent most of its
+  server CPU on hydrating 300 full `APIUser` models (by reflection) and on
+  the `Decodable` decode of 3,600 best-grade rows. #3044 reads only the
+  three roster columns and decodes the fold rows by column name. Server CPU
+  per export 58.4 → 36.4 ms (three runs of 200 requests each, all within
+  0.2 ms), wall time 78 → 54 ms. The statements (12) and rows (4,232) do not
+  change, and the CSV is byte-identical. **Not merged:** the permission check of this unattended run refused the merge command. Every check is green; it waits for the maintainer.
+
+### Production
+| Number | Value | Last week |
+|---|---|---|
+| Runner poll p50 / p95 / p99 (last 60 min) | 10 / 22 / 22 ms (1,260 requests, peak 21/min) | 10 / 25 / 25 ms |
+| Status poll p50 / p95 / p99 | no requests since the process started | no requests |
+| Queue wait p50 / p95 (24 h) | not read: no jobs in 24 h (Sunday) | 929 / 6,122 ms |
+| Execution p50 / p95 (24 h) | not read: no jobs in 24 h | 356 / 15,989 ms |
+| Max queue depth (24 h) | 0 | 6 |
+| Peak utilization (24 h) | 0% | 100% |
+| Timeouts (24 h) | 0 of 0 jobs | 0 of 299 jobs |
+| Runners (id, version, max jobs, active) | Sparrow 0.5.951 6/0; Chickadee 0.5.951 1/0. Starling and Swift not polling (see open items) | four runners on 0.5.930 |
+| Cache hit rate (last 50 jobs) | Sparrow 32%, Chickadee 26% (50 samples each) | Sparrow 32%, Starling 24%, Swift 46%, Chickadee 26% |
+| Kernel boot funnel (7 days) | boot_start 30 → app_ready 30 → kernel_starting 30 → kernel_idle 21 | 29 → 29 → 29 → 20 |
+| Health alerts firing | `runnerMissing` (Starling, Swift) | none |
+| Free disk | 62.5 GB of 99.1 GB (63%) | 58.5 GB of 92.3 GB (63%) |
+
+### Benchmark (Tools/perf-bench/weekly.sh)
+| Page or scenario | Statements | Rows | Time | Last week |
+|---|---|---|---|---|
+| Student dashboard | 22 | 155 | 28 ms | 22 / 155, 23–31 ms |
+| Student submission | 22 | 28 | 24 ms | 22 / 28, 26–31 ms |
+| Student history | 9 | 19 | 10 ms | 9 / 19, 11–14 ms |
+| Status poll | 3 | 3 | 3 ms | 3 / 3, 2–5 ms |
+| Staff view of a submission | 18 | 15 | 16 ms | 18 / 15, 16–19 ms |
+| Instructor assignment submissions | 20 | 4,810 | 90 ms | 20 / 4,810, 79–93 ms |
+| Grades CSV export (main) | 12 | 4,232 | 83–85 ms | 12 / 4,232, 81–86 ms |
+| Grades CSV export (#3044) | 12 | 4,232 | 53–56 ms | |
+| Instructor assignment list | 14 | 652 | 44 ms | 14 / 652, 45–47 ms |
+| Admin dashboard | 11 | 4,653 | 35 ms | 11 / 4,653, 36–40 ms |
+| Claims: twelve assignments, 100 runners | 96.0–96.7/s | p50 56–74 ms, p99 197–420 ms | CPU 116–119% | 97.4/s, p50 54 ms |
+| Claims: one assignment, 50 runners | 47.8–48.2/s | p50 40–41 ms, p99 66–84 ms | CPU 59–60% | 48.2/s, p50 33 ms |
+| Claims: one assignment, 100 runners | 96.0–97.0/s | p50 49–57 ms, p99 107–119 ms | CPU 91–94% | 95.6/s, p50 42 ms |
+| Claims: one assignment, 200 runners | 192.6–195.6/s | p50 64–76 ms, p99 237–290 ms | CPU 154–159% | 194.3/s, p50 65 ms |
+| Foreign keys with no leading index | 50 | | | 50 |
+
+### Top statements by total time
+not read: production Postgres does not load `pg_stat_statements`
+(`get_query_stats` reports `notPreloaded`).
+
+### Open items for the maintainer
+- **Runners:** `Starling` has not polled since 2026-11-15 12:56 UTC.
+  `Swift` runs in Docker on this Mac. Docker Desktop was not running, so it
+  had not polled since 2026-11-13 23:25 UTC. This run started Docker Desktop
+  for the benchmark database, and the `chickadee-runner-swift` container
+  started with it. It now polls, but at v0.5.938, so `runnerVersionSkew`
+  fires until its update job pulls the new image.
+- **#3044 is green and waits for a merge.** This run could not merge it.
+  After it deploys, the grades CSV export should use about 38% less server
+  CPU. No budget in `StatementBudgetTests` changes.
+- **#3017 is still open** (from last week): see last week's open items.
+- **Production setting:** load `pg_stat_statements` in the production
+  database. It is still not loaded.
+- **Watch:** the Chickadee runner (`--max-jobs 1`) averages 14.2 s of queue
+  wait over its last 50 jobs, the same as last week. 9 of 30 editor kernel
+  boots in 7 days did not reach `kernel_idle` (7 `boot_stalled`).
+
+
 ## Week of 2026-11-13 (v0.5.930 at snapshot; v0.5.932 after this run)
 
 The first section, so there is no last week to compare production with. This

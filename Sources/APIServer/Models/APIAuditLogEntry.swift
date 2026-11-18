@@ -285,6 +285,14 @@ enum AuditAction: String, Sendable, CaseIterable {
     case githubCourseRepositoryCreated = "github.course_repository_created"
     case githubCourseRepositoriesArchived = "github.course_repositories_archived"
 
+    // The release gate (docs/release-gate.md): requests the admin page sends
+    // to the deploy daemon. Each records that the request was written; the
+    // daemon decides whether to accept it, in its own history.
+    case deployApproveRequested = "deploy.approve_requested"
+    case deployModeRequested = "deploy.mode_requested"
+    case deployPauseRequested = "deploy.pause_requested"
+    case deployResumeRequested = "deploy.resume_requested"
+
     /// Coarse grouping shown as the "Category" column / filter on /admin/audit.
     var category: AuditCategory {
         switch self {
@@ -339,6 +347,8 @@ enum AuditAction: String, Sendable, CaseIterable {
             .githubSubmissionToggled, .githubCourseBound, .githubCourseUnbound, .githubTemplateSet,
             .githubCourseRepositoryCreated, .githubCourseRepositoriesArchived:
             return .github
+        case .deployApproveRequested, .deployModeRequested, .deployPauseRequested, .deployResumeRequested:
+            return .deploy
         }
     }
 
@@ -383,7 +393,8 @@ enum AuditAction: String, Sendable, CaseIterable {
             .ltiContentLinked, .ltiGradeTransportChanged, .ltiGradesPushAll, .ltiStudentsLinked,
             .githubAppRegistered, .githubAppRemoved, .githubAccountLinked, .githubAccountUnlinked,
             .githubSubmissionToggled, .githubCourseBound, .githubCourseUnbound, .githubTemplateSet,
-            .githubCourseRepositoryCreated, .githubCourseRepositoriesArchived:
+            .githubCourseRepositoryCreated, .githubCourseRepositoriesArchived,
+            .deployApproveRequested, .deployModeRequested, .deployPauseRequested, .deployResumeRequested:
             return .ok
         }
     }
@@ -500,6 +511,10 @@ enum AuditAction: String, Sendable, CaseIterable {
         case .githubTemplateSet: return "GitHub template repository changed"
         case .githubCourseRepositoryCreated: return "GitHub course repository created"
         case .githubCourseRepositoriesArchived: return "GitHub course repositories archived"
+        case .deployApproveRequested: return "Release approval requested"
+        case .deployModeRequested: return "Deploy mode change requested"
+        case .deployPauseRequested: return "Deploy pause requested"
+        case .deployResumeRequested: return "Deploy resume requested"
         }
     }
 }
@@ -537,6 +552,7 @@ enum AuditCategory: String, Sendable, CaseIterable {
     case brightspace = "LEARN sync"
     case lti = "LTI"
     case github = "GitHub"
+    case deploy = "Deployment"
 }
 
 /// Resolves a stored (raw) action string to its display category + label,
@@ -570,4 +586,5 @@ enum AuditTargetType: String, Sendable {
     case oauthClient = "oauth_client"
     case ltiPlatform = "lti_platform"
     case githubApp = "github_app"
+    case deployment
 }

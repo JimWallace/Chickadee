@@ -216,7 +216,7 @@ private func estimateMeasureName(_ measure: DatasetColumnDivergence.Measure) -> 
 /// computed off the event loop.  The one constructor every datasets handler
 /// uses (a PUT through the `saved:` wrapper below), so the GET and PUT of
 /// both pairs cannot disagree about what the panel is told.
-func datasetsPanelResponse(req: Request, setup: APITestSetup) async throws -> DatasetsResponse {
+func datasetsPanelResponse(setup: APITestSetup) async throws -> DatasetsResponse {
     let specs = datasetSpecs(inManifest: setup.manifest)
     guard !specs.isEmpty else { return DatasetsResponse(datasets: [], diagnostics: []) }
     let zipPath = setup.zipPath
@@ -227,9 +227,9 @@ func datasetsPanelResponse(req: Request, setup: APITestSetup) async throws -> Da
 /// The panel response after a save, with the save's normalizations as
 /// `savedNotes`.
 func datasetsPanelResponse(
-    req: Request, setup: APITestSetup, saved normalized: [WholeFileSampleNormalization]
+    setup: APITestSetup, saved normalized: [WholeFileSampleNormalization]
 ) async throws -> DatasetsResponse {
-    var response = try await datasetsPanelResponse(req: req, setup: setup)
+    var response = try await datasetsPanelResponse(setup: setup)
     response.savedNotes = Dictionary(
         normalized.map { ($0.file, $0.panelNote) }, uniquingKeysWith: { first, _ in first })
     return response

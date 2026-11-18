@@ -252,6 +252,19 @@ for env_name in sorted(set(kernel_envs.values())):
     # stdlib list.
     if not index.get("modules") and not index.get("stdlibModules"):
         fail(f"{index_path} lists no modules at all — regenerate it")
+    # The stdlib half of a Python index comes partly from the interpreter that
+    # derived it (`sys.stdlib_module_names`), so it is exact only when that
+    # interpreter's minor version is the kernel's. derive-kernel-modules.py
+    # warns at build time; this makes a mismatched index a failure.
+    derived_on = index.get("derivedOnPython")
+    kernel_python = index.get("kernelPython")
+    if kernel_python and ".".join(kernel_python.split(".")[:2]) != derived_on:
+        fail(
+            f"{index_path} was derived on Python {derived_on} but the kernel is "
+            f"Python {kernel_python}, so its stdlib list is not the kernel's — "
+            f"re-run scripts/derive-kernel-modules.py {env_dir} on Python "
+            f"{'.'.join(kernel_python.split('.')[:2])}"
+        )
     print(
         f"check-xeus-vendored: OK ({env_name} module index matches the env: "
         f"{len(index['modules'])} package modules, "
@@ -365,6 +378,9 @@ PY
 #    REWRITES (scripts/patch-xeus-python-http.py) must carry the hash of its own
 #    bytes in its name (`.chickadee.<12 hex>.tar.gz`), or a re-vendor that changed
 #    the patch would ship new bytes under a name that students have cached.
+#    An archive that scripts/prune-kernel-packages.py only NORMALIZES (no time,
+#    no owner) keeps its upstream name: its files are the upstream files, so
+#    the name still maps to one set of files.
 #    And each env's empack_env_meta.json must name exactly the files on disk,
 #    since every reader fetches `kernel_packages/<filename>` from it.
 python3 - "$BUILD_DIR" "$ROOT_DIR" <<'PY'

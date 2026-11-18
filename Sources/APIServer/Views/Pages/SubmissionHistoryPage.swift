@@ -59,7 +59,11 @@ struct SubmissionHistoryTableRow: HTML {
         tr {
             td(.class("col-hide-phone")) { "\(history.attemptNumber)" }
             SubmittedAtCell(row: history)
-            td { span(.class("tier")) { SubmissionStatus.displayLabel(forRaw: history.status) } }
+            td {
+                span(.class(SubmissionStatus.badgeClass(forRaw: history.status))) {
+                    SubmissionStatus.displayLabel(forRaw: history.status)
+                }
+            }
             td { history.gradeText }
             td {
                 div(.class("history-actions")) {

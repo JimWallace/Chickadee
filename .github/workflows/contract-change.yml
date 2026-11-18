@@ -1,0 +1,87 @@
+name: Contract change
+
+# A pull request that changes the student contract ships only in a minor
+# (docs/release-gate.md). The contract is the paths in
+# scripts/contract-paths.txt: the kernel files a student's browser caches and
+# the code that decides what a grade means. This check fails when a pull
+# request changes one of them and does not carry the `minor-release` label.
+# The label is the author saying "this ships in the next minor".
+#
+# It runs again when a label is added or removed, so labelling the pull
+# request turns the check green without a new push. It names every contract
+# path it found, in the log and in the job summary.
+#
+# The check is the merge-time half of the gate. The release-time half is in
+# auto-release.yml, which cuts no release past a contract change.
+#
+# The changed files come from the pull request files API, not from a full
+# clone: a re-vendor pull request carries about 100 MB of kernel history, and
+# the API lists up to 3000 files. The list and the matcher come from the
+# checked-out pull request, so a change to the list is reviewed with the pull
+# request that makes it.
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, labeled, unlabeled]
+
+concurrency:
+  group: contract-change-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  contract-change:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          sparse-checkout: |
+            scripts/contract-paths.txt
+            scripts/contract-changes.sh
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+
+      - name: Check the matcher
+        run: scripts/contract-changes.sh --self-test
+
+      - name: Look for contract paths
+        env:
+          GH_TOKEN: ${{ github.token }}
+          R: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}
+          LABELLED: ${{ contains(github.event.pull_request.labels.*.name, 'minor-release') }}
+        run: |
+          set -euo pipefail
+          # A renamed file counts under both names.
+          gh api --paginate "repos/$R/pulls/$PR/files?per_page=100" \
+            --jq '.[] | .filename, (.previous_filename // empty)' > files.txt
+          scripts/contract-changes.sh < files.txt | sort -u > contract.txt
+          if [ ! -s contract.txt ]; then
+            echo "No contract path changed." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          count="$(wc -l < contract.txt | tr -d ' ')"
+          {
+            echo "This pull request changes $count contract path(s) (scripts/contract-paths.txt):"
+            echo ""
+            echo '```'
+            head -50 contract.txt
+            if [ "$count" -gt 50 ]; then echo "... and $((count - 50)) more"; fi
+            echo '```'
+            echo ""
+          } >> "$GITHUB_STEP_SUMMARY"
+          head -50 contract.txt
+          if [ "$LABELLED" = "true" ]; then
+            echo "It carries the \`minor-release\` label, so it ships in the next minor. While it is on \`main\`, auto-release cuts no release (docs/release-gate.md)." >> "$GITHUB_STEP_SUMMARY"
+            echo "Labelled minor-release: this change ships in the next minor."
+            exit 0
+          fi
+          echo "It does not carry the \`minor-release\` label. A contract change ships only in a minor: add the label, or take the contract change out (docs/release-gate.md)." >> "$GITHUB_STEP_SUMMARY"
+          echo "::error::This pull request changes $count contract path(s) and has no minor-release label. A contract change ships only in a minor (docs/release-gate.md): add the label, or take the change out."
+          exit 1

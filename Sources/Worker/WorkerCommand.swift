@@ -1,8 +1,9 @@
 // Worker/WorkerCommand.swift
 //
 // The chickadee-runner CLI entry point (`@main`) plus worker-secret
-// resolution (CLI flag → env var → .worker-secret file fallbacks). The CLI
-// flag is deprecated; see `workerSecretFlagUse(flagSet:sandboxed:)`.
+// resolution (the RUNNER_SHARED_SECRET env var, then the .worker-secret file
+// fallbacks). The `--worker-secret` flag was removed at 0.6.0: it put the
+// secret in the runner's command line, where every test script can read it.
 // Split from RunnerDaemon.swift (June 2026 audit); the WorkerDaemon
 // actor itself stays in RunnerDaemon.swift.
 
@@ -30,36 +31,36 @@ struct WorkerCommand: AsyncParsableCommand {
     @Option(name: .long, help: "Maximum number of concurrent jobs")
     var maxJobs: Int = 4
 
-    @Flag(name: .long, help: "Run test scripts inside a sandbox (network-isolated, privilege-dropped)")
-    var sandbox: Bool = false
+    /// On by default since 0.6.0 (#2348). `--sandbox` is still accepted and
+    /// changes nothing, so a start command written for 0.5 keeps working;
+    /// `--no-sandbox` turns it off. With both, the last one wins.
+    @Flag(
+        name: .long, inversion: .prefixedNo, exclusivity: .chooseLast,
+        help:
+            "Run test scripts inside a sandbox (network-isolated, privilege-dropped). On by default; --no-sandbox turns it off"
+    )
+    var sandbox: Bool = true
 
     @Option(
         name: .long,
         help:
-            "With --sandbox, the most processes and threads one test script may start at once"
+            "With the sandbox, the most processes and threads one test script may start at once"
     )
     var jobProcessLimit: Int = SandboxedScriptRunner.defaultProcessLimit
 
     @Option(
         name: .long,
         help:
-            "With --sandbox on Linux, the megabytes one test script may write in its working directory; the writes are discarded when it ends"
+            "With the sandbox on Linux, the megabytes one test script may write in its working directory; the writes are discarded when it ends"
     )
     var jobDiskLimit: Int = SandboxedScriptRunner.defaultDiskLimitMegabytes
 
     @Option(
         name: .long,
         help:
-            "With --sandbox on Linux, the megabytes of memory one test script may use, its files included; needs the job cgroups that runner-entrypoint.sh delegates"
+            "With the sandbox on Linux, the megabytes of memory one test script may use, its files included; needs the job cgroups that runner-entrypoint.sh delegates"
     )
     var jobMemoryLimit: Int = JobCgroups.defaultMemoryLimitMegabytes
-
-    @Option(
-        name: .long,
-        help:
-            "Deprecated, and refused with --sandbox: test scripts can read it. Set the RUNNER_SHARED_SECRET env var instead"
-    )
-    var workerSecret: String?
 
     @Option(
         name: .long,
@@ -81,18 +82,9 @@ struct WorkerCommand: AsyncParsableCommand {
     mutating func run() async throws {
         // A test script runs as the runner's user. Without this it can read
         // RUNNER_SHARED_SECRET from /proc/<runner pid>/environ and sign worker
-        // API calls, for example to report its own result. `--sandbox` blocks
+        // API calls, for example to report its own result. The sandbox blocks
         // the read too, but only where the host allows user namespaces.
         let processInspection = Self.processInspectionStatus(chickadee_refuse_process_inspection())
-
-        switch workerSecretFlagUse {
-        case .notUsed:
-            break
-        case .deprecated(let warning):
-            writeToStandardError(warning)
-        case .refused(let reason):
-            throw Self.startupFailure(reason)
-        }
 
         guard let baseURL = URL(string: apiBaseURL) else {
             throw Self.startupFailure("Error: invalid --api-base-url '\(apiBaseURL)'\n")
@@ -128,10 +120,7 @@ struct WorkerCommand: AsyncParsableCommand {
             workRoot: workRoot
         ).detect()
         guard
-            let effectiveWorkerSecret = resolveWorkerSharedSecret(
-                cliWorkerSecret: workerSecret,
-                environment: env
-            )
+            let effectiveWorkerSecret = resolveWorkerSharedSecret(environment: env)
         else {
             throw Self.startupFailure(
                 "Error: missing runner secret. Set RUNNER_SHARED_SECRET.\n")
@@ -212,11 +201,6 @@ struct WorkerCommand: AsyncParsableCommand {
         returnCode == 0 ? "refused" : "allowed"
     }
 
-    /// What the runner does with this command's `--worker-secret`.
-    var workerSecretFlagUse: WorkerSecretFlagUse {
-        Self.workerSecretFlagUse(flagSet: workerSecret != nil, sandboxed: sandbox)
-    }
-
     /// Makes SIGTERM drain the runner rather than stop it (`WorkerDaemon.drain`).
     /// `docker stop`, `docker compose up` on a new image and a host shutdown
     /// all send SIGTERM, then SIGKILL after the container's
@@ -255,7 +239,7 @@ struct WorkerCommand: AsyncParsableCommand {
     /// Checks the sandbox at startup: whether the kernel applies
     /// `--job-process-limit`, and whether each job can have its own cgroup.
     ///
-    /// It refuses to start with `--sandbox` on a host that cannot sandbox. The
+    /// It refuses to start with the sandbox on a host that cannot sandbox. The
     /// alternative is a runner that claims jobs and fails every one of them.
     /// The process limit isolates the jobs from each other only when the
     /// kernel applies it and the container can hold every job at its limit,
@@ -276,7 +260,7 @@ struct WorkerCommand: AsyncParsableCommand {
         }
         if let reason = await SandboxedScriptRunner.probe(workDir: workRoot) {
             throw Self.startupFailure(
-                "Error: --sandbox is set, but this host cannot start the sandbox: \(reason)\n"
+                "Error: the sandbox is on, but this host cannot start the sandbox: \(reason)\n"
                     + SandboxedScriptRunner.probeFailureAdvice + "\n")
         }
         let enforced = await SandboxedScriptRunner.processLimitIsEnforced(workDir: workRoot)
@@ -346,7 +330,7 @@ struct WorkerCommand: AsyncParsableCommand {
         return (nil, "unavailable: \(reason)")
     }
 
-    /// The script runner `--sandbox` selects, with the label the startup log
+    /// The script runner the sandbox setting selects, with the label the startup log
     /// reports for it. One decision for both, so the log cannot describe a
     /// different runner from the one that grades.
     static func scriptRunner(
@@ -365,45 +349,12 @@ struct WorkerCommand: AsyncParsableCommand {
             )
             : (UnsandboxedScriptRunner(), "unsandboxed")
     }
-
-    /// What the runner does when `--worker-secret` is set.
-    enum WorkerSecretFlagUse: Equatable {
-        case notUsed
-        case deprecated(warning: String)
-        case refused(reason: String)
-    }
-
-    /// `--worker-secret` puts the secret in the runner's command line, and any
-    /// process of the same user can read `/proc/<pid>/cmdline`, whatever the
-    /// runner's dumpable flag. That includes every test script, also inside
-    /// the sandbox, which has no PID namespace. With the secret, a script can
-    /// sign worker API calls, for example to report its own result.
-    ///
-    /// With `--sandbox`, the operator asked for isolation that the flag
-    /// defeats, so the runner refuses to start. Without it, the flag only
-    /// warns: a patch may not remove it (docs/release-process.md), so it is
-    /// removed at the next minor release.
-    static func workerSecretFlagUse(flagSet: Bool, sandboxed: Bool) -> WorkerSecretFlagUse {
-        guard flagSet else { return .notUsed }
-        let why =
-            "--worker-secret puts the secret in the runner's command line, "
-            + "where every test script can read it. Set RUNNER_SHARED_SECRET instead.\n"
-        if sandboxed {
-            return .refused(reason: "Error: --worker-secret cannot be used with --sandbox. " + why)
-        }
-        return .deprecated(
-            warning: "Warning: --worker-secret is deprecated and will be removed in the next minor release. " + why)
-    }
 }
 
 func resolveWorkerSharedSecret(
-    cliWorkerSecret: String?,
     environment: [String: String],
     currentDirectory: String = FileManager.default.currentDirectoryPath
 ) -> String? {
-    let cliSecret = cliWorkerSecret?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-    if !cliSecret.isEmpty { return cliSecret }
-
     let envSecret = (environment["RUNNER_SHARED_SECRET"] ?? "")
         .trimmingCharacters(in: .whitespacesAndNewlines)
     if !envSecret.isEmpty { return envSecret }

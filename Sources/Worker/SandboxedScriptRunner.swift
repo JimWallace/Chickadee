@@ -209,12 +209,12 @@ extension SandboxedScriptRunner {
     static var probeFailureAdvice: String {
         #if os(Linux)
         return "A container that drops capabilities or uses the default seccomp profile "
-            + "refuses user and mount namespaces. Remove --sandbox, or allow them."
+            + "refuses user and mount namespaces. Allow them, or start the runner with --no-sandbox."
         #elseif os(macOS)
         return "sandbox-exec cannot start inside another sandbox. "
-            + "Remove --sandbox, or start the runner outside the sandbox."
+            + "Start the runner outside the sandbox, or with --no-sandbox."
         #else
-        return "This platform has no sandbox. Remove --sandbox."
+        return "This platform has no sandbox. Start the runner with --no-sandbox."
         #endif
     }
 

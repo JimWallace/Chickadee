@@ -399,7 +399,10 @@ the motivating bug, not just a `watchdog_timeout` count.
 
 ### 6.2 Structured log access
 
-Logs are stdout-only today (`OperationalDiagnostics` emits
+*As built:* `RingBufferLogHandler` and `AdminEventSink`
+(`Sources/APIServer/MCP/Admin/`). The design as written follows.
+
+Logs were stdout-only (`OperationalDiagnostics` emits
 `logger.info("observability", metadata:)`; no custom handler, nothing
 queryable). Add a bounded **in-process ring buffer**:
 

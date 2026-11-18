@@ -120,7 +120,7 @@ them is the answer.
 
 | Archetype | Skeleton | Copy this | Also |
 |-----------|----------|-----------|------|
-| **Admin tabbed** | `AdminTabs` (the `.admin-version-banner`, the hidden `<h1>`, the tab bar) → `.page-section` blocks, headings starting at `<h2>` | `AlertsPage` | `AdminPage`, `AdminUsersPage`, `AdminAuditPage`, `AdminBrightspacePage`, `AdminGitHubPage`, `AdminLTIPage`, `AdminMCPPage`, `AdminRetentionPage`, `AdminStoragePage` |
+| **Admin tabbed** | `AdminTabs` (the `.admin-version-banner`, the hidden `<h1>`, the tab bar) → `.page-section` blocks, headings starting at `<h2>` | `AlertsPage` | `AdminPage`, `AdminUsersPage`, `AdminAuditPage`, `AdminBrightspacePage`, `AdminDeploymentPage`, `AdminGitHubPage`, `AdminLTIPage`, `AdminMCPPage`, `AdminRetentionPage`, `AdminStoragePage` |
 | **Instructor tabbed** | `InstructorTabs` → `.page-section` blocks | `InstructorMCPPage` | `AssignmentsPage`, `InstructorAchievementsPage`, `InstructorActivityPage`, `InstructorBrightspacePage`, `InstructorDatasetsPage`, `InstructorGitHubPage`, `InstructorGroupsPage`, `InstructorLTIGradesPage`, `InstructorNewTermPage`, `InstructorSlipDaysPage`, `InstructorStudentsPage` |
 | **Titlebar page** | `.page-titlebar` (`<h1>` left, actions right) → optional `.page-subtitle` → content | `AdminUserPage` | `AdminCoursePage`, `AdminRunnerPage`, `AssignmentFeedbackPage`, `AssignmentSubmissionsPage`, `CourseStudentSubmissionsPage`, `InstructorDatasetPage`, `InstructorEnrollCSVPage`, `AssignmentNewPage`, `SessionAttendancePage` |
 | **Plain student page** | `<h1>` → content | `AccountPage` | `SubmitPage`, `CourseDataPage`, `EnrollPage`, `IndexPage`, `SubmissionPage`, `GitHubSubmitPage`, `LeaderboardPage`, `JoinSessionPage` |
@@ -345,7 +345,10 @@ duplicate.
   badges (defined variants only:
   open/closed/extended/preview/unpublished/danger).  A bare `.tier` is the
   neutral state badge, for a state with no status colour ("Secret tests
-  revealed", or a submission whose browser and native grades differ).  `.tier-danger` is the one
+  revealed", or a submission whose browser and native grades differ).  Its
+  fill, and `.tier-unpublished`'s, is `--badge-neutral-bg`, one step up from
+  `--surface` in dark mode (dark `--gray-100` is `--surface`, so the badge
+  vanished).  `.tier-danger` is the one
   that means something went wrong; `.tier-closed` is a neutral inactive grey
   and must not be borrowed for it.  One `.tier-open` is not a state: the
   result page's gain beside the grade ("+13%", result-celebration.md) uses
@@ -532,8 +535,14 @@ duplicate.
   which sets the room's sizes.
 - **`.fieldset-plain`** — the unstyled `<fieldset>` + bold `<legend>` that
   wraps a group of radio or checkbox choices (enroll, the LTI grade
-  transport, LTI deep linking, the bird picker).  Use it for any group
-  of choices rather than restyling a fieldset.
+  transport, LTI deep linking, the bird picker, the deploy mode).  Use it
+  for any group of choices rather than restyling a fieldset.  A choice of
+  one of a few options is a radio group with one submit button, never a
+  row of buttons, one per option.  Where each option needs a one-line
+  description, the row is `.checkbox-row .checkbox-row--described`: the
+  name in `<strong>`, the description in `.field-note--muted` under it, and
+  the radio aligned with the name.  When a section heading already names
+  the group, as on the Deployment page, the legend is `visually-hidden`.
 - **`.swatch-row`**, `.swatch`, `.swatch-sample`, `.swatch-name` — a choice of
   one colour, inside a `.fieldset-plain`: each option is a radio input shown
   as a round sample with its name under it.  The input is invisible but stays
@@ -782,6 +791,14 @@ duplicate.
   the instructor roster) shows `pointer` across the row.
 - **`.drop-zone`** (+ `.drag-over`, `.drop-filename`) — file-drop upload
   targets.  Unrelated to the reorder cues above despite the shared verb.
+- **`.card--padded`** — a `.card` with its own padding, for a card whose
+  content is a form or a heading over lists: the approval form, the contract
+  changes and each release's notes on the admin Deployment page.  Inside it,
+  an `<h3>` is the card's title, an `<h4>` is a category (Changed, Fixed)
+  above its own `<ul>`, and the lists are indented; all three are direct
+  children of the card, or the rules miss them.  The global reset zeroes
+  list padding, so a bare `<ul>` hangs its bullets outside the column.  A
+  category is a heading, never a bullet.
 - **`.card`**, `.notice-box`, `.error-box` — surfaces and callouts.
   **Two empty states, and they never borrow each other's words.** An empty
   COLLECTION (term start, a course with no assignments) replaces the table: an
@@ -1029,6 +1046,12 @@ countdown all change with the table beside them. Reach for `json` only for somet
 renders: the class composite's canvas, whose pixels a region swap would throw
 away. It polls at once, then on the interval. Whatever the mode, keep a page's
 fixed chrome — its heading, its chips, its intro — OUTSIDE the polled element.
+A page that must act on a new state (reload once a result or an export is
+ready) listens for `chickadee:table-repaint` on the region, as `app.js` does.
+`scripts/check-ui-vocabulary.sh` fails on a first-party `Public/*.js` file
+that calls both `setInterval` and `fetch(`, unless its poll allowlist says
+why that timer does not poll. A `role="status"` banner does not belong
+inside a region that changes on most polls: each swap announces it again.
 
 The affordances that say an element is interactive are a **closed registry**,
 enforced by `scripts/check-ui-vocabulary.sh`:

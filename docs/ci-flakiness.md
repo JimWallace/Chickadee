@@ -1,9 +1,9 @@
 # CI flakiness — known families
 
-**Open: Families 2, 3, 4, 7 and 8.** These can still make a check red, and the
-cause is not fixed in this repository. **Mitigated: Family 5.** It is closed
+**Open: Families 2, 3, 4, 7 and 8.** These can still make a check red, and
+the cause is not fixed in this repository. **Mitigated: Family 5.** It is closed
 for monitoring since 2026-09-28, but nobody found its cause. **Fixed: Families
-1 and 6.**
+1, 6, 9 and 10.**
 
 Read this file before you diagnose a red check on a PR that did not touch the
 failing area. Each family keeps its original number, because code comments
@@ -27,6 +27,8 @@ heading for each family.
 | 6 | `worker-tests` cancelled at its ceiling after the move to resolute | fixed | `worker-tests` reads `cancelled`. `[ci-pressure]` shows `scopes=0.0/min` with `self cpu=0.0%`. Some `WorkerDaemonTests` record "Time limit was exceeded". | It should not recur. If it does, read the printed wedge dump. |
 | 7 | `build` exits 139 as Swift Build starts planning (libdispatch, upstream) | open (upstream bug; in-job retry) | Step `Build all targets and tests` red within about 90 s. Exit 139. The last build line is `[Planning 1 / N]`. `DispatchWorker` crashed in `_dispatch_event_loop_drain`. A `::warning` "Family 7 retry" on a green job is one absorbed hit. | Not your diff: nothing compiled. One `/rerun-failed`. Never read the diff for it. |
 | 8 | A test lane misses the shared `.build` cache that `build` saved (cache eviction, inferred) | open (fails fast since the guard) | A `::error` "Family 8" in the `Swift test setup` step of a test lane, after "Cache not found for input keys". Before the guard: `[N / M]` compile lines inside a `Run …Tests` step, a timeout with no `Test run with` line, and "No wedge dump was written." Other lanes on the same run passed. | Not your diff. Do not use `/rerun-failed`: the cache is gone, so it misses again. Re-run all jobs, so `build` saves again. |
+| 9 | Workbench shell e2e: the editor click after the toolbar insert latched onto a hidden cell, `smoke (chromium)` | fixed | Step `Run workbench shell e2e (chromium)`: `SHELL FAIL — locator.click: Timeout 30000ms exceeded`, waiting for `.jp-Cell.jp-mod-active .cm-content`, which resolves to a `data-language="markdown"` editor that "is not visible". Since the fix the probe fails at "timed out: the inserted code cell is active" instead. | It should not recur. A new hit means that the insert did not land: read the `smoke-diagnostics-chromium` trace. |
+| 10 | `api-tests` statement timeout from stale planner statistics in a recycled pooled schema | fixed | A `PSQLError` in a test that seeds many rows (first seen: `CourseWideResultQueryBindLimitTests.theLearnTabSummaryReadsACoursePastTheBindLimit`). The Postgres log in the job shows `canceling statement due to statement timeout` on a query that takes under 1 s locally. | It should not recur. If it does, check that the schema came from `MigratedPostgresSchemaPool` and still has autovacuum off. |
 
 ## Before you chase a red check
 
@@ -384,6 +386,136 @@ re-run of a Docker-relevant PR rebuilds the release binaries cold. The `-build-`
 stays, because the PR's own test lanes read it. The `-probebuild-` save stays
 for now: without it, every probe build that loses the race with `build` is
 cold, and so is every probe re-run.
+
+## Family 9 — workbench shell e2e: the editor click after the toolbar insert latched onto a hidden cell (`smoke (chromium)`) — ROOT-CAUSED & FIXED
+
+**Tells.** `smoke (chromium)` in `browser-probes.yml` failed at the step
+"Run workbench shell e2e (chromium)", in step 4 of
+`Tools/editor-smoke-test/workbench-shell-check.mjs` ("A saved setting keeps
+the kernel"). The save succeeded. Then the probe clicked the toolbar button
+`notebook:insert-cell-below notebook:change-cell-to-code` and clicked the
+active cell's editor. The click found a markdown editor that was not
+visible, and timed out after 30 s:
+
+```
+SHELL FAIL — locator.click: Timeout 30000ms exceeded.
+  - waiting for locator('#jl-frame').contentFrame().locator('.jp-Cell.jp-mod-active .cm-content')
+    - locator resolved to <div ... contenteditable="true" data-language="markdown" ...>
+      - element is not visible
+```
+
+**Cause.** A race in the probe, not in the product. The toolbar click
+returns when the DOM click is sent. `notebook-toolbar.js` then sends the two
+commands through the iframe command bridge, and the insert lands about
+20–40 ms later on a local machine (more on a loaded runner). The editor click
+started at once. When its locator resolved before the insert landed, it found
+the old active cell: the rendered markdown heading `## Task 2: Total`
+(`run-cell-and-select-next` had selected it), whose editor is hidden.
+Playwright re-resolves a locator only when its element leaves the DOM. A
+hidden element stays attached, so Playwright retried the same element for
+30 s and never saw the new code cell, which was active by then.
+
+**Evidence (2026-11-16).** An ad hoc instrumented copy of the probe (not kept in the repository) showed the
+notebook state 2 ms after the toolbar click returned: 4 cells, the active
+cell the rendered heading. 250 ms later: 5 cells, the active cell the new
+code cell. The bridge round trip of the insert took 20–25 ms. A copy that adds
+100 ms before each bridge command reproduced the CI log exactly, on the
+first run. The fixed probe passed with 100 ms and with 1000 ms added.
+
+**Fix.** The probe counts the cells before the toolbar click, then waits
+(the usual 30 s step limit) until there is one more cell and the active cell
+is a code cell. Only then does it click the editor. This is a stronger check
+than before: it now says when the insert does not take effect.
+
+**Seen.**
+
+| Date | Run | Ref |
+|---|---|---|
+| 2026-10-19 | 39184416569, 39341547738 | PR branches |
+| 2026-10-22 | 39784232421 | `main`, scheduled |
+| 2026-11-04 | 41860413720 | `main`, scheduled |
+| 2026-11-10 | 42882492301, attempt 1 | PR branch; attempt 3 passed, so the tally did not count it |
+| 2026-11-11 | 42976666655 | Dependabot PR #2990 |
+| 2026-11-13 | 43346727113 | Dependabot PR |
+
+**The 2026-11-16 tally.** Issue #1178 reported 8 red `smoke` runs for the
+week. Only 2 of them were this family. The full job logs give:
+
+| Count | Signature | Runs |
+|---|---|---|
+| 3 | Cancelled by the concurrency group ("Canceling since a higher priority waiting request ... exists"), not a failure | 42707971965, 42857670044, 42906403109 |
+| 2 | Family 9 | 42976666655, 43346727113 |
+| 1 | `GUIDE FAIL — the rows do not name the tasks`, both engines: the PR's own change | 42876740324 |
+| 1 | `playwright install-deps` could not resolve `archive.ubuntu.com` (runner DNS) | 43049512385 (`main`, scheduled) |
+| 1 | `AUTHORING-DRAFT FAIL — the kernel did not reach idle within 120000ms`, webkit, after its retry | 43102715975 |
+
+`flake-telemetry.yml` now leaves out a leg that the concurrency group
+cancelled, and counts every attempt of a run (`filter=all`), so a re-run
+that passes no longer hides the red attempt before it.
+
+**Handling.** It should not recur. If the same signature comes back, the
+insert did not take effect within 30 s: the probe now fails at "timed out:
+the inserted code cell is active". Download the `smoke-diagnostics-chromium`
+artifact and read the order of the toolbar commands in the trace.
+
+## Family 10 — `api-tests` statement timeout from stale planner statistics in a recycled schema — ROOT-CAUSED & FIXED
+
+**Tells.** One `api-tests` test fails with a `PSQLError`. The Postgres log
+printed at the end of the job shows `ERROR: canceling statement due to
+statement timeout` (the test database sets 60 s), and the next `STATEMENT:`
+line is a join that takes well under a second locally. The first case was the
+`DISTINCT ON` query of
+`BrightSpacePagePresenter+LatestResultSync.swift`, from
+`CourseWideResultQueryBindLimitTests.theLearnTabSummaryReadsACoursePastTheBindLimit`,
+which seeds 65,536 submissions and 65,536 results.
+
+**Seen.**
+
+| Date | Run | Ref |
+|---|---|---|
+| 2026-11-14 | 43563616637 | `main` |
+| 2026-11-14 | 43569094796 | PR #3034 |
+| 2026-11-14 | 43575574733 | `main` |
+| 2026-11-16 | 43883006848 (job 133367667477) | PR #3040 |
+
+**Cause.** The test schemas come from `MigratedPostgresSchemaPool`, which
+empties a returned schema with a DELETE sweep. A DELETE leaves the table's
+pages in place. When autovacuum then ANALYZEs an emptied table, `pg_class`
+records `relpages > 0, reltuples = 0`. The planner scales `reltuples /
+relpages` by the table's current size, so a density of zero estimates one row
+however many rows the next borrower inserts. Without column statistics from an
+earlier analyze of real data, which a pooled table almost never has, the planner
+then joins `submissions` and `results` with a nested loop. It applies
+`r.submission_id = s.id` as a join filter, not as an index condition: 65,536 ×
+65,536 comparisons. The earlier test on that schema need only have left
+one page behind.
+Whether autovacuum (naptime 1 min) reaches the table between the sweep and the
+query is a matter of timing. That is why the failure was intermittent and did
+not line up with a change.
+
+Reproduced on Postgres 16 with the two tables and their indexes, 65,536 rows
+each: seed, DELETE, ANALYZE, seed again, then the query. It is cancelled at
+60 s in every run. The same sequence with TRUNCATE in place of the DELETE, or
+with no ANALYZE, runs in about 0.2 s. #3042 ruled out "no statistics" and
+"after ANALYZE". Both of those plan well. The bad state is the one between
+them: statistics taken while the table was empty, then read after it was
+filled.
+
+**Fix.** A pooled schema turns autovacuum off on its tables when it is built,
+so a table that the sweep has emptied is never ANALYZEd. A table that is never
+analyzed has `reltuples = -1`. The planner then estimates from the table's
+real size. The return sweep TRUNCATEs every table instead of deleting from
+it when any table's heap has passed 1 MiB
+(`MigratedPostgresSchemaPool.truncateThresholdBytes`). That frees the dead
+rows that no vacuum now removes, and it resets the table to "never analyzed".
+`PostgresSchemaPoolTests` pins both halves.
+
+**If it recurs.** A schema that does not come from the pool
+(`SchemaMutatingSuites`) is migrated fresh and was never swept, so it cannot
+reach this state. A test that runs `ANALYZE` or `VACUUM` itself on a pooled
+schema can. To see the plan, run `EXPLAIN` on the statement from the log
+against a schema in the same state. `auto_explain` cannot log a cancelled
+statement.
 
 ## Structural problems → current state
 

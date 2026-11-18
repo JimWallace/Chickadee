@@ -224,7 +224,6 @@ struct AuthoringLanguageResolution {
 /// `set_assignment_language`'s), both of which refuse once generated scripts
 /// exist — a guard this scan quietly went around.
 func resolveAuthoringLanguage(
-    setup: APITestSetup,
     props: TestProperties
 ) -> AuthoringLanguageResolution {
     let declared = AssignmentLanguage.resolve(manifest: props)

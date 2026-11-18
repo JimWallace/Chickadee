@@ -71,6 +71,11 @@ struct AdminRoutes: RouteCollection {
         admin.get("github", use: githubPage)
         admin.get("github", "callback", use: githubCallback)
         admin.post("github", "delete", use: deleteGitHubApp)
+        admin.get("deployment", use: deploymentPage)
+        admin.post("deployment", "approve", use: approveDeployment)
+        admin.post("deployment", "mode", use: setDeploymentMode)
+        admin.post("deployment", "pause", use: pauseDeployment)
+        admin.post("deployment", "resume", use: resumeDeployment)
     }
 
     // MARK: - GET /admin

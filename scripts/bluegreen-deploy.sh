@@ -81,6 +81,10 @@ HEALTH_TIMEOUT_SECS="${CHICKADEE_HEALTH_TIMEOUT:-90}"
 DRAIN_SECS="${CHICKADEE_DRAIN_SECS:-10}"
 
 STATE_DIR="${CHICKADEE_STATE_DIR:-/var/lib/chickadee-deploy}"
+# The user the server image runs as. The Dockerfile pins it to 999, and the
+# docker-build smoke step asserts it. The app writes deploy requests as this
+# user (see the state mount in cmd_deploy).
+APP_UID=999
 
 DRY_RUN=0
 ASSUME_YES=0
@@ -301,11 +305,27 @@ cmd_deploy() {
   # (Re)create the idle color. If anything below fails, the active color is
   # untouched and still serving — that is the whole safety guarantee.
   run "docker rm -f '$idle_name' >/dev/null 2>&1 || true"
-  # The deploy state dir is mounted READ-ONLY so the admin-MCP deploy tools can
-  # read status.json / history.jsonl. Read-only is deliberate: the app can see
-  # deploy state but cannot write command.json, so it can never move traffic.
+  # The deploy state dir is mounted READ-ONLY so the app (the admin page and
+  # the admin-MCP deploy tools) can read status.json / history.jsonl.
+  # Read-only is deliberate: the app can see deploy state but cannot write
+  # command.json, so it can never move traffic.
+  #
+  # One subdirectory is the exception: requests/, mounted read-write over it at
+  # /deploy-state/requests, where the admin page drops request files. The
+  # daemon validates each one and accepts only approve-the-held-release, mode,
+  # pause and resume (docs/release-gate.md). Its path is derived from
+  # STATE_DIR, so it needs no setting of its own. It belongs to the image's
+  # user, uid 999 (the Dockerfile pins it), and only that user and root may
+  # enter it.
   local state_mount=""
-  [[ -d "$STATE_DIR" ]] && state_mount="-v '${STATE_DIR}:/deploy-state:ro'"
+  if [[ -d "$STATE_DIR" ]]; then
+    state_mount="-v '${STATE_DIR}:/deploy-state:ro'"
+    # A failure here costs the admin page its deploy controls, not the
+    # deploy, so it warns and goes on.
+    run "mkdir -p '$STATE_DIR/requests' && chown $APP_UID:$APP_UID '$STATE_DIR/requests' && chmod 0700 '$STATE_DIR/requests'" \
+      || warn "could not prepare $STATE_DIR/requests for uid $APP_UID; the admin page cannot send deploy requests"
+    state_mount+=" -v '${STATE_DIR}/requests:/deploy-state/requests'"
+  fi
   run "docker run -d --name '$idle_name' \
         --restart unless-stopped \
         --network '$DOCKER_NETWORK' --network-alias server \

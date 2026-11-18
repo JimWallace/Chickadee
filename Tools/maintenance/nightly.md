@@ -7,9 +7,13 @@ The procedure files in this folder (and `Tools/perf-bench/weekly-task.md`)
 stay the instructions for each job. This file decides what runs, in which
 order, and when to stop.
 
-The goal: use the night's 5-hour usage window, which the maintainer cannot
-use, on maintenance. Do as much useful work as fits. Leave every piece of
-work in a state that survives the run being cut off.
+The goal: use a full night shift, 23:30 to 07:30, which the maintainer
+does not use, on maintenance. The shift covers the night's 5-hour usage
+window and most of a second one, which resets by about 09:30. The
+maintainer uses only about half of the weekly quota, so the shift spends
+time on pull requests that the shorter night left open. Do as much useful
+work as fits. Leave every piece of work in a state that survives the run
+being cut off.
 
 ## Rules
 
@@ -18,9 +22,12 @@ added for the night:
 
 - **Read the root `CLAUDE.md` first.** Load the `steward` skill before you
   drive a pull request.
-- **The night has a clock.** Start no new work item after 04:00. At 04:00,
-  finish what is running, write the report (below), and stop. The usage
-  window can also end early; the next rule makes that safe.
+- **The night has a clock.** Start no new work item after 07:00. From
+  07:00, finish what is running, write the report (below), and stop by
+  07:30. At about 04:30 the first usage window resets and a second one
+  starts; that is not a reason to stop. The run can still hit a usage
+  limit inside a window and be cut off. The next rule makes that safe: the
+  next night finds the work by its label.
 - **Push early.** Open each pull request as a draft as soon as it has its
   first commit, with the `steward` label and a branch named
   `steward/<job>-<YYYY-MM-DD>`. If the run stops, the next night finds the
@@ -37,7 +44,7 @@ added for the night:
   (`gh pr merge N --disable-auto`), merge nothing more tonight, and put it
   first in the report.
 - **Work in parallel, but not on everything.** Run each work item in a
-  subagent with its own worktree from `origin/main`. Run at most three at
+  subagent with its own worktree from `origin/main`. Run at most five at
   once. The performance check runs alone (see the calendar).
 - **Create the labels once.** If the `steward` or `steward-report` label
   does not exist, create it (`gh label create`).
@@ -75,8 +82,11 @@ A draft from a run that was cut off: finish it.
 ### 3. Tonight's calendar
 
 Each night starts at 23:30 local time: 04:30 UTC the next day in winter,
-03:30 UTC in summer. The
-calendar uses the CI runs that have finished by then.
+03:30 UTC in summer. It ends at 07:30 local time: 12:30 UTC in winter,
+11:30 UTC in summer. The
+calendar uses the CI runs that have finished by the start. A run that
+finishes during the shift (for example the Monday 07:15 UTC pin check, in
+Sunday's shift) is for the next night.
 
 | Night of | Job | Procedure |
 |---|---|---|
@@ -98,7 +108,7 @@ say so. Do not start a long CI run and wait for it; the next night takes it.
 
 ### 4. Fill work
 
-With the time left before 04:00, take work from these sources, in this
+With the time left before 07:00, take work from these sources, in this
 order. One work item is one pull request.
 
 1. **Audit findings.** Open `ui-audit` and `docs-audit` issues: fix the
@@ -110,7 +120,9 @@ order. One work item is one pull request.
    first. Skip one that a comment says a person is handling.
 3. **Deeper sweeps.** Run the mutation tool on a tier that the weekly sweep
    does not cover, and answer the survivors. Find coverage gaps in
-   `test-coverage.yml`'s newest report and close them with new test files.
+   `test-coverage.yml`'s newest report (`gh run download RUN_ID -n
+   coverage-lcov -D SCRATCHPAD/coverage`) and close them with new test
+   files.
    Move npm dependencies that are behind, within their ranges. Leave the
    xeus kernels to `kernel-currency.yml` (`scheduled-checks.md`).
 4. **The nightly tests and this steward.** Find what made CI or tonight's
@@ -133,7 +145,7 @@ maintainer closes it after reading. It holds:
 3. Merged tonight: each pull request, one line each.
 4. Open: each steward pull request and its state.
 5. Skipped: each calendar job that did not run, and why.
-6. Time: when the run started and stopped, and why it stopped (04:00, out
+6. Time: when the run started and stopped, and why it stopped (07:00, out
    of work, or cut off).
 
 Write it in ASD-STE100 English, as the `steward` skill says, and end it

@@ -9,7 +9,7 @@ update fails.
    other are grouped, so each PR resolves on its own. The pip
    `jupyterlite` / `jupyterlite-core` split in #2863 is why.
    Each entry has a `cooldown`. Dependabot offers a version only when it is
-   3 days old, and a new major version only when it is 14 days old. A merge
+   7 days old, and a new major version only when it is 14 days old. A merge
    reaches production with no person involved, and most compromised releases
    are withdrawn within those days. A security update is not delayed.
 2. **`dependabot-auto.yml` lands it.** When the bump feeds committed output, the
@@ -19,7 +19,7 @@ update fails.
    |---|---|---|
    | `Tools/vendor/package*.json` | `Public/vendor/` | `scripts/setup-vendor.sh` |
    | `Tools/jupyterlite/chickadee-extension` | its labextension and `Public/jupyterlite/extensions/@chickadee/` | `jlpm build`, then `scripts/vendor-chickadee-extension.sh` |
-   | `Tools/jupyterlite/requirements.txt` | `Public/jupyterlite/`, and the `appVersion` label in `Tools/jupyterlite/jupyter-lite.json` | `revendor-kernels.yml`, dispatched with `commit: true` |
+   | `Tools/jupyterlite/requirements.in` and the `requirements.txt` compiled from it | `Public/jupyterlite/`, and the `appVersion` label in `Tools/jupyterlite/jupyter-lite.json` | `revendor-kernels.yml`, dispatched with `commit: true` |
 
    The rebuild runs the bumped packages' own install and build scripts, so it
    runs in a job with no secret and a read-only `GITHUB_TOKEN`. It writes its

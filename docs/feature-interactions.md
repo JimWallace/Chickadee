@@ -508,6 +508,25 @@ because line numbers go out of date.
   made family dependencies "sticky", with references to deleted files that no
   edit could remove.
 
+### A Python submission's own exit: `_check_submission_exit`
+
+- **Writer:** `_check_submission_exit` in `Tools/runner-support/test_runtime.py`.
+  A `SystemExit` raised in a student file becomes an error (`SystemExit(2)`).
+- **Callers:** the native bootstrap (`Sources/Worker/ScriptInvocation.swift`)
+  and the browser grading cell (`runScriptCellPython` in
+  `Public/python-grading-shared.js`).
+- **Readers:** notebook checks that call `student_main_state`, whose exit
+  reaches the test script. The `programIO` family catches the student's exit
+  itself, so the check never sees it.
+- **Rules:**
+  - Both graders call this one function, so they cannot disagree about which
+    exits count. Change the rule there, not in either caller.
+  - The browser cell skips the check when the loaded helper lacks it, so it is
+    only as strict as the helper it loads.
+- **Parallel paths:** the R, Lua, Octave and Racket runtimes each carry their
+  own exit check, with no shared function. A change to the rule for one
+  language does not reach the others.
+
 ### Does a pattern kind call a function: `PatternKind.callsFunction`
 
 - **Writer:** only the exhaustive switch in
@@ -1215,7 +1234,7 @@ coordination, and each must see every edit.
   intended (UI audit #3007, finding 2). Do not "fix" one to match the other.
   A collection with no outcomes keeps its own counts on the tiles.
 
-### Submission state words and "waiting": `SubmissionStatus.displayLabel`, `awaitsResult`
+### Submission state words and "waiting": `SubmissionStatus.displayLabel`, `awaitsResult`, `badgeClass`
 
 - **Defined in:** `Utilities/SubmissionStatus+Display.swift`, next to the
   enum's other `APIServer` code.
@@ -1227,7 +1246,8 @@ coordination, and each must see every edit.
     state that does not await a result renders the final marker that
     `Public/app.js` answers with a reload.
   - Both history tables (`SubmissionHistoryPage`,
-    `StudentAssignmentHistoryPage`), through `displayLabel(forRaw:)`.
+    `StudentAssignmentHistoryPage`), through `displayLabel(forRaw:)` and
+    `badgeClass(forRaw:)`.
   - The wardrobe grant in `WebRoutes+Submission`. It grants no item while
     the submission awaits a result, because the page shows no Earned toast
     then, and an item granted with no toast never gets one. The page and the
@@ -1241,13 +1261,32 @@ coordination, and each must see every edit.
     (`RunnerValidationService`) is not a "waiting" test. It asks whether the
     queue already holds the row (`.pending`, `.assigned`), and the server
     never writes `.running`.
-  - A new `SubmissionStatus` case needs a `displayLabel` and an
-    `awaitsResult` answer. Student words name no "runner" or "worker".
+  - A new `SubmissionStatus` case needs a `displayLabel`, an
+    `awaitsResult` and a `badgeClass` answer. Only a state where something
+    went wrong takes `tier-danger` (today `.failed`). Student words name no "runner" or "worker".
 - **Trap:** the page once treated only `.pending` and `.assigned` as
   waiting, while the poller also waited on `.running`. A page first loaded
   in `.running` showed empty results and did not poll. After that fix, the
   wardrobe grant still tested `.pending` and `.assigned` by hand, so a
   `.running` retest granted an item with no toast (#3018 review).
+
+### Data export state on the account page: `AccountExportStateRegion`
+
+- **Defined in:** `Views/Pages/AccountPage.swift`.
+- **Writers:** `APIDataExport.status`, set by the export task and by
+  `DataExportRecoveryService`, which moves a stuck `pending` row to `failed`.
+- **Readers:**
+  - The account page renders the region while the row is `pending`.
+  - `GET /account/export/status?fragment=state` renders it for
+    `Public/table-poll.js`. Any state that is not `pending` renders the
+    `data-export-final` marker.
+  - `Public/app.js` reloads `/account` when the marker appears.
+- **Rules:**
+  - The page and the fragment must agree on "pending". If the fragment
+    called a state pending that the page does not, the page would poll
+    forever. The recovery sweep exists so that no row stays `pending`.
+  - The plain JSON from `/account/export/status` is unchanged for any other
+    request (#3007).
 
 ### Browser and native grades differ: `gradeSourceDisagreement`
 
@@ -1455,12 +1494,21 @@ coordination, and each must see every edit.
   leaves a one-shot notice in the session before it redirects to
   `/instructor` (`Helpers/Request+OverviewNotice.swift`).
 - **Readers:** the Overview (`InstructorDashboardRoutes`), once.
+  `Public/inplace-forms.js` sends the `X-Chickadee-Inplace` header that the
+  writer reads.
 - **Rules:**
-  - The Overview always takes the session notice, then prefers a
-    `?notice=` query value when one is present. If the read is skipped, the
-    notice stays in the session and shows on a later, unrelated visit.
+  - On a page navigation (`Sec-Fetch-Dest: document`, or no header) the
+    Overview takes the session notice, then prefers a `?notice=` query value
+    when one is present. A background `fetch` (`Sec-Fetch-Dest: empty`), as
+    `multipart-forms.js` makes when it follows the redirect, leaves the
+    notice for the navigation that follows (#3040).
+  - A request that carries `X-Chickadee-Inplace` sets no notice. Only
+    `inplace-forms.js` sends it, on every in-place form in the workbench
+    pane, which never shows the Overview. If a notice is set and no page
+    navigation reads it, it shows on a later, unrelated visit.
   - The redirect location stays `/instructor`. Many tests pin it.
-- **Test:** `OverviewNoticeConsumptionTests`.
+- **Test:** `OverviewNoticeConsumptionTests`, `OverviewNoticeFetchTests`,
+  `OverviewNoticeInPlaceTests`.
 
 ### Authoring checks: `AuthoringCheckCatalog`, `AuthoringFinding`
 
@@ -1537,6 +1585,10 @@ coordination, and each must see every edit.
   - `ActivityMatches` and `Tournaments`.
   - `Sources/Worker/MatrixAggregation.swift`.
   - The leaderboard routes.
+  - The live board's fast path (`docs/live-board-cache.md`):
+    `LiveBoardFingerprint` aggregates `leaderboard_entries`, and
+    `RosterSnapshot`, which `LiveBoardSnapshots` shares between refreshes,
+    holds the ranked students' handles and birds.
   - The `activity.noMetric` authoring check (MCP `check_assignment`), which
     reads a leaderboard kind as `kind.aggregation == .leaderboard`.
 - **Rules** (`docs/class-activities.md`):
@@ -1556,6 +1608,19 @@ coordination, and each must see every edit.
     row was written: ties and `LeaderboardGroupScope.studentGroup` read it.
   - `ResultIngestEffects.bestEffort` returns whether its effect succeeded,
     for an effect that has a repair. Only the leaderboard has one.
+  - A metric board's refresh is answered 304 when its ETag
+    (`LiveBoardETag`) has not changed. A new input to the rows of a board
+    that takes the fast path (`WebRoutes.takesLiveBoardFastPath`) must enter
+    the fingerprint, the roster snapshot or the tag, or the refresh shows the
+    old board until the tag's 30-second bucket turns over. A kind whose board
+    reads another table stays off the fast path.
+  - `HotPathRoute.leaderboardRefresh` matches the board's path whatever the
+    kind, the page load included. Only a 304 skips its `request_metrics`
+    row, so a built board stays visible to `get_request_metrics` and the
+    request series.
+  - The wall's `data-poll-until` is read once when the page loads. Its value
+    must never be earlier than a window that staff could extend
+    (`PresentModePresentation.pollUntil`).
   - Connect a new accumulator at both ingest paths. An accumulator on one
     path shows only the half of the class that one substrate grades, as if it
     were the whole class.
@@ -2185,6 +2250,26 @@ coordination, and each must see every edit.
 - **Rule:** a change to the vendored layout changes all of them.
   `KernelAssetListTests` fails when a listed file is missing or a package is
   not listed.
+- **Fields the browser reads in `empack_env_meta.json`:** each package's
+  `depends` (`dependencyName` in `xeus-kernel-shared.js`, which splits on
+  `[\s<>=!]`, so `name 1.2` and `name ==1.2` both work) and `channel` (mambajs
+  matches it against the channel list; `scripts/create-kernel-prefix.py`
+  keeps it the channel's own URL).
+- **Rule:** a `kernel_packages/` name maps to one set of files. An archive the
+  build changes gets a content-hash name; one it only normalizes keeps its
+  upstream name (`scripts/check-xeus-vendored.sh` section 9).
+
+### A kernel environment's lock: `Tools/jupyterlite/locks/*-lock.yml`
+
+- **Writers:** `scripts/lock-kernel-envs.py`, by hand or in the re-vendor
+  workflow's publish mode.
+- **Readers:** `scripts/create-kernel-prefix.py` (the build installs each kernel
+  from its lock), `scripts/lock-kernel-envs.py --check` (the JupyterLite job),
+  and the re-vendor workflow's pull request run, which fails when the committed
+  kernels are not what the locks build.
+- **Rule:** an environment file, its lock and the vendored packages agree. Edit
+  the environment file, lock it again, then re-vendor; each step without the
+  next fails a check.
 
 ### The cache-warm marker: `ck-kernel-warm:<env>`
 
@@ -2216,6 +2301,73 @@ coordination, and each must see every edit.
     is not isolated (`EvalWorkerLanguageTableTests`; #2721).
   - The CSP permits no inline script (#1516;
     `ContentSecurityPolicyInlineScriptTests`).
+
+### The deploy state folder: `status.json`, `pending-notes.json`, `requests/`
+
+- **Writers:** the host deploy daemon (`deploy/chickadee-deployer.sh`) writes
+  `status.json`, `history.jsonl`, `pending-notes.json`, `mode`, `paused` and
+  `approved`. Only the host writes `channel`. The admin Deployment page (`AdminRoutes+Deployment.swift`,
+  `DeployStateFolder.write`) writes one file per request into `requests/`,
+  the only path the app may write (`bluegreen-deploy.sh` mounts it read-write
+  over the read-only `/deploy-state`). A host operator writes
+  `command.json`.
+- **Readers:** the daemon reads `requests/` and `command.json` each poll. The
+  app reads `status.json` in three places: `DeployStateFolder` (the
+  Deployment page), `GetDeployStatusTool` (MCP `get_deploy_status`) and
+  `DeployerHealthRule` (the `deployerUnhealthy` alert, which does not fire on
+  `paused` or `pending_approval`). `GetDeployHistoryTool` and the page read
+  `history.jsonl`.
+- **Parallel paths:** two Swift decoders of `status.json`: `DeployStatusFile`
+  (the page and `GetDeployStatusTool`) and `DeployerStatus` (the alert).
+  A field the daemon adds or renames goes in each that needs it; every field
+  stays optional, because an older daemon writes fewer.
+- **Rules:**
+  - The app only asks. The daemon accepts approve-the-held-release, mode,
+    pause and resume, and refuses everything else, rollback included
+    (`docs/release-gate.md`; `scripts/test-chickadee-deployer.sh`). No
+    route or MCP tool may write anywhere else in the folder.
+  - The mode's raw values (`DeployMode`) and the daemon's `valid_mode` are
+    the same three strings.
+  - The release channel is host-only. The request reader refuses a
+    `channel` request, and the page shows the channel without a control, so
+    nothing in the app can point production at pre-releases.
+  - The approval names a version, and the daemon accepts it only for the
+    release it holds, so a newer release is held anew.
+
+### The version string: `ChickadeeVersion.current` and `v*` tags
+
+- **Writers:** `scripts/assemble-release.sh` (a patch or a hand-cut minor, on
+  `main`), and `auto-release.yml` for a pre-release, which stamps
+  `0.X.0-rc.N` on a commit reached only by its tag (`docs/release-gate.md`).
+- **Readers:** `/health` (the deployer checks it after a deploy), the admin
+  banner, the `?v=` asset cache key, `LiveBoardETag`, alert text, the bundle
+  manifest's `chickadeeVersion`, `get_server_info`, and the runner's
+  advertised version, compared by `VersionComparator` in the runner gates and
+  the version skew alert.
+- **Rules:**
+  - `VersionComparator` reads only the leading `X.Y.Z`, so an rc and its final
+    release compare equal on the server. Only the deployer orders rcs
+    (`version_key`).
+  - Every workflow that reacts to a `v*` tag (`docker-build.yml`,
+    `runner-arm64-image.yml`, `release.yml`) treats a `-rc.` tag as a
+    pre-release: never `:latest`, never the latest release.
+
+### The student contract: `scripts/contract-paths.txt`
+
+- **Writers:** a pull request that edits the list. The `minor-release` label
+  that goes with it is set by the author, by `revendor-kernels.yml`, and by
+  `dependabot-auto.yml` (only on a Dependabot pull request).
+- **Readers:** `scripts/contract-changes.sh`, run by the `contract-change`
+  check (`.github/workflows/contract-change.yml`), the release gate in
+  `auto-release.yml`, and `dependabot-auto.yml`. The label is read by
+  `contract-change.yml` (as the author's consent), `dependabot-auto.yml` and
+  `dependency-health.yml` (which leaves a labelled pull request alone), and by
+  the steward, which never merges one (`Tools/maintenance/README.md`).
+- **Rule:** a path joins the list when a change to it would break a student
+  who has the old version open or cached. While a commit that touched a
+  listed path is on `main` after the last release tag, auto-release cuts no
+  release, so the labelled pull requests merge together just before a minor
+  is cut by hand (`docs/release-gate.md`).
 
 ---
 

@@ -1,0 +1,20 @@
+# The files that build, sign and deploy Chickadee (#3072). A change to any of
+# them can reach production with no other review, so each one names an owner,
+# and GitHub asks that owner to review every pull request that touches it.
+#
+# Review by the owner is not required today (the main ruleset needs no
+# approval, so one maintainer can merge). Turning on "Require review from
+# Code Owners" in the main-protection ruleset makes this file a gate.
+
+/.github/                         @JimWallace
+/deploy/                          @JimWallace
+/Dockerfile                       @JimWallace
+/docker-compose.yml               @JimWallace
+/.dockerignore                    @JimWallace
+/.trivyignore.yaml                @JimWallace
+/scripts/bluegreen-deploy.sh      @JimWallace
+/scripts/server-deploy.sh         @JimWallace
+/scripts/snapshot.sh              @JimWallace
+/scripts/restore.sh               @JimWallace
+/scripts/assemble-release.sh      @JimWallace
+/SECURITY.md                      @JimWallace

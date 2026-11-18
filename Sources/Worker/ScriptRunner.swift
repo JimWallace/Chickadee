@@ -2,7 +2,7 @@
 //
 // Protocol and unsandboxed implementation for running a single test script
 // subprocess. `SandboxedScriptRunner` conforms to the same protocol for the
-// `--sandbox` path without changing any callers.
+// sandboxed path (the default) without changing any callers.
 //
 // Both conformances do the same thing: build a `ScriptLaunch` and hand it to
 // `executeScriptLaunch` (ScriptExecution.swift). They differ only in which

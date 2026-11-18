@@ -98,7 +98,13 @@ week's numbers, and any open item it carried over.
 Run `Tools/perf-bench/weekly.sh` from the repository root, in the background,
 and wait for it: it takes about 25 minutes, longer than a foreground command
 may run. It needs a local Postgres with `pg_stat_statements` loaded
-(docs/database-performance.md, "Re-run the measurements").
+(docs/database-performance.md, "Re-run the measurements"). On the
+maintainer's Mac that Postgres is the `chickadee-postgres` container. If
+`docker info` fails, Docker Desktop is not running: start it with
+`open -a Docker`, wait until `docker info` succeeds, and then
+`docker start chickadee-postgres` if `docker ps` does not list it. Say in
+the log that you started it. The `Swift` production runner also runs in
+Docker on this machine, so it starts again too.
 
 If the script itself fails (a changed route, a seed that no longer matches
 the schema), that is the first thing to fix: repair the script or the seed in

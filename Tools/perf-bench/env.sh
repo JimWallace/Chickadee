@@ -11,5 +11,8 @@ BASE=${BASE:-http://127.0.0.1:$PERF_PORT}
 # Cookie jars, the runner secret, ids and results. Outside the repository.
 WORK=${PERF_WORK:-/tmp/chickadee-perf}
 mkdir -p "$WORK/jars" "$WORK/out/pages" "$WORK/out/load"
+# psql reads its password from PGPASSWORD. Default it to the password that
+# start-server.sh gives the server, so the two always reach the same database.
+export PGPASSWORD=${PGPASSWORD:-postgres}
 PSQL_BASE="psql -h ${PGHOST:-localhost} -U ${PGUSER:-postgres} -X -q"
 PSQL="$PSQL_BASE -d $PERF_DB"

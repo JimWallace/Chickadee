@@ -18,8 +18,6 @@ enum MCPProgramIOProse {
         }
     }
 
-    static var tokens: [String] { MCPEnumProse<ProgramIOComparison>.tokens }
-
     static var fieldDescription: String {
         let glossed = ProgramIOComparison.allCases.map { "\($0.rawValue) (\(gloss(for: $0)))" }
         return "Read by kind=program_io only: how each case's expected text is matched against "

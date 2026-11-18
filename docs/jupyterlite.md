@@ -9,15 +9,42 @@ Chickadee embeds a full JupyterLite instance at `Public/jupyterlite/`. This
 enables in-browser notebook editing for both students (submit) and instructors
 (create/validate assignments).
 
-Source-of-truth config lives in `Tools/jupyterlite/`. Rebuild:
+Source-of-truth config lives in `Tools/jupyterlite/`. After an environment file
+changes, lock it again, then rebuild:
 
 ```bash
+scripts/lock-kernel-envs.py
 scripts/setup-jupyterlite.sh
 scripts/build-jupyterlite.sh
 ```
 
 `Public/jupyterlite` is generated output and is checked in; rebuild only when
 updating kernel versions or config.
+
+**Each kernel is built from a lock, and two builds give the same bytes.**
+`scripts/lock-kernel-envs.py` solves each `environment-<x>.yml` once and writes
+`Tools/jupyterlite/locks/environment-<x>-lock.yml`, which names every package
+file by URL and sha256. `scripts/build-jupyterlite.sh` never solves: it installs
+each environment from its lock (`scripts/create-kernel-prefix.py`) at the fixed
+path `/tmp/chickadee-xeus/envs/<name>`, so a rebuild changes a package only when
+a lock changes. Three things used to make every build differ, and each is fixed:
+
+- the install path, which conda writes into each kernel binary, was a random
+  temporary directory (the "16 bytes" of `xpython.wasm`); it is now fixed;
+- empack packed every file with the install's time and user;
+  `scripts/prune-kernel-packages.py` now writes every archive with neither;
+- the build's task database (`.jupyterlite.doit.db`) was kept between builds
+  and, once the paths were fixed, made a second build skip tasks; the build now
+  runs where that database is new each time.
+
+The JupyterLite toolchain is locked the same way: `Tools/jupyterlite/requirements.in`
+holds the pins people write, `requirements.txt` is compiled from it with a hash
+for every package (`empack` included, since it packs the kernels), and
+`scripts/setup-jupyterlite.sh` installs it with `--require-hashes`. CI installs
+the pinned micromamba (`scripts/install-micromamba.sh`), checked by sha256.
+`scripts/lock-kernel-envs.py --check` runs in the JupyterLite job, offline: every
+environment file has a lock, the lock matches the file, and the vendored packages
+are the locked ones.
 
 **Every vendored kernel is a xeus kernel, one env each.**
 `Tools/jupyterlite/environment-python.yml`, `environment-r.yml`,
@@ -65,7 +92,8 @@ back at it.
 Anything a student imports must be baked into the matching env: the editor's CSP is
 `connect-src 'self'`, so there is no runtime pip/piplite escape hatch and a
 missing package is an ImportError with no recovery. The Python set is currently
-numpy / pandas / matplotlib / scipy / sympy / scikit-learn / statsmodels / PIL;
+numpy / pandas / matplotlib / PIL (scipy and statsmodels were dropped for v0.6,
+#3122; worker-graded assignments still have them through the runner's Python);
 the R side is the tidyverse core (dplyr, tidyr, readr, stringr, tibble, purrr,
 forcats).
 
@@ -121,8 +149,8 @@ environment file. It never commits onto unrelated work, because the output is
 ~100 MB of content-hashed binary assets. When the weekly
 `kernel-currency.yml` finds the kernels behind their channels, it dispatches
 the workflow in publish mode: a rebuild from `main` on its own
-`kernels/revendor-*` branch, opened as an auto-merging pull request whose CI
-tests the new kernels. Publishing needs the `RELEASE_TOKEN` secret; the header
+`kernels/revendor-*` branch, opened as a pull request whose CI tests the new
+kernels. It carries the `minor-release` label and does not auto-merge. Publishing needs the `RELEASE_TOKEN` secret; the header
 of the workflow says why.
 
 That false belief had a cost worth remembering. Adding a name to
@@ -135,6 +163,9 @@ to *itself*, so none of them could see it.
 `scripts/check-env-vendored-sync.sh` is the one that compares **declared intent
 to shipped bytes**, costs two file reads, and fails the PR pointing at the
 workflow.
+
+Publish mode locks the environments again before it builds, and the new locks
+travel in the same pull request as the rebuilt bytes.
 
 The committed `Public/jupyterlite/xeus/` bytes remain authoritative for every
 other job (`scripts/check-xeus-vendored.sh` guards their integrity; the
@@ -172,8 +203,9 @@ both engines because the transports fail independently.
 ## What a kernel boot downloads
 
 A student's first editor boot downloads about 50–60 MB for Python: the
-`kernel_packages/` tarballs (~48 MB gzipped, scipy, openblas, matplotlib-base,
-pandas and statsmodels the largest), `bin/xpython.wasm` (15 MB, 4.4 MB as
+`kernel_packages/` tarballs (~48 MB gzipped before v0.6 dropped scipy, openblas
+and statsmodels, which were about 27 MB of it; matplotlib-base and pandas are
+now the largest), `bin/xpython.wasm` (15 MB, 4.4 MB as
 brotli) and the JupyterLite shell. A class of 150 that opens notebooks at once
 pulls 8–9 GB. Every one of those files is cached afterwards (the tarballs
 immutably for a year), so the load falls on a course's first week, on a

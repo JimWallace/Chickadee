@@ -36,15 +36,16 @@ is viable. SQLite support was removed in 0.5, so every deployment can do this.
 
 ```
   ┌─ chickadee-server (app container) ─────────┐
-  │  admin MCP tools: get_deploy_status,        │   read/write small JSON
-  │  pause/resume, approve_major, rollback      │   files on a shared dir
-  │  (NO docker access)                          │   (bind mount)
+  │  admin page: approve held release, mode,    │   reads the state dir
+  │  pause/resume (requests/ only, read-write)  │   (read-only mount),
+  │  admin MCP: get_deploy_status (read-only)   │   writes requests/ only
+  │  (NO docker access)                          │
   └─────────────────────────────────────────────┘
                      │ intent / status (files)
                      ▼
   ┌─ host: chickadee-deployer (systemd, shell) ┐   owns docker + nginx
   │  • polls GitHub Releases for a new tag      │
-  │  • SemVer gate (auto non-major / hold major)│
+  │  • deploy mode gate (release-gate.md)       │
   │  • snapshot.sh (safety net)                 │
   │  • bluegreen-deploy.sh: start → health-gate │   ← the "can't bring it
   │    → flip nginx → drain → stop old          │     down" invariant lives here
@@ -64,10 +65,10 @@ host root for a process that accepts student uploads). The app only ever
 | Orchestration location | Host-side daemon, **not** in the app | App must never hold the Docker socket |
 | Daemon form | **Shell + systemd** (not a Swift binary/container) | Keeps the host toolchain-free; tiny, auditable; no socket-in-container |
 | App ⇄ daemon channel | **Files on a shared bind-mount dir** | No DB coupling, no new network surface, no privilege leak |
-| Initiation | **Fully automatic CD** | New release → auto blue-green; MCP for oversight/rollback |
+| Initiation | **Automatic CD, by deploy mode** | A patch deploys on its own; in the default mode a minor waits for an admin's approval on the admin page (`docs/release-gate.md`) |
 | Version source | **GitHub Releases / the release tag `vX.Y.Z`** | The project's actual source of truth; the VERSION file is unreliable and is *not* used |
 | Image deployed | The release commit's immutable **`:sha-<commit>`** image, checked by its revision label and deployed by digest (not `:latest`) | What runs maps 1:1 to a visible release. `:latest` is published before the release build finishes, and can move backwards (see step 5) |
-| Safety gate | **SemVer: auto for non-major, hold majors for approval** | Breaking changes (incl. destructive migrations) live in majors |
+| Safety gate | **Deploy mode** (`autonomous`, `gated-minors` (default), `manual`); a major always waits | Contract changes ship only in a minor and breaking changes in a major, so the default holds both for an admin (`docs/release-gate.md`) |
 | MCP surface | **Admin/diagnostics**, not content-authoring | Deploying is an operator action, never an instructor one |
 
 ---
@@ -171,15 +172,30 @@ mechanism without moving any student traffic:
 `deploy/chickadee-deployer.sh` (shell) + `deploy/chickadee-deployer.service`
 (systemd). The loop, every `POLL_INTERVAL_SECS` (default 300):
 
-1. Reads `command.json` (operator/MCP commands — see IPC below).
+1. Reads `command.json` (host operator commands) and then `requests/*.json`
+   (requests from the admin page), oldest first. See IPC below.
 2. Polls the **GitHub Releases API** (`/repos/<repo>/releases/latest`,
    unauthenticated — the repo is public) for the latest tag `vX.Y.Z`.
 3. If it's not newer than the deployed version (`sort -V` compare), records
    "up to date" and sleeps.
-4. Applies the **SemVer gate**: if the bump crosses `DEPLOY_GATE_LEVEL`
-   (default `major` → only major bumps held; set `minor` to also hold minor
-   bumps during the 0-series), it writes `pending_approval` and waits for an
-   `approve` command. Otherwise it proceeds automatically.
+4. Applies the **deploy mode** (`docs/release-gate.md`), read from
+   `$STATE_DIR/mode` (absent means `gated-minors`):
+
+   | Mode | Patch | Minor | Major |
+   |---|---|---|---|
+   | `autonomous` | deploys | deploys | waits |
+   | `gated-minors` (default) | deploys | waits | waits |
+   | `manual` | waits | waits | waits |
+
+   A release that waits is *held*: the state is `pending_approval`,
+   `status.json` names it in `heldVersion`, the history says so once, and the
+   daemon writes `pending-notes.json` (the GitHub release notes from the
+   deployed version up to the held one, and the merged `minor-release` pull
+   requests among them) for the admin page. It deploys after an admin approves
+   that exact version on the admin page, or after a host `approve` command.
+   The daemon reads only the newest release, so if a newer one appears first,
+   the newer one is held and needs its own approval.
+   `CHICKADEE_DEPLOY_GATE_LEVEL` is no longer read.
 5. **Stages the release image.** It resolves the commit of the release tag,
    pulls `:sha-<first 7 characters>`, and requires the image's
    `org.opencontainers.image.revision` label to equal that commit. It then tags
@@ -187,7 +203,26 @@ mechanism without moving any student traffic:
    prunes only untagged images, so a tag per release would fill the disk), and
    deploys it **by digest**. If the image is not published yet, the state is
    `waiting_for_image`: no snapshot, no swap, and a new check every poll. After
-   two hours of waiting the state becomes `stuck`.
+   two hours of waiting the state becomes `stuck`. Only the tag build in
+   `docker-build.yml` publishes this image (the push to `main` of a release
+   commit builds nothing), so if that build fails, re-run it.
+
+   **The image must be signed (#3069).** Before it tags the image, the daemon
+   runs `cosign verify-attestation` on the digest. The digest must carry a
+   Sigstore build-provenance attestation that `docker-build.yml` signed at
+   `refs/tags/<the release tag>`. The revision label alone is not enough: the
+   builder writes it, so anyone who can push to the registry can forge it. An
+   unsigned image, or one signed by a main-branch build or by another workflow,
+   is refused: the state is `waiting_for_image` and the detail names the
+   reason. cosign needs no GitHub token. The daemon installs it once into
+   `<state dir>/bin` from its GitHub release, with a pinned SHA-256, and keeps
+   Sigstore's trust root in `<state dir>/sigstore`. The host must reach
+   `github.com` and its release-asset host (the first time only), `ghcr.io`
+   and `tuf-repo-cdn.sigstore.dev`. To check an image by hand:
+
+   ```
+   cosign verify-attestation --type slsaprovenance1 --certificate-oidc-issuer https://token.actions.githubusercontent.com --certificate-identity https://github.com/JimWallace/Chickadee/.github/workflows/docker-build.yml@refs/tags/vX.Y.Z ghcr.io/jimwallace/chickadee@sha256:DIGEST
+   ```
 
    This replaced deploying `:latest`, which failed twice over. The release is
    published about 30 minutes before its own image build finishes, so the
@@ -196,6 +231,18 @@ mechanism without moving any student traffic:
    a snapshot and a runner restart). And `:latest` is pushed in the order
    builds *finish*, so it can move backwards: on 2026-09-22 the build of the
    commit before the release finished after the release's own tag build.
+
+   **While the newest release waits, an older built release goes out.** Each
+   merge to `main` makes a release, so on a day of quick merges the newest
+   release moved before its image existed, and production waited for hours:
+   on 2026-11-16 it stayed on 0.5.964 from 19:57 to after 22:32 UTC. Now,
+   when the newest release waits for its image, the daemon reads the release
+   tags (one `/repos/<repo>/tags` call) and deploys the newest older release
+   that is newer than production and has a published image (`docker manifest
+   inspect`, at most five checked). It skips a release held at the gate or
+   backed off after a failure. The history records `fallback chosen`. The
+   newest release keeps its own wait clock, so a tag build that never
+   publishes still becomes `stuck`. A disk hold sends nothing out.
 6. Runs `scripts/snapshot.sh --label predeploy-<ver>` (Postgres dump +
    artifacts) as a safety net. `SNAPSHOT_REQUIRED=1` makes a failed snapshot
    abort the deploy; the default warns and continues.
@@ -231,7 +278,7 @@ mechanism without moving any student traffic:
    drain): on SIGTERM it claims no new job and finishes the jobs it is running,
    for up to its `stop_grace_period` of 10 minutes, while other runners take new
    jobs. A job still running after that is killed and re-queued by the server's
-   `StuckSubmissionReaperMonitor`. Best-effort: this
+   `StuckSubmissionReaperService`. Best-effort: this
    runs only after the server swap is already verified healthy, so a runner hiccup
    is logged to `history.jsonl` (`runner-refresh`) but never rolls back the deploy.
    Disable with `CHICKADEE_REFRESH_RUNNER=0`. Because this step is best-effort, a
@@ -259,7 +306,7 @@ mechanism without moving any student traffic:
 ### Configuration (env / `/etc/chickadee-deployer.env`)
 
 `CHICKADEE_REPO`, `CHICKADEE_IMAGE_REPO`, `CHICKADEE_POLL_INTERVAL_SECS`,
-`CHICKADEE_DEPLOY_GATE_LEVEL` (major|minor), `CHICKADEE_SNAPSHOT_BEFORE_DEPLOY`,
+`CHICKADEE_SNAPSHOT_BEFORE_DEPLOY`,
 `CHICKADEE_SNAPSHOT_REQUIRED`, `CHICKADEE_POST_DEPLOY_VERIFY_SECS`,
 `CHICKADEE_PUBLIC_HEALTH_URL`, `CHICKADEE_STATE_DIR`,
 `CHICKADEE_REFRESH_RUNNER` (1|0, default 1), `CHICKADEE_RUNNER_SERVICE`
@@ -275,6 +322,44 @@ sudo systemctl enable --now chickadee-deployer
 journalctl -u chickadee-deployer -f
 ```
 
+### The systemd sandbox
+
+The unit runs the daemon as root inside a systemd sandbox (#3078). The file
+system is read-only except the state directory, the clone, the nginx upstream
+directory and the nginx log, temp and cache paths. The unit file lists each
+path and the script that writes it.
+
+Check three things before you install it:
+
+- The clone is at `/home/jrwallac/Chickadee`. If it is elsewhere, change
+  `WorkingDirectory`, `ExecStart` and the clone path in `ReadWritePaths`.
+- If `/etc/chickadee-deployer.env` sets `CHICKADEE_STATE_DIR` or
+  `CHICKADEE_NGINX_UPSTREAM`, add that path to `ReadWritePaths`. The path must
+  exist.
+- `nginx -t` must be able to write every log, temp and cache path that the
+  host nginx configuration names. List them with the first command below. Add
+  any path outside `/var/log/nginx`, `/var/lib/nginx` and `/var/cache/nginx`.
+
+The daemon updates its own scripts, but not its unit. A unit change reaches the
+host only when it is installed again. Install it between deploys: check that
+`get_deploy_status` does not report a deploy in progress. Then install it, and
+check the sandbox score and the log:
+
+```
+sudo nginx -T | grep -E "cache_path|temp_path|error_log|access_log|pid"
+sudo cp deploy/chickadee-deployer.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl restart chickadee-deployer
+systemd-analyze security chickadee-deployer
+journalctl -u chickadee-deployer -f
+```
+
+Then watch the next deploy in `get_deploy_history`. A sandbox fault shows as a
+`Read-only file system` error in the journal, or as status 226/NAMESPACE if a
+path is missing. To undo the sandbox, delete the lines from the
+`# --- Sandbox` heading to `[Install]` in the installed unit. Then run
+`daemon-reload` and `restart` again.
+
 ### Safe first run (recommended before enabling the service)
 
 Run it in the foreground with a short interval. Since the deployed version equals
@@ -286,9 +371,9 @@ sudo CHICKADEE_POLL_INTERVAL_SECS=30 deploy/chickadee-deployer.sh
 ```
 
 Ctrl-C, then enable the service. Its first *real* auto-deploy then happens
-naturally on the next merge to `main` (the next release). Pause anytime by
-writing `{"command":"pause"}` to `command.json`, or `sudo systemctl stop
-chickadee-deployer`.
+naturally on the next merge to `main` (the next release). Pause anytime on the
+admin page (Deployment), by writing `{"command":"pause"}` to `command.json`, or
+with `sudo systemctl stop chickadee-deployer`.
 
 ### The `deployerUnhealthy` alert
 
@@ -314,15 +399,61 @@ server's `deployerUnhealthy` rule pages on `disk_low`.
 
 ### App ⇄ daemon IPC (files in `STATE_DIR`)
 
-- `command.json` — operator/MCP → daemon: `{"command":"pause|resume|approve|rollback|deploy","version":"vX.Y.Z"}` (consumed each cycle).
-- `status.json` — daemon → readers: `state`, `deployedVersion`, `latestSeen`, `detail`, `paused`, `updatedAt`.
+- `command.json` — host operator → daemon: `{"command":"pause|resume|approve|rollback|deploy|mode|channel","version":"vX.Y.Z","mode":"...","channel":"..."}` (consumed each cycle). Only the host can write it.
+- `requests/*.json` — admin page → daemon, one file per request (see "The
+  request channel" below).
+- `mode` — the deploy mode (`autonomous`, `gated-minors`, `manual`); absent
+  means `gated-minors`.
+- `channel` — the release channel: `releases` (absent; production reads
+  GitHub `releases/latest`, which never names a pre-release) or
+  `prereleases` (the dev server reads the newest release including
+  `vX.Y.0-rc.N`). Host-only: the request channel refuses a change to it.
+  See `docs/release-gate.md`, "Pre-release channel".
+- `paused` — present while auto-deploy is paused. Pause survives a restart,
+  including the one after the daemon updates its own scripts.
+- `approved` — the release an admin approved, until it deploys. It survives
+  the same restart.
+- `pending-notes.json` — the held release's notes, for the admin page.
+- `status.json` — daemon → readers: `state`, `deployedVersion`, `latestSeen`, `detail`, `paused`, `mode`, `channel`, `heldVersion`, `approvedVersion`, `scriptsRevision`, `updatedAt`.
   `state` is one of `idle`, `deploying`, `waiting_for_image` (step 5),
   `pending_approval` (step 4), `paused`, `error` (a failed attempt; the detail
   says when the next one is), `stuck` (five failures in a row, or two hours
   waiting for an image) and `certificate_invalid` (deployed, but the public
   certificate failed verification; step 8) and `disk_low` (see below).
-- `history.jsonl` — append-only deploy log.
+- `history.jsonl` — append-only deploy log. A line for a request carries the
+  admin's `user`.
 - `deployed_version` — the daemon's source of truth for what is live.
+
+### The request channel (admin page → daemon)
+
+The app reads the state folder through a read-only mount, so that a
+compromised app can never move traffic. `bluegreen-deploy.sh` adds one more
+mount, read-write, for requests only: `$STATE_DIR/requests` on the host, at
+`/deploy-state/requests` in the container, owned by the image's user (uid
+999) with mode 0700. The path is derived from `CHICKADEE_STATE_DIR`, so no new
+variable is needed. The rest of `/deploy-state` stays read-only.
+
+The admin page writes one JSON file per request (a `.tmp` name, then renamed
+to `.json`). Each poll the daemon reads them oldest first, deletes each, and
+accepts exactly these:
+
+| Request | Accepted when |
+|---|---|
+| `{"request":"approve","version":"vX.Y.Z"}` | `vX.Y.Z` is the release the daemon is holding |
+| `{"request":"mode","mode":"autonomous"}` (or `gated-minors`, `manual`) | always |
+| `{"request":"pause"}`, `{"request":"resume"}` | always |
+
+Anything else is refused and written to the history: an unknown request, a
+`rollback` or `deploy`, a change of channel, a version that is not the held one, a file over 4 KB,
+an entry that is not a regular file. Each request, accepted or refused, is a
+line in `history.jsonl` with the admin's username, which the app writes into
+the request. The app also records each request it writes in the audit log
+(category Deployment).
+
+What a compromised app can do through this channel: deploy, sooner than
+planned, a release that CI built and the deployer would deploy anyway; change
+the mode; pause. It cannot run an image that is not a release, choose an older
+version, or roll back.
 
 ---
 
@@ -332,20 +463,22 @@ Two read tools on the admin diagnostic MCP surface let an operator/agent see
 deploy state remotely, without SSH:
 
 - `get_deploy_status` — the daemon's current `status.json` (live version, latest
-  release seen, paused flag, pending-major-approval, last update).
+  release seen, paused flag, mode, held release and its approval, last update).
 - `get_deploy_history` — the most recent `history.jsonl` entries (deploy / gate /
   rollback events), newest first.
 
-**Control stays host-side, on purpose.** The admin MCP surface is read-only *by
+**The MCP surface stays read-only.** The admin MCP surface is read-only *by
 construction* — `DiagnosticScope` has no write case, the bearer middleware
 enforces it, and a contract test asserts every tool is read-only. So
-pause/approve/rollback are **not** MCP tools; they are host actions (write
-`command.json`, or `systemctl`). To support that division safely the deploy
-state dir is mounted into the container **read-only**
-(`-v $STATE_DIR:/deploy-state:ro` in `bluegreen-deploy.sh`), so the app can *read*
-deploy state but physically cannot write `command.json` — a compromised app can
-never move traffic. The path is `Application.deployStateDirectory`
-(`CHICKADEE_DEPLOY_STATE_DIR`, default `/deploy-state`).
+pause/approve/rollback are **not** MCP tools. Approve, mode and pause/resume
+are requests from the admin page (the request channel above), which the
+daemon validates; rollback is a host action only (write `command.json`, or
+`systemctl`). The deploy state dir is mounted into the container
+**read-only** (`-v $STATE_DIR:/deploy-state:ro` in `bluegreen-deploy.sh`), with
+only `requests/` mounted read-write over it, so the app can *read* deploy
+state but physically cannot write `command.json`. The path is
+`Application.deployStateDirectory` (`CHICKADEE_DEPLOY_STATE_DIR`, default
+`/deploy-state`).
 
 Host-side control reference:
 
@@ -353,6 +486,8 @@ Host-side control reference:
 echo '{"command":"pause"}'    | sudo tee /var/lib/chickadee-deploy/command.json
 echo '{"command":"resume"}'   | sudo tee /var/lib/chickadee-deploy/command.json
 echo '{"command":"approve","version":"vX.Y.Z"}' | sudo tee /var/lib/chickadee-deploy/command.json
+echo '{"command":"mode","mode":"gated-minors"}' | sudo tee /var/lib/chickadee-deploy/command.json
+echo '{"command":"channel","channel":"prereleases"}' | sudo tee /var/lib/chickadee-deploy/command.json
 echo '{"command":"rollback"}' | sudo tee /var/lib/chickadee-deploy/command.json
 ```
 
@@ -373,11 +508,12 @@ column the old code reads) would break the old color too, and auto-rollback of t
 *container* cannot un-migrate the *data*. Mitigations:
 
 - The pre-swap **snapshot** is the recoverable backstop (`scripts/restore.sh`).
-- The **SemVer major gate** aligns the deploy gate with where breaking changes
-  belong, so a destructive migration shipped as a major is held for human
-  approval rather than auto-applied.
-- During the `0.x` series, keep migrations additive (expand-contract) or tighten
-  `DEPLOY_GATE_LEVEL` if a given release is risky.
+- The **deploy mode** aligns the deploy gate with where breaking changes
+  belong: a major always waits for human approval, and in the default mode a
+  minor does too, so a destructive migration shipped in one is never
+  auto-applied.
+- During the `0.x` series, keep migrations additive (expand-contract), or ship
+  a risky change in a minor, or switch to `manual` on the admin page.
 
 ---
 

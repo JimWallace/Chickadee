@@ -71,8 +71,13 @@ dependencies:
   # hazard: it drags in urllib3, whose emscripten module crashes the kernel on
   # import unless scripts/patch-xeus-python-http.py neuters it. See that script
   # and the urllib3 assertion in scripts/check-xeus-vendored.sh.
-  - scipy
-  - statsmodels
+  #
+  # DROPPED for v0.6: `scipy` and `statsmodels` (and with them `openblas`,
+  # which nothing else needs). They were ~27 MB of a ~69 MB env, about 40% of
+  # every boot, and no course needed them in the browser. Worker-graded
+  # assignments keep scipy, which is the runner's own Python. Revisit before the
+  # next minor: #3122. Adding one back is a lock and a re-vendor, and a
+  # contract change.
   - pillow
 
 # COST, measured — the same two-part cost the R env documents, milder here but
@@ -84,7 +89,8 @@ dependencies:
 #    range 8.2-10.1s, so treat it as "about nine seconds" and no finer.
 #
 # 2. Import, paid only by a script that uses the package. Measured with all
-#    eight of the then-shipped packages present:
+#    eight of the then-shipped packages present (before v0.6 dropped scipy and
+#    statsmodels):
 #
 #      scikit-learn 10.8s | sympy 5.9s | pandas 4.8s | matplotlib 1.3s
 #      numpy 0.9s | statsmodels 0.3s | scipy 0.1s | PIL 0.0s
@@ -94,13 +100,11 @@ dependencies:
 #    teaches. (Ordering matters as it does in R: scipy measures 0.1s only because
 #    numpy and pandas came first in that run.)
 #
-# WHERE THE SIZE IS, which is not where the import cost is. `openblas` is 16 MB,
-# the largest single package here, and NOTHING but scipy needs it — numpy does
-# not. scipy (11 MB) plus openblas is therefore ~27 MB of a ~69 MB env, or about
-# 40% of everyone's boot payload, for a package whose *import* is nearly free.
-# statsmodels is the only remaining reason scipy is here. Dropping both is the
-# single biggest boot saving available, and is a live option if no lab needs
-# them — it is a course decision, not an engineering one.
+# WHERE THE SIZE WAS, which is not where the import cost is. `openblas` was
+# 16 MB, the largest single package, and NOTHING but scipy needed it — numpy
+# does not. scipy (11 MB) plus openblas was ~27 MB of a ~69 MB env, about 40% of
+# everyone's boot payload, for a package whose *import* was nearly free. That is
+# why scipy and statsmodels were dropped for v0.6 (#3122).
 #
 # Both costs argue for restraint. The env is not a place to put things that
 # might be handy — every addition is paid at boot by everyone, and a heavy

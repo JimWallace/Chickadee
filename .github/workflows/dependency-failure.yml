@@ -16,6 +16,7 @@ name: Dependency update failure
 # from that run and never checks out or executes the PR's code.
 
 on:
+  # zizmor: ignore[dangerous-triggers] -- reads only the watched run's metadata and logs; never checks out or runs its code.
   workflow_run:
     # The workflows that test a pull request, plus the two that land
     # Dependabot's. Names, not file names: workflow_run matches on `name:`.
@@ -24,7 +25,7 @@ on:
       - JupyterLite
       - Browser probes
       - Browser grading smoke test
-      - CodeQL (JS/TS)
+      - CodeQL
       - Re-vendor xeus kernels
       - Dependabot auto-merge
     types: [completed]
@@ -53,7 +54,7 @@ jobs:
       BRANCH: ${{ github.event.workflow_run.head_branch }}
       SHA: ${{ github.event.workflow_run.head_sha }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           # main, for scripts/dependency-issue.sh and the sanitizer.
           persist-credentials: false

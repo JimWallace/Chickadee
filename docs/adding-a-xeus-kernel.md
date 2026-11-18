@@ -153,10 +153,22 @@ kernel itself.
 silently and ships with no index at all — on-demand loading then resolves nothing
 and the authoring import guard has no package list to check against.
 
-### 2. Vendor it
+### 2. Lock it, then vendor it
 
-Run `.github/workflows/revendor-kernels.yml` (workflow_dispatch). It installs
-micromamba, builds, and commits the result. **Do not hand-edit anything under
+The build installs each kernel from its lock and never solves an environment
+file. Lock the new environment, with micromamba on PATH and network to
+`repo.prefix.dev`:
+
+```bash
+scripts/lock-kernel-envs.py
+```
+
+Commit the new `Tools/jupyterlite/locks/environment-<lang>-lock.yml` with the
+environment file. Without it the build stops and `scripts/lock-kernel-envs.py
+--check` fails the JupyterLite job.
+
+Then run `.github/workflows/revendor-kernels.yml` (workflow_dispatch). It installs
+micromamba, builds from the locks, and commits the result. **Do not hand-edit anything under
 `Public/jupyterlite/`** — it is generated output.
 
 Locally, if you have micromamba and network to `repo.prefix.dev`:
@@ -212,7 +224,7 @@ reads each file's own `name:` field to find the directory it vendors into, so
 the `chickadee-*` glob above notably does not have. `.github/workflows/
 kernel-currency.yml` runs it weekly and goes red when a re-vendor would change
 what ships, then dispatches the re-vendor in publish mode, which opens the
-update as an auto-merging pull request. It is the only thing that ever says a
+update as a `minor-release` pull request, which does not auto-merge. It is the only thing that ever says a
 kernel has moved: nothing in this repository changes when upstream publishes
 one, and Dependabot cannot
 watch the environments (its `conda` ecosystem needs a file named
@@ -317,7 +329,10 @@ an uncaught error with its message on stderr, and — if the language has packag
 
 - **A guard that compares the vendored tree to itself proves nothing about
   intent.** `check-env-vendored-sync.sh` is the one that compares declared YAML
-  to shipped bytes. Keep your env in it.
+  to shipped bytes: every dependency line against the `specs` the vendored
+  env was built from, both ways. It finds your env by globbing
+  `environment-*.yml`, as `build-jupyterlite.sh` does, so there is no list to
+  add it to.
 - **"Is a newer version published?" is the wrong question, and it answers
   itself wrongly with total confidence.** The currency check was first written
   to read repodata and compare versions. It reported three of the four

@@ -26,14 +26,15 @@ name: Re-vendor xeus kernels
 # channels.
 #
 # PUBLISH MODE (`publish: true`). This is how kernels ship without a person.
-# kernel-currency.yml dispatches it only when the channels have moved, because
-# a diff cannot decide that: xpython.wasm differs by 16 bytes on every build
-# (see below). It rebuilds from `main`, verifies, puts the rebuild and a
-# changelog fragment on a new `kernels/revendor-<run id>` branch, opens a pull
-# request and enables auto-merge. The pull request's CI, the browser grading
-# and editor smoke included, tests the new kernels before they merge, and
-# auto-release then deploys them like any other merge. If a re-vendor pull
-# request is already open, it does nothing.
+# kernel-currency.yml dispatches it only when the channels have moved, which
+# only a solve can tell. It locks the environments again, rebuilds from
+# `main`, verifies, puts the new locks, the rebuild and a
+# changelog fragment on a new `kernels/revendor-<run id>` branch, and opens a
+# pull request labelled `minor-release`. The pull request's CI, the browser
+# grading and editor smoke included, tests the new kernels. It does NOT enable
+# auto-merge: a kernel re-vendor changes the student contract, so it waits to
+# merge just before a minor is cut by hand (docs/release-gate.md). If a
+# re-vendor pull request is already open, it does nothing.
 #
 # WHOSE TOKEN. Both pushing modes push with the RELEASE_TOKEN secret, the one
 # auto-release.yml uses. A commit run on a Dependabot branch, which
@@ -41,12 +42,12 @@ name: Re-vendor xeus kernels
 # only Dependabot secrets, so the commit step tries DEPENDABOT_MERGE_TOKEN
 # first. GITHUB_TOKEN cannot do either job: the branch ruleset
 # rejects its push (GH013, "Required status check editor-smoke-gate is
-# expected"), and a pull request opened with it starts no CI, so auto-merge
-# would merge untested kernels or wait forever. Publish mode refuses to run
+# expected"), and a pull request opened with it starts no CI, so its kernels
+# would never be tested. Publish mode refuses to run
 # without RELEASE_TOKEN.
 #
 # Auto-release needs only Contents: read & write from that token. Publish mode
-# also opens a pull request and enables auto-merge, so it needs Pull requests:
+# also opens and labels a pull request, so it needs Pull requests:
 # read & write too. Without it the branch push succeeds and `gh pr create`
 # fails with "Resource not accessible by personal access token
 # (createPullRequest)" (docs/release-process.md).
@@ -58,25 +59,27 @@ name: Re-vendor xeus kernels
 # redirect a push with `url.<base>.insteadOf`. So `revendor` builds and
 # verifies with no secret and a read-only GITHUB_TOKEN, and writes the rebuild
 # as a patch artifact. `land`, on a new runner, refuses the patch unless every
-# file in it is under Public/jupyterlite or is Tools/jupyterlite/jupyter-lite.json
-# (scripts/regenerated-patch.sh), then commits, pushes and opens the pull
+# file in it is under Public/jupyterlite or Tools/jupyterlite/locks, or is
+# Tools/jupyterlite/jupyter-lite.json (scripts/regenerated-patch.sh), then commits, pushes and opens the pull
 # request.
 #
 # ONLY `workflow_dispatch` commits. A pull_request run rebuilds and verifies but
-# never pushes, and that is not caution — it is required for termination.
-# `xpython.wasm` embeds the absolute path of the temp directory it was built in
-# (`/tmp/tmpXXXXXXXX/_env/envs/chickadee-python`), which `tempfile` randomises
-# per run. The kernel is therefore NOT byte-reproducible: two builds of the same
-# environment differ, by exactly those 16 bytes and nothing else. An
-# auto-committing PR trigger would push a new commit, which would re-trigger
-# itself, which would produce a different path again — forever.
+# never pushes. Pushing from it would also need a token in a job that runs
+# third-party code (see THE TOKEN STAYS OUT OF THE BUILD above).
 #
-# A PR run is still worth its minutes: it proves the environment still solves and
-# the kernel still boots, which is how the urllib3 import crash was found. When
-# it reports a diff, dispatch the workflow to land one.
+# A PR RUN NOW PROVES THE COMMITTED BYTES. The build is byte-reproducible: each
+# kernel is installed from its lock at a fixed path, and every archive is
+# written with no time or owner (docs/jupyterlite.md). It used to differ on
+# every run, by the random build directory written into `xpython.wasm`, so a
+# PR run could only say that the environments still solved. Now it rebuilds
+# from the locks and FAILS when the result is not exactly what is committed:
+# a lock, a pin or a build script changed and the kernels were not re-vendored,
+# or something in the build stopped being reproducible. Either way, dispatch
+# this workflow on the branch to land a rebuild, and if the next PR run still
+# differs, the build has lost its reproducibility. That is a bug to fix, not
+# a diff to land again.
 #
-# Fork PRs additionally cannot be pushed to from here at all, so they are
-# verify-only by both rules.
+# Fork PRs cannot be pushed to from here at all.
 
 on:
   workflow_dispatch:
@@ -86,7 +89,7 @@ on:
         type: boolean
         default: true
       publish:
-        description: "Instead: rebuild from main and open an auto-merging pull request"
+        description: "Instead: rebuild from main and open a minor-release pull request (it does not auto-merge)"
         type: boolean
         default: false
       branch:
@@ -96,7 +99,11 @@ on:
   pull_request:
     paths:
       - "Tools/jupyterlite/environment-*.yml"
+      - "Tools/jupyterlite/requirements.in"
       - "Tools/jupyterlite/requirements.txt"
+      - "Tools/jupyterlite/locks/**"
+      - "scripts/lock-kernel-envs.py"
+      - "scripts/create-kernel-prefix.py"
       - "Tools/jupyterlite/jupyter-lite.json"
       - "scripts/build-jupyterlite.sh"
       - "scripts/setup-jupyterlite.sh"
@@ -158,15 +165,15 @@ jobs:
           if [ -n "$open" ]; then
             echo "skip=true" >> "$GITHUB_OUTPUT"
             # A warning, not only a summary line: an open re-vendor pull request
-            # that is red, or whose auto-merge failed, holds every later
-            # publish, and nothing else would say so.
+            # waits for the next minor (docs/release-gate.md) and holds every
+            # later publish until then, and nothing else would say so.
             echo "::warning::A re-vendor pull request is still open, so no new one is published: $open"
             echo "A re-vendor pull request is still open, so this run publishes nothing: $open" >> "$GITHUB_STEP_SUMMARY"
           else
             echo "skip=false" >> "$GITHUB_OUTPUT"
           fi
 
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         if: steps.gate.outputs.skip != 'true'
         with:
           # Publish mode builds from main. Otherwise this is the branch the
@@ -182,7 +189,7 @@ jobs:
         if: steps.gate.outputs.skip != 'true'
         run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
-      - uses: actions/setup-python@v7
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         if: steps.gate.outputs.skip != 'true'
         with:
           # Must match the kernel's own Python (currently 3.13). The derived
@@ -196,6 +203,14 @@ jobs:
         if: steps.gate.outputs.skip != 'true'
         run: scripts/install-micromamba.sh
 
+      # Publish mode exists to move the kernels to their channels' current
+      # builds. The build installs only what the locks name, so lock again
+      # first; the new locks travel in the patch with the rebuilt bytes. Every
+      # other mode builds the committed locks unchanged.
+      - name: Lock the environments again (publish mode)
+        if: steps.gate.outputs.skip != 'true' && env.PUBLISH == 'true'
+        run: scripts/lock-kernel-envs.py
+
       - name: Report the toolchain
         if: steps.gate.outputs.skip != 'true'
         run: |
@@ -206,7 +221,7 @@ jobs:
       # env files so a rebuild triggered by anything else reuses the packages.
       - name: Cache the empack package downloads
         if: steps.gate.outputs.skip != 'true'
-        uses: actions/cache@v6
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.cache/empack
           key: empack-${{ hashFiles('Tools/jupyterlite/environment-*.yml') }}
@@ -223,7 +238,7 @@ jobs:
           python3 - <<'PY'
           import pathlib, re
           pin = re.search(r"^jupyterlite==(\S+)$",
-                          pathlib.Path("Tools/jupyterlite/requirements.txt").read_text(),
+                          pathlib.Path("Tools/jupyterlite/requirements.in").read_text(),
                           re.M).group(1)
           path = pathlib.Path("Tools/jupyterlite/jupyter-lite.json")
           text = path.read_text()
@@ -240,7 +255,7 @@ jobs:
         if: steps.gate.outputs.skip != 'true'
         run: scripts/setup-jupyterlite.sh
 
-      - name: Rebuild the bundle and both xeus kernels
+      - name: Rebuild the bundle and the xeus kernels
         if: steps.gate.outputs.skip != 'true'
         env:
           MAMBA_ROOT_PREFIX: ${{ runner.temp }}/mamba
@@ -261,15 +276,11 @@ jobs:
         id: diff
         run: |
           set -euo pipefail
-          if git diff --quiet -- Public/jupyterlite Tools/jupyterlite; then
+          # `git status`, not `git diff`: a rebuild that renames an archive
+          # writes it as a new, untracked file, which `git diff` does not see.
+          if [ -z "$(git status --porcelain -- Public/jupyterlite Tools/jupyterlite)" ]; then
             echo "changed=false" >> "$GITHUB_OUTPUT"
-            {
-              echo "The rebuild reproduced the committed bytes exactly."
-              echo ""
-              echo "Note this is unexpected for the Python kernel: xpython.wasm"
-              echo "embeds its build temp path, so it normally differs by 16 bytes"
-              echo "between any two builds."
-            } >> "$GITHUB_STEP_SUMMARY"
+            echo "The rebuild reproduced the committed bytes exactly." >> "$GITHUB_STEP_SUMMARY"
             exit 0
           fi
           echo "changed=true" >> "$GITHUB_OUTPUT"
@@ -277,7 +288,7 @@ jobs:
             echo "### Re-vendored kernel diff"
             echo ""
             echo '```'
-            git diff --stat -- Public/jupyterlite | tail -25
+            git status --short -- Public/jupyterlite Tools/jupyterlite | tail -25
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
 
@@ -291,9 +302,9 @@ jobs:
         run: |
           set -euo pipefail
           scripts/regenerated-patch.sh make "$RUNNER_TEMP/revendor.patch" \
-            Public/jupyterlite Tools/jupyterlite/jupyter-lite.json
+            Public/jupyterlite Tools/jupyterlite/locks Tools/jupyterlite/jupyter-lite.json
 
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: >-
           steps.diff.outputs.changed == 'true'
           && github.event_name == 'workflow_dispatch'
@@ -304,18 +315,21 @@ jobs:
           retention-days: 3
           if-no-files-found: error
 
-      - name: Report a verify-only run
-        if: steps.diff.outputs.changed != 'false' && github.event_name == 'pull_request'
+      # The committed kernels must be exactly what this branch's locks, pins
+      # and build scripts produce. See A PR RUN NOW PROVES THE COMMITTED BYTES.
+      - name: The committed kernels are what the locks build
+        if: steps.diff.outputs.changed == 'true' && github.event_name == 'pull_request'
         run: |
           {
-            echo "### Verify-only run"
+            echo "### The committed kernels are not what this branch builds"
             echo ""
-            echo "The environment solved and the kernel built and verified."
-            echo "Nothing was committed — see the header of this workflow for why"
-            echo "a pull_request trigger must not push."
-            echo ""
-            echo "To land a rebuild, run this workflow manually on this branch."
+            echo "The rebuild from the locks differs from the committed bytes (the"
+            echo "file list is above). Run this workflow manually on this branch to"
+            echo "commit the rebuild. If a PR run still differs after that, the"
+            echo "build is no longer reproducible; see the header of this workflow."
           } >> "$GITHUB_STEP_SUMMARY"
+          echo "::error::The committed Public/jupyterlite is not what this branch builds. Dispatch revendor-kernels.yml on this branch to land the rebuild."
+          exit 1
 
   # Commits, pushes and opens the pull request. Holds the push token, and runs
   # no third-party code: it checks out the commit the build started from,
@@ -335,14 +349,29 @@ jobs:
     env:
       PUBLISH: ${{ github.event_name == 'workflow_dispatch' && inputs.publish }}
     steps:
-      - uses: actions/checkout@v7
+      # Egress allowlist (#3075). This job holds the push token. A step that
+      # reaches any other host fails, so a compromised dependency cannot send a
+      # token out. A new host that a change really needs goes on this list, in
+      # the same change.
+      - name: Restrict network egress
+        uses: step-security/harden-runner@1d88384fd173af6ecb012dfd0264a306b711241a # v2.22.4
+        with:
+          egress-policy: block
+          disable-telemetry: true
+          allowed-endpoints: >
+            github.com:443
+            api.github.com:443
+            results-receiver.actions.githubusercontent.com:443
+            *.blob.core.windows.net:443
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         if: needs.revendor.outputs.changed == 'true'
         with:
           ref: ${{ needs.revendor.outputs.sha }}
           persist-credentials: false
 
       # The checker from main, not from the branch being pushed to.
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         if: needs.revendor.outputs.changed == 'true'
         with:
           ref: main
@@ -351,7 +380,7 @@ jobs:
           sparse-checkout-cone-mode: false
           persist-credentials: false
 
-      - uses: actions/download-artifact@v8
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         if: >-
           needs.revendor.outputs.changed == 'true'
           && (env.PUBLISH == 'true' || inputs.commit)
@@ -383,11 +412,11 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           .trusted/scripts/regenerated-patch.sh apply "$RUNNER_TEMP/revendor/revendor.patch" \
-            Public/jupyterlite Tools/jupyterlite/jupyter-lite.json
+            Public/jupyterlite Tools/jupyterlite/locks Tools/jupyterlite/jupyter-lite.json
           git commit -m "chore(jupyterlite): re-vendor the xeus kernels
 
           Rebuilt by .github/workflows/revendor-kernels.yml from
-          Tools/jupyterlite/environment-*.yml. Regenerated bytes only."
+          Tools/jupyterlite/locks/. Regenerated bytes only."
           for attempt in 1 2 3 4; do
             if git push origin HEAD:"$TARGET"; then
               exit 0
@@ -399,9 +428,11 @@ jobs:
           exit 1
 
       # A Dependabot branch whose rebuild reproduced the committed bytes gets no
-      # commit, so no run of dependabot-auto.yml follows to enable auto-merge.
-      # Enable it here instead; the required checks still decide.
-      - name: Enable auto-merge on an unchanged Dependabot branch
+      # commit. Its pin bump still changes the student contract
+      # (Tools/jupyterlite/requirements.txt), so it gets the `minor-release`
+      # label and waits for the next minor; auto-merge stays off
+      # (docs/release-gate.md).
+      - name: Label an unchanged Dependabot branch minor-release
         if: >-
           needs.revendor.outputs.changed == 'false'
           && startsWith(inputs.branch, 'dependabot/')
@@ -410,7 +441,7 @@ jobs:
           BRANCH: ${{ inputs.branch }}
         run: |
           set -euo pipefail
-          gh pr merge "$BRANCH" --repo "$GITHUB_REPOSITORY" --auto --merge
+          gh pr edit "$BRANCH" --repo "$GITHUB_REPOSITORY" --add-label minor-release
 
       # Publish mode: the rebuild goes onto its own branch from main, with the
       # changelog fragment every merge to main needs, and reaches main only
@@ -427,27 +458,27 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git switch -c "$BRANCH"
           .trusted/scripts/regenerated-patch.sh apply "$RUNNER_TEMP/revendor/revendor.patch" \
-            Public/jupyterlite Tools/jupyterlite/jupyter-lite.json
+            Public/jupyterlite Tools/jupyterlite/locks Tools/jupyterlite/jupyter-lite.json
           cat > "changelog.d/revendor-kernels-${GITHUB_RUN_ID}.md" <<'EOF'
           ### Changed
 
           - **The xeus kernels are re-vendored to their channels' current builds.**
-            The weekly kernel currency check found the vendored kernels behind
-            `emscripten-forge-4x`. `.github/workflows/revendor-kernels.yml` rebuilt
-            `Public/jupyterlite/` from the unchanged `Tools/jupyterlite/environment-*.yml`
-            files and verified it before this pull request was opened.
+            `.github/workflows/revendor-kernels.yml` locked the unchanged
+            `Tools/jupyterlite/environment-*.yml` files again
+            (`Tools/jupyterlite/locks/`), rebuilt `Public/jupyterlite/` from the new
+            locks and verified it before this pull request was opened.
           EOF
           git add "changelog.d/revendor-kernels-${GITHUB_RUN_ID}.md"
           git commit -m "chore(jupyterlite): re-vendor the xeus kernels
 
-          Rebuilt by .github/workflows/revendor-kernels.yml (publish mode) from
-          Tools/jupyterlite/environment-*.yml. Regenerated bytes and a changelog
-          fragment only."
+          Locked again and rebuilt by .github/workflows/revendor-kernels.yml
+          (publish mode) from Tools/jupyterlite/environment-*.yml. New locks,
+          regenerated bytes and a changelog fragment only."
           git push origin "HEAD:refs/heads/$BRANCH"
           {
-            echo "The weekly kernel currency check found the vendored kernels behind their channels, so this workflow rebuilt them from \`main\` and verified them with \`check-env-vendored-sync.sh\`, \`check-xeus-vendored.sh\` and \`verify-jupyterlite.sh\`."
+            echo "This workflow rebuilt the vendored kernels from \`main\` against their channels and verified them with \`check-env-vendored-sync.sh\`, \`check-xeus-vendored.sh\` and \`verify-jupyterlite.sh\`."
             echo ""
-            echo "This pull request's CI, the browser grading and editor smoke included, tests the new kernels. Auto-merge is on; a red check holds it."
+            echo "This pull request's CI, the browser grading and editor smoke included, tests the new kernels. A kernel re-vendor changes the student contract, so this pull request carries the \`minor-release\` label and does not auto-merge. Merge it just before the next minor is cut by hand (docs/release-gate.md)."
             echo ""
             echo "Workflow run: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
             echo ""
@@ -455,13 +486,12 @@ jobs:
             git diff --stat HEAD~1 -- Public/jupyterlite | tail -25
             echo '```'
           } > /tmp/pr-body.md
-          if ! url="$(gh pr create --base main --head "$BRANCH" \
+          gh label create minor-release --repo "$GITHUB_REPOSITORY" --color 5319E7 \
+            --description "Changes the student contract; ships in the next minor (docs/release-gate.md)" \
+            >/dev/null 2>&1 || true
+          if ! url="$(gh pr create --base main --head "$BRANCH" --label minor-release \
             --title "Re-vendor the xeus kernels" --body-file /tmp/pr-body.md)"; then
             echo "::error::Pushed $BRANCH but could not open its pull request. RELEASE_TOKEN needs Pull requests: read & write as well as Contents: read & write (docs/release-process.md). Open the pull request from $BRANCH by hand, or grant the permission, delete $BRANCH and dispatch a new run."
             exit 1
           fi
-          if ! gh pr merge --auto --merge "$url"; then
-            echo "::error::Opened $url but could not enable auto-merge. It holds every later publish until it is merged or closed."
-            exit 1
-          fi
-          echo "Opened $url with auto-merge on." >> "$GITHUB_STEP_SUMMARY"
+          echo "Opened $url with the minor-release label. It waits for the next minor (docs/release-gate.md)." >> "$GITHUB_STEP_SUMMARY"

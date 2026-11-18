@@ -112,7 +112,9 @@ extension MCPOAuthRoutes {
             permittedRoleLabel: surface.permittedRoleLabel,
             purposeLabel: surface.purposeLabel,
             requestToken: requestToken,
-            readsStudentAnswers: scopes.contains(ContentScope.feedbackRead.rawValue))
+            readsStudentAnswers: scopes.contains(ContentScope.feedbackRead.rawValue),
+            signedInAs: user.username,
+            returnTo: req.url.string)
         return try await renderConsent(req, consent: consent)
     }
 

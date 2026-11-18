@@ -4,6 +4,8 @@ guard="scripts/check-css-vars.sh"
 files="Public/styles.css"
 description="a --gray-N step with no value in a dark block"
 expect="a grey step has no dark-mode value"
+# The address `1,/re/` deletes only the first match because line 1 of
+# styles.css does not match. It is the portable form of GNU-only `0,/re/`.
 apply() {
-    sed -i '0,/--gray-300: #374151;/{/--gray-300: #374151;/d}' Public/styles.css
+    sed_inplace '1,/--gray-300: #374151;/{/--gray-300: #374151;/d;}' Public/styles.css
 }

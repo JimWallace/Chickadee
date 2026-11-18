@@ -403,7 +403,7 @@ actor WorkerDaemon {
     /// allowlisted environment (no worker secrets).
     func runMake(in directory: URL, target: String?) async throws(WorkerDaemonError) {
         let timeLimitSeconds = max(1, config.makeTimeoutSeconds)
-        // Through the job's script runner, so `--sandbox` covers `make` and
+        // Through the job's script runner, so the sandbox covers `make` and
         // everything a makefile runs, as it covers the test scripts (#2250).
         let output = await runner.run(
             command: "/usr/bin/make",

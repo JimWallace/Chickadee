@@ -17,6 +17,14 @@ no kernel reads at run time:
   The loader adds `lib/libxeus.so` to that list for every kernel. The copy in
   the package is never read. For Octave this is 52 MB.
 
+Every archive is also NORMALIZED: each member gets mtime 0, uid and gid 0
+and no owner names, and the gzip header has no timestamp. empack packs each
+package with the time and the user of the install, so before this no two
+builds of the same lock gave the same archive bytes, and an upstream-named
+archive changed bytes on every re-vendor while keeping its name. An archive
+that only normalization changes keeps its upstream name: the files in it are
+the same, so a browser that cached the earlier bytes has the same files.
+
 Each archive that loses a file is rewritten, and then renamed to carry the hash
 of its new bytes, through `content_address` in `patch-xeus-python-http.py`.
 The server caches `kernel_packages/` as immutable, so a name must never get
@@ -95,14 +103,34 @@ def load_content_address():
     return module.content_address
 
 
-def prune_archive(archive: pathlib.Path, shared: set[str]) -> int:
-    """Rewrite one archive without its prunable members. Returns the number of
-    bytes removed, or 0 when the archive holds nothing to remove."""
+def normalized(member: tarfile.TarInfo) -> tarfile.TarInfo:
+    """`member` with no time or owner, so the bytes depend on content only."""
+    member = member.replace(mtime=0, uid=0, gid=0, uname="", gname="", deep=False)
+    member.pax_headers = {}
+    return member
+
+
+def is_normalized(member: tarfile.TarInfo) -> bool:
+    return (member.mtime == 0 and member.uid == 0 and member.gid == 0
+            and member.uname == "" and member.gname == "" and not member.pax_headers)
+
+
+def gzip_has_timestamp(archive: pathlib.Path) -> bool:
+    with open(archive, "rb") as raw:
+        header = raw.read(8)
+    return len(header) == 8 and header[4:8] != b"\0\0\0\0"
+
+
+def prune_archive(archive: pathlib.Path, shared: set[str]) -> int | None:
+    """Rewrite one archive normalized and without its prunable members.
+    Returns the number of bytes removed, 0 when it removed nothing but the
+    archive was rewritten to normalize it, or None when it was left alone."""
     with tarfile.open(archive, "r:gz") as source:
         members = source.getmembers()
         removed = [m for m in members if m.isfile() and prunable(m.name, shared)]
-        if not removed:
-            return 0
+        if not removed and all(is_normalized(m) for m in members) \
+                and not gzip_has_timestamp(archive):
+            return None
         removed_names = {m.name for m in removed}
         # A link to a removed file would be written back dangling. No vendored
         # archive has a link today, so stop and make a person decide.
@@ -123,7 +151,7 @@ def prune_archive(archive: pathlib.Path, shared: set[str]) -> int:
                     if member.name in removed_names:
                         continue
                     data = source.extractfile(member) if member.isfile() else None
-                    out.addfile(member, data)
+                    out.addfile(normalized(member), data)
             os.replace(temp_name, archive)
         except BaseException:
             pathlib.Path(temp_name).unlink(missing_ok=True)
@@ -147,6 +175,8 @@ def main() -> None:
         total = 0
         for archive in sorted((env_dir / "kernel_packages").glob("*.tar.gz")):
             removed = prune_archive(archive, shared)
+            if removed is None:
+                continue
             if removed:
                 renamed = content_address(archive)
                 print(f"prune-kernel-packages: {env_dir.name}/{renamed.name}: "

@@ -1,4 +1,14 @@
-name: CodeQL (JS/TS)
+name: CodeQL
+
+# Three CodeQL analyses. The JS/TS job keeps its name, because
+# "Analyze (javascript-typescript)" is a required check on main. The second
+# job adds two languages (#3073):
+#   - actions: the workflows themselves. It finds an untrusted value that
+#     reaches a shell, a privileged trigger that runs PR code, and token
+#     permissions that are too wide.
+#   - python: the scripts under scripts/ and Tools/.
+# Neither needs a build. Swift is not here: CodeQL's Swift extractor needs a
+# full build on macOS, which costs more than it finds in this code today.
 
 on:
   push:
@@ -11,10 +21,7 @@ on:
   schedule:
     - cron: '0 6 * * 1'
 
-permissions:
-  security-events: write
-  contents: read
-  actions: read
+permissions: {}
 
 # Cancel superseded PR runs; main pushes / merge-queue / scheduled runs are
 # never cancelled (their group key is the unique ref).
@@ -27,10 +34,16 @@ jobs:
     name: Analyze (javascript-typescript)
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    permissions:
+      # Upload the results to code scanning.
+      security-events: write
+      contents: read
+      actions: read
 
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          persist-credentials: false
           fetch-depth: 1
 
       # Skip the analysis on PRs that touch no JS/TS at all (pure-Swift or
@@ -51,7 +64,7 @@ jobs:
 
       - name: Initialize CodeQL
         if: steps.detect.outputs.relevant == 'true'
-        uses: github/codeql-action/init@v4
+        uses: github/codeql-action/init@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
         with:
           languages: javascript-typescript
           paths-ignore: |
@@ -59,6 +72,42 @@ jobs:
 
       - name: Perform CodeQL Analysis
         if: steps.detect.outputs.relevant == 'true'
-        uses: github/codeql-action/analyze@v4
+        uses: github/codeql-action/analyze@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
         with:
           category: "/language:javascript-typescript"
+
+  analyze-other:
+    name: Analyze (${{ matrix.language }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      # Upload the results to code scanning.
+      security-events: write
+      contents: read
+      actions: read
+    strategy:
+      fail-fast: false
+      matrix:
+        language: [actions, python]
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: none
+          # Vendored and generated code is not ours to fix.
+          paths-ignore: |
+            Public/jupyterlite/**
+            Public/vendor/**
+            **/node_modules/**
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
+        with:
+          category: "/language:${{ matrix.language }}"

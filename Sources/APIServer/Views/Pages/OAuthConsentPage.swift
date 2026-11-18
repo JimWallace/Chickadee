@@ -27,6 +27,12 @@ struct OAuthConsentPage: HTML {
     /// True when the grant includes `feedback:read`: the consent note must not
     /// say the agent cannot reach student data (docs/ai-assisted-feedback.md).
     let readsStudentAnswers: Bool
+    /// The signed-in account's username, shown so the human can see which
+    /// account this grant would belong to.
+    let signedInAs: String
+    /// This authorize request's own path + query. The switch-account form posts
+    /// it back so the human returns to this same request after signing in again.
+    let returnTo: String
 
     var body: some HTML {
         BaseLayout(title: "Authorize agent", page: page) {
@@ -43,7 +49,22 @@ struct OAuthConsentPage: HTML {
                 } else {
                     consent
                 }
+                switchAccount
             }
+        }
+    }
+
+    /// "Signed in as X" plus a way out: one account can be an instructor (for
+    /// the content surface) and another an admin (for diagnostics), and the
+    /// browser session decides which one this screen uses.
+    @HTMLBuilder private var switchAccount: some HTML {
+        form(.class("auth-alt"), .method(.post), .action(MCPOAuthRoutes.switchAccountPath)) {
+            CSRFField(token: page.csrfToken)
+            input(.type(.hidden), .name("return_to"), .value(returnTo))
+            "Signed in as "
+            strong { signedInAs }
+            ". "
+            button(.class("btn-link"), .type(.submit)) { "Use a different account" }
         }
     }
 

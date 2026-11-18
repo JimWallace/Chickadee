@@ -122,11 +122,13 @@ func studentBestGradePercentBySetup(
 // MARK: - By-student variants (instructor roster, #1382 item 6)
 
 /// Per-student submission summary for one assignment's setup: the latest
-/// submission's id and the attempt count — `studentSubmissionSummaryBySetup`
-/// partitioned by student instead of by setup, for the instructor
-/// assignment-submissions roster.
+/// submission's id and time, and the attempt count —
+/// `studentSubmissionSummaryBySetup` partitioned by student instead of by
+/// setup, for the instructor assignment-submissions roster. The time comes
+/// from the same ranked row, so the roster needs no second read by id.
 struct SetupStudentSubmissionSummary {
     let latestSubmissionID: String
+    let latestSubmittedAt: Date?
     let submissionCount: Int
 }
 
@@ -141,17 +143,19 @@ func submissionSummaryByStudent(
     struct SummaryRow: Decodable {
         let userID: UUID
         let id: String
+        let submittedAt: Date?
         let total: Int
         enum CodingKeys: String, CodingKey {
             case userID = "user_id"
             case id
+            case submittedAt = "submitted_at"
             case total
         }
     }
     let rows = try await sql.raw(
         """
-        SELECT user_id, id, total FROM (
-            SELECT user_id, id,
+        SELECT user_id, id, submitted_at, total FROM (
+            SELECT user_id, id, submitted_at,
                 ROW_NUMBER() OVER (
                     PARTITION BY user_id
                     ORDER BY submitted_at DESC, attempt_number DESC
@@ -167,7 +171,7 @@ func submissionSummaryByStudent(
     ).all(decoding: SummaryRow.self)
     return rows.reduce(into: [:]) {
         $0[$1.userID] = SetupStudentSubmissionSummary(
-            latestSubmissionID: $1.id, submissionCount: $1.total)
+            latestSubmissionID: $1.id, latestSubmittedAt: $1.submittedAt, submissionCount: $1.total)
     }
 }
 
@@ -259,6 +263,7 @@ private func submissionSummaryByStudentViaFluent(
         .sort(\.$attemptNumber, .descending)
         .field(\.$id)
         .field(\.$userID)
+        .field(\.$submittedAt)
         .all()
     var summary: [UUID: SetupStudentSubmissionSummary] = [:]
     for row in rows {
@@ -266,10 +271,11 @@ private func submissionSummaryByStudentViaFluent(
         if let existing = summary[userID] {
             summary[userID] = SetupStudentSubmissionSummary(
                 latestSubmissionID: existing.latestSubmissionID,
+                latestSubmittedAt: existing.latestSubmittedAt,
                 submissionCount: existing.submissionCount + 1)
         } else {
             summary[userID] = SetupStudentSubmissionSummary(
-                latestSubmissionID: id, submissionCount: 1)
+                latestSubmissionID: id, latestSubmittedAt: row.submittedAt, submissionCount: 1)
         }
     }
     return summary

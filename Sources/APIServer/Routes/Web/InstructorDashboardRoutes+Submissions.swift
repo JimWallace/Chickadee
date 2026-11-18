@@ -73,25 +73,10 @@ extension InstructorDashboardRoutes {
         let bestByStudentID = try await bestFetch
         let disagreeingStudentIDs = try await disagreementFetch
 
-        // The latest submission per student, refetched as O(students) rows
-        // for their timestamps.
-        let latestIDs = summaryByStudentID.values.map(\.latestSubmissionID)
-        let latestRows =
-            latestIDs.isEmpty
-            ? []
-            : try await APISubmission.query(on: req.db)
-                .filter(\.$id ~~ latestIDs)
-                // The row reads only the id and the time.
-                .field(\.$id)
-                .field(\.$submittedAt)
-                .all()
-        let latestRowByID = Dictionary(
-            latestRows.compactMap { row in row.id.map { ($0, row) } },
-            uniquingKeysWith: { first, _ in first })
-
+        // The summary carries each latest submission's id and time, so the
+        // roster needs no second read by id.
         let lookups = StudentRowLookups(
             summaryByStudentID: summaryByStudentID,
-            latestRowByID: latestRowByID,
             bestByStudentID: bestByStudentID,
             overrideByStudentID: overrideByStudentID,
             spentRevealUserIDs: spentRevealUserIDs,
@@ -214,7 +199,6 @@ extension InstructorDashboardRoutes {
     /// so `buildAssignmentStudentRow` stays within the parameter-count limit.
     private struct StudentRowLookups {
         let summaryByStudentID: [UUID: SetupStudentSubmissionSummary]
-        let latestRowByID: [String: APISubmission]
         let bestByStudentID: [UUID: Int]
         let overrideByStudentID: [UUID: Int]
         let spentRevealUserIDs: Set<UUID>
@@ -230,7 +214,7 @@ extension InstructorDashboardRoutes {
     ) -> AssignmentStudentRow? {
         guard let studentID = student.id else { return nil }
         let summary = lookups.summaryByStudentID[studentID]
-        let latest = summary.flatMap { lookups.latestRowByID[$0.latestSubmissionID] }
+        let latestSubmittedAt = summary?.latestSubmittedAt
         let submissionCount = summary?.submissionCount ?? 0
         let runnerBestGradePercent = lookups.bestByStudentID[studentID]
         // An instructor override is the student's effective grade — it feeds
@@ -245,8 +229,8 @@ extension InstructorDashboardRoutes {
             bestGradePercent: bestGradePercent, threshold: lookups.passingThresholdPercent)
         let cell = LatestSubmissionCell(
             count: submissionCount,
-            latestSubmissionID: latest?.id,
-            latestSubmittedAtText: latest?.submittedAt.map { fmt.string(from: $0) },
+            latestSubmissionID: summary?.latestSubmissionID,
+            latestSubmittedAtText: latestSubmittedAt.map { fmt.string(from: $0) },
             bestPercent: runnerBestGradePercent,
             overridePercent: override)
         return AssignmentStudentRow(
@@ -257,7 +241,7 @@ extension InstructorDashboardRoutes {
             gradeText: cell.bestGradeText ?? "—",
             gradeOverridePercent: override ?? runnerBestGradePercent ?? 0,
             latest: cell,
-            latestSubmittedAtEpoch: latest?.submittedAt.map { Int($0.timeIntervalSince1970) } ?? 0,
+            latestSubmittedAtEpoch: latestSubmittedAt.map { Int($0.timeIntervalSince1970) } ?? 0,
             fullHistoryURL: "/instructor/\(assignmentIDRaw)/students/\(studentID.uuidString)/history",
             bestGradePercent: bestGradePercent,
             secretRevealSpent: lookups.spentRevealUserIDs.contains(studentID),
