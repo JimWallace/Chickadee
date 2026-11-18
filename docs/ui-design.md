@@ -791,6 +791,14 @@ duplicate.
   the instructor roster) shows `pointer` across the row.
 - **`.drop-zone`** (+ `.drag-over`, `.drop-filename`) — file-drop upload
   targets.  Unrelated to the reorder cues above despite the shared verb.
+- **`.card--padded`** — a `.card` with its own padding, for a card whose
+  content is a form or a heading over lists: the approval form, the contract
+  changes and each release's notes on the admin Deployment page.  Inside it,
+  an `<h3>` is the card's title, an `<h4>` is a category (Changed, Fixed)
+  above its own `<ul>`, and the lists are indented; all three are direct
+  children of the card, or the rules miss them.  The global reset zeroes
+  list padding, so a bare `<ul>` hangs its bullets outside the column.  A
+  category is a heading, never a bullet.
 - **`.card`**, `.notice-box`, `.error-box` — surfaces and callouts.
   **Two empty states, and they never borrow each other's words.** An empty
   COLLECTION (term start, a course with no assignments) replaces the table: an
