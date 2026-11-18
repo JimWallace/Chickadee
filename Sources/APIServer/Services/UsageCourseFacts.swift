@@ -132,9 +132,9 @@ extension UsageTotals {
 extension UsageIntegrations {
     init(folding courses: [UsageCourseFacts]) {
         self.init(
-            brightSpaceCourses: courses.filter(\.usesBrightSpace).count,
-            ltiCourses: courses.filter(\.usesLTI).count,
-            aiFeedbackCourses: courses.filter(\.usesAIFeedback).count,
-            githubSubmissionCourses: courses.filter(\.usedGitHubSubmissions).count)
+            brightSpaceCourses: courses.count(where: \.usesBrightSpace),
+            ltiCourses: courses.count(where: \.usesLTI),
+            aiFeedbackCourses: courses.count(where: \.usesAIFeedback),
+            githubSubmissionCourses: courses.count(where: \.usedGitHubSubmissions))
     }
 }

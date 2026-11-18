@@ -17,6 +17,7 @@
 // withheld. Asserted by the per-tool PII test.
 
 import Core
+import Fluent
 import Vapor
 
 struct GetUsageSummaryTool: DiagnosticTool {

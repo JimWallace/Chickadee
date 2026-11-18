@@ -69,7 +69,7 @@ enum UsageStatisticsBuilder {
             integrations: UsageIntegrations(folding: courses),
             byTerm: byTerm,
             perCourse: request.includePerCourse ? courses.map(\.row) : nil,
-            notes: notes(inferredTerms: courses.filter(\.termInferred).count))
+            notes: notes(inferredTerms: courses.count(where: \.termInferred)))
     }
 
     /// The term a course counts in: its recorded term, else the term its
