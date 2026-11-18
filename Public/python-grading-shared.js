@@ -40,9 +40,15 @@
 // `execute_request` returns nothing — a kernel replies with messages, not
 // values.  So the payload is printed on the last line of the cell behind a
 // per-run nonce and parsed back.  JSON, because it is stdlib and removes every
-// escaping question; the nonce, because student code prints arbitrary text and
-// must not be able to forge the boundary (it cannot guess a value it never
-// sees).
+// escaping question; the nonce, because student code prints arbitrary text, and
+// output that happens to look like a payload must not be read as one.
+//
+// The nonce marks a boundary. It is not a secret from the submission: the
+// marker is a constant in this cell's code, which the submission runs inside,
+// so code that walks its own call frames can read it, print a payload of its
+// own and stop the real one from printing. A browser result can be forged
+// more simply still, by posting it; a browser grade is a participation grade
+// (docs/grading-integrity.md, D8).
 //
 // The cell must therefore be exception-safe end to end: if the payload does not
 // print, the run reports nothing at all.  Every failure mode inside is caught
@@ -166,6 +172,7 @@
             '_ck_out = _ck_io.StringIO()',
             '_ck_err = _ck_io.StringIO()',
             '_ck_saved = (_ck_sys.stdout, _ck_sys.stderr)',
+            '_ck_argv = _ck_sys.argv',
             'try:',
             '    _ck_sys.stdout = _ck_out',
             '    _ck_sys.stderr = _ck_err',
@@ -176,12 +183,30 @@
             // a hand-authored script need not import it. Let the script itself
             // decide, exactly as it would under `python3`.
             '        pass',
+            // What `python3 script` gives a script, as the native runner's
+            // runpy.run_path does: sys.argv[0] and __file__ name the script.
+            // The reset before the next script removes __file__ again.
+            '    _ck_sys.argv = [' + name + ']',
+            '    __file__ = ' + name,
             '    try:',
             '        with open(' + name + ', encoding="utf-8") as _ck_fh:',
             '            _ck_src = _ck_fh.read()',
             '        exec(compile(_ck_src, ' + name + ', "exec"), globals())',
             '    except SystemExit as _ck_e:',
             '        _ck_exit = _ck_e.code',
+            // A SystemExit from the submission's own code is an error, not the
+            // test's status: test_runtime's `_check_submission_exit`, the
+            // check the native runner calls. Older helper files lack it, and
+            // then the exit code stands as before.
+            '        _ck_check = getattr(_ck_sys.modules.get("test_runtime"), "_check_submission_exit", None)',
+            '        if _ck_check is not None:',
+            '            try:',
+            '                _ck_check(_ck_e, ' + name + ')',
+            '            except SystemExit as _ck_e2:',
+            '                _ck_exit = _ck_e2.code',
+            '            except BaseException:',
+            '                _ck_exit = None',
+            '                _ck_error = _ck_tb.format_exc()',
             '    except BaseException:',
             // Mirrors `python3 script` dying on an uncaught exception: the
             // traceback goes to stderr and the process exits non-zero. The exit
@@ -190,6 +215,16 @@
             '        _ck_error = _ck_tb.format_exc()',
             'finally:',
             '    _ck_sys.stdout, _ck_sys.stderr = _ck_saved',
+            '    _ck_sys.argv = _ck_argv',
+            // `sys.exit(x)` with x not an int: python3 prints str(x) to stderr
+            // and exits 1. Doing the same here also keeps an object that JSON
+            // cannot hold out of the payload, which would stop it printing.
+            'if _ck_exit is not None and not isinstance(_ck_exit, int):',
+            '    try:',
+            '        _ck_err.write(str(_ck_exit) + "\\n")',
+            '    except Exception:',
+            '        pass',
+            '    _ck_exit = 1',
             'try:',
             '    _ck_payload = _ck_json.dumps({',
             '        "exit": _ck_exit, "out": _ck_out.getvalue(),',
@@ -206,8 +241,8 @@
     // Pull the payload back out of the kernel's concatenated stdout.
     //
     // Anchored on the LAST occurrence of the marker, so a submission that echoes
-    // an earlier line cannot shadow the real one — and it cannot produce the
-    // marker in the first place without the nonce.
+    // an earlier line cannot shadow the real one. (A submission that reads the
+    // nonce out of the cell's code can; see the header.)
     //
     // Returns null when the cell never reported: the caller turns that into a
     // substrate error rather than guessing at a status, since a cell that died

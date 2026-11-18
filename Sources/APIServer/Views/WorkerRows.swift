@@ -11,6 +11,15 @@ struct WorkerRows: HTML {
     let workers: [AdminRunnerRow]
 
     var body: some HTML {
+        // The empty state is a row, so the poll replaces it when the first
+        // runner connects (UI audit #3007, finding 11).
+        if workers.isEmpty {
+            tr {
+                td(.custom(name: "colspan", value: "5"), .class("section-empty-cell")) {
+                    "No runners are connected, so submissions wait in the queue."
+                }
+            }
+        }
         for worker in workers {
             WorkerRow(worker: worker)
         }

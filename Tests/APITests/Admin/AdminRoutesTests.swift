@@ -132,7 +132,7 @@ private struct PassthroughResponder: AsyncResponder {
         }
     }
 
-    @Test func usersListDisablesTheRoleMenuOnTheViewersOwnRow() async throws {
+    @Test func usersListShowsNoRoleMenuOnTheViewersOwnRow() async throws {
         try await withApp(app) { _ in
             let cookie = try await loginAsAdmin("admin_routes", on: app)
             let me = try #require(
@@ -156,7 +156,8 @@ private struct PassthroughResponder: AsyncResponder {
                     let body = String(buffer: res.body)
                     let mine = selectTag(in: body, marker: myMenu)
                     let theirs = selectTag(in: body, marker: otherMenu)
-                    #expect(mine?.contains("disabled") == true)
+                    // Your own row has no role menu at all, only a badge (#3007).
+                    #expect(mine == nil)
                     #expect(theirs != nil)
                     #expect(theirs?.contains("disabled") == false)
                 })

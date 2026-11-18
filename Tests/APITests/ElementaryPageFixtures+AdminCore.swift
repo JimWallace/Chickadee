@@ -12,7 +12,7 @@ import Foundation
 extension ElementaryPageFixtures {
 
     static var adminCorePages: [ElementaryPageFixture] {
-        [adminPage, adminUsersPage, alertsPage]
+        [adminPage, adminUsersPage, alertsPage, adminDeploymentPage]
     }
 
     // MARK: - Shared values

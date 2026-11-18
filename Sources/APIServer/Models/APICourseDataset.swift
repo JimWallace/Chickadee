@@ -5,6 +5,7 @@
 // what describes the dataset as a whole: its slug, its name, where the data
 // came from and under which licence, and whether students can see it.
 
+import Core
 import Fluent
 import Foundation
 import Vapor
@@ -45,18 +46,32 @@ final class APICourseDataset: Model, Content, @unchecked Sendable {
     @Field(key: "current_version")
     var currentVersion: Int
 
+    /// The stored `DatasetFormat` raw value. Read through `format`.
+    @Field(key: "format")
+    var formatRaw: String
+
     @Timestamp(key: "created_at", on: .create)
     var createdAt: Date?
 
     @Timestamp(key: "updated_at", on: .update)
     var updatedAt: Date?
 
+    /// The format of every version (docs/fhir-datasets-plan.md §6). Set at
+    /// create and never changed. A stored value this release does not know
+    /// reads as CSV, rather than failing the read.
+    var format: DatasetFormat {
+        get { DatasetFormat(rawValue: formatRaw) ?? .csv }
+        set { formatRaw = newValue.rawValue }
+    }
+
     init() {}
 
     init(
         id: UUID? = nil, courseID: UUID, slug: String, name: String, datasetDescription: String? = nil,
-        provenance: String? = nil, licence: String? = nil, isPublished: Bool = false, currentVersion: Int
+        provenance: String? = nil, licence: String? = nil, isPublished: Bool = false, currentVersion: Int,
+        format: DatasetFormat
     ) {
+        self.formatRaw = format.rawValue
         self.id = id
         self.courseID = courseID
         self.slug = slug

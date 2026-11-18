@@ -207,7 +207,7 @@ struct DataFrameEqualityKind: NotebookCheckKindHandler {
         // or more comma-separated tokens or a single non-empty
         // token).  This catches the case of an instructor pasting
         // `pd.DataFrame(...)` Python code instead of CSV.
-        let firstLine = csv.split(whereSeparator: { $0 == "\n" || $0 == "\r" }).first ?? ""
+        let firstLine = csv.split(whereSeparator: \.isNewline).first ?? ""
         guard !firstLine.isEmpty else {
             throw AuthoringValidationError.notebookCheckExpectedCSVMissingHeader(
                 checkID: check.id, kindLabel: "data_frame_equality")
@@ -238,7 +238,7 @@ struct SeriesEqualityKind: NotebookCheckKindHandler {
         // Single-column header check: the first line should not
         // contain a comma (a multi-column CSV would be ambiguous
         // — which column is the Series?).
-        let firstLine = csv.split(whereSeparator: { $0 == "\n" || $0 == "\r" }).first ?? ""
+        let firstLine = csv.split(whereSeparator: \.isNewline).first ?? ""
         guard !firstLine.isEmpty else {
             throw AuthoringValidationError.notebookCheckExpectedCSVMissingHeader(
                 checkID: check.id, kindLabel: "series_equality")

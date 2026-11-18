@@ -14,7 +14,7 @@ extension ElementaryPageFixtures {
         [
             instructorDatasetsPage, instructorDatasetPage, assignmentEditPageWithLibrary, courseDataPage,
             submitPageWithData,
-        ]
+        ] + fhirDatasetPages
     }
 
     /// The student Data page: a published dataset with a download, an

@@ -571,6 +571,11 @@ private func registerLateSchemaMigrations(on app: Application) {
     // Staged MCP file uploads (docs/mcp-file-uploads.md). New table with an
     // FK to `courses`; no ordering constraint beyond CreateCourses.
     app.migrations.add(CreateMCPUploads())
+    // A course library dataset's format, and a FHIR version's summary
+    // (docs/fhir-datasets-plan.md §6). Adds a column to `course_datasets` and
+    // one to `course_dataset_versions` (CreateCourseDatasets, far above); no
+    // data change.
+    app.migrations.add(AddCourseDatasetFormat())
 }
 
 /// The data migrations, registered after every schema migration (#1805).
@@ -599,4 +604,8 @@ private func registerDataMigrations(on app: Application) {
     // before the column, from its manifest (docs/assignment-types.md). Reads
     // `assignments` and `test_setups`, so it follows `AddAssignmentType`.
     app.migrations.add(BackfillAssignmentType())
+
+    // A wardrobe unlock records the achievement that granted it, and its
+    // name (docs/achievement-rewards.md, S2). Schema only.
+    app.migrations.add(AddWardrobeUnlockSource())
 }

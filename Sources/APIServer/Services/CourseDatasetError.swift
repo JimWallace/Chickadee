@@ -11,7 +11,9 @@ enum CourseDatasetError: Error, Sendable, Equatable, CustomStringConvertible {
     case slugTaken(String)
     case invalidName
     case invalidFilename(String)
+    case invalidFHIRFilename(String)
     case notUTF8
+    case notFHIR(FHIRDatasetIssue)
     case tooLarge(sizeBytes: Int, limitBytes: Int)
     case notATable(DatasetDictionary.ProfileError)
     case duplicateVersion(of: Int)
@@ -47,8 +49,13 @@ enum CourseDatasetError: Error, Sendable, Equatable, CustomStringConvertible {
             return "A dataset needs a name of 1 to \(CourseDatasetService.maxNameLength) characters."
         case .invalidFilename(let name):
             return "'\(name)' is not a valid dataset filename. Use a bare filename that ends in .csv."
+        case .invalidFHIRFilename(let name):
+            return "'\(name)' is not a valid filename for a FHIR NDJSON dataset. Use a bare filename that ends in "
+                + ".ndjson. A dataset keeps the format it was created with."
         case .notUTF8:
-            return "The file is not UTF-8 text. A library dataset is a CSV file."
+            return "The file is not UTF-8 text. A library dataset is a CSV or a FHIR NDJSON file."
+        case .notFHIR(let issue):
+            return issue.description
         case .tooLarge(let size, let limit):
             return "The file is \(size) bytes. A library dataset version can be at most \(limit) bytes."
         case .notATable(let error):

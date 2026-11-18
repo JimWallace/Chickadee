@@ -38,6 +38,9 @@ set -uo pipefail
 #     expect="colour literal"                  # substring its output must have
 #     apply() { ... }                          # introduce the defect
 #
+# To edit a file with sed, apply() calls `sed_inplace` (defined below), not
+# sed with its in-place option, so that the fixture runs on macOS too.
+#
 # `args` exists for the guards that are a check only under a flag: run bare,
 # `generate-js-constants.sh` rewrites the file a fixture just broke, and
 # `ci-compose-env.sh` writes a .env into the repository root.
@@ -80,6 +83,38 @@ cleanup() {
     rm -rf "$backup_dir"
 }
 trap cleanup EXIT INT TERM
+
+# Edits one file in place with sed, the same way on GNU sed (Linux, CI) and BSD
+# sed (macOS). The two disagree on the in-place option: BSD sed reads the next
+# word as a backup suffix, so a GNU-style call fails there, or leaves a stray
+# backup file. Every fixture uses this instead of that option, and
+# scripts/check-fixture-portable-sed.sh enforces it.
+#
+#     sed_inplace [sed options] 'script' FILE
+#
+# The last argument is the file; every other argument goes to sed unchanged.
+# The result is copied back with `cat >`, not `mv`, so the file keeps its mode
+# and the restore above sees no mode change. Fixtures run in a subshell of this
+# script, so they inherit the function. The sed script itself must still be
+# portable: end each command in a `{...}` group with `;`, write `i\` with the
+# text on the next line, and do not use the GNU-only `0,/re/` address.
+sed_inplace() {
+    if [ "$#" -lt 2 ]; then
+        echo "sed_inplace: needs a sed script and a file" >&2
+        return 2
+    fi
+    local file="${!#}"
+    local tmp
+    tmp="$(mktemp "$backup_dir/sed_inplace.XXXXXX")" || return 2
+    if sed "${@:1:$#-1}" "$file" >"$tmp"; then
+        cat "$tmp" >"$file"
+        rm -f "$tmp"
+    else
+        local code=$?
+        rm -f "$tmp"
+        return "$code"
+    fi
+}
 
 if [ ! -d "$fixture_dir" ]; then
     echo "ERROR: no fixture directory at $fixture_dir"

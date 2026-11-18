@@ -154,7 +154,7 @@ func labItemCoverage(testSetupID: String, on db: any Database) async throws -> [
     }
 }
 
-/// How many contribution slots the assignment behind `testSetupID` declares, or
+/// How many contribution slots the assignment behind `setup` declares, or
 /// 0 when it declares none / has no starter notebook.
 ///
 /// Shared by both result-ingest paths so the gate cannot be applied on one and
@@ -168,15 +168,6 @@ func labItemCoverage(testSetupID: String, on db: any Database) async throws -> [
 /// which means "not a contribution assignment" and skips accumulation. That is
 /// the safe direction — a missed row is recoverable by re-testing, whereas
 /// failing a student's result report to record a diagnostic is not.
-func declaredContributionSlotCount(
-    testSetupID: String, app: Application, on db: any Database
-) async -> Int {
-    guard let setup = try? await APITestSetup.find(testSetupID, on: db) else { return 0 }
-    return await declaredContributionSlotCount(setup: setup, app: app)
-}
-
-/// `declaredContributionSlotCount(testSetupID:…)` for a caller that has
-/// already loaded the setup.
 func declaredContributionSlotCount(setup: APITestSetup, app: Application) async -> Int {
     await app.notebookBytesCache.declaredContributionSlotCount(for: NotebookSourceRef(setup))
 }

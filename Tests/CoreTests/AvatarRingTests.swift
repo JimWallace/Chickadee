@@ -80,6 +80,7 @@ import Testing
                 == [
                     .rainbow, .spectrum, .twotone, .stitched, .snowflake, .blossom, .maple,
                     .lifering, .greenlight, .ouroboros, .function, .binary, .pulse, .quantumcats,
+                    .crossfade,
                 ])
     }
 

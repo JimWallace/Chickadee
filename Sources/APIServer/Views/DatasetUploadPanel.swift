@@ -1,8 +1,10 @@
 // APIServer/Views/DatasetUploadPanel.swift
 //
-// The form that uploads a CSV on the Datasets tab: a new dataset on the
-// list page, a new version on a dataset's page.
+// The form that uploads a file on the Datasets tab: a new dataset on the
+// list page, with its format, or a new version on a dataset's page, in the
+// dataset's format (docs/fhir-datasets-plan.md §6).
 
+import Core
 import Elementary
 
 /// The form that uploads a file: a new dataset when `slug` is nil, else a new
@@ -14,6 +16,18 @@ struct DatasetUploadPanel: HTML {
     let slug: String?
     let submitLabel: String
     let maxUploadText: String
+    /// The dataset's format for a new version; nil for a new dataset, which
+    /// chooses one.
+    var format: DatasetFormat?
+
+    /// The extensions the file picker offers.
+    private var acceptText: String {
+        (format.map { [$0] } ?? DatasetFormat.allCases).map { "." + $0.fileExtension }.joined(separator: ",")
+    }
+
+    private var fileLabel: String {
+        format.map { "\($0.displayName) file" } ?? "File"
+    }
 
     var body: some HTML {
         div(.class("add-panel card"), .id(panelID)) {
@@ -35,10 +49,24 @@ struct DatasetUploadPanel: HTML {
                             "It cannot change later."
                         }
                     }
+                    label(.class("form-label")) {
+                        "Format"
+                        select(.class("form-input"), .name("format")) {
+                            SelectOptions(
+                                options: DatasetFormat.allCases.map {
+                                    SelectOption(value: $0.rawValue, label: $0.displayName, selected: $0 == .csv)
+                                })
+                        }
+                        span(.class("field-note field-note--muted")) {
+                            "FHIR NDJSON is one FHIR R4 resource per line."
+                        }
+                    }
                 }
                 label(.class("form-label")) {
-                    "CSV file"
-                    input(.class("form-input"), .type(.file), .name("file"), .accept(".csv"), .required)
+                    fileLabel
+                    input(
+                        .class("form-input"), .type(.file), .name("file"), .custom(name: "accept", value: acceptText),
+                        .required)
                     span(.class("field-note field-note--muted")) {
                         "At most \(maxUploadText)."
                     }

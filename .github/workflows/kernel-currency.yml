@@ -21,8 +21,9 @@ name: Kernel currency
 # produces no bytes to review.
 #
 # When the scheduled run finds the kernels behind, it dispatches
-# revendor-kernels.yml in publish mode, which rebuilds from main and opens an
-# auto-merging pull request whose CI tests the new kernels. It dispatches only
+# revendor-kernels.yml in publish mode, which rebuilds from main and opens a
+# pull request whose CI tests the new kernels. That pull request carries the
+# `minor-release` label and does not auto-merge (docs/release-gate.md). It dispatches only
 # on the script's "behind their channels" verdict. The script exits 1 for a
 # failed solve too, and a broken check must never start a publish. A manual
 # run reports and does not publish.
@@ -41,13 +42,16 @@ concurrency:
   group: kernel-currency
   cancel-in-progress: true
 
-permissions:
-  contents: read
-  # To dispatch revendor-kernels.yml. A dispatch is allowed under GITHUB_TOKEN.
-  actions: write
+# Write scopes are granted per job, not here, so a job added later starts
+# with none (OpenSSF Scorecard TokenPermissions).
+permissions: {}
 
 jobs:
   currency:
+    permissions:
+      contents: read
+      # To dispatch revendor-kernels.yml. A dispatch is allowed under GITHUB_TOKEN.
+      actions: write
     runs-on: ubuntu-latest
     # Four environment solves against a remote channel, measured at a few
     # minutes in total. The ceiling sits above 4 x the script's own 600s
@@ -55,9 +59,11 @@ jobs:
     # script's explanation rather than being killed opaquely by the job.
     timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
-      - uses: actions/setup-python@v7
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: "3.13"
 
@@ -98,6 +104,8 @@ jobs:
 
       - name: Summarise
         if: always()
+        env:
+          DISPATCHED: ${{ steps.publish.outputs.dispatched }}
         run: |
           {
             echo "### Kernel currency"
@@ -105,10 +113,10 @@ jobs:
             echo '```'
             cat /tmp/currency.txt 2>/dev/null || echo "the check produced no output"
             echo '```'
-            if [ "${{ steps.publish.outputs.dispatched }}" = "true" ]; then
+            if [ "$DISPATCHED" = "true" ]; then
               echo ""
               echo "Dispatched **Re-vendor xeus kernels** in publish mode. It opens"
-              echo "an auto-merging pull request unless one is already open."
+              echo "a minor-release pull request unless one is already open."
             elif [ "${{ steps.currency.outcome }}" != "success" ]; then
               echo ""
               echo "Run **Re-vendor xeus kernels** with \`publish\` checked to open"

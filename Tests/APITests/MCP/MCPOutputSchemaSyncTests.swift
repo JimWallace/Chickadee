@@ -71,8 +71,9 @@ import Testing
                 datasets: [
                     SetDatasetTool.DatasetEntry(
                         file: "cases.csv", sampleSize: 100,
-                        kind: "rowSample", stratumColumn: nil, transforms: [])
-                ])
+                        kind: "rowSample", stratumColumn: nil, transforms: [], datasetDelivery: "perStudent")
+                ],
+                notes: [], warnings: ["'cases.csv': the sample covers every row."])
         ),
         (
             SetMinimumRunnerVersionTool.name, SetMinimumRunnerVersionTool.outputSchema,

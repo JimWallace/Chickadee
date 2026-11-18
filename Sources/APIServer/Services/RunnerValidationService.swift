@@ -298,7 +298,6 @@ func materializeValidationGrading(
         setupID: setupID,
         templateNotebookData: templateNotebookData,
         testSetupsDirectory: testSetupsDirectory,
-        app: app,
         on: db,
         seeds: PinnedSeeds(assignment: variantSeedHex, course: variantCourseSeedHex, deal: variantDealNumber))
     return MaterializedValidationSubmission(submission: submission)
@@ -326,7 +325,6 @@ private func resolveAndCacheValidationMaterialization(
     setupID: String,
     templateNotebookData: Data,
     testSetupsDirectory: String,
-    app: Application,
     on db: any Database,
     seeds: PinnedSeeds = .fromSubmitter
 ) async {

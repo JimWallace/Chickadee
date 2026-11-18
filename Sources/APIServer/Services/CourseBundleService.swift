@@ -5,7 +5,8 @@
 // everything between. The export pipeline is here; the import transaction
 // and its phase helpers are in CourseBundleService+Import.swift.
 //
-// Bundle format (schemaVersion 1, or 2 when it carries the dataset library):
+// Bundle format (schemaVersion 1; 2 when it carries the dataset library; 3
+// when a dataset in it is not a CSV):
 //   bundle.json              — CourseBundleManifest (ISO8601 dates)
 //   testsetups/<id>.zip      — instructor test-setup archives
 //   submissions/<id>.<ext>   — student submission files
@@ -357,9 +358,11 @@ enum CourseBundleService {
         }
 
         // Version 2 only for a bundle that carries the library, so one without
-        // stays readable by a server that knows only version 1.
+        // stays readable by a server that knows only version 1; version 3 only
+        // when a dataset is not a CSV, so a server that knows only version 2
+        // refuses it rather than read NDJSON as a CSV.
         return CourseBundleManifest(
-            schemaVersion: library.isEmpty ? 1 : CourseBundleManifest.datasetsSchemaVersion,
+            schemaVersion: CourseBundleManifest.schemaVersion(carrying: library),
             exportedAt: Date(),
             exportedBy: caller.username,
             chickadeeVersion: ChickadeeVersion.current,

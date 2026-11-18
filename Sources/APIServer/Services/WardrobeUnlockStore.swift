@@ -19,6 +19,22 @@ enum WardrobeUnlockStore {
         return Set(rows.compactMap { WardrobeItem(rawValue: $0.item) })
     }
 
+    /// The stored achievement name of each item an achievement granted
+    /// `userID` (docs/achievement-rewards.md, S2), for the account page's
+    /// "how you earned it". A rule item or a found one has no label.
+    static func grantLabels(for userID: UUID, on db: any Database) async throws -> [WardrobeItem: String] {
+        let rows = try await APIWardrobeUnlock.query(on: db)
+            .filter(\.$userID == userID)
+            .filter(\.$label != nil)
+            .all()
+        var labels: [WardrobeItem: String] = [:]
+        for row in rows {
+            guard let item = WardrobeItem(rawValue: row.item), let label = row.label else { continue }
+            labels[item] = label
+        }
+        return labels
+    }
+
     /// What `userID`'s own graded student submissions show.
     static func progress(for userID: UUID, on db: any Database) async throws -> WardrobeProgress {
         WardrobeProgress(graded: try await graded(for: userID, inTestSetups: nil, on: db))
@@ -152,9 +168,10 @@ enum WardrobeUnlockStore {
     private static func grantEarned(
         for userID: UUID, stored: Set<WardrobeItem>, on db: any Database
     ) async throws -> (stored: Set<WardrobeItem>, complete: Bool) {
-        // A found item is never earned, so a student who has earned every
-        // earnable item skips the progress queries, found items or not.
-        guard !stored.isSuperset(of: WardrobeItem.allCases.filter { !$0.isFound }) else { return (stored, true) }
+        // A found item and a grantable one are never earned by a rule, so a
+        // student who has earned every rule item skips the progress queries,
+        // whatever else they hold.
+        guard !stored.isSuperset(of: WardrobeItem.allCases.filter(\.hasBuiltInRule)) else { return (stored, true) }
         let earned = WardrobeItem.earned(by: try await progress(for: userID, on: db))
         let missing = earned.subtracting(stored)
         guard !missing.isEmpty else { return (stored, true) }
@@ -214,8 +231,8 @@ enum WardrobeUnlockStore {
         let outcome = try await grantEarned(for: userID, stored: stored, on: db)
         if let fingerprint, outcome.complete { await checks.recordComplete(userID, fingerprint) }
         let granted = outcome.stored.subtracting(stored)
-        // A found item stored by a concurrent request is not this grant's to
-        // show: the found item's own toast said so.
-        return WardrobeItem.allCases.filter { granted.contains($0) && !$0.isFound }
+        // A found item or a granted one stored by a concurrent request is not
+        // this grant's to show: its own toast said so.
+        return WardrobeItem.allCases.filter { granted.contains($0) && $0.hasBuiltInRule }
     }
 }

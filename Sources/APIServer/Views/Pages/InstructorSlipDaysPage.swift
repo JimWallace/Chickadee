@@ -82,11 +82,10 @@ struct InstructorSlipDaysPage: HTML {
     private var settingsPanel: some HTML {
         div(.class("add-panel card"), .id("slip-settings-panel")) {
             p(.class("section-note")) {
-                "A slip day is a student-initiated deadline extension drawn from a fixed per-student budget, "
-                    + "spent without staff involvement. After a deadline passes, an eligible student can claim "
-                    + "one from the dashboard within one extension length of the deadline; days stack on a "
-                    + "single assignment. Staff-granted extensions always take precedence: a student holding "
-                    + "one cannot spend slip days on that assignment."
+                "A slip day is a deadline extension a student claims from a fixed budget, without staff. "
+                NewTabLink(
+                    href: "https://github.com/JimWallace/Chickadee/blob/main/docs/slip-days.md",
+                    text: "How slip days work ")
             }
             form(.method(.post), .action("/instructor/slip-days/settings"), .class("form-stack")) {
                 CSRFField(token: page.csrfToken)
@@ -162,7 +161,10 @@ struct InstructorSlipDaysPage: HTML {
         section(.class("page-section")) {
             h2 { "Roster ledger" }
             if students.isEmpty {
-                p(.class("empty")) { "No students enrolled." }
+                p(.class("empty")) {
+                    "No students enrolled. "
+                    a(.href("/instructor/students")) { "Go to Students" }
+                }
             } else {
                 if showFilter {
                     div(.class("toolbar toolbar--end section-gap")) {

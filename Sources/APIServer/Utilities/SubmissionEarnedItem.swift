@@ -30,7 +30,10 @@ struct SubmissionEarnedItem: Encodable {
     /// Where the ring starts to draw in, clockwise from the top.
     let ringStartDegrees: Int
 
-    init(_ item: WardrobeItem, wearing spec: AvatarSpec, isStaff: Bool) {
+    /// `grantedBy` is the name of the achievement that granted the item
+    /// (docs/achievement-rewards.md, S2), or nil for a rule item or a found
+    /// one, whose text is `WardrobeItem.howEarned`.
+    init(_ item: WardrobeItem, wearing spec: AvatarSpec, isStaff: Bool, grantedBy: String? = nil) {
         var wearing = spec
         switch item.slot {
         case .expression: wearing.expression = AvatarExpression(rawValue: item.value) ?? spec.expression
@@ -46,7 +49,7 @@ struct SubmissionEarnedItem: Encodable {
             }
         chip = "New \(kind)"
         name = item.displayName
-        howEarned = "\(item.obtainedVerb) \(item.howEarned)."
+        howEarned = grantedBy.map { "Earned for “\($0)”." } ?? "\(item.obtainedVerb) \(item.howEarned)."
         announcement = "New \(kind) \(item.obtainedVerb.lowercased()): \(item.displayName)."
         field = item.slot.rawValue
         value = item.value

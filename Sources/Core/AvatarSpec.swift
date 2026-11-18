@@ -198,6 +198,11 @@ public enum AvatarBorder: String, CaseIterable, Codable, Sendable {
     /// it opens to a student who finds the hidden game
     /// (docs/student-wardrobe.md, "Found items").
     case quantumcats
+    /// Eight flat steps from blue on the left to red on the right, the
+    /// colours of the Cross-fade pattern in "The Class Paints a Picture"
+    /// (red `x*4`, blue `236 - x*4`). Special: an instructor's achievement
+    /// grants it (docs/achievement-rewards.md, decision 4).
+    case crossfade
 
     /// The accent this ring is drawn in; nil for `none` and the patterned rings.
     public var accent: AvatarAccent? { AvatarAccent(rawValue: rawValue) }
@@ -221,6 +226,7 @@ public enum AvatarBorder: String, CaseIterable, Codable, Sendable {
         case .binary: .binary
         case .pulse: .pulse
         case .quantumcats: .quantumcats
+        case .crossfade: .crossfade
         }
     }
 
@@ -245,6 +251,7 @@ public enum AvatarBorder: String, CaseIterable, Codable, Sendable {
         case .lifering: return "Life ring"
         case .greenlight: return "Green light"
         case .quantumcats: return "Quantum Cats"
+        case .crossfade: return "Cross-fade"
         default: return rawValue.capitalized
         }
     }
@@ -257,7 +264,7 @@ public enum AvatarBorder: String, CaseIterable, Codable, Sendable {
         case .none, .ember, .orchid, .lagoon, .honey, .moss, .rainbow: .starter
         case .twotone, .stitched: .earned
         case .lifering, .greenlight, .ouroboros, .function, .binary, .pulse: .earned
-        case .spectrum: .special
+        case .spectrum, .crossfade: .special
         case .snowflake, .blossom, .maple: .seasonal
         case .quantumcats: .found
         }
@@ -292,6 +299,7 @@ public enum AvatarRing: String, CaseIterable, Sendable {
     case snowflake, blossom, maple
     case lifering, greenlight, ouroboros, function, binary, pulse
     case quantumcats
+    case crossfade
 
     /// Where the result page's Earned toast starts to draw the ring in,
     /// clockwise from the top: the ring art's own start. The snake of the

@@ -66,7 +66,8 @@ extension InstructorLMSRoutes {
             let who2 = who.uniqueName.isEmpty ? who.displayName : "\(who.displayName) (\(who.uniqueName))"
             return BrightspaceTestResult(ok: true, message: "Connected as \(who2).")
         } catch {
-            return BrightspaceTestResult(ok: false, message: "Connection failed: \(error.localizedDescription)")
+            req.logger.warning("LEARN connection test failed: \(error)")
+            return BrightspaceTestResult(ok: false, message: learnFailureText(error, action: "connect to LEARN"))
         }
     }
 
@@ -315,7 +316,8 @@ extension InstructorLMSRoutes {
                 courseUUID: courseUUID, orgUnitID: orgUnitID, client: client,
                 on: req.db, application: req.application)
         } catch {
-            return brightspaceRedirect(req, error: "Couldn't read the LEARN grade book: \(error.localizedDescription)")
+            req.logger.warning("LEARN grade book auto-map failed: \(error)")
+            return brightspaceRedirect(req, error: learnFailureText(error, action: "read the LEARN grade book"))
         }
 
         await AuditLogger.record(
@@ -394,7 +396,7 @@ extension InstructorLMSRoutes {
         } catch {
             req.logger.warning("Roster reconcile-now failed: \(error)")
             return brightspaceRedirect(
-                req, error: "Couldn't reconcile against LEARN: \(error.localizedDescription)")
+                req, error: learnFailureText(error, action: "reconcile against LEARN"))
         }
     }
 

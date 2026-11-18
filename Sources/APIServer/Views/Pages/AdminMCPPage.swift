@@ -197,7 +197,7 @@ private struct AdminMCPAccountsSection: HTML {
                             .id("mcp-new-account"), .class("form-input"), .type(.text), .name("username"), .required,
                             .autocomplete("new-password"), .placeholder("course-bot"))
                         span(.class("field-note field-note--muted")) {
-                            "A new account has no course access until you enrol it in a course."
+                            "A new account has no course access until you enroll it in a course."
                         }
                     }
                     div(.class("toolbar")) {
@@ -281,18 +281,25 @@ private struct AdminMCPAccountRowView: HTML {
                 ) {
                     CSRFField(token: csrfToken)
                     label(.class("visually-hidden"), .for("enroll-\(account.id)")) {
-                        "Enrol \(account.username) in a course"
+                        "Enroll \(account.username) in a course"
                     }
                     select(.id("enroll-\(account.id)"), .name("courseID"), .class("form-input")) {
                         for course in account.enrollableCourses {
                             option(.value(course.id)) { AdminMCPCourseLabel(course: course) }
                         }
                     }
-                    button(.class("btn action-btn"), .type(.submit)) { "Enrol" }
+                    button(.class("btn action-btn"), .type(.submit)) { "Enroll" }
                 }
             }
             for course in account.enrolledCourses {
-                form(.method(.post), .action("/admin/mcp/accounts/\(account.id)/unenroll")) {
+                form(
+                    .method(.post), .action("/admin/mcp/accounts/\(account.id)/unenroll"),
+                    .data(
+                        "confirm",
+                        value:
+                            "Remove \(account.username) from \(course.code)\(course.termLabel.map { " \($0)" } ?? "")?"
+                    )
+                ) {
                     CSRFField(token: csrfToken)
                     input(.type(.hidden), .name("courseID"), .value(course.id))
                     button(.class("row-menu-item"), .type(.submit), .role("menuitem")) {

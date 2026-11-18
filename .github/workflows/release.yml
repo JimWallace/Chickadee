@@ -10,6 +10,9 @@ on:
         required: true
         type: string
 
+# No permission by default (#3067). The one job names what it needs.
+permissions: {}
+
 jobs:
   release:
     runs-on: ubuntu-latest
@@ -18,23 +21,28 @@ jobs:
       contents: write
 
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          persist-credentials: false
           fetch-depth: 0
 
       - name: Resolve tag
         id: tag
+        env:
+          EVENT: ${{ github.event_name }}
+          INPUT_TAG: ${{ github.event.inputs.tag }}
         run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            echo "name=${{ github.event.inputs.tag }}" >> "$GITHUB_OUTPUT"
+          if [ "$EVENT" = "workflow_dispatch" ]; then
+            echo "name=$INPUT_TAG" >> "$GITHUB_OUTPUT"
           else
             echo "name=${GITHUB_REF#refs/tags/}" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Extract release notes from CHANGELOG
         id: notes
+        env:
+          TAG: ${{ steps.tag.outputs.name }}
         run: |
-          TAG="${{ steps.tag.outputs.name }}"
           VERSION="${TAG#v}"
 
           # Pull the section for this version out of CHANGELOG.md.
@@ -50,6 +58,20 @@ jobs:
              found{print}' \
             CHANGELOG.md)
 
+          # A pre-release of the next minor (vX.Y.0-rc.N, docs/release-gate.md)
+          # has no CHANGELOG section: its notes are the fragments still
+          # pending in changelog.d/, which fold into the real minor.
+          case "$TAG" in
+            *-rc.*)
+              NOTES="$(printf 'Pre-release of the next minor, for the dev server. Production does not deploy pre-releases.\n\n'
+                for fragment in changelog.d/*.md; do
+                  [ "$(basename "$fragment")" = "README.md" ] && continue
+                  cat "$fragment"
+                  printf '\n'
+                done)"
+              ;;
+          esac
+
           if [ -z "$NOTES" ]; then
             NOTES="Release $TAG"
           fi
@@ -61,12 +83,29 @@ jobs:
             echo "RELEASE_NOTES_EOF"
           } >> "$GITHUB_OUTPUT"
 
+      # The runner's own `gh`, not a third-party action (#3074). The
+      # production deployer follows `releases/latest`, so a release is marked
+      # latest. A pre-release (vX.Y.0-rc.N) is marked a pre-release and never
+      # latest, so production never sees it; only a deployer on the
+      # pre-release channel reads it (docs/release-gate.md). A re-run of this
+      # workflow updates the release it already made.
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v3
-        with:
-          tag_name: ${{ steps.tag.outputs.name }}
-          name: Chickadee ${{ steps.tag.outputs.name }}
-          body: ${{ steps.notes.outputs.body }}
-          make_latest: true
-          draft: false
-          prerelease: false
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.tag.outputs.name }}
+          NOTES: ${{ steps.notes.outputs.body }}
+        run: |
+          set -euo pipefail
+          notes="$RUNNER_TEMP/release-notes.md"
+          printf '%s\n' "$NOTES" > "$notes"
+          case "$TAG" in
+            *-rc.*) kind=(--prerelease --latest=false) ;;
+            *) kind=(--latest --prerelease=false) ;;
+          esac
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" \
+              --title "Chickadee $TAG" --notes-file "$notes" --draft=false "${kind[@]}"
+          else
+            gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --verify-tag \
+              --title "Chickadee $TAG" --notes-file "$notes" "${kind[@]}"
+          fi

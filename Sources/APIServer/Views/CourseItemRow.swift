@@ -333,7 +333,11 @@ private struct CourseAssignmentItemRow: HTML {
             td(.class("col-hide-phone nowrap")) {
                 if row.assignmentID != nil {
                     let submitted = row.submittedStudentCount.map(String.init) ?? ""
-                    span(.title("\(submitted) / \(enrolledStudentCount) students submitted")) {
+                    span(
+                        .title(
+                            "\(submitted) / \(enrolledStudentCount) \(enrolledStudentCount == 1 ? "student" : "students") submitted"
+                        )
+                    ) {
                         "\(submitted) / \(enrolledStudentCount)"
                     }
                     div(.class("item-details")) { "submitted" }
@@ -396,7 +400,9 @@ private struct CourseAssignmentItemRow: HTML {
             }
         } else {
             div(.class("item-title text-muted")) { em { "Unpublished" } }
-            div(.class("item-details")) { "Uploaded \(row.createdAt) · \(row.suiteCount) tests" }
+            div(.class("item-details")) {
+                "Uploaded \(row.createdAt) · \(row.suiteCount) \(row.suiteCount == 1 ? "test" : "tests")"
+            }
         }
     }
 
@@ -433,10 +439,10 @@ private struct CourseAssignmentItemRow: HTML {
                     .title("No runner could grade this when it was last saved, so validation did not run.")
                 ) { "No runner" }
             default:
-                span(.class("tier tier-closed")) { "closed" }
+                span(.class("tier tier-closed")) { AssignmentVisibility.closed.displayLabel }
             }
         } else {
-            span(.class("tier tier-unpublished")) { "Unpublished" }
+            span(.class("tier tier-unpublished")) { "unpublished" }
         }
     }
 
@@ -452,11 +458,7 @@ private struct CourseAssignmentItemRow: HTML {
     /// The words for a published status, in the select and in the read-only
     /// label.
     private static func statusLabel(_ status: String) -> String {
-        switch status {
-        case "open": "open"
-        case "preview": "staff only"
-        default: "closed"
-        }
+        (AssignmentVisibility(rawValue: status) ?? .closed).displayLabel
     }
 
     private var unpublishedActions: some HTML {

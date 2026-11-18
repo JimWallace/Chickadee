@@ -32,8 +32,11 @@ struct AssignmentSubmissionsPage: HTML {
         BaseLayout(title: "\(assignmentTitle) — Submissions", page: page, flash: flash) {
             div(.class("page-titlebar")) {
                 h1 { assignmentTitle }
-                if aiFeedbackOpen {
-                    a(.class("btn action-btn"), .href("/instructor/\(assignmentID)/feedback")) { "AI feedback" }
+                div(.class("toolbar")) {
+                    if aiFeedbackOpen {
+                        a(.class("btn action-btn"), .href("/instructor/\(assignmentID)/feedback")) { "AI feedback" }
+                    }
+                    a(.class("btn action-btn"), .href("/instructor")) { "Overview" }
                 }
             }
             section(.class("diagnostics-section")) {

@@ -196,6 +196,11 @@ struct InstructorDashboardRoutes: RouteCollection {
         let hasSections = !allSections.isEmpty
         let hasUngrouped = !ungroupedItems.isEmpty
         let page = try await PageRequestContext.courseAware(req)
+        // On a page navigation, always consume the one-shot session notice,
+        // even when a query notice wins, so it cannot show up again on a later,
+        // unrelated visit. A background `fetch` leaves it for the page.
+        let sessionNotice = req.takeOverviewNotice()
+        let notice = req.query[String.self, at: "notice"] ?? sessionNotice
         return try await HTMLResponse {
             AssignmentsPage(
                 page: page,
@@ -206,7 +211,7 @@ struct InstructorDashboardRoutes: RouteCollection {
                 showEmptyMessage: !hasSections && !hasUngrouped,
                 enrolledStudentCount: roster.enrolledStudentCount,
                 attachTargets: Self.attachTargets(sections: sectionContexts, ungroupedItems: ungroupedItems),
-                flash: FlashMessages(notice: req.query[String.self, at: "notice"]))
+                flash: FlashMessages(notice: notice))
         }.encodeResponse(for: req)
     }
 

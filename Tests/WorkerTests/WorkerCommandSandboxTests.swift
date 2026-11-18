@@ -43,7 +43,7 @@ import Testing
 
 @Suite struct SandboxProbeAdviceTests {
 
-    @Test func theAdviceNamesTheFlagToRemove() {
-        #expect(SandboxedScriptRunner.probeFailureAdvice.contains("--sandbox"))
+    @Test func theAdviceNamesTheFlagThatTurnsTheSandboxOff() {
+        #expect(SandboxedScriptRunner.probeFailureAdvice.contains("--no-sandbox"))
     }
 }

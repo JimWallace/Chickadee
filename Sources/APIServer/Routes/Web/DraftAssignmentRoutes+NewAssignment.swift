@@ -427,6 +427,10 @@ extension DraftAssignmentRoutes {
         if !validated.draftID.isEmpty {
             clearDraftFormState(req: req, draftID: validated.draftID)
         }
+        req.setOverviewNotice(
+            shouldQueueValidation
+                ? "Created \(validated.title). Validation is running."
+                : "Created \(validated.title).")
         return req.redirect(to: "/instructor")
     }
 

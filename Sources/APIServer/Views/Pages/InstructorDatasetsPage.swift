@@ -46,7 +46,7 @@ struct InstructorDatasetsPage: HTML {
     @HTMLBuilder private var datasetList: some HTML {
         if datasets.isEmpty {
             p(.class("empty")) { "No datasets yet." }
-            p(.class("section-note")) { "Upload a CSV to create one." }
+            p(.class("section-note")) { "Upload a CSV or a FHIR NDJSON file to create one." }
         } else {
             table(.class("results-table section-items")) {
                 thead(.class("visually-hidden")) {

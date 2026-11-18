@@ -14,7 +14,8 @@ A green merge to `main` deploys to production in 10 to 15 minutes
 (CLAUDE.md, "Deployment & CI/CD"). So every merge this task makes is a
 production change, and the rules below are what make that safe.
 
-Run on Mondays, before the weekly digest (15:13 UTC).
+The nightly steward (`Tools/maintenance/nightly.md`) runs it first on
+Sunday nights, alone, before the Monday weekly digest (15:13 UTC).
 
 ## Rules
 
@@ -23,6 +24,9 @@ Run on Mondays, before the weekly digest (15:13 UTC).
   anything in this folder against production. A production setting that
   should change (runner `--max-jobs`, a Postgres setting) is a recommendation
   in the log, never an action.
+- **Label every pull request `steward`.** The nightly steward finds its own
+  open work by that label (`Tools/maintenance/README.md`). This file keeps
+  its own branch names (`perf-log/...` and one branch per fix).
 - **Merge only your own green pull requests.** Every change goes in a pull
   request from its own branch, opened by this run. Merge it (squash) only
   when every check on its current head has passed: no failed, cancelled or
@@ -94,7 +98,13 @@ week's numbers, and any open item it carried over.
 Run `Tools/perf-bench/weekly.sh` from the repository root, in the background,
 and wait for it: it takes about 25 minutes, longer than a foreground command
 may run. It needs a local Postgres with `pg_stat_statements` loaded
-(docs/database-performance.md, "Re-run the measurements").
+(docs/database-performance.md, "Re-run the measurements"). On the
+maintainer's Mac that Postgres is the `chickadee-postgres` container. If
+`docker info` fails, Docker Desktop is not running: start it with
+`open -a Docker`, wait until `docker info` succeeds, and then
+`docker start chickadee-postgres` if `docker ps` does not list it. Say in
+the log that you started it. The `Swift` production runner also runs in
+Docker on this machine, so it starts again too.
 
 If the script itself fails (a changed route, a seed that no longer matches
 the schema), that is the first thing to fix: repair the script or the seed in

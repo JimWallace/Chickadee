@@ -174,7 +174,7 @@ import VaporTesting
             let html = try await getHTML("/admin/users", cookie: cookie, on: app)
             let total = try await APIUser.query(on: app.db).count()
             let admins = try await APIUser.query(on: app.db).filter(\.$role == "admin").count()
-            #expect(html.contains("\(total) users · \(admins) admins"))
+            #expect(html.contains("\(total) users · \(admins) \(admins == 1 ? "admin" : "admins")"))
         }
     }
 
@@ -264,7 +264,6 @@ import VaporTesting
             ] {
                 #expect(html.contains("id=\"\(id)\""))
             }
-            #expect(html.contains("data-runner-id=\"detail-runner\""))
             // A fact with no value is left out, not shown as a dash.
             #expect(!html.contains("<dd>—</dd>"))
         }

@@ -76,7 +76,7 @@ struct WorkerJobRoutes: RouteCollection {
         await req.application.workerActivityStore.incrementAssignedJobs(for: body.workerID)
         await recordJobAssignmentDiagnostics(req: req, body: body, claimed: claimed)
 
-        let job = try await buildJobPayload(req: req, body: body, claimed: claimed)
+        let job = try await buildJobPayload(req: req, claimed: claimed)
         return try encodeJobResponse(job)
     }
 
@@ -193,7 +193,7 @@ struct WorkerJobRoutes: RouteCollection {
     /// per-(student, assignment) personalization seed and constructs the
     /// submission/testsetup download URLs.
     private func buildJobPayload(
-        req: Request, body: WorkerActivityPayload, claimed: ClaimedJob
+        req: Request, claimed: ClaimedJob
     ) async throws(WorkerJobError) -> Job {
         let submission = claimed.submission
         let setup = claimed.setup
@@ -279,7 +279,7 @@ struct WorkerJobRoutes: RouteCollection {
         guard let submissionID = submission.id, let setupID = setup.id else {
             throw WorkerJobError.internalInconsistency(reason: "Claimed submission or test setup missing id")
         }
-        let downloadVersion = await testSetupDownloadVersion(for: setup, req: req)
+        let downloadVersion = await testSetupDownloadVersion(for: setup)
         guard
             let submissionURL = URL(string: "\(base)/api/v1/worker/submissions/\(submissionID)/download"),
             let testSetupURL = URL(
@@ -458,7 +458,7 @@ private actor TestSetupDownloadVersionCache {
     }
 }
 
-private func testSetupDownloadVersion(for setup: APITestSetup, req: Request) async -> String {
+private func testSetupDownloadVersion(for setup: APITestSetup) async -> String {
     let setupID = setup.id ?? setup.zipPath
     let manifest = setup.manifest
     let zipPath = setup.zipPath

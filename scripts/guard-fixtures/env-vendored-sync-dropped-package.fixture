@@ -1,0 +1,9 @@
+# Removing a package from an environment file removes nothing from what
+# students boot until the kernel is rebuilt; the guard used to look one way only.
+guard="scripts/check-env-vendored-sync.sh"
+files="Tools/jupyterlite/environment-python.yml"
+description="an environment file drops a package the vendored env still carries"
+expect="which environment-python.yml no longer lists"
+apply() {
+    sed_inplace '/^  - pillow$/d' Tools/jupyterlite/environment-python.yml
+}

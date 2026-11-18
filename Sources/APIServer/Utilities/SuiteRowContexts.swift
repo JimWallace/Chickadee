@@ -66,6 +66,11 @@ struct EditableSuiteRow: Encodable {
     /// panel has no fields for a partition, so it shows a note instead of the
     /// sample fields.
     let datasetPartCount: Int?
+    /// What the dataset's format lets its spec do
+    /// (docs/dataset-kinds-plan.md §6); `.table` on every non-dataset row.
+    /// Carried so the delivery note and the panel's fields read the same rule
+    /// as the spec's `deliveryMode`.
+    let datasetCapabilities: DatasetCapabilities
     /// The file's place in the course dataset library, for the edit page's
     /// Files panel. Nil on every other row and page, which then shows no
     /// library control (`withLibraryStates`).
@@ -89,7 +94,8 @@ struct EditableSuiteRow: Encodable {
         guard isDataset else { return "" }
         let isPartition = datasetPartCount != nil
         let mode = DatasetDeliveryMode(
-            isPartition: isPartition, partCount: datasetPartCount, sampleSize: datasetSampleSize,
+            capabilities: datasetCapabilities, isPartition: isPartition, partCount: datasetPartCount,
+            sampleSize: datasetSampleSize,
             hasTransforms: !datasetTransforms.isEmpty)
         return DatasetDeliveryNote.text(for: mode, isPartition: isPartition) ?? ""
     }
@@ -140,7 +146,8 @@ struct EditableSuiteRow: Encodable {
         datasetSampleSize: Int? = nil,
         datasetStratumColumn: String? = nil,
         datasetTransforms: [DatasetTransform] = [],
-        datasetPartCount: Int? = nil
+        datasetPartCount: Int? = nil,
+        datasetCapabilities: DatasetCapabilities = .table
     ) {
         self.name = name
         self.url = url
@@ -155,6 +162,7 @@ struct EditableSuiteRow: Encodable {
         self.datasetStratumColumn = datasetStratumColumn
         self.datasetTransforms = datasetTransforms
         self.datasetPartCount = datasetPartCount
+        self.datasetCapabilities = datasetCapabilities
     }
 
     /// Display name if set, otherwise the filename stem (extension stripped).

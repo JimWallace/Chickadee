@@ -127,7 +127,7 @@ func routes(_ app: Application) throws {
     // Browser OAuth flow (/oauth/authorize consent + /oauth/token). The consent
     // GET reuses session auth; the submit is guarded by a single-use consent
     // token instead of the session cookie so it survives the cross-site hop.
-    try registerMCPOAuthRoutes(app, sessionAuth: sessionAuth)
+    try registerMCPOAuthRoutes(app, sessionAuth: sessionAuth, csrf: csrf)
 
     // MARK: - Admin diagnostic MCP (read-only)
 

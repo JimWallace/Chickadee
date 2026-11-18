@@ -105,7 +105,9 @@ jobs:
     timeout-minutes: 45
 
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Toolchain
         run: |
@@ -113,12 +115,15 @@ jobs:
           xcodebuild -version || true
 
       - name: Build Muter from source
+        env:
+          MUTER_REF: ${{ inputs.muter_ref || '7f1f258' }}
+          APPLY_PATCHES: ${{ inputs.apply_patches }}
         run: |
           git clone https://github.com/muter-mutation-testing/muter.git "$RUNNER_TEMP/muter"
           cd "$RUNNER_TEMP/muter"
-          git checkout "${{ inputs.muter_ref || '7f1f258' }}"
+          git checkout "$MUTER_REF"
           git log -1 --format='muter @ %h %ad %s' --date=short
-          if [ "${{ inputs.apply_patches }}" != "false" ]; then
+          if [ "$APPLY_PATCHES" != "false" ]; then
             for patch_file in "$GITHUB_WORKSPACE"/Tools/mutation/[0-9][0-9][0-9][0-9]-*.patch; do
               git apply "$patch_file"
               echo "applied $(basename "$patch_file")"
@@ -329,7 +334,7 @@ jobs:
 
       - name: Upload the Muter report
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: muter-probe-report
           path: |

@@ -35,6 +35,16 @@ set -euo pipefail
 # the environment once, into a file-private `let`. The measurement is in
 # docs/mutation-testing-pilot.md, "Why the guards read the environment once".
 #
+# A THIRD PATCH STOPS ONE MUTANT FROM COSTING A SHARD. RemoveSideEffects means to
+# skip a variable declaration, but that check passes any statement that is not a
+# `do`, so it deletes any
+# `let name = ...` whose text contains `_ = ` -- including one inside a closure,
+# as in `let startHeartbeat = Task { _ = try? await ... }`. Every later use of
+# the name then fails to compile, and schemata put every mutant in one binary,
+# so shard 10 of the 2026-11-10 sweep produced no outcomes at all (#2970).
+# Tools/mutation/0003-keep-named-bindings.patch skips a declaration that names a
+# binding. `let _ = f()` stays a mutant, because removing it still compiles.
+#
 # Every `Tools/mutation/*.patch` is applied, in name order. Adding one means
 # re-verifying with the probe, exactly as for a new MUTER_REF.
 #
@@ -82,6 +92,7 @@ cd "$repo_root"
 
 config="Tools/mutation/config.json"
 # Name order is application order: 0001 before 0002, and 0002 assumes 0001.
+# 0003 touches a different file and assumes neither.
 patch_files=(Tools/mutation/[0-9][0-9][0-9][0-9]-*.patch)
 plan_only=0
 check_flags_only=0
@@ -184,23 +195,30 @@ command -v swift >/dev/null || { echo "swift not on PATH" >&2; exit 1; }
 #     scripts/mutation-run.sh --check-build-flags
 check_warning_demotion() {
     local probe
-    local extra_args
+    local extra_args line
     probe="${TMPDIR:-/tmp}/chickadee-mutation-flag-probe"
     rm -rf "$probe"
     mkdir -p "$probe/Sources/Probe"
 
-    # `test`, and each `--skip <suite>`, select tests rather than affect the
-    # build; everything else in testArgs is build configuration and belongs in
-    # the probe. Derived rather than restated, so the probe measures whatever
-    # the sweep is actually configured to use.
-    mapfile -t extra_args < <(python3 - "$config" "$repo_root" <<'ARGS'
+    # `test`, and each `--skip <suite>` or `--filter <suite>`, select tests
+    # rather than affect the build (`swift build` refuses `--filter`, so a
+    # steward run that narrows the suite would fail here); everything else in
+    # testArgs is build configuration and belongs in the probe. Derived rather
+    # than restated, so the probe measures whatever the sweep is actually
+    # configured to use.
+    # A read loop, not mapfile: mapfile needs bash 4, and macOS ships bash 3.2,
+    # where the nightly steward runs this script.
+    extra_args=()
+    while IFS= read -r line; do
+        if [ -n "$line" ]; then extra_args+=("$line"); fi
+    done < <(python3 - "$config" "$repo_root" <<'ARGS'
 import json, sys
 args = json.load(open(sys.argv[1]))["testArgs"]
 out, i = [], 0
 while i < len(args):
     if args[i] == "test":
         i += 1
-    elif args[i] == "--skip":
+    elif args[i] in ("--skip", "--filter"):
         i += 2
     else:
         out.append(args[i].replace("{repoRoot}", sys.argv[2]))
@@ -230,7 +248,7 @@ public func probe() {
 }
 SOURCE
 
-    ( cd "$probe" && swift build "${extra_args[@]}" ) > "$probe/log.txt" 2>&1
+    ( cd "$probe" && swift build ${extra_args[@]+"${extra_args[@]}"} ) > "$probe/log.txt" 2>&1
 }
 
 echo "==> checking that a mutated copy's warnings are not errors"
@@ -264,7 +282,10 @@ else
         echo "shard $SHARD out of range (0..$((SHARD_COUNT - 1)))" >&2
         exit 2
     fi
-    mapfile -t shard_files < <(assign "$SHARD")
+    shard_files=()
+    while IFS= read -r line; do
+        if [ -n "$line" ]; then shard_files+=("$line"); fi
+    done < <(assign "$SHARD")
     [ "${#shard_files[@]}" -gt 0 ] || { echo "shard $SHARD is empty" >&2; exit 1; }
     label="shard $SHARD of $SHARD_COUNT"
     echo "==> $label: ${#shard_files[@]} files"

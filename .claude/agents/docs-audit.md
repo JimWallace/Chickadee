@@ -34,7 +34,7 @@ that says "every page" when the job covers one page per archetype.
    **New** or **Still open**, and list the previous findings that are fixed.
 
 `docs/archive/` is out of scope: its documents describe finished work and say
-so. `CHANGELOG.md` and `CHANGELOG-0.4.md` are history, not claims.
+so. `CHANGELOG.md`, `CHANGELOG-0.5.md` and `CHANGELOG-0.4.md` are history, not claims.
 
 ## What you check
 

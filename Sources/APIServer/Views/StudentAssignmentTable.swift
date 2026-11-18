@@ -5,6 +5,7 @@
 // draws it once per course section and once for the ungrouped assignments,
 // from this one definition (UI audit S7).
 
+import Core
 import Elementary
 
 /// One student's assignment rows: status, due date, grade, history and the
@@ -42,6 +43,7 @@ private struct StudentAssignmentTableRow: HTML {
         switch row.status {
         case "open": "tier tier-open"
         case "closed": "tier tier-closed"
+        case "preview": "tier tier-preview"
         default: "tier"
         }
     }
@@ -65,7 +67,7 @@ private struct StudentAssignmentTableRow: HTML {
                     }
                 }
             }
-            td { span(.class(statusClass)) { row.status } }
+            td { span(.class(statusClass)) { AssignmentVisibility.displayLabel(forRaw: row.status) } }
             td(.class("due-col col-hide-phone")) { dueCell }
             td { gradeCell }
             td(.class("col-hide-phone")) {

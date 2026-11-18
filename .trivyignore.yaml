@@ -1,0 +1,17 @@
+# Accepted vulnerabilities for the image gate (#3077).
+#
+# docker-build.yml and runner-arm64-image.yml fail on any CRITICAL or HIGH
+# finding that has a fix. Add an entry here only after you have read the
+# advisory and decided that the image is not exposed. Each entry needs:
+#   id:          the CVE or GHSA identifier
+#   paths:       the package path from the Trivy report (optional; narrows it)
+#   statement:   why the image is not exposed, in one or two sentences
+#   expired_at:  at most 90 days ahead; the gate fails again after it
+#
+# Example (not active):
+#   - id: CVE-0000-00000
+#     paths:
+#       - "usr/lib/python3/dist-packages/example"
+#     statement: The vulnerable function is not reachable; nothing imports it.
+#     expired_at: 2027-02-01
+vulnerabilities: []

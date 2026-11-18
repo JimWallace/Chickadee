@@ -93,10 +93,24 @@ fi
 # Run the check; on failure dump the server log tail BEFORE the EXIT trap wipes
 # the work dir, so a server-side 500 is
 # visible in CI instead of hiding behind the browser's generic "500" message.
+#
+# SMOKE_SCREENSHOT_DIR, when set, gets one subdirectory per check and engine,
+# so two checks in one CI job do not overwrite the files of each other. A
+# failed check also gets the whole server log there, because the EXIT trap
+# deletes the work dir. CI uploads the directory when a step fails.
+check="${SMOKE_CHECK:-editor-check.mjs}"
+if [ -n "${SMOKE_SCREENSHOT_DIR:-}" ]; then
+  SMOKE_SCREENSHOT_DIR="$SMOKE_SCREENSHOT_DIR/${check%.mjs}-${SMOKE_BROWSER:-chromium}"
+  export SMOKE_SCREENSHOT_DIR
+fi
 set +e
-node "${SMOKE_CHECK:-editor-check.mjs}" "http://127.0.0.1:$PORT"
+node "$check" "http://127.0.0.1:$PORT"
 check_rc=$?
 set -e
+if [ "$check_rc" -ne 0 ] && [ -n "${SMOKE_SCREENSHOT_DIR:-}" ]; then
+  mkdir -p "$SMOKE_SCREENSHOT_DIR"
+  cp "$LOG" "$SMOKE_SCREENSHOT_DIR/server.log" || true
+fi
 if [ "$check_rc" -ne 0 ]; then
   # The error lines FIRST, from the whole log, because the tail below often
   # cannot show them. When a submit 500s the page keeps polling the submission

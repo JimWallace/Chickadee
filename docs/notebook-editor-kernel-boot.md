@@ -1,8 +1,9 @@
 # Notebook editor kernel boot — "Kernel Unknown" and the path to a deterministic fix
 
 This note captures the in-browser editor's kernel-boot failure mode
-("Kernel Unknown"), the mitigation shipped now, and the plan for the
-durable root-cause fix (cross-origin isolation / `SharedArrayBuffer`).
+("Kernel Unknown"), the mitigation, and the durable root-cause fix
+(cross-origin isolation / `SharedArrayBuffer`), which has shipped (plan C,
+below).
 
 It is the companion to [`docs/notebook-editor-smoke-test.md`](notebook-editor-smoke-test.md)
 (the Playwright harness that gates this code) and the inline rationale in

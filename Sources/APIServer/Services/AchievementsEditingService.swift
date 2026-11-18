@@ -77,6 +77,13 @@ struct AchievementRow: Codable, Sendable {
     var points: Int?
     /// record: raw `RecordDimension`.
     var recordDimension: String?
+    /// Raw `RewardType`: what the row awards. Absent = the scope's default
+    /// (badge, points or title). `wardrobe` is for an individual row only
+    /// (docs/achievement-rewards.md, decision 4).
+    var rewardType: String?
+    /// `wardrobe` only: the `WardrobeItem` raw value granted, one of
+    /// `WardrobeItem.grantable`.
+    var rewardItem: String?
 
     init(
         id: String? = nil,
@@ -87,7 +94,9 @@ struct AchievementRow: Codable, Sendable {
         conditions: [ConditionRow]? = nil,
         classPercent: Double? = nil,
         points: Int? = nil,
-        recordDimension: String? = nil
+        recordDimension: String? = nil,
+        rewardType: String? = nil,
+        rewardItem: String? = nil
     ) {
         self.id = id
         self.name = name
@@ -98,6 +107,8 @@ struct AchievementRow: Codable, Sendable {
         self.classPercent = classPercent
         self.points = points
         self.recordDimension = recordDimension
+        self.rewardType = rewardType
+        self.rewardItem = rewardItem
     }
 }
 
@@ -134,6 +145,7 @@ enum AchievementsEditing {
         try validateLevel(
             of: rawConditions.compactMap { AchievementSignal(rawValue: $0.signal) }, name: name, at: level)
         let conditions = try rawConditions.map(condition(from:))
+        let rewardType = try Self.rewardType(of: input, name: name, scope: scope, at: level)
         switch level {
         case .assignment:
             break
@@ -157,10 +169,13 @@ enum AchievementsEditing {
         }
         switch scope {
         case .individual:
+            let reward =
+                rewardType == .wardrobe
+                ? AchievementReward(type: .wardrobe, label: name, item: try grantableItem(input.rewardItem, name: name))
+                : AchievementReward(type: .badge, label: name)
             return Achievement(
                 id: id, name: name, detail: cleanDetail, scope: .individual,
-                conditions: conditions, match: match,
-                reward: AchievementReward(type: .badge, label: name))
+                conditions: conditions, match: match, reward: reward)
         case .classWide:
             guard let classPercent = input.classPercent, (0...100).contains(classPercent) else {
                 throw AppError.invalidParameter(
@@ -211,6 +226,52 @@ enum AchievementsEditing {
                 reward: AchievementReward(type: .title, label: name),
                 recordDimension: dim)
         }
+    }
+
+    /// `wardrobe` when a row asks for a wardrobe item, or nil for the scope's
+    /// own reward.
+    /// A wardrobe item is an individual assignment achievement's reward only
+    /// (docs/achievement-rewards.md, decision 4): a record moves between
+    /// holders and an item is sticky, so a record refuses it; a class goal's
+    /// "also grant" and a course achievement's item are later slices.
+    private static func rewardType(
+        of input: AchievementRow, name: String, scope: AchievementScope, at level: AchievementLevel
+    ) throws -> RewardType? {
+        guard let raw = input.rewardType, !raw.isEmpty else { return nil }
+        guard let type = RewardType(rawValue: raw) else {
+            throw AppError.invalidParameter(
+                name: "rewardType",
+                reason: "Unknown reward type '\(raw)'. Use one of "
+                    + RewardType.allCases.map(\.rawValue).joined(separator: ", ") + ".")
+        }
+        // Every other type is the scope's own, which the scope decides, so a
+        // row read back from get_achievements saves unchanged.
+        guard type == .wardrobe else { return nil }
+        guard scope == .individual, level == .assignment else {
+            let reason =
+                scope == .record
+                ? "A record moves between holders and a wardrobe item is kept, so a record cannot grant one."
+                : "Only an individual achievement on an assignment can grant a wardrobe item."
+            throw AppError.invalidParameter(name: "rewardType", reason: "'\(name)': " + reason)
+        }
+        return type
+    }
+
+    /// The item a wardrobe reward names, which must be grantable: an item a
+    /// built-in rule earns, or a found item, is refused, so the "how you
+    /// earned it" text stays true.
+    private static func grantableItem(_ raw: String?, name: String) throws -> String {
+        let choices = WardrobeItem.grantable.map(\.rawValue).joined(separator: ", ")
+        guard let raw = raw?.trimmingCharacters(in: .whitespacesAndNewlines), !raw.isEmpty else {
+            throw AppError.invalidParameter(
+                name: "rewardItem", reason: "'\(name)' grants a wardrobe item, so it needs one of: \(choices).")
+        }
+        guard let item = WardrobeItem(rawValue: raw), WardrobeItem.grantable.contains(item) else {
+            throw AppError.invalidParameter(
+                name: "rewardItem",
+                reason: "'\(raw)' is not an item an achievement can grant. Use one of: \(choices).")
+        }
+        return item.rawValue
     }
 
     private static func condition(from input: ConditionRow) throws -> AchievementCondition {
@@ -292,7 +353,9 @@ enum AchievementsEditing {
             conditions: a.conditions.map(conditionRow(from:)),
             classPercent: a.classFraction.map { $0 * 100 },
             points: a.reward.points,
-            recordDimension: a.recordDimension?.rawValue)
+            recordDimension: a.recordDimension?.rawValue,
+            rewardType: a.reward.type.rawValue,
+            rewardItem: a.reward.item)
     }
 
     private static func conditionRow(from c: AchievementCondition) -> ConditionRow {
@@ -400,8 +463,24 @@ enum AchievementsEditing {
     ///   the whole assignment.
     private static func validateEvaluableShape(_ achievement: Achievement) throws {
         switch (achievement.scope, achievement.reward.type) {
-        case (.individual, .badge), (.classWide, .points), (.record, _):
+        case (.individual, .badge), (.classWide, .points), (.record, .badge), (.record, .title),
+            (.record, .points):
             break
+        case (.individual, .wardrobe):
+            // A hand-authored manifest can name any item; only a grantable
+            // one is granted, so any other would never be.
+            guard achievement.reward.wardrobeItem != nil else {
+                throw AppError.invalidParameter(
+                    name: "rewardItem",
+                    reason: "'\(achievement.name)' grants '\(achievement.reward.item ?? "")', which is not an "
+                        + "item an achievement can grant. Use one of: "
+                        + WardrobeItem.grantable.map(\.rawValue).joined(separator: ", ") + ".")
+            }
+        case (.classWide, .wardrobe), (.record, .wardrobe):
+            throw AppError.invalidParameter(
+                name: "rewardType",
+                reason: "'\(achievement.name)' grants a wardrobe item, which only an individual "
+                    + "achievement can do.")
         case (.individual, .title), (.individual, .points):
             throw AppError.invalidParameter(
                 name: "reward",

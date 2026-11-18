@@ -69,7 +69,7 @@ struct AccountPage: HTML {
                             tr {
                                 th { "Code" }
                                 th { "Name" }
-                                th { "Enrolment" }
+                                th { "Enrollment" }
                                 th { span(.class("visually-hidden")) { "Actions" } }
                             }
                         }
@@ -181,11 +181,14 @@ struct AccountPage: HTML {
             }
             switch exportStatus {
             case "pending":
-                p(.id("export-pending")) {
-                    span(.class("tier tier-preview")) { "In progress" }
-                    " Requested \(exportRequestedAtDisplay ?? ""). Preparing your export can take a few minutes."
+                div(
+                    .class("js-export-state"), .role("status"),
+                    .data("poll-url", value: AccountExportStateRegion.pollURL),
+                    .data("poll-swap", value: "region"), .data("poll-interval", value: "3000")
+                ) {
+                    AccountExportStateRegion(isPending: true, requestedAtDisplay: exportRequestedAtDisplay)
                 }
-                script(.src(page.asset("/account-export.js"))) {}
+                script(.src(page.asset("/table-poll.js"))) {}
             case "complete":
                 p { a(.class("btn btn-primary"), .href("/account/export/download")) { "Download your export" } }
                 p {
@@ -198,9 +201,7 @@ struct AccountPage: HTML {
                 ""
             }
             p {
-                "Request a copy of the personal information Chickadee holds about you: your profile, course "
-                    + "enrollments, submissions (including the files you uploaded), grading results, and account "
-                    + "activity records — delivered as a single zip archive. Limit one export per day."
+                "Request a zip of the personal information Chickadee holds about you, at most once a day."
             }
             if exportCanRequest {
                 form(.method(.post), .action("/account/export"), .class("inline-form")) {
@@ -208,6 +209,36 @@ struct AccountPage: HTML {
                     " "
                     button(.class("btn btn-primary"), .type(.submit)) { "Request data export" }
                 }
+            }
+        }
+    }
+}
+
+/// The export's state while it is prepared. Rendered inline and as the
+/// `/account/export/status?fragment=state` poll response, so the refresh
+/// cannot drift from the page. A finished export carries
+/// `data-export-final`, which `app.js` answers by reloading the page, where
+/// the download button or the failure notice is. When the reload does not
+/// happen, the link does the same job.
+struct AccountExportStateRegion: HTML {
+    /// True while the export is still being prepared.
+    let isPending: Bool
+    /// When the export was requested, for the pending line.
+    let requestedAtDisplay: String?
+
+    /// The poll URL of the region.
+    static let pollURL = "/account/export/status?fragment=state"
+
+    var body: some HTML {
+        if isPending {
+            p(.id("export-pending")) {
+                span(.class("tier tier-preview")) { "In progress" }
+                " Requested \(requestedAtDisplay ?? ""). Preparing your export can take a few minutes."
+            }
+        } else {
+            p(.data("export-final", value: "true")) {
+                "Your export has finished. "
+                a(.href("/account")) { "Refresh the page" }
             }
         }
     }
@@ -497,6 +528,9 @@ private struct AccountRingGroup: HTML {
                         if position > 0 { " " }
                         AccountBorderSwatch(option: option)
                     }
+                }
+                for note in picker.grantNotes {
+                    p(.class("field-note field-note--muted")) { note }
                 }
                 if !picker.laterRings.isEmpty {
                     AccountLockedList(labelID: "bird-locked-label") {

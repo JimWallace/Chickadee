@@ -42,13 +42,21 @@ public enum WardrobeItem: String, CaseIterable, Codable, Sendable {
     /// an earned one: no graded work earns it, so `earned(by:)` never returns
     /// it. `isFound` items are granted by `WardrobeUnlockStore.grantFound`.
     case quantumCatsRing = "border.quantumcats"
+    /// The spectrum ring. Grantable only: no built-in rule earns it, and an
+    /// instructor's achievement grants it (docs/achievement-rewards.md,
+    /// decision 4).
+    case spectrumRing = "border.spectrum"
+    /// The cross-fade ring, blue on the left to red on the right in the
+    /// colours of the Cross-fade pattern of "The Class Paints a Picture"
+    /// (red `x*4`, blue `236 - x*4`). Grantable only, like spectrum.
+    case crossFadeRing = "border.crossfade"
 
     /// The slot the item belongs to.
     public var slot: AvatarCustomizableSlot {
         switch self {
         case .chirpFace, .slyFace, .dreamyFace: .expression
         case .twoToneRing, .stitchedRing, .lifeRing, .greenLightRing, .ouroborosRing, .functionRing, .binaryRing,
-            .pulseRing, .quantumCatsRing:
+            .pulseRing, .quantumCatsRing, .spectrumRing, .crossFadeRing:
             .border
         }
     }
@@ -68,6 +76,8 @@ public enum WardrobeItem: String, CaseIterable, Codable, Sendable {
         case .binaryRing: AvatarBorder.binary.rawValue
         case .pulseRing: AvatarBorder.pulse.rawValue
         case .quantumCatsRing: AvatarBorder.quantumcats.rawValue
+        case .spectrumRing: AvatarBorder.spectrum.rawValue
+        case .crossFadeRing: AvatarBorder.crossfade.rawValue
         }
     }
 
@@ -99,7 +109,31 @@ public enum WardrobeItem: String, CaseIterable, Codable, Sendable {
         case .lifeRing, .greenLightRing, .ouroborosRing, .functionRing, .binaryRing, .pulseRing:
             "when every test passed on a \(concept?.displayName.lowercased() ?? "concept") lab"
         case .quantumCatsRing: "by entering the Konami code"
+        // A granted item's own text is the achievement that granted it,
+        // stored with the unlock (`wardrobe_unlocks.label`). This is the
+        // fallback when no label was stored.
+        case .spectrumRing, .crossFadeRing: "by an achievement in a course"
         }
+    }
+
+    /// The items an achievement may grant (docs/achievement-rewards.md,
+    /// decision 4): the items with no built-in rule, so the "how you earned
+    /// it" text is always true. Disjoint from the items `earned(by:)` returns
+    /// and from the found items. The editor's Reward select and the MCP prose
+    /// derive their lists from this.
+    public static let grantable: [WardrobeItem] = [.spectrumRing, .crossFadeRing]
+
+    /// The items a student obtains with no instructor setup: the rule items
+    /// and the found ones, in wardrobe order. The course Achievements tab's
+    /// "Built in" list reads this.
+    public static var obtainedWithoutSetup: [WardrobeItem] {
+        allCases.filter { !grantable.contains($0) }
+    }
+
+    /// Whether graded work earns this item by a rule in code (`earned(by:)`).
+    /// False for a found item and for a grantable one.
+    public var hasBuiltInRule: Bool {
+        !isFound && !Self.grantable.contains(self)
     }
 
     /// Whether the item is found rather than earned: granted when a student

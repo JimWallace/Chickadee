@@ -23,7 +23,7 @@ extension WebRoutes {
             let setupID = req.parameters.get("testSetupID"),
             let setup = try await APITestSetup.find(setupID, on: req.db)
         else {
-            throw AppError.notFound(resource: "Test setup")
+            throw AppError.notFound(resource: "Assignment")
         }
         try await req.cachedRequireCourseEnrollment(caller: user, courseID: setup.courseID)
         // The notebook source's gate: a student may not read a closed lab they

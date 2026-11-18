@@ -5,6 +5,5 @@ files="Sources/APIServer/Views/Pages/AdminUserPage.swift"
 description="an Elementary PageStyle block that redefines a global selector"
 expect="re-defines a selector from the global sheet"
 apply() {
-    sed -i.bak 's/\.user-enroll-select { flex: 1; }/.user-enroll-select { flex: 1; }\n                .toolbar { gap: 0; }/' Sources/APIServer/Views/Pages/AdminUserPage.swift
-    rm -f Sources/APIServer/Views/Pages/AdminUserPage.swift.bak
+    sed_inplace 's/\.user-enroll-select { flex: 1; }/.user-enroll-select { flex: 1; }\n                .toolbar { gap: 0; }/' Sources/APIServer/Views/Pages/AdminUserPage.swift
 }

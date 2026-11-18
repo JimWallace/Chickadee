@@ -135,6 +135,13 @@ public enum DatasetDictionary {
     /// Why an edited dictionary cannot be saved against a version whose header
     /// is `header`, or nil. An entry must name a column the file has, and must
     /// name it once.
+    /// Dictionary prose as stored: trimmed, with blank text read as none. The
+    /// CSV and the FHIR dictionaries both store prose this way.
+    public static func cleaned(_ text: String?) -> String? {
+        let trimmed = text?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return trimmed.isEmpty ? nil : trimmed
+    }
+
     public static func editIssue(_ entries: [DatasetColumn], header: [String]) -> String? {
         let known = Set(header)
         var seen: Set<String> = []

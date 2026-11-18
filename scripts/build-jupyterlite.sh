@@ -50,23 +50,23 @@ if [[ -n "$SOURCE_DATE_EPOCH" ]]; then
   BUILD_ARGS+=(--source-date-epoch "$SOURCE_DATE_EPOCH")
 fi
 
-# Kernels via jupyterlite-xeus: xpython (Python), xr (R), xlua (Lua) and
-# xoctave (Octave), each from its OWN emscripten-forge env —
-# Tools/jupyterlite/environment-{python,r,lua,octave}.yml.
+# Kernels via jupyterlite-xeus, each from its OWN emscripten-forge env —
+# Tools/jupyterlite/environment-<language>.yml (today xpython, xr, xlua and
+# xoctave).
 #
 # The envs are separate on purpose. jupyterlite-xeus packs one
 # `kernel_packages` payload per env and a kernel fetches its whole env at boot,
 # so a single shared Python+R env made every Python boot pull all of r-base and
 # every R boot pull numpy/pandas/matplotlib — slow enough to time out the editor
-# probes ("kernel never reported idle"). `environment_file` is list-valued, so
-# passing it once per env yields one payload each.
+# probes ("kernel never reported idle"). `prefix` is list-valued, so passing it
+# once per env yields one payload each.
 #
 # NOTE: the `chickadee-*` naming is load-bearing, not cosmetic — the module-index
 # step at the end of this script globs `Public/jupyterlite/xeus/chickadee-*`, so
 # an env named anything else is skipped silently and ships with no index.
 #
-# Built ONLY where micromamba is available: jupyterlite-xeus solves the envs at
-# build time, which needs network to repo.prefix.dev / conda-forge. Where it is
+# Built ONLY where micromamba is available: each env is installed from its lock
+# at build time, which needs network to repo.prefix.dev. Where it is
 # absent (the ordinary jupyterlite.yml build), this step is skipped and the
 # committed Public/jupyterlite/xeus/ is treated as authoritative — the
 # reproducibility check excludes that path and scripts/check-xeus-vendored.sh
@@ -78,24 +78,48 @@ fi
 # now a deliberate choice about WHERE a ~100 MB regenerated diff belongs, not a
 # capability limit.
 #
-# NOTE: --XeusAddon.environment_file is resolved RELATIVE TO --lite-dir, so each
-# must be passed as a bare filename, not the absolute path it was copied to.
-XEUS_ENVS=(environment-python.yml environment-r.yml environment-lua.yml environment-octave.yml)
+# EACH KERNEL IS INSTALLED FROM ITS LOCK, at a fixed path, and handed to
+# jupyterlite-xeus as a prefix (scripts/create-kernel-prefix.py). It never
+# solves an environment file here. A rebuild changes a package only when a lock
+# in Tools/jupyterlite/locks/ changes (scripts/lock-kernel-envs.py), and two
+# builds from the same locks give the same kernel bytes, because the install
+# path written into each kernel binary is always the same.
+#
+# The environments are FOUND, not listed: every environment-*.yml in
+# $LITE_SRC_DIR is built, from locks/<its name>-lock.yml. A hand-written list
+# here would let a new environment file be checked by the guards and never
+# built.
 XEUS_ENVS_PRESENT=()
-for env_file in "${XEUS_ENVS[@]}"; do
-  [[ -f "$LITE_SRC_DIR/$env_file" ]] && XEUS_ENVS_PRESENT+=("$env_file")
+for env_path in "$LITE_SRC_DIR"/environment-*.yml; do
+  [[ -f "$env_path" ]] && XEUS_ENVS_PRESENT+=("$(basename "$env_path")")
 done
 if [[ ${#XEUS_ENVS_PRESENT[@]} -gt 0 ]] && command -v micromamba >/dev/null 2>&1; then
+  # /tmp/chickadee-xeus is where scripts/create-kernel-prefix.py installs the
+  # kernel environments. Its path is fixed on purpose (see that script), so two
+  # builds on one machine cannot share it. `mkdir` claims it atomically, and
+  # only the build that claimed it removes it on exit.
+  XEUS_PREFIX_ROOT=/tmp/chickadee-xeus
+  if ! mkdir "$XEUS_PREFIX_ROOT" 2>/dev/null; then
+    echo "build-jupyterlite: $XEUS_PREFIX_ROOT already exists. Another kernel build is running, or one stopped without cleaning up. Remove it when no build is running, then build again." >&2
+    exit 1
+  fi
+  trap 'rm -rf "$TMP_LITE_DIR" "$TEMP_BUILD_DIR" "$XEUS_PREFIX_ROOT"' EXIT
   for env_file in "${XEUS_ENVS_PRESENT[@]}"; do
-    cp "$LITE_SRC_DIR/$env_file" "$TMP_LITE_DIR/$env_file"
-    BUILD_ARGS+=(--XeusAddon.environment_file "$env_file")
+    prefix="$("$VENV_DIR/bin/python" "$ROOT_DIR/scripts/create-kernel-prefix.py" \
+      "$LITE_SRC_DIR/$env_file" "$LITE_SRC_DIR/locks/${env_file%.yml}-lock.yml")"
+    BUILD_ARGS+=(--XeusAddon.prefix "$prefix")
   done
-  echo "build-jupyterlite: micromamba found — building the xeus kernels from ${XEUS_ENVS_PRESENT[*]}."
+  echo "build-jupyterlite: micromamba found — building the xeus kernels from the locks of ${XEUS_ENVS_PRESENT[*]}."
 elif [[ ${#XEUS_ENVS_PRESENT[@]} -gt 0 ]]; then
   echo "build-jupyterlite: micromamba not found — skipping the xeus kernel build; the committed Public/jupyterlite/xeus/ is authoritative." >&2
 fi
 
-"$JUPYTER_BIN" lite build "${BUILD_ARGS[@]}"
+# Run in the temporary source directory, so the build's doit task database
+# (.jupyterlite.doit.db, written to the current directory) is new each run and
+# removed with that directory. A database kept from an earlier build marks tasks
+# as up to date: with the kernel prefixes now at fixed paths, a second build
+# skipped copying the kernels' labextensions and shipped without them.
+(cd "$TMP_LITE_DIR" && "$JUPYTER_BIN" lite build "${BUILD_ARGS[@]}")
 
 mkdir -p "$OUTPUT_DIR"
 

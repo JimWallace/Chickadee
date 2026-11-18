@@ -1,0 +1,9 @@
+# The environments are found by glob. A hand-written list let a new
+# environment ship unchecked.
+guard="scripts/check-env-vendored-sync.sh"
+created="Tools/jupyterlite/environment-guardfixture.yml"
+description="a new environment file with no vendored env"
+expect="environment-guardfixture.yml declares an env but"
+apply() {
+    printf 'name: chickadee-guardfixture\ndependencies:\n  - xeus-lua\n' > Tools/jupyterlite/environment-guardfixture.yml
+}

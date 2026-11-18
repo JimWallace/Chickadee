@@ -37,8 +37,8 @@ struct DatasetLibraryOption: Encodable, Sendable {
 
 /// `rows` with each support file's library state, and the course's datasets
 /// for the attach control. A file that is not attached gets a state only when
-/// it is a CSV, the one format the library holds, and not a grader-only file,
-/// which a promote refuses.
+/// its extension is a format the library holds (CSV or FHIR NDJSON), and it is
+/// not a grader-only file, which a promote refuses.
 func withLibraryStates(
     _ rows: [EditableSuiteRow], setup: APITestSetup, on db: any Database
 ) async throws -> (rows: [EditableSuiteRow], options: [DatasetLibraryOption]) {
@@ -56,7 +56,9 @@ func withLibraryStates(
                     slug: source.slug, name: dataset?.name ?? source.slug, version: source.version,
                     newerVersion: behind ? dataset?.currentVersion : nil,
                     isCourseScoped: spec.scope == .course))
-        } else if row.name.lowercased().hasSuffix(".csv"), !graderOnly.contains(row.name) {
+        } else if DatasetFormat.allCases.contains(where: { $0.matches(filename: row.name) }),
+            !graderOnly.contains(row.name)
+        {
             row.library = SupportFileLibraryState(attachment: nil)
         }
         return row

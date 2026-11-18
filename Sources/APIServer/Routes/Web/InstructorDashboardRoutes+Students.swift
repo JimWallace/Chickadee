@@ -102,7 +102,10 @@ extension InstructorDashboardRoutes {
                     idPrefix: "add-staff", placeholderAllowed: req.application.staffPlaceholderAllowed,
                     defaultRole: .ta,
                     errorQuery: req.query[String.self, at: "staffError"]),
-                showsGroups: showsGroups
+                showsGroups: showsGroups,
+                readOnlyNote: courseIsArchived
+                    ? "This course is archived and is read-only."
+                    : (canManageRoster ? nil : "Only this course's instructors can change its roster.")
             )
         }
         .encodeResponse(for: req)

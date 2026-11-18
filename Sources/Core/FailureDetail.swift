@@ -23,9 +23,6 @@ public enum FailureDetail: String, Codable, Sendable, Equatable, CaseIterable {
     /// no message text. The hint, if any, still shows.
     case verdictOnly
 
-    /// The level an entry with no setting resolves to.
-    public static let `default`: FailureDetail = .full
-
     /// Instructor-facing label for a select control.
     public var displayName: String {
         switch self {

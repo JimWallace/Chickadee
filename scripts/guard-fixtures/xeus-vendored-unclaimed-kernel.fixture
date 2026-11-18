@@ -5,5 +5,5 @@ files="Sources/Core/LanguageDescriptor.swift"
 description="a language names a kernel that kernels.json does not register"
 expect="which no AssignmentLanguage claims"
 apply() {
-    sed -i 's|kernelName: "xlua",|kernelName: "xlua-guard-fixture",|' Sources/Core/LanguageDescriptor.swift
+    sed_inplace 's|kernelName: "xlua",|kernelName: "xlua-guard-fixture",|' Sources/Core/LanguageDescriptor.swift
 }

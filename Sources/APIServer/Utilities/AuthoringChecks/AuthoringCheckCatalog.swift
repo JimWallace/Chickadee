@@ -20,6 +20,7 @@ enum AuthoringCheckCatalog {
         TimingMarginCheck(),
         MissingMetricCheck(),
         MissingDataFileCheck(),
+        WholeFileSampleCheck(),
         ZeroPointsCheck(),
     ]
 

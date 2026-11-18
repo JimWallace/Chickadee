@@ -57,7 +57,7 @@ extension InstructorDashboardRoutes {
     func feedbackReviewPage(req: Request) async throws -> Response {
         let assignment = try await loadAssignmentForWrite(req, atLeast: .ta)
         guard let setup = try await APITestSetup.find(assignment.testSetupID, on: req.db) else {
-            throw AppError.notFound(resource: "Test setup")
+            throw AppError.notFound(resource: "Assignment")
         }
         let latest = try await ReflectionFeedbackService.latestStudentSubmissions(for: assignment, on: req.db)
         let rows = try await ReflectionFeedbackService.ensureRows(

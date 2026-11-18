@@ -25,7 +25,7 @@ of server CPU to database time is what carries over to production.
 |---|---|---|---|
 | Delete of a submission | 34 ms per row; one assignment (about 1,500 submissions) about 50 s | `request_metrics.submission_id` had no index | Fixed (`CreateForeignKeyIndexes`): 3.5 ms per row |
 | Runner claim with 20,000 pending jobs | 28–63 statements and 18–31 ms of server CPU per claim; p50 1.6–2.7 s at 200 runners | 50 full candidate rows per poll, Fluent query building, lost lock races | Improved: one-statement claim, a 10-row first page, one setup query per group. 100 runners on one assignment: p50 50 → 26 ms, CPU 210% → 135%; on twelve: p50 1.4 s → 0.57 s. Still saturates the 4-vCPU test machine at 200 runners |
-| Grades CSV export | 2.6 s, of which 49 ms is the database | 44,000 rows hydrated as Fluent models | Fixed (`bestGradePercentByStudentAndSetup`): one SQL fold. 157–195 ms, of which 30 ms is the database |
+| Grades CSV export | 2.6 s, of which 49 ms is the database | 44,000 rows hydrated as Fluent models | Fixed (`bestGradePercentByStudentAndSetup`): one SQL fold. 157–195 ms, of which 30 ms is the database. Then (2026-11-15, maintainer's Mac) the 300 roster rows and 3,600 fold rows decode by column name, not as `APIUser` models and a `Decodable` row: server CPU 58 → 36 ms per request, wall 78 → 54 ms |
 | Instructor assignment submissions page | about 300 ms, of which 31 ms is the database | 5,100 rows hydrated | Improved: grade summaries and timestamps decode as plain rows (SQLKit), and the other reads take only the columns shown. 167–191 ms |
 | A student's submission page | 16% of its CPU | the avatar-wardrobe unlock check (`WardrobeUnlockStore.grantNew`) re-reads the student's whole grade history on each view | Fixed (`WardrobeGrantChecks`): the history is read only when a result or an assignment's due date or concept has changed |
 | Student dashboard | 33–47 ms | | Fine |
@@ -70,10 +70,15 @@ Measured on v0.5.876 (2026-11-09) with `Tools/perf-bench/weekly.sh` on the
 | Student history | 9 | 0.4 | 19 | 19–23 ms |
 | Status poll `GET /api/v1/submissions/:id` | 3 | 0.07 | 3 | 4–11 ms |
 | Staff view of a submission | 19 | 0.6 | 16 | 27–33 ms |
-| Instructor assignment submissions | 20 | 36 | 4,810 | 167–191 ms |
+| Instructor assignment submissions | 19 | 36 | 4,510 | 167–191 ms |
 | Grades CSV export | 12 | 30 | 4,232 | 157–195 ms |
 | Instructor assignment list | 14 | 29 | 652 | 93–109 ms |
 | Admin dashboard | 11 | 11 | 4,653 | 60–77 ms |
+
+On 2026-11-13 the instructor assignment submissions page dropped from 20
+statements and 4,810 rows to 19 and 4,510: the per-student summary returns
+the latest submission's time, so the page no longer re-reads those rows by
+id. Its times above are still the 2026-11-09 ones.
 
 **Runner claims.** There is a backlog of 20,000 pending jobs. Each runner polls
 every second for 30 s.

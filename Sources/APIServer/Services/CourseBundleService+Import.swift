@@ -66,6 +66,9 @@ extension CourseBundleService {
         let manifest: CourseBundleManifest
         do {
             manifest = try decoder.decode(CourseBundleManifest.self, from: manifestData)
+        } catch let error as BundledDatasetFormatError {
+            // A dataset format this server does not know, by name.
+            throw AppError.invalidParameter(name: "bundle.json", reason: error.description)
         } catch {
             throw AppError.invalidParameter(name: "bundle.json", reason: "\(error)")
         }
@@ -75,6 +78,11 @@ extension CourseBundleService {
             throw AppError.badRequest(
                 reason: "Unsupported bundle schemaVersion \(manifest.schemaVersion); expected "
                     + "\(supported.lowerBound) to \(supported.upperBound)")
+        }
+        if let issue = CourseBundleManifest.datasetFormatIssue(
+            schemaVersion: manifest.schemaVersion, datasets: manifest.datasets ?? [])
+        {
+            throw AppError.badRequest(reason: issue)
         }
 
         return manifest
@@ -258,7 +266,7 @@ extension CourseBundleService {
                 // 6f. Create test setups → setupIDMap[bundleID] = new live ID
                 let setupIDMap = try await importBundledTestSetups(
                     manifest: manifest, dirs: dirs, courseID: t.courseID,
-                    app: app, db: db, tally: &t)
+                    db: db, tally: &t)
 
                 // 6g. Create assignments
                 let assignmentIDMap = try await importBundledAssignments(
@@ -456,7 +464,6 @@ private func importBundledTestSetups(
     manifest: CourseBundleManifest,
     dirs: BundleImportDirectories,
     courseID: UUID,
-    app: Application,
     db: any Database,
     tally: inout ImportTally
 ) async throws -> [String: String] {

@@ -1,0 +1,25 @@
+# The student contract (docs/release-gate.md): what a student's work depends
+# on between two visits. A change to one of these paths ships only in a minor
+# or a major, cut by hand. scripts/contract-changes.sh reads this file for the
+# pull request check (contract-change.yml), the release gate
+# (auto-release.yml) and the Dependabot path (dependabot-auto.yml).
+#
+# One pattern per line. A pattern that ends in / matches everything under that
+# directory; any other pattern is a shell glob matched against the whole path.
+# Lines that start with # and blank lines are ignored.
+Public/jupyterlite/
+Public/vendor/
+Public/runner-wasm/
+Public/grading-shared.js
+Public/python-grading-shared.js
+Public/r-grading-shared.js
+Public/lua-grading-shared.js
+Public/octave-grading-shared.js
+Public/xeus-kernel-shared.js
+Tools/jupyterlite/environment-*.yml
+Tools/jupyterlite/requirements.in
+Tools/jupyterlite/requirements.txt
+Tools/jupyterlite/locks/
+Tools/jupyterlite/jupyter-lite.json
+Sources/RunnerCore/
+Tests/Fixtures/output-contract.json

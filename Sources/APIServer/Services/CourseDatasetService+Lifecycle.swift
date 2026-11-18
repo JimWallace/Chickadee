@@ -2,7 +2,8 @@
 //
 // The course dataset library through a course's lifecycle
 // (docs/datasets-course-library.md §4.8): a course clone copies the library,
-// and a course bundle carries it (bundle schemaVersion 2). A course delete
+// and a course bundle carries it (bundle schemaVersion 2, or 3 with a FHIR
+// dataset; docs/fhir-datasets-plan.md §6). A course delete
 // needs nothing here: the library rows cascade with the course, and the blob
 // collector counts every version as a reference until its row is gone.
 
@@ -30,14 +31,15 @@ extension CourseDatasetService {
             let copy = APICourseDataset(
                 courseID: targetCourseID, slug: dataset.slug, name: dataset.name,
                 datasetDescription: dataset.datasetDescription, provenance: dataset.provenance,
-                licence: dataset.licence, isPublished: dataset.isPublished, currentVersion: dataset.currentVersion)
+                licence: dataset.licence, isPublished: dataset.isPublished, currentVersion: dataset.currentVersion,
+                format: dataset.format)
             try await copy.create(on: db)
             let copyID = try copy.requireID()
             for version in try await versions(of: dataset, on: db) {
                 try await APICourseDatasetVersion(
                     datasetID: copyID, version: version.version, filename: version.filename,
                     sha256: version.sha256, sizeBytes: version.sizeBytes, rowCount: version.rowCount,
-                    columns: version.columns, note: version.note
+                    columns: version.columns, description: version.datasetDescription, note: version.note
                 ).create(on: db)
             }
         }
@@ -53,13 +55,13 @@ extension CourseDatasetService {
             let versions = try await versions(of: dataset, on: db).map {
                 BundledDatasetVersion(
                     version: $0.version, filename: $0.filename, sha256: $0.sha256, sizeBytes: $0.sizeBytes,
-                    rowCount: $0.rowCount, columns: $0.columns, note: $0.note)
+                    rowCount: $0.rowCount, columns: $0.columns, note: $0.note, description: $0.datasetDescription)
             }
             bundled.append(
                 BundledDataset(
                     slug: dataset.slug, name: dataset.name, description: dataset.datasetDescription,
                     provenance: dataset.provenance, licence: dataset.licence, isPublished: dataset.isPublished,
-                    currentVersion: dataset.currentVersion, versions: versions))
+                    currentVersion: dataset.currentVersion, versions: versions, format: dataset.format))
         }
         return bundled
     }
@@ -68,7 +70,9 @@ extension CourseDatasetService {
     /// version from `bytes(_:)`, and returns how many datasets it created.
     ///
     /// Each version's bytes must hash to the hash the bundle names, so a
-    /// bundle cannot claim a version it does not carry. Slugs, version
+    /// bundle cannot claim a version it does not carry. A FHIR version's bytes
+    /// are checked as FHIR, and its patient count and summary are computed
+    /// from them, not read from the bundle. Slugs, version
     /// numbers and sizes are checked before any row is written, so a malformed
     /// bundle is refused by name and not by a unique index. The blobs are
     /// written before the rows; a failed import leaves them for the collector,
@@ -82,35 +86,52 @@ extension CourseDatasetService {
         blobs: AssignmentVersionBlobStore, on db: any Database
     ) async throws -> Int {
         let checked = try checkedBundledLibrary(datasets)
+        var fhirFacts: [String: CheckedUpload] = [:]
         for (bundled, slug, _) in checked {
+            let format = bundled.format
             for version in bundled.versions {
                 // Reading, hashing and storing a version is file work, so it
                 // runs off the cooperative pool.
-                let matches = try await runBlocking {
+                let read: (matches: Bool, facts: CheckedUpload?) = try await runBlocking {
                     let data = try bytes(version)
                     guard sha256HexDigest(data) == version.sha256, data.count == version.sizeBytes else {
-                        return false
+                        return (false, nil)
                     }
+                    let facts: CheckedUpload? =
+                        switch format {
+                        case .csv: nil
+                        case .fhirNdjson:
+                            // The facts are recomputed from the bytes; only
+                            // the instructor's prose and example pick come
+                            // from the bundle.
+                            try checkedFile(filename: version.filename, bytes: data, format: format)
+                                .carryingNotes(from: version.datasetDescription, bytes: data)
+                        }
                     try blobs.put(data)
-                    return true
+                    return (true, facts)
                 }
-                guard matches else {
+                guard read.matches else {
                     throw CourseDatasetError.bundledVersionMismatch(slug: slug, version: version.version)
                 }
+                if let facts = read.facts { fhirFacts["\(slug)/\(version.version)"] = facts }
             }
         }
         for (bundled, slug, name) in checked {
             let dataset = APICourseDataset(
                 courseID: courseID, slug: slug, name: name, datasetDescription: cleaned(bundled.description),
                 provenance: cleaned(bundled.provenance), licence: cleaned(bundled.licence),
-                isPublished: bundled.isPublished, currentVersion: bundled.versions.map(\.version).max() ?? 1)
+                isPublished: bundled.isPublished, currentVersion: bundled.versions.map(\.version).max() ?? 1,
+                format: bundled.format)
             try await dataset.create(on: db)
             let datasetID = try dataset.requireID()
             for version in bundled.versions {
+                let facts = fhirFacts["\(slug)/\(version.version)"]
                 try await APICourseDatasetVersion(
-                    datasetID: datasetID, version: version.version, filename: try validatedFilename(version.filename),
-                    sha256: version.sha256, sizeBytes: version.sizeBytes, rowCount: version.rowCount,
-                    columns: version.columns, note: cleaned(version.note)
+                    datasetID: datasetID, version: version.version,
+                    filename: try validatedFilename(version.filename, format: bundled.format),
+                    sha256: version.sha256, sizeBytes: version.sizeBytes, rowCount: facts?.rowCount ?? version.rowCount,
+                    columns: facts?.columns ?? version.columns, description: facts?.description,
+                    note: cleaned(version.note)
                 ).create(on: db)
             }
         }

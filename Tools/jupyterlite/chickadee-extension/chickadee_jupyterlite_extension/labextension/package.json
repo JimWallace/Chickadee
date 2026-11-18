@@ -23,11 +23,11 @@
     "test": "node --test test/*.test.mjs"
   },
   "dependencies": {
-    "@jupyterlab/application": "~4.6.5",
-    "@jupyterlab/apputils": "~4.7.5",
-    "@jupyterlab/cells": "~4.6.5",
+    "@jupyterlab/application": "~4.6.6",
+    "@jupyterlab/apputils": "~4.7.6",
+    "@jupyterlab/cells": "~4.6.6",
     "@jupyterlab/coreutils": "~6.6.5",
-    "@jupyterlab/notebook": "~4.6.5",
+    "@jupyterlab/notebook": "~4.6.6",
     "@jupyterlab/services": "~7.6.5",
     "@lumino/widgets": "^2.7.0"
   },
@@ -39,7 +39,7 @@
     "extension": true,
     "outputDir": "chickadee_jupyterlite_extension/labextension",
     "_build": {
-      "load": "static/remoteEntry.bd45c472a0c129029bf5.js",
+      "load": "static/remoteEntry.ab4730ff2bc3893bc5ec.js",
       "extension": "./extension",
       "style": "./style"
     }

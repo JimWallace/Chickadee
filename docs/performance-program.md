@@ -1,7 +1,8 @@
 # Performance program: weekly measurement, ratchets and production tuning
 
-Status: plan, proposed 2026-11-09. Nothing in this page runs yet except where
-it names an existing tool.
+Status: proposed 2026-11-09; the weekly measurement runs (`Tools/perf-bench/`,
+logged in [perf-log.md](perf-log.md), started by the nightly steward). The
+ratchets under "Ratchets to add" are still planned.
 
 This page sets out how Chickadee measures its performance every week, how a
 measured gain becomes a floor that later changes cannot fall below, and how to
@@ -51,9 +52,10 @@ Monday, so it lands in the same week as the weekly digest
 
 ### Step 1: the production snapshot
 
-This runs as a Claude Code scheduled task on the maintainer's work machine,
-with the `Chickadee_Admin` MCP connected, as the weekly dead-code review does
-(`docs/dead-code-scan.md`). It is not set up yet. The task:
+This runs first on Sunday nights in the nightly steward, a Claude Code
+scheduled task on the maintainer's work machine with the `Chickadee_Admin`
+MCP connected (`Tools/maintenance/nightly.md`). The procedure is
+`Tools/perf-bench/weekly-task.md`. The task:
 
 1. Calls the tools in the table below, read-only.
 2. Appends one dated section to `docs/perf-log.md` on a branch, with the

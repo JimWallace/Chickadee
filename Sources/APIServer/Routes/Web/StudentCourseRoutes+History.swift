@@ -287,8 +287,7 @@ extension StudentCourseRoutes {
 
     @Sendable
     func studentAssignmentHistoryPage(req: Request) async throws -> Response {
-        let action = try await resolveStudentAssignmentAction(
-            req: req, action: "view student submission history")
+        let action = try await resolveStudentAssignmentAction(req: req)
         let (course, student, assignment) = (action.course, action.student, action.assignment)
         let assignmentIDRaw = assignment.publicID
 
@@ -348,8 +347,7 @@ extension StudentCourseRoutes {
 
     @Sendable
     func retestStudentAssignment(req: Request) async throws -> Response {
-        let action = try await resolveStudentAssignmentAction(
-            req: req, action: "retest student submissions", writeFloor: .ta)
+        let action = try await resolveStudentAssignmentAction(req: req, writeFloor: .ta)
         let (actor, student, assignment) = (action.actor, action.student, action.assignment)
         let assignmentIDRaw = assignment.publicID
 
@@ -389,12 +387,11 @@ extension StudentCourseRoutes {
     /// redirect lands back here.
     @Sendable
     func resetStudentAssignmentNotebook(req: Request) async throws -> Response {
-        let action = try await resolveStudentAssignmentAction(
-            req: req, action: "reset student notebooks", writeFloor: .ta)
+        let action = try await resolveStudentAssignmentAction(req: req, writeFloor: .ta)
         let (actor, student, assignment) = (action.actor, action.student, action.assignment)
         let assignmentIDRaw = assignment.publicID
         guard let setup = try await APITestSetup.find(assignment.testSetupID, on: req.db) else {
-            throw AppError.notFound(resource: "Test setup")
+            throw AppError.notFound(resource: "Assignment")
         }
 
         let starter: Data
@@ -431,8 +428,7 @@ extension StudentCourseRoutes {
             var note: String?
         }
 
-        let action = try await resolveStudentAssignmentAction(
-            req: req, action: "grant deadline extensions", writeFloor: .ta)
+        let action = try await resolveStudentAssignmentAction(req: req, writeFloor: .ta)
         let (actor, student) = (action.actor, action.student)
         let assignmentIDRaw = action.assignment.publicID
         let studentUUID = action.studentID
@@ -493,8 +489,7 @@ extension StudentCourseRoutes {
 
     @Sendable
     func deleteStudentAssignmentExtension(req: Request) async throws -> Response {
-        let action = try await resolveStudentAssignmentAction(
-            req: req, action: "revoke deadline extensions", writeFloor: .ta)
+        let action = try await resolveStudentAssignmentAction(req: req, writeFloor: .ta)
         let student = action.student
         let assignmentIDRaw = action.assignment.publicID
         let studentUUID = action.studentID
@@ -532,8 +527,7 @@ extension StudentCourseRoutes {
             var note: String?
         }
 
-        let action = try await resolveStudentAssignmentAction(
-            req: req, action: "override grades", writeFloor: .ta)
+        let action = try await resolveStudentAssignmentAction(req: req, writeFloor: .ta)
         let (actor, student, assignment) = (action.actor, action.student, action.assignment)
         let assignmentIDRaw = assignment.publicID
         let studentUUID = action.studentID
@@ -577,8 +571,7 @@ extension StudentCourseRoutes {
 
     @Sendable
     func deleteStudentAssignmentGradeOverride(req: Request) async throws -> Response {
-        let action = try await resolveStudentAssignmentAction(
-            req: req, action: "clear grade overrides", writeFloor: .ta)
+        let action = try await resolveStudentAssignmentAction(req: req, writeFloor: .ta)
         let (student, assignment) = (action.student, action.assignment)
         let assignmentIDRaw = assignment.publicID
         let studentUUID = action.studentID
@@ -664,10 +657,9 @@ extension StudentCourseRoutes {
     ///
     /// Note on the role check: these routes are registered under the
     /// `/instructor` group's `ActiveCourseStaffMiddleware` (routes.swift),
-    /// which gates on instructor authority in the caller's *active* course. The
-    /// `isInstructor` guard here is defense-in-depth in case the route grouping
-    /// ever changes. `action` carries each handler's original forbidden-message
-    /// wording.
+    /// which gates on staff authority in the caller's *active* course. The
+    /// course-role check here is defense-in-depth in case the route grouping
+    /// ever changes.
     ///
     /// Authorization is per-course (#417 Slice E): every caller must be staff
     /// (TA or instructor) in the assignment's **own** course — `requireCourseRole
@@ -689,7 +681,7 @@ extension StudentCourseRoutes {
     /// missing, belongs to a different course, or (unreachable for a
     /// DB-loaded model) the student row has no id.
     fileprivate func resolveStudentAssignmentAction(
-        req: Request, action: String, writeFloor: CourseRole? = nil
+        req: Request, writeFloor: CourseRole? = nil
     ) async throws -> StudentAssignmentActionContext {
         let actor = try req.auth.require(APIUser.self)
         let (course, student) = try await resolveCourseAndStudent(req: req)
@@ -792,8 +784,9 @@ extension StudentCourseRoutes {
         return StudentAssignmentRow(
             assignmentID: assignment.publicID,
             title: assignment.title,
-            // Student-facing: Preview is indistinguishable from closed.
-            status: assignment.visibility == .preview ? "closed" : assignment.visibility.rawValue,
+            // A staff page: it names the state as the Overview does, so a
+            // staff-only assignment is not mislabelled "closed" (#3007).
+            status: assignment.visibility.rawValue,
             isOpen: assignment.isOpen,
             dueAtText: dueAtText,
             effectiveDueAtText: effectiveDueAtText,

@@ -60,7 +60,7 @@ struct StatementBudgetTests {
         .studentHistory: 8,
         .statusPoll: 2,
         .staffSubmission: 13,
-        .instructorSubmissions: 18,
+        .instructorSubmissions: 17,
         .gradesCSV: 14,
         .instructorList: 13,
         .adminDashboard: 10,

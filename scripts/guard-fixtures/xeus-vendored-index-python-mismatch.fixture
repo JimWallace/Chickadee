@@ -1,0 +1,10 @@
+# The stdlib half of the Python module index comes from the interpreter that
+# derived it. On the wrong minor version the authoring import check rejects
+# stdlib imports that work, or accepts ones that do not.
+guard="scripts/check-xeus-vendored.sh"
+files="Public/jupyterlite/xeus/chickadee-python/importable-modules.json"
+description="the Python module index was derived on a different Python than the kernel"
+expect="so its stdlib list is not the kernel's"
+apply() {
+    sed_inplace 's/"derivedOnPython": "3.13"/"derivedOnPython": "3.12"/' Public/jupyterlite/xeus/chickadee-python/importable-modules.json
+}

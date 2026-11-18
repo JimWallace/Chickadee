@@ -47,10 +47,11 @@ enum AdminMCPServerInstructions {
         What's available, by area:
         - Deployment: get_deployment_info (version + capability surface); \
         get_deploy_status (the zero-downtime auto-deploy daemon's current state — \
-        live version, latest release seen, paused flag, pending major approval) \
-        and get_deploy_history (recent deploy / rollback events). Both are \
-        read-only views of the daemon's status files; deploy control \
-        (pause/approve/rollback) is a host-side action, not exposed here.
+        live version, latest release seen, paused flag, deploy mode, the release \
+        held for approval) and get_deploy_history (recent deploy / rollback \
+        events). Both are read-only views of the daemon's status files. Deploy \
+        control is not exposed here: approve, mode and pause are on the admin \
+        Deployment page, and rollback is a host action.
         - Runners: list_runners (the fleet) and get_runner_detail (one runner's \
         capability profile + aggregate per-stage timing + cache-hit rate + \
         recent snapshots — never the per-job rows).

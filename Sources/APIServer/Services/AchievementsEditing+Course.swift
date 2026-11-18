@@ -47,7 +47,14 @@ extension AchievementsEditing {
     /// The rows the course editor shows: the course's achievements as stored.
     /// There are no built-in course defaults to merge in.
     static func rows(fromCourse course: APICourse) -> [AchievementRow] {
-        course.courseAchievements.map(row(from:))
+        // A course achievement is a badge, so its row names no reward: the
+        // course row shape (`update_course_achievements`) has no reward field.
+        course.courseAchievements.map { achievement in
+            var row = row(from: achievement)
+            row.rewardType = nil
+            row.rewardItem = nil
+            return row
+        }
     }
 
     /// Replaces the course's achievements wholesale with these rows, after

@@ -217,8 +217,8 @@ private struct EditHeaderFields: HTML {
                 " "
             }
             p(.class("card-meta fine-print")) {
-                "The language sets the extension of generated tests, so set it before you add pattern families "
-                    + "or notebook checks. \(edit.uploadOnlyLanguagesProse) assignments are upload-only."
+                "Set the language before you add pattern families or notebook checks; "
+                    + "\(edit.uploadOnlyLanguagesProse) assignments are upload-only."
             }
             label(.class("form-label field-gap")) {
                 "Submission Method "
@@ -231,8 +231,7 @@ private struct EditHeaderFields: HTML {
                 " "
             }
             p(.class("card-meta fine-print")) {
-                "File upload only hides the notebook editor and grades every submission on the native runner. "
-                    + "Use it for makefile-graded work (for example C++) or multi-file projects submitted as a zip."
+                "File upload only hides the notebook editor, for makefile-graded work or multi-file zips."
             }
             label(.class("form-label field-gap")) {
                 "Class activity "
@@ -932,6 +931,41 @@ private struct EditAchievementsBlock: HTML {
     }
 }
 
+/// The Reward control of an individual assignment achievement
+/// (docs/achievement-rewards.md, S2): a badge, or a wardrobe item from
+/// `WardrobeItem.grantable`. The item select shows only for a wardrobe
+/// reward; achievements-editor.js reads both selects by id, and the table's
+/// summary names the item from the option text, so the script holds no item
+/// list.
+struct AchievementRewardFields: HTML {
+    var body: some HTML {
+        div(.class("js-am-scope-field"), .data("scope", value: "individual")) {
+            label(.class("form-label field-gap")) {
+                "Reward "
+                select(.class("form-input"), .id("am-rewardType")) {
+                    option(.value(RewardType.badge.rawValue)) { "Badge" }
+                    option(.value(RewardType.wardrobe.rawValue)) { "Wardrobe item" }
+                }
+                " "
+            }
+            div(.class("js-am-reward-item")) {
+                label(.class("form-label field-gap")) {
+                    "Item "
+                    select(.class("form-input"), .id("am-rewardItem")) {
+                        for item in WardrobeItem.grantable {
+                            option(.value(item.rawValue)) { item.displayName }
+                        }
+                    }
+                    " "
+                }
+                p(.class("field-note field-note--muted")) {
+                    "A student who already wears this item from another course earns nothing new here."
+                }
+            }
+        }
+    }
+}
+
 /// The inline achievement editor. Fields show and hide by scope. The course
 /// Achievements tab shares it through `AchievementsTable`. It stays in this
 /// file because `RecordDimensionCoverageTests` reads the "Ranked by" loop
@@ -982,6 +1016,9 @@ struct AchievementEditorFields: HTML {
             }
             div(.id("am-conditions"), .class("am-conditions")) {}
             button(.type(.button), .class("btn action-btn"), .id("am-add-condition")) { "+ Add condition" }
+        }
+        if !courseLevel {
+            AchievementRewardFields()
         }
         label(.class("form-label field-gap js-am-scope-field"), .data("scope", value: "classWide")) {
             "Class share ≥ (%) "

@@ -36,7 +36,7 @@ import Vapor
         try await writeZipFixture(
             at: zipPath,
             entries: [
-                ("publictest_a.py", "print('ok')\n"), ("cases.csv", "id\n1\n2\n3\n"),
+                ("publictest_a.py", "print('ok')\n"), ("cases.csv", "id\n1\n2\n3\n4\n5\n"),
                 ("answers.csv", "id\n1\n"),
             ])
         let manifest = """

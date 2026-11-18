@@ -115,32 +115,32 @@ if (dropZone && fileInput) {
     });
 })();
 
-// Results page: poll until the submission reaches its final state.
+// Results page: reload once the submission has a result.
 //
-// Statuses that require polling:
-//   pending / assigned  — runner hasn't started yet
-const root = document.getElementById('submission-root');
-if (root) {
-    const isPending = root.dataset.pending === 'true';
+// The pending band is a region `table-poll.js` refreshes from
+// `/submissions/:id?fragment=state` (the one poller, docs/ui-design.md
+// "Interaction idioms"). The region names the state ("Queued", "Grading");
+// when it reports a final one it carries `data-submission-final`, and the
+// results are a whole page, so the page reloads.
+document.querySelectorAll('.js-submission-state').forEach((region) => {
+    region.addEventListener('chickadee:table-repaint', () => {
+        if (region.querySelector('[data-submission-final]')) window.location.reload();
+    });
+});
 
-    if (isPending) {
-        const submissionID = root.dataset.submissionId;
-        const poll = setInterval(async () => {
-            try {
-                const res = await fetch(`/api/v1/submissions/${submissionID}`);
-                if (!res.ok) return;
-                const data = await res.json();
-                const done = data.status !== 'pending' && data.status !== 'assigned';
-                if (done) {
-                    clearInterval(poll);
-                    window.location.reload();
-                }
-            } catch (_) {
-                // network blip — try again next tick
-            }
-        }, 2000);
-    }
-}
+// Account page: reload once the personal-data export has finished.
+//
+// The same shape as the results page above. The export's state is a region
+// `table-poll.js` refreshes from `/account/export/status?fragment=state`.
+// When it reports a finished export it carries `data-export-final`, and the
+// download button (or the failure notice) is part of the page, so the page
+// loads again. `replace` drops the `?exportNotice=` query, so the "being
+// prepared" banner does not come back with it.
+document.querySelectorAll('.js-export-state').forEach((region) => {
+    region.addEventListener('chickadee:table-repaint', () => {
+        if (region.querySelector('[data-export-final]')) window.location.replace('/account');
+    });
+});
 
 // ── Destructive-action confirmation ────────────────────────────────────────
 // One seam for "are you sure?" (UI audit S5). A form or control declares the

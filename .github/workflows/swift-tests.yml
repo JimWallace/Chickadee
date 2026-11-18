@@ -30,6 +30,13 @@ concurrency:
   group: swift-tests-${{ github.event_name }}-${{ github.event_name == 'push' && github.sha || github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
+# Least privilege by default (#3067). A job that needs more names it in its
+# own `permissions:`. `packages: read` lets the job containers and services
+# pull the GHCR mirrors with GITHUB_TOKEN.
+permissions:
+  contents: read
+  packages: read
+
 jobs:
   # Decides how much of the Swift suite this change needs: `full`, `build`
   # (the build job alone, for the release commit) or `skip`.
@@ -52,8 +59,9 @@ jobs:
       # merge commit included. That is all a pull_request compares. A full
       # history fetch of every branch and tag came to the job's 5-minute
       # limit and timed out (#2812).
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          persist-credentials: false
           fetch-depth: 2
 
       # pull_request checks out the merge commit, so its first parent is the
@@ -121,7 +129,9 @@ jobs:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - name: Every guard fails on its own defect
         run: scripts/check-guards.sh
       - name: Claude Code hook behaviour tests
@@ -142,7 +152,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Mutation tooling self-tests
         # `*_test.py`, not one named file: report_test.py existed for a week
@@ -210,14 +222,16 @@ jobs:
         password: ${{ secrets.GITHUB_TOKEN }}
 
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Compute SPM cache key
         id: spm-cache-key
         run: echo "value=$(sha256sum Package.resolved | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
 
       - name: Cache SPM checkouts
-        uses: actions/cache@v6
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: .build/checkouts
           key: ${{ runner.os }}-spm-${{ steps.spm-cache-key.outputs.value }}
@@ -254,6 +268,9 @@ jobs:
 
       - name: Every guard has a fixture or a stated exemption
         run: scripts/check-guard-coverage.sh
+
+      - name: Guard fixtures edit files the same way on GNU and BSD sed
+        run: scripts/check-fixture-portable-sed.sh
 
       - name: Require a reason on every unchecked Sendable
         run: scripts/check-unchecked-sendable.sh
@@ -333,7 +350,9 @@ jobs:
         password: ${{ secrets.GITHUB_TOKEN }}
 
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       # The toolchain key and the shared `.build` cache. This job is the only
       # one that SAVES the cache. The cache is exact-match only, and the
@@ -356,7 +375,7 @@ jobs:
       - name: Restore SwiftPM package mirrors
         id: spm-mirrors
         if: steps.setup.outputs.cache-hit != 'true'
-        uses: actions/cache/restore@v6
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: .build/repositories
           key: ${{ runner.os }}-spm-mirrors-v1-${{ hashFiles('Package.resolved') }}
@@ -380,7 +399,7 @@ jobs:
           github.event_name == 'push'
           && steps.setup.outputs.cache-hit != 'true'
           && steps.spm-mirrors.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v6
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: .build/repositories
           key: ${{ steps.spm-mirrors.outputs.cache-primary-key }}
@@ -403,7 +422,9 @@ jobs:
       options: --privileged
 
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Swift test setup
         id: setup
@@ -480,7 +501,9 @@ jobs:
       TEST_DATABASE_USER: postgres
       TEST_DATABASE_PASSWORD: postgres
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       # The swift-ci image has the test dependencies, so the probe normally
       # only does a check. The action tells why each lane probes for EVERY
@@ -542,13 +565,15 @@ jobs:
         password: ${{ secrets.GITHUB_TOKEN }}
 
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       # Pinned rather than taking the image's node: the suite targets 24 and
       # `node --test` semantics move between majors. `.node-version` is the
       # one Node pin of the repository. It is the exact version that the
       # swift-ci image installs, not only the major (#1985).
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version-file: .node-version
 
@@ -604,7 +629,9 @@ jobs:
       options: --privileged
 
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Swift test setup
         id: setup
@@ -689,8 +716,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          persist-credentials: false
           sparse-checkout: .github/actions/gate
       - uses: ./.github/actions/gate
         with:
