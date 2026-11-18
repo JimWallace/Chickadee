@@ -224,8 +224,10 @@ suppression list:
 ## The number to watch is the queue, not the score
 
 There is no coverage target here, and the mutation percentage is not one either:
-some mutants are unkillable by construction, so a suite that drove it to 100%
-would be asserting things that cannot vary. Muter also reports outcomes that are
+some mutants are unkillable by construction, and a suite that tried to kill them
+would be asserting things that cannot vary. The trend's score leaves recorded
+equivalents out of both counts, so it reads 100% once the queue is empty; that is
+a consequence of the queue, not a target in its own right. Muter also reports outcomes that are
 not mutants at all — 134 phantoms and 9 inert no-ops in run 32265903112, against
 383 real ones.
 
