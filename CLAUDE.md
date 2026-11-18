@@ -526,8 +526,10 @@ the kernel pins, the browser grading cells, `Sources/RunnerCore/`) needs the `mi
 does a compatibility removal, which no path list can see. While a contract
 change or a labelled pull request is on `main`, auto-release cuts no release
 and opens a `minor-needed` issue. It cuts a pre-release of the next minor (`v0.X.0-rc.N`) instead, which
-only the dev server takes: its deployer runs the host-only `prereleases`
-channel, production's the default `releases`. The minor is cut by hand (`docs/release-process.md`). Kernel re-vendor
+the dev server takes on its own: its deployer runs the host-only `prereleases`
+channel, production's the default `releases`. Production takes an rc only
+when an admin approves it on the Deployment page's Coming next card; no mode
+does. The minor is cut by hand (`docs/release-process.md`). Kernel re-vendor
 and JupyterLab dependency pull requests carry the label and never auto-merge.
 
 **Verify a fix is live with the read-only admin diagnostics MCP**

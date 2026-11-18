@@ -3,11 +3,11 @@
 // The app's side of the deploy daemon's state folder (docs/release-gate.md).
 //
 // The daemon (deploy/chickadee-deployer.sh) owns the folder. The app reads it
-// through a read-only mount at `/deploy-state`: status.json, history.jsonl and
-// pending-notes.json. It may write one place only, `requests/`, which
+// through a read-only mount at `/deploy-state`: status.json, history.jsonl,
+// pending-notes.json and prerelease-notes.json. It may write one place only, `requests/`, which
 // bluegreen-deploy.sh mounts read-write over the read-only folder. A request
 // is a request, not a command: the daemon validates each one, accepts only
-// approve-the-held-release, mode, pause and resume, and records every request
+// approve-the-held-release (or the offered pre-release), mode, pause and resume, and records every request
 // in its history. Rollback stays a host action.
 //
 // Pure file I/O over a directory path, with no Vapor and no database, so it
@@ -30,6 +30,14 @@ struct DeployStateFolder: Sendable {
     /// The held release's notes, or nil when nothing is held.
     func pendingNotes() -> DeployPendingNotes? {
         guard let data = try? Data(contentsOf: root.appendingPathComponent("pending-notes.json")) else {
+            return nil
+        }
+        return try? JSONDecoder().decode(DeployPendingNotes.self, from: data)
+    }
+
+    /// The offered pre-release's notes (prerelease-notes.json), or nil.
+    func prereleaseNotes() -> DeployPendingNotes? {
+        guard let data = try? Data(contentsOf: root.appendingPathComponent("prerelease-notes.json")) else {
             return nil
         }
         return try? JSONDecoder().decode(DeployPendingNotes.self, from: data)
