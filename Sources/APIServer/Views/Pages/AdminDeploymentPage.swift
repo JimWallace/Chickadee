@@ -16,7 +16,12 @@ struct AdminDeploymentPage: HTML {
             AdminTabs(active: .deployment, page: page)
             DeploymentRunningSection(view: view, csrfToken: page.csrfToken)
             if let held = view.held {
-                DeploymentHeldSection(held: held, canSend: view.canSendRequests, csrfToken: page.csrfToken)
+                DeploymentHeldSection(
+                    held: held, kind: .held, canSend: view.canSendRequests, csrfToken: page.csrfToken)
+            }
+            if let prerelease = view.prerelease {
+                DeploymentHeldSection(
+                    held: prerelease, kind: .prerelease, canSend: view.canSendRequests, csrfToken: page.csrfToken)
             }
             DeploymentModeSection(view: view, csrfToken: page.csrfToken)
             DeploymentHistorySection(history: view.history)
@@ -100,25 +105,42 @@ private struct DeploymentRunningSection: HTML {
     }
 }
 
-/// What waits: the held release, its notes, and the approval form.
+/// What waits: the held release, its notes, and the approval form. The same
+/// card offers the newest pre-release (Coming next), which production deploys
+/// only when an admin approves it here: no mode deploys a pre-release.
 private struct DeploymentHeldSection: HTML {
+    enum Kind {
+        case held, prerelease
+    }
+
     let held: AdminDeploymentView.Held
+    let kind: Kind
     let canSend: Bool
     let csrfToken: String
+
+    private var inputID: String { kind == .held ? "deploy-approve-version" : "deploy-approve-prerelease" }
 
     var body: some HTML {
         section(.class("page-section")) {
             div(.class("page-titlebar")) {
                 h2 {
-                    "Waiting for approval "
+                    kind == .held ? "Waiting for approval " : "Coming next "
                     code { held.version }
                     " "
+                    if kind == .prerelease {
+                        span(.class("tier")) { "Pre-release" }
+                    }
                     if held.isApproved {
                         span(.class("tier")) { "Approved" }
                     }
                     if !held.contractPullRequests.isEmpty {
                         span(.class("tier tier-preview")) { "Contract change" }
                     }
+                }
+            }
+            if kind == .prerelease && !held.isApproved {
+                p(.class("section-intro")) {
+                    "Runs on the dev server; deploys here only when approved."
                 }
             }
             if held.isApproved {
@@ -129,10 +151,10 @@ private struct DeploymentHeldSection: HTML {
                     .class("form form--wide card card--padded section-gap")
                 ) {
                     CSRFField(token: csrfToken)
-                    label(.class("form-label"), .for("deploy-approve-version")) {
+                    label(.class("form-label"), .for(inputID)) {
                         "Type \(held.version) to approve it"
                         input(
-                            .id("deploy-approve-version"), .class("form-input"), .type(.text), .name("version"),
+                            .id(inputID), .class("form-input"), .type(.text), .name("version"),
                             .required, .autocomplete(.off), .placeholder(held.version))
                         span(.class("field-note field-note--muted")) {
                             "It deploys on the daemon’s next poll, unless paused."
@@ -199,7 +221,21 @@ private struct DeploymentReleaseNotes: HTML {
                                 span(.class("tier tier-preview")) { "Contract change" }
                                 " "
                             }
-                            entry.text
+                            // Changelog entries mark code with backticks; an
+                            // odd-numbered part is between a pair of them. An
+                            // unmatched backtick leaves the entry as plain text.
+                            let parts = entry.text.split(separator: "`", omittingEmptySubsequences: false)
+                            if parts.count.isMultiple(of: 2) {
+                                entry.text
+                            } else {
+                                for (index, part) in parts.enumerated() {
+                                    if index.isMultiple(of: 2) {
+                                        String(part)
+                                    } else {
+                                        code { String(part) }
+                                    }
+                                }
+                            }
                         }
                     }
                 }

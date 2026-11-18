@@ -198,6 +198,35 @@ order of a minor becomes:
 4. An admin approves it on production's admin page, at a time with no
    lecture running.
 
+## Approving a pre-release on production
+
+Added on 2026-11-18. Production's channel never deploys a pre-release on its
+own, in any mode, and no setting makes it. But an admin may choose to put a
+validated rc on production before the minor is cut, so the daemon offers one,
+for an explicit approval only:
+
+- **The offer.** On the `releases` channel, each poll the daemon also reads
+  the newest non-draft pre-release. When it is newer than production and than
+  the newest release, it records it in `status.json` (`prereleaseVersion`) and
+  writes its notes, in the shape of `pending-notes.json`, to
+  `prerelease-notes.json`. A cut minor, or the rc deploying, retires the offer.
+- **The card.** The admin page shows a "Coming next" card: the rc, a
+  Pre-release badge, "Not cut yet; the dev server runs it", its notes and the
+  `minor-release` pull requests it carries, and the same typed-version
+  approval form as a held release.
+- **The approval.** `{"request":"approve","version":"vX.Y.0-rc.N"}` is
+  accepted only for the offered rc. The daemon then deploys that exact
+  version, through the same staging, signature check and blue-green swap as
+  any release. A newer rc that appears before it acts needs its own approval.
+- **After it.** While production runs an approved rc, the release that
+  follows it in the same minor (the minor itself, or a later rc) counts as a
+  minor: in `gated-minors` and `manual` it waits for approval, because it
+  carries whatever merged after the approved rc. In `autonomous` it deploys,
+  as a minor would.
+
+The modes are unchanged: none of them has a setting that deploys a
+pre-release, and no request can change the channel.
+
 ## The admin page asks; the daemon decides
 
 The app reads the state folder through a read-only mount (`/deploy-state`), so
@@ -211,19 +240,20 @@ oldest first, deletes each, and accepts exactly these:
 
 | Request | Accepted when |
 |---|---|
-| `{"request":"approve","version":"vX.Y.Z"}` | `vX.Y.Z` is the release the daemon is holding |
+| `{"request":"approve","version":"vX.Y.Z"}` | `vX.Y.Z` is the release the daemon is holding, or the pre-release it offers (`prereleaseVersion`) |
 | `{"request":"mode","mode":"autonomous"}` (or `gated-minors`, `manual`) | always |
 | `{"request":"pause"}`, `{"request":"resume"}` | always |
 
 Anything else is refused and written to the history: an unknown request, a
-`rollback` or `deploy`, a change of channel, a version that is not the held one, a file over 4 KB.
+`rollback` or `deploy`, a change of channel, a version that is neither the held release nor the offered pre-release, a file over 4 KB.
 Each accepted or refused request is a line in `history.jsonl`, with the admin's
 username, which the app writes into the request.
 
 **What a compromised app can do through this channel:** deploy, sooner than
-planned, a release that CI built and the deployer would deploy anyway; change
-the mode; pause. It cannot run an image that is not a release, choose an older
-version, or roll back.
+planned, a release that CI built and the deployer would deploy anyway; deploy
+the newest pre-release, which CI built and signed and dev runs; change the
+mode; pause. It cannot run an image that is not a release, choose an older
+version or an earlier rc, or roll back.
 
 ## The admin page
 
@@ -235,7 +265,10 @@ A "Deployment" section on the admin panel, for admins only:
 - **What waits:** the held release, the release notes between the deployed
   version and it (`pending-notes.json`), and a flag on every entry that came
   from a `minor-release` pull request.
-- **Approve:** the admin types the held version to confirm. The page then says
+- **Coming next:** on production, the newest pre-release, its notes and an
+  approval form (`prerelease-notes.json`); see "Approving a pre-release on
+  production".
+- **Approve:** the admin types the held version (or the offered rc) to confirm. The page then says
   "approved, deploys within 5 minutes" and follows `status.json`.
 - **Mode:** the three modes, changeable in both directions.
 - **Pause / Resume.**
@@ -245,8 +278,8 @@ Every action is a POST with CSRF, writes an audit-log entry
 (`AuditLogger`, category deploy), and writes one request file. The page never
 shows a button for rollback; it shows the host command, for reference.
 
-The admin diagnostics MCP stays read-only. `get_deploy_status` reports the mode
-and the held release.
+The admin diagnostics MCP stays read-only. `get_deploy_status` reports the mode,
+the held release and the offered pre-release.
 
 ## What changes in the docs
 

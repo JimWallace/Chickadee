@@ -414,7 +414,10 @@ server's `deployerUnhealthy` rule pages on `disk_low`.
 - `approved` — the release an admin approved, until it deploys. It survives
   the same restart.
 - `pending-notes.json` — the held release's notes, for the admin page.
-- `status.json` — daemon → readers: `state`, `deployedVersion`, `latestSeen`, `detail`, `paused`, `mode`, `channel`, `heldVersion`, `approvedVersion`, `scriptsRevision`, `updatedAt`.
+- `prerelease-notes.json` — on the `releases` channel, the notes of the newest
+  pre-release, offered on the admin page's Coming next card for an explicit
+  approval (`docs/release-gate.md`, "Approving a pre-release on production").
+- `status.json` — daemon → readers: `state`, `deployedVersion`, `latestSeen`, `detail`, `paused`, `mode`, `channel`, `heldVersion`, `approvedVersion`, `prereleaseVersion`, `scriptsRevision`, `updatedAt`.
   `state` is one of `idle`, `deploying`, `waiting_for_image` (step 5),
   `pending_approval` (step 4), `paused`, `error` (a failed attempt; the detail
   says when the next one is), `stuck` (five failures in a row, or two hours

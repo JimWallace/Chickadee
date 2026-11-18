@@ -2282,11 +2282,12 @@ coordination, and each must see every edit.
   - The CSP permits no inline script (#1516;
     `ContentSecurityPolicyInlineScriptTests`).
 
-### The deploy state folder: `status.json`, `pending-notes.json`, `requests/`
+### The deploy state folder: `status.json`, `pending-notes.json`, `prerelease-notes.json`, `requests/`
 
 - **Writers:** the host deploy daemon (`deploy/chickadee-deployer.sh`) writes
-  `status.json`, `history.jsonl`, `pending-notes.json`, `mode`, `paused` and
-  `approved`. Only the host writes `channel`. The admin Deployment page (`AdminRoutes+Deployment.swift`,
+  `status.json` (with `prereleaseVersion` on the `releases` channel),
+  `history.jsonl`, `pending-notes.json`, `prerelease-notes.json`, `mode`,
+  `paused` and `approved`. Only the host writes `channel`. The admin Deployment page (`AdminRoutes+Deployment.swift`,
   `DeployStateFolder.write`) writes one file per request into `requests/`,
   the only path the app may write (`bluegreen-deploy.sh` mounts it read-write
   over the read-only `/deploy-state`). A host operator writes
@@ -2302,8 +2303,8 @@ coordination, and each must see every edit.
   A field the daemon adds or renames goes in each that needs it; every field
   stays optional, because an older daemon writes fewer.
 - **Rules:**
-  - The app only asks. The daemon accepts approve-the-held-release, mode,
-    pause and resume, and refuses everything else, rollback included
+  - The app only asks. The daemon accepts approve-the-held-release (or the
+    offered pre-release), mode, pause and resume, and refuses everything else, rollback included
     (`docs/release-gate.md`; `scripts/test-chickadee-deployer.sh`). No
     route or MCP tool may write anywhere else in the folder.
   - The mode's raw values (`DeployMode`) and the daemon's `valid_mode` are
@@ -2312,7 +2313,13 @@ coordination, and each must see every edit.
     `channel` request, and the page shows the channel without a control, so
     nothing in the app can point production at pre-releases.
   - The approval names a version, and the daemon accepts it only for the
-    release it holds, so a newer release is held anew.
+    release it holds or the pre-release it offers, so a newer release is
+    held anew.
+  - On the `releases` channel no mode deploys a pre-release: only an
+    approval of the offered one does. While production runs an approved rc,
+    the next release of that minor counts as a minor (`after_running_prerelease`,
+    which `is_gated`, `bump_kind` and so `pick_fallback_release` all use). On
+    `prereleases` that rule does not apply, or the dev server would stall.
 
 ### The version string: `ChickadeeVersion.current` and `v*` tags
 
