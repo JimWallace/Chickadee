@@ -7,7 +7,7 @@ name: Mirror CI images
 # noble line once SwiftLint publishes a bundle that runs on resolute.
 #
 # Mirrors the Docker Hub images our CI jobs run in (swift:6.4-resolute job
-# container, postgres:16 service) into GHCR, so the test workflows never
+# container, postgres service) into GHCR, so the test workflows never
 # pull from registry-1.docker.io at job time.
 # Unauthenticated Docker Hub pulls from shared Actions runner IPs are
 # rate-limited and were the single largest source of red CI on main
@@ -102,6 +102,9 @@ jobs:
           mirror docker.io/library/swift:6.4-resolute swift:6.4-resolute
           mirror docker.io/library/swift:6.4-noble swift:6.4-noble
           mirror docker.io/library/postgres:16 postgres:16
+          # 18 first, ahead of the test jobs moving to it (#3148). Drop the 16
+          # line once no workflow references postgres:16.
+          mirror docker.io/library/postgres:18 postgres:18
 
       - name: Build and push the derived CI test image
         # After the mirror step on purpose: the derived image builds FROM the
