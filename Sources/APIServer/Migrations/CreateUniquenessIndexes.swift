@@ -75,24 +75,32 @@ struct CreateUniquenessIndexes: ChickadeeMigration {
         ).run()
 
         // Validation variants: keep the newest row of each setup and index,
-        // then make the lookup index unique under the same name.
-        try await sql.raw(
-            """
-            DELETE FROM validation_variants WHERE id IN (
-              SELECT id FROM (
-                SELECT id, row_number() OVER (
-                  PARTITION BY test_setup_id, variant_index ORDER BY created_at DESC NULLS LAST, id DESC) AS n
-                FROM validation_variants
-              ) ranked WHERE n > 1)
-            """
-        ).run()
-        try await sql.raw("DROP INDEX IF EXISTS idx_validation_variants_setup_index").run()
-        try await sql.raw(
-            """
-            CREATE UNIQUE INDEX idx_validation_variants_setup_index \
-            ON validation_variants (test_setup_id, variant_index)
-            """
-        ).run()
+        // then make the lookup index unique under the same name. One
+        // transaction, so a variant the live server writes cannot land between
+        // the dedupe and the build: it waits for the commit, and then meets
+        // the unique index. The live server's validation logs that conflict
+        // and keeps its primary run (`enqueueValidationVariants` is
+        // best-effort); the next validation writes a whole batch.
+        try await database.transaction { tx in
+            guard let sql = tx as? (any SQLDatabase) else { return }
+            try await sql.raw(
+                """
+                DELETE FROM validation_variants WHERE id IN (
+                  SELECT id FROM (
+                    SELECT id, row_number() OVER (
+                      PARTITION BY test_setup_id, variant_index ORDER BY created_at DESC NULLS LAST, id DESC) AS n
+                    FROM validation_variants
+                  ) ranked WHERE n > 1)
+                """
+            ).run()
+            try await sql.raw("DROP INDEX IF EXISTS idx_validation_variants_setup_index").run()
+            try await sql.raw(
+                """
+                CREATE UNIQUE INDEX idx_validation_variants_setup_index \
+                ON validation_variants (test_setup_id, variant_index)
+                """
+            ).run()
+        }
     }
 
     func revert(on database: any Database) async throws {
