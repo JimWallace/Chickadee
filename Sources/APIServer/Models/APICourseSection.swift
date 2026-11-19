@@ -6,11 +6,8 @@
 // type, never the section: a section has no grading mode, and moving an
 // assignment between sections changes neither its type nor its grading mode.
 //
-// Two columns that sections used to carry stay in the table until a later
-// release drops them, so the old color of a blue-green deploy can still read
-// it: `default_grading_mode` (with a database default) and the nullable
-// `default_assignment_type` (both in `CreateCourses`). Nothing here
-// reads or writes either.
+// The two columns that sections used to carry, `default_grading_mode` and
+// `default_assignment_type`, are dropped (`DropSectionDefaultColumns`).
 //
 // Assignments reference their section via a nullable section_id FK (SET NULL on delete),
 // so deleting a section drops its assignments into the "ungrouped" bucket — no data loss.

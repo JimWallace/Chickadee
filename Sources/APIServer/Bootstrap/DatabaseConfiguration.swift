@@ -280,8 +280,8 @@ func registerMigrations(on app: Application) {
     //     4 one-time data migrations deleted outright (`CollapseUserRoles`,
     //     `StripStarterNotebookOutputs`, `MoveLearnSectionCategoryToGroupSet`
     //     and `BackfillAssignmentType`). Production (v0.5.989) had run every
-    //     one. `RequireAssignmentSlug` and `DropCoveredIndexes` stay until
-    //     production has run them.
+    //     one. `RequireAssignmentSlug`, `DropCoveredIndexes` and
+    //     `DropSectionDefaultColumns` stay until production has run them.
     // `AddSessionsCreatedAt` is NOT consolidated — it's a real migration
     // against Vapor's `_fluent_sessions` table (not one of our own).
     app.migrations.add(CreateUsers())
@@ -541,6 +541,10 @@ private func registerLateSchemaMigrations(on app: Application) {
     // The drop of four indexes that another index covers
     // (SchemaDesignTests). Index only; the tables are created far above.
     app.migrations.add(DropCoveredIndexes())
+    // The two `course_sections` columns that no model maps
+    // (docs/assignment-types.md, phase 3). `CreateCourses` no longer creates
+    // them, so the drop is `IF EXISTS`.
+    app.migrations.add(DropSectionDefaultColumns())
 }
 
 /// The data migrations, registered after every schema migration (#1805).

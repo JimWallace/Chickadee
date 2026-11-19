@@ -740,9 +740,9 @@ because line numbers go out of date.
   starts there, else on Assignment (`newAssignmentDeclaredType`).
 - **Writers:** `AssignmentsPage` (`AddItemMenu`).
 - **Readers:** `newAssignmentPage` (`DraftAssignmentRoutes+NewAssignment`).
-- **Fact:** the dead columns `course_sections.default_assignment_type` and
-  `default_grading_mode` stay in the table, unmapped, so the old color of a
-  blue-green deploy can read it. A later release drops them.
+- **Fact:** `course_sections` has no type or grading-mode column. The dead
+  `default_assignment_type` and `default_grading_mode` columns are dropped
+  in 0.6.0 (`DropSectionDefaultColumns`).
 
 ### What a runner receives: `RunnerManifest` and the cache key
 

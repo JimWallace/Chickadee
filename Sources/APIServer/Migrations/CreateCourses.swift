@@ -30,9 +30,9 @@ import SQLKit
 ///     (fifth round)
 ///   - AddCourseAchievements             — `achievements`
 ///   - AddSectionDefaultAssignmentType   — `course_sections.default_assignment_type`
-///     and the `'worker'` default on `default_grading_mode` (both in the
-///     sixth round; its "lab" update for browser-default sections ran on
-///     production and touches no row on a fresh table)
+///     and the `'worker'` default on `default_grading_mode` (sixth round)
+///   - DropSectionDefaultColumns         — drops both section columns, so
+///     this file no longer creates either (0.6.0)
 ///
 /// The consolidated form below produces the same final schema in a single
 /// Create step.  Existing deploys have CreateCourses already marked
@@ -122,14 +122,6 @@ struct CreateCourses: ChickadeeMigration {
         try await database.schema("course_sections")
             .id()
             .field("name", .string, .required)
-            // The model maps neither `default_grading_mode` nor
-            // `default_assignment_type` (docs/assignment-types.md, phase 3);
-            // a later release drops both. Folded from
-            // AddSectionDefaultAssignmentType (sixth round): the 'worker'
-            // default, so an insert that omits the old column still succeeds,
-            // and the nullable type column.
-            .field("default_grading_mode", .string, .required, .custom("DEFAULT 'worker'"))
-            .field("default_assignment_type", .string)
             .field("sort_order", .int, .required)
             .field(
                 "course_id",
