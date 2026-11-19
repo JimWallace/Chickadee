@@ -422,6 +422,11 @@ or audit that a session does not run does not happen.
   `Tools/maintenance/nightly.md`. Its pull requests carry the `steward`
   label and merge themselves when CI is green.
 - Before a commit, run `diff-reviewer` on the uncommitted diff.
+- Before a commit on a change to a migration, a model, raw SQL or any
+  database call, run `db-review`. It checks the judgment half of
+  [docs/database-design.md](docs/database-design.md); the schema guards and
+  the hot-path statement budgets in `api-tests` check the rest. Its verdict is
+  advisory.
 - Before a commit on a change under `Sources/` or to a `Public/*.js` file, run
   `interaction-review`. It checks the change for side effects on other
   features, with the shared-object map in `docs/feature-interactions.md`. Its

@@ -546,7 +546,6 @@ private func registerLateSchemaMigrations(on app: Application) {
     // `class_achievements` submission indexes. Index only; the tables are
     // created far above.
     app.migrations.add(CreateAuditAndValidationIndexes())
-
     // Indexes for foreign keys that had none, on tables that grow: every
     // delete of a referenced row scanned the referencing table. Index only.
     app.migrations.add(CreateForeignKeyIndexes())
@@ -576,6 +575,13 @@ private func registerLateSchemaMigrations(on app: Application) {
     // one to `course_dataset_versions` (CreateCourseDatasets, far above); no
     // data change.
     app.migrations.add(AddCourseDatasetFormat())
+    // `assignments.slug` NOT NULL, as the model assumes
+    // (ModelSchemaAgreementTests). Raw SQL over `slug` and `public_id`, both
+    // created by CreateAssignments.
+    app.migrations.add(RequireAssignmentSlug())
+    // The drop of four indexes that another index covers
+    // (SchemaDesignTests). Index only; the tables are created far above.
+    app.migrations.add(DropCoveredIndexes())
 }
 
 /// The data migrations, registered after every schema migration (#1805).

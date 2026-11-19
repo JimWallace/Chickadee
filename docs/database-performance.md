@@ -45,10 +45,14 @@ of server CPU to database time is what carries over to production.
   Use a partial index (`WHERE col IS NOT NULL`) when most rows leave the
   column empty. A partial index adds no entry for a row where the column is
   NULL.
-- **A new index locks writes to its table while it builds.** Migrations run in
-  a transaction, so they use a plain `CREATE INDEX`, not `CONCURRENTLY`.
-  During a deploy, the old color's writes to that table wait for the build.
-  On a table of a few hundred thousand rows this is about a second.
+- **A new index locks writes to its table while it builds.** During a
+  deploy, the old color's writes to that table wait for a plain
+  `CREATE INDEX`. On a table of a few hundred thousand rows this is about a
+  second. Fluent runs each migration outside a transaction, so a migration
+  can build or drop an index `CONCURRENTLY` instead (`DropCoveredIndexes`
+  does; the test suite runs it in every test schema). A concurrent build
+  that fails leaves an invalid index behind, so drop any index of that name
+  first.
 - **Fluent hydration costs about 40–60 µs per row, and it runs on the event
   loop.** A request that hydrates 40,000 rows holds that loop for seconds and
   delays every other request on it. For a read that grows with the term,

@@ -209,12 +209,16 @@ private func enqueueValidationVariants(
                 // Variant `index` is dealt number `index`, so the variants
                 // run the first parts of a partition dataset.
                 variantDealNumber: index)
-            try await materialized.saveClaimable(on: context.db)
-
-            try await ValidationVariant(
-                testSetupID: setupID, variantIndex: index, seedHex: seedHex,
-                submissionID: subID
-            ).save(on: context.db)
+            // One transaction: a runner can claim the submission only once its
+            // variant row exists, so the report always finds the row it marks
+            // passed or failed.
+            try await context.db.transaction { tx in
+                try await materialized.saveClaimable(on: tx)
+                try await ValidationVariant(
+                    testSetupID: setupID, variantIndex: index, seedHex: seedHex,
+                    submissionID: subID
+                ).save(on: tx)
+            }
         }
     } catch {
         context.logger.warning("enqueueValidationVariants for \(setupID): \(error)")
