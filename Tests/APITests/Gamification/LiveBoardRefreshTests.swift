@@ -44,6 +44,18 @@ import VaporTesting
         return users
     }
 
+    /// The web routes app with the live board's clock pinned. The tag and the
+    /// roster snapshot both include a 30-second time bucket, so on the wall
+    /// clock two refreshes could fall either side of a bucket edge and get
+    /// different tags; a pinned clock keeps every refresh of a test in one
+    /// bucket.
+    private func withBoardApp(_ body: (Application) async throws -> Void) async throws {
+        try await withWebRoutesApp { app in
+            app.liveBoardClock = .fixed(at: Date(timeIntervalSince1970: 1_800_000_000))
+            try await body(app)
+        }
+    }
+
     private func refresh(
         _ path: String, cookie: String, etag: String? = nil, on app: Application
     ) async throws -> TestResponse {
@@ -56,7 +68,7 @@ import VaporTesting
     // MARK: - The refresh
 
     @Test func anUnchangedBoardIsAnswered304() async throws {
-        try await withWebRoutesApp { app in
+        try await withBoardApp { app in
             let cookie = try await wrLoginAsStudent(on: app)
             try await seedBoard(on: app, setupID: "lbr_304")
             let path = "/testsetups/lbr_304/leaderboard?fragment=body"
@@ -74,7 +86,7 @@ import VaporTesting
     }
 
     @Test func aNewBestChangesTheTagAndTheRows() async throws {
-        try await withWebRoutesApp { app in
+        try await withBoardApp { app in
             let cookie = try await wrLoginAsStudent(on: app)
             let users = try await seedBoard(on: app, setupID: "lbr_new")
             let path = "/testsetups/lbr_new/leaderboard?fragment=body"
@@ -96,7 +108,7 @@ import VaporTesting
     }
 
     @Test func aStaffTagChangesWithASubmissionThatSetsNoBest() async throws {
-        try await withWebRoutesApp { app in
+        try await withBoardApp { app in
             let cookie = try await wrLoginAsInstructor(on: app)
             let instructor = try #require(
                 try await APIUser.query(on: app.db).filter(\.$username == "instructor1").first())
@@ -117,7 +129,7 @@ import VaporTesting
     }
 
     @Test func eachViewerHasTheirOwnTag() async throws {
-        try await withWebRoutesApp { app in
+        try await withBoardApp { app in
             let cookie = try await wrLoginAsStudent(on: app)
             try await seedBoard(on: app, setupID: "lbr_own")
             let window = try await refresh(
@@ -129,7 +141,7 @@ import VaporTesting
     }
 
     @Test func aBoardWithAHillIsBuiltEveryTime() async throws {
-        try await withWebRoutesApp { app in
+        try await withBoardApp { app in
             let cookie = try await wrLoginAsStudent(on: app)
             try await seedBoard(
                 on: app, setupID: "lbr_hill",
@@ -143,7 +155,7 @@ import VaporTesting
     // MARK: - The shared snapshot
 
     @Test func aBoardFromTheSnapshotMatchesOneFromTheDatabase() async throws {
-        try await withWebRoutesApp { app in
+        try await withBoardApp { app in
             _ = try await wrLoginAsStudent(on: app)
             let users = try await seedBoard(on: app, setupID: "lbr_parity", classmates: 6)
             let setup = try #require(try await APITestSetup.find("lbr_parity", on: app.db))
@@ -176,7 +188,7 @@ import VaporTesting
     }
 
     @Test func aSnapshotThatMissesARankedStudentIsNotUsed() async throws {
-        try await withWebRoutesApp { app in
+        try await withBoardApp { app in
             _ = try await wrLoginAsStudent(on: app)
             let users = try await seedBoard(on: app, setupID: "lbr_miss")
             let setup = try #require(try await APITestSetup.find("lbr_miss", on: app.db))
@@ -192,7 +204,7 @@ import VaporTesting
     }
 
     @Test func theDigestFollowsAHandle() async throws {
-        try await withWebRoutesApp { app in
+        try await withBoardApp { app in
             _ = try await wrLoginAsStudent(on: app)
             let users = try await seedBoard(on: app, setupID: "lbr_digest")
             let setup = try #require(try await APITestSetup.find("lbr_digest", on: app.db))
@@ -315,8 +327,28 @@ import VaporTesting
         #expect(PresentModePresentation.pollUntil(ClassActivity(kind: .bestMetric), now: now) == fourHours)
     }
 
+    /// The refresh reads the app's clock, not the wall clock: the next bucket
+    /// on that clock changes the tag, so the old one is no longer a 304.
+    @Test func theTagFollowsTheAppsClock() async throws {
+        try await withBoardApp { app in
+            let cookie = try await wrLoginAsStudent(on: app)
+            try await seedBoard(on: app, setupID: "lbr_clock")
+            let path = "/testsetups/lbr_clock/leaderboard?fragment=body"
+
+            let first = try await refresh(path, cookie: cookie, on: app)
+            let etag = try #require(first.headers.first(name: .eTag))
+            #expect(try await refresh(path, cookie: cookie, etag: etag, on: app).status == .notModified)
+
+            app.liveBoardClock = .fixed(
+                at: Date(timeIntervalSince1970: 1_800_000_000 + LiveBoardETag.bucketSeconds))
+            let later = try await refresh(path, cookie: cookie, etag: etag, on: app)
+            #expect(later.status == .ok)
+            #expect(later.headers.first(name: .eTag) != etag)
+        }
+    }
+
     @Test func theWallsRefreshIsAnswered304Too() async throws {
-        try await withWebRoutesApp { app in
+        try await withBoardApp { app in
             let cookie = try await wrLoginAsInstructor(on: app)
             let instructor = try #require(
                 try await APIUser.query(on: app.db).filter(\.$username == "instructor1").first())
