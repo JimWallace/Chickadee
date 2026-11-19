@@ -1,8 +1,7 @@
 // A starter notebook reaches students without the author's cell outputs: the
 // editor's save route, the shared authoring write (MCP `update_notebook` and
-// assignment creation), a starter read from the setup zip, and the one-time
-// `StripStarterNotebookOutputs` migration all clear them. The author's own
-// working copy and the solution keep theirs.
+// assignment creation) and a starter read from the setup zip all clear them.
+// The author's own working copy and the solution keep theirs.
 
 import ChickadeeTestSupport
 import Core
@@ -197,24 +196,6 @@ import VaporTesting
             let restored = try await storedStarter(setupID)
             #expect(restored.contains("print(1)"))
             #expect(restored.contains("AUTHOR_RESULT") == false)
-        }
-    }
-
-    @Test func theMigrationClearsStoredStartersAndLeavesCleanOnesUntouched() async throws {
-        try await withApp(app) { _ in
-            try await insertSetup(id: "setup_outputs_dirty", notebookJSON: Self.ranNotebook)
-            let clean = #"{"nbformat":4,"nbformat_minor":5,"metadata":{},"cells":[]}"#
-            try await insertSetup(id: "setup_outputs_clean", notebookJSON: clean)
-            // A setup whose flat file is gone must not stop the migration.
-            let missing = try await insertSetup(id: "setup_outputs_missing", notebookJSON: clean)
-            try FileManager.default.removeItem(atPath: try #require(missing.notebookPath))
-
-            try await StripStarterNotebookOutputs().prepare(on: app.db)
-
-            let dirty = try await storedStarter("setup_outputs_dirty")
-            #expect(dirty.contains("AUTHOR_RESULT") == false)
-            #expect(dirty.contains("print(1)"))
-            #expect(try await storedStarter("setup_outputs_clean") == clean)
         }
     }
 }
