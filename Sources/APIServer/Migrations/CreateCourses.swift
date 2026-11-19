@@ -28,6 +28,11 @@ import SQLKit
 ///     term (all six in the fourth round, #1806)
 ///   - AddAIFeedbackGates (its courses half) — `ai_feedback_enabled`
 ///     (fifth round)
+///   - AddCourseAchievements             — `achievements`
+///   - AddSectionDefaultAssignmentType   — `course_sections.default_assignment_type`
+///     and the `'worker'` default on `default_grading_mode` (sixth round)
+///   - DropSectionDefaultColumns         — drops both section columns, so
+///     this file no longer creates either (0.6.0)
 ///
 /// The consolidated form below produces the same final schema in a single
 /// Create step.  Existing deploys have CreateCourses already marked
@@ -89,6 +94,10 @@ struct CreateCourses: ChickadeeMigration {
             // AI-assisted feedback gate (docs/ai-assisted-feedback.md).
             // nil = off.
             .field("ai_feedback_enabled", .bool)
+            // Folded from AddCourseAchievements (sixth round): the course
+            // achievements as a JSON list (docs/achievement-rewards.md, S3).
+            // nil = none.
+            .field("achievements", .string)
             .field("created_at", .datetime)
             .create()
         // Partial unique index: one active course per code and term. Archived
@@ -113,7 +122,6 @@ struct CreateCourses: ChickadeeMigration {
         try await database.schema("course_sections")
             .id()
             .field("name", .string, .required)
-            .field("default_grading_mode", .string, .required)
             .field("sort_order", .int, .required)
             .field(
                 "course_id",

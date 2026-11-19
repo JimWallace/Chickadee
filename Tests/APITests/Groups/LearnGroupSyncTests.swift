@@ -315,31 +315,4 @@ private struct FakeLearn: BrightSpaceGrading {
             #expect(try await APICourseGroup.query(on: app.db).count() == 1)
         }
     }
-
-    @Test func theMigrationMakesASetFromTheOldSectionCategory() async throws {
-        try await withApp(app) { _ in
-            let withCategory = try await makeTestCourse(on: app, code: "LSY4")
-            withCategory.brightspaceSectionCategoryID = "55"
-            try await withCategory.save(on: app.db)
-            let withSet = try await makeTestCourse(on: app, code: "LSY5")
-            withSet.brightspaceSectionCategoryID = "56"
-            try await withSet.save(on: app.db)
-            _ = try await CourseGroupStore.createSet(courseID: try withSet.requireID(), name: "Labs", on: app.db)
-            let student = try await makeTestStudent(on: app, username: "lsync_old").requireID()
-            try await makeTestEnrollment(on: app, userID: student, courseID: try withCategory.requireID())
-            let enrollment = try #require(
-                try await APICourseEnrollment.query(on: app.db).filter(\.$userID == student).first())
-            enrollment.brightspaceSection = "Lab 3"
-            try await enrollment.save(on: app.db)
-
-            try await MoveLearnSectionCategoryToGroupSet().prepare(on: app.db)
-
-            let made = try await CourseGroupStore.sets(courseID: try withCategory.requireID(), on: app.db)
-            #expect(made.map(\.source) == [.learnGroups])
-            #expect(made.map(\.externalID) == ["55"])
-            let kept = try await CourseGroupStore.sets(courseID: try withSet.requireID(), on: app.db)
-            #expect(kept.map(\.source) == [.manual], "a course with a set keeps it")
-            #expect(try await APICourseEnrollment.find(enrollment.id, on: app.db)?.brightspaceSection == nil)
-        }
-    }
 }

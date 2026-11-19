@@ -20,9 +20,10 @@ enum UserRole: String, Sendable {
     /// deployment role only distinguishes an ordinary `user` from an `admin`
     /// operator (and the non-human `mcp` service account). The retired global
     /// `student` / `instructor` roles were folded into `user` by the
-    /// `CollapseUserRoles` migration and are no longer part of the vocabulary; a
-    /// row that still carries one of those legacy strings simply decodes to
-    /// `nil` (`roleValue`), which reads as a non-admin, non-agent user.
+    /// `CollapseUserRoles` migration (since deleted) and are no longer part of
+    /// the vocabulary; a row that still carries one of those legacy strings
+    /// simply decodes to `nil` (`roleValue`), which reads as a non-admin,
+    /// non-agent user.
     case user
     case admin
     /// MCP service accounts (admin-provisioned, non-loginable agents).
