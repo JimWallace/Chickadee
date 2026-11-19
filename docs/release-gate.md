@@ -227,6 +227,12 @@ for an explicit approval only:
   accepted only for the offered rc. The daemon then deploys that exact
   version, through the same staging, signature check and blue-green swap as
   any release. A newer rc that appears before it acts needs its own approval.
+- **An rc with no image.** While the approved rc's image is built, the
+  approval waits, as a held release's does. The wait is bounded: if the image
+  is still not deployable after two hours (`WAIT_STUCK_AFTER_SECS`), the
+  daemon drops the approval, writes `approve expired` to the history, and
+  goes on to the release path, so a patch is not held behind an rc that will
+  never build. The rc stays offered; approve it again once its image exists.
 - **After it.** While production runs an approved rc, the release that
   follows it in the same minor (the minor itself, or a later rc) counts as a
   minor: in `gated-minors` and `manual` it waits for approval, because it

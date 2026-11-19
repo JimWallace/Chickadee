@@ -2334,7 +2334,9 @@ coordination, and each must see every edit.
     nothing in the app can point production at pre-releases.
   - The approval names a version, and the daemon accepts it only for the
     release it holds or the pre-release it offers, so a newer release is
-    held anew.
+    held anew. An approved rc whose image is not deployable after
+    `WAIT_STUCK_AFTER_SECS` loses its approval (`approve expired` in the
+    history), so it cannot hold the release path.
   - On the `releases` channel no mode deploys a pre-release: only an
     approval of the offered one does. While production runs an approved rc,
     the next release of that minor counts as a minor (`after_running_prerelease`,
