@@ -320,7 +320,8 @@ FHIR file (§7).
 
 ### Server
 
-One migration, `AddCourseDatasetFormat`:
+One migration, `AddCourseDatasetFormat` (since folded into
+`CreateCourseDatasets`):
 
 - `course_datasets.format`: text, not null, default `'csv'`. Set at create and
   never changed; `add_dataset_version` refuses a file of another format.
