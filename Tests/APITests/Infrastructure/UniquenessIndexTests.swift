@@ -1,9 +1,9 @@
 // Tests/APITests/Infrastructure/UniquenessIndexTests.swift
 //
-// The three "one row per X" rules that `CreateUniquenessIndexes` moved from
+// The four "one row per X" rules that `CreateUniquenessIndexes` moved from
 // app code into the database: one running tournament per setup and group,
 // one BrightSpace credential per scope, one validation variant per setup and
-// index. Each test checks the index refuses a second row, and that the app
+// index, one group set per course. Each test checks the index refuses a second row, and that the app
 // path the index guards still succeeds when it runs twice.
 
 import Core
@@ -116,6 +116,29 @@ struct UniquenessIndexTests {
                     testSetupID: "setup_unique_variant", variantIndex: 0, seedHex: "cc", submissionID: nil
                 ).save(on: app.db)
             }
+        }
+    }
+
+    // MARK: - course_group_sets
+
+    @Test func oneGroupSetPerCourse() async throws {
+        try await withTestApp(prefix: "chickadee-unique-group-set") { app in
+            let course = try await makeTestCourse(on: app, code: "SETS101")
+            let courseID = try course.requireID()
+            let first = try await CourseGroupStore.createSet(courseID: courseID, name: "Labs", on: app.db)
+            await expectInsertConflict {
+                _ = try await CourseGroupStore.createSet(courseID: courseID, name: "More labs", on: app.db)
+            }
+
+            // Switching the source changes the one set; it never adds one.
+            let switched = try await CourseGroupStore.setSource(.learnSections, courseID: courseID, on: app.db)
+            #expect(switched.id == first.id)
+            #expect(try await CourseGroupStore.sets(courseID: courseID, on: app.db).count == 1)
+
+            // A course with no set gets exactly one.
+            let other = try await makeTestCourse(on: app, code: "SETS102")
+            try await CourseGroupStore.setSource(.manual, courseID: try other.requireID(), on: app.db)
+            #expect(try await CourseGroupStore.sets(courseID: try other.requireID(), on: app.db).count == 1)
         }
     }
 }

@@ -1,6 +1,6 @@
 ### Fixed
 
-- **One running tournament, one BrightSpace credential and one validation batch per scope, held by the database.** Each was a read-then-write that two requests at once could both pass. A migration removes any duplicates first, keeping the newest row.
+- **One running tournament, one BrightSpace credential, one validation batch and one lab group set per scope, held by the database.** Each was a read-then-write that two requests at once could both pass. A migration removes any duplicates first, keeping the newest row.
 
 ### Changed
 

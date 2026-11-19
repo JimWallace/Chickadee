@@ -62,7 +62,9 @@ enum CourseGroupStore {
 
     // MARK: - Writes
 
-    /// Creates a manual set in `courseID`.
+    /// Creates a manual set in `courseID`. A course has one set
+    /// (`idx_course_group_sets_course`): a second insert fails as an insert
+    /// conflict (`isInsertConflict`).
     static func createSet(courseID: UUID, name: String, on db: any Database) async throws -> APICourseGroupSet {
         let set = APICourseGroupSet(courseID: courseID, name: try validName(name), source: .manual)
         try await set.save(on: db)
@@ -224,13 +226,21 @@ enum CourseGroupStore {
     static func setSource(
         _ source: CourseGroupSource, courseID: UUID, on db: any Database
     ) async throws -> APICourseGroupSet {
-        let set =
-            try await sets(courseID: courseID, on: db).first
-            ?? APICourseGroupSet(courseID: courseID, name: "Lab sections", source: source)
-        set.sourceRaw = source.rawValue
-        set.externalID = nil
-        try await set.save(on: db)
-        return set
+        func apply(_ set: APICourseGroupSet) async throws -> APICourseGroupSet {
+            set.sourceRaw = source.rawValue
+            set.externalID = nil
+            try await set.save(on: db)
+            return set
+        }
+        if let existing = try await sets(courseID: courseID, on: db).first { return try await apply(existing) }
+        do {
+            return try await apply(APICourseGroupSet(courseID: courseID, name: "Lab sections", source: source))
+        } catch where isInsertConflict(error) {
+            // Another request made the course's one set first
+            // (`idx_course_group_sets_course`): set the source on that one.
+            guard let existing = try await sets(courseID: courseID, on: db).first else { throw error }
+            return try await apply(existing)
+        }
     }
 
     /// Ends every join placement of the set's groups (`placed_in_group`)

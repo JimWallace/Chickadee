@@ -61,7 +61,6 @@ import VaporTesting
         "composite_spares.submission_id",
         "course_personalization_seeds.course_id",
         "dataset_deals.user_id",
-        "course_group_sets.course_id",
         "course_group_memberships.user_id",
         "course_group_memberships.group_id",
         "activity_session_attendance.user_id",

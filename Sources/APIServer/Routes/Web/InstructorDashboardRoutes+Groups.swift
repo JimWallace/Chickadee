@@ -154,7 +154,9 @@ extension InstructorDashboardRoutes {
         let courseID = try await req.requireActiveCourseForWrite(
             user, atLeast: .instructor, action: "managing groups"
         ).requireID()
-        // Slice 1 shows one set per course, so a second is not made.
+        // A course has one set (`idx_course_group_sets_course`), so a second
+        // is not made. A create that loses a race with another lands on the
+        // index and goes to the set that won.
         if try await !CourseGroupStore.sets(courseID: courseID, on: req.db).isEmpty {
             return req.redirect(to: "/instructor/groups")
         }
@@ -165,6 +167,8 @@ extension InstructorDashboardRoutes {
             return req.redirect(to: "/instructor/groups?notice=\(GroupsNotice.setCreated.rawValue)")
         } catch let error as CourseGroupError {
             return try await renderGroupsPage(req: req, flash: FlashMessages(error: error.description))
+        } catch where isInsertConflict(error) {
+            return req.redirect(to: "/instructor/groups")
         }
     }
 

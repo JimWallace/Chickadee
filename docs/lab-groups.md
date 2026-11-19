@@ -789,6 +789,11 @@ The maintainer chose best effort on 2026-10-18.
     lists.
 - Only a synced set is written by the sync (`CourseGroupError.setNotSynced`),
   and only a manual set is written by hand.
+- **One set per course.** A unique index on `course_group_sets.course_id`
+  (`idx_course_group_sets_course`, `CreateUniquenessIndexes`) holds it. "Create
+  set" and the source switch (`CourseGroupStore.setSource`) treat a lost race
+  as the set that won. More than one set per course would need that index
+  dropped and every reader of "the course's first set" changed.
 - **The migration.** `MoveLearnSectionCategoryToGroupSet` (since deleted,
   after production ran it) made one `learnGroups` set from a course's
   `brightspaceSectionCategoryID`, when the course had no set yet. The lab features read the course's first set, so a

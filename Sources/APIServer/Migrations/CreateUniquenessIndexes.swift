@@ -14,6 +14,11 @@
 // - `validation_variants`: one row per setup and variant index. A
 //   re-validation replaces the batch; two overlapping ones could leave eight
 //   rows, and the workbench listed both batches.
+// - `course_group_sets`: one set per course. Every lab feature reads the
+//   course's first set (oldest, then by name), so a second set, made by two
+//   creates at once, was read by nothing. The dedupe keeps that first set and
+//   deletes the others with their groups, memberships and sessions (the
+//   foreign keys cascade). Those groups were in no reader's set.
 //
 // Each step first removes the duplicates already present, keeping the newest
 // row, so the unique index cannot fail on a production database. The older
@@ -101,10 +106,34 @@ struct CreateUniquenessIndexes: ChickadeeMigration {
                 """
             ).run()
         }
+        try await uniqueGroupSetPerCourse(on: database)
+    }
+
+    /// One group set per course: keep the set the readers already take, the
+    /// oldest (then by name, then by id), and index `course_id` as unique. One
+    /// transaction, so a set the live server makes waits for the index.
+    private func uniqueGroupSetPerCourse(on database: any Database) async throws {
+        try await database.transaction { tx in
+            guard let sql = tx as? (any SQLDatabase) else { return }
+            try await sql.raw(
+                """
+                DELETE FROM course_group_sets WHERE id IN (
+                  SELECT id FROM (
+                    SELECT id, row_number() OVER (
+                      PARTITION BY course_id ORDER BY created_at ASC NULLS FIRST, name, id) AS n
+                    FROM course_group_sets
+                  ) ranked WHERE n > 1)
+                """
+            ).run()
+            try await sql.raw(
+                "CREATE UNIQUE INDEX IF NOT EXISTS idx_course_group_sets_course ON course_group_sets (course_id)"
+            ).run()
+        }
     }
 
     func revert(on database: any Database) async throws {
         guard let sql = database as? (any SQLDatabase) else { return }
+        try await sql.raw("DROP INDEX IF EXISTS idx_course_group_sets_course").run()
         try await sql.raw("DROP INDEX IF EXISTS idx_validation_variants_setup_index").run()
         try await sql.raw(
             "CREATE INDEX IF NOT EXISTS idx_validation_variants_setup_index ON validation_variants(test_setup_id, variant_index)"
