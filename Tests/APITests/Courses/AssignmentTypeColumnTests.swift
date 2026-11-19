@@ -1,8 +1,8 @@
 // Tests/APITests/Courses/AssignmentTypeColumnTests.swift
 //
 // The declared assignment type on the `assignments` row
-// (docs/assignment-types.md): the one-time backfill, the MCP read and write,
-// and the row tile each type draws.
+// (docs/assignment-types.md): the MCP read and write, and the row tile each
+// type draws.
 
 import Core
 import Elementary
@@ -15,12 +15,7 @@ import Vapor
 
 @Suite(.serialized) struct AssignmentTypeColumnTests {
 
-    private static let browserManifest = #"{"schemaVersion":1,"gradingMode":"browser","testSuites":[]}"#
     private static let workerManifest = #"{"schemaVersion":1,"gradingMode":"worker","testSuites":[]}"#
-    private static let activityManifest =
-        #"{"schemaVersion":1,"gradingMode":"worker","testSuites":[],"activity":{"kind":"bestMetric"}}"#
-    private static let browserActivityManifest =
-        #"{"schemaVersion":1,"gradingMode":"browser","testSuites":[],"activity":{"kind":"bestMetric"}}"#
 
     private func untypedAssignment(
         on app: Application, setupID: String, manifest: String, courseID: UUID
@@ -30,39 +25,6 @@ import Vapor
             on: app, testSetupID: setupID, courseID: courseID, title: setupID)
         #expect(assignment.assignmentTypeRaw == nil)
         return assignment
-    }
-
-    @Test func theBackfillRecordsATypeFromEachManifest() async throws {
-        try await withTestApp { app in
-            let courseID = try await makeTestCourse(on: app, code: "HLTH230", name: "Health").requireID()
-            let assignment = try await untypedAssignment(
-                on: app, setupID: "setup_type_a", manifest: Self.workerManifest, courseID: courseID)
-            let lab = try await untypedAssignment(
-                on: app, setupID: "setup_type_lab", manifest: Self.browserManifest,
-                courseID: courseID)
-            let labWithActivity = try await untypedAssignment(
-                on: app, setupID: "setup_type_lab4b", manifest: Self.browserActivityManifest,
-                courseID: courseID)
-            let activity = try await untypedAssignment(
-                on: app, setupID: "setup_type_act", manifest: Self.activityManifest, courseID: courseID)
-            // A row that already declares a type keeps it.
-            let declared = try await untypedAssignment(
-                on: app, setupID: "setup_type_declared", manifest: Self.workerManifest, courseID: courseID)
-            declared.assignmentType = .lab
-            try await declared.save(on: app.db)
-
-            try await BackfillAssignmentType().prepare(on: app.db)
-
-            func reloaded(_ row: APIAssignment) async throws -> String? {
-                let stored = try await assignmentByPublicID(row.publicID, on: app.db)
-                return try #require(stored).assignmentTypeRaw
-            }
-            #expect(try await reloaded(assignment) == "assignment")
-            #expect(try await reloaded(lab) == "lab")
-            #expect(try await reloaded(labWithActivity) == "lab")
-            #expect(try await reloaded(activity) == "classActivity")
-            #expect(try await reloaded(declared) == "lab")
-        }
     }
 
     @Test func updateAssignmentSetsTheTypeAndGetAssignmentReportsIt() async throws {

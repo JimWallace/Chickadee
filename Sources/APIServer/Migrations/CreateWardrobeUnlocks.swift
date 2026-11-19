@@ -16,6 +16,13 @@ struct CreateWardrobeUnlocks: ChickadeeMigration {
             )
             .field("item", .string, .required)
             .field("unlocked_at", .datetime)
+            // Folded from AddWardrobeUnlockSource (docs/achievement-rewards.md,
+            // S2): `source` is `achievement:<level>:<owner>:<id>` for an item
+            // an achievement granted, nil for a rule item or a found one;
+            // `label` is the achievement's name, kept as text so it outlives
+            // the course or assignment that granted the item.
+            .field("source", .string)
+            .field("label", .string)
             .unique(on: "user_id", "item")
             .create()
     }

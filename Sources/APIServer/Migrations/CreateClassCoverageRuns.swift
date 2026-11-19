@@ -12,6 +12,10 @@ struct CreateClassCoverageRuns: ChickadeeMigration {
             .field("coverage", .double)
             .field("created_at", .datetime, .required)
             .field("completed_at", .datetime)
+            // Folded from AddClassCoverageRunGroup: the lab group whose
+            // students' corpus this run grades (docs/lab-groups.md, slice
+            // 5c). Nil is a run of the whole class. No foreign key.
+            .field("group_id", .uuid)
             // One row per corpus submission. The ingest path completes a run by
             // its submission id, so a replayed report updates the same row
             // rather than opening a second one.

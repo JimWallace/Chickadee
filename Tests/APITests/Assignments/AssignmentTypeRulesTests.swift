@@ -228,26 +228,30 @@ import Vapor
         }
     }
 
-    // MARK: - The section migration
+    // MARK: - The section columns
 
-    /// A section saved by this release omits the old grading-mode column,
-    /// which the migration gave a default, so the old color of a blue-green
-    /// deploy still reads a value.
-    @Test func aNewSectionGetsTheOldColumnsDefault() async throws {
+    /// A section carries no grading mode and no type: the migrated schema has
+    /// neither old column (`DropSectionDefaultColumns`), and a section still
+    /// saves.
+    @Test func sectionsHaveNoModeOrTypeColumn() async throws {
         try await withTestApp { app in
             let courseID = try await makeTestCourse(on: app, code: "MIG_SECT").requireID()
             let section = APICourseSection(name: "Labs", sortOrder: 1, courseID: courseID)
             try await section.save(on: app.db)
             let sql = try #require(app.db as? any SQLDatabase)
             struct Row: Decodable {
-                let mode: String
-                enum CodingKeys: String, CodingKey { case mode = "default_grading_mode" }
+                let name: String
+                enum CodingKeys: String, CodingKey { case name = "column_name" }
             }
-            let row = try #require(
-                try await sql.raw(
-                    "SELECT default_grading_mode FROM course_sections WHERE id = \(bind: try section.requireID())"
-                ).first(decoding: Row.self))
-            #expect(row.mode == "worker")
+            let columns = try await sql.raw(
+                """
+                SELECT column_name FROM information_schema.columns \
+                WHERE table_schema = current_schema() AND table_name = 'course_sections'
+                """
+            ).all(decoding: Row.self).map(\.name)
+            #expect(columns.contains("name"))
+            #expect(!columns.contains("default_grading_mode"))
+            #expect(!columns.contains("default_assignment_type"))
         }
     }
 }

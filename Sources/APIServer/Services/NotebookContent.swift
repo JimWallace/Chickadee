@@ -318,8 +318,9 @@ func resolveNotebook(from source: NotebookSourceRef) async -> NotebookResolution
             !data.isEmpty
         else { continue }
         // A starter that lives only in the zip was never written through
-        // `starterNotebookForStorage`, and `StripStarterNotebookOutputs`
-        // rewrites only flat files, so its outputs are cleared here.
+        // `starterNotebookForStorage`, and the one-time cleanup of stored
+        // starters (`StripStarterNotebookOutputs`, since deleted) rewrote
+        // only flat files, so its outputs are cleared here.
         return .found(starterNotebookForStorage(data))
     }
 
