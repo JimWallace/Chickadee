@@ -157,6 +157,14 @@ FROM ubuntu:26.04@sha256:d66b366dac61b575bee2aef07e9c26e8070096fbe84a3d4d3eb0da0
 
 ENV DEBIAN_FRONTEND=noninteractive
 
+# The resolute base image carries Canonical's pebble service manager as a loose
+# binary (/usr/bin/pebble, owned by no package, so no apt upgrade touches it).
+# Nothing here runs it: the base has no entrypoint, and ours are the server
+# binary and deploy/runner-entrypoint.sh. Its Go stdlib tripped the image gate
+# (CVE-2026-97054, #3077), so it goes, with its empty state directory. A stage
+# that ever needs pebble installs the `pebble` package instead.
+RUN rm -f /usr/bin/pebble && rm -rf /var/lib/pebble
+
 # Non-root user for the application processes.
 #
 # The UID and GID are PINNED to 999 and must stay there, and this must stay
