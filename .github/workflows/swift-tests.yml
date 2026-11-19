@@ -481,7 +481,7 @@ jobs:
       options: "--privileged --tmpfs /tmp:rw,exec,size=2g"
     services:
       postgres:
-        image: ghcr.io/jimwallace/chickadee/postgres:16
+        image: ghcr.io/jimwallace/chickadee/postgres:18
         credentials:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}

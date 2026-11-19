@@ -233,9 +233,23 @@ services:
   #
   # Required. The deploy daemon refreshes the runner with `--no-deps`, so a
   # deploy never recreates this service.
+  #
+  # Major-version upgrades go through scripts/db-major-upgrade.sh, never by
+  # editing the image below on a host that already has data: the script dumps,
+  # restores into a new volume, verifies, and records the live image and volume
+  # in docker-compose.db.yml, which overrides this block (deploy/README.md,
+  # "PostgreSQL major upgrade"). The image below is what a FRESH install gets.
+  # On a host still holding an older major's data in chickadee-postgres, a
+  # recreate on this image fails safe: the server refuses the old data
+  # directory instead of starting empty. Run `scripts/db-major-upgrade.sh
+  # --pin-current` on such a host to keep its running version pinned.
+  #
+  # PGDATA is set explicitly because postgres:18 moved its default to
+  # /var/lib/postgresql/18/docker; keeping /var/lib/postgresql/data lets one
+  # volume layout serve every major version.
   # ----------------------------------------------------------------
   db:
-    image: postgres:16
+    image: postgres:18
     restart: unless-stopped
     # Modest tuning over the stock image. max_connections must clear the
     # app's pool ceiling of 4 connections x event loops (loops = host
@@ -256,6 +270,7 @@ services:
       POSTGRES_DB: ${DATABASE_NAME:-chickadee}
       POSTGRES_USER: ${DATABASE_USER:-chickadee}
       POSTGRES_PASSWORD: ${DATABASE_PASSWORD:-change-me}
+      PGDATA: /var/lib/postgresql/data
     volumes:
       - chickadee-postgres:/var/lib/postgresql/data
     networks:

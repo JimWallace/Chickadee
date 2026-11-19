@@ -51,7 +51,7 @@ Edit `.env`:
 
 Chickadee stores everything in PostgreSQL. SQLite support was removed in 0.5,
 and nothing moves a SQLite database into Postgres. The Compose file starts a
-`db` service (Postgres 16) and points the server at it.
+`db` service (Postgres 18) and points the server at it.
 
 The server refuses to start unless `DATABASE_HOST`, `DATABASE_PORT`,
 `DATABASE_NAME`, `DATABASE_USER` and `DATABASE_PASSWORD` all have values. The
@@ -273,6 +273,76 @@ The `db` service in `docker-compose.yml` is required. It keeps its data in the
 tool `get_query_stats`. To use a Postgres outside Compose, set the five
 `DATABASE_*` variables to it. Compose still starts the bundled `db` service,
 because the server depends on it, but the server does not use it.
+
+On a host that has been through a major-version upgrade, the image and volume
+in use are set by `docker-compose.db.yml` beside `docker-compose.yml`, not by
+the `db` block itself. `scripts/db-major-upgrade.sh` writes that file; do not
+edit it by hand. Every script here includes it automatically.
+
+#### PostgreSQL major upgrade
+
+Never change the `db` image tag on a host that already has data: a new major
+version cannot open an older one's data directory. (It fails safe, refusing to
+start rather than starting empty, but the app is down until it is undone.)
+Use the script, which dumps the database, restores it into a new volume on the
+new version, checks the result, and rolls back by itself on any failure:
+
+```bash
+# 1. Pause the deploy daemon (admin Deployment page). The script refuses otherwise.
+# 2. Preflight only: versions, disk, target volume, password hashes, image pull.
+scripts/db-major-upgrade.sh --to 18 --check
+# 3. The upgrade. Type UPGRADE to confirm; the app is down for a few minutes.
+scripts/db-major-upgrade.sh --to 18
+# 4. Resume the deploy daemon.
+```
+
+What it does, in order (each step logged to
+`backups/db-upgrade-<stamp>-pg<old>-to-pg<new>/upgrade.log`):
+
+1. Takes a snapshot (`--label pre-pg18`) while the app is still up.
+2. Stops every server container and the runner. nginx serves the maintenance
+   page meanwhile.
+3. Records an inventory of the old database: exact row counts, Fluent
+   migrations, roles and password hashes, schema, table and database grants,
+   row-level security and policies, columns, indexes, constraints, triggers,
+   functions, sequences, extensions and database settings.
+4. Dumps the roles (`pg_dumpall --globals-only`) and the database
+   (`pg_dump -Fc`). Roles matter: a database dump does not carry them, and
+   without `chickadee_mcp` its grants and RLS policies would not restore.
+5. Creates the volume `chickadee_chickadee-postgres-18`, points
+   `docker-compose.db.yml` at it and at `postgres:18`, and recreates `db`.
+   The new cluster has data checksums on.
+6. Restores the roles, then the database with `pg_restore --create` (which
+   keeps the database's own grants and settings), and runs `ANALYZE`.
+7. Takes the same inventory of the new database. Any difference fails the run.
+8. Starts the servers and runner and waits for `/health`.
+
+If any step from 2 on fails, the script points `docker-compose.db.yml` back at
+the old image and the old volume, which it never writes to, and restarts the
+app. The failed new volume is kept for inspection; re-run with
+`--replace-target` to discard it and try again. If the script itself is killed
+mid-run, `.db-upgrade.lock` stays behind and the next run refuses to start;
+`scripts/db-major-upgrade.sh --recover` rolls back to the old volume.
+
+After a successful run:
+
+- Check the app: log in, run one submission through a runner, and call the
+  admin MCP tools `get_query_stats` (confirms `pg_stat_statements`) and
+  `get_storage_usage`.
+- Going back to the old version loses every write made since the switch.
+  Decide within the maintenance window. To do it: stop the app, set
+  `docker-compose.db.yml` to the old image and volume the script printed,
+  run `docker compose up -d --no-deps --force-recreate db`, and start the app.
+- New snapshots are now dumps from the new version. Restoring one into an
+  older Postgres is not supported, so a staging host must be upgraded too.
+- After two quiet weeks, delete the old volume
+  (`docker volume rm chickadee_chickadee-postgres`).
+
+`scripts/db-major-upgrade.sh --pin-current` writes `docker-compose.db.yml`
+for the database that is running now, without restarting anything. Run it on
+an existing host whose `docker-compose.yml` names a newer image than the one
+it runs, so that a stray `docker compose up -d` cannot try the newer image on
+the old data.
 
 Check status:
 
@@ -698,7 +768,9 @@ expired. Never commit `.mcp-signing-key`.
 Persistent data lives in two named volumes:
 - `chickadee-data` holds `submissions/`, `testsetups/`, `results/` and the
   server's secrets and key files.
-- `chickadee-postgres` holds the database.
+- `chickadee-postgres` holds the database. After a major-version upgrade the
+  live database is in `chickadee-postgres-<major>` (see
+  [PostgreSQL major upgrade](#postgresql-major-upgrade)).
 
 The command below backs up the data volume only. For the database, take a
 snapshot (next section), which captures both.
