@@ -414,14 +414,11 @@ extension InstructorLMSRoutes {
         let submissionIDs = try await APISubmission.query(on: req.db)
             .filter(\.$testSetupID == assignment.testSetupID)
             .filter(\.$kind == APISubmission.Kind.student)
-            .all()
-            .compactMap(\.id)
-        let results =
-            submissionIDs.isEmpty
-            ? []
-            : try await APIResult.query(on: req.db)
-                .filter(\.$submissionID ~~ submissionIDs)
-                .all()
+            .all(\.$id)
+        var results: [APIResult] = []
+        for chunk in chunkedForInFilter(submissionIDs) {
+            results += try await APIResult.query(on: req.db).filter(\.$submissionID ~~ chunk).all()
+        }
         try await requeueForImmediateSync(results, on: req.db)
         // Override-only grades (no-submission students) carry their pending
         // flag on the override row; re-queue those for this assignment too.

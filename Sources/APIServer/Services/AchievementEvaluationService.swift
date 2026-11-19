@@ -533,8 +533,7 @@ func requeueFrozenClassGoalBonusPushes(
     let submissionIDs = try await APISubmission.query(on: db)
         .filter(\.$testSetupID == testSetupID)
         .filter(\.$kind == APISubmission.Kind.student)
-        .all()
-        .compactMap(\.id)
+        .all(\.$id)
     guard !submissionIDs.isEmpty else { return }
 
     var results: [APIResult] = []

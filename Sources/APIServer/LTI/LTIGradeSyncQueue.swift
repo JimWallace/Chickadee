@@ -9,6 +9,7 @@
 
 import Fluent
 import Foundation
+import SQLKit
 
 enum LTIGradeSyncQueue {
     /// Queues `userIDs` for `testSetupID` when the assignment's course uses
@@ -42,15 +43,19 @@ enum LTIGradeSyncQueue {
     /// the "push all" action and a frozen class-goal bonus.
     static func queueAllStudents(testSetupID: String, on db: any Database, now: Date = Date()) async throws {
         guard try await courseUsesLTIGrades(testSetupID: testSetupID, on: db) else { return }
+        // Only the user column, once per user: a setup's submissions are its
+        // whole history.
         let submitters = try await APISubmission.query(on: db)
             .filter(\.$testSetupID == testSetupID)
             .filter(\.$kind == APISubmission.Kind.student)
-            .all()
-            .compactMap(\.userID)
+            .filter(\.$userID != nil)
+            .unique()
+            .all(\.$userID)
+            .compactMap { $0 }
         let overridden = try await APIGradeOverride.query(on: db)
             .filter(\.$testSetupID == testSetupID)
-            .all()
-            .map(\.userID)
+            .unique()
+            .all(\.$userID)
         let userIDs = Array(Set(submitters + overridden))
         try await markPending(userIDs: userIDs, testSetupID: testSetupID, on: db, now: now)
     }
@@ -64,47 +69,61 @@ enum LTIGradeSyncQueue {
             .all()
             .map(\.testSetupID)
         guard !setupIDs.isEmpty else { return }
-        let failed = try await APILTIGradeSync.query(on: db)
+        // One statement for every failed row of the student in the course.
+        try await APILTIGradeSync.query(on: db)
             .filter(\.$userID == userID)
             .filter(\.$testSetupID ~~ setupIDs)
             .filter(\.$pending == false)
             .filter(\.$failureReason == LTIGradeSyncFailureReason.notLaunched.rawValue)
-            .all()
-        for row in failed {
-            row.pending = true
-            row.pendingSince = now
-            row.error = nil
-            row.failure = nil
-            try await row.save(on: db)
-        }
+            .set(\.$pending, to: true)
+            .set(\.$pendingSince, to: now)
+            .set(\.$error, to: nil)
+            .set(\.$failureReason, to: nil)
+            .update()
     }
 
     private static func courseUsesLTIGrades(testSetupID: String, on db: any Database) async throws -> Bool {
         try await gradePushTarget(testSetupID: testSetupID, on: db).1?.usesLTIGrades == true
     }
 
+    /// Puts each user's row for the setup in the pending state, in one
+    /// statement per chunk: an insert for a user with no row, an update for
+    /// one with a row (on the unique `(user_id, test_setup_id)`). A row that
+    /// is already waiting keeps its start time, so a stream of submissions
+    /// cannot hold the push back forever.
     private static func markPending(userIDs: [UUID], testSetupID: String, on db: any Database, now: Date) async throws {
-        guard !userIDs.isEmpty else { return }
-        var existing: [APILTIGradeSync] = []
-        for chunk in chunkedForInFilter(userIDs) {
-            existing += try await APILTIGradeSync.query(on: db)
-                .filter(\.$testSetupID == testSetupID)
-                .filter(\.$userID ~~ chunk)
-                .all()
-        }
-        let byUser = Dictionary(existing.map { ($0.userID, $0) }, uniquingKeysWith: { first, _ in first })
-        for userID in userIDs {
-            if let row = byUser[userID] {
-                // A row that is already waiting keeps its start time, so a
-                // stream of submissions cannot hold the push back forever.
-                if !row.pending { row.pendingSince = now }
-                row.pending = true
-                row.error = nil
-                row.failure = nil
-                try await row.save(on: db)
-            } else {
-                try await APILTIGradeSync(userID: userID, testSetupID: testSetupID, pendingSince: now).save(on: db)
+        let distinct = Array(Set(userIDs))
+        guard !distinct.isEmpty else { return }
+        guard let sql = db as? (any SQLDatabase) else {
+            for userID in distinct {
+                try await APILTIGradeSync(userID: userID, testSetupID: testSetupID, pendingSince: now)
+                    .createIgnoringConflict(on: db)
             }
+            return
+        }
+        let table = APILTIGradeSync.schema
+        for chunk in chunkedForInFilter(distinct) {
+            var insert = sql.insert(into: table)
+                .columns("id", "user_id", "test_setup_id", "pending", "pending_since")
+            for userID in chunk {
+                insert = insert.values([
+                    SQLBind(UUID()), SQLBind(userID), SQLBind(testSetupID), SQLBind(true), SQLBind(now),
+                ])
+            }
+            try await insert
+                .onConflict(with: ["user_id", "test_setup_id"]) { conflict in
+                    conflict
+                        .set(
+                            "pending_since",
+                            to: SQLRaw(
+                                "CASE WHEN \(table).pending THEN \(table).pending_since ELSE EXCLUDED.pending_since END"
+                            )
+                        )
+                        .set("pending", to: true)
+                        .set("error", to: SQLLiteral.null)
+                        .set("failure_reason", to: SQLLiteral.null)
+                }
+                .run()
         }
     }
 }

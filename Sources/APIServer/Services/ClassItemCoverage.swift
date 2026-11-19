@@ -15,6 +15,7 @@
 import Core
 import Fluent
 import Foundation
+import SQLKit
 import Vapor
 
 /// Records every item this submission covered that no earlier submission had.
@@ -86,22 +87,52 @@ func recordClassItemCoverage(
         return
     }
 
-    // One query for the whole submission rather than one per item: a suite can
-    // carry dozens of variants and this runs on the result path.
-    let alreadyCovered = try await APIClassItemCoverage.query(on: db)
-        .filter(\.$testSetupID == testSetupID)
-        .filter(\.$item ~~ covered)
-        .all()
-    let seen = Set(alreadyCovered.map(\.item))
-
-    for item in covered where !seen.contains(item) {
-        let row = APIClassItemCoverage(
-            testSetupID: testSetupID, item: item,
-            userID: userID, submissionID: submissionID)
-        // Ignore the conflict: two submissions covering the same item at once,
-        // first insert wins. Same shape as `awardImmutableBadge`.
-        try await row.createIgnoringConflict(on: db)
+    // One statement for the whole submission rather than one per item: a
+    // suite can carry dozens of variants and this runs on the result path.
+    // The first submission to cover an item keeps it: the unique
+    // `(test_setup_id, item)` turns every later insert into nothing.
+    if let sql = db as? (any SQLDatabase) {
+        try await insertCoverageIgnoringConflict(
+            into: APIClassItemCoverage.schema, keyColumns: ["test_setup_id", "item"], testSetupID: testSetupID,
+            groupID: nil, items: covered, userID: userID, submissionID: submissionID, on: sql)
+        return
     }
+    let seen = Set(
+        try await APIClassItemCoverage.query(on: db)
+            .filter(\.$testSetupID == testSetupID)
+            .filter(\.$item ~~ covered)
+            .all()
+            .map(\.item))
+    for item in covered where !seen.contains(item) {
+        try await APIClassItemCoverage(
+            testSetupID: testSetupID, item: item, userID: userID, submissionID: submissionID
+        ).createIgnoringConflict(on: db)
+    }
+}
+
+/// Inserts one coverage row per distinct item in one statement, and skips the
+/// items that a row already holds (`ON CONFLICT DO NOTHING` on `keyColumns`,
+/// the table's unique key). `groupID` is set only for the per-lab table.
+private func insertCoverageIgnoringConflict(
+    into table: String, keyColumns: [String], testSetupID: String, groupID: UUID?, items: [String],
+    userID: UUID, submissionID: String, on sql: any SQLDatabase
+) async throws {
+    var distinct: [String] = []
+    var seen: Set<String> = []
+    for item in items where seen.insert(item).inserted { distinct.append(item) }
+    guard !distinct.isEmpty else { return }
+
+    let now = Date()
+    var columns = ["id", "test_setup_id", "item", "user_id", "submission_id", "covered_at"]
+    if groupID != nil { columns.insert("group_id", at: 2) }
+    var insert = sql.insert(into: table).columns(columns)
+    for item in distinct {
+        var row: [any SQLExpression] = [SQLBind(UUID()), SQLBind(testSetupID)]
+        if let groupID { row.append(SQLBind(groupID)) }
+        row += [SQLBind(item), SQLBind(userID), SQLBind(submissionID), SQLBind(now)]
+        insert = insert.values(row)
+    }
+    try await insert.ignoringConflicts(with: keyColumns).run()
 }
 
 /// The class's coverage of one assignment: how many distinct items have been
@@ -132,6 +163,13 @@ func recordLabItemCoverage(
     testSetupID: String, groupID: UUID, items: [String], userID: UUID, submissionID: String,
     on db: any Database
 ) async throws {
+    if let sql = db as? (any SQLDatabase) {
+        try await insertCoverageIgnoringConflict(
+            into: APIGroupClassItemCoverage.schema, keyColumns: ["test_setup_id", "group_id", "item"],
+            testSetupID: testSetupID, groupID: groupID, items: items, userID: userID, submissionID: submissionID,
+            on: sql)
+        return
+    }
     let seen = Set(
         try await APIGroupClassItemCoverage.query(on: db)
             .filter(\.$testSetupID == testSetupID)
