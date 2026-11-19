@@ -19,6 +19,10 @@ struct CreateTournamentRuns: ChickadeeMigration {
             .field("round_count", .int, .required)
             .field("winner_user_id", .uuid)
             .field("completed_at", .datetime)
+            // Folded from AddTournamentRunGroup: the lab group whose students
+            // play this run (docs/lab-groups.md, slice 3d). Nil is a run of
+            // the whole class. No foreign key.
+            .field("group_id", .uuid)
             .create()
         try await database.schema("tournament_matches")
             .id()

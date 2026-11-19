@@ -276,7 +276,8 @@ Roles are two-level (#417): a deployment role plus a per-course role.
 - **Deployment role** (`UserRole` on `APIUser`): `user` < `admin`, plus the
   non-login `mcp` service-account role. There is no deployment-global
   student or instructor role — the legacy global roles were retired by the
-  #417 multi-course-roles series (`CollapseUserRoles` migration).
+  #417 multi-course-roles series (`CollapseUserRoles` migration, since
+  deleted).
 - **Course role** (`CourseRole` on the enrollment row): `student` < `ta` <
   `instructor`. One account can be an instructor in one course and a student
   in another. TAs author content and grade but cannot manage enrollment,
@@ -619,11 +620,14 @@ file. The steady-state convention:
   course-code index. A fifth round folded 8 more column and index migrations,
   from the GitHub invited-user column to the assignment concept, and deleted
   the 6 one-time data migrations outright, because every deployed database had
-  run them and they touch no rows on a fresh one. A handful are deliberately kept as
+  run them and they touch no rows on a fresh one. A sixth round, before
+  0.6.0, folded 11 column migrations, from the activity-session networks to
+  the wardrobe unlock source, and deleted the last 4 data migrations,
+  `CollapseUserRoles` among them. A handful are deliberately kept as
   standalone migrations: `AddUserFKConstraints`, `AddSessionsCreatedAt` (it targets
-  Vapor's own sessions table, which no `Create*` file owns),
-  `CollapseUserRoles` (a pure data rewrite with no schema home), and
-  `AddLTIGradeSyncFailureReasonColumn` (it backfills existing rows).
+  Vapor's own sessions table, which no `Create*` file owns), and
+  `AddLTIGradeSyncFailureReasonColumn` (it backfills existing rows). A
+  migration that production has not yet run stays standalone until it has.
 - **Not every migration is additive.** `CreateResultCollections` moved
   `results.collection_json` into a side table and dropped the original
   column, and the assignment table's boolean `is_open` became the three-state

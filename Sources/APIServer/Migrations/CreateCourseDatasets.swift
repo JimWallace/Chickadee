@@ -30,6 +30,10 @@ struct CreateCourseDatasets: ChickadeeMigration {
             .field("current_version", .int, .required)
             .field("created_at", .datetime)
             .field("updated_at", .datetime)
+            // Folded from AddCourseDatasetFormat (sixth round): CSV or FHIR
+            // NDJSON (docs/fhir-datasets-plan.md §6). The database default
+            // is kept as it was added.
+            .field("format", .string, .required, .custom("DEFAULT 'csv'"))
             .unique(on: "course_id", "slug")
             .create()
 
@@ -48,6 +52,10 @@ struct CreateCourseDatasets: ChickadeeMigration {
             .field("columns_json", .string, .required)
             .field("note", .string)
             .field("created_at", .datetime)
+            // Folded from AddCourseDatasetFormat (sixth round): the encoded
+            // description of a FHIR version. nil for a CSV version, whose
+            // dictionary stays in `columns_json`.
+            .field("summary_json", .string)
             .unique(on: "dataset_id", "version")
             .create()
     }

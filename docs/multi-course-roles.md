@@ -320,7 +320,7 @@ representable and creatable.
    retired the `SSO_INSTRUCTOR_USERS` handling (kept `SSO_ADMIN_USERS`).
    Both items originally deferred here have since shipped: the
    `UserRole.instructor` enum case was physically removed with the
-   `CollapseUserRoles` migration (c646dc7 — legacy strings decode as a plain
+   `CollapseUserRoles` migration (c646dc7, since deleted — legacy strings decode as a plain
    non-admin `user`), and the global-instructor option was removed from the
    admin user-management UI (590e2b1). Per-course roles are now seeded as
    admin → `.instructor`, everyone else → `.student`

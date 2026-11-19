@@ -8,8 +8,8 @@
 // would open showing them: the answer to "what does this cell print" before the
 // student has run anything. Each write of a starter notebook passes through
 // `stripped(_:)` (via `starterNotebookForStorage`), and the one-time
-// `StripStarterNotebookOutputs` migration cleaned the notebooks stored before
-// that.
+// `StripStarterNotebookOutputs` migration (since deleted) cleaned the
+// notebooks stored before that.
 //
 // The solution notebook is NOT passed through this. It is staff-facing, and
 // how a revealed solution reaches students is its own question.

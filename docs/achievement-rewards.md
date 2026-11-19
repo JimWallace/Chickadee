@@ -542,7 +542,8 @@ S6 and S8 as they fit.
   `decodeIfPresent`; `WardrobeItem.grantable` (spectrum, cross-fade) and
   `hasBuiltInRule`, with a test that every item is exactly one of rule, found
   or grantable.
-- `wardrobe_unlocks.source` and `label` (`AddWardrobeUnlockSource`).
+- `wardrobe_unlocks.source` and `label` (`AddWardrobeUnlockSource`, since
+  folded into `CreateWardrobeUnlocks`).
 - The grant on read: the student's own result page grants the item of each
   satisfied individual `wardrobe` achievement
   (`AchievementAwardStore.grantWardrobeRewards`), writes a ledger row, and

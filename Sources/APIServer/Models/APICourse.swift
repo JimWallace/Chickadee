@@ -57,7 +57,7 @@ final class APICourse: Model, Content, @unchecked Sendable {
     var brightspaceSyncUserID: UUID?
 
     /// Retired by lab groups slice 6: the D2L group category that the old
-    /// section sweep read. `MoveLearnSectionCategoryToGroupSet` made it a
+    /// section sweep read. `MoveLearnSectionCategoryToGroupSet` (since deleted) made it a
     /// `learnGroups` group set, and the LEARN group sync reads the set. Nothing
     /// reads this field now.
     @OptionalField(key: "brightspace_section_category_id")

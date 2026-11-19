@@ -52,8 +52,8 @@ from users where username = 'perfadmin'
 on conflict do nothing;
 
 -- ---------------------------------------------------------------- sections
-insert into course_sections (id, name, default_grading_mode, sort_order, course_id, created_at)
-select pg_temp.u('sec' || g), 'Unit ' || g, 'worker', g, (select course_id from ctx), now() - interval '65 days'
+insert into course_sections (id, name, sort_order, course_id, created_at)
+select pg_temp.u('sec' || g), 'Unit ' || g, g, (select course_id from ctx), now() - interval '65 days'
 from generate_series(1, 3) g;
 
 -- ---------------------------------------------------------------- test setups + assignments
