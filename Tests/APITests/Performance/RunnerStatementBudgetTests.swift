@@ -24,11 +24,14 @@ struct RunnerStatementBudgetTests {
     /// The statements each request may send. Raise one only with the reason
     /// in the pull request.
     enum Budget {
-        static let claim = 20
-        static let resultReport = 23
+        static let claim = 16
+        static let resultReport = 17
     }
 
     private static let workerSecret = "runner-statement-budget-secret"
+    /// The one runner that claims and reports: result ingest accepts a report
+    /// only from the runner that holds the claim (`ResultClaimCheck`).
+    private static let workerID = "runner-budget"
     private static let workerManifest = """
         {"schemaVersion":1,"testSuites":[{"tier":"public","script":"test.sh"}],"timeLimitSeconds":10}
         """
@@ -57,10 +60,11 @@ struct RunnerStatementBudgetTests {
     private func poll(on app: Application) async throws -> TestResponse {
         let path = "/api/v1/worker/request"
         let payload = WorkerActivityPayload(
-            workerID: "runner-budget", hostname: "runner-budget.local", runnerVersion: "budget/1.0",
+            workerID: Self.workerID, hostname: "runner-budget.local", runnerVersion: "budget/1.0",
             maxConcurrentJobs: 1, activeJobs: 0, profile: nil)
         let body = ByteBuffer(data: try JSONEncoder().encode(payload))
-        let headers = workerHMACHeaders(method: .POST, path: path, body: body, workerSecret: Self.workerSecret)
+        let headers = workerHMACHeaders(
+            method: .POST, path: path, body: body, workerSecret: Self.workerSecret, workerID: Self.workerID)
         return try await app.asyncSendRequest(.POST, path, headers: headers, body: body)
     }
 
@@ -78,7 +82,8 @@ struct RunnerStatementBudgetTests {
         encoder.dateEncodingStrategy = .iso8601
         let body = ByteBuffer(data: try encoder.encode(WorkerExecutionReport(collection: collection, diagnostics: nil)))
         let path = "/api/v1/worker/results"
-        let headers = workerHMACHeaders(method: .POST, path: path, body: body, workerSecret: Self.workerSecret)
+        let headers = workerHMACHeaders(
+            method: .POST, path: path, body: body, workerSecret: Self.workerSecret, workerID: Self.workerID)
         return try await app.asyncSendRequest(.POST, path, headers: headers, body: body)
     }
 

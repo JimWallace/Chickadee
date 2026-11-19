@@ -28,6 +28,8 @@ struct SchemaDesignTests {
         "course_content_items.attachments_json",
         "course_content_items.links_json",
         "course_dataset_versions.columns_json",
+        // Landed on main beside this rule (AddCourseDatasetFormat).
+        "course_dataset_versions.summary_json",
         "result_collections.collection_json",
         "runner_profiles.capabilities_json",
         "runner_profiles.language_versions_json",
