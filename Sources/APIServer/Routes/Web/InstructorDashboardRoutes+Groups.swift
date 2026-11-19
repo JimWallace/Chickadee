@@ -167,7 +167,7 @@ extension InstructorDashboardRoutes {
             return req.redirect(to: "/instructor/groups?notice=\(GroupsNotice.setCreated.rawValue)")
         } catch let error as CourseGroupError {
             return try await renderGroupsPage(req: req, flash: FlashMessages(error: error.description))
-        } catch where isInsertConflict(error) {
+        } catch  where isInsertConflict(error) {
             return req.redirect(to: "/instructor/groups")
         }
     }

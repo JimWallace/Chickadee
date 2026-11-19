@@ -235,7 +235,7 @@ enum CourseGroupStore {
         if let existing = try await sets(courseID: courseID, on: db).first { return try await apply(existing) }
         do {
             return try await apply(APICourseGroupSet(courseID: courseID, name: "Lab sections", source: source))
-        } catch where isInsertConflict(error) {
+        } catch  where isInsertConflict(error) {
             // Another request made the course's one set first
             // (`idx_course_group_sets_course`): set the source on that one.
             guard let existing = try await sets(courseID: courseID, on: db).first else { throw error }
