@@ -653,8 +653,8 @@ because line numbers go out of date.
   Validate (`persistAssignmentNotebook`), the draft upload, and both
   `TestSetupRoutes` writes. Course bundle import and version restore call
   `NotebookOutputs.stripped` directly. A starter read from the setup zip is
-  cleared in `resolveNotebook`. `StripStarterNotebookOutputs` cleaned the files
-  stored before this. A new starter write site must clear them too.
+  cleared in `resolveNotebook`. `StripStarterNotebookOutputs` (since deleted) cleaned
+  the files stored before this. A new starter write site must clear them too.
 - **Comparisons that must agree:** `sameDraftContent` (the server-drive draft
   sync) clears each cell with `NotebookOutputs.clearingRunState`, and the
   `refreshFromSeed` path of `ensureUserNotebookWorkingCopy` compares both sides
@@ -687,8 +687,8 @@ because line numbers go out of date.
 
 - **Rule:** the type is declared, never inferred from a title.
   `AssignmentType.derivedDeclaration` (effective grading mode, then the
-  `activity` block) runs only where a row is created and in the one-time
-  `BackfillAssignmentType`, and each records the result at once
+  `activity` block) runs only where a row is created (and ran once in the
+  since-deleted `BackfillAssignmentType`), and each records the result at once
   (docs/assignment-types.md).
 - **Rules the type carries** (phase 2): an Assignment refuses browser grading
   (read as the effective mode), and a Class activity needs an `activity`
@@ -1751,8 +1751,8 @@ coordination, and each must see every edit.
     set's attendance rows, because the join places a student only while the
     set is manual. A failed first read keeps them.
   - `APICourseEnrollment.brightspaceSection` and
-    `APICourse.brightspaceSectionCategoryID` are retired: only
-    `MoveLearnSectionCategoryToGroupSet` reads them. A student's lab goes
+    `APICourse.brightspaceSectionCategoryID` are retired: nothing reads
+    them since `MoveLearnSectionCategoryToGroupSet` was deleted. A student's lab goes
     out in the data export as a group membership (`gatherGroups`).
   - Staff are never gated, as with the window.
   - Every write that turns `runsPerGroup` off ends the open sessions:

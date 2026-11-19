@@ -9,7 +9,7 @@
 // Two columns that sections used to carry stay in the table until a later
 // release drops them, so the old color of a blue-green deploy can still read
 // it: `default_grading_mode` (with a database default) and the nullable
-// `default_assignment_type` (`AddSectionDefaultAssignmentType`). Nothing here
+// `default_assignment_type` (both in `CreateCourses`). Nothing here
 // reads or writes either.
 //
 // Assignments reference their section via a nullable section_id FK (SET NULL on delete),

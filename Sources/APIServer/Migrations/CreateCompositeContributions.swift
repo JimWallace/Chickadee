@@ -30,6 +30,10 @@ struct CreateCompositeContributions: ChickadeeMigration {
             .field("data", .string, .required)
             .field("passed", .bool, .required)
             .field("updated_at", .datetime)
+            // Folded from AddCompositeContributionGroup: the lab group whose
+            // image the student's slot is in (docs/lab-groups.md, slice 4).
+            // Nil is the whole class's image. No foreign key.
+            .field("group_id", .uuid)
             .unique(on: "assignment_id", "user_id")
             .create()
     }

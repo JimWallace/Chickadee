@@ -24,6 +24,10 @@ struct CreateActivityStandings: ChickadeeMigration {
             .field("losses", .int, .required)
             .field("score_sum", .double, .required)
             .field("updated_at", .datetime, .required)
+            // Folded from AddActivityStandingGroup: the lab group of the
+            // session the row's submission was made in (docs/lab-groups.md,
+            // slice 3c). Nil is course-wide. No foreign key.
+            .field("group_id", .uuid)
             .unique(on: "test_setup_id", "user_id")
             .create()
     }

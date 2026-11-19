@@ -96,8 +96,9 @@ shows an icon would then have to decode the manifest.
 
 ### Backfill
 
-The migration declares a type for every existing assignment once, using
-signals that already exist and never the title:
+The backfill ran once, as `BackfillAssignmentType`, which the sixth migration
+consolidation round deleted after production had run it. The migration declared a type for every existing assignment once, using
+signals that already existed and never the title:
 
 1. Effective grading mode is browser → `lab`.
 2. Otherwise, `activity` is non-nil → `classActivity`.
@@ -204,8 +205,8 @@ create page; it was removed in 2026-11, because the "+ Add" menu names the
 type for each new item. A move changes neither the type nor the grading
 mode, and reports nothing. The web forms, MCP `create_course_section` /
 `rename_course_section` / `list_course_sections`, the clone and the bundle
-carry no type. The migration `AddSectionDefaultAssignmentType` added the
-`default_assignment_type` column, and the old `default_grading_mode` column
+carry no type. The migration `AddSectionDefaultAssignmentType` (since folded
+into `CreateCourses`) added the `default_assignment_type` column, and the old `default_grading_mode` column
 has a database default; the model maps neither, and both stay until a later
 release drops them, so the old color of a blue-green deploy can still read
 the table. A bundle still writes `defaultGradingMode: "worker"` for an older

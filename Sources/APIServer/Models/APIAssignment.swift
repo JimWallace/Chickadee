@@ -157,8 +157,8 @@ final class APIAssignment: Model, Content, @unchecked Sendable {
 
     /// The kind of graded work, stored as the raw `AssignmentType` string
     /// (docs/assignment-types.md). Every row creator records one, and the
-    /// `BackfillAssignmentType` migration recorded one for each row that
-    /// existed before the column. Use the typed `assignmentType` accessor.
+    /// `BackfillAssignmentType` migration (since deleted) recorded one for
+    /// each row that existed before the column. Use the typed `assignmentType` accessor.
     @OptionalField(key: "assignment_type")
     var assignmentTypeRaw: String?
 
