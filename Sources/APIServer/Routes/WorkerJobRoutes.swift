@@ -24,14 +24,59 @@ struct WorkerJobRoutes: RouteCollection {
 
         let runnerProfile = try await recordRunnerCheckIn(req: req, body: body, seenAt: seenAt, reason: .poll)
 
-        guard let claimed = try await claimNextEligibleJob(req: req, body: body, runnerProfile: runnerProfile) else {
-            return Response(status: .noContent)
+        guard let holdSeconds = WorkerLongPoll.grantedHoldSeconds(requested: body.longPollSeconds) else {
+            guard
+                let claimed = try await claimNextEligibleJob(
+                    req: req, body: body, runnerProfile: runnerProfile, reportsNoCompatibleRunner: true)
+            else {
+                return Response(status: .noContent)
+            }
+            return try await respondWithClaimedJob(req: req, body: body, claimed: claimed)
         }
 
+        // The runner asked for a held poll. Claim, and if nothing is
+        // claimable, wait for pending work to appear and claim again, until
+        // the hold ends or the server shuts down. The generation is read
+        // before each claim, so work that arrives during the claim walk ends
+        // the wait at once.
+        //
+        // Only the first walk reports a job no compatible runner can take.
+        // Every wake walks again, and a report per wake would count walks,
+        // not blocked jobs. The time spent waiting is recorded on the request
+        // so the request timing measures the server's work, not the hold.
+        let signal = req.application.pendingWorkSignal
+        let clock = ContinuousClock()
+        let deadline = clock.now + .seconds(holdSeconds)
+        var isFirstWalk = true
+        while true {
+            let generation = await signal.currentGeneration
+            if let claimed = try await claimNextEligibleJob(
+                req: req, body: body, runnerProfile: runnerProfile, reportsNoCompatibleRunner: isFirstWalk)
+            {
+                return try await respondWithClaimedJob(req: req, body: body, claimed: claimed)
+            }
+            isFirstWalk = false
+            if await signal.isClosed || clock.now >= deadline {
+                break
+            }
+            let waitStarted = clock.now
+            await signal.wait(after: generation, until: deadline)
+            req.addHeldPollWait(waitStarted.duration(to: clock.now))
+            if await signal.isClosed {
+                break
+            }
+        }
+        return Response(status: .noContent, headers: [WorkerLongPoll.heldHeader: "1"])
+    }
+
+    /// Records the assignment and returns the claimed job to the runner.
+    private func respondWithClaimedJob(
+        req: Request, body: WorkerActivityPayload, claimed: ClaimedJob
+    ) async throws -> Response {
         await req.application.workerActivityStore.incrementAssignedJobs(for: body.workerID)
         await recordJobAssignmentDiagnostics(req: req, body: body, claimed: claimed)
 
-        let job = try await buildJobPayload(req: req, body: body, claimed: claimed)
+        let job = try await buildJobPayload(req: req, claimed: claimed)
         return try encodeJobResponse(job)
     }
 
@@ -105,10 +150,11 @@ struct WorkerJobRoutes: RouteCollection {
     /// Finds and claims the best pending job for this runner. The claim
     /// logic is in `WorkerJobClaim` (#2774).
     private func claimNextEligibleJob(
-        req: Request, body: WorkerActivityPayload, runnerProfile: RunnerCapabilityProfile?
+        req: Request, body: WorkerActivityPayload, runnerProfile: RunnerCapabilityProfile?,
+        reportsNoCompatibleRunner: Bool
     ) async throws -> ClaimedJob? {
         try await WorkerJobClaim.claimNextEligibleJob(
-            body: body, runnerProfile: runnerProfile,
+            body: body, runnerProfile: runnerProfile, reportsNoCompatibleRunner: reportsNoCompatibleRunner,
             db: req.db, application: req.application, logger: req.logger)
     }
 
@@ -121,7 +167,7 @@ struct WorkerJobRoutes: RouteCollection {
             id: submissionID, workerID: body.workerID, db: req.db)
     }
 
-    /// Records "job assigned" diagnostics outside the claim transaction so
+    /// Records "job assigned" diagnostics after the claim statement, so
     /// `req.application` is safely accessible.
     private func recordJobAssignmentDiagnostics(
         req: Request, body: WorkerActivityPayload, claimed: ClaimedJob
@@ -147,7 +193,7 @@ struct WorkerJobRoutes: RouteCollection {
     /// per-(student, assignment) personalization seed and constructs the
     /// submission/testsetup download URLs.
     private func buildJobPayload(
-        req: Request, body: WorkerActivityPayload, claimed: ClaimedJob
+        req: Request, claimed: ClaimedJob
     ) async throws(WorkerJobError) -> Job {
         let submission = claimed.submission
         let setup = claimed.setup
@@ -233,7 +279,7 @@ struct WorkerJobRoutes: RouteCollection {
         guard let submissionID = submission.id, let setupID = setup.id else {
             throw WorkerJobError.internalInconsistency(reason: "Claimed submission or test setup missing id")
         }
-        let downloadVersion = await testSetupDownloadVersion(for: setup, req: req)
+        let downloadVersion = await testSetupDownloadVersion(for: setup)
         guard
             let submissionURL = URL(string: "\(base)/api/v1/worker/submissions/\(submissionID)/download"),
             let testSetupURL = URL(
@@ -308,7 +354,8 @@ struct WorkerJobRoutes: RouteCollection {
             personalizedFiles: personalizedFiles,
             language: language,
             opponent: opponentSet.opponent,
-            opponents: opponentSet.opponents
+            opponents: opponentSet.opponents,
+            claimToken: submission.assignedAt.map(WorkerClaimToken.token(assignedAt:))
         )
     }
 
@@ -411,7 +458,7 @@ private actor TestSetupDownloadVersionCache {
     }
 }
 
-private func testSetupDownloadVersion(for setup: APITestSetup, req: Request) async -> String {
+private func testSetupDownloadVersion(for setup: APITestSetup) async -> String {
     let setupID = setup.id ?? setup.zipPath
     let manifest = setup.manifest
     let zipPath = setup.zipPath

@@ -4,6 +4,7 @@
 // materials, one table per course section, with the per-row grade and the
 // student's actions (edit, upload, reset, slip day, solution, leaderboard).
 
+import Core
 import Elementary
 
 struct IndexPage: HTML {
@@ -18,6 +19,9 @@ struct IndexPage: HTML {
     let slipDaySummary: String?
     /// The course Data page, when the active course has a published dataset.
     var dataPageHref: String?
+    /// The kernels `kernel-prewarm.js` warms in the browser cache: those the
+    /// page's open notebook assignments boot. Empty renders no warm script.
+    var kernelPrewarm: [KernelAssetList] = []
 
     private var heading: String {
         if let activeCourse { "\(activeCourse.code) — \(activeCourse.name)" } else { "Assignments" }
@@ -38,7 +42,7 @@ struct IndexPage: HTML {
                 if activeCourse != nil {
                     div(.class("notice-box")) {
                         p(.class("empty")) { "No assignments available yet." }
-                        p(.class("section-note")) { "Labs open one at a time as the term goes on." }
+                        p(.class("section-note")) { "Assignments open one at a time as the term goes on." }
                         p { a(.href("/account")) { "Check your course memberships" } }
                     }
                 } else {
@@ -54,6 +58,13 @@ struct IndexPage: HTML {
                 }
             }
             script(.src(page.asset("/list-filter.js"))) {}
+            if !kernelPrewarm.isEmpty {
+                script(.src(page.asset("/kernel-asset-telemetry.js"))) {}
+                script(
+                    .src(page.asset("/kernel-prewarm.js")),
+                    .data("kernel-assets", value: KernelAssetList.encode(kernelPrewarm))
+                ) {}
+            }
         }
     }
 }
@@ -154,15 +165,7 @@ private struct IndexContentRow: HTML {
                     div(.class("assignment-actions-cell")) {
                         for (position, action) in content.actions.enumerated() {
                             if position > 0 { " " }
-                            a(
-                                .class("btn action-btn action-btn-icon"), .href(action.href), .title(action.label),
-                                .ariaLabel(action.label)
-                            ) {
-                                " "
-                                SVG.svg(.class("icon"), .ariaHidden) { SVG.use(.href(action.iconHref)) {} }
-                                " "
-                            }
-                            .attributes(.target(.blank), .rel("noopener noreferrer"), when: action.opensNewTab)
+                            ContentActionLink(action: action)
                         }
                     }
                 }
@@ -188,7 +191,7 @@ private struct IndexAssignmentRow: HTML {
     var body: some HTML {
         tr {
             td(.class("item-tile-cell")) {
-                span(.class("item-tile"), .data("kind", value: "graded")) { Icon("i-calendar-check") }
+                AssignmentTypeTile(type: row.assignmentType)
             }
             td(.class("item-main")) { mainCell }
             td(.class("item-status")) {
@@ -196,13 +199,13 @@ private struct IndexAssignmentRow: HTML {
                     span(
                         .class("tier tier-preview staff-only-tag"),
                         .title("Visible to course staff only — students can't see this assignment yet.")
-                    ) { "preview" }
+                    ) { AssignmentVisibility.preview.displayLabel }
                 } else if row.status == "extended" {
                     span(.class("tier tier-extended"), .title("You can submit past the class deadline")) {
                         "extended"
                     }
                 } else {
-                    span(.class(statusClass)) { row.status }
+                    span(.class(statusClass)) { AssignmentVisibility.displayLabel(forRaw: row.status) }
                 }
             }
             td(.class("item-grade col-hide-phone")) {
@@ -255,7 +258,12 @@ private struct IndexAssignmentRow: HTML {
                 }
                 if row.latest.gradeIsOverridden {
                     " · "
-                    span(.class("grade-override-tag"), .title("Your grade was set by your instructor")) { "adjusted" }
+                    span(.class("grade-override-tag"), .title("Your instructor set this grade for the assignment")) {
+                        "overridden"
+                    }
+                }
+                for title in row.materialTitles {
+                    " · \(title)"
                 }
                 if let grade = row.latest.bestGradeText {
                     " "
@@ -271,15 +279,9 @@ private struct IndexAssignmentRow: HTML {
         if let opensAtText = row.opensAtText {
             span(.title("This assignment opens automatically at this time.")) { "Opens \(opensAtText)" }
         } else if row.hasActiveExtension {
-            let effective = row.effectiveDueAtText ?? ""
-            "Due "
-            span(.class("js-relative-time"), .data("iso", value: row.effectiveDueAtISO ?? "")) { effective }
-            " · \(effective) "
-            span(.class("card-meta")) { "(extension)" }
+            DueDate(iso: row.effectiveDueAtISO ?? "", text: row.effectiveDueAtText ?? "", note: "(extension)")
         } else if let dueAt = row.dueAt {
-            "Due "
-            span(.class("js-relative-time"), .data("iso", value: row.dueAtISO ?? "")) { dueAt }
-            " · \(dueAt)"
+            DueDate(iso: row.dueAtISO ?? "", text: dueAt)
         } else {
             "No due date"
         }
@@ -294,7 +296,7 @@ private struct IndexAssignmentActions: HTML {
 
     var body: some HTML {
         div(.class("assignment-actions-cell")) {
-            if !row.hasAnyAction {
+            if !row.hasAnyAction && row.materialActions.isEmpty {
                 span(.class("empty")) { "—" }
             }
             if row.showEditAction {
@@ -322,7 +324,7 @@ private struct IndexAssignmentActions: HTML {
                         .ariaLabel("Reset notebook to starter")
                     ) {
                         " "
-                        Icon("i-rewind")
+                        Icon("i-eraser")
                         " "
                     }
                 }
@@ -337,7 +339,12 @@ private struct IndexAssignmentActions: HTML {
             }
             if let leaderboardURL = row.leaderboardURL {
                 " "
-                IndexIconLink(href: leaderboardURL, label: "Leaderboard", icon: "i-award")
+                IndexIconLink(href: leaderboardURL, label: "Leaderboard", icon: "i-podium")
+            }
+            // The lab's attached material (its slides), after its own actions.
+            for action in row.materialActions {
+                " "
+                ContentActionLink(action: action)
             }
         }
     }
@@ -355,5 +362,23 @@ private struct IndexIconLink: HTML {
             Icon(icon)
             " "
         }
+    }
+}
+
+/// One content item button: a material row's, or an attached material's on
+/// its assignment's row. Leaf wrote each icon padded by a space.
+private struct ContentActionLink: HTML {
+    let action: ContentActionView
+
+    var body: some HTML {
+        a(
+            .class("btn action-btn action-btn-icon"), .href(action.href), .title(action.label),
+            .ariaLabel(action.label)
+        ) {
+            " "
+            SVG.svg(.class("icon"), .ariaHidden) { SVG.use(.href(action.iconHref)) {} }
+            " "
+        }
+        .attributes(.target(.blank), .rel("noopener noreferrer"), when: action.opensNewTab)
     }
 }

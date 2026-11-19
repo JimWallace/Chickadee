@@ -45,9 +45,9 @@ on:
       - ".github/workflows/mirror-images.yml"
       - ".github/docker/ci-image/**"
 
-permissions:
-  contents: read
-  packages: write
+# Write scopes are granted per job, not here, so a job added later starts
+# with none (OpenSSF Scorecard TokenPermissions).
+permissions: {}
 
 concurrency:
   group: mirror-ci-images
@@ -55,6 +55,9 @@ concurrency:
 
 jobs:
   mirror:
+    permissions:
+      contents: read
+      packages: write
     runs-on: ubuntu-latest
     # 60, not 30: the derived-image build apt-installs a heavy set (r-base,
     # python3-pandas, python3-matplotlib, and now nodejs/npm's ~40-package
@@ -67,10 +70,12 @@ jobs:
     timeout-minutes: 60
 
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Log in to GHCR
-        uses: docker/login-action@v4
+        uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}

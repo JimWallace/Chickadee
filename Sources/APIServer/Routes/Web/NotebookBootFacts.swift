@@ -5,6 +5,7 @@
 // shows. Both notebook routes build their context through these.
 
 import Core
+import Vapor
 
 enum NotebookBootFacts {
     /// The declared language's name when the editor has a kernel for it
@@ -18,6 +19,13 @@ enum NotebookBootFacts {
             case .notebookKernel = language.descriptor.editorSupport
         else { return nil }
         return language.displayName
+    }
+
+    /// The declared language's kernel boot files as JSON, for the cold-load
+    /// measurement (`KernelAssetList`). Empty when there is no such kernel or
+    /// the checkout has no vendored bytes; the page then measures nothing.
+    static func kernelAssetsJSON(manifestJSON: String, app: Application) -> String {
+        app.kernelAssetLists?.forManifest(json: manifestJSON)?.json ?? ""
     }
 
     /// The patterns the editor extension reads defined names with, from the

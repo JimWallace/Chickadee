@@ -120,7 +120,10 @@ the live region still reads its sentence once.
   first item that this load grants goes to the toast (`SubmissionEarnedItem`,
   `EarnedToast`). An item shows in the toast once, because a grant happens
   once. A pending result grants nothing. Course staff cannot choose a ring,
-  so a ring never shows in their toast.
+  so a ring never shows in their toast. The page runs the grant only when a
+  fingerprint of what it reads has changed since the last complete grant in
+  this process: the student's results, and the due date and concept of each
+  assignment they submitted to (`WardrobeGrantChecks`).
 - **Toast:** the notebook page's graded toast in shape (`.nb-graded`, with
   `.nb-graded-earned`), fixed at the bottom right, `role="status"`, not a
   dialog. It holds the student's bird at 72px wearing the new item, a "New

@@ -13,6 +13,7 @@ not exist.
 
 - [architecture.md](architecture.md) — system architecture: targets, grading pipeline, auth, sandboxing, MCP, deployment
 - [grading-integrity.md](grading-integrity.md) — what a submission can do to its own grade today, the decisions, and the four-phase plan (#2223)
+- [assignment-types.md](assignment-types.md) — a declared Assignment / Lab / Class activity type: what it controls, the rules each type carries, how a new item gets its type, and the rows that break a rule (phases 1 to 3 shipped)
 - [failure-detail.md](failure-detail.md) — how much of a failing test a student sees: `full`, `actualOnly` and `verdictOnly`
 - [manifest-format-v2.md](manifest-format-v2.md) — proposed: the manifest (`TestProperties`) review, the v2 envelope and its phased rollout
 - [runner-capability-profiles.md](runner-capability-profiles.md) — runner capability matching, the language gate, `minimumRunnerVersion`
@@ -43,7 +44,7 @@ not exist.
 - [jupyterlite.md](jupyterlite.md) — the vendored editor and kernels: environments, import checks, re-vendoring, patches, stdin transports
 - [kernel-boot-cost.md](kernel-boot-cost.md) — what a kernel boot costs, and on-demand package loading
 - [notebook-editor-extension.md](notebook-editor-extension.md) — the Chickadee JupyterLite extension: theme, hidden chrome, bridge commands, page events, build and vendor
-- [notebook-editor-kernel-boot.md](notebook-editor-kernel-boot.md) — the "Kernel Unknown" boot failure, its mitigation and the plan for the root-cause fix
+- [notebook-editor-kernel-boot.md](notebook-editor-kernel-boot.md) — the "Kernel Unknown" boot failure, its mitigation and the shipped isolation fix
 - [notebook-editor-smoke-test.md](notebook-editor-smoke-test.md) — the pre-merge browser smoke test for the editor
 - [notebook-editor-help.md](notebook-editor-help.md) — student help: what each editor notice means and what to do
 - [notebook-guide.md](notebook-guide.md) — tests anchored to notebook cells by name, and the student guide the editor reads
@@ -52,6 +53,7 @@ not exist.
 
 - [authoring-editors.md](authoring-editors.md) — the suite editor, the notebook write-back, the language seed and server-side auto-compute
 - [auto-compute.md](auto-compute.md) — auto-compute in the pattern-family editor
+- [mcp-file-uploads.md](mcp-file-uploads.md) — `begin_upload`: how an agent delivers a large local file byte for byte, and why its token is a header
 - [mcp-authoring-roadmap.md](mcp-authoring-roadmap.md) — the MCP authoring roadmap, largely delivered, and its tool index (`MCPRoadmapDocSyncTests` reads it)
 - [assignment-versioning.md](assignment-versioning.md) — content version history: capture, read, restore
 - [inputs.md](inputs.md) — global and section inputs: literals, `=` expressions, `$name` references
@@ -62,7 +64,11 @@ not exist.
 - [personalization-drift-prevention-plan.md](personalization-drift-prevention-plan.md) — the plan that prevents drift between personalization and the solution
 - [datasets.md](datasets.md) — per-student datasets (#1083)
 - [datasets-course-library.md](datasets-course-library.md) — the per-course dataset library: versions and dictionary, attachments, the course cohort seed, the student Data page, the MCP tools, clone and bundle, `formatNoise`, the ranked-activity refusal and the dealt partition; opens with a Status table
+- [fhir-datasets-plan.md](fhir-datasets-plan.md) — FHIR NDJSON datasets in the course library: P1–P3 built (shared, whole file); Bundle upload, sampling by patient and a live feed planned
+- [dataset-kinds-plan.md](dataset-kinds-plan.md) — plan: one dataset component for many kinds of data (tables, record lists, FHIR, graphs, signals); Stage A is built, the rest is planned
+- [dataset-shared-delivery.md](dataset-shared-delivery.md) — link a dataset that is the same for many students into the editor working copy instead of writing a copy per student: a whole file to the shared extraction (step 1), a partition part to a part stored once (step 2), and a sample that covers its whole file stored as no sample at save time (step 3)
 - [examples/r-lab9-trial/](examples/r-lab9-trial/) — a worked R lab: starter, solution, data and test scripts for each tier
+- [examples/fhir/](examples/fhir/) — the FHIR feed for HLTH 230 Assignment 3: a reproducible generator, the `chickadee_fhir.py` helper with its checks, and a proposed Question 4 with its reference solution and tests
 
 ## Courses, roles and students
 
@@ -80,12 +86,14 @@ not exist.
 - [collaborative-class-assignments.md](collaborative-class-assignments.md) — shipped: contribution assignments and class goals
 - [class-activities.md](class-activities.md) — shipped: leaderboards, bots, round robins, hills and brackets (#1508)
 - [class-composite.md](class-composite.md) — shipped: each student renders one slot of a shared image, composed live on the projector
+- [bug-hunt-code-map.md](bug-hunt-code-map.md) — shipped: a bug hunt's reference code on the projector, lit part by part as the class covers it
 - [lab-groups.md](lab-groups.md) — shipped: lab groups and in-lab sessions: a session per (activity, group), a join code for the room, every class activity run once per group
 
 ## Achievements and avatars
 
 - [achievements-unification.md](achievements-unification.md) — one achievements model, endpoint and editor; phases A to C shipped, phase D not finished
-- [achievement-rewards.md](achievement-rewards.md) — partly shipped (S1, S3 to S5): achievements at the assignment, course and site levels, one award ledger, and a wardrobe item as a reward
+- [achievement-rewards.md](achievement-rewards.md) — partly shipped (S1 to S5): achievements at the assignment, course and site levels, one award ledger, and a wardrobe item as a reward
+- [custom-wardrobe-items.md](custom-wardrobe-items.md) — proposed: instructors compose their own rings, backdrops, faces and wearables from site templates and a checked palette, granted by their course's achievements
 - [result-celebration.md](result-celebration.md) — the result-page celebration: the 100% moment, the bird, and the Earned toast
 - [student-avatars.md](student-avatars.md) — generated avatars and the per-course pseudonymous handle
 - [avatar-species.md](avatar-species.md) — eleven avatar species on one shared skeleton, the colourway decides the species, the trait weights, the prototype findings; opens with a Status table
@@ -107,9 +115,15 @@ not exist.
 ## Operations, CI and releases
 
 - [release-process.md](release-process.md) — versions at merge time, `changelog.d/` fragments, and cutting a minor release
+- [release-gate.md](release-gate.md) — deploy modes set on the admin page, admin approval of held releases, and contract changes (kernels, grading) only in a minor
 - [zero-downtime-deploy.md](zero-downtime-deploy.md) — blue-green deploys, the `chickadee-deployer` daemon, read-only deploy oversight
+- [mac-runner.md](mac-runner.md) — a bonus runner on an Apple Silicon Mac under Docker Desktop: the arm64 runner image, sizing, the launchd updater
 - [operational-diagnostics.md](operational-diagnostics.md) — observability tables, log events, metrics endpoint, ops runbook
-- [load-testing.md](load-testing.md) — `chickadee-loadtest`: simulated deadline traffic on the runner poll and the status poll
+- [live-board-cache.md](live-board-cache.md) — the live board's refresh: the fingerprint 304, the shared roster snapshot, the hot-path count and the wall's stop time
+- [load-testing.md](load-testing.md) — `chickadee-loadtest`: simulated deadline traffic on the runner poll and the status poll, and one class activity in a lecture
+- [database-performance.md](database-performance.md) — query counts, load and plans measured at one course's scale; the rules that came out of them; the baseline and the weekly check (`Tools/perf-bench/`)
+- [performance-program.md](performance-program.md) — the weekly performance cycle, the count-based ratchets, and how to tune the production server, Postgres and runners
+- [perf-log.md](perf-log.md) — the weekly performance numbers, one section a week, written by the task in `Tools/perf-bench/weekly-task.md`
 - [dependency-updates.md](dependency-updates.md) — Dependabot PRs land on their own; the regenerated bytes, the `dependency-update-failed` issues, the tokens
 - [ci-flakiness.md](ci-flakiness.md) — CI flake families; start here before you chase a red check on an unrelated PR
 - [swift-toolchain-upgrades.md](swift-toolchain-upgrades.md) — the semi-annual Swift upgrade: where the pins live, its traps, the verification gauntlet
@@ -119,8 +133,9 @@ not exist.
 - [mutation-trend.md](mutation-trend.md) — how to read a series of mutation runs
 - [mutation-triage.md](mutation-triage.md) — the protocol that turns mutation survivors into tests
 - [dead-code-scan.md](dead-code-scan.md) — the weekly Periphery Pro scan: reading its report, results that are not dead code, updating the tool and the token
+- [../Tools/maintenance/README.md](../Tools/maintenance/README.md) — the nightly steward, the one scheduled maintenance task on the maintainer's machine: its jobs, its rules and how to set it up; [nightly.md](../Tools/maintenance/nightly.md) is the order of work and the calendar
 
 ## History
 
 - [archive/](archive/) — finished-era documents; nothing there describes current behaviour. Among them: the Pyodide-to-xeus migration (`xeus-python-grading-*`), the RunnerCore wasm migration, the language-handling review, the 2026-08 UI consistency audit, the editor freeze investigation, the 2026-10 abstraction survey, the per-language kernel postmortems and the CI flake history
-- `CHANGELOG.md` (from 0.5.0) and `CHANGELOG-0.4.md` (0.1.0 to 0.4.x), at the repository root — release history
+- `CHANGELOG.md` (from 0.6.0), `CHANGELOG-0.5.md` (the 0.5 series) and `CHANGELOG-0.4.md` (0.1.0 to 0.4.x), at the repository root — release history

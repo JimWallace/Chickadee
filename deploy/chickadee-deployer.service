@@ -8,10 +8,11 @@
 #
 # Configuration (optional) lives in /etc/chickadee-deployer.env, e.g.:
 #   CHICKADEE_POLL_INTERVAL_SECS=300
-#   CHICKADEE_DEPLOY_GATE_LEVEL=major
+#   (The deploy mode is not set here: it is $STATE_DIR/mode, set from the admin page; docs/release-gate.md.)
 #   CHICKADEE_PUBLIC_HEALTH_URL=https://chickadee.uwaterloo.ca/health
 #
-# Adjust WorkingDirectory/ExecStart if the repo is checked out elsewhere.
+# Adjust WorkingDirectory, ExecStart and the clone path in ReadWritePaths if
+# the repo is checked out elsewhere.
 
 [Unit]
 Description=Chickadee zero-downtime auto-deploy daemon
@@ -30,6 +31,52 @@ Restart=always
 RestartSec=30
 # Give an in-flight deploy time to finish on stop/restart.
 TimeoutStopSec=120
+
+# --- Sandbox (#3078) --------------------------------------------------------
+# The daemon stays root, because it drives Docker, reloads nginx and runs git
+# as the clone owner through runuser. The sandbox limits what a bad release
+# script or a compromised dependency of it can reach: the file system is
+# read-only except the paths below, and the kernel interfaces it never uses
+# are closed. Docker itself is not sandboxed by this; the daemon reaches it
+# through /run/docker.sock, which a read-only mount does not block.
+#
+# Each writable path, and who writes it:
+#   /var/lib/chickadee-deploy   StateDirectory: status, history, command file
+#                               (the daemon); the server reads it through a
+#                               mount. systemd creates it if it is missing.
+#                               If CHICKADEE_STATE_DIR moves it, add the new
+#                               path to ReadWritePaths; it must exist first.
+#   /home/jrwallac/Chickadee    the clone: self-update (git) and backups/
+#                               (snapshot.sh). Follows WorkingDirectory.
+#   /etc/nginx/conf.d           the active-upstream file (bluegreen-deploy.sh)
+#   /var/log/nginx, /var/lib/nginx
+#                               `nginx -t` opens the logs and temp paths
+#   /root/.docker               the Docker CLI config, if present
+# A path with a leading `-` may be missing. A path without one must exist,
+# or the unit fails to start (status 226/NAMESPACE).
+#
+# After an install, check the score (lower is better) and watch one deploy:
+#   systemd-analyze security chickadee-deployer
+# To undo, delete the lines from the Sandbox heading to [Install], then
+# reinstall the unit.
+NoNewPrivileges=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectSystem=strict
+ProtectHome=read-only
+StateDirectory=chickadee-deploy
+ReadWritePaths=/home/jrwallac/Chickadee -/etc/nginx/conf.d -/var/log/nginx -/var/lib/nginx -/var/cache/nginx -/root/.docker
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+RestrictRealtime=yes
+RestrictNamespaces=yes
+LockPersonality=yes
+SystemCallArchitectures=native
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK
 
 [Install]
 WantedBy=multi-user.target

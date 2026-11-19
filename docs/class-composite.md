@@ -552,7 +552,7 @@ range, or when the total payload for all slots is more than 4 MB.
 | Output contract | `output-contract.json` only gains rows. |
 | Setup cache | The key hashes the manifest. Assignments without a composite keep their key. |
 | Versioning and bundles | The block travels in the manifest, as the other activity fields do. |
-| MCP | `set_activity` accepts the kind and the block. Every kind list derives from `ActivityKind.allCases`, so `MCPActivityCoverageTests` covers this kind. |
+| MCP | `set_activity` accepts the kind and the block. Every kind list derives from `ActivityKind.allCases`, so `MCPActivityCoverageTests` covers this kind. `prepareReference: true` queues the reference renders through `CompositeReferences.prepare`, the service behind the "Prepare reference" button, on the owner pool. |
 | Class goal | `itemsCovered`, which the sweep already evaluates. No new goal shape. |
 
 ## Load and size

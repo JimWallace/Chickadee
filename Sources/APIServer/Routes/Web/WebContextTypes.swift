@@ -97,6 +97,16 @@ struct TestSetupRow: Encodable {
     /// The class activity's leaderboard when this viewer may open it
     /// (`ClassActivity.leaderboardPath`); nil hides the action.
     let leaderboardURL: String?
+    /// The declared type, which picks the row tile (docs/assignment-types.md).
+    var assignmentType: AssignmentType = .assignment
+    /// The buttons of the content items attached to this assignment (a lab's
+    /// slides), drawn after the assignment's own actions. Filled by
+    /// `buildIndexDisplayGroups`, and only with the items this viewer may see
+    /// (`ContentItemVisibility`).
+    var materialActions: [ContentActionView] = []
+    /// The titles of those same items, for the row's details line, so a
+    /// button is not the only place the material is named.
+    var materialTitles: [String] = []
 }
 
 struct LatestSubmissionItem: Encodable {
@@ -127,7 +137,7 @@ struct ContentAttachmentView: Encodable {
 /// dashboard lines up.
 struct ContentActionView: Encodable {
     let href: String
-    let iconHref: String  // "#i-eye" | "#i-download" | "#i-book" | "#i-external"
+    let iconHref: String  // "#i-file-text" | "#i-download" | "#i-notebook" | "#i-external"
     let label: String  // title + aria-label
     let opensNewTab: Bool  // true → target="_blank" rel="noopener noreferrer"
 }
@@ -153,6 +163,10 @@ struct ContentItemRow: Encodable {
     let detailsText: String
     /// Icon buttons for the Actions cell: attachments first, then links.
     let actions: [ContentActionView]
+    /// The public ID of the assignment this item is attached to, for the
+    /// instructor edit form; nil for a standalone item. Set by the instructor
+    /// dashboard builder, which holds the id map; the student page leaves it.
+    var attachedAssignmentPublicID: String?
 
     init(from item: APICourseContentItem) {
         let itemID = item.id?.uuidString ?? ""
@@ -164,8 +178,7 @@ struct ContentItemRow: Encodable {
         self.links = item.links
         let attachmentViews = item.attachments.map { attachment in
             let downloadURL = "/content-files/\(itemID)/\(attachment.id.uuidString)"
-            let isPDF =
-                (FilePath(attachment.originalName).extension ?? "").lowercased() == "pdf"
+            let isPDF = ContentItemRow.hasPDFExtension(attachment.originalName)
             return ContentAttachmentView(
                 id: attachment.id.uuidString,
                 displayName: attachment.displayName,
@@ -190,8 +203,8 @@ struct ContentItemRow: Encodable {
     static func iconHref(for kind: ContentItemKind) -> String {
         switch kind {
         case .slides: return "#i-slides"
-        case .notebook: return "#i-book"
-        case .document: return "#i-file-text"
+        case .notebook: return "#i-notebook"
+        case .document: return documentIconHref
         case .link: return "#i-link"
         case .outline: return "#i-list"
         case .heading: return ""
@@ -208,10 +221,24 @@ struct ContentItemRow: Encodable {
         return parts.joined(separator: " · ")
     }
 
+    /// The document page: the document kind tile, and the button that opens a
+    /// PDF. Both mean "a document", so they share one constant.
+    static let documentIconHref = "#i-file-text"
+
+    /// The glyph for a PDF, hosted or linked. Where the file is stored does
+    /// not change what it is, so a hosted PDF and a linked PDF look the same,
+    /// and a PDF never borrows `#i-external`, which means "another website".
+    static let pdfIconHref = documentIconHref
+
+    /// True when a file name or URL path ends in `.pdf`, in any case.
+    static func hasPDFExtension(_ path: String) -> Bool {
+        (FilePath(path).extension ?? "").lowercased() == "pdf"
+    }
+
     private static func action(for attachment: ContentAttachmentView) -> ContentActionView {
         if let viewURL = attachment.viewURL {
             return ContentActionView(
-                href: viewURL, iconHref: "#i-eye",
+                href: viewURL, iconHref: pdfIconHref,
                 label: "Open \(attachment.displayName) in a new tab (\(attachment.sizeLabel))",
                 opensNewTab: true)
         }
@@ -225,13 +252,28 @@ struct ContentItemRow: Encodable {
         // Do not double the verb: "Open in JupyterHub" stays as written.
         let label =
             link.label.lowercased().hasPrefix("open") ? link.label : "Open \(link.label)"
-        // A notebook link gets the book whatever the item's kind: a slides
-        // item often carries "PDF" and "Jupyter Notebook" side by side, and
-        // two identical arrows leave the reader guessing which is which.
-        let isNotebook = kind == .notebook || link.label.lowercased().contains("notebook")
-        return ContentActionView(
-            href: link.url, iconHref: isNotebook ? "#i-book" : "#i-external",
-            label: label, opensNewTab: true)
+        // A slides item often carries "PDF" and "Jupyter Notebook" side by
+        // side, so each link says what it opens. A PDF is checked first: a
+        // notebook item's "PDF" link is still a PDF.
+        let iconHref: String
+        if isPDFLink(link) {
+            iconHref = pdfIconHref
+        } else if kind == .notebook || link.label.lowercased().contains("notebook") {
+            iconHref = "#i-notebook"
+        } else {
+            iconHref = "#i-external"
+        }
+        return ContentActionView(href: link.url, iconHref: iconHref, label: label, opensNewTab: true)
+    }
+
+    /// A link is a PDF when its URL path ends in `.pdf` or its label has the
+    /// word "PDF" ("Slides (PDF)", not "Why PDFs are hard"). A link only gives
+    /// these two signals: a PDF behind a download URL with another label keeps
+    /// `#i-external`.
+    static func isPDFLink(_ link: ContentLink) -> Bool {
+        if link.label.contains(/\bpdf\b/.ignoresCase()) { return true }
+        guard let path = URLComponents(string: link.url)?.path else { return false }
+        return hasPDFExtension(path)
     }
 
     static func label(for kind: ContentItemKind) -> String {
@@ -371,6 +413,16 @@ struct NotebookContext: Encodable {
     /// for a submission record or a preview. Rendered as
     /// `data-server-drive`; `serverDrive.ts` and `notebook.js` read it.
     var serverDrive = false
+    /// The file that kept a staff member's unpublished draft edits when the
+    /// stored notebook had changed elsewhere since (#2925), or nil. The page
+    /// names it, so the author can find and compare it.
+    var draftBackupFileName: String?
+    /// Where the author downloads that file: its URL under `/jupyterlite/files/`.
+    var draftBackupURL: String?
+    /// The declared language's kernel boot files as JSON (`KernelAssetList`),
+    /// for the cold-load measurement in `kernel-asset-telemetry.js`. Empty
+    /// when the language has no vendored kernel.
+    var kernelAssetsJSON = ""
 }
 
 // MARK: - Submission history page
@@ -480,14 +532,14 @@ struct SubmissionContext: Encodable {
     /// header — behaviour identical to the pre-sections page.
     let sectionedOutcomes: [SectionedOutcomes]
     let passCount: Int
-    /// The other three states, for the count tiles in the score band.  These
-    /// are the four states `TestOutcomeStatus` has; "skipped" is derived from a
-    /// short-result pattern rather than being a status, so it is not a tile.
+    /// The other count tiles in the score band (`ResultCountTiles`): with
+    /// `passCount` and `skippedCount` they partition the tests, so a test
+    /// skipped behind a failed prerequisite is counted once, as skipped.
     let failCount: Int
     let errorCount: Int
     let timeoutCount: Int
-    /// Rows skipped because a prerequisite failed.  Derived per row rather than
-    /// being a `TestOutcomeStatus`, so it is counted from the rendered rows.
+    /// Tests skipped because a prerequisite failed, over every tier. Derived
+    /// per outcome rather than being a `TestStatus`.
     let skippedCount: Int
     let totalTests: Int
     let gradePercent: Int
@@ -544,6 +596,17 @@ struct SubmissionContext: Encodable {
     /// result when the viewer is that student, as stored when staff read it
     /// (docs/result-celebration.md). Nil for any other submission kind.
     var bird: SubmissionBird?
+    /// The assignment's title, for the page's `<h1>` and tab title; nil when
+    /// the submission has no published assignment.
+    var assignmentTitle: String?
+    /// When the submission arrived: an ISO 8601 stamp for the relative
+    /// rendering, and its absolute form as the no-JS fallback.
+    var submittedAtISO: String?
+    var submittedAtText: String?
+    /// The way back: the student's history of this assignment, or the
+    /// assignment's submissions page for staff. Nil when there is none.
+    var backURL: String?
+    var backLabel: String?
 }
 
 /// The submitting student's bird on a result page, and how it reacts to the

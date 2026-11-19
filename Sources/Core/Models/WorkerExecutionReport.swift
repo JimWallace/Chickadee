@@ -122,13 +122,22 @@ public struct WorkerExecutionReport: Codable, Sendable {
     /// every other job and from every runner that predates the field. An
     /// older server ignores the key.
     public let matches: [MatchReport]?
+    /// The `Job.claimToken` of the claim this report answers, echoed back
+    /// unchanged. The server refuses a report whose token no longer names the
+    /// row's current claim: a forced retest or the stuck-submission reaper
+    /// re-queued the row after this runner claimed it, and a report from the
+    /// old claim would complete the new one with a stale grade. Nil from a
+    /// runner that predates the field, which the server then checks by runner
+    /// id alone; an older server ignores the key.
+    public let claimToken: String?
 
     public init(
         collection: TestOutcomeCollection, diagnostics: WorkerExecutionDiagnostics?,
-        matches: [MatchReport]? = nil
+        matches: [MatchReport]? = nil, claimToken: String? = nil
     ) {
         self.collection = collection
         self.diagnostics = diagnostics
         self.matches = matches
+        self.claimToken = claimToken
     }
 }

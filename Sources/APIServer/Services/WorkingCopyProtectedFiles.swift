@@ -6,9 +6,9 @@
 // paths:
 //
 // - every file the setup delivers (`StudentWorkspaceFiles.delivered`): the
-//   per-student dataset files and the support files. A dataset is a real file
-//   that the materialization pass does not rewrite while its fingerprint is
-//   current, and a support-file name is never relinked over a real file, so a
+//   per-student dataset files and the support files. A per-student dataset is
+//   a real file that the materialization pass does not rewrite while its
+//   fingerprint is current (a shared one is a link, like a support file), and a support-file name is never relinked over a real file, so a
 //   student's write to either would persist and no reset would repair it;
 // - the records the server writes for viewing: `view-<submissionID>.ipynb` and
 //   staff `preview-<token>.ipynb`.
@@ -30,6 +30,22 @@ enum WorkingCopyProtectedFiles {
         else { return [] }
         let entries = await application.zipEntryListCache.entries(zipPath: setup.zipPath)
         return StudentWorkspaceFiles.delivered(zipEntries: entries, manifest: manifest)
+    }
+
+    /// `paths(setupID:)` for several setups in one database read, keyed by
+    /// setup ID. A setup that does not exist or does not decode is absent.
+    static func paths(
+        setupIDs: [String], on db: any Database, application: Application
+    ) async throws -> [String: Set<String>] {
+        guard !setupIDs.isEmpty else { return [:] }
+        let setups = try await APITestSetup.query(on: db).filter(\.$id ~~ setupIDs).all()
+        var result: [String: Set<String>] = [:]
+        for setup in setups {
+            guard let id = setup.id, let manifest = decodeManifest(from: Data(setup.manifest.utf8)) else { continue }
+            let entries = await application.zipEntryListCache.entries(zipPath: setup.zipPath)
+            result[id] = StudentWorkspaceFiles.delivered(zipEntries: entries, manifest: manifest)
+        }
+        return result
     }
 
     /// True when a write at `relativePath` (inside the setup folder) would

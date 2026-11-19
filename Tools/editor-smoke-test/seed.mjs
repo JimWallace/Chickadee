@@ -8,7 +8,8 @@
 // The same sequence as notebook-page-check.mjs, which keeps its own copy.
 // `seedInstructorAssignment` stops at the instructor instead: it publishes the
 // assignment, gives it a solution, and returns the instructor's session, for a
-// probe of the workbench.
+// probe of the workbench. Its `nonAdmin` option makes that instructor a
+// non-admin course instructor.
 
 import { request as pwRequest } from "playwright";
 import JSZip from "jszip";
@@ -108,31 +109,92 @@ export async function seedAssignment(baseURL, { notebook, files, manifest }) {
   return { setupID, courseID, storageState };
 }
 
+/// Registers an account and signs it in. Returns the request context, which
+/// holds its session.
+async function registerAndLogin(baseURL, account, label) {
+  const ctx = await pwRequest.newContext({ baseURL });
+  let csrf = await csrfFrom(ctx, "/register");
+  await expectOK(
+    `register ${label}`,
+    ctx.post("/register", { form: { ...account, _csrf: csrf }, maxRedirects: 0 }),
+    [200, 302, 303]);
+  csrf = await csrfFrom(ctx, "/login");
+  await expectOK(
+    `login ${label}`,
+    ctx.post("/login", { form: { ...account, _csrf: csrf }, maxRedirects: 0 }),
+    [200, 302, 303]);
+  return ctx;
+}
+
 /// Seeds an assignment for the instructor who authors it: the same course and
 /// test setup as `seedAssignment`, then a published assignment with a
 /// reference solution. Returns its public id and the instructor's Playwright
 /// storage state.
-export async function seedInstructorAssignment(baseURL, { notebook, files, manifest, title }) {
+///
+/// By default the instructor is the first account, so an admin. With
+/// `nonAdmin: true`, a throwaway admin (the first account) creates the course
+/// and adds the instructor, a second account whose deployment role is `user`,
+/// as course `instructor`; the instructor then authors everything else. An
+/// admin passes checks that course staff do not (listing `users` on the server
+/// drive answered non-admin staff 403, and the WebKit kernel never reached
+/// idle, 2026-11), so a probe of a staff page should run as a non-admin.
+export async function seedInstructorAssignment(baseURL, { notebook, files, manifest, title, nonAdmin = false }) {
   const stamp = Date.now().toString(36);
   const instructor = { username: `e2e_wbi_${stamp}`, password: "instructor-pw-123" };
   const course = { code: `WBI${stamp}`.slice(0, 12), name: "E2E Workbench Course" };
 
-  const instr = await pwRequest.newContext({ baseURL });
-  let csrf = await csrfFrom(instr, "/register");
-  await expectOK(
-    "register instructor",
-    instr.post("/register", { form: { ...instructor, _csrf: csrf }, maxRedirects: 0 }),
-    [200, 302, 303]);
-  csrf = await csrfFrom(instr, "/admin/courses/new");
+  let instr;
+  let creator;
+  if (nonAdmin) {
+    creator = await registerAndLogin(baseURL, { username: `e2e_adm_${stamp}`, password: "admin-pw-123" }, "admin");
+  } else {
+    instr = await pwRequest.newContext({ baseURL });
+    const regCsrf = await csrfFrom(instr, "/register");
+    await expectOK(
+      "register instructor",
+      instr.post("/register", { form: { ...instructor, _csrf: regCsrf }, maxRedirects: 0 }),
+      [200, 302, 303]);
+    creator = instr;
+  }
+
+  let csrf = await csrfFrom(creator, "/admin/courses/new");
   const courseRes = await expectOK(
     "create course",
-    instr.post("/admin/courses", {
+    creator.post("/admin/courses", {
       form: { code: course.code, name: course.name, termYear: "2026", termSeason: "fall", _csrf: csrf },
       headers: { "x-csrf-token": csrf }, maxRedirects: 0,
     }),
     [302, 303]);
   const courseID = ((courseRes.headers()["location"] || "").match(/\/admin\/courses\/([0-9a-fA-F-]{36})/) || [])[1];
   if (!courseID) throw new Error("could not parse courseID from the redirect");
+
+  if (nonAdmin) {
+    instr = await registerAndLogin(baseURL, instructor, "instructor");
+    csrf = await csrfFrom(creator, `/admin/courses/${courseID}`);
+    const staffRes = await expectOK(
+      "add instructor as course staff",
+      creator.post(`/admin/courses/${courseID}/staff`, {
+        form: { identifier: instructor.username, role: "instructor", _csrf: csrf },
+        headers: { "x-csrf-token": csrf }, maxRedirects: 0,
+      }),
+      [302, 303]);
+    const staffLoc = staffRes.headers()["location"] || "";
+    if (!staffLoc.includes("staffAdded=1")) throw new Error(`adding the instructor as staff failed: "${staffLoc}"`);
+    await creator.dispose();
+    // The instructor's session predates the enrollment; sign in again so no
+    // per-session course or role state is stale.
+    csrf = await csrfFrom(instr, "/login");
+    await expectOK(
+      "login instructor",
+      instr.post("/login", { form: { ...instructor, _csrf: csrf }, maxRedirects: 0 }),
+      [200, 302, 303]);
+    const adminPage = await instr.get("/admin", { maxRedirects: 0 });
+    if (adminPage.status() === 200) {
+      throw new Error("the instructor opened /admin: the seeded account is an admin, not course staff");
+    }
+  }
+
+  csrf = await csrfFrom(instr, "/");
   await expectOK(
     "set enrollment auto",
     instr.post(`/courses/${courseID}/enrollment-mode`, {

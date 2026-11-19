@@ -12,8 +12,15 @@ public enum GradePercent {
     /// goals for an imperfect score. Nil when `total` is not above zero.
     public static func of(earned: Double, total: Double) -> Int? {
         guard total > 0 else { return nil }
-        let percent = Int((earned / total * 100).rounded())
-        if percent >= 100, !isFullMark(earned: earned, total: total) { return 99 }
+        return of(rawPercent: earned / total * 100, isFullMark: isFullMark(earned: earned, total: total))
+    }
+
+    /// The rule of `of(earned:total:)` for a raw percent already computed,
+    /// as the SQL grade folds return it: rounded to the nearest whole number,
+    /// and 99 at most unless the mark is full.
+    public static func of(rawPercent: Double, isFullMark: Bool) -> Int {
+        let percent = Int(rawPercent.rounded())
+        if percent >= 100, !isFullMark { return 99 }
         return percent
     }
 

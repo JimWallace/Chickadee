@@ -126,6 +126,8 @@ struct Reporter: Sendable {
                         return classifyHTTPRetry(statusCode: statusCode, body: body)
                     case .unexpectedResponse:
                         return .terminal("unexpected response")
+                    case .claimSuperseded:
+                        return .terminal("claim superseded")
                     }
                 },
                 onRetry: { context in
@@ -164,12 +166,6 @@ struct Reporter: Sendable {
 
 extension Reporter: Reporting {}
 
-extension Reporting {
-    func report(_ collection: TestOutcomeCollection) async throws(ReporterError) {
-        try await report(WorkerExecutionReport(collection: collection, diagnostics: nil))
-    }
-}
-
 private extension Reporter {
     static func attemptReport(
         session: URLSession, request: URLRequest, expectedStatus: Int
@@ -180,6 +176,10 @@ private extension Reporter {
         guard let http = response as? HTTPURLResponse else { return .failure(.unexpectedResponse) }
         guard http.statusCode == expectedStatus else {
             let body = String(data: data, encoding: .utf8) ?? "<binary>"
+            // 410: the server no longer counts this job as ours (a forced
+            // retest or the stuck-submission reaper re-queued it). Terminal,
+            // and the caller drops the job rather than reporting a failure.
+            if http.statusCode == 410 { return .failure(.claimSuperseded(body)) }
             return .failure(.httpError(http.statusCode, body))
         }
         return .success(())
@@ -190,6 +190,11 @@ enum ReporterError: Error, LocalizedError {
     case unexpectedResponse
     case httpError(Int, String)
     case transportError(any Error)
+    /// The server refused a result report (HTTP 410) because the job's claim
+    /// is no longer current: the submission was re-queued after this runner
+    /// claimed it. The report is dropped, not retried, and no failure is
+    /// reported for the job.
+    case claimSuperseded(String)
 
     var errorDescription: String? {
         switch self {
@@ -199,6 +204,8 @@ enum ReporterError: Error, LocalizedError {
             return "API server returned HTTP \(code): \(body)"
         case .transportError(let error):
             return "Transport error: \(error.localizedDescription)"
+        case .claimSuperseded(let body):
+            return "API server refused the result: the claim is no longer current: \(body)"
         }
     }
 }

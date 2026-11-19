@@ -1,6 +1,6 @@
 // APIServer/Utilities/NewAssignmentFormContext.swift
 //
-// The five form fields the new-assignment page round-trips through every
+// The form fields the new-assignment page round-trips through every
 // redirect back to itself, plus the one builder that turns them into that URL.
 
 import Foundation
@@ -21,6 +21,9 @@ struct NewAssignmentFormContext {
     let startsAt: String
     let sectionID: String
     let draftID: String
+    /// The Type select's value, carried as `type` so a bounce keeps the type
+    /// the "+ Add" menu chose. Empty is omitted.
+    let assignmentType: String
 
     /// Builds the `/instructor/new?…` URL that bounces the instructor back to
     /// the page, optionally carrying a notice or a user-visible error.
@@ -38,6 +41,9 @@ struct NewAssignmentFormContext {
             "startsAt=\(urlEncode(startsAt))",
             "sectionID=\(urlEncode(sectionID))",
         ]
+        if !assignmentType.isEmpty {
+            parts.append("type=\(urlEncode(assignmentType))")
+        }
         if let notice, !notice.isEmpty {
             parts.append("notice=\(urlEncode(notice))")
         }

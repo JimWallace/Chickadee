@@ -152,7 +152,7 @@ public struct NotebookFunctionScanEntry: Sendable {
 /// other language. Production code calls the language-aware overload
 /// `scanNotebookForSectionsAndFunctions(_:language:)` instead, which answers
 /// "cannot read this language" rather than "found nothing".
-public func scanNotebookForSectionsAndFunctions(
+func scanNotebookForSectionsAndFunctions(
     _ notebookData: Data, parsing language: AssignmentLanguage
 ) -> NotebookScanResult {
     guard let cells = NotebookCellView.cells(from: notebookData) else {
@@ -219,24 +219,12 @@ func scanNotebookForSectionsAndFunctions(
     return NotebookScanResult(sectionNames: sectionsInOrder, functions: shadowed)
 }
 
-/// The `## ` section headers of a notebook, in order, deduplicated.
+/// The `## ` section headers of decoded notebook cells, in order, deduplicated.
 ///
-/// LANGUAGE-INDEPENDENT, and that is the point: a section name is a markdown
-/// header and has nothing to do with the code cells around it. It exists as its
-/// own entry point because the language-aware scan needs section names even
-/// when it cannot read the language — and the only way to ask for them used to
-/// be to call the raw Python scan, which meant naming a language to answer a
-/// question that has none. That call was literally `parsing: language ?? .python`
-/// on an R or Lua notebook.
-///
-/// One implementation, shared with `scanNotebookForSectionsAndFunctions`, so
-/// the two cannot disagree about what a section is.
-public func notebookSectionNames(_ notebookData: Data) -> [String] {
-    guard let cells = NotebookCellView.cells(from: notebookData) else { return [] }
-    return notebookSectionNames(cells: cells)
-}
-
-/// `notebookSectionNames(_:)` over cells already decoded.
+/// LANGUAGE-INDEPENDENT: a section name is a markdown header and has nothing to
+/// do with the code cells around it. One implementation, shared with
+/// `scanNotebookForSectionsAndFunctions`, so the two cannot disagree about what
+/// a section is.
 func notebookSectionNames(cells: [NotebookCellView]) -> [String] {
     var inOrder: [String] = []
     var seen: Set<String> = []

@@ -87,7 +87,8 @@ env var takes precedence over it.
 
 ### Test-script sandbox
 
-The Compose runner starts with `--sandbox`. Each test script then runs in its
+The runner sandboxes test scripts by default since 0.6.0; the Compose file
+still passes `--sandbox`, which changes nothing. Each test script runs in its
 own user, network and mount namespace: it has no network, no real privileges,
 and no view of the other jobs on the runner, because the work root is covered
 inside the namespace and only the job's own directories are bound back.
@@ -110,7 +111,7 @@ Everything a test script writes, in its working directory, `/tmp`,
 ends, so one job cannot fill the work root for the others. That tmpfs is
 memory, and it counts against the job's memory limit (see "Job cgroups"
 below). The overlay that holds it needs Linux 5.11 or later; on
-an older kernel the runner refuses to start with `--sandbox` and says why.
+an older kernel the sandboxed runner refuses to start and says why.
 
 The host must also allow unprivileged user namespaces, with mounts inside
 them. Check it before the first `docker compose up` with this file. The check
@@ -151,10 +152,10 @@ runner container its own AppArmor profile that permits `userns`, and use that
 profile in place of `apparmor=unconfined`.
 
 Then run the check again. It must print `sandbox OK` before you start the
-runner with `--sandbox`.
+runner.
 
 A runner that cannot start the sandbox does not start at all. Its log
-says `--sandbox is set, but this host cannot start the sandbox`, and the admin
+says `the sandbox is on, but this host cannot start the sandbox`, and the admin
 runner page shows it offline. It never grades without the sandbox it was told
 to use. When the deployer refreshes such a runner after a release, it records
 `runner-refresh failed` in its deploy history, with that log line.
@@ -172,15 +173,16 @@ docker compose logs runner | grep sandbox_mode
 The second command must show `"sandbox_mode":"sandboxed"`.
 
 A `docker-compose.override.yml` that sets `command:` for the runner replaces
-the command in this file. Add `--sandbox` to that command too. Look at the
-command that Compose will use:
+the command in this file. That command sandboxes too unless it passes
+`--no-sandbox`, so keep the two `unconfined` lines in `security_opt`. Look at
+the command that Compose will use:
 
 ```bash
 docker compose config | grep -n -e sandbox -e unconfined
 ```
 
-To run without the sandbox, remove `--sandbox` from the runner command and the
-two `unconfined` lines from its `security_opt`.
+To run without the sandbox, replace `--sandbox` with `--no-sandbox` in the
+runner command and remove the two `unconfined` lines from its `security_opt`.
 
 ### Job cgroups
 
@@ -421,6 +423,10 @@ Every push to `main` triggers `.github/workflows/docker-build.yml`, which:
    - `ghcr.io/jimwallace/chickadee:sha-<commit>` — immutable, used for rollback
 3. On version tags (`v0.x.y`): also pushes `ghcr.io/jimwallace/chickadee:v0.x.y`
 
+A release commit (`chore(release): ...`) is the exception: its push to `main`
+builds nothing, because its version tag build pushes the same `:latest` and
+`:sha-<commit>` tags.
+
 Pull requests build the image but do **not** push, catching build failures
 before they reach `main`.
 
@@ -512,7 +518,9 @@ does not run. After a rollback on the server, the runner follows it back.
 The script uses the Compose file in the clone that holds it, with the
 `runner` service. The flags `--compose-dir`, `--service` and `--health-url`
 change these. The service must use the image
-`ghcr.io/jimwallace/chickadee:latest`, as the bundled Compose file does. Run it
+`ghcr.io/jimwallace/chickadee:latest`, as the bundled Compose file does, or the
+image that `--image-repo` names: an Apple Silicon host uses
+`ghcr.io/jimwallace/chickadee-runner` (`docs/mac-runner.md`). Run it
 as root, or as a user in the `docker` group, every 10 minutes:
 
 ```bash
@@ -528,14 +536,14 @@ Add this line, with the path to your clone:
 Cron sends mail only when the script prints a line, which is when it updates
 the runner or when it fails.
 
-On macOS with Docker Desktop, use the crontab of the user who runs Docker
-Desktop, not the root crontab, and write the log to a file that the user owns.
-The script needs no python3, flock or newer bash, and it finds `docker` in the
-directories where Docker Desktop and Homebrew install it:
-
-```
-*/10 * * * * /Users/NAME/Chickadee/deploy/chickadee-runner-update.sh --compose-dir DIR --service NAME >> /Users/NAME/Library/Logs/chickadee-runner-update.log 2>&1
-```
+On macOS with Docker Desktop, schedule the script with a launchd agent of the
+user who runs Docker Desktop, not with cron: installing a crontab on macOS
+waits for a permission dialog that an unattended session never answers. The
+agent, and the commands to load and stop it, are in `docs/mac-runner.md`
+("Keep it current"). The script needs no python3, flock or newer bash, and it
+finds `docker` in the directories where Docker Desktop and Homebrew install
+it. Run it from a clone of the repository, because it loads
+`scripts/lib/deployment-target.sh` from beside it.
 
 Docker Desktop runs the containers in a Linux VM. A service's `cpus` and
 `memory` limits cannot be larger than the CPUs and memory that Settings →
@@ -908,6 +916,11 @@ sudo systemctl daemon-reload
 sudo systemctl enable chickadee-server chickadee-runner
 sudo systemctl start chickadee-server chickadee-runner
 ```
+
+The runner sandboxes test scripts by default, so the host must allow
+unprivileged user namespaces (see "Test-script sandbox" above). On a host that
+does not, the runner refuses to start and says why; add `--no-sandbox` to
+`ExecStart` only if running student code unsandboxed is acceptable there.
 
 Check status:
 ```bash

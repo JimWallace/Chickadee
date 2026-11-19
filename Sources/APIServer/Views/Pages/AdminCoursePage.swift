@@ -4,6 +4,7 @@
 // or one course with its settings, clone and staff forms, its facts, its
 // assignments and its enrolled people.
 
+import Core
 import Elementary
 
 struct AdminCoursePage: HTML {
@@ -147,12 +148,12 @@ private struct AdminCourseHeader: HTML {
                 .data(
                     "confirm",
                     value:
-                        "Unarchive \(course.code)? \(course.enrollmentCount) students regain access immediately, and the retention clock stops."
+                        "Unarchive \(course.code)? \(course.enrollmentCount) \(course.enrollmentCount == 1 ? "student regains" : "students regain") access immediately, and the retention clock stops."
                 )
             ) {
                 CSRFField(token: csrfToken)
                 button(.class("row-menu-item"), .type(.submit), .role("menuitem")) {
-                    Icon("i-archive")
+                    Icon("i-archive-restore")
                     "Unarchive course"
                 }
             }
@@ -162,7 +163,7 @@ private struct AdminCourseHeader: HTML {
                 .data(
                     "confirm",
                     value:
-                        "Archive \(course.code)? \(course.enrollmentCount) students lose access immediately. Submissions, grades and audit records are kept, and Unarchive on this page puts it back."
+                        "Archive \(course.code)? \(course.enrollmentCount) \(course.enrollmentCount == 1 ? "student loses" : "students lose") access immediately. Submissions, grades and audit records are kept, and Unarchive on this page puts it back."
                 )
             ) {
                 CSRFField(token: csrfToken)
@@ -332,7 +333,7 @@ private struct AdminCourseAssignmentItem: HTML {
     var body: some HTML {
         tr {
             td(.class("item-tile-cell")) {
-                span(.class("item-tile"), .data("kind", value: "graded")) { Icon("i-calendar-check") }
+                AssignmentTypeTile(type: assignment.assignmentType)
             }
             td(.class("item-main")) {
                 div(.class("item-title")) {
@@ -343,10 +344,14 @@ private struct AdminCourseAssignmentItem: HTML {
                 }
             }
             td(.class("item-status")) {
-                switch assignment.visibility {
-                case "open": span(.class("tier tier-open")) { "Open" }
-                case "preview": span(.class("tier tier-preview")) { "Preview" }
-                default: span(.class("tier tier-closed")) { "Closed" }
+                let tierClass =
+                    switch assignment.visibility {
+                    case "open": "tier-open"
+                    case "preview": "tier-preview"
+                    default: "tier-closed"
+                    }
+                span(.class("tier \(tierClass)")) {
+                    AssignmentVisibility.displayLabel(forRaw: assignment.visibility)
                 }
             }
         }
@@ -364,7 +369,7 @@ private struct AdminCourseRoster: HTML {
     var body: some HTML {
         section(.class("page-section")) {
             div(.class("page-titlebar")) {
-                h2 { "Enrolled students (\(course.enrollmentCount))" }
+                h2 { "Enrolled (\(course.enrollmentCount))" }
                 div(.class("toolbar")) {
                     enrollmentModeForm
                     if !course.isArchived {
@@ -380,7 +385,7 @@ private struct AdminCourseRoster: HTML {
                         ) {
                             CSRFField(token: csrfToken)
                             label(.class("btn action-btn")) {
-                                "Enrol from CSV "
+                                "Enroll from CSV "
                                 // The one inline style the UI rules allow: a
                                 // JS-free hidden file input the label opens.
                                 input(
@@ -405,7 +410,7 @@ private struct AdminCourseRoster: HTML {
                 .attributes(.class("is-open"), when: staffForm.error != nil)
             }
             if enrolledUsers.isEmpty {
-                p(.class("empty")) { "No students enrolled yet." }
+                p(.class("empty")) { "No one is enrolled yet." }
             } else {
                 table(.class("results-table section-items section-items--manage")) {
                     colgroup {
@@ -435,17 +440,17 @@ private struct AdminCourseRoster: HTML {
     private var enrollmentModeForm: some HTML {
         form(.method(.post), .action("/admin/courses/\(course.id)/enrollment-mode"), .class("form-flush")) {
             CSRFField(token: csrfToken)
-            label(.class("visually-hidden"), .for("enrollment-mode")) { "Enrolment mode" }
+            label(.class("visually-hidden"), .for("enrollment-mode")) { "Enrollment mode" }
             span(.class("state-select"), .data("state", value: course.enrollmentMode)) {
                 select(
                     .id("enrollment-mode"), .name("enrollmentMode"), .class("form-input"),
                     .dataFlag("ck-submit-on-change")
                 ) {
-                    option(.value("open")) { "Open enrolment" }
+                    option(.value("open")) { "Open enrollment" }
                         .attributes(.selected, when: course.enrollmentMode == "open")
-                    option(.value("auto")) { "Auto enrolment" }
+                    option(.value("auto")) { "Auto enrollment" }
                         .attributes(.selected, when: course.enrollmentMode == "auto")
-                    option(.value("closed")) { "Closed enrolment" }
+                    option(.value("closed")) { "Closed enrollment" }
                         .attributes(.selected, when: course.enrollmentMode == "closed")
                 }
             }
@@ -496,7 +501,7 @@ private struct AdminCourseUserRow: HTML {
                             button(
                                 .class("row-menu-item row-menu-item--danger"), .type(.submit), .role("menuitem")
                             ) {
-                                Icon("i-trash")
+                                Icon("i-user-minus")
                                 "Remove from course"
                             }
                         }

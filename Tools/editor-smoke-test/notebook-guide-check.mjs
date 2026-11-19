@@ -135,7 +135,10 @@ async function main() {
     const outline = await page.locator("#nb-outline").textContent();
     console.log(`outline: ${outline.replace(/\s+/g, " ").trim()}`);
     if (!outline.includes("Not submitted yet")) return fail("the attempt card does not say Not submitted yet");
-    if (!outline.includes("1. Count") || !outline.includes("2. Total")) return fail("the rows do not name the tasks");
+    // Each row shows the notebook heading, the same title as the editor's
+    // task header, with no number the page adds (docs/notebook-guide.md).
+    if (!outline.includes("Task 1: Count") || !outline.includes("Task 2: Total")) return fail("the rows do not name the tasks");
+    if (outline.includes("1. Task 1")) return fail("the outline numbers a row the notebook does not number");
     await shot("outline");
 
     // (2) Headers and checks lines in the editor.
@@ -154,7 +157,7 @@ async function main() {
     });
     const labels = await headers().locator(".ck-task-label").allTextContents();
     console.log(`headers: ${labels.join(" | ")}; pills: ${(await pills()).join(" | ")}`);
-    if (labels.join("|") !== "Task 1|Task 2|Reflection") return fail(`header labels ${labels}`);
+    if (labels.join("|") !== "Task 1: Count|Task 2: Total|Reflection") return fail(`header labels ${labels}`);
     // The header sits in the heading cell's own header widget.
     const inHeading = await editor().locator(".jp-MarkdownCell .jp-CellHeader .ck-task-header").count();
     if (inHeading !== 3) return fail(`${inHeading} headers sit in a markdown cell header, not 3`);

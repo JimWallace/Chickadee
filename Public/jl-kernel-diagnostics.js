@@ -21,6 +21,12 @@
 //     a previously-reported unhealthy streak carries `recovered=1;unhealthy_ms=…`
 //     so a transient slow boot can be told apart from a terminal stall (CASE 2):
 //     terminal kernel_unknown = (kernel_unknown count) − (recovered=1 idles).
+//   • shell_assets — once, just before kernel_idle: the resource timings of
+//     the JupyterLite shell this document loaded (sizes only), which the parent
+//     folds into its `asset_load` cold-load breadcrumb
+//     (kernel-asset-telemetry.js). The kernel's own files are fetched by a
+//     worker whose timings this document cannot read; the parent probes the
+//     HTTP cache for those instead.
 //   • kernel_error — the actual failure: a CSP worker block (the data:-worker
 //     case), an IndexedDB / Drive exception, a blocked/404 asset, a dead/unknown
 //     kernel, a boot-stall watchdog, or a post-idle execution hang
@@ -62,11 +68,56 @@
     // Always posts to window.parent: in the editor that is the notebook page
     // (which forwards it); loaded top-level (the editor-smoke REPL) parent is
     // self, so a top-level listener can still observe it for testing.
+    // A server-drive path names the viewer's own folder (`users/<id>/`, or
+    // `users%2F<id>` inside an encoded URL). Every message this collector
+    // sends passes through here, so the id is replaced once, for all of them:
+    // kernel_error rows carry no user identifier.
+    function scrubUserFolder(text) {
+        return String(text).replace(/users(\/|%2F)[^/%\s"']+/gi, 'users$1<id>');
+    }
+
     function post(kind, source, message) {
         try {
             var payload = { ck: 'kernel-diag', kind: kind, source: String(source).slice(0, 64) };
-            if (message != null) payload.message = String(message).slice(0, 1000);
+            if (message != null) payload.message = scrubUserFolder(message).slice(0, 1000);
             window.parent.postMessage(payload, origin);
+        } catch (_) { /* never throw */ }
+    }
+
+    // The shell bundle is several hundred files, more than the default
+    // resource timing buffer of 250 holds, so raise it before the bundle's
+    // chunks arrive.
+    try {
+        if (window.performance && window.performance.setResourceTimingBufferSize) {
+            window.performance.setResourceTimingBufferSize(4000);
+        }
+    } catch (_) { /* default buffer */ }
+
+    // Plain copies of this document's JupyterLite-shell timings: path and
+    // the three sizes, nothing else. Never throws.
+    function shellEntries() {
+        var out = [];
+        try {
+            var list = (window.performance && window.performance.getEntriesByType)
+                ? window.performance.getEntriesByType('resource') : [];
+            for (var i = 0; i < list.length && out.length < 3000; i++) {
+                var e = /** @type {PerformanceResourceTiming} */ (list[i]);
+                var path;
+                try { path = new URL(e.name).pathname; } catch (_) { continue; }
+                if (path.indexOf('/jupyterlite/') !== 0) continue;
+                if (/^\/jupyterlite\/(xeus|files|api)\//.test(path)) continue;
+                out.push({
+                    name: path, transferSize: e.transferSize,
+                    encodedBodySize: e.encodedBodySize, decodedBodySize: e.decodedBodySize,
+                });
+            }
+        } catch (_) { /* report what was gathered */ }
+        return out;
+    }
+
+    function postShellAssets() {
+        try {
+            window.parent.postMessage({ ck: 'kernel-diag', kind: 'shell_assets', entries: shellEntries() }, origin);
         } catch (_) { /* never throw */ }
     }
 
@@ -134,12 +185,54 @@
         return String(message || '').indexOf('insertWidget') !== -1;
     }
 
+    // A rejection reason that is not an Error (a plain object, a Response, a
+    // worker's serialized error) has no `.message`, and String() of it is
+    // "[object Object]", which says nothing about what failed. Production
+    // reported exactly that on every stalled boot of 2026-11. Describe such a
+    // reason by its constructor and a shallow, bounded list of its fields.
+    // (`post` removes a user folder id from the result.)
+    function describeRejection(reason) {
+        if (reason == null) return 'unhandledrejection';
+        if (typeof reason !== 'object') return String(reason);
+        if (typeof reason.message === 'string' && reason.message) return reason.message;
+        var parts = [];
+        try {
+            var ctor = reason.constructor && reason.constructor.name;
+            parts.push(ctor || 'Object');
+            if (typeof reason.status === 'number') parts.push('status=' + reason.status);
+            if (typeof reason.url === 'string' && reason.url) parts.push('url=' + reason.url.split('?')[0]);
+            var keys = Object.keys(reason).slice(0, 8);
+            for (var i = 0; i < keys.length; i++) {
+                var key = keys[i];
+                if (key === 'status' || key === 'url') continue;
+                var value = reason[key];
+                var shown;
+                if (value == null || typeof value === 'number' || typeof value === 'boolean') {
+                    shown = String(value);
+                } else if (typeof value === 'string') {
+                    shown = JSON.stringify(value.slice(0, 160));
+                } else if (typeof value === 'object') {
+                    shown = (value.constructor && value.constructor.name) || 'Object';
+                    if (typeof value.message === 'string' && value.message) {
+                        shown += '(' + JSON.stringify(value.message.slice(0, 160)) + ')';
+                    }
+                } else {
+                    shown = typeof value;
+                }
+                parts.push(key + '=' + shown);
+            }
+        } catch (_) { /* report what was gathered */ }
+        return parts.join(' ').slice(0, 500);
+    }
+
     try {
         window.addEventListener('unhandledrejection', function (e) {
             try {
                 var reason = e && e.reason;
-                var message = (reason && reason.message) || String(reason || 'unhandledrejection');
-                if (isBenignLayoutRace(message)) return;
+                // The race is matched on the error's own text, as before, not on
+                // the field list below, so no field can hide a real failure.
+                if (isBenignLayoutRace((reason && reason.message) || String(reason || ''))) return;
+                var message = describeRejection(reason);
                 reportError('unhandledrejection', message);
             } catch (_) { /* ignore */ }
         });
@@ -372,6 +465,9 @@
                     // boot time (boot_start → idle). A boot that recovered from a
                     // previously-reported unhealthy streak is tagged recovered=1 so
                     // a transient CASE-2 blip isn't counted as a terminal failure.
+                    // The shell's timings go first, so the parent holds them
+                    // when kernel_idle arrives.
+                    if (!reportedPhases.kernel_idle) postShellAssets();
                     reportPhase('kernel_idle', idleMessage(
                         Date.now() - startedAt, unhealthyReported,
                         unhealthyReportedSince ? Date.now() - unhealthyReportedSince : 0));
@@ -422,6 +518,7 @@
             trackExecHang: trackExecHang, executionStatusRaw: executionStatusRaw,
             bootContext: bootContext, idleMessage: idleMessage,
             isBenignLayoutRace: isBenignLayoutRace,
+            shellEntries: shellEntries,
         };
     } catch (_) { /* ignore */ }
 })();

@@ -15,9 +15,9 @@ tools: Read, Grep, Glob, Bash
 
 You review one change to Chickadee for one question: **will this change make
 the database slower, or let it hold data it should not?** The guards already
-check the mechanical rules: an index on every foreign key, no redundant
+check the mechanical rules: an index or a listed reason for each foreign key, no redundant
 index, column types, model and schema agreement, deletion coverage, and the
-statement count of six hot requests. You check what a guard cannot decide.
+statement budgets of the hot requests. You check what a guard cannot decide.
 
 ## What you read first
 
@@ -57,7 +57,7 @@ statement count of six hot requests. You check what a guard cannot decide.
    - Do the writes that must land together share a transaction, and does the
      transaction do file or network work?
    - Can two requests race through a read-then-write that no constraint backs?
-4. **Budgets.** When `HotPathStatementBudgetTests` changed, check that the
+4. **Budgets.** When `StatementBudgetTests` or `RunnerStatementBudgetTests` changed, check that the
    commit gives the reason for a rise.
 
 Only report a finding when you can state its cost or its failure in one or two

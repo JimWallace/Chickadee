@@ -16,7 +16,7 @@ extension HealthRule {
         case .runnerMissing:
             return "a named runner stops polling"
         case .runnerVersionSkew:
-            return "a runner is behind the server for \(Int(config.runnerVersionSkewGraceSeconds))s"
+            return "a runner stays behind the server for \(Int(config.runnerVersionSkewGraceSeconds / 60)) min"
         case .queueBackedUp:
             return "≥ \(config.queueDepthThreshold) pending or oldest > \(Int(config.oldestPendingSeconds))s"
         case .errorRateSpike:

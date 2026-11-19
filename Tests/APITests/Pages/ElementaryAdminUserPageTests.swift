@@ -70,7 +70,8 @@ import Testing
         #expect(html.contains("<td><strong>CS136</strong></td>"))
         #expect(html.contains("action=\"/admin/users/U1/unenroll/C1\""))
         #expect(html.contains("<input type=\"hidden\" name=\"_csrf\" value=\"salt-token\">"))
-        #expect(html.contains("<svg class=\"icon\" aria-hidden=\"true\"><use href=\"#i-trash\" /></svg>"))
+        #expect(html.contains("<svg class=\"icon\" aria-hidden=\"true\"><use href=\"#i-user-minus\" /></svg>"))
+        #expect(html.contains("data-confirm=\"Remove this user from CS135?\""))
     }
 
     @Test func theEnrollPickerLabelsEachOfferingWithItsTerm() {

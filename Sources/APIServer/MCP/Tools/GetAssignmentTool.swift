@@ -80,12 +80,48 @@ struct GetAssignmentTool: ContentTool {
         /// full marks earn, or nil when untagged. Set via
         /// set_assignment_concept.
         let concept: String?
+        /// The declared `AssignmentType` raw value (docs/assignment-types.md).
+        /// Set via the assignment-update tool (a read tool's prose never names
+        /// a write tool: read-only `tools/list` must not mention one).
+        let assignmentType: String
         /// The class-activity block, or nil for an ordinary assignment. Set via
         /// the activity tool (same naming caveat as `secretRevealEnabled`).
         let activity: ActivityOutput?
         /// The files that come from the course dataset library, with the
         /// version each one pins.
         let datasets: [AttachedDatasetDTO]
+        /// The GitHub submission setting (docs/github-submissions.md),
+        /// reported read-only. Turning it on sends students' code to GitHub,
+        /// which waits on a privacy review, so it is set by an instructor on
+        /// the edit page and by no MCP tool.
+        let githubSubmission: GitHubSubmissionOutput
+    }
+
+    /// The manifest's three GitHub submission fields.
+    struct GitHubSubmissionOutput: Encodable, Sendable, Equatable {
+        /// Whether students may submit from a GitHub repository.
+        let enabled: Bool
+        /// Whether each graded commit gets a commit status on GitHub.
+        let statusChecks: Bool
+        /// The template repository students start from, as `owner/name`, or
+        /// nil when none is set.
+        let starterRepository: String?
+
+        private enum CodingKeys: String, CodingKey { case enabled, statusChecks, starterRepository }
+
+        /// `starterRepository` is always present, explicitly null when unset.
+        func encode(to encoder: any Encoder) throws {
+            var c = encoder.container(keyedBy: CodingKeys.self)
+            try c.encode(enabled, forKey: .enabled)
+            try c.encode(statusChecks, forKey: .statusChecks)
+            try c.encode(starterRepository, forKey: .starterRepository)
+        }
+
+        init(manifest: TestProperties?) {
+            enabled = manifest?.githubSubmission == true
+            statusChecks = manifest?.githubStatusChecks == true
+            starterRepository = manifest?.githubStarterRepository
+        }
     }
 
     /// The activity block as reported: its kind, the leaderboard's visibility,
@@ -111,10 +147,13 @@ struct GetAssignmentTool: ContentTool {
         var composite: CompositeSpec?
         /// True when the activity runs once per lab group (docs/lab-groups.md).
         var runsPerGroup: Bool = false
+        /// The bug-hunt block `set_activity` accepts; nil for any kind but
+        /// `bugHunt`.
+        var bugHunt: BugHuntSpec?
 
         private enum CodingKeys: String, CodingKey {
             case kind, kindDisplayName, leaderboardVisibility, leaderboardPath, aggregation
-            case opponentSource, opponentFile, opensAt, closesAt, composite, runsPerGroup
+            case opponentSource, opponentFile, opensAt, closesAt, composite, runsPerGroup, bugHunt
         }
 
         /// The three nullable keys are always present, explicitly null when
@@ -134,6 +173,7 @@ struct GetAssignmentTool: ContentTool {
             try c.encode(closesAt, forKey: .closesAt)
             try c.encode(composite, forKey: .composite)
             try c.encode(runsPerGroup, forKey: .runsPerGroup)
+            try c.encode(bugHunt, forKey: .bugHunt)
         }
     }
 
@@ -152,7 +192,10 @@ struct GetAssignmentTool: ContentTool {
         + "advisory best-grade percentage that marks a student as passing on the instructor "
         + "submissions page, null when off; set via the assignment-update tool), concept (the lab "
         + "concept whose wardrobe ring full marks earn, null when untagged; set via "
-        + "set_assignment_concept), minimumRunnerVersion "
+        + "set_assignment_concept), assignmentType (\(MCPEnumProse<AssignmentType>.slashAlternatives): "
+        + "the declared kind of graded work, an assignment for marks, a lab graded in the browser for "
+        + "participation, or an ungraded live class activity; set via the assignment-update tool), "
+        + "minimumRunnerVersion "
         + "(the optional minimum native-runner version required to grade it, null when ungated), "
         + "submissionMode (\"notebook\" = embedded editor plus upload form, \"uploadOnly\" = upload "
         + "only), and language (\(MCPLanguageProse.quotedTokenAlternatives), null for a plain "
@@ -162,7 +205,11 @@ struct GetAssignmentTool: ContentTool {
         + "leaderboard path, the aggregation, the opponent source and file, and the live-session "
         + "window as opensAt and closesAt, null when unset) — which together decide what may be "
         + "authored here. datasets lists the files that come from the course dataset library, with the "
-        + "slug, the pinned version, the scope and the sample of each."
+        + "slug, the pinned version, the scope and the sample of each. githubSubmission reports whether "
+        + "students may submit from a GitHub repository (enabled), whether graded commits get a "
+        + "status on GitHub (statusChecks) and the template repository (starterRepository, null "
+        + "when none); it is read-only here, because turning it on sends students' code to GitHub, "
+        + "and an instructor sets it on the assignment's edit page."
     static let inputSchema: JSONValue = MCPSchema.assignmentPublicIDOnlyInput
     static let outputSchema: JSONValue? = .object([
         "type": .string("object"),
@@ -193,6 +240,10 @@ struct GetAssignmentTool: ContentTool {
             ]),
             "passingThresholdPercent": MCPSchema.nullableInteger,
             "concept": MCPSchema.nullableString,
+            "assignmentType": .object([
+                "type": .string("string"),
+                "enum": MCPEnumProse<AssignmentType>.jsonEnum,
+            ]),
             "submissionMode": MCPSchema.string,
             "language": MCPSchema.string,
             "activity": .object([
@@ -228,6 +279,11 @@ struct GetAssignmentTool: ContentTool {
                             "The composite block, in set_activity's shape; null for any other kind."),
                     ]),
                     "runsPerGroup": MCPSchema.boolean,
+                    "bugHunt": .object([
+                        "type": .array([.string("object"), .string("null")]),
+                        "description": .string(
+                            "The bug-hunt block, in set_activity's shape; null for any other kind."),
+                    ]),
                 ]),
                 "required": .array([
                     .string("kind"), .string("kindDisplayName"), .string("leaderboardVisibility"),
@@ -235,13 +291,26 @@ struct GetAssignmentTool: ContentTool {
                 ]),
             ]),
             "datasets": .object(["type": .string("array"), "items": DatasetToolSchema.attached]),
+            "githubSubmission": .object([
+                "type": .string("object"),
+                "description": .string("The GitHub submission setting, read-only."),
+                "properties": .object([
+                    "enabled": MCPSchema.boolean,
+                    "statusChecks": MCPSchema.boolean,
+                    "starterRepository": MCPSchema.nullableString,
+                ]),
+                "required": .array([
+                    .string("enabled"), .string("statusChecks"), .string("starterRepository"),
+                ]),
+            ]),
         ]),
         "required": .array([
             .string("publicID"), .string("title"), .string("slug"), .string("courseCode"),
             .string("courseKey"),
             .string("isOpen"), .string("visibility"), .string("deadlineOverrideActive"),
             .string("gradingMode"), .string("secretRevealEnabled"),
-            .string("solutionVisibility"), .string("submissionMode"),
+            .string("solutionVisibility"), .string("assignmentType"), .string("submissionMode"),
+            .string("githubSubmission"),
         ]),
     ])
     static let requiredScopes: Set<ContentScope> = [.read]
@@ -293,6 +362,7 @@ struct GetAssignmentTool: ContentTool {
             solutionVisibility: assignment.solutionVisibility.rawValue,
             passingThresholdPercent: assignment.passingThresholdPercent,
             concept: assignment.concept?.rawValue,
+            assignmentType: assignment.assignmentType.rawValue,
             activity: manifest?.activity.map { activity in
                 ActivityOutput(
                     kind: activity.kind.rawValue,
@@ -305,9 +375,11 @@ struct GetAssignmentTool: ContentTool {
                     opensAt: activity.window?.opensAtISO,
                     closesAt: activity.window?.closesAtISO,
                     composite: activity.composite,
-                    runsPerGroup: activity.isPerGroup)
+                    runsPerGroup: activity.isPerGroup,
+                    bugHunt: activity.bugHunt)
             },
-            datasets: (manifest?.datasets ?? []).compactMap(AttachedDatasetDTO.init)
+            datasets: (manifest?.datasets ?? []).compactMap(AttachedDatasetDTO.init),
+            githubSubmission: GitHubSubmissionOutput(manifest: manifest)
         )
     }
 }

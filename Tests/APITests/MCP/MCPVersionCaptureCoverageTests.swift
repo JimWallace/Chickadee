@@ -45,6 +45,9 @@ import Testing
         "CourseContentItemTools.swift",
         // Course achievements live on the course row, not in a manifest.
         "CourseAchievementsTools.swift",
+        // Stages an upload in mcp_uploads; the write tool that consumes it
+        // captures the version.
+        "BeginUploadTool.swift",
     ]
 
     /// Write tools that reach their setup without the standard seam and so

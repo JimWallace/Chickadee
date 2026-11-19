@@ -174,7 +174,7 @@ private struct StudentRow: HTML {
                 ) {
                     CSRFField(token: csrfToken)
                     button(.class("row-menu-item"), .type(.submit), .role("menuitem")) {
-                        Icon("i-refresh")
+                        Icon("i-shuffle")
                         "Give new handle"
                     }
                 }
@@ -185,7 +185,7 @@ private struct StudentRow: HTML {
             ) {
                 CSRFField(token: csrfToken)
                 button(.class("row-menu-item row-menu-item--danger"), .type(.submit), .role("menuitem")) {
-                    Icon("i-trash")
+                    Icon("i-user-minus")
                     "Remove from course"
                 }
             }

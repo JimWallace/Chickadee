@@ -1,7 +1,8 @@
 // Tests/APITests/Courses/CourseSectionServiceTests.swift
 //
 // The course-section rules that the web routes and the MCP tools share through
-// `CourseSectionService` (#2769), tested once at the service.
+// `CourseSectionService` (#2769), tested once at the service. A section carries
+// only a name: no grading mode and no type (docs/assignment-types.md).
 
 import Core
 import Fluent
@@ -16,43 +17,16 @@ import Vapor
     // MARK: - Field rules
 
     @Test func draftTrimsTheName() throws {
-        let draft = try CourseSectionDraft(name: "  Labs ", defaultGradingMode: "worker")
-        #expect(draft.name == "Labs")
-        #expect(draft.defaultGradingMode == .worker)
+        #expect(try CourseSectionDraft(name: "  Labs ").name == "Labs")
+        #expect(try CourseSectionEdit(name: " Exams").name == "Exams")
     }
 
     @Test func aBlankNameIsRefused() {
         #expect(throws: CourseSectionError.emptyName) {
-            _ = try CourseSectionDraft(name: "  ", defaultGradingMode: "browser")
+            _ = try CourseSectionDraft(name: "  ")
         }
-    }
-
-    @Test(arguments: GradingMode.allCases)
-    func everyGradingModeIsAccepted(mode: GradingMode) throws {
-        #expect(try CourseSectionDraft(name: "Labs", defaultGradingMode: mode.rawValue).defaultGradingMode == mode)
-    }
-
-    @Test(arguments: ["", "Browser", "kernel"])
-    func anUnknownGradingModeIsRefused(raw: String) {
-        #expect(throws: CourseSectionError.unknownGradingMode(raw)) {
-            _ = try CourseSectionDraft(name: "Labs", defaultGradingMode: raw)
-        }
-    }
-
-    @Test func theGradingModeReasonNamesEveryMode() {
-        let error = CourseSectionError.unknownGradingMode("kernel")
-        for mode in GradingMode.allCases {
-            #expect(error.description.contains(mode.rawValue))
-        }
-        #expect(error.field == "defaultGradingMode")
-    }
-
-    @Test func anEditValidatesOnlyTheFieldsItSets() throws {
-        let edit = try CourseSectionEdit(name: nil, defaultGradingMode: "worker")
-        #expect(edit.name == nil)
-        #expect(edit.defaultGradingMode == .worker)
         #expect(throws: CourseSectionError.emptyName) {
-            _ = try CourseSectionEdit(name: " ", defaultGradingMode: nil)
+            _ = try CourseSectionEdit(name: " ")
         }
     }
 
@@ -62,27 +36,21 @@ import Vapor
         try await withTestApp { app in
             let courseID = try await makeTestCourse(on: app, code: "CSS_CREATE").requireID()
             let first = try await CourseSectionService.create(
-                try CourseSectionDraft(name: "Labs", defaultGradingMode: "browser"), courseID: courseID,
-                on: app.db)
+                try CourseSectionDraft(name: "Labs"), courseID: courseID, on: app.db)
             let second = try await CourseSectionService.create(
-                try CourseSectionDraft(name: "Exams", defaultGradingMode: "worker"), courseID: courseID,
-                on: app.db)
+                try CourseSectionDraft(name: "Exams"), courseID: courseID, on: app.db)
             #expect(second.sortOrder == first.sortOrder + 1)
-            #expect(second.defaultGradingMode == "worker")
         }
     }
 
-    @Test func updateChangesOnlyTheGivenFields() async throws {
+    @Test func updateRenames() async throws {
         try await withTestApp { app in
             let courseID = try await makeTestCourse(on: app, code: "CSS_UPDATE").requireID()
             let section = try await CourseSectionService.create(
-                try CourseSectionDraft(name: "Labs", defaultGradingMode: "browser"), courseID: courseID,
-                on: app.db)
-            try await CourseSectionService.update(
-                section, with: try CourseSectionEdit(name: nil, defaultGradingMode: "worker"), on: app.db)
+                try CourseSectionDraft(name: "Labs"), courseID: courseID, on: app.db)
+            try await CourseSectionService.update(section, with: try CourseSectionEdit(name: "Exams"), on: app.db)
             let stored = try #require(try await APICourseSection.find(section.id, on: app.db))
-            #expect(stored.name == "Labs")
-            #expect(stored.defaultGradingMode == "worker")
+            #expect(stored.name == "Exams")
         }
     }
 
@@ -90,8 +58,7 @@ import Vapor
         try await withTestApp { app in
             let courseID = try await makeTestCourse(on: app, code: "CSS_DELETE").requireID()
             let section = try await CourseSectionService.create(
-                try CourseSectionDraft(name: "Labs", defaultGradingMode: "browser"), courseID: courseID,
-                on: app.db)
+                try CourseSectionDraft(name: "Labs"), courseID: courseID, on: app.db)
             let ungrouped = try await CourseSectionService.delete(section, on: app.db)
             #expect(ungrouped == 0)
             #expect(try await APICourseSection.find(section.id, on: app.db) == nil)

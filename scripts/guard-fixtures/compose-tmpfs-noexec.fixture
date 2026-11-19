@@ -7,5 +7,5 @@ files="docker-compose.yml"
 description="a tmpfs mount with no exec option"
 expect="has no exec option"
 apply() {
-    sed -i 's|/tmp:size=1g,exec|/tmp:size=1g|' docker-compose.yml
+    sed_inplace 's|/tmp:size=1g,exec|/tmp:size=1g|' docker-compose.yml
 }

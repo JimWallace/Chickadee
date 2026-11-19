@@ -15,7 +15,8 @@ enum AvatarHatchStrip: String, Encodable {
     case hatched
 }
 
-struct AvatarHatchContext: Encodable {
+/// A class, not a struct, for the reason `AvatarPickerContext` gives.
+final class AvatarHatchContext: Encodable {
     /// Hatches left this term.
     let left: Int
     /// "3 of 3 left this term", or, at none, when more come.

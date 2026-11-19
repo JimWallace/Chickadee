@@ -133,7 +133,7 @@ private struct StampedRow: Encodable, Sendable, Equatable {
 
 @Suite struct AuditCategoryTileTests {
     @Test func auditCategoriesPickTheirTile() {
-        #expect(AuditCategoryTile.tile(forCategory: AuditCategory.authentication.rawValue).icon == "#i-key")
+        #expect(AuditCategoryTile.tile(forCategory: AuditCategory.authentication.rawValue).icon == "#i-log-in")
         #expect(AuditCategoryTile.tile(forCategory: AuditCategory.mcp.rawValue).icon == "#i-cpu")
         #expect(AuditCategoryTile.tile(forCategory: AuditCategory.users.rawValue).icon == "#i-shield")
         #expect(AuditCategoryTile.tile(forCategory: "Other").key == "other")
@@ -190,7 +190,7 @@ private struct StampedRow: Encodable, Sendable, Equatable {
             }
             #expect(html.contains("10.0.0.9"))
             #expect(html.contains("<code>auth.login_success</code>"))
-            #expect(html.contains("#i-key"))
+            #expect(html.contains("#i-log-in"))
             // A log stays unsortable, and the old Filter button is gone.
             #expect(!html.contains("sortable-table.js"))
             #expect(!html.contains("sortable-table\""))

@@ -8,6 +8,7 @@
 // and the editor scripts with the edit page; Public/assignment-new-page.js
 // wires them here.
 
+import Core
 import Elementary
 
 struct AssignmentNewPage: HTML {
@@ -26,6 +27,9 @@ struct AssignmentNewPage: HTML {
     /// `draftID` as JSON: a quoted string, or `null`.
     let draftIDJSON: String
     let assignmentLanguageOptions: [SelectOption]
+    /// The Type select's options; the selected one is the stored choice, else
+    /// the type the "+ Add" menu named, else Assignment.
+    let assignmentTypeOptions: [SelectOption]
     let assignmentNotebook: NewAssignmentNotebookContext?
     let solutionNotebook: NewAssignmentNotebookContext?
     let supportFileRows: [EditableSuiteRow]
@@ -60,7 +64,8 @@ struct AssignmentNewPage: HTML {
                 }
                 NewAssignmentTitlebar(
                     assignmentName: assignmentName, startsAt: startsAt, dueAt: dueAt, sections: sections,
-                    preselectedSectionID: preselectedSectionID, assignmentLanguageOptions: assignmentLanguageOptions)
+                    preselectedSectionID: preselectedSectionID, assignmentLanguageOptions: assignmentLanguageOptions,
+                    assignmentTypeOptions: assignmentTypeOptions)
                 draftActionButtons
                 NewAssignmentFilesBlock(
                     hasDraft: draftID != nil, assignmentNotebook: assignmentNotebook,
@@ -154,7 +159,7 @@ struct AssignmentNewPage: HTML {
         }
         div(.class("runner-req-row")) {
             label(.class("req-field")) {
-                "Languages "
+                "Runner languages "
                 input(
                     .class("form-input input-sm"), .type(.text), .name("requiredLanguagesCSV"),
                     .value(requiredLanguagesCSV), .placeholder("e.g. \(LanguageProse.allTokensCSV)"))
@@ -172,7 +177,7 @@ struct AssignmentNewPage: HTML {
     }
 }
 
-/// The name, dates, section and language row, and the page actions.
+/// The name, dates, section, type and language row, and the page actions.
 private struct NewAssignmentTitlebar: HTML {
     let assignmentName: String
     let startsAt: String
@@ -180,6 +185,7 @@ private struct NewAssignmentTitlebar: HTML {
     let sections: [CourseSectionRow]
     let preselectedSectionID: String
     let assignmentLanguageOptions: [SelectOption]
+    let assignmentTypeOptions: [SelectOption]
 
     var body: some HTML {
         div(.class("page-titlebar page-titlebar--top")) {
@@ -210,6 +216,8 @@ private struct NewAssignmentTitlebar: HTML {
                         sectionPicker
                         " "
                     }
+                    typePicker
+                    " "
                     label(.class("field-inline")) {
                         "Language "
                         select(
@@ -222,19 +230,22 @@ private struct NewAssignmentTitlebar: HTML {
                     }
                 }
                 p(.class("card-meta fine-print")) {
-                    "Every generated test renders in this language, so it is stated here rather than worked out "
-                        + "later. Pick \"None\" for a suite of plain shell scripts. Choosing "
-                        + "\(LanguageProse.uploadOnlyDisplayNames) makes the assignment upload-only, since those "
-                        + "languages have no notebook editor."
+                    "Generated tests use this language, and an assignment in "
+                        + "\(LanguageProse.uploadOnlyDisplayNames) is upload-only. "
+                    NewTabLink(
+                        href: "https://github.com/JimWallace/Chickadee/blob/main/docs/language-declaration.md",
+                        text: "How languages work ")
                 }
                 div(
                     .id("uw-date-warning"), .class("card-meta date-warning"),
                     .custom(name: "style", value: "display:none")
                 ) {}
-                p(
-                    .id("grading-mode-hint"), .class("card-meta grading-mode-hint"),
-                    .custom(name: "style", value: "display:none")
-                ) {}
+                p(.id("assignment-type-hint"), .class("card-meta assignment-type-hint")) {
+                    AssignmentTypeRules.summary(
+                        for: assignmentTypeOptions.first(where: \.selected).flatMap {
+                            AssignmentType(rawValue: $0.value)
+                        } ?? .assignment)
+                }
             }
             div(.class("editor-actions")) {
                 button(.class("btn btn-primary"), .type(.submit)) { "Create & Validate" }
@@ -253,10 +264,33 @@ private struct NewAssignmentTitlebar: HTML {
                 // browser selects the first option anyway.
                 option(.value("")) { "— Ungrouped —" }
                 for section in sections {
-                    option(.value(section.sectionID), .data("grading-mode", value: section.defaultGradingMode)) {
-                        section.name
+                    option(.value(section.sectionID)) { section.name }
+                        .attributes(.selected, when: preselectedSectionID == section.sectionID)
+                }
+            }
+            " "
+        }
+    }
+
+    /// The Type select (docs/assignment-types.md). The type sets the grading
+    /// mode, so each option carries its rules for the hint below the row.
+    private var typePicker: some HTML {
+        label(.class("field-inline")) {
+            "Type "
+            select(
+                .class("form-input input-compact"), .name("assignmentType"), .id("assignmentTypeSelect")
+            ) {
+                for entry in assignmentTypeOptions {
+                    option(
+                        .value(entry.value),
+                        .data(
+                            "hint",
+                            value: AssignmentType(rawValue: entry.value).map(AssignmentTypeRules.summary(for:))
+                                ?? "")
+                    ) {
+                        entry.label
                     }
-                    .attributes(.selected, when: preselectedSectionID == section.sectionID)
+                    .attributes(.selected, when: entry.selected)
                 }
             }
             " "

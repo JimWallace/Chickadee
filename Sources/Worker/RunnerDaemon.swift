@@ -103,7 +103,9 @@ actor WorkerDaemon {
     /// Cordons the runner and lets it drain: it claims no new job, finishes
     /// and reports the jobs it is running, and then `run()` returns. A job
     /// that a poll already in flight claims is run too, because the server
-    /// has assigned it. SIGTERM calls this (`WorkerCommand.drainOnTerminate`),
+    /// has assigned it. An idle slot's poll is held on the server for up to
+    /// `WorkerLongPoll.requestedHoldSeconds`, so a drain can wait that long
+    /// for the slot to end. SIGTERM calls this (`WorkerCommand.drainOnTerminate`),
     /// so `docker stop` and every runner update wait for the running jobs, up
     /// to the container's `stop_grace_period`, and do not stop them.
     func drain() {
@@ -190,7 +192,8 @@ actor WorkerDaemon {
                 "max_jobs": maxConcurrentJobs,
                 "api_base_url": apiBaseURL.absoluteString,
             ])
-        if let job = try await poller.requestJob(activeJobs: currentActiveJobs) {
+        let result = try await poller.pollForJob(activeJobs: currentActiveJobs)
+        if let job = result.job {
             recordConnectionRestoredIfNeeded(stage: .poll)
             backoff.reset()
             writeStructuredRunnerLog(
@@ -209,7 +212,15 @@ actor WorkerDaemon {
                     "runner_id": workerID,
                     "slot": slot,
                     "status": "no_job",
+                    "server_held": result.serverHeldPoll,
                 ])
+            // A held poll already waited on the server, which answers as soon
+            // as a job arrives, so poll again at once. An unheld empty poll
+            // (an older server) backs off as before.
+            if result.serverHeldPoll {
+                backoff.reset()
+                return
+            }
             let delay = backoff.next()
             try await pollSleep(delay)
         }
@@ -392,7 +403,7 @@ actor WorkerDaemon {
     /// allowlisted environment (no worker secrets).
     func runMake(in directory: URL, target: String?) async throws(WorkerDaemonError) {
         let timeLimitSeconds = max(1, config.makeTimeoutSeconds)
-        // Through the job's script runner, so `--sandbox` covers `make` and
+        // Through the job's script runner, so the sandbox covers `make` and
         // everything a makefile runs, as it covers the test scripts (#2250).
         let output = await runner.run(
             command: "/usr/bin/make",
@@ -435,7 +446,8 @@ actor WorkerDaemon {
             runnerVersion: ChickadeeVersion.current,
             timestamp: Date()
         )
-        try await reporter.report(collection)
+        try await reporter.report(
+            WorkerExecutionReport(collection: collection, diagnostics: nil, claimToken: job.claimToken))
     }
 
     func sendHeartbeat() async throws(ReporterError) {

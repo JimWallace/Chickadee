@@ -1,4 +1,4 @@
-# syntax=docker/dockerfile:1
+# syntax=docker/dockerfile:1@sha256:4edf897a3ffa55b89f906fc8cc78afdb3f1834cc9c7083565e611a8a7d5fe99e
 # ============================================================
 # Binary source — selectable so CI can skip the in-image compile.
 #
@@ -12,14 +12,32 @@
 # statically-linked-stdlib binaries match the runtime glibc.
 # To update Swift: change the tag here and in the runtime stage.
 # Current: Swift 6.4 on Ubuntu 26.04 (resolute).
+#
+# Every base image, and the BuildKit frontend on the first line, is pinned
+# by digest as well as by tag (#3079). A tag can be pushed over; a digest
+# cannot. The digest wins over the tag, so change both together.
+#
+# Dependabot (docker ecosystem, weekly, 7-day cooldown) moves the digests
+# of the FROM lines. It does not read the `# syntax=` line, so that digest
+# is moved by hand. Take the digest of the multi-arch index, so the arm64
+# runner image still resolves:
+#   docker buildx imagetools inspect docker.io/docker/dockerfile:1
+#   docker buildx imagetools inspect docker.io/library/ubuntu:26.04
 # ============================================================
 
 # Global ARG — must be declared before the first FROM so it can be used in
 # the `FROM ${BINARIES}` stage-selector below.
 ARG BINARIES=compile
+# The binary source of the runner-only image (`--target runner`):
+#   RUNNER_BINARIES=compile-runner  (default) — compile only chickadee-runner.
+#   RUNNER_BINARIES=prebuilt-runner — copy ./artifacts/chickadee-runner, as
+#       .github/workflows/runner-arm64-image.yml does.
+# It is a second selector, not a duplicate of BINARIES: BINARIES=prebuilt
+# requires artifacts/chickadee-server too, which a runner-only build lacks.
+ARG RUNNER_BINARIES=compile-runner
 
 # ── Compile from source ─────────────────────────────────────
-FROM swift:6.4-resolute AS compile
+FROM swift:6.4-resolute@sha256:0384f00cf80f81064a907c249a0ad56a1648906f65075a95b1827e88de666e21 AS compile-runner
 
 WORKDIR /build
 
@@ -54,7 +72,6 @@ COPY Tools/runner-support ./Tools/runner-support
 # swift_ucasemap_*. Only the static release link is affected — the debug build
 # and the whole test suite are clean on the default engine. `native` is
 # deprecated and warns; drop this flag once the default engine links statically.
-RUN swift build -c release --static-swift-stdlib --build-system native --product chickadee-server
 RUN swift build -c release --static-swift-stdlib --build-system native --product chickadee-runner
 # A release build links with -g. Measured in CI on 6.4, --strip-debug takes
 # the server from 301 MB to 171 MB and the runner from 98 MB to 80 MB. It keeps
@@ -63,13 +80,18 @@ RUN swift build -c release --static-swift-stdlib --build-system native --product
 # docker-build.yml builds the production images. It saves the debug data and
 # the symbols to a separate file, so it can remove both (--strip-all).
 RUN mkdir -p /out \
-    && strip --strip-debug -o /out/chickadee-server .build/release/chickadee-server \
     && strip --strip-debug -o /out/chickadee-runner .build/release/chickadee-runner
+
+# The server image compiles the server on top of the runner build, so the two
+# share the dependency and runner layers. The runner-only image stops above.
+FROM compile-runner AS compile
+RUN swift build -c release --static-swift-stdlib --build-system native --product chickadee-server
+RUN strip --strip-debug -o /out/chickadee-server .build/release/chickadee-server
 
 # ── Prebuilt binaries from the build context ────────────────
 # Only built when BINARIES=prebuilt; its COPY paths are not evaluated
 # otherwise.  CI downloads the `build-release` artifact into ./artifacts/.
-FROM ubuntu:26.04 AS prebuilt
+FROM ubuntu:26.04@sha256:d66b366dac61b575bee2aef07e9c26e8070096fbe84a3d4d3eb0da069b5d76db AS prebuilt
 
 WORKDIR /out
 COPY artifacts/chickadee-server artifacts/chickadee-runner /out/
@@ -83,6 +105,19 @@ FROM ${BINARIES} AS binaries
 # Verify both binaries are present — fail fast with a clear message if not.
 RUN ls -lh /out/chickadee-server /out/chickadee-runner
 
+# ── The runner-only binary source ───────────────────────────
+# Only built for `--target runner`. BuildKit builds only the stages a target
+# reaches, so the server image never evaluates these, and the runner image
+# never compiles or copies the server.
+FROM ubuntu:26.04@sha256:d66b366dac61b575bee2aef07e9c26e8070096fbe84a3d4d3eb0da069b5d76db AS prebuilt-runner
+
+WORKDIR /out
+COPY artifacts/chickadee-runner /out/
+RUN chmod +x /out/chickadee-runner
+
+FROM ${RUNNER_BINARIES} AS runner-binaries
+RUN ls -lh /out/chickadee-runner
+
 # ── Brotli copies of the large kernel files ─────────────────
 # PrecompressedAssetMiddleware serves `<file>.br` to a browser that accepts br,
 # so the server does not gzip up to 27 MB per request. Only the .br files leave
@@ -90,7 +125,7 @@ RUN ls -lh /out/chickadee-server /out/chickadee-runner
 # ~95 s for one 27 MB file, against ~5 s. Each copy keeps its original's mtime,
 # which CI set from the last commit, so its ETag changes only with the file.
 # The kernel_packages tarballs are gzip already and are excluded.
-FROM ubuntu:26.04 AS kernel-assets
+FROM ubuntu:26.04@sha256:d66b366dac61b575bee2aef07e9c26e8070096fbe84a3d4d3eb0da069b5d76db AS kernel-assets
 
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 RUN apt-get update \
@@ -111,8 +146,14 @@ RUN cd /src \
 # ============================================================
 # Stage 2 — Runtime
 # Must use the same Ubuntu version as the build stage (resolute).
+#
+# runtime-base holds what both images need: the pinned application user and
+# the language toolchains. The runner-only image (`--target runner`) adds the
+# runner and its entrypoint. The server image, the LAST stage and so the
+# default target, adds everything else. Keep it last: production and
+# `docker build .` build the default target.
 # ============================================================
-FROM ubuntu:26.04
+FROM ubuntu:26.04@sha256:d66b366dac61b575bee2aef07e9c26e8070096fbe84a3d4d3eb0da069b5d76db AS runtime-base
 
 ENV DEBIAN_FRONTEND=noninteractive
 
@@ -238,6 +279,26 @@ RUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-reco
 # plotly toolkit is built in).
 
 WORKDIR /app
+
+# ── The runner-only image ───────────────────────────────────
+# For a runner host that runs no server, for example a Mac
+# (docs/mac-runner.md). No server, no Public/, Resources/ or docs/: the runner
+# reads none of them. It has no HEALTHCHECK, because the runner serves no HTTP
+# (the comment on the runner service in docker-compose.yml). The entrypoint is
+# the one the Compose runner service sets, and Compose still sets it. There is
+# no CMD: Compose gives the runner command (its flags are per host).
+FROM runtime-base AS runner
+
+COPY --from=runner-binaries /out/chickadee-runner ./chickadee-runner
+COPY deploy/runner-entrypoint.sh ./runner-entrypoint.sh
+RUN chmod +x ./runner-entrypoint.sh
+
+USER chickadee
+
+ENTRYPOINT ["/app/runner-entrypoint.sh", "/bin/sh", "-lc"]
+
+# ── The server image (default target) ───────────────────────
+FROM runtime-base
 
 # Compiled binaries (from whichever binary source was selected above).
 COPY --from=binaries /out/chickadee-server  ./chickadee-server

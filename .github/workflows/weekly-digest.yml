@@ -13,6 +13,11 @@ name: Weekly digest
 #     release notes. It cannot hold it: that pull request usually merges first.
 #   * Flake telemetry: the week's tally (flake-telemetry.yml, 06:41).
 #   * Dependabot: the open Dependabot pull requests.
+#   * Weekly checks on main: the newest run of swift-currency.yml (Mondays
+#     07:15) and the scheduled visual-regression.yml (Thursdays).
+#     macos-build.yml is dispatch-only until a hosted runner has the macOS 27
+#     SDK, so the digest does not list it (see that workflow's header). A red one has its own issue with a
+#     brief; the digest names it.
 #
 # NO MODEL. scripts/weekly-digest-render.sh writes every line from rules
 # stated in its header, so the digest needs no API key. A model wrote it
@@ -52,7 +57,7 @@ jobs:
       security-events: read
 
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 1
           persist-credentials: false
@@ -125,6 +130,17 @@ jobs:
           gh pr list --repo "$R" --state open --author "app/dependabot" --limit 50 \
               --json number,title,url > digest/dependabot.json 2> err.txt \
             || gap > digest/dependabot.json
+
+          # The weekly checks on main. Each files its own issue when red; the
+          # digest reports the newest run, so a check that stopped running is
+          # seen too. Visual regression also runs on every UI pull request, so
+          # only its scheduled runs count.
+          gh run list --repo "$R" --workflow swift-currency.yml --branch main --limit 1 \
+              --json conclusion,status,createdAt,url > digest/swift-currency-run.json 2> err.txt \
+            || gap > digest/swift-currency-run.json
+          gh run list --repo "$R" --workflow visual-regression.yml --branch main --event schedule --limit 1 \
+              --json conclusion,status,createdAt,url > digest/visual-run.json 2> err.txt \
+            || gap > digest/visual-run.json
 
       - name: Write and file the digest
         env:

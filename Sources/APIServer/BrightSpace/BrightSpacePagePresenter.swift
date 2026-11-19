@@ -24,8 +24,6 @@ enum BrightSpacePagePresenter {
     struct Flashes {
         let success: String?
         let error: String?
-
-        static let none = Flashes(success: nil, error: nil)
     }
 
     /// How the active course's grade-sync identity is shown: the display
@@ -313,7 +311,8 @@ enum BrightSpacePagePresenter {
                 syncDetailText: syncDetailText(
                     status: last?.status ?? "none", detail: last?.detail,
                     at: last?.attemptedAt.map { fmt.string(from: $0) }),
-                hasSyncError: last?.status == "error")
+                hasSyncError: last?.status == "error",
+                assignmentType: a.assignmentType)
         }
     }
 

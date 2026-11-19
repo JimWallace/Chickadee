@@ -139,8 +139,8 @@ import VaporTesting
             let failed = try await failStalePendingDataExports(on: app.db, logger: app.logger)
             #expect(failed == 1)
 
-            // After recovery: the poll sees a terminal state (so account-export.js
-            // reloads the page) ...
+            // After recovery: the poll sees a terminal state (so the account
+            // page's polled region reloads the page) ...
             try await app.asyncTest(
                 .GET, "/account/export/status",
                 beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },

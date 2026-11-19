@@ -31,7 +31,8 @@ extension ElementaryPageFixtures {
                 scopeLabels: ["Read course content (assignments, etc.)", "Create and edit course content"],
                 redirectHost: "agent.example.com", firstTimeApproval: firstTime, notPermitted: notPermitted,
                 permittedRoleLabel: "instructors and admins", purposeLabel: "author course content",
-                requestToken: notPermitted ? nil : "fixture-request", readsStudentAnswers: readsAnswers
+                requestToken: notPermitted ? nil : "fixture-request", readsStudentAnswers: readsAnswers,
+                signedInAs: "fixture-admin", returnTo: "/oauth/authorize?client_id=fixture"
             ).render()
         }
         return ElementaryPageFixture(

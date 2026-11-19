@@ -102,6 +102,11 @@ struct SubmissionIntake {
             await ResultIngestEffects(application: req.application, db: req.db, logger: req.logger)
                 .awardFirstToSubmit(setup: setup, userID: userID, submissionID: submissionID)
         }
+        // Wake the runner polls the server holds, so grading starts without
+        // waiting for a poll. Last of the row's effects: a woken poll claims
+        // the row at once and writes the same diagnostics rows that
+        // `recordSubmissionCreated` writes, so that write must be done first.
+        await req.application.pendingWorkSignal.notify()
         // Production runners poll on their own. This only starts the
         // development runner when the admin turned autostart on.
         await ensureLocalRunnerForSubmissionIfNeeded(req: req)

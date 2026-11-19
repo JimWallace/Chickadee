@@ -6,13 +6,15 @@
 //
 //   POST /account/export           → reset/create the user's export row,
 //                                    kick off async generation → /account
-//   GET  /account/export/status    → tiny JSON poll for the account page
+//   GET  /account/export/status    → tiny JSON status; `?fragment=state`
+//                                    is the account page's polled region
 //   GET  /account/export/download  → stream the finished zip
 //
 // Rate limiting is one export per day per user, enforced against the
 // row's `requestedAt` (DB-backed, so it holds across processes).  Both
 // the request and the download are audit-logged.
 
+import Elementary
 import Fluent
 import Foundation
 import Vapor
@@ -73,14 +75,25 @@ struct AccountExportRoutes: RouteCollection {
 
     // MARK: - GET /account/export/status
 
+    /// Two representations, one query, as on every polled page:
+    /// `?fragment=state` renders the account page's export region
+    /// (`AccountExportStateRegion`) for `table-poll.js`; anything else keeps
+    /// the JSON status unchanged.
     @Sendable
-    func exportStatus(req: Request) async throws -> DataExportStatusResponse {
+    func exportStatus(req: Request) async throws -> Response {
         let user = try req.auth.require(APIUser.self)
         let userID = try user.requireID()
         let export = try await APIDataExport.query(on: req.db)
             .filter(\.$userID == userID)
             .first()
-        return DataExportStatusResponse(status: export?.statusValue?.rawValue ?? "none")
+        guard req.query[String.self, at: "fragment"] == "state" else {
+            return try await DataExportStatusResponse(status: export?.statusValue?.rawValue ?? "none")
+                .encodeResponse(for: req)
+        }
+        let region = AccountExportStateRegion(
+            isPending: export?.statusValue == .pending,
+            requestedAtDisplay: export.map { waterlooDateTimeFormatter().string(from: $0.requestedAt) })
+        return Response.pollFragment(html: region.render(), for: req)
     }
 
     // MARK: - GET /account/export/download

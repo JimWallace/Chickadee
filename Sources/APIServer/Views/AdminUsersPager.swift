@@ -39,7 +39,6 @@ struct AdminUsersPager: HTML {
     }
 
     var isPaged: Bool { pageCount > 1 }
-    var isSearching: Bool { search != nil }
 
     /// `&q=…` for the search, percent-encoded, or nothing without one.
     private var searchQuery: String {

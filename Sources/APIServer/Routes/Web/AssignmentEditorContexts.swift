@@ -130,6 +130,10 @@ struct EditAssignmentContext: Encodable {
     /// The ring the chosen concept earns, as a sentence names it ("the
     /// Ouroboros ring"); nil when the assignment has no concept.
     var conceptRingPhrase: String?
+    /// Each `AssignmentType`, for the "Type" select (docs/assignment-types.md).
+    var assignmentTypeOptions: [SelectOption] = []
+    /// The current type's one-sentence note (`AssignmentTypeRules.summary`).
+    var assignmentTypeRules: String = ""
     /// The assignment gate for AI-assisted feedback
     /// (docs/ai-assisted-feedback.md). Nil while the course gate is off, so
     /// the "Student Options" control does not render at all.
@@ -271,7 +275,8 @@ struct ActivityEditFacts: Encodable {
             windowOpensAtLocal: dueAtLocalInputString(activity?.window?.opensAt),
             windowClosesAtLocal: dueAtLocalInputString(activity?.window?.closesAt),
             composite: composite,
-            showsVisibilityToggle: activity?.kind != .classComposite,
+            // Both boards are for the projector, so the save refuses visible.
+            showsVisibilityToggle: activity?.kind != .classComposite && activity?.kind != .bugHunt,
             runsPerGroup: activity?.runsPerGroup == true,
             canRunPerGroup: activity?.kind.canRunPerGroup == true)
     }

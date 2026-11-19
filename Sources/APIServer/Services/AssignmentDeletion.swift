@@ -50,6 +50,15 @@ enum AssignmentDeletion {
             try await setup.delete(on: db)
             setupDeleted = true
         }
+        // Materials attached to the assignment become rows of their own again,
+        // at the end of the assignment's section, rather than going with it:
+        // the same placement as a detach from the edit form.
+        let attached = try await APICourseContentItem.query(on: db)
+            .filter(\.$assignmentID == assignment.requireID())
+            .all()
+        for item in attached {
+            try await CourseContentService.attach(item, toAssignment: nil, on: db)
+        }
         try await assignment.delete(on: db)
         return RemovedRows(
             submissionCount: work.submissionCount, filePaths: filePaths, setupDeleted: setupDeleted)

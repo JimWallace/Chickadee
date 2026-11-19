@@ -50,7 +50,7 @@ extension InstructorLMSRoutes {
             classlist = try await client.fetchClasslist(orgUnitID: orgUnitID, on: req.application)
         } catch {
             req.logger.warning("LEARN classlist fetch failed: \(error)")
-            return .unavailable("Couldn't fetch the LEARN classlist: \(error).")
+            return .unavailable(learnFailureText(error, action: "fetch the LEARN classlist"))
         }
 
         let learnIdentities = BrightSpaceIdentityIndex(classlist: classlist)

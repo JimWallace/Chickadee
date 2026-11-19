@@ -200,9 +200,10 @@ func makeWorkerManifestJSON(
 /// Only what the create page owns is set: the makefile, the starter notebook
 /// and the two modes. The modes follow the declared language. An upload-only
 /// language gets `uploadOnly` + `worker`, the pair `declareManifestLanguage`
-/// writes; any other gets `notebook` and the section's grading mode. These
-/// rebuilds used to call the fresh builder, which wrote `notebook` and the
-/// section's mode over an upload-only declaration: the pair every authoring
+/// writes; any other gets `notebook` and the grading mode of the declared
+/// assignment type (`AssignmentType.defaultGradingMode`). These rebuilds used
+/// to call the fresh builder, which wrote `notebook` and the section's mode
+/// over an upload-only declaration: the pair every authoring
 /// door refuses to store (#1720).
 ///
 /// With no readable draft manifest there is nothing to carry forward, and the
@@ -211,21 +212,21 @@ func rebuildDraftManifestJSON(
     _ draft: TestProperties?,
     testSuites: [ConfiguredSuiteEntry],
     includeMakefile: Bool,
-    sectionGradingMode: String,
+    gradingMode: String,
     starterNotebook: String
 ) throws -> String {
     guard var next = draft else {
         return try makeWorkerManifestJSON(
-            testSuites: testSuites, includeMakefile: includeMakefile, gradingMode: sectionGradingMode,
+            testSuites: testSuites, includeMakefile: includeMakefile, gradingMode: gradingMode,
             starterNotebook: starterNotebook, language: nil)
     }
     if let language = next.language, requiresUploadOnlySubmission(language) {
         next.submissionMode = .uploadOnly
         next.gradingMode = .worker
     } else {
-        guard let grading = GradingMode(rawValue: sectionGradingMode) else {
+        guard let grading = GradingMode(rawValue: gradingMode) else {
             throw AppError.invalidParameter(
-                name: "gradingMode", reason: "Unknown grading mode \"\(sectionGradingMode)\".")
+                name: "gradingMode", reason: "Unknown grading mode \"\(gradingMode)\".")
         }
         next.submissionMode = .notebook
         next.gradingMode = grading

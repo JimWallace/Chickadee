@@ -61,7 +61,7 @@ struct CourseTimelineRow: Encodable, Sendable {
 
 /// How an activity row's category maps to its tile. The audit categories are
 /// the real `AuditCategory` values; "Content edit" is the version-history
-/// source's own label. Anything unrecognised reads as a neutral link tile.
+/// source's own label. Anything unrecognised reads as a neutral event tile.
 enum TimelineCategoryTile {
     static func tile(forCategory category: String) -> (key: String, kind: String, icon: String) {
         switch category {
@@ -72,9 +72,9 @@ enum TimelineCategoryTile {
         case AuditCategory.enrollment.rawValue, AuditCategory.users.rawValue:
             return ("roster", "outline", "#i-list")
         case AuditCategory.grading.rawValue, AuditCategory.submissions.rawValue:
-            return ("grade", "graded", "#i-calendar-check")
+            return ("grade", "graded", "#i-clipboard-check")
         default:
-            return ("other", "link", "#i-link")
+            return ("other", "link", "#i-activity")
         }
     }
 }

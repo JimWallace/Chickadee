@@ -47,6 +47,10 @@ func bootstrapAppServices(_ app: Application, appConfig: AppConfig) async throws
     // "Sync now" grade push, logout token revocation, OIDC discovery (#1923).
     app.backgroundWork = BackgroundWork()
     app.lifecycle.use(BackgroundWorkDrainLifecycleHandler())
+    // Release the runner polls the server holds, before Vapor waits for
+    // in-flight requests, and stop the pending-work watcher before Fluent
+    // closes the database.
+    app.lifecycle.use(PendingWorkSignalLifecycleHandler())
     // Unstick personal-data exports orphaned in `pending` by a restart mid-
     // generation, so the account page's status poll can resolve (#557).
     app.lifecycle.use(PeriodicSweepLifecycleHandler { $0.staleDataExportReaperMonitor })
@@ -63,6 +67,17 @@ func bootstrapAppServices(_ app: Application, appConfig: AppConfig) async throws
     // skipped rather than failing every write (see KernelEnvironment).
     app.kernelEnvironments = KernelEnvironments.load(
         publicDirectory: app.directory.publicDirectory)
+    // Each vendored kernel's boot files, for the cold-load telemetry and the
+    // dashboard's cache warm (KernelAssetList). Absent bytes mean no list,
+    // and the pages then render neither.
+    app.kernelAssetLists = KernelAssetLists.load(publicDirectory: app.directory.publicDirectory)
+    for language in AssignmentLanguage.allCases where app.kernelAssetLists?[language] == nil {
+        if case .notebookKernel = language.editorSupport {
+            app.logger.notice(
+                "No kernel boot file list for \(language.rawValue): its notebook pages measure no cold loads and warm no cache."
+            )
+        }
+    }
     for language in AssignmentLanguage.allCases where app.kernelEnvironments?[language] == nil {
         app.logger.notice(
             """

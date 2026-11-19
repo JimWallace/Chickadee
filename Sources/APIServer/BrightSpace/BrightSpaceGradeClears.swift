@@ -7,6 +7,7 @@
 // after its pushes; a clear whose (student, setup) is also being pushed the
 // same sweep is dropped — the push wins.
 
+import Core
 import Fluent
 import Foundation
 import Vapor
@@ -72,8 +73,10 @@ extension GradeSyncSweep {
     ) async throws -> Bool {
         let clearRow = target.clearRow
         // Without a configured grade item + org unit there is nothing in D2L to
-        // clear — drop the queue row.
+        // clear — drop the queue row. A Class activity never pushed a grade
+        // (docs/assignment-types.md), so it has nothing to clear either.
         guard let assignment = target.assignment,
+            assignment.assignmentType.pushesGradesToLMS,
             let gradeObjectID = assignment.brightspaceGradeObjectID, !gradeObjectID.isEmpty,
             let course = target.course,
             let orgUnitID = course.brightspaceOrgUnitID, !orgUnitID.isEmpty

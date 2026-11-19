@@ -84,7 +84,7 @@ struct AdminBrightspacePage: HTML {
                         .class("row-menu-item"), .href("#replace-key-panel"), .role("menuitem"),
                         .custom(name: "data-add-target", value: "replace-key-panel")
                     ) {
-                        Icon("i-key")
+                        Icon("i-credential")
                         "Replace user key…"
                     }
                     if storedKey {

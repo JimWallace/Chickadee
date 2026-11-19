@@ -72,6 +72,9 @@ enum MCPToolCatalog {
             AuthorNotebookCheckTool().erased(),
             UpdateNotebookTool().erased(),
             UpdateSolutionTool().erased(),
+            // A staged upload, used by author_script, create_dataset and
+            // add_dataset_version (docs/mcp-file-uploads.md).
+            BeginUploadTool().erased(),
             AuthorScriptTool().erased(),
             DeleteSupportFileTool().erased(),
             CreateCourseSectionTool().erased(),
@@ -83,6 +86,7 @@ enum MCPToolCatalog {
             CreateContentItemTool().erased(),
             UpdateContentItemTool().erased(),
             DeleteContentItemTool().erased(),
+            AttachContentItemTool().erased(),
             ReorderContentItemsTool().erased(),
             ReorderAssignmentsTool().erased(),
             ReorderSectionItemsTool().erased(),
@@ -178,6 +182,9 @@ func registerMCPRoutes(_ app: Application) throws {
         collection: MCPRoutes(dispatcher: dispatcher, configuration: routeConfiguration))
     try app.register(
         collection: MCPMetadataRoutes(endpoints: endpoints, advertisedScopes: mcp.mode.advertisedScopes))
+    // The begin_upload URL (docs/mcp-file-uploads.md). Outside the bearer
+    // group: the single-use token in its path is the credential.
+    try app.register(collection: MCPUploadRoutes())
 
     app.logger.info(
         "MCP endpoint mounted at /mcp — issuer=\(endpoints.issuer), resource=\(endpoints.resource)")
@@ -189,7 +196,7 @@ func registerMCPRoutes(_ app: Application) throws {
 /// a cookie) and the machine `/oauth/token`/`/revoke`/`/register`.  A no-op
 /// otherwise.
 func registerMCPOAuthRoutes(
-    _ app: Application, sessionAuth: UserSessionAuthenticator
+    _ app: Application, sessionAuth: UserSessionAuthenticator, csrf: CSRFMiddleware
 ) throws {
     let mcp = app.appConfig.mcp
     guard mcp.mode.isMounted,
@@ -207,6 +214,10 @@ func registerMCPOAuthRoutes(
     // consent token bound to them. The submit is handled separately below.
     let consentForm = app.grouped(sessionAuth)
     consentForm.get("oauth", "authorize", use: oauth.authorizeForm)
+    // "Use a different account" on the consent screen: a same-origin form
+    // carrying the page's CSRF token, so it is a session route, not a
+    // back-channel one.
+    consentForm.grouped(csrf).post("oauth", "authorize", "switch-account", use: oauth.switchAccount)
     // Back-channel POSTs — rate-limited per IP, no session/CSRF middleware:
     //   • /authorize submit is guarded by the single-use consent token (not a
     //     cookie), so it survives Safari/ITP dropping the cross-site cookie;

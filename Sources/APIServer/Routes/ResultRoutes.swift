@@ -72,85 +72,105 @@ struct ResultRoutes: RouteCollection {
         // transaction: a failure between the two used to leave a result row
         // with the submission stuck `assigned` until the stuck-submission
         // reaper re-queued and regraded it (wasted work, duplicate results).
-        let completedSubmission = try await req.db.transaction { tx -> APISubmission? in
-            let prepared = try await ResultIngestEffects.prepareResult(
-                collection, source: "worker", testSetupID: collection.testSetupID,
-                encodedJSON: collectionJSON, application: req.application, on: tx)
-            // Row and blob side-table row persist together, inside this
-            // transaction (persist and submission status flip).
-            try await prepared.row.saveWithCollection(json: prepared.json, on: tx)
-            guard let submission = try await APISubmission.find(collection.submissionID, on: tx)
-            else { return nil }
-            submission.setStatus(.complete)
-            try await submission.save(on: tx)
-            return submission
+        //
+        // The report must answer the row's current claim (`ResultClaimCheck`):
+        // a forced retest or the reaper may have re-queued the row since this
+        // runner claimed it, and the old claim's report would complete the
+        // re-queued row with a grade from the old suite. The check reads the
+        // row under a lock before anything is written, so a refusal writes
+        // nothing.
+        let workerID = req.headers.first(name: WorkerHMACSigning.Header.workerID)
+        let submission: APISubmission
+        do {
+            submission = try await req.db.transaction { tx -> APISubmission in
+                let submission = try await ResultClaimCheck.lockCurrentClaim(
+                    submissionID: collection.submissionID, workerID: workerID,
+                    claimToken: report.claimToken, on: tx)
+                let prepared = try await ResultIngestEffects.prepareResult(
+                    collection, source: "worker", testSetupID: collection.testSetupID,
+                    encodedJSON: collectionJSON, application: req.application, on: tx)
+                // Row and blob side-table row persist together, inside this
+                // transaction (persist and submission status flip).
+                try await prepared.row.saveWithCollection(json: prepared.json, on: tx)
+                submission.setStatus(.complete)
+                try await submission.save(on: tx)
+                return submission
+            }
+        } catch WorkerJobError.staleClaim(let submissionID, let reason) {
+            // Submission id in metadata only (compliance audit F-1).
+            req.logger.warning(
+                "result_report_stale_claim — runner reported for a claim it no longer holds; result dropped",
+                metadata: [
+                    "submission_id": .string(submissionID),
+                    "runner_id": .string(workerID ?? ""),
+                    "reason": .string(reason.rawValue),
+                ])
+            throw WorkerJobError.staleClaim(submissionID: submissionID, reason: reason)
         }
 
-        if let submission = completedSubmission {
-            // Record execution diagnostics (execution time + queue wait).
-            await req.application.diagnostics.recordWorkerExecutionReport(
-                collection: collection,
-                diagnostics: report.diagnostics,
-                submission: submission,
-                on: req.db,
-                logger: req.logger
-            )
+        // Record execution diagnostics (execution time + queue wait).
+        await req.application.diagnostics.recordWorkerExecutionReport(
+            collection: collection,
+            diagnostics: report.diagnostics,
+            submission: submission,
+            on: req.db,
+            logger: req.logger
+        )
 
-            let effects = ResultIngestEffects(application: req.application, db: req.db, logger: req.logger)
+        let effects = ResultIngestEffects(application: req.application, db: req.db, logger: req.logger)
 
-            // A validation run's verdict, so the instructor sees pass or fail
-            // without polling.
-            if submission.kind == APISubmission.Kind.validation {
-                try await effects.recordValidationVerdict(collection)
-            }
-
-            // A tournament match reaches only the bracket, whatever its
-            // build status: a match that could not run advances the
-            // opponent rather than stalling the round. Best effort, like the
-            // class effects below: the result is committed, so a failure
-            // here must not fail the report, which a runner would resend as
-            // a second result row. A replay of the report finishes an
-            // advance that failed (#2184).
-            if submission.kind == APISubmission.Kind.tournamentMatch {
-                await effects.bestEffort("tournament_match", submissionID: collection.submissionID) {
-                    try await recordTournamentMatch(submission: submission, collection: collection, on: req.db)
-                }
-            }
-
-            // The class corpus run's grade IS the class's coverage number
-            // (docs/collaborative-class-assignments.md). It belongs to no
-            // student, so `ResultIngestEffects.apply` below skips it.
-            if submission.kind == APISubmission.Kind.classAggregate {
-                try await recordClassCoverageRun(
-                    submission: submission, collection: collection, on: req.db)
-            }
-
-            // A class composite's reference render fills its slot's row
-            // (docs/class-composite.md). It belongs to no student either.
-            if submission.kind == APISubmission.Kind.compositeReference {
-                await effects.bestEffort("composite_reference", submissionID: collection.submissionID) {
-                    try await CompositeReferences.record(submission: submission, collection: collection, on: req.db)
-                }
-            }
-
-            // A spare fills its slot for the student its row names. The job
-            // itself belongs to no student, so no grade or attempt changes.
-            if submission.kind == APISubmission.Kind.compositeSpare {
-                await effects.bestEffort("composite_spare", submissionID: collection.submissionID) {
-                    try await CompositeSpares.record(submission: submission, collection: collection, on: req.db)
-                }
-            }
-
-            // Coverage, the leaderboard, the match and the class records, best
-            // effort: the result is committed, so none of them may fail the
-            // report (#1708).
-            await effects.apply(submission: submission, collection: collection, matches: report.matches)
-
-            // An opted-in GitHub submission's public-tier result, on its commit
-            // (docs/github-submissions.md slice 6). Runs after the response, so
-            // a slow GitHub never holds the report.
-            await GitHubCommitStatusPoster.startPost(submission: submission, collection: collection, req: req)
+        // A validation run's verdict, so the instructor sees pass or fail
+        // without polling.
+        if submission.kind == APISubmission.Kind.validation {
+            try await effects.recordValidationVerdict(collection)
         }
+
+        // A tournament match reaches only the bracket, whatever its
+        // build status: a match that could not run advances the
+        // opponent rather than stalling the round. Best effort, like the
+        // class effects below: the result is committed, so a failure
+        // here must not fail the report, which a runner would resend as
+        // a second result row. A replay of the report finishes an
+        // advance that failed (#2184).
+        if submission.kind == APISubmission.Kind.tournamentMatch {
+            await effects.bestEffort("tournament_match", submissionID: collection.submissionID) {
+                try await recordTournamentMatch(submission: submission, collection: collection, on: req.db)
+            }
+        }
+
+        // The class corpus run's grade IS the class's coverage number
+        // (docs/collaborative-class-assignments.md). It belongs to no
+        // student, so `ResultIngestEffects.apply` below skips it.
+        if submission.kind == APISubmission.Kind.classAggregate {
+            try await recordClassCoverageRun(
+                submission: submission, collection: collection, on: req.db)
+        }
+
+        // A class composite's reference render fills its slot's row
+        // (docs/class-composite.md). It belongs to no student either.
+        if submission.kind == APISubmission.Kind.compositeReference {
+            await effects.bestEffort("composite_reference", submissionID: collection.submissionID) {
+                try await CompositeReferences.record(submission: submission, collection: collection, on: req.db)
+            }
+        }
+
+        // A spare fills its slot for the student its row names. The job
+        // itself belongs to no student, so no grade or attempt changes.
+        if submission.kind == APISubmission.Kind.compositeSpare {
+            await effects.bestEffort("composite_spare", submissionID: collection.submissionID) {
+                try await CompositeSpares.record(submission: submission, collection: collection, on: req.db)
+            }
+        }
+
+        // Coverage, the leaderboard, the match and the class records, best
+        // effort: the result is committed, so none of them may fail the
+        // report (#1708).
+        await effects.apply(submission: submission, collection: collection, matches: report.matches)
+
+        // An opted-in GitHub submission's public-tier result, on its commit
+        // (docs/github-submissions.md slice 6). Runs after the response, so
+        // a slow GitHub never holds the report.
+        await GitHubCommitStatusPoster.startPost(submission: submission, collection: collection, req: req)
 
         return ReportResponse(received: true)
     }

@@ -369,6 +369,12 @@ ask it, and every GitHub route is 404 while it is false. The results page, for
 the student and for staff, shows "From GitHub: owner/name at abc1234" with a
 link to the commit.
 
+MCP `get_assignment` reports the three fields as `githubSubmission`
+(`enabled`, `statusChecks`, `starterRepository`), and no MCP tool writes them.
+Turning the setting on sends students' code and logins to GitHub, which waits
+on the privacy review below, so an instructor makes that choice on the edit
+page, not an agent.
+
 ## Starter repositories (a slice-3 follow-up)
 
 A course that does not bind an organization can still give every student the

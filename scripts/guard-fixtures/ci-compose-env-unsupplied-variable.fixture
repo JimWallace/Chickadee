@@ -6,5 +6,5 @@ files="docker-compose.yml"
 description="a compose-required variable that the CI .env does not supply"
 expect="now requires CHICKADEE_GUARD_FIXTURE"
 apply() {
-    sed -i 's|^      LOG_LEVEL: .*|&\n      CHICKADEE_GUARD_FIXTURE: ${CHICKADEE_GUARD_FIXTURE:?required}|' docker-compose.yml
+    sed_inplace 's|^      LOG_LEVEL: .*|&\n      CHICKADEE_GUARD_FIXTURE: ${CHICKADEE_GUARD_FIXTURE:?required}|' docker-compose.yml
 }

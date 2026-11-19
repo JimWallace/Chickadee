@@ -15,9 +15,6 @@ enum MCPFailureDetailProse {
     /// `"full/actualOnly/verdictOnly"` for an inline parenthetical.
     static var slashAlternatives: String { MCPEnumProse<FailureDetail>.slashAlternatives }
 
-    /// `"full, actualOnly, verdictOnly"` for a "must be one of" error.
-    static var oneOfList: String { MCPEnumProse<FailureDetail>.oneOfList }
-
     /// Each level with its one-line meaning, for a tool description:
     /// `"full" (…); "actualOnly" (…); "verdictOnly" (…)`.
     static var glossedList: String {

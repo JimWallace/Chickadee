@@ -79,7 +79,7 @@ struct SetSubmissionModeTool: ContentTool {
         // reads a fixable message rather than a 400. The shared helper keeps
         // its own guard as the backstop for any path that skips this.
         if let violation = ManifestCoherence.violation(
-            introducedBy: { $0.submissionMode = parsed }, in: setup.manifest)
+            for: assignment.declaredAssignmentType, introducedBy: { $0.submissionMode = parsed }, in: setup.manifest)
         {
             throw MCPToolError.invalidArguments(detail: violation)
         }

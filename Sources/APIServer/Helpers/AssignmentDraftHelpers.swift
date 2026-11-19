@@ -29,6 +29,9 @@ struct NewAssignmentDraftFormState: Codable {
     var requiredCapabilitiesCSV: String
     var assignmentNotebookName: String?
     var solutionNotebookName: String?
+    /// The Type select's value, kept across draft actions. Nil in a state
+    /// stored before the field existed.
+    var assignmentType: String?
 
     static let empty = NewAssignmentDraftFormState(
         assignmentName: "",
@@ -47,10 +50,6 @@ struct NewAssignmentDraftFormState: Codable {
 struct DraftRequirementSuggestions {
     let languages: [String]
     let capabilities: [String]
-}
-
-func loadExistingSolution(req: Request, assignment: APIAssignment) async throws -> ExistingSolution? {
-    try await loadExistingSolution(assignment: assignment, on: req.db)
 }
 
 /// The solution a validation run uses: the linked validation submission, or

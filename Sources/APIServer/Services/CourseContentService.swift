@@ -144,6 +144,9 @@ enum CourseContentService {
     static func apply(_ edit: ContentItemEdit, to item: APICourseContentItem) throws(CourseContentError) {
         let title = try edit.title.map(validatedTitle)
         let kind = try parseKind(edit.kind)
+        // An attached item renders as buttons on its assignment's row, which a
+        // heading has none of.
+        if kind == .heading, item.assignmentID != nil { throw .headingCannotAttach }
         let links = try edit.links.map(validatedLinks)
         if let title { item.title = title }
         if let kind { item.kind = kind }
@@ -161,6 +164,11 @@ enum CourseContentService {
         _ item: APICourseContentItem, with edit: ContentItemEdit, movingTo newSectionID: UUID?? = nil,
         on db: any Database
     ) async throws {
+        // An attached item sits on its assignment's row; its section follows
+        // the assignment's, so it cannot be moved on its own.
+        if let newSectionID, newSectionID != item.sectionID, item.assignmentID != nil {
+            throw CourseContentError.attachedItemCannotMove
+        }
         try apply(edit, to: item)
         if let newSectionID, newSectionID != item.sectionID {
             item.sectionID = newSectionID
@@ -180,6 +188,56 @@ enum CourseContentService {
         item.sortOrder = try await nextSectionItemSortOrder(
             courseID: item.courseID, sectionID: sectionID, db: db)
         try await item.save(on: db)
+    }
+
+    /// Attaches `item` to an assignment (`assignmentID`), or detaches it
+    /// (nil), and saves. An attached item renders on the assignment's row, so
+    /// it takes the assignment's section. Detaching puts it at the end of the
+    /// lane of the assignment's section at that time. Refuses an assignment in
+    /// another course, and a heading. No change when the attachment is
+    /// already as asked.
+    static func attach(
+        _ item: APICourseContentItem, toAssignment assignmentID: UUID?, on db: any Database
+    ) async throws {
+        guard assignmentID != item.assignmentID else { return }
+        guard let assignmentID else {
+            // The assignment may have moved weeks since the attach: the item
+            // lands in its current one.
+            if let current = item.assignmentID, let assignment = try await APIAssignment.find(current, on: db) {
+                item.sectionID = assignment.sectionID
+            }
+            item.assignmentID = nil
+            item.sortOrder = try await nextSectionItemSortOrder(
+                courseID: item.courseID, sectionID: item.sectionID, db: db)
+            try await item.save(on: db)
+            return
+        }
+        guard item.kind != .heading else { throw CourseContentError.headingCannotAttach }
+        guard let assignment = try await APIAssignment.find(assignmentID, on: db),
+            assignment.courseID == item.courseID
+        else { throw CourseContentError.assignmentNotInCourse }
+        item.assignmentID = assignmentID
+        item.sectionID = assignment.sectionID
+        try await item.save(on: db)
+    }
+
+    /// The id of the assignment that `publicID` names in `item`'s course, as an
+    /// attach target: nil for a blank value (a detach). Shared by the web
+    /// "Show on" field and MCP `attach_content_item`. A public ID that names
+    /// no assignment in the course is refused without saying whether it
+    /// exists in another course.
+    static func attachTarget(
+        publicID raw: String, for item: APICourseContentItem, on db: any Database
+    ) async throws -> UUID? {
+        let publicID = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !publicID.isEmpty else { return nil }
+        guard
+            let assignment = try await APIAssignment.query(on: db)
+                .filter(\.$publicID == publicID)
+                .filter(\.$courseID == item.courseID)
+                .first()
+        else { throw CourseContentError.assignmentNotInCourse }
+        return try assignment.requireID()
     }
 
     /// Deletes the item and its hosted attachment files.

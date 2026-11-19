@@ -9,6 +9,7 @@
 
 import Core
 import Fluent
+import FluentSQL
 import Foundation
 import SQLKit
 import Vapor
@@ -23,8 +24,13 @@ enum WorkerJobClaim {
     /// the claim itself is transactional, and a candidate another runner
     /// claimed between our scan and our claim yields nil, so the walk simply
     /// moves to the next candidate.
+    ///
+    /// `reportsNoCompatibleRunner` is false for a held poll's later walks
+    /// (`WorkerLongPoll`), so a held poll reports a blocked job once, not
+    /// once per wake.
     static func claimNextEligibleJob(
         body: WorkerActivityPayload, runnerProfile: RunnerCapabilityProfile?,
+        reportsNoCompatibleRunner: Bool,
         db: any Database, application: Application, logger: Logger
     ) async throws -> ClaimedJob? {
         guard try await hasPendingWork(on: db) else { return nil }
@@ -53,7 +59,9 @@ enum WorkerJobClaim {
                 return claimed
             }
         }
-        await walk.finish()
+        if reportsNoCompatibleRunner {
+            await walk.finish()
+        }
         return nil
     }
 
@@ -64,8 +72,8 @@ enum WorkerJobClaim {
     /// SELECTs (2026-07 audit). One cheap indexed existence probe answers the
     /// empty case. Deliberately a fresh DB read, not cached state: there is
     /// nothing to invalidate, it is correct across processes, and a submission
-    /// enqueued right after the probe is simply seen by the runner's next poll
-    /// — the same pickup latency the poll cadence already implies. The claim
+    /// enqueued right after the probe is seen by the held poll's next claim
+    /// attempt (`PendingWorkSignal`), or by the runner's next poll. The claim
     /// below re-reads candidates, so this never affects claim atomicity.
     ///
     /// The sort on `kind` changes no answer; it is there for the planner.
@@ -96,16 +104,49 @@ enum WorkerJobClaim {
             .first() != nil
     }
 
+    /// How many submissions are pending, counted to at most `limit`. The
+    /// held-poll watcher (`PendingWorkSignal`) compares one count with the
+    /// next, once a second while a runner poll is held.
+    ///
+    /// The inner select sorts on `kind` and stops at `limit` for the reason
+    /// `hasPendingWork` does: it keeps the planner on an index led by
+    /// `(status, kind)` whatever the statistics say, and the cap bounds the
+    /// read during a backlog. Past the cap the count stops growing, which
+    /// costs a held poll at most its hold.
+    static func pendingCount(on db: any Database, limit: Int = 1000) async throws -> Int {
+        guard let sql = db as? (any SQLDatabase) else {
+            return try await APISubmission.query(on: db)
+                .filter(\.$status == SubmissionStatus.pending.rawValue)
+                .count()
+        }
+        let row = try await sql.raw(
+            """
+            SELECT count(*) AS pending FROM (
+              SELECT 1 FROM submissions
+              WHERE status = \(bind: SubmissionStatus.pending.rawValue)
+              ORDER BY kind
+              LIMIT \(bind: limit)
+            ) AS capped
+            """
+        ).first()
+        return try row?.decode(column: "pending", as: Int.self) ?? 0
+    }
+
     /// Atomically claims one submission (#1172). It claims only the
     /// already-evaluated candidate id — ordering and the requirement-
-    /// compatibility walk stay in `evaluateAndClaimCandidate` — and returns
-    /// nil on a lost race so the walk moves to the next candidate.
+    /// compatibility walk stay in `ClaimWalk` — and returns nil on a lost race
+    /// so the walk moves to the next candidate.
     ///
-    /// A short transaction takes a row lock with `SELECT … FOR UPDATE SKIP
-    /// LOCKED` and updates the locked row. SKIP LOCKED means a row another
-    /// claimer holds is skipped (nil) instead of waited on, so concurrent
-    /// claims from any number of processes scale natively — no in-process
-    /// serialization at all.
+    /// One statement: an UPDATE whose target is a `SELECT … FOR UPDATE SKIP
+    /// LOCKED` of the row while it is still pending, returning the claimed
+    /// row. SKIP LOCKED means a row another claimer holds is skipped instead of
+    /// waited on, and a row another claimer already moved out of pending
+    /// matches nothing, so the loser gets no row at once and walks on.
+    /// Concurrent claims from any number of processes scale with no in-process
+    /// serialization. The statement is atomic on its own, so it needs no
+    /// transaction: the claim used to be BEGIN, a lock, an UPDATE, a re-read
+    /// and COMMIT, and a runner that lost races paid all five for each one
+    /// (docs/database-performance.md).
     ///
     /// Internal (not private) so the claim semantics are directly testable —
     /// the lost-race path can't be triggered deterministically through the
@@ -114,37 +155,41 @@ enum WorkerJobClaim {
     static func claimSubmission(
         id submissionID: String, workerID: String, db: any Database
     ) async throws -> APISubmission? {
-        try await db.transaction { db in
-            guard let sql = db as? (any SQLDatabase) else {
-                throw WorkerJobError.internalInconsistency(
-                    reason: "Claim transaction did not expose SQLDatabase")
-            }
-            // SKIP LOCKED: a concurrently-locked row is skipped, not waited
-            // on — the loser sees zero rows immediately and walks on to its
-            // next candidate instead of queueing behind the winner.
-            let locked = try await sql.raw(
-                """
-                SELECT id FROM submissions
+        guard let sql = db as? (any SQLDatabase) else {
+            throw WorkerJobError.internalInconsistency(reason: "The claim needs a SQL database")
+        }
+        let row = try await sql.raw(
+            """
+            UPDATE \(unsafeRaw: APISubmission.schema)
+            SET status = \(bind: SubmissionStatus.assigned.rawValue),
+                worker_id = \(bind: workerID),
+                assigned_at = \(bind: Date())
+            WHERE id = (
+                SELECT id FROM \(unsafeRaw: APISubmission.schema)
                 WHERE id = \(bind: submissionID)
                   AND status = \(bind: SubmissionStatus.pending.rawValue)
                 FOR UPDATE SKIP LOCKED
+            )
+            RETURNING *
+            """
+        ).first()
+        guard let row else { return nil }
+        do {
+            return try row.decode(fluentModel: APISubmission.self)
+        } catch {
+            // The UPDATE has committed, so a row that does not decode would
+            // stay assigned to a runner that never receives it until the
+            // stale-claim sweep. Hand it back to the queue first.
+            try await sql.raw(
                 """
-            ).first()
-            guard locked != nil else { return nil }
-
-            try await APISubmission.query(on: db)
-                .filter(\.$id == submissionID)
-                .set(\.$status, to: SubmissionStatus.assigned.rawValue)
-                .set(\.$workerID, to: workerID)
-                .set(\.$assignedAt, to: Date())
-                .update()
-
-            guard
-                let fresh = try await APISubmission.find(submissionID, on: db),
-                fresh.status == SubmissionStatus.assigned.rawValue,
-                fresh.workerID == workerID
-            else { return nil }
-            return fresh
+                UPDATE \(unsafeRaw: APISubmission.schema)
+                SET status = \(bind: SubmissionStatus.pending.rawValue), worker_id = NULL, assigned_at = NULL
+                WHERE id = \(bind: submissionID)
+                  AND status = \(bind: SubmissionStatus.assigned.rawValue)
+                  AND worker_id = \(bind: workerID)
+                """
+            ).run()
+            throw error
         }
     }
 }

@@ -140,10 +140,11 @@ struct GradeSyncSweep {
             let syncRows = target.syncRows
             do {
                 // Explicitly excluded from LEARN sync (instructor chose "Do not
-                // sync") — a deliberate no-op, distinct from "no grade item
-                // configured": clear the pending flag and record nothing, so the row
-                // reads as neither synced nor errored.
-                if target.assignment?.brightspaceSyncExcluded == true {
+                // sync", or a Class activity, whose points stay in Chickadee) — a
+                // deliberate no-op, distinct from "no grade item configured":
+                // clear the pending flag and record nothing, so the row reads as
+                // neither synced nor errored.
+                if target.assignment?.isExcludedFromGradePush == true {
                     try await clearPendingFlag(syncRows, on: db)
                     processed += syncRows.count
                     continue

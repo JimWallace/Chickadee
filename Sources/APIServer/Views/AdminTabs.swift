@@ -5,7 +5,7 @@
 // `AdminTabs`, and no other view writes the `admin-tab` classes (SwiftLint
 // `elementary_tabs_only_in_component`).
 //
-// Overview, Health Alerts and People are direct links. The other pages group
+// Overview, Health Alerts, Deployment and People are direct links. The other pages group
 // into the Data and Integrations menus, which use the nav-dropdown idiom
 // (app.js drives every [data-nav-dropdown]). aria-current goes on the item
 // that is the current page. A menu toggle navigates nowhere, so it carries
@@ -15,13 +15,14 @@ import Elementary
 
 /// One admin page. The raw value is the tab's name in the markup.
 enum AdminTab: String, CaseIterable, Sendable {
-    case overview, alerts, users, storage, retention, audit, brightspace, mcp, lti, github
+    case overview, alerts, deployment, users, storage, retention, audit, brightspace, mcp, lti, github
 
     /// The hidden h1: the group, then the page.
     var heading: String {
         switch self {
         case .overview: "Overview"
         case .alerts: "Health Alerts"
+        case .deployment: "Deployment"
         case .users: "People"
         case .storage: "Data — Storage"
         case .retention: "Data — Retention"
@@ -48,6 +49,7 @@ struct AdminTabs: HTML {
         nav(.class("admin-tabs"), .ariaLabel("Admin sections")) {
             tab(.overview, "Overview")
             tab(.alerts, "Health Alerts")
+            tab(.deployment, "Deployment")
             tab(.users, "People")
             menu("Data", [(.storage, "Storage"), (.retention, "Retention"), (.audit, "Audit Log")])
             // The MCP item is hidden when MCP is off, but /admin/mcp still

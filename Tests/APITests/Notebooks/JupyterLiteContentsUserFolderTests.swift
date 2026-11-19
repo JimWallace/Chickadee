@@ -98,12 +98,29 @@ struct JupyterLiteContentsUserFolderTests {
     @Test(arguments: [
         "/jupyterlite/api/contents/users/all.json",
         "/jupyterlite/api/contents/users/\(owner)/all.json",
-        "/jupyterlite/api/contents/users",
     ])
     func listingsAboveASetupAreRefused(path: String) async throws {
         try await withContentsApp(taCourse: "OWN") { app in
             let result = try await status(app, path)
             #expect(result == .forbidden)
+        }
+    }
+
+    /// The kernel's file system reads `users` on its way to a staff draft
+    /// (#2925). A 403 there kept the kernel from booting on WebKit (2026-11),
+    /// so a TA who is not an admin reads `users` as a student does: one child,
+    /// their own folder, and no other user named.
+    @Test func aTAReadsUsersAsTheirOwnFolderOnly() async throws {
+        try await withContentsApp(taCourse: "OWN") { app in
+            try await app.asyncTest(.GET, "/jupyterlite/api/contents/users?content=1") { res in
+                #expect(res.status == .ok)
+                let body = res.body.string
+                #expect(body.contains(#""type":"directory""#))
+                #expect(!body.contains(Self.owner))
+                let ta = try await APIUser.query(on: app.db).filter(\.$username == "jlc-ta").first()
+                let taID = try #require(ta?.id).uuidString.lowercased()
+                #expect(body.contains(taID))
+            }
         }
     }
 }

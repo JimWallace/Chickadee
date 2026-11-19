@@ -28,14 +28,12 @@ struct SubmitPage: HTML {
     var dataPageHref: String?
 
     var body: some HTML {
-        BaseLayout(title: "Submit Code", page: page) {
+        BaseLayout(title: "Submit to \(assignmentTitle)", page: page) {
             h1 { "Submit to \(assignmentTitle)" }
             div(.class("chip-row")) {
                 span(.class("chip")) { "Attempt \(chips.attemptNumber)" }
                 if let deadlineText = chips.deadlineText {
-                    span(.class("chip js-relative-time"), .data("iso", value: chips.deadlineISO ?? "")) {
-                        deadlineText
-                    }
+                    span(.class("chip")) { DueDate(iso: chips.deadlineISO ?? "", text: deadlineText) }
                 }
             }
             if aiFeedbackNotice {

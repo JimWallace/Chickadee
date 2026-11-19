@@ -132,7 +132,7 @@ private struct PassthroughResponder: AsyncResponder {
         }
     }
 
-    @Test func usersListDisablesTheRoleMenuOnTheViewersOwnRow() async throws {
+    @Test func usersListShowsNoRoleMenuOnTheViewersOwnRow() async throws {
         try await withApp(app) { _ in
             let cookie = try await loginAsAdmin("admin_routes", on: app)
             let me = try #require(
@@ -156,7 +156,8 @@ private struct PassthroughResponder: AsyncResponder {
                     let body = String(buffer: res.body)
                     let mine = selectTag(in: body, marker: myMenu)
                     let theirs = selectTag(in: body, marker: otherMenu)
-                    #expect(mine?.contains("disabled") == true)
+                    // Your own row has no role menu at all, only a badge (#3007).
+                    #expect(mine == nil)
                     #expect(theirs != nil)
                     #expect(theirs?.contains("disabled") == false)
                 })
@@ -1236,14 +1237,12 @@ private struct PassthroughResponder: AsyncResponder {
             let course = try await makeCourse(code: "CPSECT")
             let courseID = try course.requireID()
 
-            // Two sections with distinct grading modes.
+            // Two sections.
             let browserSec = APICourseSection(
-                name: "Browser Labs", defaultGradingMode: "browser",
-                sortOrder: 1, courseID: courseID)
+                name: "Browser Labs", sortOrder: 1, courseID: courseID)
             try await browserSec.save(on: app.db)
             let workerSec = APICourseSection(
-                name: "Worker Labs", defaultGradingMode: "worker",
-                sortOrder: 2, courseID: courseID)
+                name: "Worker Labs", sortOrder: 2, courseID: courseID)
             try await workerSec.save(on: app.db)
 
             let setup1 = try await makeSetup(id: "cpsect_s1", courseID: courseID, withNotebook: false)
@@ -1277,16 +1276,14 @@ private struct PassthroughResponder: AsyncResponder {
                 "Copied course not found")
             let copiedID = try copied.requireID()
 
-            // Sections should be recreated with matching names and modes.
+            // Sections should be recreated with matching names, in order.
             let copiedSections = try await APICourseSection.query(on: app.db)
                 .filter(\.$courseID == copiedID)
                 .sort(\.$sortOrder)
                 .all()
             #expect(copiedSections.count == 2, "Copy should have 2 sections")
             #expect(copiedSections.first?.name == "Browser Labs")
-            #expect(copiedSections.first?.defaultGradingMode == "browser")
             #expect(copiedSections.last?.name == "Worker Labs")
-            #expect(copiedSections.last?.defaultGradingMode == "worker")
 
             // Every copied assignment should land in the right new section.
             let copiedAssignments = try await APIAssignment.query(on: app.db)
@@ -1298,13 +1295,13 @@ private struct PassthroughResponder: AsyncResponder {
                 "All copied assignments should have a sectionID")
 
             let copiedBrowserSec = try #require(
-                copiedSections.first(where: { $0.defaultGradingMode == "browser" }))
+                copiedSections.first(where: { $0.name == "Browser Labs" }))
             let browserLab = try #require(
                 copiedAssignments.first(where: { $0.title == "Browser Lab" }))
             #expect(browserLab.sectionID == (try copiedBrowserSec.requireID()))
 
             let copiedWorkerSec = try #require(
-                copiedSections.first(where: { $0.defaultGradingMode == "worker" }))
+                copiedSections.first(where: { $0.name == "Worker Labs" }))
             let workerLab = try #require(
                 copiedAssignments.first(where: { $0.title == "Worker Lab" }))
             #expect(workerLab.sectionID == (try copiedWorkerSec.requireID()))

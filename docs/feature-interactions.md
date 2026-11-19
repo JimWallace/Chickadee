@@ -146,6 +146,38 @@ because line numbers go out of date.
   - `studentMayViewClosedAssignment` in `NotebookWorkingCopyStore`. It serves
     the closed-assignment gate and the dataset downloads.
   - `solutionVisibleToStudent`.
+  - `ContentItemVisibility`, for the material attached to the assignment.
+
+### Material attached to an assignment: `course_content_items.assignment_id`
+
+- **Rule:** a content item with `assignmentID` set is not a section item. It
+  renders as extra buttons on that assignment's row, and a student sees it
+  only when the item is published and either the student can complete the
+  assignment (`isAssignmentEffectivelyOpen`, an extension included; the
+  dashboard row's `isOpen`) or the assignment is visible by state
+  (`assignmentVisibleToStudentByState`, no future `startsAt`). Staff always
+  see it.
+- **Readers:**
+  - The student dashboard (`buildIndexDisplayGroups`) and the instructor
+    dashboard (`buildInstructorSectionItems`), which draw it in the row.
+  - `ContentFileRoutes`, which hides its hosted files from a student until
+    then.
+  - `SortOrderRenumbering`, which leaves it out of a section's item count and
+    refuses its id.
+  - `list_content_items` and `attach_content_item`
+    (`attachedAssignmentPublicID`).
+- **Writers:** the material edit form's "Show on" select and MCP
+  `attach_content_item`. Both resolve the target with
+  `CourseContentService.attachTarget` and write with
+  `CourseContentService.attach`, which also moves the item to the
+  assignment's section. A new door calls those two; it does not set
+  `assignmentID` itself. `CourseSectionService.moveAssignment` (the
+  dashboard move and MCP `set_assignment_course_section`) moves it with its
+  assignment in the same transaction, leaving its `sortOrder`.
+  `AssignmentDeletion` detaches it into the
+  assignment's section at that time, as a detach does. The course clone and
+  the bundle export and import carry it. `CourseContentService.update`
+  refuses to move an attached item to a section or make it a heading.
 
 ### The reveal moment: `postDeadlineRevealDeadline`
 
@@ -213,6 +245,54 @@ because line numbers go out of date.
   them shipped with no guard. Every route that serves solution content must
   call `requireSolutionVisible`.
 
+### A test's cell pin: `TestSuiteEntry.anchor`
+
+- **Writers:** `SuiteAnchorPinning.apply`
+  (`Services/SuiteAnchorPinning.swift`), called by the web
+  `PUT /instructor/:id/suite-anchor` route and by MCP `update_suite`.
+  `makeWorkerManifestJSON(preserving:)` carries a pin across a suite rewrite.
+- **Readers:**
+  - `NotebookTestAnchoring` (`Sources/Core/NotebookTestAnchoring.swift`),
+    rule 1 of the anchors.
+  - The staff suite outline (`InstructorSuiteOutlineBuilder`), the student
+    guide (`NotebookGuideBuilder`) and MCP `get_suite`, all through
+    `SuiteAnchorResolution` (`Services/SuiteAnchorResolution.swift`). All
+    three read the solution, or the template starter before a solution
+    exists, so they agree on a test's cell. A change to the rules goes in
+    Core; a change to the notebook choice or the reported form goes in
+    `SuiteAnchorResolution`.
+  - The `RunnerManifest` init removes it, so no runner receives it.
+- **Rules** (`docs/notebook-guide.md`, "Pin to a cell"):
+  - Only a hand-written entry can be pinned. A generated entry is anchored by
+    its family or check.
+  - Grading never reads a pin, so a pin alone does not close, re-grade or
+    re-validate. An MCP `update_suite` call that sets only pins stays out of
+    `finalizeContentEdit`.
+  - A caller that saves another edit before the pins checks the pins first
+    (`SuiteAnchorPinning.refusal`), so a refused pin cannot leave a changed
+    suite that nothing re-validated.
+
+### A guide task's title and header cell: `ck:tasks`
+
+- **Writer:** `placeTasks` in the editor extension
+  (`Tools/jupyterlite/chickadee-extension/src/guide.ts`), which `GuideView`
+  posts in `ck:tasks` after each redraw as `title` and `cell`.
+- **Readers:**
+  - The editor's task header (`taskHeader` in `guideView.ts`) and
+    `GuideView.taskOf`, which drives `ck:active-cell`.
+  - The page outline (`rowLabels` and the row click in
+    `Public/notebook-guide.js`).
+- **Rules** (`docs/notebook-guide.md`, "Which heading, and the title"):
+  - The header and the outline row show the same text. The extension works it
+    out (notebook heading, else the section name as written, else the
+    server's name); the page only falls back to the last two when no
+    extension has sent one.
+  - A row click reveals the cell the editor placed the task at (its first
+    anchored cell, else its header cell), not a heading or name the notebook
+    may lack.
+  - An ambiguous anchor does not place a task that has another, and does not
+    decide `starter` or "edited since".
+
 ### Failure detail: `TestSuiteEntry.failureDetail`
 
 - **Writers:** the suite, family and notebook-check editors, and their MCP
@@ -261,11 +341,25 @@ because line numbers go out of date.
   - On an activity that runs per lab group, no writer writes
     `class_item_coverage`. A new writer of item coverage branches on the
     lab the same way.
-  - The whole class's `class_item_coverage` has two readers: the sweep's
-    whole-class branch and the instructor's coverage section
-    (`buildAssignmentCoverageRows`). That section treats no rows as "not a
-    contribution assignment", so it is empty on a per-group activity; it
-    has no lab reader yet.
+  - The whole class's `class_item_coverage` has three readers: the sweep's
+    whole-class branch, the instructor's coverage section
+    (`buildAssignmentCoverageRows`), and a bug hunt's board
+    (`BugHuntCoverage.read`, `docs/bug-hunt-code-map.md`). The coverage
+    section treats no rows as "not a contribution assignment", so it is
+    empty on a per-group activity; it has no lab reader yet. A bug hunt
+    cannot run per lab group, so its board reads the whole class only.
+  - A bug hunt's board looks items up by the runner's outcome name of each
+    listed script (`runnerOutcomeTestName`). Renaming a listed entry's
+    display name after the class has covered it leaves the old row under
+    the old name, and the board reads that item as uncovered.
+  - A bug hunt's `items` name suite scripts, and only `set_activity` checks
+    them (`ActivityAuthoring.validateBugHunt`). A suite edit that removes or
+    renames a listed script leaves an item that no result can cover, so the
+    board stops short of 100%. Call `set_activity` with the new list after
+    such an edit.
+  - Only a contribution assignment writes these rows (a starter with slot
+    cells). A bug hunt whose starter has none saves, and its board says so
+    (`BugHuntPresentation.recordsCoverage`).
   - Turning `runsPerGroup` off leaves the lab coverage unread: the item
     goal counts from `class_item_coverage` again.
   - Course delete removes it (`LabGoalGroups.deleteClassGoalData`).
@@ -360,6 +454,7 @@ because line numbers go out of date.
   - `SuiteEntryBuilder`.
   - `makeWorkerManifestJSON(preserving:)`.
   - A version restore.
+  - The cell pin only (`anchor`): `SuiteAnchorPinning`, below.
 - **Readers:**
   - The native suite mapping
     (`Sources/Worker/RunnerDaemon+SuiteExecution.swift`).
@@ -412,6 +507,25 @@ because line numbers go out of date.
 - **Trap:** the old manifest's dependencies were once carried forward. This
   made family dependencies "sticky", with references to deleted files that no
   edit could remove.
+
+### A Python submission's own exit: `_check_submission_exit`
+
+- **Writer:** `_check_submission_exit` in `Tools/runner-support/test_runtime.py`.
+  A `SystemExit` raised in a student file becomes an error (`SystemExit(2)`).
+- **Callers:** the native bootstrap (`Sources/Worker/ScriptInvocation.swift`)
+  and the browser grading cell (`runScriptCellPython` in
+  `Public/python-grading-shared.js`).
+- **Readers:** notebook checks that call `student_main_state`, whose exit
+  reaches the test script. The `programIO` family catches the student's exit
+  itself, so the check never sees it.
+- **Rules:**
+  - Both graders call this one function, so they cannot disagree about which
+    exits count. Change the rule there, not in either caller.
+  - The browser cell skips the check when the loaded helper lacks it, so it is
+    only as strict as the helper it loads.
+- **Parallel paths:** the R, Lua, Octave and Racket runtimes each carry their
+  own exit check, with no shared function. A change to the rule for one
+  language does not reach the others.
 
 ### Does a pattern kind call a function: `PatternKind.callsFunction`
 
@@ -527,6 +641,30 @@ because line numbers go out of date.
     counts only when every element is a string. A change to one must go to
     the other.
 
+### A stored starter notebook holds no outputs: `NotebookOutputs`
+
+- **Invariant:** the starter notebook stored for a setup has no cell outputs,
+  execution counts or execution timing, so students run each cell themselves.
+  The author's own working copy and the solution notebook keep theirs.
+- **Writers:** every starter write clears them. `starterNotebookForStorage`
+  normalizes and clears; it is called by
+  `AssignmentAuthoringService.writeAssignmentNotebook` (the editor save, MCP
+  `update_notebook` and `create_assignment`), the new-assignment save, Save &
+  Validate (`persistAssignmentNotebook`), the draft upload, and both
+  `TestSetupRoutes` writes. Course bundle import and version restore call
+  `NotebookOutputs.stripped` directly. A starter read from the setup zip is
+  cleared in `resolveNotebook`. `StripStarterNotebookOutputs` cleaned the files
+  stored before this. A new starter write site must clear them too.
+- **Comparisons that must agree:** `sameDraftContent` (the server-drive draft
+  sync) clears each cell with `NotebookOutputs.clearingRunState`, and the
+  `refreshFromSeed` path of `ensureUserNotebookWorkingCopy` compares both sides
+  after `NotebookOutputs.stripped`. If either compared outputs, every save
+  would make the author's copy look stale and rewrite it under the open editor.
+- **Versioning:** the migration rewrites files without recording a version, and
+  a restore of a snapshot taken with outputs stores the cleared bytes. So
+  restoring that snapshot a second time is not `alreadyCurrent`; it records
+  another version.
+
 ### Grading and submission mode: `effectiveGradingMode`, `effectiveSubmissionMode`
 
 - **Rule:** every consumer reads the effective value, not the raw field. Only
@@ -544,6 +682,67 @@ because line numbers go out of date.
   decode, `decodeManifestGradingMode` seeds the notebook page with `browser`,
   but `requireBrowserRunnerAccess` refuses a student. The runner then fails
   with a visible error and fails over to the worker. Nothing leaks.
+
+### The declared assignment type: `assignments.assignment_type`
+
+- **Rule:** the type is declared, never inferred from a title.
+  `AssignmentType.derivedDeclaration` (effective grading mode, then the
+  `activity` block) runs only where a row is created and in the one-time
+  `BackfillAssignmentType`, and each records the result at once
+  (docs/assignment-types.md).
+- **Rules the type carries** (phase 2): an Assignment refuses browser grading
+  (read as the effective mode), and a Class activity needs an `activity`
+  block. Both live in `ManifestCoherence.typeViolations`, so every door that
+  checks the manifest rules checks them, and an edit is refused only for a
+  rule it introduces (`violation(for:introducedBy:in:)`), never for one the
+  row inherits. A row that stores no type (`declaredAssignmentType` nil, test
+  fixtures only) gets no type rule.
+- **Writers of the type:** every creator through
+  `NewAssignmentFields.assignmentType` (no default): the new-assignment page
+  (its Type select, which starts on the "+ Add" menu's `?type=`, else
+  Assignment), MCP
+  `create_assignment` (its `assignmentType`, else the derivation), quick
+  publish (the derivation). The clone and the bundle import carry the type
+  through `admissibleAssignmentType`, which turns a browser-graded Assignment
+  into a Lab and copies anything else as it is. A change of type goes through
+  `AssignmentTypeChange.apply` (the edit page's Type select and MCP
+  `update_assignment`): it checks `ManifestCoherence.violation(declaring:over:in:)`
+  and writes an `assignment.type_changed` audit record.
+- **Writers that must check the type:** every writer of the grading mode, the
+  submission mode, the language or the activity: `setManifestGradingMode`,
+  `setManifestSubmissionMode`, `changeDeclaredLanguage`,
+  `ActivityAuthoring.setActivity` (each reads `declaredAssignmentType(of:)`),
+  MCP `set_grading_mode`, `set_submission_mode` and
+  `restore_assignment_version`. A new writer of one of those fields passes
+  the type to `ManifestCoherence`; nil is right only where no assignment row
+  exists yet (the zip upload) or the edit cannot change a type rule (a
+  dataset edit).
+- **Readers:** the row tile on the instructor dashboard, the student course
+  page and the admin course page (`AssignmentTypeTile`), MCP `get_assignment`,
+  `check_assignment` (the type rules are `manifest.incoherent` findings), the
+  bundle export, the BrightSpace sweep and the frozen class-goal requeue
+  (`APIAssignment.isExcludedFromGradePush`), the LTI AGS sweep, the
+  BrightSpace result flag (`flagResultForBrightSpaceSync`) and the BrightSpace
+  grade-clear sweep (`AssignmentType.pushesGradesToLMS`), and the slip-day offer, the claim
+  state and the dashboard's slip-day action (`AssignmentType.allowsSlipDays`).
+- **Parallel path that differs on purpose:** the LTI sweep reads only the type,
+  because it never read the BrightSpace "Do not sync" flag.
+- **Known gap:** the BrightSpace page (`BrightSpacePagePresenter`) still shows a
+  Class activity's mapped grade item rather than "Do not sync", and "Push all"
+  can still queue its rows, which the sweeps then drop without sending.
+- **Fact:** a section has no grading mode and no type. A section move changes
+  neither the type nor the grading mode.
+
+### A new item's type: the "+ Add" menu's `?type=`
+
+- **Rule:** a section never chooses a type. The Overview's "+ Add" menu links
+  each graded type to `/instructor/new?type=…`; the create page's Type select
+  starts there, else on Assignment (`newAssignmentDeclaredType`).
+- **Writers:** `AssignmentsPage` (`AddItemMenu`).
+- **Readers:** `newAssignmentPage` (`DraftAssignmentRoutes+NewAssignment`).
+- **Fact:** the dead columns `course_sections.default_assignment_type` and
+  `default_grading_mode` stay in the table, unmapped, so the old color of a
+  blue-green deploy can read it. A later release drops them.
 
 ### What a runner receives: `RunnerManifest` and the cache key
 
@@ -624,7 +823,11 @@ coordination, and each must see every edit.
     stops at the first claim. `collectClaimCandidates` is the eager form for
     callers that need the whole order.
   - Fresh and retest student work share one 50-row scan cap: retests fill
-    what fresh work leaves.
+    what fresh work leaves. Fresh work is read in two pages: the first 10,
+    then the rest only when none of the 10 can be claimed
+    (`ClaimCandidateGroup.freshStudentRest`, keyset from the last row's
+    time). A change to the fresh pass's order or filter must change both
+    pages.
   - The validation groups throw on a missing setup or an undecodable
     manifest. The other groups skip the candidate.
   - A new submission kind that a runner grades needs a group here, or no
@@ -648,6 +851,79 @@ coordination, and each must see every edit.
     `submissions` on every poll. Check a new candidate query with
     `EXPLAIN` under statistics taken during a backlog.
 
+### A submission's claim and the result it takes: `worker_id`, `assigned_at`, `ResultClaimCheck`
+
+- **Writers:** the claim statement (`WorkerJobClaim.claimSubmission`) sets
+  `status = assigned`, `worker_id` and `assigned_at`. Three paths re-queue a
+  row and clear both: a forced retest
+  (`bulkFlipStudentSubmissionsToPending(force: true)`), the stuck-submission
+  reaper (`reapStuckAssignedSubmissions`) and the claim's own decode-failure
+  rollback.
+- **Readers:** result ingest (`ResultRoutes.reportResults`) accepts a report
+  only when `ResultClaimCheck.lockCurrentClaim` finds the row `assigned` to
+  the reporting runner (the signed `X-Worker-Id`), or `complete` under its
+  claim (a replay), and, when the report echoes `claimToken`, only for the
+  claim whose `assigned_at` that token names (`WorkerClaimToken`). A report
+  with no `X-Worker-Id` is checked by its token alone. Anything else is HTTP
+  410, and the runner drops the job (`ReporterError.claimSuperseded`).
+- **Rules:**
+  - A new path that re-queues an `assigned` row must clear `worker_id` and
+    `assigned_at`, or the old claim's report still completes it.
+  - A new path that posts a worker result must claim the row first. Tests
+    that seed a row directly call `markClaimedForResultReport`. The
+    visual-regression seed (`Tools/visual-regression/seed.mjs`) claims each
+    row in its scratch database with `assigned_at = submitted_at` and posts
+    the token with no runner id, so the `/admin` baseline shows no runner
+    and a fixed queue wait.
+  - A replay that passes the gate runs the whole ingest again: a second
+    result row and the effects again, as before the gate (a replayed
+    tournament report finishes an advance that failed, #2184).
+  - The browser result (`BrowserResultRoutes`) is not gated: it creates its
+    own `complete` row in the same request, so no claim can go stale.
+- **Trap:** a forced "Retest all" re-queued rows mid-grade, and the old
+  claim's report completed the row with the old suite's grade, so the retest
+  never ran, or added a second result beside the retest's own.
+
+### Held runner polls: `PendingWorkSignal`, `WorkerLongPoll`
+
+- **Writers:** `SubmissionIntake.accept` calls `notify()` once a `pending`
+  student row is committed. The signal's own watcher calls it when
+  `WorkerJobClaim.pendingCount` rises, once a second while a poll is held.
+  `PendingWorkSignalLifecycleHandler` closes it at shutdown.
+- **Readers:** `WorkerJobRoutes.requestJob`, for a poll whose
+  `WorkerActivityPayload.longPollSeconds` asks for a hold. The runner's
+  `JobPoller.pollForJob` reads the `WorkerLongPoll.heldHeader` on the 204.
+- **Rules:**
+  - Call `notify()` after the row is committed, not inside the transaction
+    that writes it. A poll woken before the commit cannot see the row, and
+    goes back to waiting until the watcher counts it.
+  - Call it after the row's other effects too. A woken poll claims the row
+    at once, and the claim's `recordJobAssigned` writes the same
+    `JobExecutionMetric` and `APISubmissionDiagnostics` rows that
+    `recordSubmissionCreated` writes; neither write takes a lock, so the two
+    must not overlap.
+  - Every other path that makes a row pending (validation runs, retests, the
+    stuck-claim reaper, a second server process during a cutover) relies on
+    the watcher. Its pickup usually takes up to a second, and at worst the
+    rest of the hold: the watcher misses a row that arrives between a poll's
+    last claim and its first count, or in the same second that another row
+    is claimed. A path a student waits on calls `notify()` too.
+  - A held poll walks the claim again on every wake, but reports a job no
+    compatible runner can take only on its first walk
+    (`reportsNoCompatibleRunner`), so the blocked-job count stays a count of
+    jobs, not of wakes.
+  - The time a held poll waits (`Request.heldPollWait`) is left out of its
+    request timing, so the hot-path stats and `request_metrics` still
+    measure the server's work.
+  - The watcher wakes polls only when the count rises. A pending row that no
+    runner can claim must not wake the held polls on every count.
+  - The hold stays below the runner's 30 s request timeout
+    (`WorkerLongPoll.maxHoldSeconds`). The close runs before Vapor waits for
+    in-flight requests, so a deploy's drain does not wait for a held poll.
+  - Each side falls back alone: a poll without `longPollSeconds` is
+    answered at once, and a runner that gets a 204 without the header backs
+    off as before.
+
 ### Pending queue depth: `pendingQueueDepth`, `queueDepthForLog`
 
 - **Writer:** `OperationalDiagnosticsService` counts pending rows
@@ -663,6 +939,23 @@ coordination, and each must see every edit.
     (`ServerHealthAlertService.loadPendingQueueState`).
 - **Rule:** only those two log lines may read `queueDepthForLog`. An alert, a
   page, an MCP tool or any decision reads the exact count.
+
+### A health alert's summary and details: `RuleEvaluation`
+
+- **Writers:** each rule's `decide…` function in `ServerHealthAlertService`,
+  `RunnerMissingRule`, `UnclaimableJobsRule`, `DeployerHealthRule`,
+  `DiskSpaceRule` and the two course-link rules. They read runner IDs from
+  `WorkerActivityStore`, assignment titles from `APIAssignment` and
+  `brightspace_sync_log`, and the deploy daemon's `status.json`.
+- **Readers:** the webhook (`AlertSender.text` wraps the summary), the
+  `/admin/alerts` recent-firings list, and MCP `get_health_alerts`. All three
+  pass the summary through as text. The cooldown keys on the rule and
+  `isFiring`, never on the summary text.
+- **Rule:** a summary names what it is about, gives a time in minutes or
+  hours, and says where to look. A list of names goes through
+  `alertNamedList` (`Utilities/AlertText.swift`), which stops at five; the
+  full list goes in `details`. Names are runner IDs and assignment titles,
+  which staff chose; no student's name or data goes in an alert.
 
 ### The per-student seed, inputs and datasets
 
@@ -686,6 +979,144 @@ coordination, and each must see every edit.
     (`docs/datasets.md`).
   - `variesPerStudent` is not a wider `hasPersonalization`. Each predicate
     has its own readers. Do not use one in place of the other.
+  - Whether a dataset is the same for every student is
+    `DatasetDeliveryMode.init`, and nothing else states it. Its modes are
+    `shared`, `perPart` and `perStudent`. Four features read it: the working-copy writer (`writeDatasetFiles`), `isShared` (the
+    ranked activities), the Files panel note (`DatasetDeliveryNote`) and MCP
+    `datasetDelivery`. A `shared` dataset is a link to the shared extraction
+    in the working copy; a `perStudent` one is a real file
+    (`docs/dataset-shared-delivery.md`).
+  - A library attachment's sample that covers its whole file is not stored:
+    `applyDatasetsEdit` (the web and `set_dataset`) and the library attach
+    pass it through `DatasetWholeFileNormalization.swift`, which drops the
+    sample and keeps the spec. The mode therefore turns `shared`, so the
+    working-copy writer links the file and a ranked activity (`isShared`)
+    accepts it. The coherence check runs on the normalized specs. A plain
+    file's spec is never dropped by this: `StudentDatasetDelivery` and the
+    submit page's dataset links (`SubmitDatasetLink`) read "a spec exists",
+    and an upload-only student receives the file only through them. The
+    update to another version keeps its sample. Any new door that saves a
+    library spec must call `normalizedForSave`. `WholeFileSampleCheck` and
+    the MCP warnings use the same rule (`DatasetWholeFileSample.deliversWholeFile`).
+  - A write never goes through a dataset link:
+    `DatasetWorkingCopyPlacement.write` removes the link first. A change of
+    mode is reconciled on the next visit by `datasetTargetIsCurrent`, which
+    asks for each target's form, not only its presence.
+  - A partition's parts are stored once per fingerprint under
+    `{testSetupsDirectory}dataset-parts/<setupID>/` (`DatasetPartStore`), and
+    each student's working copy links to their part. Three features meet
+    there: the working-copy writer publishes and sweeps it, the links of
+    every student in the assignment read it, and `DiskUsage` counts it with
+    the setup. Rules: a published fingerprint directory is never written
+    again; the bytes come from `DatasetMaterializer.allParts`, pinned to what
+    grading materializes; a sweep keeps every current fingerprint and removes
+    a superseded one a day after it first marks it. The part a student is
+    dealt is `DatasetSpec.part(forDeal:)` for the materializer, the stored
+    part names and `DatasetLinkTargets` alike, so a change to that rule moves
+    all three. Where a student's copy belongs is
+    `DatasetLinkTargets.placement`, which both the writer and the skip check
+    read.
+
+### Dataset format: `DatasetFormat`
+
+- **Objects:** `DatasetSpec.format` (`csv` or `fhirNdjson`), decoded as `csv`
+  and encoded only when it is not, so a stored manifest keeps its bytes
+  (`docs/fhir-datasets-plan.md`). `DatasetSpec.unknownFormat`: a stored value
+  this server does not know, kept as written. `DatasetFormat.capabilities`
+  (`DatasetCapabilities`: sample, stratum, partition, transforms, unit name),
+  read through `DatasetSpec.capabilities`, which selects nothing for an
+  unknown format (`docs/dataset-kinds-plan.md`).
+- **Readers that branch on the format:**
+  - **Selection reads `capabilities`, never `format`.**
+    `DatasetMaterializer.materialize`: a spec whose capabilities select
+    nothing is delivered as the source bytes, whatever it asks for.
+  - `DatasetDeliveryMode.init`: such a spec is always `shared`. The Files
+    panel row carries `datasetCapabilities` so its note reads the same rule.
+  - `DatasetSpec.part(forDeal:)`, `TestProperties.hasPartitionedDatasets` and
+    `DatasetDeals.withholdingUndealtParts` read `capabilities.partition`.
+  - Two copies that must agree: `SupportFileRow` writes the sample
+    capability on the row (`data-dataset-sample`), and
+    `Public/support-files.js` reads it to hide the sample fields. The view
+    also hides the per-student toggle and the "Course-wide rows" box of a
+    spec that selects nothing.
+  - **A name's format:** `DatasetFormat.candidates(forFilename:)` lists the
+    formats an extension could be; `entersThroughLibrary` says which formats
+    become datasets only through the library (FHIR). Promote, the save-time
+    checks and the Files panel read these, not "ends in `.ndjson`".
+  - **An unknown format** (written by a newer server): the spec decodes,
+    re-encodes as written, delivers whole and is refused at save
+    (`unknownFormatIssue`); every rebuild carries it (`set_dataset`,
+    `withScope`, `withoutLibraryFields`), and `libraryFieldIssue` compares
+    it. The zip upload carries such a spec through untouched. MCP and the
+    download report `formatName` and `mediaType`, never `csv`. A bundle
+    refuses an unknown format by name (`BundledDatasetFormatError`), so a new
+    format needs no new bundle `schemaVersion`.
+  - `DatasetSpecValidation.issue`: `capabilityIssue` refuses each setting
+    the format's capabilities lack (for FHIR: a sample, a partition, a stratum
+    and transforms); a FHIR spec needs a `.ndjson` name and a file that passes
+    `FHIRNdjsonProfile`; a CSV spec refuses a name of a format that enters
+    through the library.
+  - `datasetSpecRefusal` reads the file for every FHIR spec, and the zip
+    upload runs the same format checks (`datasetFormatRefusal`). Bundle
+    import, clone and restore copy the manifest as it is, as for every other
+    spec rule.
+  - `datasetDiagnosticsReports` skips a FHIR spec: there is nothing to
+    estimate when every student gets the whole file.
+  - `CourseDatasetService` (P2): `create` and `addVersion` check a file by
+    the dataset's format (`checkedFile`); a FHIR version stores a
+    `DatasetDescription` envelope in `summary_json` (a row written before the
+    envelope holds a bare summary, which reads the same), its patient count in `row_count` and no columns. Attach and
+    update take the format from the library dataset, promote from the file's
+    extension. `sourceIssue` refuses a spec whose format is not its dataset's,
+    so the whole-manifest doors drop that source.
+  - The clone (`copyLibrary`) copies the format and the summary. The bundle
+    writes `schemaVersion` 3 when a dataset is not CSV
+    (`CourseBundleManifest.schemaVersion(carrying:)`), and the import checks a
+    FHIR version's bytes and recomputes its summary.
+  - The staff download names the file and its type by the format; the
+    student download sends the spec's media type.
+  - A FHIR version's `row_count` is patients, not lines. MCP `get_dataset`
+    reads `truncated` from the file's lines for FHIR, not from `rowCount`.
+  - The pages (P3): the Datasets tab takes the format at create and words a
+    version's `row_count` by it (`InstructorDatasetDetail.countText`). The
+    dictionary route edits a FHIR version's summary
+    (`updateFHIRDictionary`): the prose of each type and code, and the
+    example. A new version and a bundle import carry that prose
+    (`carryingNotes`). The Data page shows the summary and the example, and
+    the student download is `mine.ndjson` for a FHIR spec (both names serve
+    the same bytes). The upload page's data line says "every patient". The
+    Files panel hides the sample fields on a FHIR spec, in the view and in
+    `Public/support-files.js`, and the "Course-wide rows" box on a FHIR
+    attachment. An `.ndjson` file that is not a dataset shows no per-student
+    control, only "Move to course library" (`withLibraryStates`).
+  - The MCP tools (P3): `create_dataset` takes `format` and refuses a
+    filename of the other format by name; `get_dataset` reports `format` and
+    the version's description (`DatasetDTO.summary`, the
+    `DatasetDescription` envelope), and
+    `get_dataset` shows resource lines with no header. `list_datasets`
+    reports the format but not the summary, which can be large. The write
+    tools return the summary of the one dataset they change.
+    `update_dataset` edits a FHIR dictionary by `entries` and `example` and
+    refuses `columns` on it, and the reverse. `attach_dataset` and
+    `get_assignment` report an attachment's format as `format`
+    (`AttachedDatasetDTO`); `get_support_files` reports it as
+    `datasetFormat`, beside its other `dataset*` fields.
+    The `DatasetToolSchema.format` enum derives from `DatasetFormat.allCases`.
+- **Rules:**
+  - A line of a FHIR file is never re-encoded on any delivery path.
+  - Every rebuild of a `DatasetSpec` carries `format`, as it carries the
+    library fields and `partCount`.
+  - Only the library attach path sets the format
+    (`DatasetSpecValidation.libraryFieldIssue`).
+  - A library dataset's format is fixed at create; a version of another
+    format is refused.
+  - FHIR dictionary prose sits on an entry of the summary, so it can name
+    only what the file holds. Anything that recomputes a summary carries the
+    prose and the example pick from the one before it.
+  - A place that must act differently per format switches over every
+    format, with no `default` and no `==`, so a new format does not compile
+    until it answers.
+  - A new format updates every reader above, or says why it does not.
 
 ### Dataset transform kinds: `DatasetTransform.Kind`
 
@@ -762,6 +1193,13 @@ coordination, and each must see every edit.
     `subject_user_id` metadata key, so `AuditLogger.recordDatasetWrite` sets
     `title` to the dataset name. A new course-scoped audit action must set one
     of those keys, or its row shows a bare UUID.
+  - The edit page's Files panel, and the workbench's Files sheet, list an
+    attached file (`SupportFileLibraryState.attachment != nil`) in the
+    Datasets table, apart from the support files (`EditDatasetsBlock`), with
+    the library's actions only, because the delete door refuses an attached
+    file. A new action on a `SupportFileRow` must say which of the two kinds
+    it applies to. `Public/support-files.js` finds rows by
+    `tr[data-support-file]` in either table.
 
 ### The result: `TestOutcomeCollection` counts and the grade
 
@@ -770,9 +1208,17 @@ coordination, and each must see every edit.
   - The browser runner (`buildCollection`). It calculates counts only.
   - The server (`reconcileBrowserCollection`). It calculates the points
     again, but keeps the counts from the browser.
-- **Parallel paths.** Two formulas calculate the grade percent:
+- **Parallel paths.** These calculate the grade percent, and each must equal
+  `GradePercent.of`, where only a full mark reads 100:
   - `gradePercent(from:)` in `Utilities/TierFilter.swift`.
   - `CollectionGradeFields` in `Utilities/CollectionGradeFields.swift`.
+  - `GradeResultSummary.gradePercentValue`, from the result's grade columns.
+  - `GradePercentSQL`, the SQL fold behind the dashboard, the roster and
+    the grades CSV. `GradePercentFoldTests` runs it and the Swift fold on
+    the same rows.
+- **Parallel paths.** `gradeColumnsRows` (`BestGradePercentBySubmissionID.swift`)
+  names the result's grade columns twice: in its raw SELECT and in its
+  Fluent fallback. A new grade column goes into both.
 - **Rules:**
   - `ResultIngestEffects` is the one ingest chokepoint. The worker path, the
     browser path and the tournament arena all use it. Put a new side effect
@@ -780,6 +1226,67 @@ coordination, and each must see every edit.
   - A browser result is authoritative, and a student can forge it
     (`docs/grading-integrity.md`). A feature that trusts a value in a result
     has the same risk.
+- **The result page's count tiles are not these counts.** `ResultCountTiles`
+  (`Routes/Web/SubmissionResultPresenter.swift`) puts each outcome in exactly one tile.
+  A test that the dependency gate skipped counts once, as Skipped, and not
+  also as Failed. The collection's `failCount` still counts it as a fail,
+  and the API and MCP report the collection's counts. The difference is
+  intended (UI audit #3007, finding 2). Do not "fix" one to match the other.
+  A collection with no outcomes keeps its own counts on the tiles.
+
+### Submission state words and "waiting": `SubmissionStatus.displayLabel`, `awaitsResult`, `badgeClass`
+
+- **Defined in:** `Utilities/SubmissionStatus+Display.swift`, next to the
+  enum's other `APIServer` code.
+- **Readers:**
+  - The result page. `SubmissionResultPresenter` sets `isPending` from
+    `awaitsResult`, which decides the pending band and the poll.
+  - The state poller. `SubmissionStateRegion` renders the band inline and as
+    the `?fragment=state` response that `Public/table-poll.js` swaps in; a
+    state that does not await a result renders the final marker that
+    `Public/app.js` answers with a reload.
+  - Both history tables (`SubmissionHistoryPage`,
+    `StudentAssignmentHistoryPage`), through `displayLabel(forRaw:)` and
+    `badgeClass(forRaw:)`.
+  - The wardrobe grant in `WebRoutes+Submission`. It grants no item while
+    the submission awaits a result, because the page shows no Earned toast
+    then, and an item granted with no toast never gets one. The page and the
+    grant must agree.
+- **Rules:**
+  - `awaitsResult` is the only "waiting" test. Do not test
+    `status == .pending` by hand on a page or before a grant. If the page
+    and the poller disagree, a page can poll forever or never poll. If the
+    page and the grant disagree, an item is granted with no toast.
+  - The re-queue guard in `flipSubmissionToPending`
+    (`RunnerValidationService`) is not a "waiting" test. It asks whether the
+    queue already holds the row (`.pending`, `.assigned`), and the server
+    never writes `.running`.
+  - A new `SubmissionStatus` case needs a `displayLabel`, an
+    `awaitsResult` and a `badgeClass` answer. Only a state where something
+    went wrong takes `tier-danger` (today `.failed`). Student words name no "runner" or "worker".
+- **Trap:** the page once treated only `.pending` and `.assigned` as
+  waiting, while the poller also waited on `.running`. A page first loaded
+  in `.running` showed empty results and did not poll. After that fix, the
+  wardrobe grant still tested `.pending` and `.assigned` by hand, so a
+  `.running` retest granted an item with no toast (#3018 review).
+
+### Data export state on the account page: `AccountExportStateRegion`
+
+- **Defined in:** `Views/Pages/AccountPage.swift`.
+- **Writers:** `APIDataExport.status`, set by the export task and by
+  `DataExportRecoveryService`, which moves a stuck `pending` row to `failed`.
+- **Readers:**
+  - The account page renders the region while the row is `pending`.
+  - `GET /account/export/status?fragment=state` renders it for
+    `Public/table-poll.js`. Any state that is not `pending` renders the
+    `data-export-final` marker.
+  - `Public/app.js` reloads `/account` when the marker appears.
+- **Rules:**
+  - The page and the fragment must agree on "pending". If the fragment
+    called a state pending that the page does not, the page would poll
+    forever. The recovery sweep exists so that no row stays `pending`.
+  - The plain JSON from `/account/export/status` is unchanged for any other
+    request (#3007).
 
 ### Browser and native grades differ: `gradeSourceDisagreement`
 
@@ -812,8 +1319,9 @@ coordination, and each must see every edit.
     with `.submission` itself; nothing forces it. The intake owns the file write, the row, the attempt number
     and every effect of a saved row. Put a new effect of a new submission
     there, not in one door.
-  - A `pending` row records the "accepted" and "enqueued" diagnostics and
-    wakes the local runner. A `complete` row (a browser result) does neither,
+  - A `pending` row records the "accepted" and "enqueued" diagnostics, wakes
+    the runner polls the server holds (`PendingWorkSignal.notify`) and wakes
+    the local runner. A `complete` row (a browser result) does none of these,
     because no runner grades it.
   - Pathfinder goes to the owner of a `pending` row. A `complete` row's door
     (`browser-result`) awards it after it stores the result
@@ -836,6 +1344,18 @@ coordination, and each must see every edit.
   - A write route writes only under the caller's own `users/<id>/`, staff
     included, and never over or through a symlink (a support file or a shared
     dataset directory). `JupyterLiteContentsWriteRoutesTests` pins it.
+  - A student reads one tree three ways, and the three must agree. The
+    server drive reads the root `""` as `[users]`, `users` as
+    `[users/<id>]`, then `users/<id>` as the real folder (the kernel walks it
+    one level at a time); the IndexedDB drive reads the root only as
+    `all.json`, which answers with the student's own folder. A change to one
+    listing in `JupyterLiteContentsRoutes` must keep the other two consistent
+    (`JupyterLiteContentsWriteRoutesTests`).
+  - Every non-admin caller, course staff included, reads `users` as
+    `[users/<id>]`, because a staff draft's kernel walks through it (#2925). A
+    403 there kept the kernel from booting on WebKit (2026-11). Another user's
+    folder is reached only by its path, through `mayReadUserFile`
+    (`JupyterLiteContentsUserFolderTests`).
   - The file's mtime is the only reset signal. JupyterLab's save compares it
     with its last save and raises "File changed". The page's IndexedDB reseed
     reads it too, so it is skipped when the server drive is on: a drive save
@@ -849,8 +1369,31 @@ coordination, and each must see every edit.
     (`WorkingCopyProtectedFiles`, `JupyterLiteContentsProtectedFilesTests`).
     A new kind of delivered file must join `delivered`, or the drive can
     write over it.
-  - The write routes check ownership only, not `requireOpenStudentAssignment`
-    (open question for #469). Submission is gated separately.
+  - A student writes a working copy only while its assignment is open to
+    them: a save, a rename and a new folder pass `requireOpenStudentAssignment`
+    (#2927, `gateStudentWrite`), as the notebook reset does. Course
+    staff are not gated, so their authoring and practice copies of a closed
+    assignment still save (`JupyterLiteContentsAssignmentGateTests`). A file
+    in a copy the gate would refuse reads as `writable: false` (`mayWrite`),
+    so an editor open past the close does not autosave into the refusal.
+  - A student's notebook save is stored without outputs
+    (`NotebookOutputs.stripped`). Nothing on the server may read a student's
+    outputs from the working copy: a submission carries its own notebook from
+    the editor. Staff copies keep outputs, because the assignment and the
+    solution are saved from them (`JupyterLiteContentsOutputStrippingTests`).
+    Submit's fallbacks in `Public/notebook.js` (`loadNotebookForSubmit`), used
+    when the editor frame cannot be read, read the saved copy, so a
+    submission captured that way carries no outputs. Grading runs the code
+    again; only the display of that submission lacks them.
+  - A save that grows a student's files is refused past the per-user quota
+    (#2926, `JupyterLiteContentsWriteLimits`). Course staff are not under it:
+    their copies keep outputs, and the authoring draft's `(unsaved draft …)`
+    backups accumulate where no route can delete them. The quota counts only what the
+    write routes can write (`UserFolderUsage`): not symlinks, not the
+    delivered files, not the `view-`/`preview-` records. A new kind of file
+    the server writes into the tree must be left out of that count, or a
+    student near the limit through it cannot save
+    (`JupyterLiteContentsWriteLimitsTests`).
 
 ### The server drive and its opt-out: the `ck_server_drive` cookie
 
@@ -864,12 +1407,27 @@ coordination, and each must see every edit.
 - **Rules:**
   - The three readers must agree: only the value `0` opts out.
   - The page decides too: the editor frame carries `data-server-drive`
-    (`NotebookContext.serverDrive`), true only on a copy that holds the
-    viewer's own editable work. A staff authoring copy is rebuilt from the
-    stored notebook on every page load (`workingCopySeed` refresh) and
-    "Save to assignment" rewrites it, so it stays on the IndexedDB drive; so
-    do a closed assignment's locked copy, a submission record and a preview.
-    `serverDrive.ts` and `serverDriveActive` both require the attribute.
+    (`NotebookContext.serverDrive`), true on any editable copy: a student's
+    own work, or a staff authoring draft of a published assignment (#2925).
+    A closed assignment's locked copy, a new-assignment draft (no assignment
+    row: its working copy *is* its stored notebook, read by
+    `draftNotebookData`), a submission record and a preview stay on the
+    IndexedDB drive. `serverDrive.ts` and `serverDriveActive` both require
+    the attribute.
+  - A staff copy of a published assignment on the server drive is a draft,
+    not a view (`AuthoringDraftFiles`, `ensureAuthoringDraft`). The page load
+    and `/notebook/source` keep it while the stored notebook equals its base,
+    refresh it when it has no edits of its own, and keep unpublished edits in
+    a dated backup beside it when both moved; the page links the newest
+    backup for 14 days. "An edit" is authored content (`sameDraftContent`):
+    kernel metadata, outputs and execution counts do not count. "Save to
+    assignment" saves the editor first, rewrites the draft only when it
+    differs (keeping a backup first), records the new base, and does not drop
+    the other view's draft. A writer that replaces a staff draft without the
+    editor (`createSolutionFromAssignment`) must record its base, or the next
+    load backs the new draft up. On the IndexedDB drive (`ck_server_drive=0`)
+    the staff copy is still a view, rebuilt on every load, which replaces a
+    server-side draft without a backup.
   - A browser result writes the submitted notebook back to the student-view
     copy only on the IndexedDB drive. On the server drive the copy is already
     the student's work, and a rewrite under the open editor would raise
@@ -879,6 +1437,20 @@ coordination, and each must see every edit.
     (`mayWrite` in `JupyterLiteContentsRoutes`), so JupyterLab opens a
     provided file, a record or another user's copy read-only and never
     autosaves into a refusal.
+
+### Authoring draft bases: `<testSetupsDirectory>/authoring-draft-bases/`
+
+- **Writers:** `ensureAuthoringDraft` (page load and `/notebook/source`) and
+  `recordAuthoringDraftBase` ("Save to assignment",
+  `createSolutionFromAssignment`).
+- **Readers:** `AuthoringDraftFiles.reconcile`.
+- **Rules:** one base per staff draft path, mirroring
+  `users/<id>/<setupID>/<file>.ipynb`, outside the working-copy tree so the
+  editor and the kernel cannot reach it. A base is the seed the draft was last
+  in sync with; a missing base makes the next load compare the draft with the
+  stored notebook directly. Nothing deletes a base when its setup or user goes
+  away; an orphan is harmless. The dated `… (unsaved draft …).ipynb` backups
+  sit beside the draft, in the owner's folder only, and nothing deletes them.
 
 ### Content versions and restore
 
@@ -901,10 +1473,42 @@ coordination, and each must see every edit.
   - Every lookup for "the newest validation row is the solution" filters on
     `.validation`. A `.starterValidation` run never sets `validationStatus`
     (`Sources/APIServer/CLAUDE.md`).
+- **The workbench pill.** `WorkbenchAppBar` renders the validation pill once
+  from `validationStatus`. `Public/workbench-rail.js` redraws it from
+  `suite-outline.json` and asks again while the status is `pending`, or while
+  the starter run is behind the solution run after a save (`pollDelay`).
+  The rail's wording mirrors `pillText`; `workbench-poll.test.mjs` checks
+  that they agree. A new `validationStatus` value needs wording in both, and
+  a `pollDelay` case if a runner will settle it later.
+- **Trap:** the workbench fetched the outline once after a save, while the
+  run was still pending, so the pill said "Validating…" until a reload.
 - **Trap:** the web support-file delete did not validate or retest (#2472).
 - **Trap:** MCP `delete_support_file` ran the delete steps by hand and
   skipped the `dependsOn` check that the web delete ran (#2771). Both doors
   now call `deleteFileFromSetup` (`Services/SetupFileDeletion.swift`).
+
+### The Overview notice: `Request.setOverviewNotice`, `takeOverviewNotice`
+
+- **Writers:** "Create & Validate" (`DraftAssignmentRoutes+NewAssignment.swift`)
+  and "Save & Validate" (`PublishedAssignmentRoutes+SaveEdit.swift`). Each
+  leaves a one-shot notice in the session before it redirects to
+  `/instructor` (`Helpers/Request+OverviewNotice.swift`).
+- **Readers:** the Overview (`InstructorDashboardRoutes`), once.
+  `Public/inplace-forms.js` sends the `X-Chickadee-Inplace` header that the
+  writer reads.
+- **Rules:**
+  - On a page navigation (`Sec-Fetch-Dest: document`, or no header) the
+    Overview takes the session notice, then prefers a `?notice=` query value
+    when one is present. A background `fetch` (`Sec-Fetch-Dest: empty`), as
+    `multipart-forms.js` makes when it follows the redirect, leaves the
+    notice for the navigation that follows (#3040).
+  - A request that carries `X-Chickadee-Inplace` sets no notice. Only
+    `inplace-forms.js` sends it, on every in-place form in the workbench
+    pane, which never shows the Overview. If a notice is set and no page
+    navigation reads it, it shows on a later, unrelated visit.
+  - The redirect location stays `/instructor`. Many tests pin it.
+- **Test:** `OverviewNoticeConsumptionTests`, `OverviewNoticeFetchTests`,
+  `OverviewNoticeInPlaceTests`.
 
 ### Authoring checks: `AuthoringCheckCatalog`, `AuthoringFinding`
 
@@ -958,8 +1562,8 @@ coordination, and each must see every edit.
     so that both read it.
   - What a student's working copy holds is `StudentWorkspaceFiles`: the
     support files it links, minus suite scripts, reserved notebooks,
-    grader-only files and datasets, plus the datasets, which are written
-    whatever their grader-only mark. `createSupportFileSymlinks` and
+    grader-only files and datasets, plus the datasets, which
+    `writeDatasetFiles` places whatever their grader-only mark. `createSupportFileSymlinks` and
     `files.missing` both call it. `linkSupportFiles` makes the links, with
     the parent folders of a file in a subfolder, so a nested entry that
     `files.missing` counts as delivered is in the working copy. The browser runner's zip filter and the
@@ -975,15 +1579,48 @@ coordination, and each must see every edit.
 
 - **Readers:**
   - `LeaderboardEntries`, from `ResultIngestEffects`.
+  - `repairLeaderboardEntries` (`LeaderboardRepair`), which
+    `LeaderboardRepairQueue` runs after a failed leaderboard write. It reads
+    the stored collections and writes through `recordLeaderboardEntry`.
   - `ActivityMatches` and `Tournaments`.
   - `Sources/Worker/MatrixAggregation.swift`.
   - The leaderboard routes.
+  - The live board's fast path (`docs/live-board-cache.md`):
+    `LiveBoardFingerprint` aggregates `leaderboard_entries`, and
+    `RosterSnapshot`, which `LiveBoardSnapshots` shares between refreshes,
+    holds the ranked students' handles and birds.
   - The `activity.noMetric` authoring check (MCP `check_assignment`), which
     reads a leaderboard kind as `kind.aggregation == .leaderboard`.
 - **Rules** (`docs/class-activities.md`):
   - A higher metric is better.
   - The metric is never credit, and it is not gated on the grade.
   - Only `.student` rows in the setup's own course get a rank.
+  - A leaderboard row and a ranked class record (`updateRecordBadge`) move
+    only through `writeBestSoFar`: one conditional UPDATE that raises them,
+    so results landing at once cannot undo each other. A new writer of these
+    rows raises them the same way. The exceptions are the retest recompute
+    (`storeRecordHolder`) and the held records (`setRecordHolder`), which
+    still read then write.
+  - A ranking gate belongs in `recordLeaderboardEntry`, which the repair
+    calls too; the repair repeats only the "build passed" rule that
+    `ResultIngestEffects.apply` applies before it. `reachedAt` is when the
+    metric was reached (the submission's time on a repair), never when the
+    row was written: ties and `LeaderboardGroupScope.studentGroup` read it.
+  - `ResultIngestEffects.bestEffort` returns whether its effect succeeded,
+    for an effect that has a repair. Only the leaderboard has one.
+  - A metric board's refresh is answered 304 when its ETag
+    (`LiveBoardETag`) has not changed. A new input to the rows of a board
+    that takes the fast path (`WebRoutes.takesLiveBoardFastPath`) must enter
+    the fingerprint, the roster snapshot or the tag, or the refresh shows the
+    old board until the tag's 30-second bucket turns over. A kind whose board
+    reads another table stays off the fast path.
+  - `HotPathRoute.leaderboardRefresh` matches the board's path whatever the
+    kind, the page load included. Only a 304 skips its `request_metrics`
+    row, so a built board stays visible to `get_request_metrics` and the
+    request series.
+  - The wall's `data-poll-until` is read once when the page loads. Its value
+    must never be earlier than a window that staff could extend
+    (`PresentModePresentation.pollUntil`).
   - Connect a new accumulator at both ingest paths. An accumulator on one
     path shows only the half of the class that one substrate grades, as if it
     were the whole class.
@@ -1034,7 +1671,7 @@ coordination, and each must see every edit.
   - An activity whose kind compares students (`ActivityKind.comparesStudents`)
     accepts only shared data (`DatasetSpec.isShared`). The rule is in
     `ManifestCoherence`. A new door that writes an activity or a dataset spec
-    must call `ManifestCoherence.violation(introducedBy:in:)`
+    must call `ManifestCoherence.violation(for:introducedBy:in:)`
     (`docs/datasets-course-library.md` §4.11). The web `PUT /datasets`
     routes and MCP `set_dataset` call it through `applyDatasetsEdit`
     (`Services/DatasetsChange.swift`), the one dataset-spec edit (#2771). The bundle import, the
@@ -1147,8 +1784,10 @@ coordination, and each must see every edit.
 ### Rate-limit rows: `login_attempts`
 
 - **Writers:** the login rate limit (`LoginRateLimitMiddleware`: scopes `ip`
-  and `user_failure`) and `/join` (`ActivitySessionStore`: scope
-  `join_failure`, keyed by user id).
+  and `user_failure`), `/join` (`ActivitySessionStore`: scope
+  `join_failure`, keyed by user id) and the editor's contents write routes
+  (`ContentsWriteRateLimitMiddleware`: scope `contents_write`,
+  keyed by user id, #2926).
 - **Readers:** each writer reads its own scope only.
 - **Rules:**
   - Every reader filters by `scope`. A new scope is a new string constant in
@@ -1158,6 +1797,21 @@ coordination, and each must see every edit.
     to the sweep.
   - No row has a foreign key, so a deleted user's rows stay until the sweep
     (`docs/operational-diagnostics.md`).
+
+### Foreign-key indexes: `ForeignKeyIndexCoverageTests`
+
+- **Writers:** every migration that adds a foreign key.
+- **Readers:** the `ON DELETE` action of each foreign key, which reads the
+  referencing table once per deleted row.
+- **Rules:**
+  - A new foreign key needs an index that leads with its column, or an
+    entry in the test's `unindexedOnPurpose` list under the group that gives
+    its reason. A later migration that indexes a listed key removes it from
+    the list, or the test fails on the stale entry.
+  - Index the keys whose referenced rows are deleted in bulk: submissions,
+    setups, assignments. A key to a user or a course on a table that takes
+    a row per request or per job stays unindexed (`CreateForeignKeyIndexes`,
+    `docs/database-performance.md`).
 
 ### Notebook-check kind support
 
@@ -1336,7 +1990,9 @@ coordination, and each must see every edit.
   re-grade, version capture, the version tools and restore, the
   `set_activity` lock count, version v1 of `create_assignment` and
   `clone_assignment`, the copied reference solution of `clone_assignment`,
-  the starter run of `get_suite`, and the start of a `run_tournament` run.
+  the starter run of `get_suite`, the start of a `run_tournament` run, and
+  the reference render jobs of `set_activity` with `prepareReference`, and
+  the staged uploads of `begin_upload` (`mcp_uploads`).
 - **Rules:**
   - A step that the `chickadee_mcp` role is denied runs on `mainDB`, not on
     `ToolContext.db`. A new MCP step on an ungranted table needs a choice:
@@ -1348,6 +2004,30 @@ coordination, and each must see every edit.
   - `MCPRoleDatabase` models the role in tests. A tool that touches a table
     the role cannot use passes on the test databases unless a test runs it
     through the stand-in.
+
+### Staged MCP uploads: `mcp_uploads`
+
+- **Writers:** MCP `begin_upload` (`MCPUploadService.begin`), the upload URL
+  `PUT /mcp/uploads/:uploadID` (`MCPUploadRoutes`, `MCPUploadService.receive`),
+  the write tools that consume an upload (`consumeMCPUpload` in
+  `author_script`, `create_dataset`, `add_dataset_version`), the expiry purge
+  in `begin` and the hourly MCP OAuth reaper (`reapExpiredMCPOAuthRecords`).
+- **Readers:** `MCPUploadService.load`, from the same three write tools.
+- **Rules** (`docs/mcp-file-uploads.md`):
+  - An upload belongs to one grant (token subject plus OAuth client) and one
+    course. `load` answers another grant as if the id did not exist.
+  - The cap is `SupportFileURLFetcher.maxBytes`, shared with `sourceUrl`; a
+    change to one changes both. The route's body limit is the same constant.
+  - The bytes must be UTF-8. A write tool that later accepts binary bytes
+    must not rely on the PUT having checked anything else.
+  - A write consumes the upload only after it succeeds. A new consumer must
+    keep that order, or a refused write costs the agent its upload.
+  - The table is on the owner pool (`mainDB`). The `chickadee_mcp` role has no
+    grant on it.
+  - The upload token travels in the `Authorization` header, never in the
+    path. Vapor's route logger (into the admin `query_logs` buffer) and
+    `RequestTimingMiddleware` (into `request_metrics`) record paths, so a
+    secret in a path reaches the admin diagnostics surface.
 
 ### The avatar handle: `users.avatar_handle`
 
@@ -1371,22 +2051,36 @@ coordination, and each must see every edit.
   - `WardrobeUnlockStore.grantFound`, from `POST /account/wardrobe/found`
     (`Routes/Web/AccountRoutes+Found.swift`). The Konami script
     `Public/quantum-cats-egg.js` posts it.
+  - `AchievementAwardStore.grantWardrobeRewards`, when the student's own
+    result page loads and an individual assignment achievement with a
+    `wardrobe` reward is satisfied (docs/achievement-rewards.md, S2). It
+    writes `source` and `label`, and an award ledger row, which a course
+    `achievementsEarned` condition counts like any assignment award. It
+    does not grant while the submission is pending, because the page shows
+    no Earned toast then.
 - **Readers:**
   - The "Your bird" card (`AvatarPickerContext`) and the avatar save
     chokepoint (`AvatarCustomization.isOpen`), which offer and accept only
-    stored items.
+    stored items. The card reads `label` for "how you earned it"
+    (`WardrobeUnlockStore.grantLabels`).
   - The result page's Earned toast, which shows what `grantNew` stored.
   - The data export.
   - Indirectly, every page that draws a bird: a worn ring shows on
     leaderboards and rosters (`AvatarPresentation`).
 - **Also reads `WardrobeItem.allCases`:** the course Achievements tab's
-  "Built in" list (`BuiltInRuleRow`), found items included.
+  "Built in" list (`BuiltInRuleRow`), found items included and grantable
+  items left out.
 - **Rules** (`docs/student-wardrobe.md`, 6b and 6c):
   - A stored unlock is never taken back.
   - `earned(by:)` never returns a found item, and `grantFound` refuses an
     earned one. `grantEarned` counts only earnable items when it decides to
     skip the progress queries, and `grantNew` never returns a found item. A
     new found item needs no change to the grading path.
+  - A grantable item (`WardrobeItem.grantable`) has no built-in rule:
+    `earned(by:)` never returns one, `grantEarned` skips it when it decides
+    to skip the progress queries (`hasBuiltInRule`), and `grantNew` never
+    returns one. Only a `wardrobe` achievement grants it, and the result
+    page's toast shows it with the achievement's name.
   - Course staff wear the staff ring: no surface offers them a ring to wear.
     The result page's toast skips ring items for them, and the layout
     renders them no found-ring toast (`CurrentUserContext.foundRingToast`).
@@ -1395,6 +2089,13 @@ coordination, and each must see every edit.
     also shows the result page's Earned toast has two, with distinct ids.
   - The unique index on user and item stores an item once when two requests
     race.
+  - The result page runs `grantNew` only when
+    `WardrobeUnlockStore.gradedFingerprint` changed since the last complete
+    grant (`WardrobeGrantChecks`). The fingerprint must cover every input of
+    `graded(for:inTestSetups:)`: the student's results, and the due date and
+    concept of their assignments. A new input to the earned rules needs a
+    term in the fingerprint, or the result page stops granting on it. It
+    relies on result rows never being edited in place.
 
 ### Student data that classmates see
 
@@ -1523,6 +2224,72 @@ coordination, and each must see every edit.
     `isSubmissionStaff(_:testSetupID:on:)`. The form that takes a submission
     delegates to it.
 
+### Browser telemetry rows: `client_diagnostics`
+
+- **Writer:** `ClientDiagnosticsRoutes`, behind `allowedKinds` and
+  `ClientDiagnosticsRateLimiter`, whose key (user, verified setup, kind,
+  source, plus the kernel environment for `asset_load`) decides what a count
+  means: the first event per key per hour.
+- **Readers:** `get_browser_diagnostics`, the instructor dashboard's Browser
+  Errors card (`InstructorCardSeries`, filtered to failure kinds), the
+  editor-unrecoverable health alert (`kernel_error` / `recover_failed`), and
+  the retention prune.
+- **Rule:** a new kind says which readers filter it out. Non-failure kinds
+  (`asset_load`, `kernel_phase`, `editor_ready`) must stay out of every
+  failure count.
+
+### A kernel's boot files: `KernelAssetList`
+
+- **Writers:** the vendored layout: `<env>/<kernel>/kernel.json` and
+  `empack_env_meta.json`, rewritten by a re-vendor.
+- **Readers:** `KernelAssetList` (the cold-load probe and the dashboard's
+  cache warm), the editor's `@jupyterlite/xeus-extension` worker and
+  `xeus-kernel-shared.js` (which build the same URLs),
+  `EditorAssetFastPathMiddleware.isImmutableKernelPackage` (which decides
+  their cache policy) and `KernelEnvironments` (`importable-modules.json`).
+- **Rule:** a change to the vendored layout changes all of them.
+  `KernelAssetListTests` fails when a listed file is missing or a package is
+  not listed.
+- **Fields the browser reads in `empack_env_meta.json`:** each package's
+  `depends` (`dependencyName` in `xeus-kernel-shared.js`, which splits on
+  `[\s<>=!]`, so `name 1.2` and `name ==1.2` both work) and `channel` (mambajs
+  matches it against the channel list; `scripts/create-kernel-prefix.py`
+  keeps it the channel's own URL).
+- **Rule:** a `kernel_packages/` name maps to one set of files. An archive the
+  build changes gets a content-hash name; one it only normalizes keeps its
+  upstream name (`scripts/check-xeus-vendored.sh` section 9).
+
+### A kernel environment's lock: `Tools/jupyterlite/locks/*-lock.yml`
+
+- **Writers:** `scripts/lock-kernel-envs.py`, by hand or in the re-vendor
+  workflow's publish mode.
+- **Readers:** `scripts/create-kernel-prefix.py` (the build installs each kernel
+  from its lock), `scripts/lock-kernel-envs.py --check` (the JupyterLite job),
+  and the re-vendor workflow's pull request run, which fails when the committed
+  kernels are not what the locks build.
+- **Rule:** an environment file, its lock and the vendored packages agree. Edit
+  the environment file, lock it again, then re-vendor; each step without the
+  next fails a check.
+
+### The cache-warm marker: `ck-kernel-warm:<env>`
+
+- **Writer:** `kernel-prewarm.js`, through `kernel-asset-telemetry.js`, after
+  every file of one kernel arrived.
+- **Reader:** the same script, to skip a kernel warmed at its current version
+  in the last 7 days.
+- **Rule:** it records "warmed", not "still cached". Nothing else may read it
+  as a cache state.
+
+### The editor iframe's diagnostics messages: `kernel-diag`
+
+- **Writer:** `jl-kernel-diagnostics.js` inside the editor iframe.
+- **Reader:** `handleKernelDiagMessage` in `notebook.js`. It forwards
+  `kernel_phase` and `kernel_error`, acts on `kernel_idle`, `exec_hang` and
+  `wasm_crash`, and keeps `shell_assets` for the `asset_load` breadcrumb
+  without forwarding it.
+- **Rule:** a kind that is not forwarded returns before the forwarding cap,
+  so it cannot use up the page's breadcrumb budget.
+
 ### Browser isolation and the CSP
 
 - **Rules:**
@@ -1534,6 +2301,73 @@ coordination, and each must see every edit.
     is not isolated (`EvalWorkerLanguageTableTests`; #2721).
   - The CSP permits no inline script (#1516;
     `ContentSecurityPolicyInlineScriptTests`).
+
+### The deploy state folder: `status.json`, `pending-notes.json`, `requests/`
+
+- **Writers:** the host deploy daemon (`deploy/chickadee-deployer.sh`) writes
+  `status.json`, `history.jsonl`, `pending-notes.json`, `mode`, `paused` and
+  `approved`. Only the host writes `channel`. The admin Deployment page (`AdminRoutes+Deployment.swift`,
+  `DeployStateFolder.write`) writes one file per request into `requests/`,
+  the only path the app may write (`bluegreen-deploy.sh` mounts it read-write
+  over the read-only `/deploy-state`). A host operator writes
+  `command.json`.
+- **Readers:** the daemon reads `requests/` and `command.json` each poll. The
+  app reads `status.json` in three places: `DeployStateFolder` (the
+  Deployment page), `GetDeployStatusTool` (MCP `get_deploy_status`) and
+  `DeployerHealthRule` (the `deployerUnhealthy` alert, which does not fire on
+  `paused` or `pending_approval`). `GetDeployHistoryTool` and the page read
+  `history.jsonl`.
+- **Parallel paths:** two Swift decoders of `status.json`: `DeployStatusFile`
+  (the page and `GetDeployStatusTool`) and `DeployerStatus` (the alert).
+  A field the daemon adds or renames goes in each that needs it; every field
+  stays optional, because an older daemon writes fewer.
+- **Rules:**
+  - The app only asks. The daemon accepts approve-the-held-release, mode,
+    pause and resume, and refuses everything else, rollback included
+    (`docs/release-gate.md`; `scripts/test-chickadee-deployer.sh`). No
+    route or MCP tool may write anywhere else in the folder.
+  - The mode's raw values (`DeployMode`) and the daemon's `valid_mode` are
+    the same three strings.
+  - The release channel is host-only. The request reader refuses a
+    `channel` request, and the page shows the channel without a control, so
+    nothing in the app can point production at pre-releases.
+  - The approval names a version, and the daemon accepts it only for the
+    release it holds, so a newer release is held anew.
+
+### The version string: `ChickadeeVersion.current` and `v*` tags
+
+- **Writers:** `scripts/assemble-release.sh` (a patch or a hand-cut minor, on
+  `main`), and `auto-release.yml` for a pre-release, which stamps
+  `0.X.0-rc.N` on a commit reached only by its tag (`docs/release-gate.md`).
+- **Readers:** `/health` (the deployer checks it after a deploy), the admin
+  banner, the `?v=` asset cache key, `LiveBoardETag`, alert text, the bundle
+  manifest's `chickadeeVersion`, `get_server_info`, and the runner's
+  advertised version, compared by `VersionComparator` in the runner gates and
+  the version skew alert.
+- **Rules:**
+  - `VersionComparator` reads only the leading `X.Y.Z`, so an rc and its final
+    release compare equal on the server. Only the deployer orders rcs
+    (`version_key`).
+  - Every workflow that reacts to a `v*` tag (`docker-build.yml`,
+    `runner-arm64-image.yml`, `release.yml`) treats a `-rc.` tag as a
+    pre-release: never `:latest`, never the latest release.
+
+### The student contract: `scripts/contract-paths.txt`
+
+- **Writers:** a pull request that edits the list. The `minor-release` label
+  that goes with it is set by the author, by `revendor-kernels.yml`, and by
+  `dependabot-auto.yml` (only on a Dependabot pull request).
+- **Readers:** `scripts/contract-changes.sh`, run by the `contract-change`
+  check (`.github/workflows/contract-change.yml`), the release gate in
+  `auto-release.yml`, and `dependabot-auto.yml`. The label is read by
+  `contract-change.yml` (as the author's consent), `dependabot-auto.yml` and
+  `dependency-health.yml` (which leaves a labelled pull request alone), and by
+  the steward, which never merges one (`Tools/maintenance/README.md`).
+- **Rule:** a path joins the list when a change to it would break a student
+  who has the old version open or cached. While a commit that touched a
+  listed path is on `main` after the last release tag, auto-release cuts no
+  release, so the labelled pull requests merge together just before a minor
+  is cut by hand (`docs/release-gate.md`).
 
 ---
 

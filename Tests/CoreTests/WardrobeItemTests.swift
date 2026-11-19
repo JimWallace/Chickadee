@@ -27,6 +27,7 @@ import Testing
                 "expression.chirp", "expression.sly", "border.twotone", "expression.dreamy", "border.stitched",
                 "border.lifering", "border.greenlight", "border.ouroboros",
                 "border.function", "border.binary", "border.pulse", "border.quantumcats",
+                "border.spectrum", "border.crossfade",
             ])
     }
 
@@ -83,8 +84,9 @@ import Testing
         #expect(AvatarCustomization.isOpen("twotone", for: .border, unlocked: [.twoToneRing]))
         #expect(AvatarCustomization.isOpen("dreamy", for: .expression, unlocked: [.dreamyFace]))
         #expect(AvatarCustomization.isOpen("stitched", for: .border, unlocked: [.stitchedRing]))
-        // An item no rule earns stays locked whatever is unlocked.
-        let everything = Set(WardrobeItem.allCases)
+        // An item no rule earns stays locked until an achievement grants it,
+        // whatever else is unlocked (docs/achievement-rewards.md, S2).
+        let everything = Set(WardrobeItem.allCases).subtracting(WardrobeItem.grantable)
         #expect(!AvatarCustomization.isOpen("spectrum", for: .border, unlocked: everything))
 
         let updated = try AvatarCustomization.applying(

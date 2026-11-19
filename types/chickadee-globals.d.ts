@@ -27,6 +27,7 @@ declare var ChickadeeGraded: any;
 declare var ChickadeeGradingExecutors: any;
 declare var ChickadeeGradingShared: any;
 declare var ChickadeeInputsCore: any;
+declare var ChickadeeKernelAssets: any;
 declare var ChickadeeLanguage: any;
 declare var ChickadeeListFilter: any;
 declare var ChickadeeLuaEvalShared: any;

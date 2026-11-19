@@ -7,20 +7,66 @@
 import Core
 import Vapor
 
+/// Every view on a page holds one of these, and the page's view tree copies
+/// it at each level. The values live in one shared, immutable `Storage`, so a
+/// copy is one reference, not the 1 KB of the values themselves. A debug build
+/// copies each view's fields through every nested builder closure, and with the
+/// values inline the account page overflowed the 512 KB stack of a test thread
+/// on macOS (docs/elementary-spike.md, "Keep view fields small").
 struct PageRequestContext: Sendable {
-    let currentUser: CurrentUserContext?
-    let csrfToken: String
-    let appVersion: String
-    let sessionIdleTimeoutSeconds: Int
-    let sessionIdleWarningSeconds: Int
+    private final class Storage: Sendable {
+        let currentUser: CurrentUserContext?
+        let csrfToken: String
+        let appVersion: String
+        let sessionIdleTimeoutSeconds: Int
+        let sessionIdleWarningSeconds: Int
+        let iconSprite: String
+        let mcpEnabled: Bool
+        let avatarSprite: String
+
+        init(
+            currentUser: CurrentUserContext?, csrfToken: String, appVersion: String,
+            sessionIdleTimeoutSeconds: Int, sessionIdleWarningSeconds: Int, iconSprite: String,
+            mcpEnabled: Bool, avatarSprite: String
+        ) {
+            self.currentUser = currentUser
+            self.csrfToken = csrfToken
+            self.appVersion = appVersion
+            self.sessionIdleTimeoutSeconds = sessionIdleTimeoutSeconds
+            self.sessionIdleWarningSeconds = sessionIdleWarningSeconds
+            self.iconSprite = iconSprite
+            self.mcpEnabled = mcpEnabled
+            self.avatarSprite = avatarSprite
+        }
+    }
+
+    private let storage: Storage
+
+    init(
+        currentUser: CurrentUserContext?, csrfToken: String, appVersion: String,
+        sessionIdleTimeoutSeconds: Int, sessionIdleWarningSeconds: Int, iconSprite: String,
+        mcpEnabled: Bool = false, avatarSprite: String = ""
+    ) {
+        storage = Storage(
+            currentUser: currentUser, csrfToken: csrfToken, appVersion: appVersion,
+            sessionIdleTimeoutSeconds: sessionIdleTimeoutSeconds,
+            sessionIdleWarningSeconds: sessionIdleWarningSeconds, iconSprite: iconSprite,
+            mcpEnabled: mcpEnabled, avatarSprite: avatarSprite)
+    }
+
+    var currentUser: CurrentUserContext? { storage.currentUser }
+    var csrfToken: String { storage.csrfToken }
+    var appVersion: String { storage.appVersion }
+    var sessionIdleTimeoutSeconds: Int { storage.sessionIdleTimeoutSeconds }
+    var sessionIdleWarningSeconds: Int { storage.sessionIdleWarningSeconds }
     /// The inline icon sprite (`Resources/Sprites/icons.svg`), loaded once at startup.
-    let iconSprite: String
+    var iconSprite: String { storage.iconSprite }
     /// True when the content-authoring MCP endpoint is mounted. The admin tab
     /// bar shows its MCP item only then.
-    var mcpEnabled = false
+    var mcpEnabled: Bool { storage.mcpEnabled }
     /// The avatar sprite (`Resources/Sprites/avatar-sprite.svg`). `BaseLayout`
     /// renders it on every signed-in page, through `AvatarSprite`.
-    var avatarSprite = ""
+    var avatarSprite: String { storage.avatarSprite }
 
     /// A static asset path with the cache-busting version query.
     func asset(_ path: String) -> String {

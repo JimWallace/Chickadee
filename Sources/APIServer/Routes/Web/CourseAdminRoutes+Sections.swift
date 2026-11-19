@@ -41,7 +41,6 @@ extension CourseAdminRoutes {
     func createSection(req: Request) async throws -> Response {
         struct CreateSectionBody: Content {
             var name: String
-            var defaultGradingMode: String
         }
         let user = try req.auth.require(APIUser.self)
         let courseID = try await req.requireActiveCourseForWrite(
@@ -50,7 +49,7 @@ extension CourseAdminRoutes {
         let body = try await req.decodeContent(CreateSectionBody.self)
         let draft: CourseSectionDraft
         do {
-            draft = try CourseSectionDraft(name: body.name, defaultGradingMode: body.defaultGradingMode)
+            draft = try CourseSectionDraft(name: body.name)
         } catch {
             throw Self.webError(error)
         }
@@ -89,7 +88,6 @@ extension CourseAdminRoutes {
     func renameSection(req: Request) async throws -> Response {
         struct RenameSectionBody: Content {
             var name: String
-            var defaultGradingMode: String
         }
         let user = try req.auth.require(APIUser.self)
         let courseID = try await req.requireActiveCourseID(for: user, action: "managing sections")
@@ -98,7 +96,7 @@ extension CourseAdminRoutes {
         let body = try await req.decodeContent(RenameSectionBody.self)
         let edit: CourseSectionEdit
         do {
-            edit = try CourseSectionEdit(name: body.name, defaultGradingMode: body.defaultGradingMode)
+            edit = try CourseSectionEdit(name: body.name)
         } catch {
             throw Self.webError(error)
         }
@@ -140,10 +138,9 @@ extension CourseAdminRoutes {
         let body = (try? await req.decodeContent(MoveBody.self))
         let newSectionID: UUID? = try await resolveSectionID(body?.sectionID, courseID: courseID, db: req.db)
         // Appends to the destination lane (the DnD client follows with a
-        // reorder to place it exactly) and adopts a named section's default
-        // grading mode where the manifest allows it. Ungrouping leaves the
-        // grading mode unchanged.
-        try await CourseSectionService.moveAssignment(assignment, toSection: newSectionID, on: req.db)
+        // reorder to place it exactly). The type and the grading mode stay as
+        // they were (docs/assignment-types.md).
+        _ = try await CourseSectionService.moveAssignment(assignment, toSection: newSectionID, on: req.db)
         return .ok
     }
 

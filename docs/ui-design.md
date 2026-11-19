@@ -120,7 +120,7 @@ them is the answer.
 
 | Archetype | Skeleton | Copy this | Also |
 |-----------|----------|-----------|------|
-| **Admin tabbed** | `AdminTabs` (the `.admin-version-banner`, the hidden `<h1>`, the tab bar) → `.page-section` blocks, headings starting at `<h2>` | `AlertsPage` | `AdminPage`, `AdminUsersPage`, `AdminAuditPage`, `AdminBrightspacePage`, `AdminGitHubPage`, `AdminLTIPage`, `AdminMCPPage`, `AdminRetentionPage`, `AdminStoragePage` |
+| **Admin tabbed** | `AdminTabs` (the `.admin-version-banner`, the hidden `<h1>`, the tab bar) → `.page-section` blocks, headings starting at `<h2>` | `AlertsPage` | `AdminPage`, `AdminUsersPage`, `AdminAuditPage`, `AdminBrightspacePage`, `AdminDeploymentPage`, `AdminGitHubPage`, `AdminLTIPage`, `AdminMCPPage`, `AdminRetentionPage`, `AdminStoragePage` |
 | **Instructor tabbed** | `InstructorTabs` → `.page-section` blocks | `InstructorMCPPage` | `AssignmentsPage`, `InstructorAchievementsPage`, `InstructorActivityPage`, `InstructorBrightspacePage`, `InstructorDatasetsPage`, `InstructorGitHubPage`, `InstructorGroupsPage`, `InstructorLTIGradesPage`, `InstructorNewTermPage`, `InstructorSlipDaysPage`, `InstructorStudentsPage` |
 | **Titlebar page** | `.page-titlebar` (`<h1>` left, actions right) → optional `.page-subtitle` → content | `AdminUserPage` | `AdminCoursePage`, `AdminRunnerPage`, `AssignmentFeedbackPage`, `AssignmentSubmissionsPage`, `CourseStudentSubmissionsPage`, `InstructorDatasetPage`, `InstructorEnrollCSVPage`, `AssignmentNewPage`, `SessionAttendancePage` |
 | **Plain student page** | `<h1>` → content | `AccountPage` | `SubmitPage`, `CourseDataPage`, `EnrollPage`, `IndexPage`, `SubmissionPage`, `GitHubSubmitPage`, `LeaderboardPage`, `JoinSessionPage` |
@@ -345,12 +345,19 @@ duplicate.
   badges (defined variants only:
   open/closed/extended/preview/unpublished/danger).  A bare `.tier` is the
   neutral state badge, for a state with no status colour ("Secret tests
-  revealed", or a submission whose browser and native grades differ).  `.tier-danger` is the one
+  revealed", or a submission whose browser and native grades differ).  Its
+  fill, and `.tier-unpublished`'s, is `--badge-neutral-bg`, one step up from
+  `--surface` in dark mode (dark `--gray-100` is `--surface`, so the badge
+  vanished).  `.tier-danger` is the one
   that means something went wrong; `.tier-closed` is a neutral inactive grey
   and must not be borrowed for it.  One `.tier-open` is not a state: the
   result page's gain beside the grade ("+13%", result-celebration.md) uses
   it, because the gain is the student's own good news in the open colour,
   not a pass or fail count, which is what `.chip-ok` marks.
+- **`.due-relative`** — the relative reading inside a `DueDate`, after the
+  absolute time.  It modifies the `DueDate` view and is not a chip.  It is
+  seeded empty, and its "·" separator is CSS that shows only once
+  `relative-time.js` has filled it ("Timestamps", "Due dates").
 - **`.account-identity`** — the account page's identity header: the resolved
   name and the username under it.  The bird is not here: it is in the
   `.bird-card` just below.  The name
@@ -517,10 +524,25 @@ duplicate.
   the lab's name and progress, and gives each stage's range its own id. In the
   strip, passed is `--green` and failed is `--red`, the test-status pair, and
   reference is `--gray-300`, between empty and passed in both themes.
+- **`.bug-hunt`** (the `bug-hunt-*` family) — a bug hunt's board
+  (docs/bug-hunt-code-map.md). A `.bug-hunt-share` line holds the share
+  covered in the `.score-figure` and a `.bug-hunt-count`. The optional code map
+  is the `.diff-table` listing with one gutter. A row in an item's region is
+  `.diff-uncovered` until the class covers it, `.diff-partial` while only some
+  of the items on the line are covered, and `.diff-added` after. A visually
+  hidden word in the gutter says the state. It renders inside the polled
+  region, so it needs no script. Present mode wraps it in `.present-bug-hunt`,
+  which sets the room's sizes.
 - **`.fieldset-plain`** — the unstyled `<fieldset>` + bold `<legend>` that
   wraps a group of radio or checkbox choices (enroll, the LTI grade
-  transport, LTI deep linking, the bird picker).  Use it for any group
-  of choices rather than restyling a fieldset.
+  transport, LTI deep linking, the bird picker, the deploy mode).  Use it
+  for any group of choices rather than restyling a fieldset.  A choice of
+  one of a few options is a radio group with one submit button, never a
+  row of buttons, one per option.  Where each option needs a one-line
+  description, the row is `.checkbox-row .checkbox-row--described`: the
+  name in `<strong>`, the description in `.field-note--muted` under it, and
+  the radio aligned with the name.  When a section heading already names
+  the group, as on the Deployment page, the legend is `visually-hidden`.
 - **`.swatch-row`**, `.swatch`, `.swatch-sample`, `.swatch-name` — a choice of
   one colour, inside a `.fieldset-plain`: each option is a radio input shown
   as a round sample with its name under it.  The input is invisible but stays
@@ -603,12 +625,16 @@ duplicate.
   figure a student opens that page to read, at `2.4em`.  The only display-size
   type in the product: the `--text-*` scale tops out at 1.4rem for page
   headings and deliberately does not carry display sizes, so this is `em`
-  against its container rather than a new scale step.  One per page.
+  against its container rather than a new scale step.  One per page.  A bug
+  hunt's board uses it for the share covered, at the room's size in present
+  mode.
 - **`.diff-table`** — the one unified diff listing (the instructor's
   starter-to-submission page).  Rows are `.diff-added` / `.diff-removed` /
   `.diff-context`, or `.diff-fold` standing in for a run of unchanged lines;
   cells are two `.diff-gutter` line-number columns and one `.diff-line`;
-  `.diff-marker` is a notebook cell boundary.  A second comparison view
+  `.diff-marker` is a notebook cell boundary.  A bug hunt's code map uses it
+  with one gutter and two more row states, `.diff-uncovered` and
+  `.diff-partial` (see `.bug-hunt`).  A second comparison view
   (two attempts, two students) reuses this rather than minting a twin.
 - **`.text-muted`**, `.card-meta`, `.fine-print` — muted text.
 - **`.section-items`** — the student dashboard's section list: one
@@ -619,11 +645,21 @@ duplicate.
   row each fill only the cells that apply.  The `thead` is `.visually-hidden`,
   not removed.  Each row leads with an `.item-tile` (in an `.item-tile-cell`),
   a square glyph coloured by `data-kind` (`slides`, `notebook`, `document`,
-  `link`, `outline`, `graded`) from the `--kind-*` token pairs — one component
-  with an attribute, not six classes.  A course library dataset is reference
+  `link`, `outline`, `graded`, `lab`, `activity`) from the `--kind-*` token
+  pairs — one component with an attribute, not eight classes.  A published
+  assignment's tile follows its declared type (`AssignmentTypeTile`,
+  docs/assignment-types.md): an Assignment is `graded` with `i-clipboard-check`,
+  a Lab is `lab` with `i-flask`, and a Class activity is `activity` with
+  `i-users`. The graded kinds are solid tiles with a white glyph; the content
+  kinds are pale tints. The type's name is the tile's visually hidden text.
+  A course library dataset is reference
   material, so it takes `document` with the `i-list` glyph.  The name cell is an `.item-title` over an
   `.item-details` line; `.item-grade` right-aligns the grade.  A material's
   buttons are `.action-btn-icon`, the same fixed square as an assignment's.
+  Each button shows what it opens. A PDF, hosted or linked, is `i-file-text`,
+  the document tile's glyph, because both mean "a document". A notebook is
+  `i-notebook`, any other uploaded file is `i-download`, and a link to another
+  website is `i-external` (`ContentItemRow.action`).
   A section filter appears only at `IndexDisplayGroup.filterThreshold` (8) rows
   or more, and never on the ungrouped bucket.
 - **`.section-items--manage`** (with `.section-items-handle`,
@@ -755,6 +791,14 @@ duplicate.
   the instructor roster) shows `pointer` across the row.
 - **`.drop-zone`** (+ `.drag-over`, `.drop-filename`) — file-drop upload
   targets.  Unrelated to the reorder cues above despite the shared verb.
+- **`.card--padded`** — a `.card` with its own padding, for a card whose
+  content is a form or a heading over lists: the approval form, the contract
+  changes and each release's notes on the admin Deployment page.  Inside it,
+  an `<h3>` is the card's title, an `<h4>` is a category (Changed, Fixed)
+  above its own `<ul>`, and the lists are indented; all three are direct
+  children of the card, or the rules miss them.  The global reset zeroes
+  list padding, so a bare `<ul>` hangs its bullets outside the column.  A
+  category is a heading, never a bullet.
 - **`.card`**, `.notice-box`, `.error-box` — surfaces and callouts.
   **Two empty states, and they never borrow each other's words.** An empty
   COLLECTION (term start, a course with no assignments) replaces the table: an
@@ -857,7 +901,9 @@ duplicate.
   (an `.outline-caption`, the `.outline-figure` percent, an `.outline-meta` line
   and a link to the results), a second `.outline-caption`, and an
   `.outline-tasks` list of `.outline-row` buttons.  Each row has an
-  `.outline-glyph`, an `.outline-name` and its points; `data-status` colours the
+  `.outline-glyph`, an `.outline-name` and its points.  The name is the same
+  title as the editor's task header, the notebook heading the task sits under,
+  and the page adds no number to it; `data-status` colours the
   glyph, and the glyph character and the editor's pill always say the status
   too.  The `starter` glyph ("Still the starter code") reuses the amber
   `--preview-bg` / `--preview-fg` pair on purpose: it is the one "attention,
@@ -906,6 +952,14 @@ duplicate.
   too long for the row (the admin LTI platforms table); give its `<summary>`
   a visually hidden copy of the row's name, so a screen reader can tell one
   "Edit" from the next.
+- **`.nowrap`** — text that must not wrap, such as a table cell holding a
+  code or an identifier ("59408-5", whose hyphen a narrow column would
+  otherwise break at).
+- **`.test-output-pre`** — the house preformatted block: monospace text kept
+  as written and wrapped, on the muted surface. It holds a test's long output
+  on the submission page and a FHIR example resource on the dataset pages. Use
+  it for any machine text that is shown whole; do not add another block class.
+  `.compiler-output` is the build log's own block.
 - **`.disclosure-summary`** — the `<summary>` of a `<details>` that a reader
   opens occasionally, such as the options under a form.  It starts with an
   `.accordion-caret` (a span around the `#i-chevron-right` icon), which turns
@@ -917,7 +971,9 @@ duplicate.
 - **`.icon`** — every inline stroked SVG icon, referencing a `<symbol>` in
   `Resources/Sprites/icons.svg` by `<use href="#i-…">`.  Geometry may appear
   in exactly two files: that sprite, and `Resources/Sprites/avatar-sprite.svg`
-  for the avatar parts.
+  for the avatar parts.  One glyph has one meaning (#2960, #2965).  Before you
+  use a symbol for a new action or a new row tile, read its comment in the
+  sprite.  If it already means something else, add a symbol.
 - **`.textarea-mono`**, `.form-stack` — a monospace textarea and
   the stacked form column that usually holds one.
 
@@ -971,7 +1027,7 @@ no second poller:
 |---|---|
 | `data-poll-url` | the server endpoint rendering the replacement, from the SAME view the page rendered inline |
 | `data-poll-interval` | milliseconds between polls (default 5000) |
-| `data-poll-swap` | `region` replaces the element's own contents; `json` replaces nothing and hands each changed JSON body to the element as a `chickadee:poll-data` event; omitted replaces its `<tbody>` |
+| `data-poll-swap` | `region` replaces the element's own contents, but not when they already match the response, so a `role="status"` region does not announce the same text again (best-effort: it compares serialized markup); `json` replaces nothing and hands each changed JSON body to the element as a `chickadee:poll-data` event; omitted replaces its `<tbody>` |
 | `data-poll-until` | an instant after which the poll stops for good; omitted polls while the tab is open |
 
 Every poll is conditional (ETag / 304) and carries `X-Background-Refresh: 1`,
@@ -990,6 +1046,12 @@ countdown all change with the table beside them. Reach for `json` only for somet
 renders: the class composite's canvas, whose pixels a region swap would throw
 away. It polls at once, then on the interval. Whatever the mode, keep a page's
 fixed chrome — its heading, its chips, its intro — OUTSIDE the polled element.
+A page that must act on a new state (reload once a result or an export is
+ready) listens for `chickadee:table-repaint` on the region, as `app.js` does.
+`scripts/check-ui-vocabulary.sh` fails on a first-party `Public/*.js` file
+that calls both `setInterval` and `fetch(`, unless its poll allowlist says
+why that timer does not poll. A `role="status"` banner does not belong
+inside a region that changes on most polls: each swap announces it again.
 
 The affordances that say an element is interactive are a **closed registry**,
 enforced by `scripts/check-ui-vocabulary.sh`:
@@ -1061,6 +1123,18 @@ Two renderings, chosen by what the reader is asking (UI audit S8):
   **no-JS fallback for both**, so the relative span after it is seeded empty —
   seed both with the server string and the cell prints the same instant twice
   on every load before the script runs.  A hover `title` does not satisfy this: it is not a disclosure.
+
+- **Due dates** a student reads — the dashboard row, the submit page —
+  render through the `DueDate` view: the word "Due", the absolute time,
+  then the relative reading, with an optional note such as "(extension)".  The
+  reader asks both "how long do I have" and "when exactly", so both show,
+  and the label says which date it is (UI audit #3007).  As in the audit
+  log, the absolute time is the no-JS fallback, so the relative span is
+  seeded **empty**, and its "·" separator comes from CSS only once the span
+  has text.  Seed it with the server string and the page prints the same
+  date twice before the script runs, and for good with JS off.  Staff
+  schedule views (the Overview, the per-student page) still show the
+  absolute date.
 
 The server-formatted string stays in the cell as the no-JS fallback, so a
 column degrades to an absolute date rather than to nothing.  Staleness
@@ -1428,7 +1502,9 @@ intentional look change means regenerating baselines
 (`Tools/visual-regression/run-visual.sh --update`) in the same PR.  The same
 CI job also runs the axe-core accessibility scan (`run-a11y.sh`) over those
 pages in both schemes: critical/serious violations are zero-tolerance,
-moderate/minor ratchet down via `a11y-baseline.json`.
+moderate/minor ratchet down via `a11y-baseline.json`. The job also runs each
+week on `main`, because its pull request trigger is path-filtered; a red
+weekly run files an issue (`Tools/visual-regression/README.md`).
 
 A screenshot cannot see everything, though — the capture fires ~300 ms after
 load, so it never observes a table's **background repaint**, where the shared

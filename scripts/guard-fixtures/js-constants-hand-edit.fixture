@@ -6,5 +6,5 @@ files="Public/browser-runner.js"
 description="a generated block in browser-runner.js with its line removed"
 expect="language constants are stale"
 apply() {
-    sed -i '/CHICKADEE_GENERATED:R_KERNEL_NAMES:BEGIN/{n;d}' Public/browser-runner.js
+    sed_inplace '/CHICKADEE_GENERATED:R_KERNEL_NAMES:BEGIN/{n;d;}' Public/browser-runner.js
 }

@@ -7,6 +7,7 @@
 import Core
 import Fluent
 import Foundation
+import SQLKit
 import Vapor
 
 extension InstructorDashboardRoutes {
@@ -31,15 +32,23 @@ extension InstructorDashboardRoutes {
         let sections = try await sectionsFuture
 
         let setupIDs = Set(assignments.map(\.testSetupID))
-        let studentIDs = Set(students.compactMap(\.id))
+        let studentIDs = Set(students.map(\.id))
 
-        // Phase 2: setups-by-id + submissions in parallel.  Both depend on
+        // Phase 2: setups-by-id + best grades in parallel.  Both depend on
         // phase 1 (setupIDs / studentIDs), but neither depends on the other.
+        //
+        // "Highest grade wins" across EVERY result of every submission (not
+        // just the worker-preferred one), so a 100 % browser run is never
+        // displaced by a later worker regrading at a lower percentage. The
+        // fold runs in the database and returns one row per (student,
+        // assignment): hydrating every submission and result of the course
+        // took seconds on the event loop at one course's scale
+        // (docs/database-performance.md).
         async let setupByIDFuture = loadGradesCSVSetupsByID(req: req, setupIDs: setupIDs)
-        async let submissionsFuture = loadGradesCSVSubmissions(
-            req: req, setupIDs: setupIDs, studentIDs: studentIDs)
+        async let bestPercentFuture = bestGradePercentByStudentAndSetup(
+            setupIDs: Array(setupIDs), studentIDs: Array(studentIDs), on: req.db)
         let setupByID = try await setupByIDFuture
-        let submissions = try await submissionsFuture
+        let bestPercentByKey = try await bestPercentFuture
 
         // Section-aware column order: assignments group by their section's
         // display order (ungrouped last), then by the shared per-section item
@@ -57,21 +66,11 @@ extension InstructorDashboardRoutes {
                 rhsCreatedAt: setupByID[rhs.testSetupID]?.createdAt,
                 lhsSetupID: lhs.testSetupID, rhsSetupID: rhs.testSetupID)
         }
-        let submissionIDs = submissions.map(\.id)
-
-        // Serial follow-on: needs submission IDs from phase 2.
-        // Load every result for every submission (not just the worker-preferred one)
-        // so that "highest grade wins" — a 100 % browser run is never displaced by
-        // a later worker regrading at a lower percentage.  The best percentage is
-        // then converted to points using the manifest total so the CSV column is
-        // anchored to a stable scale regardless of which tier mix each result used.
-        let allResultsBySubmission = try await gradeSummariesBySubmissionID(
-            for: submissionIDs, on: req.db)
+        // The best percentage is converted to points using the manifest total
+        // so the CSV column is anchored to a stable scale regardless of which
+        // tier mix each result used.
         var bestPointsByUserAndSetup = bestGradePointsByUserAndSetup(
-            submissions: submissions,
-            allResultsBySubmission: allResultsBySubmission,
-            setupByID: setupByID
-        )
+            bestPercentByKey: bestPercentByKey, setupByID: setupByID)
 
         // Instructor grade overrides replace the runner-computed points. They
         // apply even when the student has no submission, so this overlays the
@@ -129,18 +128,22 @@ extension InstructorDashboardRoutes {
 
     // MARK: - exportGradesCSV helpers
 
+    /// One roster row of the export: the three columns it writes. A plain
+    /// value, not a Fluent model.
+    struct GradesCSVStudent: Sendable {
+        let id: UUID
+        let username: String
+        let studentID: String?
+    }
+
     /// Only include students enrolled in the active course (if one is set).
     private func loadGradesCSVStudents(
         req: Request, activeCourseUUID: UUID?
-    ) async throws -> [APIUser] {
+    ) async throws -> [GradesCSVStudent] {
         if let activeCourseUUID {
             // Students are `.student`-role enrollments now (#417 Slice G2).
             let studentUserIDs = try await CourseRoster.studentIDs(in: activeCourseUUID, on: req.db)
-            guard !studentUserIDs.isEmpty else { return [] }
-            return try await APIUser.query(on: req.db)
-                .filter(\.$id ~~ Array(studentUserIDs))
-                .sort(\.$username, .ascending)
-                .all()
+            return try await loadGradesCSVStudentRows(ids: Array(studentUserIDs), on: req.db)
         }
         // No active course: every student across the deployment — the union of
         // all `.student`-role enrollments (#417 Slice G2; the global role no
@@ -153,11 +156,40 @@ extension InstructorDashboardRoutes {
             .field(\.$roleRaw)
             .all()
         let studentUserIDs = Set(studentEnrollments.filter(CourseRoster.isStudent).map(\.userID))
-        guard !studentUserIDs.isEmpty else { return [] }
-        return try await APIUser.query(on: req.db)
-            .filter(\.$id ~~ Array(studentUserIDs))
-            .sort(\.$username, .ascending)
+        return try await loadGradesCSVStudentRows(ids: Array(studentUserIDs), on: req.db)
+    }
+
+    /// The roster rows for `ids`, sorted by username in the database. The
+    /// export writes three columns per student, so it reads only those three
+    /// and decodes each by name: hydrating a full `APIUser` per student took
+    /// most of the export's server CPU (docs/database-performance.md, "What it found").
+    private func loadGradesCSVStudentRows(
+        ids: [UUID], on db: any Database
+    ) async throws -> [GradesCSVStudent] {
+        guard !ids.isEmpty else { return [] }
+        guard let sql = db as? (any SQLDatabase) else {
+            return try await APIUser.query(on: db)
+                .filter(\.$id ~~ ids)
+                .sort(\.$username, .ascending)
+                .all()
+                .compactMap { user in
+                    user.id.map { GradesCSVStudent(id: $0, username: user.username, studentID: user.studentID) }
+                }
+        }
+        let rows = try await sql.select()
+            .column("id")
+            .column("username")
+            .column("student_id")
+            .from(APIUser.schema)
+            .where("id", .in, SQLBind.group(ids))
+            .orderBy("username", .ascending)
             .all()
+        return try rows.map { row in
+            GradesCSVStudent(
+                id: try row.decode(column: "id", as: UUID.self),
+                username: try row.decode(column: "username", as: String.self),
+                studentID: try row.decode(column: "student_id", as: String?.self))
+        }
     }
 
     private func loadGradesCSVAssignments(
@@ -186,71 +218,30 @@ extension InstructorDashboardRoutes {
             })
     }
 
-    private func loadGradesCSVSubmissions(
-        req: Request,
-        setupIDs: Set<String>,
-        studentIDs: Set<UUID>
-    ) async throws -> [(id: String, userID: UUID, setupID: String)] {
-        let submissionRows =
-            (setupIDs.isEmpty || studentIDs.isEmpty)
-            ? []
-            : try await APISubmission.query(on: req.db)
-                .filter(\.$kind == APISubmission.Kind.student)
-                .filter(\.$testSetupID ~~ setupIDs)
-                .filter(\.$userID ~~ studentIDs)
-                // Only the three columns the fold reads: the export spans
-                // every student submission of the course.
-                .field(\.$id)
-                .field(\.$userID)
-                .field(\.$testSetupID)
-                .all()
-        return submissionRows.compactMap { row -> (id: String, userID: UUID, setupID: String)? in
-            guard let id = row.id, let userID = row.userID else { return nil }
-            return (id, userID, row.testSetupID)
-        }
-    }
-
-    // The grouped result loader moved to the shared helper file
-    // (`allResultsBySubmissionID`, BestGradePercentBySubmissionID.swift) so
-    // this file and the highest-grade fold can't drift apart (#1111).
-
-    /// Returns the best earned points per (user, setup), where "best" is the
-    /// highest grade percentage achieved across ALL results for ALL submissions
-    /// (browser and worker alike), converted to points via the manifest total.
+    /// Returns the best earned points per (user, setup): the highest grade
+    /// percentage across ALL results for ALL submissions (browser and worker
+    /// alike), converted to points via the manifest total.
     ///
     /// Using percentage × manifest-total rather than raw earnedPoints means the
     /// CSV column is on a stable scale: the instructor knows exactly what LEARN
     /// max to enter (the manifest total), and a 100 % browser result is never
     /// overwritten by a lower-percentage worker result from a later regrading.
     private func bestGradePointsByUserAndSetup(
-        submissions: [(id: String, userID: UUID, setupID: String)],
-        allResultsBySubmission: [String: [GradeResultSummary]],
+        bestPercentByKey: [StudentSetupKey: Int],
         setupByID: [String: APITestSetup]
     ) -> [String: Double] {
-        // Step 1: highest grade percentage across ALL results for ALL
-        // submissions — the shared "highest grade wins" fold (#1111).
-        var bestPctByKey: [String: Int] = [:]
-        for submission in submissions {
-            let key = "\(submission.userID.uuidString.lowercased())::\(submission.setupID)"
-            guard let pct = bestGradePercent(of: allResultsBySubmission[submission.id] ?? [])
-            else { continue }
-            if pct > (bestPctByKey[key] ?? -1) { bestPctByKey[key] = pct }
-        }
-        // Step 2: convert best percentage → points anchored to the manifest total.
         // One total per setup, not one per (user, setup) key.
         let totalBySetupID = setupByID.compactMapValues { suiteTotalPoints(props: $0.decodedManifest()) }
         var best: [String: Double] = [:]
-        for (key, pct) in bestPctByKey {
-            guard let setupID = key.components(separatedBy: "::").last,
-                let total = totalBySetupID[setupID]
-            else { continue }
-            best[key] = Double(pct) / 100.0 * total
+        for (key, pct) in bestPercentByKey {
+            guard let total = totalBySetupID[key.setupID] else { continue }
+            best["\(key.userID.uuidString.lowercased())::\(key.setupID)"] = Double(pct) / 100.0 * total
         }
         return best
     }
 
     private func renderGradesCSV(
-        students: [APIUser],
+        students: [GradesCSVStudent],
         sortedAssignments: [APIAssignment],
         bestPointsByUserAndSetup: [String: Double]
     ) -> String {
@@ -262,7 +253,7 @@ extension InstructorDashboardRoutes {
         lines.append(header.map(csvEscaped).joined(separator: ","))
 
         for student in students {
-            guard let userID = student.id else { continue }
+            let userID = student.id
             var row: [String] = [student.studentID ?? "", "#\(student.username)"]
             for assignment in sortedAssignments {
                 let key = "\(userID.uuidString.lowercased())::\(assignment.testSetupID)"

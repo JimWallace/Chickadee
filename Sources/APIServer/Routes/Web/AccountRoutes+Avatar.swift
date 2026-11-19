@@ -98,7 +98,10 @@ extension AccountRoutes {
 /// items not earned yet reads as a list of failures (docs/student-wardrobe.md,
 /// E1 to E3). The one exception is a seasonal ring out of its term, which
 /// every student gets: it is listed apart, as "Not open yet".
-struct AvatarPickerContext: Encodable {
+/// A class, not a struct: it is about 1 KB of values, and the bird card's
+/// views each hold it, so a debug build's nested builder closures copied it
+/// until the stack ran out (docs/elementary-spike.md, "Keep view fields small").
+final class AvatarPickerContext: Encodable {
     /// The student's bird at the podium size, the card's hero and the live
     /// preview's target.
     let hero: AvatarPresentation
@@ -120,6 +123,10 @@ struct AvatarPickerContext: Encodable {
     let rings: [AvatarPickerOption]
     /// The seasonal rings out of their term: shown, never selectable.
     let laterRings: [AvatarPickerOption]
+    /// How the student earned each open ring an achievement granted, in
+    /// ring order: "Cross-fade: earned for “Painted a tile”."
+    /// (docs/achievement-rewards.md, S2). Empty when none was granted.
+    let grantNotes: [String]
     /// Course staff wear the staff ring and cannot choose one: the Ring group
     /// becomes a note.
     let isStaff: Bool
@@ -131,7 +138,8 @@ struct AvatarPickerContext: Encodable {
 
     init(
         for spec: AvatarSpec, isStaff: Bool, handle: String = "", hatchedText: String = "",
-        hatch: AvatarHatchContext? = nil, unlocked: Set<WardrobeItem> = []
+        hatch: AvatarHatchContext? = nil, unlocked: Set<WardrobeItem> = [],
+        grantLabels: [WardrobeItem: String] = [:]
     ) {
         hero = AvatarPresentation(for: spec, size: .podium, accessibility: .decorative, isStaff: isStaff)
         self.isStaff = isStaff
@@ -177,6 +185,12 @@ struct AvatarPickerContext: Encodable {
                 || AvatarCustomization.isOpen(value, for: .border, season: season, unlocked: unlocked)
         }
         rings = open.map { Self.ringOption($0, for: spec, isLocked: false) }
+        grantNotes = open.compactMap { value in
+            guard let item = WardrobeItem(slot: .border, value: value), unlocked.contains(item),
+                let label = grantLabels[item]
+            else { return nil }
+            return "\(item.displayName): earned for “\(label)”."
+        }
         laterRings = values.filter { !open.contains($0) && AvatarBorder(rawValue: $0)?.season != nil }
             .map { Self.ringOption($0, for: spec, isLocked: true) }
     }

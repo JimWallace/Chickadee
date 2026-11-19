@@ -67,16 +67,19 @@ test('the boot seeds exclude the data-science half, which is the point', () => {
 test('each optional package can still be reached from the manifest', () => {
   // The other half: on-demand install walks the same closure, so a package the
   // walk cannot reach could never be installed after boot.
-  for (const optional of ['numpy', 'pandas', 'matplotlib-base', 'scipy', 'statsmodels', 'pillow']) {
+  for (const optional of ['numpy', 'pandas', 'matplotlib-base', 'pillow']) {
     const reachable = kernel.packageClosure(meta, [optional]);
     assert.ok(reachable.includes(optional), `${optional} is not reachable from the manifest`);
   }
 });
 
-test('scipy drags openblas in, which is why it is not booted by default', () => {
-  // Documents the measured cost that motivates the whole subset: openblas is
-  // 16 MB, only scipy needs it, and numpy does not.
-  assert.ok(kernel.packageClosure(meta, ['scipy']).includes('openblas'));
+test('scipy, statsmodels and openblas are not shipped (#3122)', () => {
+  // Dropped for v0.6: scipy plus openblas (16 MB, needed by nothing else) was
+  // about 40% of every boot. numpy must not bring openblas back on its own.
+  const shipped = new Set(meta.packages.map((p) => p.name));
+  for (const dropped of ['scipy', 'statsmodels', 'openblas']) {
+    assert.ok(!shipped.has(dropped), `${dropped} is vendored again; see #3122`);
+  }
   assert.ok(!kernel.packageClosure(meta, ['numpy']).includes('openblas'));
 });
 

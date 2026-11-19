@@ -48,7 +48,9 @@ enum CourseRoster {
     /// The user IDs of the students in `courseID`. Empty when the course has
     /// no students.
     static func studentIDs(in courseID: UUID, on db: any Database) async throws -> Set<UUID> {
-        Set(try await studentEnrollments(in: courseID, on: db).map(\.userID))
+        Set(
+            try await studentsOnly(APICourseEnrollment.query(on: db).filter(\.$course.$id == courseID))
+                .all(\.$userID))
     }
 
     /// `studentIDs(in:on:)` for many courses, in one query. A course with no

@@ -57,7 +57,7 @@ extension DraftAssignmentRoutes {
         do { body = try await req.decodeContent(SuitePayload.self) } catch {
             throw AppError.invalidParameter(
                 name: "request body",
-                reason: "Invalid suite payload: \(error.localizedDescription)")
+                reason: unreadableEditorPayload(req, error))
         }
 
         try await applySuiteEdit(
@@ -124,7 +124,7 @@ extension DraftAssignmentRoutes {
     @Sendable
     func getDraftDatasets(req: Request) async throws -> DatasetsResponse {
         let setup = try await loadDraftSetupForRead(req)
-        return try await datasetsPanelResponse(req: req, setup: setup)
+        return try await datasetsPanelResponse(setup: setup)
     }
 
     // MARK: - PUT /instructor/new/draft/datasets
@@ -133,8 +133,8 @@ extension DraftAssignmentRoutes {
     func putDraftDatasets(req: Request) async throws -> DatasetsResponse {
         let setup = try await loadDraftSetupForWrite(req)
         let body = try await req.decodeContent(DatasetsBody.self)
-        try await applyDatasetsEdit(setup: setup, datasets: body.datasets, on: req.db)
-        return try await datasetsPanelResponse(req: req, setup: setup)
+        let normalized = try await applyDatasetsEdit(setup: setup, datasets: body.datasets, on: req.db)
+        return try await datasetsPanelResponse(setup: setup, saved: normalized)
     }
 
     // MARK: - GET /instructor/new/draft/files/item?draftID=<id>&name=<filename>

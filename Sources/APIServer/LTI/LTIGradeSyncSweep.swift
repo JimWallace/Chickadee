@@ -17,6 +17,7 @@
 // when the student had never opened Chickadee from the LMS, their first
 // launch.
 
+import Core
 import Fluent
 import Foundation
 import Vapor
@@ -66,6 +67,15 @@ struct LTIGradeSyncSweep {
             guard let assignment = assignments[row.testSetupID] else {
                 // The assignment is gone: nothing to send, ever.
                 try await row.delete(on: db)
+                finished += 1
+                continue
+            }
+            // A Class activity's points stay in Chickadee
+            // (docs/assignment-types.md): drop the push, as for a course that
+            // went back to Valence.
+            if !assignment.assignmentType.pushesGradesToLMS {
+                row.pending = false
+                try await row.save(on: db)
                 finished += 1
                 continue
             }

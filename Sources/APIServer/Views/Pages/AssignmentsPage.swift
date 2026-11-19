@@ -22,6 +22,10 @@ struct AssignmentsPage: HTML {
     /// True only when the course has nothing to list in any lane.
     let showEmptyMessage: Bool
     let enrolledStudentCount: Int
+    /// The published assignments a material's edit form offers under "Show on".
+    var attachTargets: [AssignmentAttachTarget] = []
+    /// From `?notice=`: what an action reported.
+    var flash = FlashMessages()
 
     /// The staff dashboard also serves a TA, who is not offered a control
     /// that the server refuses.
@@ -33,7 +37,7 @@ struct AssignmentsPage: HTML {
     }
 
     var body: some HTML {
-        BaseLayout(title: heading, page: page) {
+        BaseLayout(title: heading, page: page, flash: flash) {
             InstructorTabs(active: .overview)
             // Public/section-items-dnd.js keeps an assignment in its section
             // when the viewer may not move it to another one.
@@ -72,7 +76,7 @@ struct AssignmentsPage: HTML {
                         for section in sections {
                             SectionBlock(
                                 section: section, enrolledStudentCount: enrolledStudentCount, csrfToken: page.csrfToken,
-                                controls: controls)
+                                controls: controls, attachTargets: attachTargets)
                         }
                     }
                 }
@@ -114,16 +118,6 @@ struct AssignmentsPage: HTML {
                                 .class("form-input editor-input"), .type(.text), .name("name"),
                                 .placeholder("e.g. Labs"), .required)
                         }
-                        label(.class("form-label")) {
-                            "Default grading mode"
-                            select(
-                                .class("form-input editor-input"), .name("defaultGradingMode"),
-                                .title("Student Browser grading suits a participation grade")
-                            ) {
-                                option(.value("worker")) { "Chickadee" }
-                                option(.value("browser")) { "Student Browser" }
-                            }
-                        }
                         button(.class("btn btn-primary btn-compact"), .type(.submit)) { "Create section" }
                     }
                 }
@@ -139,8 +133,7 @@ struct AssignmentsPage: HTML {
                         h2(.class("ungrouped-heading")) { "Ungrouped" }
                     }
                     AddItemMenu(
-                        newAssignmentHref: controls.createAssignment ? "/instructor/new" : nil,
-                        panelID: "add-material-ungrouped")
+                        newItemSectionID: controls.createAssignment ? "" : nil, panelID: "add-material-ungrouped")
                 }
             }
             AddMaterialPanel(
@@ -151,7 +144,7 @@ struct AssignmentsPage: HTML {
                     for item in ungroupedItems {
                         CourseItemRow(
                             item: item, enrolledStudentCount: enrolledStudentCount, csrfToken: page.csrfToken,
-                            controls: controls)
+                            controls: controls, attachTargets: attachTargets)
                     }
                 }
             }
@@ -166,8 +159,7 @@ private struct SectionBlock: HTML {
     let enrolledStudentCount: Int
     let csrfToken: String
     let controls: DashboardControls
-
-    private var isWorker: Bool { section.defaultGradingMode == "worker" }
+    let attachTargets: [AssignmentAttachTarget]
 
     var body: some HTML {
         div(.class("section-block"), .data("section-id", value: section.sectionID)) {
@@ -175,8 +167,6 @@ private struct SectionBlock: HTML {
                 span(.class("section-drag-handle"), .ariaHidden) { "⋮⋮" }
                 div(.class("section-view")) {
                     strong { section.name }
-                    " "
-                    span(.class("section-mode-note")) { "tested in \(isWorker ? "Chickadee" : "Student Browser")" }
                     if controls.manageSections {
                         button(
                             .class("btn-link js-section-edit-toggle icon-btn-text"), .type(.button),
@@ -184,8 +174,7 @@ private struct SectionBlock: HTML {
                         ) { Icon("i-pencil") }
                     }
                     AddItemMenu(
-                        newAssignmentHref: controls.createAssignment
-                            ? "/instructor/new?sectionID=\(section.sectionID)" : nil,
+                        newItemSectionID: controls.createAssignment ? section.sectionID : nil,
                         panelID: "add-material-\(section.sectionID)")
                 }
                 if controls.manageSections {
@@ -208,7 +197,7 @@ private struct SectionBlock: HTML {
                     for item in section.items {
                         CourseItemRow(
                             item: item, enrolledStudentCount: enrolledStudentCount, csrfToken: csrfToken,
-                            controls: controls)
+                            controls: controls, attachTargets: attachTargets)
                     }
                 }
             }
@@ -227,14 +216,6 @@ private struct SectionBlock: HTML {
                 input(
                     .class("form-input section-name-input"), .type(.text), .name("name"), .value(section.name),
                     .required)
-                select(
-                    .class("form-input grading-mode-select"), .name("defaultGradingMode"),
-                    .title("Student Browser grading suits a participation grade")
-                ) {
-                    option(.value("worker")) { "Chickadee" }.attributes(.selected, when: isWorker)
-                    option(.value("browser")) { "Student Browser" }
-                        .attributes(.selected, when: section.defaultGradingMode == "browser")
-                }
                 button(.class("btn btn-primary btn-compact"), .type(.submit)) { "Save" }
             }
             button(
@@ -250,15 +231,25 @@ private struct SectionBlock: HTML {
     }
 }
 
-/// The "+ Add" menu: a new assignment, or a piece of material, which opens
-/// the add-material panel `panelID`. No assignment item when
-/// `newAssignmentHref` is nil (a TA).
+/// The "+ Add" menu: a new Assignment, Lab or Class activity, each opening
+/// the create page with that type chosen, or a piece of material, which opens
+/// the add-material panel `panelID`. A section names no default type; the
+/// author picks the type here (docs/assignment-types.md). No graded items
+/// when `newItemSectionID` is nil (a TA).
 private struct AddItemMenu: HTML {
-    let newAssignmentHref: String?
+    /// The section a new graded item joins, "" for the ungrouped bucket, or
+    /// nil when the viewer may not create one.
+    let newItemSectionID: String?
     let panelID: String
 
+    private func newItemHref(_ type: AssignmentType, sectionID: String) -> String {
+        sectionID.isEmpty
+            ? "/instructor/new?type=\(type.rawValue)"
+            : "/instructor/new?type=\(type.rawValue)&sectionID=\(sectionID)"
+    }
+
     private static let materials: [(kind: String, icon: String, label: String)] = [
-        ("slides", "i-slides", "Slides"), ("notebook", "i-book", "Notebook"),
+        ("slides", "i-slides", "Slides"), ("notebook", "i-notebook", "Notebook"),
         ("document", "i-file-text", "Document"), ("link", "i-link", "Link"), ("outline", "i-list", "Outline"),
         ("heading", "i-heading", "Heading"),
     ]
@@ -270,10 +261,17 @@ private struct AddItemMenu: HTML {
                 Icon("i-chevron-down")
             }
             div(.class("add-section-popup card suite-section-popup row-menu-panel"), .role("menu")) {
-                if let newAssignmentHref {
-                    a(.class("row-menu-item"), .href(newAssignmentHref), .role("menuitem")) {
-                        span(.class("item-tile"), .data("kind", value: "graded")) { Icon("i-calendar-check") }
-                        "Assignment"
+                if let newItemSectionID {
+                    div(.class("add-test-group-label")) { "Graded" }
+                    for type in AssignmentType.allCases {
+                        let tile = AssignmentTypeTile(type: type)
+                        a(
+                            .class("row-menu-item"), .href(newItemHref(type, sectionID: newItemSectionID)),
+                            .role("menuitem")
+                        ) {
+                            span(.class("item-tile"), .data("kind", value: tile.kind)) { Icon(tile.symbol) }
+                            type.displayName
+                        }
                     }
                     hr()
                 }

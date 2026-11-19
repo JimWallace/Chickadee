@@ -1,8 +1,7 @@
 # Chickadee — Architecture
 
-Status: current as of the 0.5.0 cleanup pass (2026-07). The browser grading
-and vendored-library sections were corrected in 2026-10, after Pyodide was
-removed (v0.5.19).
+Status: current as of the 0.6.0 cleanup pass (2026-11). Every browser grader
+is a xeus kernel, routed per script (#1271); Pyodide was removed in v0.5.19.
 
 ## Overview
 
@@ -127,6 +126,9 @@ Sources/
     SubmissionNormalizer.swift · NotebookExtractor.swift · MimeTypeDetector.swift
     TestRuntimeSources.swift    Embedded runtime helper sources, one set per language
     TestSetupCache.swift    LRU cache of prepared test setup directories
+  CProcessHardening/        C shim: runner and server refuse process inspection
+  LoadTest/                 chickadee-loadtest: hot paths and a lecture
+                            (docs/load-testing.md)
 wasm/                       SwiftPM sub-package: RunnerCore → wasm32 bridge
 Public/runner-wasm/         Vendored wasm artifact + JS bridge (checked in)
 ```
@@ -331,11 +333,27 @@ from reverse proxies.
 
 Concurrent runner instances poll `/worker/request` simultaneously. To prevent
 two runners from claiming the same job, `WorkerJobClaim.claimSubmission`
-(`Services/WorkerJobClaim.swift`) claims in a short transaction that locks the
-pending row with `SELECT … FOR UPDATE SKIP LOCKED` (#1172). A row another
-claimer holds is skipped rather than waited on, so the loser moves to its next
-candidate. This holds across any number of server processes, with no
+(`Services/WorkerJobClaim.swift`) claims in one statement: an UPDATE whose
+target is a `SELECT … FOR UPDATE SKIP LOCKED` of the row while it is still
+pending (#1172). A row another claimer holds is skipped rather than waited on,
+so the loser gets no row at once and moves to its next candidate, at the cost
+of one statement. This holds across any number of server processes, with no
 in-process serialisation.
+
+### Held polls
+
+A runner slot with no job asks the server to hold its poll for up to 20 s
+(`WorkerLongPoll`, `WorkerActivityPayload.longPollSeconds`). The server claims,
+waits on `PendingWorkSignal`, and claims again when pending work appears. It
+answers with the job, or with 204 and the `Chickadee-Poll-Held` header when the
+hold ends, and the runner then polls again at once. `SubmissionIntake` wakes
+the held polls when a student submission is committed. A watcher that counts
+pending rows once a second covers every other path, usually within a second and
+at worst within the hold. A slot used to back off up
+to 30 s between empty polls, so a submission in a quiet period could wait that
+long before any runner asked for it. At shutdown the signal releases every held
+poll before Vapor waits for in-flight requests. An older runner sends no hold,
+and an older server ignores it, so each side keeps the old behaviour alone.
 
 ### WorkerDaemon concurrency
 
@@ -395,8 +413,8 @@ protocol ScriptRunner: Sendable {
     func run(script: URL, workDir: URL, timeLimitSeconds: Int, env: [String: String]) async -> ScriptOutput
 }
 
-struct UnsandboxedScriptRunner: ScriptRunner { … }   // default in development
-struct SandboxedScriptRunner: ScriptRunner { … }     // --sandbox flag
+struct UnsandboxedScriptRunner: ScriptRunner { … }   // --no-sandbox
+struct SandboxedScriptRunner: ScriptRunner { … }     // the default since 0.6.0
 ```
 
 `SandboxedScriptRunner` uses platform-specific primitives:
@@ -447,19 +465,19 @@ these protections:
   runner's shared secret (`Sources/Worker/ScriptRunner.swift`). The runner
   also marks itself non-dumpable at start, so a script cannot read the
   secret from the runner's own `/proc` entries.
-- **The host, with `--sandbox`.** The script cannot reach the network. On
+- **The host, in the sandbox (the default since 0.6.0).** The script cannot reach the network. On
   Linux it has no real privileges, and it starts with no capability at all,
   not even inside its own namespace (#2268): the prelude that builds the
   mounts needs them, but a script that kept them could `umount` the covers
   below and read every other job and every cached test setup. On macOS it can write only in its working
-  directory. Without `--sandbox`, the script runs as the runner's user, with
+  directory. With `--no-sandbox`, the script runs as the runner's user, with
   network access. The manifest's `make` step runs in the same sandbox as the
-  scripts (#2250); until then it ran outside it, even with `--sandbox`. When
+  scripts (#2250); until then it ran outside it, even in the sandbox. When
   the manifest has a make step, a submission cannot supply `Makefile`,
   `makefile` or `GNUmakefile` (`protectedWorkspaceFilenames`), because the
   submission is merged before `make` runs and GNU make reads `GNUmakefile`
   first.
-- **Other jobs on the same runner, with `--sandbox`.** Every job on a runner
+- **Other jobs on the same runner, in the sandbox.** Every job on a runner
   runs as the same user, and every job directory is a child of one work root.
   So while two jobs run at the same time (`--max-jobs` above 1), a script
   could read the other job's workspace, which holds another student's
@@ -469,10 +487,10 @@ these protections:
   environment names (`CHICKADEE_OPPONENT_DIR`) are bound back. On macOS the
   profile denies the work root and allows the same directories. Nothing is
   configured: the work root is the parent of the working directory, because
-  the runner creates both. Without `--sandbox`, the workspaces are shared. A
+  the runner creates both. With `--no-sandbox`, the workspaces are shared. A
   class-activity match job stages a classmate's submission as the opponent,
   by design (see [class-activities.md](class-activities.md)).
-- **The job's other test scripts, with `--sandbox`.** While one suite script
+- **The job's other test scripts, in the sandbox.** While one suite script
   runs, the job's other suite scripts read as empty on Linux (each is covered
   with `/dev/null` in the script's mount namespace) and are denied on macOS. A
   public test's submission can then no longer read the release and secret test
@@ -480,7 +498,7 @@ these protections:
   included, because tests use them) and the per-student inputs stay readable
   (`NativeScriptExecutor.scriptsHidden`; [grading-integrity.md](grading-integrity.md),
   phase 2).
-- **The processes of other jobs on the same runner, with `--sandbox` on
+- **The processes of other jobs on the same runner, in the sandbox on
   Linux.** Every job runs as the same user, so one job could once fork until
   the container's `pids_limit` was used up, and the jobs beside it could then
   not start a process. Each script now starts under its own `RLIMIT_NPROC`
@@ -492,7 +510,7 @@ these protections:
   kernel does not apply the limit then; and the container's `pids_limit` must
   hold every job at its limit (`--max-jobs` x limit + 64,
   `JobProcessBudget`).
-- **The disk of other jobs on the same runner, with `--sandbox` on Linux.**
+- **The disk of other jobs on the same runner, in the sandbox on Linux.**
   Every job directory lives on one mount that the jobs on a runner share, so
   one script that wrote without bound in its working directory once filled it
   for every job. Now an overlay covers the working directory: the script reads
@@ -505,7 +523,7 @@ these protections:
   use what it builds. An opponent directory is read-only. The overlay needs
   Linux 5.11 or later, and the startup probe includes it. The work root above
   the working directory is read-only, so a script cannot write into `..`.
-- **Memory, with `--sandbox` on Linux, in part.** A script's `/tmp`,
+- **Memory, in the sandbox on Linux, in part.** A script's `/tmp`,
   `/var/tmp`, `/dev/shm`, `HOME` and working directory are folders in one
   private tmpfs of `--job-disk-limit` (#2252), not one mount each, which added
   up to about 1.1 GB. A tmpfs is memory that belongs to no process, so the
@@ -714,7 +732,7 @@ with no resolvable account surface in the BrightSpace tab's "unmapped students"
 list.
 
 **Sync engine.** On a worker result save, `ResultRoutes` flags the `APIResult`
-row pending. `BrightSpaceGradeSyncMonitor` sweeps every 60 s and pushes the
+row pending. The BrightSpace sync sweep (`BrightSpaceSyncSweep`) runs every 60 s and pushes the
 **best (max) points** per (student, assignment) past a debounce window
 (`BRIGHTSPACE_SYNC_DEBOUNCE_SECS`, default 90 s). Each meaningful event
 (success, push failure, or skipped-no-account) appends a row to
@@ -768,7 +786,8 @@ submissions when the graded suite actually changed.
 The transport is **dual-era**, resolved per request: a body whose `_meta`
 carries `io.modelcontextprotocol/protocolVersion` gets the 2026-07-28
 revision's semantics (mandatory `server/discover`, `resultType` + server
-`_meta`, mirrored protocol headers); anything else keeps the legacy
+`_meta`, the required `ttlMs` / `cacheScope` on cacheable results, mirrored
+protocol headers); anything else keeps the legacy
 `initialize` handshake behaviour. See
 [`mcp-2026-07-28-revision.md`](archive/mcp-2026-07-28-revision.md) and the tool index
 in [`mcp-authoring-roadmap.md`](mcp-authoring-roadmap.md).
@@ -808,8 +827,8 @@ and [`personalization-eval-runtime.md`](personalization-eval-runtime.md).
 function, shared defaults, and a table of cases; `applyPatternFamilies`
 expands each enabled case into an ordinary generated test script at save time
 (deterministic filenames, a `spec_hash` header, and a `generatedBy` marker so
-the raw-script edit endpoints refuse to mutate them). Eight kinds ship, from
-`boundaryEquality` to `unorderedEquality`. Notebook checks (ten
+the raw-script edit endpoints refuse to mutate them). Ten kinds ship, from
+`boundaryEquality` to `programIO` (`PatternKind`). Notebook checks (ten
 `NotebookCheckKind`s, e.g. `variableExists`, `astStructure`) render the same
 way. The grading path never knows: workers and the browser runner only see
 scripts.
@@ -861,7 +880,9 @@ version 2 course bundle carry the library. See
 ### Docker Compose (recommended)
 
 Multi-stage `Dockerfile` compiles both binaries with `--static-swift-stdlib`
-so no Swift toolchain is needed on the host. Each binary goes into the image
+so no Swift toolchain is needed on the host. Its `runner` target
+(`--target runner`) builds a runner-only image with no server and no `Public/`,
+for a runner host such as a Mac (`docs/mac-runner.md`). Each binary goes into the image
 without its debug data. The CI image build also removes the symbol table
 (`strip --strip-all`); a tag build keeps the debug data and the symbols as a
 `debug-symbols-<tag>` workflow artifact for 90 days. A local `Dockerfile` build
@@ -887,10 +908,16 @@ publishes an image; a host-side daemon, `chickadee-deployer`
 each release via `scripts/bluegreen-deploy.sh` — the new "color" container
 boots beside the live one, is health-gated, the nginx upstream flips with no
 dropped requests, and the old color drains and stays for instant rollback.
-Non-major bumps deploy unattended; major bumps hold for human approval. Each
-deploy snapshots first and auto-rolls-back if the new version degrades after
-cutover. The admin-MCP deploy tools are strictly read-only; deploy control is
-host-side by design. See [`zero-downtime-deploy.md`](zero-downtime-deploy.md).
+Which releases deploy unattended is a mode an admin sets on the admin page:
+in the default, `gated-minors`, a patch deploys on its own and a minor waits for
+approval; a major always waits. A change to the student contract (the vendored
+kernels, the runner wasm, `Sources/RunnerCore/`) ships only in a minor, cut by
+hand, and the dev server runs ahead on pre-releases. Each deploy snapshots first
+and auto-rolls-back if the new version degrades after cutover. The admin page
+only sends requests that the daemon validates; rollback stays host-side, and the
+admin-MCP deploy tools are strictly read-only. See
+[`release-gate.md`](release-gate.md) and
+[`zero-downtime-deploy.md`](zero-downtime-deploy.md).
 
 ### VM / systemd
 

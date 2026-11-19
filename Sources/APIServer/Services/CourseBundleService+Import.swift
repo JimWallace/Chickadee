@@ -66,6 +66,9 @@ extension CourseBundleService {
         let manifest: CourseBundleManifest
         do {
             manifest = try decoder.decode(CourseBundleManifest.self, from: manifestData)
+        } catch let error as BundledDatasetFormatError {
+            // A dataset format this server does not know, by name.
+            throw AppError.invalidParameter(name: "bundle.json", reason: error.description)
         } catch {
             throw AppError.invalidParameter(name: "bundle.json", reason: "\(error)")
         }
@@ -75,6 +78,11 @@ extension CourseBundleService {
             throw AppError.badRequest(
                 reason: "Unsupported bundle schemaVersion \(manifest.schemaVersion); expected "
                     + "\(supported.lowerBound) to \(supported.upperBound)")
+        }
+        if let issue = CourseBundleManifest.datasetFormatIssue(
+            schemaVersion: manifest.schemaVersion, datasets: manifest.datasets ?? [])
+        {
+            throw AppError.badRequest(reason: issue)
         }
 
         return manifest
@@ -135,16 +143,13 @@ extension CourseBundleService {
 
     // ── 4b. Validate the enum-valued fields ───────────────────────────
 
-    /// A bundle from a newer server can name a content item kind or a
-    /// section grading mode this server does not know. The import refuses
+    /// A bundle from a newer server can name a content item kind this server
+    /// does not know. The import refuses
     /// it here and names the item, instead of importing the item as a link
     /// in silence (#2172).
     private static func validateBundleKinds(manifest: CourseBundleManifest) throws {
         for item in manifest.contentItems ?? [] {
             _ = try bundledContentItemKind(item)
-        }
-        for section in manifest.sections ?? [] {
-            _ = try bundledSectionGradingMode(section)
         }
     }
 
@@ -248,7 +253,7 @@ extension CourseBundleService {
 
                 // 6e-bis. Create ungraded content items, re-linked to the sections
                 // recreated above (depends only on sectionIDMap).
-                try await importBundledContentItems(
+                let attachedContentItems = try await importBundledContentItems(
                     manifest: manifest, sectionIDMap: sectionIDMap, courseID: t.courseID,
                     dirs: dirs, db: db, tally: &t)
 
@@ -261,12 +266,21 @@ extension CourseBundleService {
                 // 6f. Create test setups → setupIDMap[bundleID] = new live ID
                 let setupIDMap = try await importBundledTestSetups(
                     manifest: manifest, dirs: dirs, courseID: t.courseID,
-                    app: app, db: db, tally: &t)
+                    db: db, tally: &t)
 
                 // 6g. Create assignments
-                try await importBundledAssignments(
+                let assignmentIDMap = try await importBundledAssignments(
                     manifest: manifest, setupIDMap: setupIDMap, sectionIDMap: sectionIDMap,
                     courseID: t.courseID, db: db, tally: &t)
+
+                // 6g-bis. Re-attach the content items attached to an assignment,
+                // now that the assignments exist. One whose assignment did not
+                // import stays a standalone item.
+                for (item, assignmentBundleID) in attachedContentItems {
+                    guard let assignmentID = assignmentIDMap[assignmentBundleID] else { continue }
+                    item.assignmentID = assignmentID
+                    try await item.save(on: db)
+                }
 
                 // 6h. Create submissions → subIDMap[bundleID] = new live ID
                 let subIDMap = try await importBundledSubmissions(
@@ -450,7 +464,6 @@ private func importBundledTestSetups(
     manifest: CourseBundleManifest,
     dirs: BundleImportDirectories,
     courseID: UUID,
-    app: Application,
     db: any Database,
     tally: inout ImportTally
 ) async throws -> [String: String] {
@@ -492,15 +505,20 @@ private func importBundledTestSetups(
         {
             let nbPath = setupsDir + "\(newSetupID).ipynb"
             tally.createdPaths.append(nbPath)
+            // Outputs cleared on import (`NotebookOutputs`; the kernel is still
+            // normalized on read, as before): a bundle from an
+            // older release or another server may carry the author's outputs,
+            // and the one-time migration ran before this import.
             try await runBlocking {
-                try FileManager.default.copyItem(at: srcNotebook, to: URL(fileURLWithPath: nbPath))
+                let bytes = try Data(contentsOf: srcNotebook)
+                try NotebookOutputs.stripped(bytes).write(to: URL(fileURLWithPath: nbPath))
             }
             notebookPath = nbPath
         } else if let nbData = await extractNotebookFromZip(zipPath: newZipPath) {
             let nbPath = setupsDir + "\(newSetupID).ipynb"
             tally.createdPaths.append(nbPath)
             try await runBlocking {
-                try nbData.write(to: URL(fileURLWithPath: nbPath))
+                try NotebookOutputs.stripped(nbData).write(to: URL(fileURLWithPath: nbPath))
             }
             notebookPath = nbPath
         }
@@ -567,7 +585,6 @@ private func importBundledSections(
     for bundledSection in manifest.sections ?? [] {
         let newSection = APICourseSection(
             name: bundledSection.name,
-            defaultGradingMode: try bundledSectionGradingMode(bundledSection).rawValue,
             sortOrder: bundledSection.sortOrder,
             courseID: courseID
         )
@@ -581,6 +598,9 @@ private func importBundledSections(
 /// each to its recreated section via `sectionIDMap` (a `sectionBundleID` with no
 /// mapping — including nil — lands the item ungrouped). Bundles exported before
 /// content items were carried have no `contentItems` array and import nothing.
+/// Returns the items that were attached to an assignment, with the
+/// assignment's bundle ID, for the caller to re-attach once the assignments
+/// are imported.
 private func importBundledContentItems(
     manifest: CourseBundleManifest,
     sectionIDMap: [String: UUID],
@@ -588,7 +608,8 @@ private func importBundledContentItems(
     dirs: BundleImportDirectories,
     db: any Database,
     tally: inout ImportTally
-) async throws {
+) async throws -> [(item: APICourseContentItem, assignmentBundleID: String)] {
+    var attached: [(item: APICourseContentItem, assignmentBundleID: String)] = []
     let extractDir = dirs.extractDir
     let contentFilesDir = dirs.contentFilesDir
     for item in manifest.contentItems ?? [] {
@@ -604,6 +625,9 @@ private func importBundledContentItems(
             isPublished: item.isPublished
         )
         try await newItem.save(on: db)
+        if let assignmentBundleID = item.assignmentBundleID {
+            attached.append((newItem, assignmentBundleID))
+        }
 
         // Re-host each attachment under freshly generated ids: copy the bundle
         // file (content/<uuid>, validated safe) into the new item's directory.
@@ -634,6 +658,7 @@ private func importBundledContentItems(
             try await newItem.save(on: db)
         }
     }
+    return attached
 }
 
 private func importBundledAssignments(
@@ -643,7 +668,8 @@ private func importBundledAssignments(
     courseID: UUID,
     db: any Database,
     tally: inout ImportTally
-) async throws {
+) async throws -> [String: UUID] {
+    var assignmentIDMap: [String: UUID] = [:]
     for bundledAssign in manifest.assignments {
         guard let setupID = setupIDMap[bundledAssign.testSetupBundleID] else { continue }
         let newAssign = APIAssignment(
@@ -669,6 +695,16 @@ private func importBundledAssignments(
         // The lab concept for the wardrobe's concept rings. One this instance
         // does not know imports as no concept.
         newAssign.concept = bundledAssign.concept.flatMap(AssignmentConcept.init(rawValue:))
+        // The declared type. A bundle written before it was carried, or one
+        // naming a type this instance does not know, derives it from the
+        // imported manifest, as the backfill did (docs/assignment-types.md).
+        // A bundled Assignment that the imported manifest grades in the
+        // browser also derives it, so an import never creates an Assignment
+        // whose secret tests reach the browser (`admissibleAssignmentType`).
+        let importedSetup = try await APITestSetup.find(setupID, on: db)
+        newAssign.assignmentType = admissibleAssignmentType(
+            bundledAssign.assignmentType.flatMap(AssignmentType.init(rawValue:)),
+            manifest: importedSetup?.decodedManifest())
         // The deadline override travels with the open state it protects
         // (#2166): without it the next sweep closes an imported assignment
         // whose due date has passed.
@@ -682,8 +718,10 @@ private func importBundledAssignments(
                 assignmentID: try newAssign.requireID(), specification: requirement
             ).save(on: db)
         }
+        assignmentIDMap[bundledAssign.bundleID] = try newAssign.requireID()
         tally.assignmentsImported += 1
     }
+    return assignmentIDMap
 }
 
 /// Seeds `v1` for every imported setup. Best effort, like the other seeds:
@@ -811,16 +849,6 @@ private func bundledContentItemKind(_ item: BundledContentItem) throws -> Conten
             reason: "Bundle content item \"\(item.title)\" has an unknown kind: \(item.kind)")
     }
     return kind
-}
-
-/// The grading mode a bundled section names, or a `badRequest` that names
-/// the section and the mode (#2172).
-private func bundledSectionGradingMode(_ section: BundledSection) throws -> GradingMode {
-    guard let mode = GradingMode(rawValue: section.defaultGradingMode) else {
-        throw AppError.badRequest(
-            reason: "Bundle section \"\(section.name)\" has an unknown grading mode: \(section.defaultGradingMode)")
-    }
-    return mode
 }
 
 /// Resolves a test setup or submission path from a bundle manifest to a file

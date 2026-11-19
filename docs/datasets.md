@@ -305,8 +305,8 @@ Therefore, secret-answer mystery assignments must use one of:
   already moved attempt-number / first-pass reconciliation server-side for
   browser results — same spirit.)
 
-Set the default grading mode for these assignments to `worker` and document
-why. A purely browser-graded mystery with the answer in the workspace is not
+Declare these assignments as the Assignment type, which refuses browser
+grading (docs/assignment-types.md), and document why. A purely browser-graded mystery with the answer in the workspace is not
 secure.
 
 A second, smaller concern: the seed itself reaches the browser (it must, for
@@ -472,7 +472,9 @@ like `solution.py`):
    filename, **skip** the read-only shared symlink and instead write the
    materialized sample as a real file at notebook open (next to the existing
    `applyNotebookSubstitutionsIfNeeded` resolution, `:200`). Re-materialize
-   when seed/source/params change.
+   when seed/source/params change. A dataset with no sample, partition or
+   transform is now linked to the shared copy instead
+   ([dataset-shared-delivery.md](dataset-shared-delivery.md)).
 2. **Worker** (`materializePersonalizedFiles` in `RunnerDaemon+JobPreparation.swift`): right where
    `_ck_inputs.py` is written into the **per-job scratch** workspace, also
    write the per-student dataset files (overwriting the source copied from the

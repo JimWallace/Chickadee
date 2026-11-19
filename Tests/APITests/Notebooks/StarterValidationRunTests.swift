@@ -167,6 +167,7 @@ import VaporTesting
         encoder.dateEncodingStrategy = .iso8601
         let body = try ByteBuffer(
             data: encoder.encode(WorkerExecutionReport(collection: collection, diagnostics: nil)))
+        try await markClaimedForResultReport(submissionID, on: app.db)
         let path = "/api/v1/worker/results"
         try await app.asyncTest(
             .POST, path,

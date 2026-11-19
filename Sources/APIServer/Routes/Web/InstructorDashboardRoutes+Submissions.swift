@@ -13,6 +13,7 @@ import Core
 import Elementary
 import Fluent
 import Foundation
+import SQLKit
 import Vapor
 
 extension InstructorDashboardRoutes {
@@ -72,22 +73,10 @@ extension InstructorDashboardRoutes {
         let bestByStudentID = try await bestFetch
         let disagreeingStudentIDs = try await disagreementFetch
 
-        // The latest submission per student, refetched as O(students) rows
-        // for their timestamps.
-        let latestIDs = summaryByStudentID.values.map(\.latestSubmissionID)
-        let latestRows =
-            latestIDs.isEmpty
-            ? []
-            : try await APISubmission.query(on: req.db)
-                .filter(\.$id ~~ latestIDs)
-                .all()
-        let latestRowByID = Dictionary(
-            latestRows.compactMap { row in row.id.map { ($0, row) } },
-            uniquingKeysWith: { first, _ in first })
-
+        // The summary carries each latest submission's id and time, so the
+        // roster needs no second read by id.
         let lookups = StudentRowLookups(
             summaryByStudentID: summaryByStudentID,
-            latestRowByID: latestRowByID,
             bestByStudentID: bestByStudentID,
             overrideByStudentID: overrideByStudentID,
             spentRevealUserIDs: spentRevealUserIDs,
@@ -154,9 +143,15 @@ extension InstructorDashboardRoutes {
         // enrollments don't count toward the submitted-student denominators.
         let studentUserIDs = try await CourseRoster.studentIDs(in: assignment.courseID, on: req.db)
         guard !studentUserIDs.isEmpty else { return [] }
+        // Only the columns a roster row reads (`buildAssignmentStudentRow`):
+        // a user row carries many more.
         return try await APIUser.query(on: req.db)
             .filter(\.$id ~~ Array(studentUserIDs))
             .sort(\.$username, .ascending)
+            .field(\.$id)
+            .field(\.$username)
+            .field(\.$displayName)
+            .field(\.$preferredName)
             .all()
     }
 
@@ -168,24 +163,42 @@ extension InstructorDashboardRoutes {
     /// out-of-range rows either way.
     private func loadRecentSubmissionTimestamps(
         req: Request, assignment: APIAssignment, studentIDs: [UUID]
-    ) async throws -> [APISubmission] {
+    ) async throws -> [Date] {
         guard !studentIDs.isEmpty else { return [] }
         let cutoff = Date().addingTimeInterval(-31 * 24 * 60 * 60)
-        return try await APISubmission.query(on: req.db)
+        let query = APISubmission.query(on: req.db)
             .filter(\.$testSetupID == assignment.testSetupID)
             .filter(\.$kind == APISubmission.Kind.student)
             .filter(\.$userID ~~ studentIDs)
             .filter(\.$submittedAt >= cutoff)
-            .field(\.$id)
-            .field(\.$submittedAt)
-            .all()
+        // Plain dates through SQLKit: a model per row cost more than the
+        // query on a busy assignment (docs/database-performance.md).
+        guard let sql = req.db as? (any SQLDatabase) else {
+            return try await query.field(\.$id).field(\.$submittedAt).all().compactMap(\.submittedAt)
+        }
+        struct Row: Decodable {
+            let submittedAt: Date
+            enum CodingKeys: String, CodingKey { case submittedAt = "submitted_at" }
+        }
+        var dates: [Date] = []
+        for chunk in chunkedForInFilter(studentIDs) {
+            dates += try await sql.raw(
+                """
+                SELECT submitted_at FROM \(unsafeRaw: APISubmission.schema)
+                WHERE test_setup_id = \(bind: assignment.testSetupID)
+                  AND kind = \(bind: APISubmission.Kind.student)
+                  AND user_id IN (\(binds: chunk))
+                  AND submitted_at >= \(bind: cutoff)
+                """
+            ).all(decoding: Row.self).map(\.submittedAt)
+        }
+        return dates
     }
 
     /// Per-assignment lookup tables shared by every roster row build, bundled
     /// so `buildAssignmentStudentRow` stays within the parameter-count limit.
     private struct StudentRowLookups {
         let summaryByStudentID: [UUID: SetupStudentSubmissionSummary]
-        let latestRowByID: [String: APISubmission]
         let bestByStudentID: [UUID: Int]
         let overrideByStudentID: [UUID: Int]
         let spentRevealUserIDs: Set<UUID>
@@ -201,7 +214,7 @@ extension InstructorDashboardRoutes {
     ) -> AssignmentStudentRow? {
         guard let studentID = student.id else { return nil }
         let summary = lookups.summaryByStudentID[studentID]
-        let latest = summary.flatMap { lookups.latestRowByID[$0.latestSubmissionID] }
+        let latestSubmittedAt = summary?.latestSubmittedAt
         let submissionCount = summary?.submissionCount ?? 0
         let runnerBestGradePercent = lookups.bestByStudentID[studentID]
         // An instructor override is the student's effective grade — it feeds
@@ -216,8 +229,8 @@ extension InstructorDashboardRoutes {
             bestGradePercent: bestGradePercent, threshold: lookups.passingThresholdPercent)
         let cell = LatestSubmissionCell(
             count: submissionCount,
-            latestSubmissionID: latest?.id,
-            latestSubmittedAtText: latest?.submittedAt.map { fmt.string(from: $0) },
+            latestSubmissionID: summary?.latestSubmissionID,
+            latestSubmittedAtText: latestSubmittedAt.map { fmt.string(from: $0) },
             bestPercent: runnerBestGradePercent,
             overridePercent: override)
         return AssignmentStudentRow(
@@ -228,7 +241,7 @@ extension InstructorDashboardRoutes {
             gradeText: cell.bestGradeText ?? "—",
             gradeOverridePercent: override ?? runnerBestGradePercent ?? 0,
             latest: cell,
-            latestSubmittedAtEpoch: latest?.submittedAt.map { Int($0.timeIntervalSince1970) } ?? 0,
+            latestSubmittedAtEpoch: latestSubmittedAt.map { Int($0.timeIntervalSince1970) } ?? 0,
             fullHistoryURL: "/instructor/\(assignmentIDRaw)/students/\(studentID.uuidString)/history",
             bestGradePercent: bestGradePercent,
             secretRevealSpent: lookups.spentRevealUserIDs.contains(studentID),
@@ -240,7 +253,7 @@ extension InstructorDashboardRoutes {
 
     private func buildAssignmentSubmissionsMetrics(
         rows: [AssignmentStudentRow],
-        submissions: [APISubmission],
+        submissions: [Date],
         enrolledStudentRosterCount: Int,
         passingThresholdPercent: Int?
     ) -> [AssignmentStatCard] {
@@ -248,10 +261,7 @@ extension InstructorDashboardRoutes {
         let windowStart = now.addingTimeInterval(-24 * 60 * 60)
         let submittedRows = rows.filter { $0.latest.submissionCount > 0 }
         let submittedCount = submittedRows.count
-        let submissions24h = submissions.count(where: { submission in
-            guard let submittedAt = submission.submittedAt else { return false }
-            return submittedAt >= windowStart
-        })
+        let submissions24h = submissions.count(where: { $0 >= windowStart })
         let gradedRows = rows.compactMap(\.bestGradePercent)
         let medianBestGrade: String
         if gradedRows.isEmpty {
@@ -373,15 +383,14 @@ extension InstructorDashboardRoutes {
     /// Waterloo time.  Empty when there's been no submission in the last 30
     /// days, so the card falls back to a plain "Submissions (24h)" count.
     private func submissionTrendWindows(
-        _ submissions: [APISubmission], now: Date
+        _ submissions: [Date], now: Date
     ) -> [SubmissionsTrendWindow] {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = TimeZone(identifier: "America/Toronto") ?? calendar.timeZone
 
         // Each submission's day is computed once, for both daily windows.
         var perDay: [Date: Int] = [:]
-        for submission in submissions {
-            guard let submittedAt = submission.submittedAt else { continue }
+        for submittedAt in submissions {
             perDay[calendar.startOfDay(for: submittedAt), default: 0] += 1
         }
         let (monthStarts, monthCounts) = dailyBuckets(perDay: perDay, dayCount: 30, calendar: calendar, now: now)
@@ -442,7 +451,7 @@ extension InstructorDashboardRoutes {
 
     /// Buckets submissions into 24 hourly buckets ending at the current hour.
     private func hourlyBuckets(
-        _ submissions: [APISubmission], calendar: Calendar, now: Date
+        _ submissions: [Date], calendar: Calendar, now: Date
     ) -> ([Date], [Int]) {
         let hourUnits: Set<Calendar.Component> = [.year, .month, .day, .hour]
         let currentHour = calendar.date(from: calendar.dateComponents(hourUnits, from: now)) ?? now
@@ -452,10 +461,10 @@ extension InstructorDashboardRoutes {
         var counts = [Int](repeating: 0, count: starts.count)
         guard let earliest = starts.min() else { return (starts, counts) }
         let indexOfStart = Dictionary(starts.enumerated().map { ($1, $0) }, uniquingKeysWith: { first, _ in first })
-        for submission in submissions {
+        for submittedAt in submissions {
             // A bucket is never later than its submission, so one submitted
             // before the earliest start matches none: skip the calendar work.
-            guard let submittedAt = submission.submittedAt, submittedAt >= earliest,
+            guard submittedAt >= earliest,
                 let bucket = calendar.date(from: calendar.dateComponents(hourUnits, from: submittedAt))
             else { continue }
             if let index = indexOfStart[bucket] {

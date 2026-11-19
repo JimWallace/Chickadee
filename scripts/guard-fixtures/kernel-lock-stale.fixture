@@ -1,0 +1,10 @@
+# The build installs each kernel from its lock and never solves. A lock left
+# behind by an environment file edit would build the old environment.
+guard="scripts/lock-kernel-envs.py"
+args="--check"
+files="Tools/jupyterlite/environment-lua.yml"
+description="an environment file changes after its lock was made"
+expect="environment-lua-lock.yml was made from a different environment-lua.yml"
+apply() {
+    printf '  - chickadee-guard-fixture\n' >> Tools/jupyterlite/environment-lua.yml
+}

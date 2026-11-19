@@ -1339,7 +1339,10 @@
             }
             var del = /** @type {Element} */ (e.target).closest && /** @type {Element} */ (e.target).closest('.js-section-delete-btn');
             if (del) {
-                var action = del.getAttribute('data-action');
+                // Same-origin check before the value becomes a form target
+                // (ChickadeeUI.sameOriginURL; CodeQL js/xss-through-dom).
+                var actionURL = global.ChickadeeUI.sameOriginURL(del.getAttribute('data-action'));
+                if (!actionURL) return;
                 var name = del.getAttribute('data-name') || 'this section';
                 var bodySid = del.closest('.section-block[data-section-id]');
                 var sid = bodySid ? bodySid.getAttribute('data-section-id') : '';
@@ -1351,7 +1354,7 @@
                 if (!await ChickadeeUI.confirmAction(msg)) return;
                 var f = document.createElement('form');
                 f.method = 'POST';
-                f.action = action;
+                f.action = actionURL;
                 // Marked and submitted the same way the template's own section
                 // forms are, so that inside a workbench pane `inplace-forms.js`
                 // intercepts this too.  `requestSubmit()` rather than

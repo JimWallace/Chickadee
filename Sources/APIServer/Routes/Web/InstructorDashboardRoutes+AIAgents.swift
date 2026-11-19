@@ -50,7 +50,7 @@ extension InstructorDashboardRoutes {
                 AgentFeedbackAssignmentRow(
                     title: assignment.title,
                     reviewURL: "/instructor/\(assignment.publicID)/feedback",
-                    draftCount: drafts))
+                    draftCount: drafts, assignmentType: assignment.assignmentType))
         }
         let enrollment = try await viewerEnrollment(viewer, courseID: courseID, on: req.db)
         let isStaff = (enrollment?.role ?? .student) >= .ta
@@ -124,4 +124,6 @@ struct AgentFeedbackAssignmentRow: Encodable {
     let reviewURL: String
     /// Drafts that still wait for a person.
     let draftCount: Int
+    /// The declared type, which picks the row tile (docs/assignment-types.md).
+    var assignmentType: AssignmentType = .assignment
 }

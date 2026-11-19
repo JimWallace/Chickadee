@@ -47,14 +47,22 @@
         clearUploadError(form);
         form.dispatchEvent(new CustomEvent('chickadee:before-multipart-submit', { bubbles: false }));
         var csrfToken = ChickadeeUI.getCsrfToken();
-        var btn = /** @type {HTMLButtonElement | HTMLInputElement | null} */ (e.submitter || form.querySelector('[type="submit"]'));
+        // Built before the button is disabled below. `new FormData(form)`
+        // leaves out the submitter, but a native submit sends its name and
+        // value: the hidden draft-action buttons on the create page carry
+        // `draftAction` that way, and without it "Create Blank", "Clear" and
+        // "Create from Assignment" reached the server as a plain save.
+        var body = new FormData(form);
+        var submitter = /** @type {HTMLButtonElement | HTMLInputElement | null} */ (e.submitter);
+        if (submitter && submitter.name) body.append(submitter.name, submitter.value);
+        var btn = submitter || /** @type {HTMLButtonElement | HTMLInputElement | null} */ (form.querySelector('[type="submit"]'));
         if (btn) btn.disabled = true;
         // Respect formaction on the activating submit button (e.g. hidden draft-action buttons).
-        var actionURL = (e.submitter && e.submitter.getAttribute('formaction')) || form.action;
+        var actionURL = (submitter && submitter.getAttribute('formaction')) || form.action;
         fetch(actionURL, {
             method: form.method.toUpperCase() || 'POST',
             headers: { 'x-csrf-token': csrfToken },
-            body: new FormData(form)
+            body: body
         }).then(function (res) {
             if (res.redirected) {
                 window.location.href = res.url;

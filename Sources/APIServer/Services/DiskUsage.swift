@@ -62,13 +62,14 @@ func topLevelFileSizesByID(inDirectory path: String) -> [String: Int] {
 
 /// Per-test-setup on-disk footprint keyed by setup id.  Sums the flat
 /// `<id>.<ext>` archives/notebooks at the top level plus the per-setup
-/// `shared/<id>/` (extracted support files) and `notebooks/<id>/` (draft
-/// notebooks) subtrees.
+/// `shared/<id>/` (extracted support files), `notebooks/<id>/` (draft
+/// notebooks) and `dataset-parts/<id>/` (stored partition parts,
+/// `DatasetPartStore`) subtrees.
 func testSetupSizesByID(testSetupsDirectory dir: String) -> [String: Int] {
     var result = topLevelFileSizesByID(inDirectory: dir)
     let base = dir.hasSuffix("/") ? dir : dir + "/"
     let fm = FileManager.default
-    for subtree in ["shared", "notebooks"] {
+    for subtree in ["shared", "notebooks", "dataset-parts"] {
         let subtreeDir = base + subtree
         guard let setupDirs = try? fm.contentsOfDirectory(atPath: subtreeDir) else { continue }
         for setupID in setupDirs {

@@ -102,7 +102,7 @@ extension MCPOAuthRoutes {
             actorOverride: user,
             on: req
         )
-        return try tokenSuccess(req, access: access, refresh: refresh, scope: authCode.scope)
+        return try tokenSuccess(access: access, refresh: refresh, scope: authCode.scope)
     }
 
     private func rotateRefresh(
@@ -195,7 +195,7 @@ extension MCPOAuthRoutes {
         let access = try await mintAccess(
             surface, authority: authority, subject: user.username, scope: grant.scope,
             clientID: grant.clientID, agentName: client?.name)
-        return try tokenSuccess(req, access: access, refresh: newRefresh, scope: grant.scope)
+        return try tokenSuccess(access: access, refresh: newRefresh, scope: grant.scope)
     }
 
     // MARK: - Token helpers
@@ -214,7 +214,7 @@ extension MCPOAuthRoutes {
             agentName: agentName)
     }
 
-    private func tokenSuccess(_ req: Request, access: String, refresh: String, scope: String) throws -> Response {
+    private func tokenSuccess(access: String, refresh: String, scope: String) throws -> Response {
         let response = Response(status: .ok)
         try response.content.encode(
             TokenResponse(

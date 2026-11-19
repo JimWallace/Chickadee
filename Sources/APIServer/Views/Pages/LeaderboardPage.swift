@@ -151,6 +151,10 @@ struct LeaderboardPage: HTML {
                 "Each student renders one slot of a shared image. The slot holders are listed under it. "
                     + "The image never changes a grade."
             }
+        } else if board.showsBugHunt {
+            p(.class("section-intro")) {
+                "The share of the bug hunt the class has covered together. Use Present to show it in the room."
+            }
         } else if board.showsStandings {
             p(.class("section-intro")) {
                 "Highest average match score first, then most wins. Each row is the student's latest "

@@ -78,6 +78,15 @@ public struct Job: Codable, Sendable {
     /// way (`activity-matrix`), since an older runner would ignore it.
     public let opponents: [JobOpponent]?
 
+    /// Names this claim of the submission. The runner echoes it in
+    /// `WorkerExecutionReport.claimToken`, so the server can tell this
+    /// claim's report from a report for an earlier claim of the same row by
+    /// the same runner (a forced retest re-queues a row mid-grade, and the
+    /// runner may claim it again). Opaque to the runner. Optional for wire
+    /// back-compat: an older server sends none, and the report then carries
+    /// none.
+    public let claimToken: String?
+
     public init(
         submissionID: String,
         testSetupID: String,
@@ -91,7 +100,8 @@ public struct Job: Codable, Sendable {
         personalizedFiles: [String: String]? = nil,
         language: AssignmentLanguage?,
         opponent: JobOpponent? = nil,
-        opponents: [JobOpponent]? = nil
+        opponents: [JobOpponent]? = nil,
+        claimToken: String? = nil
     ) {
         self.submissionID = submissionID
         self.testSetupID = testSetupID
@@ -106,6 +116,7 @@ public struct Job: Codable, Sendable {
         self.language = language
         self.opponent = opponent
         self.opponents = opponents
+        self.claimToken = claimToken
     }
 
     /// Builds a job from a full manifest.  It keeps only the runner contract
@@ -123,7 +134,8 @@ public struct Job: Codable, Sendable {
         personalizedFiles: [String: String]? = nil,
         language: AssignmentLanguage?,
         opponent: JobOpponent? = nil,
-        opponents: [JobOpponent]? = nil
+        opponents: [JobOpponent]? = nil,
+        claimToken: String? = nil
     ) {
         self.init(
             submissionID: submissionID, testSetupID: testSetupID, attemptNumber: attemptNumber,
@@ -131,6 +143,6 @@ public struct Job: Codable, Sendable {
             manifest: manifest.runnerManifest(), submissionFilename: submissionFilename,
             assignmentSeed: assignmentSeed, personalizedInputs: personalizedInputs,
             personalizedFiles: personalizedFiles, language: language,
-            opponent: opponent, opponents: opponents)
+            opponent: opponent, opponents: opponents, claimToken: claimToken)
     }
 }

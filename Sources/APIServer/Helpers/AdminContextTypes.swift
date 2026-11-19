@@ -263,6 +263,8 @@ struct AdminCourseAssignmentRow: Encodable {
     let dueAt: String?
     let isOpen: Bool
     let visibility: String  // "closed" | "preview" | "open"
+    /// The declared type, which picks the row tile (docs/assignment-types.md).
+    var assignmentType: AssignmentType = .assignment
 }
 
 struct AdminAlertsRuleRow: Encodable {
@@ -310,20 +312,21 @@ struct AdminAuditRow: Encodable {
 }
 
 /// How an audit entry's category maps to its tile: deployment-admin actions get
-/// a shield, sign-ins a key, agent activity a chip, everything else a neutral tile.
+/// a shield, sign-ins a door, agent activity a chip, everything else a neutral
+/// event glyph.
 enum AuditCategoryTile {
     static func tile(forCategory category: String) -> (key: String, kind: String, icon: String) {
         switch category {
         case AuditCategory.users.rawValue, AuditCategory.courses.rawValue,
             AuditCategory.runner.rawValue, AuditCategory.brightspace.rawValue,
-            AuditCategory.lti.rawValue, AuditCategory.github.rawValue:
+            AuditCategory.lti.rawValue, AuditCategory.github.rawValue, AuditCategory.deploy.rawValue:
             return ("admin", "outline", "#i-shield")
         case AuditCategory.authentication.rawValue:
-            return ("auth", "slides", "#i-key")
+            return ("auth", "slides", "#i-log-in")
         case AuditCategory.mcp.rawValue:
             return ("agent", "notebook", "#i-cpu")
         default:
-            return ("other", "link", "#i-link")
+            return ("other", "link", "#i-activity")
         }
     }
 }

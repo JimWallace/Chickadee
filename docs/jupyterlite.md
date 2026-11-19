@@ -9,15 +9,42 @@ Chickadee embeds a full JupyterLite instance at `Public/jupyterlite/`. This
 enables in-browser notebook editing for both students (submit) and instructors
 (create/validate assignments).
 
-Source-of-truth config lives in `Tools/jupyterlite/`. Rebuild:
+Source-of-truth config lives in `Tools/jupyterlite/`. After an environment file
+changes, lock it again, then rebuild:
 
 ```bash
+scripts/lock-kernel-envs.py
 scripts/setup-jupyterlite.sh
 scripts/build-jupyterlite.sh
 ```
 
 `Public/jupyterlite` is generated output and is checked in; rebuild only when
 updating kernel versions or config.
+
+**Each kernel is built from a lock, and two builds give the same bytes.**
+`scripts/lock-kernel-envs.py` solves each `environment-<x>.yml` once and writes
+`Tools/jupyterlite/locks/environment-<x>-lock.yml`, which names every package
+file by URL and sha256. `scripts/build-jupyterlite.sh` never solves: it installs
+each environment from its lock (`scripts/create-kernel-prefix.py`) at the fixed
+path `/tmp/chickadee-xeus/envs/<name>`, so a rebuild changes a package only when
+a lock changes. Three things used to make every build differ, and each is fixed:
+
+- the install path, which conda writes into each kernel binary, was a random
+  temporary directory (the "16 bytes" of `xpython.wasm`); it is now fixed;
+- empack packed every file with the install's time and user;
+  `scripts/prune-kernel-packages.py` now writes every archive with neither;
+- the build's task database (`.jupyterlite.doit.db`) was kept between builds
+  and, once the paths were fixed, made a second build skip tasks; the build now
+  runs where that database is new each time.
+
+The JupyterLite toolchain is locked the same way: `Tools/jupyterlite/requirements.in`
+holds the pins people write, `requirements.txt` is compiled from it with a hash
+for every package (`empack` included, since it packs the kernels), and
+`scripts/setup-jupyterlite.sh` installs it with `--require-hashes`. CI installs
+the pinned micromamba (`scripts/install-micromamba.sh`), checked by sha256.
+`scripts/lock-kernel-envs.py --check` runs in the JupyterLite job, offline: every
+environment file has a lock, the lock matches the file, and the vendored packages
+are the locked ones.
 
 **Every vendored kernel is a xeus kernel, one env each.**
 `Tools/jupyterlite/environment-python.yml`, `environment-r.yml`,
@@ -65,7 +92,8 @@ back at it.
 Anything a student imports must be baked into the matching env: the editor's CSP is
 `connect-src 'self'`, so there is no runtime pip/piplite escape hatch and a
 missing package is an ImportError with no recovery. The Python set is currently
-numpy / pandas / matplotlib / scipy / sympy / scikit-learn / statsmodels / PIL;
+numpy / pandas / matplotlib / PIL (scipy and statsmodels were dropped for v0.6,
+#3122; worker-graded assignments still have them through the runner's Python);
 the R side is the tidyverse core (dplyr, tidyr, readr, stringr, tibble, purrr,
 forcats).
 
@@ -121,8 +149,8 @@ environment file. It never commits onto unrelated work, because the output is
 ~100 MB of content-hashed binary assets. When the weekly
 `kernel-currency.yml` finds the kernels behind their channels, it dispatches
 the workflow in publish mode: a rebuild from `main` on its own
-`kernels/revendor-*` branch, opened as an auto-merging pull request whose CI
-tests the new kernels. Publishing needs the `RELEASE_TOKEN` secret; the header
+`kernels/revendor-*` branch, opened as a pull request whose CI tests the new
+kernels. It carries the `minor-release` label and does not auto-merge. Publishing needs the `RELEASE_TOKEN` secret; the header
 of the workflow says why.
 
 That false belief had a cost worth remembering. Adding a name to
@@ -135,6 +163,9 @@ to *itself*, so none of them could see it.
 `scripts/check-env-vendored-sync.sh` is the one that compares **declared intent
 to shipped bytes**, costs two file reads, and fails the PR pointing at the
 workflow.
+
+Publish mode locks the environments again before it builds, and the new locks
+travel in the same pull request as the rebuilt bytes.
 
 The committed `Public/jupyterlite/xeus/` bytes remain authoritative for every
 other job (`scripts/check-xeus-vendored.sh` guards their integrity; the
@@ -168,6 +199,85 @@ covered by a blocking `SMOKE_KERNEL=xpython` probe in the `smoke` job of
 `browser-probes.yml`, run on
 both engines because the transports fail independently.
 
+
+## What a kernel boot downloads
+
+A student's first editor boot downloads about 50–60 MB for Python: the
+`kernel_packages/` tarballs (~48 MB gzipped before v0.6 dropped scipy, openblas
+and statsmodels, which were about 27 MB of it; matplotlib-base and pandas are
+now the largest), `bin/xpython.wasm` (15 MB, 4.4 MB as
+brotli) and the JupyterLite shell. A class of 150 that opens notebooks at once
+pulls 8–9 GB. Every one of those files is cached afterwards (the tarballs
+immutably for a year), so the load falls on a course's first week, on a
+re-vendor (new names), on cache eviction (Safari evicts readily) and on lab
+machines that wipe profiles. A third-party CDN is ruled out (see "Vendored
+browser libraries" below).
+
+**`KernelAssetList` names the boot files, from the kernel's own metadata.**
+It reads `<kernel>/kernel.json` and `empack_env_meta.json` at server boot and
+lists the loader, the binary, each `metadata.shared` library and every package,
+as the URLs the kernel requests, with a version that changes when any file
+does. The pages below read it from a data attribute. A checkout without the
+vendored bytes has no list, and the pages then render neither feature.
+
+**Cold loads are measured, per page load (`asset_load` breadcrumbs).**
+`Public/kernel-asset-telemetry.js` sends one per boot through
+`/api/v1/client-diagnostics`, and `get_browser_diagnostics` reports
+`assetLoads` (per source) and `assetLoadsByDay`: loads, cold loads, the cold
+share, bytes over the network versus from the cache, and boot time p50 and p90.
+
+| source | context | how it knows |
+|---|---|---|
+| `editor` | notebook page | The kernel fetches from a worker inside the JupyterLite iframe, and resource timing entries stay in the context that fetched them, so the page cannot read them. It asks the HTTP cache instead: a `cache: 'only-if-cached'` request per file before the iframe mounts (never the network), and again for the missing files once the kernel is idle, which reads their size. The iframe collector sends the shell's own timings (`shell_assets`) just before `kernel_idle`. `boot_ms` is `kernel_idle`'s `elapsed_ms`. An engine that does not honour `only-if-cached` reports `probe=unsupported` and no `cold`. |
+| `grading` | browser grading worker | Chickadee's own worker reads its resource timings and returns them with the `<lang>_kernel_booted` phase. Submit path only. |
+| `prewarm` | dashboard | The warm below, from the page's own timings. |
+
+A load is cold when any kernel file came over the network. A revalidation (a
+304 for the `no-cache` binaries) counts as cached. The breadcrumbs share the
+endpoint's per-user, per-assignment, per-source hourly limit (for `asset_load`
+the kernel environment is part of the key too), so the numbers count the first
+load of each hour per assignment. That over-counts cold loads against a
+per-request rate, and is the load that matters for a class arriving at once.
+`asset_load` rows stay out of `bySource` and `recentSamples`, which are for
+failures.
+
+**The dashboard warms the cache before class (`Public/kernel-prewarm.js`).**
+When the student dashboard lists an open notebook assignment, it renders the
+kernel's list on the warm script. Browser-graded or not, opening the notebook
+boots the editor's kernel, and that boot is the download. After the page loads
+and goes idle, plus 5 seconds, the script fetches one file at a time at low
+priority, reads each body to the end and discards it. It skips a
+`saveData` or 2G connection and a kernel this browser already warmed at its
+current version in the last 7 days (`localStorage`, `ck-kernel-warm:<env>`,
+holding the version and the time). The marker records that the files arrived,
+not that the browser still has them, so it lapses: a re-warm of cached files
+downloads nothing for the immutable tarballs and costs a 304 for the rest. A failure leaves the
+version unmarked and the page unchanged; the kernel then downloads what it
+needs, as before. Leaving the page cancels the warm, so at most one file is
+fetched twice when a student opens a notebook mid-warm.
+
+The warm lands in the cache entry the kernel reads, and three things were
+checked to make it so:
+
+- **The same request.** Same URL, `GET`, `credentials: 'same-origin'` (the
+  mambajs `fetch` and emscripten's both send cookies), and the browser chooses
+  the same `Accept-Encoding`, so the brotli copy matches.
+- **The same cache partition.** Engines key the HTTP cache by top-level site;
+  the dashboard, the notebook page, its same-origin iframe and the kernel worker
+  all share one. Cross-origin isolation is not part of the key, and a
+  same-origin response passes `require-corp` without a CORP header (the
+  tarballs carry `same-origin` CORP from the fast path anyway), so a response
+  cached by the non-isolated dashboard is usable on the isolated page.
+- **The WebKit service worker passes through.** `JupyterLiteConfigFlagMiddleware`
+  turns the JupyterLite service worker on for WebKit, but
+  `enableServiceWorkerCache` is unset, so its fetch handler calls `fetch()`
+  and never answers from its own Cache Storage. The HTTP cache serves it.
+
+**Only what an assignment needs: grading does, the editor does not yet.**
+Browser grading already boots a bare kernel and adds packages on demand. The
+editor still loads the whole environment, so the warm warms the whole
+environment too. The measured design for the editor, and why it did not ship
+here, is in [kernel-boot-cost.md](kernel-boot-cost.md) §"The editor".
 
 ## Vendored browser libraries
 

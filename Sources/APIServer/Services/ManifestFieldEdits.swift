@@ -180,7 +180,10 @@ func setManifestGradingMode(
     guard let parsed = GradingMode(rawValue: mode) else {
         throw AppError.badRequest(reason: "Unknown grading mode \"\(mode)\".")
     }
-    if let violation = ManifestCoherence.violation(introducedBy: { $0.gradingMode = parsed }, in: setup.manifest) {
+    let type = try await declaredAssignmentType(of: setup, on: db)
+    if let violation = ManifestCoherence.violation(
+        for: type, introducedBy: { $0.gradingMode = parsed }, in: setup.manifest)
+    {
         throw AppError.badRequest(reason: violation)
     }
     try await mutateManifest(setup: setup, on: db) { props in
@@ -277,6 +280,14 @@ func currentManifestLanguage(_ manifest: String?) -> String? {
 func changeDeclaredLanguage(
     setup: APITestSetup, to language: AssignmentLanguage?, on db: any Database
 ) async throws {
+    // A language leaving upload-only makes a stored browser mode effective
+    // again, which an Assignment refuses (docs/assignment-types.md).
+    let type = try await declaredAssignmentType(of: setup, on: db)
+    if let violation = ManifestCoherence.violation(
+        for: type, introducedBy: { applyLanguageDeclaration(language, to: &$0) }, in: setup.manifest)
+    {
+        throw AppError.badRequest(reason: violation)
+    }
     try await mutateManifest(setup: setup, on: db) { props in
         if props.language != language, props.testSuites.contains(where: \.isGenerated) {
             throw AppError.badRequest(reason: languageChangeAfterGenerationMessage)
@@ -338,6 +349,14 @@ func parseLanguageChoice(_ raw: String) throws(AppError) -> AssignmentLanguage? 
 func declareManifestLanguage(
     setup: APITestSetup, to language: AssignmentLanguage?, on db: any Database
 ) async throws {
+    // A language leaving upload-only makes a stored browser mode effective
+    // again, which an Assignment refuses (docs/assignment-types.md).
+    let type = try await declaredAssignmentType(of: setup, on: db)
+    if let violation = ManifestCoherence.violation(
+        for: type, introducedBy: { applyLanguageDeclaration(language, to: &$0) }, in: setup.manifest)
+    {
+        throw AppError.badRequest(reason: violation)
+    }
     try await mutateManifest(setup: setup, on: db) { props in
         applyLanguageDeclaration(language, to: &props)
     }
@@ -413,7 +432,10 @@ func setManifestSubmissionMode(
     guard let parsed = SubmissionMode(rawValue: mode) else {
         throw AppError.badRequest(reason: "Unknown submission mode \"\(mode)\".")
     }
-    if let violation = ManifestCoherence.violation(introducedBy: { $0.submissionMode = parsed }, in: setup.manifest) {
+    let type = try await declaredAssignmentType(of: setup, on: db)
+    if let violation = ManifestCoherence.violation(
+        for: type, introducedBy: { $0.submissionMode = parsed }, in: setup.manifest)
+    {
         throw AppError.badRequest(reason: violation)
     }
     try await mutateManifest(setup: setup, on: db) { props in

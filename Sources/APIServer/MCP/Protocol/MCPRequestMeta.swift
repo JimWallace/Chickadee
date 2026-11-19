@@ -21,7 +21,6 @@ enum MCPMetaKey {
     static let protocolVersion = "io.modelcontextprotocol/protocolVersion"
     static let clientInfo = "io.modelcontextprotocol/clientInfo"
     static let clientCapabilities = "io.modelcontextprotocol/clientCapabilities"
-    static let logLevel = "io.modelcontextprotocol/logLevel"
     static let serverInfo = "io.modelcontextprotocol/serverInfo"
 }
 

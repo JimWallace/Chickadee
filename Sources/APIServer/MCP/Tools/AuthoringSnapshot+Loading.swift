@@ -21,6 +21,7 @@ extension AuthoringSnapshot {
         assignment: APIAssignment, setup: APITestSetup, manifest: TestProperties, context: ToolContext
     ) async -> (snapshot: AuthoringSnapshot, warnings: [String]) {
         var snapshot = AuthoringSnapshot(manifest: manifest)
+        snapshot.assignmentType = assignment.declaredAssignmentType
         var warnings: [String] = []
         func attempt(_ part: String, _ body: () async throws -> Void) async {
             do {
@@ -68,6 +69,8 @@ extension AuthoringSnapshot {
         if FileManager.default.fileExists(atPath: setup.zipPath) {
             snapshot.setupZipEntries = await context.request.application.zipEntryListCache.entries(
                 zipPath: setup.zipPath)
+            snapshot.wholeFileSamples = await wholeFilePerStudentSamples(
+                in: manifest.datasets, zipPath: setup.zipPath)
         } else {
             warnings.append(
                 "The test setup's zip could not be found, so the checks that need its file list found nothing.")

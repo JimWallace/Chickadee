@@ -108,6 +108,9 @@ import Testing
         // applyContentEditEffects. Like the web library routes they mirror,
         // and like set_dataset, they do not close: the suite is unchanged.
         "DatasetAttachmentTools.swift",
+        // Stages an upload for a later write tool; writes only mcp_uploads.
+        // The write that consumes it closes or not by its own rule.
+        "BeginUploadTool.swift",
         // Display-only awards; never change what the suite grades.
         "UpdateAchievementsTool.swift",
         // Shared inputs re-inline into scripts in place, matching the web

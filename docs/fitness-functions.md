@@ -68,15 +68,16 @@ exemption list. Before it, five guards ran with no fixture.
 - **`MCPAuthorizationCoverageTests`** — scans every tool's source and fails the
   build if one skips authorization.
 - **The database guards** ([database-design.md](database-design.md)) — read the
-  *migrated catalog*, not the Swift text. `SchemaDesignTests` (foreign-key
-  indexes, covered indexes, column types) holds shrink-only allowlists.
+  *migrated catalog*, not the Swift text. `ForeignKeyIndexCoverageTests`
+  (a leading index on each foreign key, or a reason) and `SchemaDesignTests`
+  (covered indexes, column types) hold shrink-only allowlists.
   `ModelSchemaAgreementTests` checks every Fluent field against its column,
   through Fluent's own property reflection, and has no allowlist.
   `StudentWorkDeletionCoverageTests` seeds a row into every table keyed to a
   setup, submission, assignment or course and runs the real delete, so a new
-  table is covered with no edit. `HotPathStatementBudgetTests` pins the
-  statement count of six hot requests. It found nine tables that the
-  assignment and course deletes left behind.
+  table is covered with no edit. It found nine tables that the assignment
+  and course deletes left behind. `StatementBudgetTests` and
+  `RunnerStatementBudgetTests` hold the hot requests at a statement budget.
 - **`Tools/visual-regression/run-repaint-probe.sh`** — the seam where the
   shared filter, sort, poll and icon sprite meet, which a screenshot cannot
   catch because both sides would agree.

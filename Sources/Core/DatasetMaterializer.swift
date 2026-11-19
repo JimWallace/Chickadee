@@ -37,6 +37,11 @@ public enum DatasetMaterializer {
     /// §4.11). Only a `.partition` spec reads it. A nil number gives a
     /// partition the whole file, which is what a job with no student grades.
     public static func materialize(source: String, spec: DatasetSpec, seedHex: String, dealNumber: Int?) -> String {
+        // A FHIR file is delivered whole and byte for byte
+        // (docs/fhir-datasets-plan.md §11, decision 1). Authoring refuses
+        // every selecting setting on it; one that arrives through a
+        // whole-manifest door is ignored here rather than read as CSV.
+        guard spec.capabilities.selects else { return source }
         let selected = select(source: source, spec: spec, seedHex: seedHex, part: spec.part(forDeal: dealNumber))
         guard !spec.transforms.isEmpty else { return selected }
         return spec.transforms.enumerated().reduce(selected) { csv, step in
@@ -122,6 +127,24 @@ public enum DatasetMaterializer {
         }
         let result = out.joined(separator: "\n")
         return hadTrailingNewline ? result + "\n" : result
+    }
+
+    /// Every part of `csv` split `partCount` ways, in one pass: element `k` is
+    /// exactly `partitionRows(csv:partCount:part: k)`. The editor's part store
+    /// writes each part once from this (docs/dataset-shared-delivery.md), so
+    /// a file in many parts is read once rather than once per part.
+    public static func allParts(csv: String, partCount: Int) -> [String] {
+        guard partCount > 0 else { return [] }
+        let (lines, hadTrailingNewline) = normalizedLines(of: csv)
+        guard lines.count > 1, partCount > 1 else { return Array(repeating: csv, count: partCount) }
+        var buckets: [[Substring]] = Array(repeating: [lines[0]], count: partCount)
+        for index in 1..<lines.count {
+            buckets[(index - 1) % partCount].append(lines[index])
+        }
+        return buckets.map { rows in
+            let result = rows.joined(separator: "\n")
+            return hadTrailingNewline ? result + "\n" : result
+        }
     }
 
     /// Deterministically sample `sampleSize` data rows apportioned across the

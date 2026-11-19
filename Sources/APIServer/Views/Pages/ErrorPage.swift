@@ -8,10 +8,14 @@ import Elementary
 
 struct ErrorPage: HTML {
     let page: PageRequestContext
-    /// The HTTP status code, shown as the large glyph.
+    /// The HTTP status code, shown as fine print under the message.
     let status: Int
+    /// A plain-language title (`errorPageTitle(for:)`), not the reason phrase.
     let title: String
     let message: String
+    /// The same-origin page the reader came from, for "Go back"; nil when
+    /// there is none to trust (#3007, finding 6).
+    var backURL: String?
 
     private var birdImage: String {
         if status == 404 { return "/images/chickadee-404.png" }
@@ -23,10 +27,15 @@ struct ErrorPage: HTML {
         BaseLayout(title: title, page: page) {
             div(.class("error-page")) {
                 img(.class("error-bird"), .src(page.asset(birdImage)), .alt(""))
-                div(.class("error-code")) { String(status) }
                 h1(.class("error-title")) { title }
                 p(.class("error-message")) { message }
-                a(.href("/"), .class("btn")) { "Go home" }
+                p(.class("card-meta")) { "Error \(status)" }
+                div(.class("toolbar")) {
+                    if let backURL {
+                        a(.href(backURL), .class("btn")) { "Go back" }
+                    }
+                    a(.href("/"), .class("btn")) { "Go home" }
+                }
             }
             PageStyle(
                 """
@@ -44,15 +53,6 @@ struct ErrorPage: HTML {
                     height: 5.5rem;
                     opacity: .8;
                     margin-bottom: .25rem;
-                }
-                .error-code {
-                    font-size: 5em;  /* display glyph — 5x body size */
-                    font-weight: 700;
-                    line-height: 1;
-                    /* gray-500, not lighter: the glyph is text to axe, and gray-300 on the
-                       page background fails even the large-text contrast threshold. */
-                    color: var(--gray-500);
-                    letter-spacing: -.05em;
                 }
                 .error-title {
                     margin: 0;

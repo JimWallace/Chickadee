@@ -52,13 +52,6 @@ protocol BrightSpaceGrading: Sendable {
         orgUnitID: String, gradeObjectID: String, bsUserID: String, on application: Application
     ) async throws
 
-    /// Lists the group categories defined for the org unit (e.g. "Lab Sections",
-    /// "Tutorial Groups"), so an instructor can pick the category that a
-    /// `learnGroups` group set reads.
-    func fetchGroupCategories(
-        orgUnitID: String, on application: Application
-    ) async throws -> [BrightSpaceGroupCategory]
-
     /// Lists the groups within a category, including each group's member
     /// D2L user IDs. The LEARN group sync reads a `learnGroups` set with it.
     func fetchGroups(
@@ -76,10 +69,6 @@ protocol BrightSpaceGrading: Sendable {
 // Default no-op implementations so existing conformers (test fakes) don't
 // need to implement these methods.
 extension BrightSpaceGrading {
-    func fetchGroupCategories(
-        orgUnitID: String, on application: Application
-    ) async throws -> [BrightSpaceGroupCategory] { [] }
-
     func fetchGroups(
         orgUnitID: String, categoryID: String, on application: Application
     ) async throws -> [BrightSpaceGroup] { [] }

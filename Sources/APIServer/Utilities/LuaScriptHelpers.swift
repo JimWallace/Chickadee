@@ -23,7 +23,7 @@ private let luaReservedWords: Set<String> = [
 /// back-tick anything and Python's rules are close enough to Lua's that the
 /// question rarely comes up; Lua is the language where a name like `my.value`
 /// (perfectly fine in R) has no legal spelling at all.
-public func isValidLuaIdentifier(_ name: String) -> Bool {
+func isValidLuaIdentifier(_ name: String) -> Bool {
     guard let first = name.first else { return false }
     guard first.isLetter && first.isASCII || first == "_" else { return false }
     guard name.allSatisfy({ ($0.isLetter || $0.isNumber) && $0.isASCII || $0 == "_" }) else {

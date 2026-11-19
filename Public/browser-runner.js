@@ -206,6 +206,18 @@
         } catch (_) { /* never let telemetry break grading */ }
     }
 
+    // Fire-and-forget cold-load breadcrumb for a grading worker's kernel boot:
+    // how many of the kernel's files came over the network, from the worker's
+    // own resource timings (kernel-asset-telemetry.js). Best-effort; never
+    // throws.
+    function recordKernelAssets(assets, setupID) {
+        try {
+            const K = window.ChickadeeKernelAssets;
+            if (!K || !assets || !Array.isArray(assets.entries)) return;
+            K.report('grading', K.gradingMessage(assets.entries, assets.bootMs), setupID);
+        } catch (_) { /* never let telemetry break grading */ }
+    }
+
     /**
      * Run all test scripts against the student's notebook and submit results.
      *
@@ -219,7 +231,10 @@
         try {
             const result = await runScripts(notebookBytes, setupID, {
                 filename: 'submission.ipynb',
-                reportPhase: function (phase, detail) { recordSubmitPhase(phase, setupID, detail); },
+                reportPhase: function (phase, detail, assets) {
+                    recordSubmitPhase(phase, setupID, detail);
+                    if (assets) recordKernelAssets(assets, setupID);
+                },
             });
 
             // Hide the loading-progress status bar — results are now in #nb-results.
@@ -293,7 +308,7 @@
      *
      * @param {Uint8Array} submissionBytes Raw bytes of the submitted solution file.
      * @param {string}     setupID         The test setup ID for this assignment.
-     * @param {{filename?: string, opponentSubmission?: {bytes: Uint8Array, filename: string, seed: string}, reportPhase?: (phase: string, detail?: string) => void}} options
+     * @param {{filename?: string, opponentSubmission?: {bytes: Uint8Array, filename: string, seed: string}, reportPhase?: (phase: string, detail?: string, assets?: any) => void}} options
      * @returns {Promise<{ outcomes: object[], collection: object, sections: {id: string, name: string}[], sectionIDs: (?string)[] }>}
      */
     async function runScripts(submissionBytes, setupID, options = {}) {

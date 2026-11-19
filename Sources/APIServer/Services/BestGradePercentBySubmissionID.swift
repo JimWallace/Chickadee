@@ -16,17 +16,16 @@
 import Core
 import Fluent
 import Foundation
+import SQLKit
 
 // MARK: - Grade-carrying abstraction (#1157)
 
-/// The three grade accessors the folds below need. `APIResult` conforms via
-/// its column-first accessors; `GradeResultSummary` carries the same values
-/// without ever loading `collection_json` — the audit found one CSV export
-/// pulling hundreds of MB of blobs to read four scalar columns.
+/// The grade accessor the folds below need. `APIResult` conforms via its
+/// column-first accessor; `GradeResultSummary` carries the same value without
+/// ever loading `collection_json` — the audit found one CSV export pulling
+/// hundreds of MB of blobs to read four scalar columns.
 protocol GradeValueCarrying {
     var gradePercentValue: Int? { get }
-    var gradePointsValue: Double? { get }
-    var gradeTotalPointsValue: Double? { get }
 }
 
 extension APIResult: GradeValueCarrying {}
@@ -158,26 +157,14 @@ func gradeSummariesBySubmissionID(
     let chunkSize = 5_000
     let ids = Array(submissionIDs)
     var grouped: [String: [GradeResultSummary]] = [:]
-    var legacyRows: [APIResult] = []
+    var legacyRows: [GradeColumnsRow] = []
 
     var index = ids.startIndex
     while index < ids.endIndex {
         let end =
             ids.index(index, offsetBy: chunkSize, limitedBy: ids.endIndex)
             ?? ids.endIndex
-        let page = try await APIResult.query(on: db)
-            .filter(\.$submissionID ~~ Array(ids[index..<end]))
-            .field(\.$id)
-            .field(\.$submissionID)
-            .field(\.$source)
-            .field(\.$earnedPoints)
-            .field(\.$totalPoints)
-            .field(\.$passCount)
-            .field(\.$totalTests)
-            .field(\.$receivedAt)
-            .sort(\.$receivedAt, .descending)
-            .all()
-        for row in page {
+        for row in try await gradeColumnsRows(for: Array(ids[index..<end]), on: db) {
             let allColumnsNil =
                 row.earnedPoints == nil && row.totalPoints == nil
                 && row.passCount == nil && row.totalTests == nil
@@ -223,6 +210,65 @@ func gradeSummariesBySubmissionID(
         }
     }
     return grouped
+}
+
+/// One result's grade columns and identity, as `gradeSummariesBySubmissionID`
+/// reads them.
+private struct GradeColumnsRow: Decodable {
+    let id: String?
+    let submissionID: String
+    let source: String?
+    let earnedPoints: Double?
+    let totalPoints: Double?
+    let passCount: Int?
+    let totalTests: Int?
+    let receivedAt: Date?
+
+    enum CodingKeys: String, CodingKey {
+        case id, source
+        case submissionID = "submission_id"
+        case earnedPoints = "earned_points"
+        case totalPoints = "total_points"
+        case passCount = "pass_count"
+        case totalTests = "total_tests"
+        case receivedAt = "received_at"
+    }
+}
+
+/// The grade columns of every result of `submissionIDs`, newest first. Decoded
+/// through SQLKit into plain rows: building a Fluent model per row cost more
+/// than the query on the pages that read thousands of results
+/// (docs/database-performance.md). The Fluent path remains for a database
+/// without SQL.
+private func gradeColumnsRows(for submissionIDs: [String], on db: any Database) async throws -> [GradeColumnsRow] {
+    if let sql = db as? (any SQLDatabase) {
+        return try await sql.raw(
+            """
+            SELECT id, submission_id, source, earned_points, total_points, pass_count, total_tests, received_at
+            FROM \(unsafeRaw: APIResult.schema)
+            WHERE submission_id IN (\(binds: submissionIDs))
+            ORDER BY received_at DESC
+            """
+        ).all(decoding: GradeColumnsRow.self)
+    }
+    return try await APIResult.query(on: db)
+        .filter(\.$submissionID ~~ submissionIDs)
+        .field(\.$id)
+        .field(\.$submissionID)
+        .field(\.$source)
+        .field(\.$earnedPoints)
+        .field(\.$totalPoints)
+        .field(\.$passCount)
+        .field(\.$totalTests)
+        .field(\.$receivedAt)
+        .sort(\.$receivedAt, .descending)
+        .all()
+        .map {
+            GradeColumnsRow(
+                id: $0.id, submissionID: $0.submissionID, source: $0.source, earnedPoints: $0.earnedPoints,
+                totalPoints: $0.totalPoints, passCount: $0.passCount, totalTests: $0.totalTests,
+                receivedAt: $0.receivedAt)
+        }
 }
 
 /// The highest `gradePercentValue` (0–100) per submission, across all result

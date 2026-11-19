@@ -88,6 +88,7 @@ struct InstructorDashboardRoutes: RouteCollection {
         r.post(":assignmentID", "brightspace", use: saveBrightSpaceGradeObjectID)
         r.post(":assignmentID", "secret-reveal", use: saveSecretRevealSetting)
         r.post(":assignmentID", "concept", use: saveConceptSetting)
+        r.post(":assignmentID", "assignment-type", use: saveAssignmentType)
         r.post(":assignmentID", "ai-feedback", use: saveAIFeedbackSetting)
         r.get(":assignmentID", "feedback", use: feedbackReviewPage)
         r.post(":assignmentID", "feedback", use: saveFeedbackReview)
@@ -179,9 +180,13 @@ struct InstructorDashboardRoutes: RouteCollection {
         )
         // Merge each section's assignment + content lanes into one interleaved,
         // drag-orderable item list (unpublished drafts trail the ungrouped bucket).
+        let assignmentPublicIDByID: [UUID: String] = Dictionary(
+            allAssignments.compactMap { a in a.id.map { ($0, a.publicID) } },
+            uniquingKeysWith: { first, _ in first })
         let (sectionContexts, ungroupedItems) = buildInstructorSectionItems(
             assignmentRows: unsortedRows,
             contentItems: allContentItems,
+            assignmentPublicIDByID: assignmentPublicIDByID,
             allSections: allSections,
             sectionByPublicID: sectionByPublicID,
             setupByID: setupByID,
@@ -191,6 +196,11 @@ struct InstructorDashboardRoutes: RouteCollection {
         let hasSections = !allSections.isEmpty
         let hasUngrouped = !ungroupedItems.isEmpty
         let page = try await PageRequestContext.courseAware(req)
+        // On a page navigation, always consume the one-shot session notice,
+        // even when a query notice wins, so it cannot show up again on a later,
+        // unrelated visit. A background `fetch` leaves it for the page.
+        let sessionNotice = req.takeOverviewNotice()
+        let notice = req.query[String.self, at: "notice"] ?? sessionNotice
         return try await HTMLResponse {
             AssignmentsPage(
                 page: page,
@@ -199,8 +209,21 @@ struct InstructorDashboardRoutes: RouteCollection {
                 hasSections: hasSections,
                 showUngroupedBlock: hasUngrouped || !hasSections,
                 showEmptyMessage: !hasSections && !hasUngrouped,
-                enrolledStudentCount: roster.enrolledStudentCount)
+                enrolledStudentCount: roster.enrolledStudentCount,
+                attachTargets: Self.attachTargets(sections: sectionContexts, ungroupedItems: ungroupedItems),
+                flash: FlashMessages(notice: notice))
         }.encodeResponse(for: req)
+    }
+
+    /// The published assignments a material can be attached to, in the order
+    /// the dashboard lists them.
+    static func attachTargets(
+        sections: [CourseSectionRow], ungroupedItems: [InstructorSectionItem]
+    ) -> [AssignmentAttachTarget] {
+        (sections.flatMap(\.items) + ungroupedItems).compactMap { item in
+            guard let row = item.row, let publicID = row.assignmentID else { return nil }
+            return AssignmentAttachTarget(publicID: publicID, title: row.title ?? publicID)
+        }
     }
 
     // MARK: - POST /instructor/:assignmentID/open
@@ -604,6 +627,8 @@ struct InstructorDashboardRoutes: RouteCollection {
                     SelectOption(value: $0.rawValue, label: $0.displayName, selected: assignment.concept == $0)
                 },
             conceptRingPhrase: assignment.concept?.ringPhrase,
+            assignmentTypeOptions: AssignmentTypeRules.options(selected: assignment.assignmentType),
+            assignmentTypeRules: AssignmentTypeRules.summary(for: assignment.assignmentType),
             aiFeedback: try await APICourse.find(assignment.courseID, on: req.db)?.aiFeedbackEnabled == true
                 ? AIFeedbackSetting(enabled: assignment.aiFeedbackEnabled == true) : nil,
             timeLimitSeconds: manifest?.timeLimitSeconds ?? 10,

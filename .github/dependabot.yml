@@ -9,11 +9,19 @@
 # dependency-health.yml), which is what a person or an agent picks up. To hold
 # a package back, add an `ignore` entry with a comment that says why.
 #
+# EXCEPT A CONTRACT UPDATE. An update that regenerates Public/vendor or
+# Public/jupyterlite, or that moves a kernel pin, changes the student contract
+# (scripts/contract-paths.txt). dependabot-auto.yml labels it `minor-release`
+# and does not enable auto-merge; it merges just before the next minor is cut
+# by hand (docs/release-gate.md).
+#
 # WAIT BEFORE TAKING A RELEASE. A merged update reaches production in about
 # 15 minutes with no person involved, so every entry has a `cooldown`: a new
-# version is offered only once it is 3 days old, and a new major version only
+# version is offered only once it is 7 days old, and a new major version only
 # once it is 14 days old. Most compromised releases of a package are found and
-# withdrawn within that time. Cooldown delays version updates only; a security
+# withdrawn within that time. Seven days is the floor that zizmor's
+# dependabot-cooldown audit enforces (#3074); it was 3 days before.
+# Cooldown delays version updates only; a security
 # update is offered at once. Docker and GitHub Actions take `default-days` only,
 # because Dependabot does not read their tags as SemVer.
 #
@@ -49,7 +57,7 @@ updates:
       interval: "weekly"
       day: "monday"
     cooldown:
-      default-days: 3
+      default-days: 7
       semver-major-days: 14
     open-pull-requests-limit: 5
     groups:
@@ -82,7 +90,7 @@ updates:
       interval: "weekly"
       day: "monday"
     cooldown:
-      default-days: 3
+      default-days: 7
       semver-major-days: 14
     open-pull-requests-limit: 3
 
@@ -111,15 +119,24 @@ updates:
       interval: "weekly"
       day: "monday"
     cooldown:
-      default-days: 3
+      default-days: 7
 
+  # Every action is pinned to a full commit SHA with a `# vX.Y.Z` comment
+  # (#3064). A tag can be moved to new code; a SHA cannot. Dependabot reads the
+  # comment, so it still offers updates and rewrites both the SHA and the
+  # comment. The repository setting `sha_pinning_required` refuses a tag pin.
+  #
+  # `directory: "/"` covers .github/workflows only. The composite actions under
+  # .github/actions/ call actions too, so they are named explicitly.
   - package-ecosystem: "github-actions"
-    directory: "/"
+    directories:
+      - "/"
+      - "/.github/actions/*"
     schedule:
       interval: "weekly"
       day: "monday"
     cooldown:
-      default-days: 3
+      default-days: 7
     groups:
       github-actions:
         patterns:
@@ -148,9 +165,16 @@ updates:
       interval: "weekly"
       day: "monday"
     cooldown:
-      default-days: 3
+      default-days: 7
       semver-major-days: 14
     open-pull-requests-limit: 5
+    # untarjs 5.4.0 was published without lib/unpack.js, so the esbuild step
+    # in scripts/setup-vendor.sh fails (PR #2918). Version 5.4.1 has the file,
+    # but the cooldown above holds it back until 2026-11-12. Remove this entry
+    # after that date.
+    ignore:
+      - dependency-name: "@emscripten-forge/untarjs"
+        versions: ["5.4.0"]
     groups:
       frontend-tooling:
         patterns:
@@ -165,8 +189,11 @@ updates:
   # dispatches it on the Dependabot branch, and enables auto-merge once its
   # commit is pushed.
   #
+  # requirements.txt is compiled from requirements.in by pip-compile, with
+  # hashes; Dependabot recognises the pair and updates both.
+  #
   # jupyterlite is a metapackage that requires the jupyterlite-core of its own
-  # version, and requirements.txt pins both exactly. Bumped one at a time, each
+  # version, and requirements.in pins both exactly. Bumped one at a time, each
   # PR is unresolvable by pip (run 41916509055, PR #2863), so they are grouped
   # and always move together.
   - package-ecosystem: "pip"
@@ -175,7 +202,7 @@ updates:
       interval: "weekly"
       day: "monday"
     cooldown:
-      default-days: 3
+      default-days: 7
       semver-major-days: 14
     open-pull-requests-limit: 2
     groups:
@@ -208,7 +235,7 @@ updates:
       interval: "weekly"
       day: "monday"
     cooldown:
-      default-days: 3
+      default-days: 7
       semver-major-days: 14
     open-pull-requests-limit: 3
     groups:

@@ -62,6 +62,29 @@ import Testing
         #expect(fields.gradeTotalPoints == nil)
     }
 
+    /// `gradeTotalPoints` is read only for a weighted run (`totalPoints` above
+    /// zero). A mutation run (2026-11-16) found that no case read it for a
+    /// weighted run, so `totalPoints > 0` turned into `totalPoints < 0` went
+    /// unseen.
+    @Test func aWeightedRunReportsItsTotal() {
+        let fields = CollectionGradeFields(earnedPoints: 6, totalPoints: 8, passCount: 3, totalTests: 4)
+        #expect(fields.gradeTotalPoints == 8)
+        #expect(fields.gradePoints == 6)
+        #expect(fields.gradePercent == 75)
+    }
+
+    @Test func aNegativeTotalIsNotATotal() {
+        let fields = CollectionGradeFields(earnedPoints: 1, totalPoints: -4, passCount: 1, totalTests: 2)
+        #expect(fields.gradeTotalPoints == nil)
+        #expect(fields.gradePoints == 1)
+        #expect(fields.gradePercent == 50)
+    }
+
+    @Test func aMissingTotalIsNotATotal() {
+        let fields = CollectionGradeFields(earnedPoints: 3, totalPoints: nil, passCount: 3, totalTests: 4)
+        #expect(fields.gradeTotalPoints == nil)
+    }
+
     /// The column accessors on APIResult and the blob readers now share one
     /// set of formulas. A result stamped from a blob reports what the blob
     /// reports.

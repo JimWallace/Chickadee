@@ -24,6 +24,9 @@ extension DraftAssignmentRoutes {
             var error: String?
             var notice: String?
             var sectionID: String?
+            /// The type the "+ Add" menu item chose: an `AssignmentType` raw
+            /// value. A section names no default type.
+            var type: String?
             var draftID: String?
         }
         let user = try req.auth.require(APIUser.self)
@@ -81,6 +84,13 @@ extension DraftAssignmentRoutes {
         let dueAt = q?.dueAt ?? storedState.dueAt
         let startsAt = q?.startsAt ?? storedState.startsAt
         let selectedSectionID = q?.sectionID ?? storedState.sectionID
+        // The type the author chose in an earlier draft action, else the one
+        // the "+ Add" menu item named, else Assignment
+        // (docs/assignment-types.md).
+        let selectedType =
+            storedState.assignmentType.flatMap(AssignmentType.init(rawValue:))
+            ?? q?.type.flatMap(AssignmentType.init(rawValue:))
+            ?? .assignment
 
         let page = PageRequestContext(request: req)
         let checkSchemaJSON = notebookCheckFormSchemaJSON(language: resolvedLanguage)
@@ -104,6 +114,7 @@ extension DraftAssignmentRoutes {
                 draftIDJSON: newAssignmentDraftIDJSON(setup: setup),
                 assignmentLanguageOptions: AssignmentLanguageOption.options(
                     recorded: setup.flatMap { currentManifestLanguage($0.manifest) }),
+                assignmentTypeOptions: AssignmentTypeRules.options(selected: selectedType),
                 assignmentNotebook: assignmentNotebook,
                 solutionNotebook: solutionNotebook,
                 supportFileRows: supportFileRows,
@@ -154,7 +165,7 @@ extension DraftAssignmentRoutes {
             req: req,
             courseID: courseID,
             draftID: payload.draftIDRaw,
-            sectionIDRaw: payload.sectionIDRaw
+            assignmentTypeRaw: payload.assignmentType
         )
         guard let setupID = setup.id else {
             throw AppError.internalFailure(reason: "Draft test setup persisted without an id")
@@ -182,6 +193,7 @@ extension DraftAssignmentRoutes {
         formState.dueAt = payload.dueAt
         formState.startsAt = payload.startsAt
         formState.sectionID = payload.sectionIDRaw
+        formState.assignmentType = payload.assignmentType
         formState.requiredPlatform = payload.requiredPlatform
         formState.requiredArchitecture = payload.requiredArchitecture
         formState.requiredLanguagesCSV = payload.requiredLanguagesCSV
@@ -213,7 +225,8 @@ extension DraftAssignmentRoutes {
                 dueAt: payload.dueAt,
                 startsAt: payload.startsAt,
                 sectionID: payload.sectionIDRaw,
-                draftID: setupID
+                draftID: setupID,
+                assignmentType: payload.assignmentType
             ),
             error: errorMessage
         )
@@ -277,6 +290,10 @@ extension DraftAssignmentRoutes {
             try multipartTextField(named: ["assignmentLanguage"], from: req)
             ?? body.assignmentLanguage
             ?? ""
+        let assignmentType =
+            try multipartTextField(named: ["assignmentType"], from: req)
+            ?? body.assignmentType
+            ?? ""
 
         return NewAssignmentDraftPayload(
             assignmentName: assignmentName,
@@ -293,7 +310,8 @@ extension DraftAssignmentRoutes {
             requiredArchitecture: requiredArchitecture,
             requiredLanguagesCSV: requiredLanguagesCSV,
             requiredCapabilitiesCSV: requiredCapabilitiesCSV,
-            assignmentLanguage: assignmentLanguage
+            assignmentLanguage: assignmentLanguage,
+            assignmentType: assignmentType
         )
     }
 
@@ -327,8 +345,10 @@ extension DraftAssignmentRoutes {
 
         let resolvedSectionID: UUID? = try await resolveSectionID(
             validated.sectionIDRaw, courseID: courseID, db: req.db)
-        let sectionGradingMode = try await newAssignmentResolvedGradingMode(
-            req: req, sectionID: resolvedSectionID)
+        // The declared type sets the grading mode: a Lab in the browser, an
+        // Assignment or a Class activity on the worker. An upload-only
+        // language still forces the worker (docs/assignment-types.md).
+        let assignmentType = try newAssignmentDeclaredType(requestedRaw: validated.assignmentTypeRaw)
 
         // Preserve the draft's pattern families, sections, and notebook
         // checks across the manifest rebuild.
@@ -341,7 +361,7 @@ extension DraftAssignmentRoutes {
             preserved.props,
             testSuites: setupPackage.testSuites,
             includeMakefile: setupPackage.hasMakefile,
-            sectionGradingMode: sectionGradingMode,
+            gradingMode: assignmentType.defaultGradingMode.rawValue,
             starterNotebook: "assignment.ipynb"
         )
         let setup = try await persistNewAssignmentSetup(
@@ -379,7 +399,8 @@ extension DraftAssignmentRoutes {
                         dueAt: validated.dueAtRaw,
                         startsAt: validated.startsAtRaw,
                         sectionID: validated.sectionIDRaw,
-                        draftID: validated.draftID
+                        draftID: validated.draftID,
+                        assignmentType: validated.assignmentTypeRaw ?? ""
                     ),
                     error: "No compatible active runner is available to validate this assignment."
                 )
@@ -391,7 +412,7 @@ extension DraftAssignmentRoutes {
             validated: validated,
             courseID: courseID,
             sectionID: resolvedSectionID,
-            setupID: paths.setupID,
+            setup: setup,
             shouldQueueValidation: shouldQueueValidation
         )
 
@@ -406,6 +427,10 @@ extension DraftAssignmentRoutes {
         if !validated.draftID.isEmpty {
             clearDraftFormState(req: req, draftID: validated.draftID)
         }
+        req.setOverviewNotice(
+            shouldQueueValidation
+                ? "Created \(validated.title). Validation is running."
+                : "Created \(validated.title).")
         return req.redirect(to: "/instructor")
     }
 
@@ -427,6 +452,7 @@ extension DraftAssignmentRoutes {
         var requiredLanguagesCSV: String?
         var requiredCapabilitiesCSV: String?
         var assignmentLanguage: String?
+        var assignmentType: String?
     }
 
     // MARK: - saveNewAssignment helpers
@@ -454,7 +480,7 @@ extension DraftAssignmentRoutes {
         req: Request,
         validated: ValidatedSaveNewAssignment
     ) async throws -> NewAssignmentPaths {
-        let assignmentNotebook = normalizeNotebookForJupyterLite(validated.assignmentNotebookRaw)
+        let assignmentNotebook = starterNotebookForStorage(validated.assignmentNotebookRaw)
         let setupID = validated.draftSetup?.id ?? freshShortID(prefix: "setup")
         let setupsDir = req.application.testSetupsDirectory
         let notebookFilename = notebookFilenameForStorage(
@@ -524,18 +550,6 @@ extension DraftAssignmentRoutes {
             suiteConfigJSON: mergedConfigJSON,
             zipPath: zipPath
         )
-    }
-
-    fileprivate func newAssignmentResolvedGradingMode(
-        req: Request,
-        sectionID: UUID?
-    ) async throws -> String {
-        if let sid = sectionID,
-            let sec = try await APICourseSection.find(sid, on: req.db)
-        {
-            return sec.defaultGradingMode  // "browser" | "worker"
-        }
-        return "worker"
     }
 
     /// Each was added on a different version (v0.4.77 for families,
@@ -621,14 +635,17 @@ extension DraftAssignmentRoutes {
         validated: ValidatedSaveNewAssignment,
         courseID: UUID,
         sectionID: UUID?,
-        setupID: String,
+        setup: APITestSetup,
         shouldQueueValidation: Bool
     ) async throws -> APIAssignment {
+        // The same resolution the manifest's grading mode came from.
+        let assignmentType = try newAssignmentDeclaredType(requestedRaw: validated.assignmentTypeRaw)
         let assignment = try await createAssignmentWithUniquePublicID(
             NewAssignmentFields(
-                testSetupID: setupID,
+                testSetupID: try setup.requireID(),
                 title: validated.title,
                 courseID: courseID,
+                assignmentType: assignmentType,
                 visibility: .closed,
                 dueAt: validated.dueAt,
                 startsAt: validated.startsAt,
@@ -687,7 +704,7 @@ extension DraftAssignmentRoutes {
         req: Request,
         courseID: UUID,
         draftID: String?,
-        sectionIDRaw: String
+        assignmentTypeRaw: String
     ) async throws -> APITestSetup {
         if let draftID,
             !draftID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
@@ -710,11 +727,7 @@ extension DraftAssignmentRoutes {
         let setupID = freshShortID(prefix: "setup")
         let zipPath = req.application.testSetupsDirectory + "\(setupID).zip"
         _ = try await createRunnerSetupZip(suiteFiles: [], suiteConfigJSON: nil, zipPath: zipPath)
-        let gradingMode = try await newAssignmentSectionGradingMode(
-            courseID: courseID,
-            sectionIDRaw: sectionIDRaw,
-            on: req.db
-        )
+        let gradingMode = try newAssignmentDeclaredType(requestedRaw: assignmentTypeRaw).defaultGradingMode.rawValue
         let manifest = try makeWorkerManifestJSON(
             testSuites: [],
             includeMakefile: false,
@@ -734,9 +747,8 @@ extension DraftAssignmentRoutes {
         return setup
     }
 
-    // newAssignmentSectionGradingMode moved to file scope (below the
-    // extension) so `NewAssignmentDraftService` can call it without
-    // needing visibility into the extension's privates.
+    // newAssignmentDeclaredType lives in Services/CourseSectionLookup.swift
+    // so `NewAssignmentDraftService` can call it too.
 
     @Sendable
     func publish(req: Request) async throws -> Response {
@@ -785,6 +797,7 @@ extension DraftAssignmentRoutes {
                 testSetupID: body.testSetupID,
                 title: body.title.isEmpty ? body.testSetupID : body.title,
                 courseID: courseID,
+                assignmentType: setup.derivedAssignmentType,
                 visibility: .closed,  // stays closed until instructor validates + opens
                 dueAt: due,
                 // Quick-publish creates an ungrouped assignment (no section picker),

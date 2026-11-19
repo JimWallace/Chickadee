@@ -12,7 +12,10 @@
 //     the stylesheet lays the same nodes out as a row of chips under the
 //     toolbar.
 //   - Follows the extension: `ck:tasks` updates each row's status (the
-//     extension works out "still the starter code"), and `ck:active-cell`
+//     extension works out "still the starter code") and its title (the
+//     notebook heading the task sits under, the same text as the editor's
+//     task header) and the cell a row click reveals (its first code
+//     cell, else its header), and `ck:active-cell`
 //     marks the task under the cursor. A row click reveals the task's cell.
 //
 // It reads results that already exist and runs nothing. Without the
@@ -58,12 +61,19 @@
         };
     }
 
-    /// "2. Average heart rate" for a wide row, "Task 2" for a chip. Pure.
-    function rowLabels(task, index) {
-        return {
-            wide: (index + 1) + '. ' + task.name,
-            short: task.label || 'Task ' + (index + 1),
-        };
+    /// A row's title and its chip. The title is the one the editor's task
+    /// header shows: the notebook heading the task sits under, which the
+    /// extension works out and sends in `ck:tasks` (`editorTitle`). Without
+    /// the extension it is the section name as written, or the server's name
+    /// for the checks in no section. The chip takes the part before a colon
+    /// ("Part 4" from "Part 4: Write two small functions"). Nothing is
+    /// numbered: a number the notebook does not show would not match it. Pure.
+    function rowLabels(task, editorTitle) {
+        var title = editorTitle || task.heading || task.name;
+        var colon = title.indexOf(':');
+        var label = colon > 0 ? title.slice(0, colon).trim() : '';
+        var rest = colon > 0 ? title.slice(colon + 1).trim() : '';
+        return { wide: title, short: label && rest ? label : title };
     }
 
     /// What `chickadee:reveal` gets for a task: its heading, else its first
@@ -82,6 +92,8 @@
         var sentToEditor = false;
         var extensionUp = false;
         var statuses = {};
+        var titles = {};
+        var cells = {};
         var reflectionStatuses = {};
         var activeSection = null;
 
@@ -123,7 +135,7 @@
             var list = el('ul', 'outline-tasks');
             guide.tasks.forEach(function (task, index) {
                 var status = statuses[index] !== undefined ? statuses[index] : task.status;
-                var labels = rowLabels(task, index);
+                var labels = rowLabels(task, titles[index]);
                 var item = el('li');
                 var row = el('button', 'outline-row');
                 row.type = 'button';
@@ -137,7 +149,10 @@
                 row.appendChild(el('span', 'outline-wide outline-meta', task.points + (task.points === 1 ? ' pt' : ' pts')));
                 if (statusWord(status)) row.appendChild(el('span', 'visually-hidden', ', ' + statusWord(status)));
                 row.addEventListener('click', function () {
-                    var target = revealTarget(task);
+                    // The task's first code cell as the editor placed it; the
+                    // guide's own target needs a heading or a name that the
+                    // notebook may not have.
+                    var target = typeof cells[index] === 'number' ? { index: cells[index] } : revealTarget(task);
                     if (target) void execute('chickadee:reveal', target);
                 });
                 item.appendChild(row);
@@ -198,6 +213,8 @@
                     if (!fetched || !Array.isArray(fetched.tasks)) return null;
                     guide = fetched;
                     statuses = {};
+                    titles = {};
+                    cells = {};
                     draw();
                     sendToEditor();
                     // notebook-graded.js watches an attempt that still grades.
@@ -224,7 +241,13 @@
                 } else if (d.ck === 'ck:tasks' && Array.isArray(d.tasks)) {
                     // In the guide's task order: a task has no sectionID
                     // when its checks are in no section.
-                    d.tasks.forEach(function (t, i) { statuses[i] = t.status; });
+                    titles = {};
+                    cells = {};
+                    d.tasks.forEach(function (t, i) {
+                        statuses[i] = t.status;
+                        if (typeof t.title === 'string') titles[i] = t.title;
+                        if (typeof t.cell === 'number') cells[i] = t.cell;
+                    });
                     (d.reflections || []).forEach(function (r) { reflectionStatuses[r.tag] = r.status; });
                     draw();
                 } else if (d.ck === 'ck:active-cell') {

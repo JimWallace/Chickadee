@@ -25,7 +25,8 @@ struct AdminMCPDispatcher: Sendable {
         _ request: JSONRPCRequest, context: AdminToolContext? = nil, era: MCPEra = .legacy
     ) async -> JSONRPCResponse? {
         guard let response = await route(request, context: context) else { return nil }
-        return mcpModernized(response, era: era, serverInfo: serverInfo)
+        return mcpModernized(
+            response, era: era, serverInfo: serverInfo, method: MCPMethod(rawValue: request.method))
     }
 
     private func route(_ request: JSONRPCRequest, context: AdminToolContext?) async -> JSONRPCResponse? {

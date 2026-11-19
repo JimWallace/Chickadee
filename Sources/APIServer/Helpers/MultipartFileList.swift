@@ -16,10 +16,6 @@ struct MultipartFileList: Codable {
     /// The decoded files; a single bare file becomes a one-element array.
     var files: [File]
 
-    init(files: [File]) {
-        self.files = files
-    }
-
     init(from decoder: any Decoder) throws {
         let container = try decoder.singleValueContainer()
         if let many = try? container.decode([File].self) {

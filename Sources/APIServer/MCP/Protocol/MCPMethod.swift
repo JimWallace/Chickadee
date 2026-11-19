@@ -55,4 +55,16 @@ enum MCPMethod: String, Sendable {
     case toolsCall = "tools/call"
     case resourcesList = "resources/list"
     case resourcesRead = "resources/read"
+
+    /// A method whose modern result is a `CacheableResult`: the 2026-07-28
+    /// schema makes `ttlMs` and `cacheScope` REQUIRED on `DiscoverResult`,
+    /// `ListToolsResult`, `ListResourcesResult` and `ReadResourceResult`, and
+    /// a conforming client rejects one of those results that lacks them.
+    /// https://modelcontextprotocol.io/specification/2026-07-28/schema
+    var returnsCacheableResult: Bool {
+        switch self {
+        case .serverDiscover, .toolsList, .resourcesList, .resourcesRead: true
+        case .initialize, .initialized, .ping, .toolsCall: false
+        }
+    }
 }

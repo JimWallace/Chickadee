@@ -60,8 +60,12 @@ is no released version to fall back to.
 A second patch, `0002-read-environment-once.patch`, is about time rather than
 correctness. Without it, a mutated hot loop makes the whole suite too slow to
 finish, and every mutant in its shard times out. See "Why the guards read the
-environment once" below. `scripts/mutation-run.sh` applies every
-`Tools/mutation/*.patch` in name order.
+environment once" below.
+
+A third patch, `0003-keep-named-bindings.patch`, stops RemoveSideEffects from
+deleting a declaration whose name a later line uses. That mutant never compiles,
+and it cost a whole shard (see the operational notes below).
+`scripts/mutation-run.sh` applies every `Tools/mutation/*.patch` in name order.
 
 ## What was run
 
@@ -275,10 +279,11 @@ occur.** It is a list of questions, and some of the answers are "correctly, no".
   with SwiftPM's absolute-path module cache. Cost is a cold build every time.
 - The originals are left intact — verified `git status` clean and
   `Sources/RunnerCore/` unmodified after the run.
-- **Two source shapes make Muter write a copy that does not compile**, and one
+- **Three source shapes make Muter write a copy that does not compile**, and one
   such mutant costs its whole shard (schemata put every mutant in one binary).
-  The 2026-10-20 and 2026-10-27 sweeps each lost shards this way. Both come from
-  Muter's own code at the pinned ref, not from this repository's flags:
+  The 2026-10-20, 2026-10-27 and 2026-11-10 sweeps each lost shards this way.
+  All three come from Muter's own code at the pinned ref, not from this
+  repository's flags:
   - *A ternary whose else-branch is a bare binary expression.* SwapTernary
     swaps the then-branch with only the next operand of the unfolded sequence,
     so `d != e ? d < e : a < b` became `d != e ? a : d < e < b`. Write an `if`
@@ -290,6 +295,18 @@ occur.** It is a list of questions, and some of the answers are "correctly, no".
     a bare `unsafe`. RemoveSideEffects deletes statements only from loop,
     guard, do and function bodies, never from a closure, so
     `let n = { unsafe read(...) }()` is immune (`ScriptExecution.drainToEOF`).
+  - *A named binding whose text contains `_ = `.* This one is fixed in the
+    tool, so the source needs no change. RemoveSideEffects means to skip a
+    variable declaration, but at the pinned ref that check passes any
+    statement that is not a `do`, so it deletes any `let name = ...` statement whose text contains `_ = `, even
+    inside a closure. The 2026-11-10 sweep lost shard 10 to
+    `let startHeartbeat = Task { _ = try? await self.sendHeartbeat() }` in
+    `WorkerDaemon.process`: with the line gone, the end-of-job `defer` that
+    awaits `startHeartbeat` did not compile (#2970).
+    `Tools/mutation/0003-keep-named-bindings.patch` skips a declaration that
+    names a binding. Such a mutant can never compile, so the patch loses no
+    real mutant. `let _ = f()` stays a mutant, because its removal still
+    compiles.
 
   The shard's job log has the compiler error; the report says only
   `error: Build failed`. Shard membership moves with line counts, so the shard

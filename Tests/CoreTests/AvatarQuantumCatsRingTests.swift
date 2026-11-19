@@ -46,8 +46,8 @@ import Testing
     // MARK: - The cases
 
     @Test func theRingIsAppendedAfterPulse() throws {
-        #expect(AvatarBorder.allCases.last == .quantumcats)
-        #expect(AvatarRing.allCases.last == .quantumcats)
+        #expect(AvatarBorder.allCases.drop { $0 != .pulse }.dropFirst().first == .quantumcats)
+        #expect(AvatarRing.allCases.drop { $0 != .pulse }.dropFirst().first == .quantumcats)
         #expect(AvatarBorder.quantumcats.ring == .quantumcats)
     }
 

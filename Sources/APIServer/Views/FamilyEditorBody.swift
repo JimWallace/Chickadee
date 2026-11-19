@@ -154,9 +154,9 @@ struct FamilyEditorBody: HTML {
                 tbody(.id("family-variables-body")) {}
             }
             p(.class("card-meta family-empty-note"), .id("family-variables-empty")) {
-                "Define a name and a value (e.g. a list or a mapping) once; reference it from any arg cell by typing "
+                "Define a value once and use it in any arg cell as "
                 code { "$name" }
-                ".  Locked rows come from the section's shared inputs (edit in the section's Inputs table)."
+                "; locked rows are the section's shared inputs."
             }
             ValueCueNote()
         }

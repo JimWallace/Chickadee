@@ -91,14 +91,6 @@ enum SlipDayStore {
         return counts
     }
 
-    /// The student's remaining balance.  Can go negative when staff claw back
-    /// more days than remain unspent; display sites clamp at 0.
-    static func balance(
-        policy: SlipDayPolicy, adjustment: Int, unrefundedCount: Int
-    ) -> Int {
-        policy.daysPerStudent + adjustment - unrefundedCount
-    }
-
     /// Every ledger row in the course (refunded included), newest first —
     /// the instructor roster ledger.
     static func courseLedger(
@@ -124,8 +116,7 @@ enum SlipDayStore {
         userID: UUID,
         assignment: APIAssignment,
         policy: SlipDayPolicy,
-        on db: any Database,
-        now: Date = Date()
+        on db: any Database
     ) async throws -> SlipDaySpendReceipt {
         guard let assignmentID = assignment.id else { throw SlipDayError.spendNotFound }
         guard let dueAt = assignment.dueAt else { throw SlipDayError.assignmentHasNoDeadline }
@@ -439,7 +430,7 @@ func slipDayClaimWindowCeiling(
 /// policy, the student's course-wide balance, and their unrefunded spends on
 /// this assignment. Nil when no claim can be reachable: the course is
 /// missing, archived, or has slip days off; the assignment is a staff-only
-/// preview; or the viewer is not enrolled. The caller is always the student
+/// preview or a Class activity; or the viewer is not enrolled. The caller is always the student
 /// viewer — staff bypass reveal gates before this is consulted.
 func slipDayClaimState(
     for assignment: APIAssignment,
@@ -463,6 +454,8 @@ func slipDayClaimState(
 ) async throws -> SlipDayClaimState? {
     guard let userID = user.id, let assignmentID = assignment.id else { return nil }
     guard assignment.visibility != .preview else { return nil }
+    // A Class activity takes no slip days (docs/assignment-types.md).
+    guard assignment.assignmentType.allowsSlipDays else { return nil }
     guard let course, !course.isArchived else { return nil }
     let policy = course.slipDayPolicy
     guard policy.enabled else { return nil }

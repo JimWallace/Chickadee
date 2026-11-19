@@ -16,8 +16,9 @@ source of truth; a census re-count is required whenever either changes
 (remediation P2-3).
 
 > **Note (2026-11):** the per-tool table stops at the 2026-07 refresh. At
-> v0.5.854 `MCPToolCatalog.live` registers 71 content tools; the 17 added since
-> are not yet inventoried here. The admin count (20) is current.
+> v0.5.854 `MCPToolCatalog.live` registered 71 content tools; the 17 added by
+> then are not yet inventoried here. `begin_upload` (73 tools) has its row. The
+> admin count (20) is current.
 
 ## How to read this table
 
@@ -43,8 +44,8 @@ source of truth; a census re-count is required whenever either changes
 | `list_courses` | `ListCoursesTool.swift:23` | — | eligible-only → enrolled filter | `APICourseEnrollment`, `APICourse` | enrolled courses (code, name, term, key) |
 | `list_course_sections` | `CourseSectionTools.swift:38` | `courseCode` | course-enrol | `APICourse`, `APICourseSection` | section list |
 | `list_assignments` | `ListAssignmentsTool.swift:30` | `courseCode` | course-enrol (`:89`) | `APICourse`, `APIAssignment` | assignment list (id, title, state) |
-| `get_assignment` | `GetAssignmentTool.swift:39` | `assignmentPublicID` | course-enrol (`:87`) | `APIAssignment`, `APICourseSection` | metadata, grading mode, section |
-| `get_suite` | `GetSuiteTool.swift:79` | `assignmentPublicID` | course-enrol (`:187`) | `APITestSetup` manifest + zip | full suite: script bodies, family specs, checks |
+| `get_assignment` | `GetAssignmentTool.swift:39` | `assignmentPublicID` | course-enrol (`:87`) | `APIAssignment`, `APICourseSection`, `APITestSetup` manifest | metadata, grading mode, section, GitHub submission setting (read-only) |
+| `get_suite` | `GetSuiteTool.swift:79` | `assignmentPublicID` | course-enrol (`:187`) | `APITestSetup` manifest + zip; the solution notebook's definition names (anchors only) | full suite: script bodies, notebook-cell anchors, family specs, checks |
 | `get_notebook` | `GetNotebookTool.swift:32` | `assignmentPublicID` | course-enrol (`:62`) | `APITestSetup` starter notebook | starter `.ipynb` |
 | `get_solution` | `GetSolutionTool.swift:34` | `assignmentPublicID` | course-enrol (`:68`) | validation/solution submission (`kind==.validation`) | **reference solution `.ipynb`** |
 | `get_support_files` | `GetSupportFilesTool.swift:53` | `assignmentPublicID` | course-enrol (`:111`) | `APITestSetup` zip helper files | support file bodies |
@@ -67,9 +68,10 @@ source of truth; a census re-count is required whenever either changes
 | `set_submission_mode` | `SetSubmissionModeTool.swift:36` | `assignmentPublicID` | course-enrol (`:76`) | `APITestSetup` manifest (submission mode) |
 | `set_assignment_language` | `SetAssignmentLanguageTool.swift:39` | `assignmentPublicID` | course-enrol (`:87`) | `APITestSetup` manifest (declared language) |
 | `set_assignment_concept` | `SetAssignmentConceptTool.swift` | `assignmentPublicID` | course-enrol write (instructor) | `APIAssignment` (`concept`: the lab concept for a wardrobe ring; authoring data, not student data) |
-| `set_activity` | `SetActivityTool.swift:16` | `assignmentPublicID` | course-enrol (`:96`) | `APITestSetup` manifest (activity block + seeded record achievement) |
+| `set_activity` | `SetActivityTool.swift:16` | `assignmentPublicID` | course-enrol (`:96`) | `APITestSetup` manifest (activity block + seeded record achievement); with `prepareReference`, one reference grading job per composite slot from the reference solution (owner pool) |
 | `run_tournament` | `RunTournamentTool.swift:16` | `assignmentPublicID` | course-enrol (`:88`) | on the owner pool (`ToolContext.mainDB`): new `tournament_runs` / `tournament_matches` rows; new `tournamentMatch` `APISubmission` rows (frozen copies of entrants' uploads, never a grade of record) |
-| `update_suite` | `UpdateSuiteTool.swift:46` | `assignmentPublicID` | course-enrol (`:116`) | `APITestSetup` manifest (suite metadata) |
+| `update_suite` | `UpdateSuiteTool.swift:46` | `assignmentPublicID` | course-enrol (`:116`) | `APITestSetup` manifest (suite metadata, cell pins) |
+| `begin_upload` | `BeginUploadTool.swift` | `courseCode` | course-enrol write (TA+) | `MCPUpload` row on the owner pool; the bytes arrive later at `PUT /mcp/uploads/:uploadID` with the upload token as a bearer header | uploadID, the upload URL, the single-use upload token, cap, expiry |
 | `author_script` | `AuthorScriptTool.swift:58` | `assignmentPublicID` + `filename` | course-enrol (`:194`) | **verbatim file into setup zip** (escape hatch — see below) |
 | `delete_suite_item` | `DeleteSuiteItemTool.swift:49` | `assignmentPublicID` + item | course-enrol (`:103`) | `APITestSetup` manifest + zip |
 | `delete_support_file` | `DeleteSupportFileTool.swift:49` | `assignmentPublicID` + `filename` | course-enrol (`:110`) | `APITestSetup` manifest + zip |
@@ -97,6 +99,7 @@ source of truth; a census re-count is required whenever either changes
 | `create_content_item` | `CourseContentItemTools.swift` | `courseCode` | course-enrol (`resolveCourseForWrite`, TA+) | new `APICourseContentItem` |
 | `update_content_item` | `CourseContentItemTools.swift` | content-item id | course-enrol (`authorizeCourseWriteAccess`, TA+) | `APICourseContentItem` |
 | `delete_content_item` | `CourseContentItemTools.swift` | content-item id | course-enrol (`authorizeCourseWriteAccess`, TA+) | `APICourseContentItem` |
+| `attach_content_item` | `CourseContentItemTools.swift` | content-item id + `assignmentPublicID` | course-enrol (`authorizeCourseWriteAccess`, TA+); assignment looked up in the item's course only | `APICourseContentItem` (`assignment_id`, `section_id`) |
 | `reorder_content_items` | `CourseContentItemTools.swift` | `courseCode` | course-enrol (`resolveCourseForWrite`, TA+) | `APICourseContentItem` order (`sort_order`) |
 
 ## Escape-hatch / general-capability audit
@@ -179,11 +182,11 @@ blobs on disk. None reads a student's rows, a seed or a student-data model.
 
 | Tool | Handler (`file`) | Resource arg | Authz | Reads / touches | Output |
 |------|------------------|--------------|-------|-----------------|--------|
-| `list_datasets` | `CourseDatasetReadTools.swift` | `courseCode` | course-enrol (`resolveCourse`) | `APICourseDataset`, `APICourseDatasetVersion`, setup manifests (usage) | datasets with versions, dictionary, usage |
-| `get_dataset` | `CourseDatasetReadTools.swift` | `courseCode`, slug | course-enrol (`resolveCourse`) | as `list_datasets`, plus one version's blob | one dataset, plus the header and first rows of the uploaded file |
+| `list_datasets` | `CourseDatasetReadTools.swift` | `courseCode` | course-enrol (`resolveCourse`) | `APICourseDataset`, `APICourseDatasetVersion`, setup manifests (usage) | datasets with format, versions, dictionary (or the FHIR summary), usage |
+| `get_dataset` | `CourseDatasetReadTools.swift` | `courseCode`, slug | course-enrol (`resolveCourse`) | as `list_datasets`, plus one version's blob | one dataset, plus the header and first rows of the uploaded file (FHIR: the first resource lines) |
 | `create_dataset` | `CourseDatasetWriteTools.swift` | `courseCode` (and `assignmentPublicID` to promote) | course-enrol write (TA+) | `APICourseDataset`, `APICourseDatasetVersion`, blob store; a promote also writes the `APITestSetup` manifest | the new dataset |
-| `update_dataset` | `CourseDatasetWriteTools.swift` | `courseCode`, slug | course-enrol write (TA+) | `APICourseDataset`, `APICourseDatasetVersion` (dictionary prose) | the dataset after the edit |
-| `add_dataset_version` | `CourseDatasetWriteTools.swift` | `courseCode`, slug | course-enrol write (TA+) | `APICourseDatasetVersion`, blob store (fetch under the SSRF guard) | the new version number, dropped columns, the dataset |
+| `update_dataset` | `CourseDatasetWriteTools.swift` | `courseCode`, slug | course-enrol write (TA+) | `APICourseDataset`, `APICourseDatasetVersion` (dictionary prose; for FHIR, entry prose and the example in `summary_json`) | the dataset after the edit |
+| `add_dataset_version` | `CourseDatasetWriteTools.swift` | `courseCode`, slug | course-enrol write (TA+) | `APICourseDatasetVersion`, blob store (fetch under the SSRF guard, or a staged `begin_upload` upload) | the new version number, dropped columns, the dataset |
 | `attach_dataset` | `DatasetAttachmentTools.swift` | `assignmentPublicID`, slug | course-enrol write (TA+) | `APITestSetup` zip and manifest; re-grade and re-validate via `applyContentEditEffects` | the attached spec, action, re-queued count |
 | `detach_dataset` | `DatasetAttachmentTools.swift` | `assignmentPublicID`, filename | course-enrol write (TA+) | `APITestSetup` zip and manifest; re-grade and re-validate | file, removed flag, re-queued count |
 

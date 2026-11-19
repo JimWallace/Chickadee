@@ -138,7 +138,8 @@ func assignmentSubmissionHistoryRows(
             status: submission.status,
             submittedAt: submission.submittedAt.map { fmt.string(from: $0) } ?? "—",
             gradeText: gradeText,
-            sourceDisagreement: disagreementBySubmissionID[subID]
+            sourceDisagreement: disagreementBySubmissionID[subID],
+            submittedAtISO: submission.submittedAt?.formatted(.iso8601)
         )
     }
 }

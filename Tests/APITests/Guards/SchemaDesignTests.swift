@@ -2,9 +2,10 @@
 //
 // Design rules for the migrated schema, checked against the catalog. Each
 // rule names a defect class that a load test or an audit found after it
-// shipped (docs/database-design.md). The allowlists hold what was already
-// there when the rule arrived, each with its reason. They may only shrink:
-// an entry that no longer applies fails the test too.
+// shipped (docs/database-design.md). The allowlist holds what was already
+// there when the rule arrived. It may only shrink: an entry that no longer
+// applies fails the test too. The foreign-key index rule is
+// `ForeignKeyIndexCoverageTests` (docs/database-performance.md).
 
 import ChickadeeTestSupport
 import Fluent
@@ -18,38 +19,6 @@ import VaporTesting
 struct SchemaDesignTests {
 
     // MARK: - Allowlists
-
-    /// Foreign keys to `users` with no index. Only the admin user delete
-    /// removes a user, and it then scans each of these tables once. Index one
-    /// when a read path filters on it.
-    static let unindexedUserForeignKeys: Set<String> = [
-        "activity_champions.user_id", "activity_session_attendance.user_id",
-        "activity_sessions.opened_by", "activity_standings.user_id",
-        "assignment_extensions.granted_by_user_id", "assignment_versions.actor_user_id",
-        "brightspace_grade_clears.user_id", "class_achievements.user_id", "client_diagnostics.user_id",
-        "composite_contributions.user_id", "composite_slots.user_id", "composite_spares.user_id",
-        "course_group_memberships.user_id", "dataset_deals.user_id", "grade_overrides.granted_by_user_id",
-        "group_activity_champions.user_id", "group_composite_slots.user_id",
-        "group_composite_spares.user_id", "group_leaderboard_entries.user_id",
-        "job_execution_metrics.user_id", "leaderboard_entries.user_id", "lti_deep_link_requests.user_id",
-        "lti_identities.user_id", "oauth_authorization_codes.user_id", "oauth_clients.created_by",
-        "oauth_consent_requests.user_id", "oauth_grants.user_id", "reflection_feedback.reviewed_by_user_id",
-        "reflection_feedback.user_id", "slip_day_spends.refunded_by_user_id",
-        "submissions.retested_by_user_id", "user_activity_events.user_id",
-    ]
-
-    /// Other foreign keys with no index, and why.
-    static let unindexedForeignKeys: [String: String] = [
-        // SET NULL on a course or assignment delete: one scan per deleted
-        // parent row, on an admin path. The setup key is indexed.
-        "submission_diagnostics.assignment_id": "one scan per course or assignment delete",
-        "submission_diagnostics.course_id": "one scan per course delete",
-        "job_execution_metrics.assignment_id": "one scan per course or assignment delete",
-        "job_execution_metrics.course_id": "one scan per course delete",
-        // Single-use deep-link tickets, reaped within minutes.
-        "lti_deep_link_requests.course_id": "short-lived rows",
-        "lti_deep_link_requests.platform_id": "short-lived rows",
-    ]
 
     /// Text columns that hold JSON. A new JSON column is `jsonb`, which
     /// Postgres validates and can index; these predate the rule.
@@ -67,33 +36,9 @@ struct SchemaDesignTests {
 
     // MARK: - Rules
 
-    /// Postgres does not index the referencing side of a foreign key. Without
-    /// one, each deleted parent row scans the child table, and a lookup by
-    /// parent scans it too (#2913, and `request_metrics.submission_id`, which
-    /// a course purge scanned once per submission).
-    @Test func everyForeignKeyHasAnIndex() async throws {
-        try await withTestApp(prefix: "chickadee-schema-fk") { app in
-            let catalog = try await SchemaCatalog.load(on: app.db)
-            let unindexed = Set(
-                catalog.foreignKeys.filter { key in
-                    !catalog.indexes.contains { $0.table == key.table && $0.columns.first == key.column }
-                }.map(\.qualified))
-            let allowed = Self.unindexedUserForeignKeys.union(Self.unindexedForeignKeys.keys)
-            #expect(catalog.foreignKeys.count > 80, "sanity: the catalog lists the foreign keys")
-            #expect(
-                unindexed.subtracting(allowed).isEmpty,
-                "foreign keys with no index; add one in the table's migration: \(unindexed.subtracting(allowed).sorted())"
-            )
-            #expect(
-                allowed.subtracting(unindexed).isEmpty,
-                "allowlisted foreign keys that now have an index; remove them: \(allowed.subtracting(unindexed).sorted())"
-            )
-        }
-    }
-
     /// An index whose columns lead another index on the same table serves no
-    /// query the wider one does not, and every write maintains it (#2913
-    /// audit: four of them).
+    /// query the wider one does not, and every write maintains it (the
+    /// 2026-11 audit found four; `DropCoveredIndexes` removed them).
     @Test func noIndexIsCoveredByAnother() async throws {
         try await withTestApp(prefix: "chickadee-schema-idx") { app in
             let catalog = try await SchemaCatalog.load(on: app.db)

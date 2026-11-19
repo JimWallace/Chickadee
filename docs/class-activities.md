@@ -15,8 +15,8 @@ assignment.
 
 Every part of issue #1508 is shipped. These activity kinds exist:
 `beatTheInstructor`, `bestMetric`, `kingOfTheHill`, `roundRobin`,
-`elimination`, `testsVersusImplementations` and `classComposite`. The
-`bugHunt` kind is in the same family. Browser-graded bot challenges, the
+`elimination`, `testsVersusImplementations`, `classComposite` and `bugHunt`
+(`docs/bug-hunt-code-map.md`). Browser-graded bot challenges, the
 live-session window, the class corpus run and the projector arena are shipped
 too.
 
@@ -45,9 +45,14 @@ describes it now.
 ## Design decisions
 
 1. **An activity is an assignment, not a new content type.** Content items are
-   ungraded. An activity needs grading, achievements, freeze and the LEARN push,
-   and all of that hangs off an assignment. The manifest gains an optional
-   `activity` block; `nil` means ordinary assignment behaviour at every branch.
+   ungraded. An activity needs grading, achievements and freeze, and all of
+   that hangs off an assignment. The manifest gains an optional `activity`
+   block; `nil` means ordinary assignment behaviour at every branch. The
+   assignment's declared type decides the rest (docs/assignment-types.md): a
+   Class activity must carry the block, and its points stay in Chickadee for
+   the leaderboard and achievements, with no LEARN or LTI push and no slip
+   days. A Lab may carry an activity too (HLTH 230 Lab 4b) and keeps a Lab's
+   push and slip days.
 2. **Two orthogonal axes, hidden behind named kinds.** Internally an activity is
    an *opponent source* (what else is in the workspace when the script runs, and
    how many times it runs) plus a *class aggregation* (how the class's results
@@ -86,7 +91,7 @@ describes it now.
 | `kingOfTheHill` | `champion` (whoever holds the hill; the bundled bot until a student does) | `leaderboard` | `record` on `highestMetric`, `record` on `champion` |
 | `roundRobin` | `classmates` (every classmate's latest submission; the bundled bot until one exists) | `standings` | `record` on `tournamentWinner`; `standing` / `matchesWon` badges are authored |
 | `elimination` | `paired` (the one entrant a schedule pairs the job with; the bot for a student's own submission) | `bracket` | `record` on `tournamentWinner` |
-| `bugHunt` | `variants` (instructor's seeded variants) | `union` | see `docs/collaborative-class-assignments.md` |
+| `bugHunt` | `none` (each seeded variant is an ordinary suite entry) | `coverage` — the share of the listed items the class's tests cover, with an optional code map | nothing; the projector's board is the reward surface (see `docs/bug-hunt-code-map.md`) |
 | `testsVersusImplementations` | `classmates` (the same matrix a round robin plays) | `union` — every match read twice, as a kill and as a fault | nothing; the page is the reward surface |
 | `classComposite` | `none` | `composite` — one image from each dealt slot's contribution | nothing; the composed image is the reward surface (see `docs/class-composite.md`) |
 
@@ -171,6 +176,33 @@ earlier submission. Only a `.student` in the setup's own course ranks, so a
 staff test run never takes a place. The `highestMetric` class record follows the
 same event, higher wins, awarded outside the 100% gate the other four records
 sit behind.
+
+**Results that land together cannot undo each other.** A browser-graded
+activity has every student post their result inside the same few seconds, and
+each request writes its own row. So the leaderboard rows and the ranked class
+records that ingest raises (`highestMetric`, and the 100% records `fastest` and
+`shortest` through `updateRecordBadge`) move only through one conditional
+UPDATE that changes them where the new value is strictly better
+(`writeBestSoFar`). The database decides the comparison, and the order the
+results land in does not matter. Two other writers of `class_achievements` are
+still read-then-write: the recompute a retest runs (`storeRecordHolder`) and
+the held records (`setRecordHolder`, the hill and the standings leader). Neither
+runs on an ordinary student result.
+
+**A lost write is repaired, on a course-wide board.** The leaderboard write is
+best effort, because it must never fail a stored grade. When it fails (a
+database pool that ran short during the burst), it schedules
+`repairLeaderboardEntries` for the assignment (`LeaderboardRepairQueue`). The
+repair reads the stored results and offers each student's best one to the same
+`recordLeaderboardEntry`, gates and all, so it only adds what is missing, and it
+stamps the row with the submission's time so a late row keeps its place in a
+tie. Asks that arrive while one is waiting join it. It waits 30 s first, so it
+does not compete with the burst, and retries with backoff for about seven
+minutes. The queue is in-process: a restart drops a waiting repair, and the next
+failed write schedules another. The repair reads stored collections, which a
+page poll must never do, so it runs only after a failure. A per-group board is
+not repaired: staff removing a student deletes their row on purpose, and a
+student who rejoined would make a repair bring it back.
 
 The page, `GET /testsetups/:id/leaderboard` (vanity
 `/:courseCode/:assignmentSlug/leaderboard`), names a student by their per-course

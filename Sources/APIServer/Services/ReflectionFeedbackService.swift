@@ -138,17 +138,10 @@ enum ReflectionFeedbackService {
         }
     }
 
-    /// The prompt and response pairs of `submission`, against the starter
-    /// notebook of `setup`. Empty when the starter tags no cell.
-    static func reflections(
-        setup: APITestSetup, submission: APISubmission?
-    ) async -> [ReflectionPair] {
-        await reflections(starter: try? await notebookData(for: setup), submission: submission)
-    }
-
-    /// The same, against starter bytes the caller has already read, so a page
-    /// or a tool that shows many students reads the starter once. A nil
-    /// starter gives `[]` without reading the submission.
+    /// The prompt and response pairs of `submission`, against starter bytes
+    /// the caller has already read, so a page or a tool that shows many
+    /// students reads the starter once. A nil starter gives `[]` without
+    /// reading the submission.
     static func reflections(
         starter: Data?, submission: APISubmission?
     ) async -> [ReflectionPair] {

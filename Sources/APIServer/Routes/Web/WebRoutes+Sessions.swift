@@ -112,7 +112,7 @@ extension WebRoutes {
         let user = try req.auth.require(APIUser.self)
         guard let setupID = req.parameters.get("testSetupID"),
             let setup = try await APITestSetup.find(setupID, on: req.db)
-        else { throw AppError.notFound(resource: "Test setup") }
+        else { throw AppError.notFound(resource: "Assignment") }
         if toChange {
             try await requireCourseWriteAccess(caller: user, courseID: setup.courseID, atLeast: .ta, db: req.db)
         } else {

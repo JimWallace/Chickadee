@@ -15,6 +15,11 @@ concurrency:
   group: jupyterlite-${{ github.event_name }}-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
+# Least privilege by default (#3067). A job that needs more names it in its
+# own `permissions:`.
+permissions:
+  contents: read
+
 jobs:
   build-and-verify:
     runs-on: ubuntu-latest
@@ -22,7 +27,9 @@ jobs:
     steps:
       # The default shallow checkout: every guard below reads committed files
       # only, and none reads git history.
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       # EVERY step below runs on EVERY event, deliberately.
       #
@@ -44,7 +51,7 @@ jobs:
       # check. A guard whose answer depends on the event it runs under is not a
       # guard, so this one now runs everywhere.
       - name: Set up Python
-        uses: actions/setup-python@v7
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: "3.11"
 
@@ -89,6 +96,12 @@ jobs:
       # while the kernel had none — see the script's header.
       - name: Environment files match the vendored kernels
         run: scripts/check-env-vendored-sync.sh
+
+      # Each kernel is installed from its lock (scripts/create-kernel-prefix.py).
+      # Offline: a lock must exist for every environment file, match that file,
+      # and name exactly the packages that are vendored.
+      - name: The kernel locks match the environment files and the vendored kernels
+        run: scripts/lock-kernel-envs.py --check
 
       # Offline and instantaneous: proves the weekly currency check's
       # comparator still reports a difference. That check runs on a schedule

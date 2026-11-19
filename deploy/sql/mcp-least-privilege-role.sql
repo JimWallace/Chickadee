@@ -47,7 +47,8 @@ GRANT USAGE ON SCHEMA public TO chickadee_mcp;
 --    (attachments_json; the attachment bytes are files on disk, not rows). It
 --    holds no student data. The content-item tools (list_content_items,
 --    create_content_item, update_content_item, delete_content_item,
---    reorder_content_items, reorder_section_items) read and write it, and
+--    attach_content_item, reorder_content_items, reorder_section_items) read
+--    and write it, and
 --    create_assignment, clone_assignment and set_assignment_course_section read
 --    it to place the new item after the section's last one
 --    (nextSectionItemSortOrder). Deployments that applied this file before the
@@ -188,7 +189,7 @@ CREATE POLICY mcp_ai_feedback_rows ON reflection_feedback
 --      request_metrics, runner_profiles, runner_snapshots, composite_slots,
 --      group_composite_slots, composite_contributions, composite_references,
 --      composite_spares, group_composite_spares,
---      dataset_deals, oauth_* ...
+--      dataset_deals, mcp_uploads, oauth_* ...
 --
 --    composite_slots and group_composite_slots map each student to their
 --    class-composite slot (the second per lab group). The one MCP use of
@@ -200,6 +201,10 @@ CREATE POLICY mcp_ai_feedback_rows ON reflection_feedback
 --    composite_spares and group_composite_spares hold the tiles students
 --    render for empty slots (the second per lab group). No MCP tool reads
 --    them.
+--    mcp_uploads holds the files that begin_upload stages
+--    (docs/mcp-file-uploads.md). It is grant bookkeeping, like oauth_*, and
+--    the MCP tools read and write it on the MAIN (owner) pool via
+--    ToolContext.mainDB, so it needs no grant here.
 --    dataset_deals maps each student to the part of a partition dataset they
 --    receive (docs/datasets-course-library.md). No MCP tool reads it.
 --    Do NOT add blanket "GRANT ... ON ALL TABLES" — that would defeat the wall.

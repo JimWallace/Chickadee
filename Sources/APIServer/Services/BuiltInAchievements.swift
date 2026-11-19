@@ -114,11 +114,6 @@ enum BuiltInAchievements {
     /// Every built-in award.
     static let all = perSubmission + classRecords
 
-    /// The built-in award with this id, if any.
-    static func byID(_ id: String) -> Achievement? {
-        all.first { $0.id == id }
-    }
-
     /// The set of built-in award ids this assignment has disabled (empty when
     /// the manifest can't be decoded or disables nothing — the common case).
     static func disabled(in setup: APITestSetup) -> Set<String> {
@@ -165,11 +160,6 @@ enum BuiltInAchievements {
     /// even when the filtered list is empty — the instructor removed every
     /// per-submission badge, so return [] rather than nil (audit A5: an empty
     /// curated list used to silently resurrect the registry defaults).
-    static func manifestPerSubmission(in setup: APITestSetup?) -> [Achievement]? {
-        manifestPerSubmission(props: setup?.decodedManifest())
-    }
-
-    /// `manifestPerSubmission(in:)` over an already-decoded manifest.
     static func manifestPerSubmission(props: TestProperties?) -> [Achievement]? {
         guard let props else { return nil }
         let perSub = props.achievements.filter(\.isPerSubmissionBadge)

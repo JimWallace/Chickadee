@@ -219,7 +219,7 @@ func workingCopyMtimeEpoch(absolutePath: String) -> Int {
 /// order, so an unchanged notebook can come back as different bytes. The two
 /// sides are compared as decoded `JSONValue` objects. Anything that is not a
 /// JSON object compares unequal, which means a refresh: the safe direction.
-private func sameNotebookContent(_ lhs: Data, _ rhs: Data) -> Bool {
+func sameNotebookContent(_ lhs: Data, _ rhs: Data) -> Bool {
     if lhs == rhs { return true }
     guard let left = JSONValue.object(from: lhs), let right = JSONValue.object(from: rhs) else { return false }
     return left == right
@@ -286,6 +286,53 @@ func ensureUserNotebookWorkingCopy(
         return existingData
     }
 
+    let processedData = try await workingCopySeedData(
+        WorkingCopySeedSource(
+            setupID: setupID, userID: userID, setup: fallbackSetup, defaultData: defaultData, viewMode: viewMode),
+        on: db, application: application, logger: logger)
+
+    if let existingData = existingWorkingCopy {
+        // Outputs are not compared. The stored starter has none
+        // (`starterNotebookForStorage`), while the author's copy keeps the ones
+        // from their last run, so comparing them would rewrite the copy after
+        // every save and drop its in-browser edits. Every other field still
+        // counts, the kernelspec among them.
+        if sameNotebookContent(NotebookOutputs.stripped(existingData), NotebookOutputs.stripped(processedData)) {
+            await createSupportFileSymlinks(setup: fallbackSetup, studentDir: workingCopyDir, application: application)
+            await writeDatasetFiles(
+                setup: fallbackSetup, userID: userID, studentDir: workingCopyDir, on: db, application: application)
+            return existingData
+        }
+        logger.info("working_copy_refreshed setup=\(setupID) user=\(userID.uuidString) path=\(resolvedRelativePath)")
+    }
+
+    try await runBlocking {
+        try FileManager.default.createDirectory(atPath: workingCopyDir, withIntermediateDirectories: true)
+        try processedData.write(to: URL(fileURLWithPath: workingCopyPath))
+    }
+    await createSupportFileSymlinks(setup: fallbackSetup, studentDir: workingCopyDir, application: application)
+    await writeDatasetFiles(
+        setup: fallbackSetup, userID: userID, studentDir: workingCopyDir, on: db, application: application)
+
+    return processedData
+}
+
+/// What a working copy at this seed is rebuilt from: the seed (`defaultData`,
+/// the stored starter for a template view, or the viewer's latest submission),
+/// with the viewer's `{{name}}` values substituted in a personalized view. The
+/// working-copy refresh and the authoring draft (`ensureAuthoringDraft`) both
+/// compare against exactly this.
+func workingCopySeedData(
+    _ source: WorkingCopySeedSource,
+    on db: any Database,
+    application: Application,
+    logger: Logger
+) async throws -> Data {
+    let setupID = source.setupID
+    let userID = source.userID
+    let fallbackSetup = source.setup
+    let defaultData = source.defaultData
+    let viewMode = source.viewMode
     let seedData: Data
     if let defaultData {
         seedData = defaultData
@@ -318,40 +365,22 @@ func ensureUserNotebookWorkingCopy(
     // A `.template` copy skips this by definition: leaving the placeholders
     // standing is the whole point of that view, and it is what lets an author
     // edit them (see `NotebookViewMode`).
-    let processedData =
-        switch viewMode {
-        case .personalized:
-            await applyNotebookSubstitutionsIfNeeded(
-                seedData: seedData,
-                setup: fallbackSetup,
-                userID: userID,
-                db: db,
-                supportFilesDirectory: application.testSetupsDirectory + "shared/\(setupID)/",
-                logger: logger
-            )
-        case .template:
-            seedData
-        }
-
-    if let existingData = existingWorkingCopy {
-        if sameNotebookContent(existingData, processedData) {
-            await createSupportFileSymlinks(setup: fallbackSetup, studentDir: workingCopyDir, application: application)
-            await writeDatasetFiles(
-                setup: fallbackSetup, userID: userID, studentDir: workingCopyDir, on: db, application: application)
-            return existingData
-        }
-        logger.info("working_copy_refreshed setup=\(setupID) user=\(userID.uuidString) path=\(resolvedRelativePath)")
+    return
+        switch viewMode
+    {
+    case .personalized:
+        await applyNotebookSubstitutionsIfNeeded(
+            seedData: seedData,
+            setup: fallbackSetup,
+            userID: userID,
+            db: db,
+            supportFilesDirectory: application.testSetupsDirectory + "shared/\(setupID)/",
+            logger: logger
+        )
+    case .template:
+        seedData
     }
 
-    try await runBlocking {
-        try FileManager.default.createDirectory(atPath: workingCopyDir, withIntermediateDirectories: true)
-        try processedData.write(to: URL(fileURLWithPath: workingCopyPath))
-    }
-    await createSupportFileSymlinks(setup: fallbackSetup, studentDir: workingCopyDir, application: application)
-    await writeDatasetFiles(
-        setup: fallbackSetup, userID: userID, studentDir: workingCopyDir, on: db, application: application)
-
-    return processedData
 }
 
 /// Discards `userID`'s working copy of `fileKind` in the view *other* than
@@ -727,9 +756,11 @@ func createSupportFileSymlinks(setup: APITestSetup, studentDir: String, applicat
     }
 }
 
-/// Materializes per-student dataset slices into the student's JupyterLite working
-/// directory. Dataset files are written as real files (not symlinks) so each student
-/// sees only their own rows. Idempotent — safe to call on every visit; a spec
+/// Puts each dataset file into the student's JupyterLite working directory, in
+/// the form its `DatasetDeliveryMode` names (docs/dataset-shared-delivery.md):
+/// a `shared` file, which every student receives unchanged, is a link to the
+/// setup's shared extraction; a `perStudent` file is a real file holding the
+/// student's own rows. Idempotent — safe to call on every visit; a spec
 /// change, a re-uploaded source, or a staff re-seed is picked up automatically
 /// because each changes the materialization fingerprint (#1382 item 3 — this
 /// used to re-slice and overwrite on every visit; now an unchanged
@@ -774,6 +805,10 @@ func writeDatasetFiles(
     }
 
     let sharedDir = application.testSetupsDirectory + "shared/\(setupID)/"
+    let targets = DatasetLinkTargets(
+        sharedDir: sharedDir, partsRoot: DatasetPartStore.root(testSetupsDirectory: application.testSetupsDirectory),
+        setupID: setupID, dealNumber: dealNumber,
+        holdsNoPartYet: DatasetDeals.holdsNoPartYet(manifest: props, dealNumber: dealNumber))
 
     // Skip the slice + write when nothing that determines the bytes has
     // changed since the last materialization and every target file is still
@@ -784,7 +819,7 @@ func writeDatasetFiles(
                 props: props, seeds: [seedHex, courseSeedHex ?? "-", dealNumber.map(String.init) ?? "-"],
                 sharedDir: sharedDir),
             targetsPresent: props.datasets.allSatisfy {
-                FileManager.default.fileExists(atPath: studentDir + "/" + $0.file)
+                datasetTargetIsCurrent(spec: $0, studentDir: studentDir, targets: targets)
             }
         )
     }
@@ -800,29 +835,52 @@ func writeDatasetFiles(
     // pool (#1156). A failed write is not a success (#2776): caching the
     // fingerprint after one left the student with a stale dataset until a
     // restart, so a failure skips the record and the next visit retries.
+    // A linked file (a shared one, or a stored part) is never read here: only
+    // the per-student specs go through the resolver.
+    let perStudent = {
+        var manifest = props
+        manifest.datasets = props.datasets.filter { $0.deliveryMode == .perStudent }
+        return manifest
+    }()
+    let linkedSpecs = props.datasets.filter { $0.deliveryMode != .perStudent }
+
     let wrote: Bool
     do {
         wrote = try await runBlocking {
-            guard
-                let files = DatasetDeals.withholdingUndealtParts(
-                    DatasetResolver.resolve(
-                        manifest: props, seedHex: seedHex, courseSeedHex: courseSeedHex, dealNumber: dealNumber,
-                        sourceDirectory: sharedDir),
-                    manifest: props, dealNumber: dealNumber)
-            else { return false }
-
             // Every file is attempted, as before; the first failure is
             // thrown after the loop.
             var firstFailure: (any Error)?
-            for (filename, content) in files {
-                // Defense-in-depth (#1104): resolver keys are validated bare
-                // filenames, but never join an unvetted name onto the student dir.
-                guard FilenameSafety.bareFilename(filename) != nil else { continue }
-                let dest = studentDir + "/" + filename
+            // The parts a sweep keeps: every partition's current fingerprint.
+            let keeping = linkedSpecs.isEmpty ? [] : targets.currentFingerprints(of: props.datasets)
+            for spec in linkedSpecs {
+                // Defense-in-depth (#1104): never join an unvetted name onto
+                // the student dir. A source the extraction does not hold yet
+                // is skipped, as the resolver skips it, and not linked.
+                guard FilenameSafety.bareFilename(spec.file) != nil else { continue }
                 do {
-                    try content.write(toFile: dest, atomically: true, encoding: .utf8)
+                    try targets.placeLink(for: spec, in: studentDir, keeping: keeping)
                 } catch {
                     firstFailure = firstFailure ?? error
+                }
+            }
+
+            if !perStudent.datasets.isEmpty {
+                guard
+                    let files = DatasetDeals.withholdingUndealtParts(
+                        DatasetResolver.resolve(
+                            manifest: perStudent, seedHex: seedHex, courseSeedHex: courseSeedHex,
+                            dealNumber: dealNumber, sourceDirectory: sharedDir),
+                        manifest: perStudent, dealNumber: dealNumber)
+                else { return false }
+                for (filename, content) in files {
+                    // Defense-in-depth (#1104): resolver keys are validated bare
+                    // filenames, but never join an unvetted name onto the student dir.
+                    guard FilenameSafety.bareFilename(filename) != nil else { continue }
+                    do {
+                        try DatasetWorkingCopyPlacement.write(content, to: studentDir + "/" + filename)
+                    } catch {
+                        firstFailure = firstFailure ?? error
+                    }
                 }
             }
             if let firstFailure { throw firstFailure }
@@ -838,6 +896,27 @@ func writeDatasetFiles(
 
     if wrote, let state {
         await cache.record(userID: userID, setupID: setupID, fingerprint: state.fingerprint)
+    }
+}
+
+/// True when the student's copy of `spec.file` is where `DatasetLinkTargets`
+/// says it belongs: a live link to the right target for a shared dataset or a
+/// stored part, a real file for a per-student one. A working copy written
+/// before a mode change holds the old form, and this is what moves it on the
+/// next visit even when the fingerprint is current. A linked dataset whose
+/// source the extraction does not hold yet is `.unavailable`, so it reads as
+/// not current and the pass runs again on each visit; that pass reads no file,
+/// and stops once the source appears.
+private func datasetTargetIsCurrent(spec: DatasetSpec, studentDir: String, targets: DatasetLinkTargets) -> Bool {
+    let path = studentDir + "/" + spec.file
+    let linkTarget = DatasetWorkingCopyPlacement.linkTarget(of: path)
+    switch targets.target(for: spec) {
+    case .realFile:
+        return linkTarget == nil && FileManager.default.fileExists(atPath: path)
+    case .link(let target, _):
+        return linkTarget == target && FileManager.default.fileExists(atPath: path)
+    case .unavailable:
+        return false
     }
 }
 

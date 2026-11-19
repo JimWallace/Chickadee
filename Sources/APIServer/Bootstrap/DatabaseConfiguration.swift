@@ -515,7 +515,19 @@ func registerMigrations(on app: Application) {
     // Course achievements (docs/achievement-rewards.md, S3): the list on the
     // course row.
     app.migrations.add(AddCourseAchievements())
+    // One-time cleanup: clears the cell outputs from every stored starter
+    // notebook (file side effect only, no schema change). Needs only
+    // `test_setups`.
+    app.migrations.add(StripStarterNotebookOutputs())
 
+    registerLateSchemaMigrations(on: app)
+    registerDataMigrations(on: app)
+}
+
+/// The newest schema migrations, registered after the ones above and before
+/// the data migrations. A separate function only to keep `registerMigrations`
+/// under the body-length limit; the order is still one list, in file order.
+private func registerLateSchemaMigrations(on app: Application) {
     // The `completed_at` index on job metrics and the `course_id` indexes on
     // course sections and content items (#2778). Index only; the tables are
     // created far above.
@@ -534,14 +546,49 @@ func registerMigrations(on app: Application) {
     // `class_achievements` submission indexes. Index only; the tables are
     // created far above.
     app.migrations.add(CreateAuditAndValidationIndexes())
-    // `assignments.slug` NOT NULL, as the model assumes. Raw SQL over
-    // `slug` and `public_id`, both created by CreateAssignments.
-    app.migrations.add(RequireAssignmentSlug())
-    // Indexes for the foreign keys that had none, and the drop of four
-    // covered indexes (SchemaDesignTests). Index only; the tables are created
-    // far above.
+    // Indexes for foreign keys that had none, on tables that grow: every
+    // delete of a referenced row scanned the referencing table. Index only.
     app.migrations.add(CreateForeignKeyIndexes())
 
+    // A content item attached to an assignment renders on that assignment's
+    // row. Adds a nullable column to `course_content_items`
+    // (CreateCourseContentItems, far above); no data change.
+    app.migrations.add(AddContentItemAssignment())
+
+    // The declared assignment type (docs/assignment-types.md). Adds a
+    // nullable column to `assignments` (CreateAssignments, far above);
+    // `BackfillAssignmentType` below fills it.
+    app.migrations.add(AddAssignmentType())
+
+    // A course section's optional default assignment type, in place of its
+    // default grading mode (docs/assignment-types.md, phase 3). Adds a column
+    // to `course_sections` (CreateCourses), gives the old mode column a
+    // default and records "lab" for browser-default sections. Since 2026-11
+    // the model maps neither column; a later release drops both.
+    app.migrations.add(AddSectionDefaultAssignmentType())
+
+    // Staged MCP file uploads (docs/mcp-file-uploads.md). New table with an
+    // FK to `courses`; no ordering constraint beyond CreateCourses.
+    app.migrations.add(CreateMCPUploads())
+    // A course library dataset's format, and a FHIR version's summary
+    // (docs/fhir-datasets-plan.md §6). Adds a column to `course_datasets` and
+    // one to `course_dataset_versions` (CreateCourseDatasets, far above); no
+    // data change.
+    app.migrations.add(AddCourseDatasetFormat())
+    // `assignments.slug` NOT NULL, as the model assumes
+    // (ModelSchemaAgreementTests). Raw SQL over `slug` and `public_id`, both
+    // created by CreateAssignments.
+    app.migrations.add(RequireAssignmentSlug())
+    // The drop of four indexes that another index covers
+    // (SchemaDesignTests). Index only; the tables are created far above.
+    app.migrations.add(DropCoveredIndexes())
+}
+
+/// The data migrations, registered after every schema migration (#1805).
+/// A separate function only to keep `registerMigrations` under the body-length
+/// limit; it is called last, so the order is one list. `MigrationOrderTests`
+/// reads every registration from `registerMigrations` to the end of this file.
+private func registerDataMigrations(on app: Application) {
     // ---------------------------------------------------------------------
     // DATA MIGRATIONS. Keep these at the end, and add every new schema
     // migration ABOVE this block (#1805).
@@ -558,4 +605,13 @@ func registerMigrations(on app: Application) {
     // Lab groups, slice 6: a course's LEARN section category becomes a
     // synced group set.
     app.migrations.add(MoveLearnSectionCategoryToGroupSet())
+
+    // Records a declared assignment type for every assignment that existed
+    // before the column, from its manifest (docs/assignment-types.md). Reads
+    // `assignments` and `test_setups`, so it follows `AddAssignmentType`.
+    app.migrations.add(BackfillAssignmentType())
+
+    // A wardrobe unlock records the achievement that granted it, and its
+    // name (docs/achievement-rewards.md, S2). Schema only.
+    app.migrations.add(AddWardrobeUnlockSource())
 }

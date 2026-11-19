@@ -41,10 +41,6 @@ struct RunnerProfileService {
             return RunnerProfileUpsertResult(profile: nil, event: nil)
         }
 
-        let existing = try await RunnerProfile.query(on: db)
-            .filter(\.$runnerID == runnerID)
-            .first()
-
         // A check-in that changes nothing but the freshness timestamp only
         // persists when the stored timestamp has aged past the debounce
         // window — the poll-frequency UPDATE-per-poll is the thing being
@@ -56,52 +52,68 @@ struct RunnerProfileService {
                 && seenAt.timeIntervalSince(existing.lastSeenAt) < lastSeenPersistInterval
         }
 
-        guard let profile else {
-            if let existing {
-                let newName = nonEmpty(displayName)
-                let displayNameChanged = newName != nil && newName != existing.displayName
-                if onlyRefreshesFreshness(existing, displayNameChanged: displayNameChanged) {
-                    return RunnerProfileUpsertResult(profile: existing, event: nil)
-                }
-                existing.lastSeenAt = seenAt
-                existing.isActive = true
-                if let newName {
-                    existing.displayName = newName
-                }
-                try await existing.save(on: db)
-            }
-            return RunnerProfileUpsertResult(profile: existing, event: nil)
-        }
+        // A new runner polls from every job slot at once, so its first
+        // check-ins arrive together: each reads "no row", and only one insert
+        // wins `uq:runner_profiles.runner_id`. A loser makes one more pass,
+        // finds the winner's row and takes the update path, so it never
+        // reports `.registered`: the winner already did.
+        var mayRetryInsert = true
+        while true {
+            let existing = try await RunnerProfile.query(on: db)
+                .filter(\.$runnerID == runnerID)
+                .first()
 
-        let profileHash = self.profileHash(for: profile)
-        if let existing {
-            let event: RunnerProfileRegistrationEvent? = existing.profileHash == profileHash ? nil : .updated
-            let newName = nonEmpty(displayName)
-            let displayNameChanged = newName != nil && newName != existing.displayName
-            if event == nil, onlyRefreshesFreshness(existing, displayNameChanged: displayNameChanged) {
+            guard let profile else {
+                if let existing {
+                    let newName = nonEmpty(displayName)
+                    let displayNameChanged = newName != nil && newName != existing.displayName
+                    if onlyRefreshesFreshness(existing, displayNameChanged: displayNameChanged) {
+                        return RunnerProfileUpsertResult(profile: existing, event: nil)
+                    }
+                    existing.lastSeenAt = seenAt
+                    existing.isActive = true
+                    if let newName {
+                        existing.displayName = newName
+                    }
+                    try await existing.save(on: db)
+                }
                 return RunnerProfileUpsertResult(profile: existing, event: nil)
             }
-            existing.displayName = newName ?? existing.displayName
-            existing.capabilityProfile = profile
-            existing.profileHash = profileHash
-            existing.lastRegisteredAt = seenAt
-            existing.lastSeenAt = seenAt
-            existing.isActive = true
-            try await existing.save(on: db)
-            return RunnerProfileUpsertResult(profile: existing, event: event)
-        }
 
-        let created = RunnerProfile(
-            runnerID: runnerID,
-            displayName: nonEmpty(displayName),
-            profile: profile,
-            profileHash: profileHash,
-            lastRegisteredAt: seenAt,
-            lastSeenAt: seenAt,
-            isActive: true
-        )
-        try await created.save(on: db)
-        return RunnerProfileUpsertResult(profile: created, event: .registered)
+            let profileHash = self.profileHash(for: profile)
+            if let existing {
+                let event: RunnerProfileRegistrationEvent? = existing.profileHash == profileHash ? nil : .updated
+                let newName = nonEmpty(displayName)
+                let displayNameChanged = newName != nil && newName != existing.displayName
+                if event == nil, onlyRefreshesFreshness(existing, displayNameChanged: displayNameChanged) {
+                    return RunnerProfileUpsertResult(profile: existing, event: nil)
+                }
+                existing.displayName = newName ?? existing.displayName
+                existing.capabilityProfile = profile
+                existing.profileHash = profileHash
+                existing.lastRegisteredAt = seenAt
+                existing.lastSeenAt = seenAt
+                existing.isActive = true
+                try await existing.save(on: db)
+                return RunnerProfileUpsertResult(profile: existing, event: event)
+            }
+
+            let created = RunnerProfile(
+                runnerID: runnerID,
+                displayName: nonEmpty(displayName),
+                profile: profile,
+                profileHash: profileHash,
+                lastRegisteredAt: seenAt,
+                lastSeenAt: seenAt,
+                isActive: true
+            )
+            do {
+                try await created.create(on: db)
+                return RunnerProfileUpsertResult(profile: created, event: .registered)
+            } catch  where mayRetryInsert && isInsertConflict(error) {
+                mayRetryInsert = false
+            }
+        }
     }
 
     func profile(for runnerID: String, on db: any Database) async throws -> RunnerProfile? {

@@ -96,8 +96,9 @@ struct TestSetupRoutes: RouteCollection {
 
         // The rules every authoring door enforces (`ManifestCoherence`),
         // checked here so a zip-borne manifest cannot smuggle a combination
-        // in that no editor would accept.
-        if let violation = ManifestCoherence.violation(in: manifest) {
+        // in that no editor would accept. A new setup has no assignment row
+        // yet, so no declared type applies (type: nil).
+        if let violation = ManifestCoherence.violation(for: nil, in: manifest) {
             throw AppError.unprocessable(reason: violation)
         }
 
@@ -136,10 +137,12 @@ struct TestSetupRoutes: RouteCollection {
         // A spec that claims a library version must name one this course has,
         // and the file must be its bytes (docs/datasets-course-library.md).
         for spec in manifest.datasets {
-            let issue: String?
+            var issue: String?
             do {
                 issue = try await CourseDatasetService.sourceIssue(
                     for: spec, courseID: upload.courseID, zipPath: zipPath, on: req.db)
+                // The format's checks too (docs/fhir-datasets-plan.md §6).
+                if issue == nil { issue = await datasetFormatRefusal(spec, zipPath: zipPath) }
             } catch {
                 try? FileManager.default.removeItem(atPath: zipPath)
                 throw error
@@ -192,7 +195,7 @@ struct TestSetupRoutes: RouteCollection {
         if manifest.gradingMode == .browser {
             let notebookPath = setupsDir + "\(setupID).ipynb"
             if let data = await extractNotebookFromZip(zipPath: zipPath) {
-                let normalized = normalizeNotebookForJupyterLite(data)
+                let normalized = starterNotebookForStorage(data)
                 try await req.fileio.writeFile(.init(data: normalized), at: notebookPath)
                 setup.notebookPath = notebookPath
                 try await setup.save(on: req.db)
@@ -424,7 +427,7 @@ struct TestSetupRoutes: RouteCollection {
             notebookPath = req.application.testSetupsDirectory + "\(setupID).ipynb"
         }
 
-        let normalizedNotebook = normalizeNotebookForJupyterLite(notebookBytes)
+        let normalizedNotebook = starterNotebookForStorage(notebookBytes)
         try await req.fileio.writeFile(.init(data: normalizedNotebook), at: notebookPath)
 
         if setup.notebookPath == nil {

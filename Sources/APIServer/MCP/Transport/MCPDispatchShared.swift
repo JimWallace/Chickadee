@@ -121,9 +121,18 @@ func mcpToolErrorResult(_ error: MCPToolError, tool: String) -> JSONValue {
 /// Applied once at the dispatcher's exit rather than inside every handler, so
 /// no result-building code has to know which era it is serving.  Error
 /// responses are left alone: they carry `error`, not `result`.
+///
+/// `method` is the request's method (nil when the name is not one this server
+/// knows, which only ever yields an error). A cacheable method's modern
+/// result also gets the caching fields the schema requires on it
+/// (`returnsCacheableResult`): `ttlMs` 0 and `cacheScope` `private`. Each of
+/// those results depends on the caller's token (its scopes, its enrolments,
+/// its course's authoring guidance), so no cache may share one across tokens,
+/// and a change must show at once, so nothing is held fresh.
 /// https://modelcontextprotocol.io/specification/2026-07-28/basic#requests
 func mcpModernized(
-    _ response: JSONRPCResponse, era: MCPEra, serverInfo: MCPServerInfo
+    _ response: JSONRPCResponse, era: MCPEra, serverInfo: MCPServerInfo,
+    method: MCPMethod?
 ) -> JSONRPCResponse {
     guard era == .modern, response.error == nil,
         case .object(var fields)? = response.result
@@ -132,6 +141,10 @@ func mcpModernized(
     // server produces is terminal — it never asks the client for input — so
     // the discriminator is always `complete`.
     fields["resultType"] = .string("complete")
+    if method?.returnsCacheableResult == true {
+        fields["ttlMs"] = .int(0)
+        fields["cacheScope"] = .string("private")
+    }
     var meta: [String: JSONValue] = [:]
     if case .object(let existing)? = fields["_meta"] { meta = existing }
     if meta[MCPMetaKey.serverInfo] == nil {
@@ -164,9 +177,10 @@ struct MCPInitializeSurface {
 /// speaks, its capabilities, and its instructions.  `serverInfo` is added by
 /// `mcpModernized` (it belongs in the result's `_meta`, not the body).
 ///
-/// Deliberately carries no `ttlMs` / `cacheScope`: the instructions embed
-/// per-course authoring guidance an instructor can change at any time, and a
-/// client caching a stale discover result would keep serving the old guide.
+/// The schema requires `ttlMs` / `cacheScope` here, and `mcpModernized` adds
+/// them as 0 and `private`: the instructions embed per-course authoring
+/// guidance an instructor can change at any time, so a client must not hold a
+/// discover result fresh.
 /// https://modelcontextprotocol.io/specification/2026-07-28/server/discover
 func mcpDiscoverResult(surface: MCPInitializeSurface) -> JSONValue {
     .object([

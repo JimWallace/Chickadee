@@ -102,7 +102,7 @@ private func requireOpenActivityWindow(
         }
     guard let activity = setup?.decodedManifest()?.activity else { return }
     if activity.isPerGroup {
-        try await requireOpenGroupSession(assignment: assignment, user: user, on: req, now: now)
+        try await requireOpenGroupSession(assignment: assignment, user: user, on: req)
         return
     }
     guard !activity.acceptsSubmissions(at: now), let window = activity.window else { return }
@@ -129,7 +129,7 @@ private func requireOpenActivityWindow(
 /// 1, `recordLeaderboardEntry`). Course staff are not gated, for the window's
 /// reason.
 private func requireOpenGroupSession(
-    assignment: APIAssignment, user: APIUser, on req: Request, now: Date
+    assignment: APIAssignment, user: APIUser, on req: Request
 ) async throws {
     if try await req.cachedIsCourseStaff(user, inCourse: assignment.courseID) { return }
     let joined = try await ActivitySessionStore.hasJoined(

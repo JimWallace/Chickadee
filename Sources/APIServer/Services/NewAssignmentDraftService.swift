@@ -162,7 +162,9 @@ struct NewAssignmentDraftService {
         let filename = notebookFilenameForStorage(
             uploadedName: file.filename, fallback: "assignment.ipynb")
         let path = dir + filename
-        try normalized.write(to: URL(fileURLWithPath: path))
+        // The stored starter loses its outputs; the author's working copy below
+        // keeps exactly what was uploaded, as an editor save does.
+        try starterNotebookForStorage(normalized).write(to: URL(fileURLWithPath: path))
         setup.notebookPath = path
         try await setup.save(on: db)
         _ = try await ensureUserNotebookWorkingCopy(
@@ -284,7 +286,6 @@ struct NewAssignmentDraftService {
             let result = try await autoScaffoldFromSolutionNotebook(
                 setup: setup,
                 notebookData: normalized,
-                zipPath: setup.zipPath,
                 on: db
             )
             if result.functions > 0 {
@@ -319,11 +320,8 @@ struct NewAssignmentDraftService {
             suiteConfigJSON: payload.suiteConfigRaw,
             zipPath: setup.zipPath
         )
-        let sectionGradingMode = try await newAssignmentSectionGradingMode(
-            courseID: courseID,
-            sectionIDRaw: payload.sectionIDRaw,
-            on: db
-        )
+        let gradingMode = try newAssignmentDeclaredType(requestedRaw: payload.assignmentType).defaultGradingMode
+            .rawValue
         let starterNotebook =
             setup.notebookPath.map { URL(fileURLWithPath: $0).lastPathComponent }
             ?? "assignment.ipynb"
@@ -334,7 +332,7 @@ struct NewAssignmentDraftService {
             setup.decodedManifest(),
             testSuites: setupPackage.testSuites,
             includeMakefile: setupPackage.hasMakefile,
-            sectionGradingMode: sectionGradingMode,
+            gradingMode: gradingMode,
             starterNotebook: starterNotebook
         )
         // The zip was rebuilt from the upload, so a library source may no
@@ -361,8 +359,8 @@ struct NewAssignmentDraftService {
             setup.decodedManifest(),
             testSuites: [],
             includeMakefile: false,
-            sectionGradingMode: try await newAssignmentSectionGradingMode(
-                courseID: courseID, sectionIDRaw: payload.sectionIDRaw, on: db),
+            gradingMode: try newAssignmentDeclaredType(requestedRaw: payload.assignmentType).defaultGradingMode
+                .rawValue,
             starterNotebook: starterNotebook
         )
         setup.manifest = try await CourseDatasetService.reconciledManifestText(

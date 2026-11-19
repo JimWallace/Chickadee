@@ -360,8 +360,10 @@ async function runCell(page, jlFrame, source, expect) {
   await page.keyboard.press("Enter");
   await page.keyboard.type(source);
   await page.keyboard.press("Shift+Enter");
+  // Wait for the cell's output, not the page text: the cell's own source
+  // contains the needle too.
   return await jlFrame.waitForFunction(
-    (needle) => ((document.body && document.body.innerText) || "").includes(needle),
+    (needle) => [...document.querySelectorAll(".jp-OutputArea-output")].some((n) => n.innerText.includes(needle)),
     expect, { timeout: 60_000 }
   ).then(() => true).catch(() => false);
 }
@@ -421,9 +423,16 @@ async function main() {
 
     // ---- Step 3: kernel file I/O through the same drive ------------------
     const wrote = await runCell(page, jlFrame,
-      `import os; os.makedirs('${PROBE_DIR}', exist_ok=True); open('${PROBE_FILE}', 'w').write('kernel-wrote-this'); print('NB_HEAD', open('${saved.name}').read()[:20].replace(chr(10), ' '))`,
-      "NB_HEAD");
+      `import os; os.makedirs('${PROBE_DIR}', exist_ok=True); open('${PROBE_FILE}', 'w').write('kernel-wrote-this'); print('NB_HEAD', open('${saved.name}').read()[:20].replace(chr(10), ' ')); print('ROOT=' + ','.join(os.listdir('/drive')) + ';')`,
+      "ROOT=");
     if (!wrote) return fail("the kernel cell that writes a file and reads the notebook did not print", (await bodyText(jlFrame)).slice(-500));
+    // The drive root lists `users` (not the student's folder contents), so the
+    // kernel's `os.listdir('/drive')` sees the real tree.
+    const rootOut = await jlFrame.evaluate(() =>
+      [...document.querySelectorAll(".jp-OutputArea-output")].map((n) => n.innerText).join("\n")).catch(() => "");
+    if (!rootOut.includes("ROOT=users;")) {
+      return fail("os.listdir('/drive') did not list exactly users", rootOut.slice(-300));
+    }
     // DriveFS flushes on close; give the PUT a moment to land.
     let probe = null;
     for (let i = 0; i < 20 && !probe; i++) {
@@ -439,7 +448,7 @@ async function main() {
     if (!dirModel || dirModel.type !== "directory") {
       return fail("the directory the kernel made (os.makedirs) did not reach the server", `${dirRes.status()}\n` + dump());
     }
-    console.log("step 3 ok: kernel read the notebook; its written file and its os.makedirs directory reached the server");
+    console.log("step 3 ok: kernel read the notebook and listed /drive as [users]; its written file and its os.makedirs directory reached the server");
     await page.keyboard.press("Control+s");
     await page.waitForTimeout(1500);
 

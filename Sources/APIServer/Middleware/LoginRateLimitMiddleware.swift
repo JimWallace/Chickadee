@@ -154,17 +154,31 @@ enum LoginAttemptService {
         max: Int,
         on db: any Database
     ) async throws -> Bool {
+        try await recordAndCheck(
+            scope: LoginAttempt.Scope.ip, key: ip, now: now, windowSeconds: windowSeconds, max: max, on: db)
+    }
+
+    /// `recordAndCheckIP` for any scope: records one event under
+    /// (`scope`, `key`) and reports whether the window still allows it.
+    static func recordAndCheck(
+        scope: String,
+        key: String,
+        now: Date,
+        windowSeconds: TimeInterval,
+        max: Int,
+        on db: any Database
+    ) async throws -> Bool {
         let cutoff = now.addingTimeInterval(-windowSeconds)
         try await LoginAttempt.query(on: db)
-            .filter(\.$scope == LoginAttempt.Scope.ip)
-            .filter(\.$attemptKey == ip)
+            .filter(\.$scope == scope)
+            .filter(\.$attemptKey == key)
             .filter(\.$occurredAt <= cutoff)
             .delete()
-        try await LoginAttempt(scope: LoginAttempt.Scope.ip, attemptKey: ip, occurredAt: now)
+        try await LoginAttempt(scope: scope, attemptKey: key, occurredAt: now)
             .create(on: db)
         let count = try await LoginAttempt.query(on: db)
-            .filter(\.$scope == LoginAttempt.Scope.ip)
-            .filter(\.$attemptKey == ip)
+            .filter(\.$scope == scope)
+            .filter(\.$attemptKey == key)
             .filter(\.$occurredAt > cutoff)
             .count()
         return count <= max

@@ -3,16 +3,17 @@
 // Tools for *course* sections — the named groups that organize an assignment
 // list (e.g. "Labs", "Assignments", "Exams"), distinct from the test-suite
 // sections inside a single assignment (create_suite_section / move_suite_item).  A
-// course section (`APICourseSection`) has a name, a sort order, and a default
-// grading mode; an assignment belongs to at most one via its nullable
-// `sectionID`.  content:read for the listing, content:write for the rest.
+// course section (`APICourseSection`) has a name and a sort order, and names no
+// type or grading mode; an assignment belongs to at most one via its
+// nullable `sectionID`.  content:read for the listing, content:write for the
+// rest.
 //
 // These share their field rules and writes with the web instructor dashboard
 // handlers (`CourseAdminRoutes+Sections.swift`) through `CourseSectionService`
 // (#2769): create_course_section ~ createSection, set_assignment_course_section
-// ~ moveToSection (including the grading-mode sync when moving into a named
-// section).  This is assignment-organization metadata, not student/enrollment
-// data.
+// ~ moveToSection.  A move changes neither the assignment's type nor its
+// grading mode (docs/assignment-types.md).  This is assignment-organization
+// metadata, not student/enrollment data.
 
 import Core
 import Fluent
@@ -29,7 +30,6 @@ struct ListCourseSectionsTool: ContentTool {
         struct Section: Encodable, Sendable {
             let sectionID: String
             let name: String
-            let defaultGradingMode: String
             let sortOrder: Int
         }
         let courseCode: String
@@ -43,8 +43,9 @@ struct ListCourseSectionsTool: ContentTool {
     static let description =
         "List the course sections (assignment groups like \"Labs\" or \"Assignments\") for a course, "
         + "identified by course code, in display order. Returns each section's id (use it as "
-        + "set_assignment_course_section's courseSectionID), name, default grading mode (browser/worker), and "
-        + "sort order. These are course-level groups for organizing the assignment list — not the "
+        + "set_assignment_course_section's courseSectionID), name and sort order. A section names no type "
+        + "and no grading mode: grading follows each "
+        + "assignment's declared type. These are course-level groups for organizing the assignment list — not the "
         + "test-suite sections inside an assignment (those come from get_suite)."
     static let inputSchema: JSONValue = .object([
         "type": .string("object"),
@@ -67,12 +68,10 @@ struct ListCourseSectionsTool: ContentTool {
                     "properties": .object([
                         "sectionID": MCPSchema.string,
                         "name": MCPSchema.string,
-                        "defaultGradingMode": MCPSchema.string,
                         "sortOrder": MCPSchema.integer,
                     ]),
                     "required": .array([
-                        .string("sectionID"), .string("name"), .string("defaultGradingMode"),
-                        .string("sortOrder"),
+                        .string("sectionID"), .string("name"), .string("sortOrder"),
                     ]),
                 ]),
             ]),
@@ -93,7 +92,6 @@ struct ListCourseSectionsTool: ContentTool {
             return Output.Section(
                 sectionID: id.uuidString,
                 name: section.name,
-                defaultGradingMode: section.defaultGradingMode,
                 sortOrder: section.sortOrder)
         }
         return Output(
@@ -108,8 +106,6 @@ struct CreateCourseSectionTool: ContentTool {
     struct Input: Decodable, Sendable {
         let courseCode: String
         let name: String
-        /// "browser" or "worker"; defaults to "browser".
-        let defaultGradingMode: String?
     }
 
     struct Output: Encodable, Sendable {
@@ -119,16 +115,15 @@ struct CreateCourseSectionTool: ContentTool {
         let courseTerm: String?
         let sectionID: String
         let name: String
-        let defaultGradingMode: String
         let sortOrder: Int
     }
 
     static let name = "create_course_section"
     static let description =
         "Create a new course section (an assignment group like \"Labs\") in a course, by course code. "
-        + "Provide a name and optionally defaultGradingMode (\"browser\" or \"worker\", default "
-        + "\"browser\") — the mode an assignment adopts when moved into this section. The new section "
-        + "is appended after the existing ones. Returns its id for use with set_assignment_course_section."
+        + "Provide a name. A section names no type: create_assignment declares each assignment's own. "
+        + "Grading follows the type, so the section sets no grading mode, and moving an assignment into it "
+        + "changes neither the type nor the grading. The new section is appended after the existing ones. Returns its id for use with set_assignment_course_section."
     static let inputSchema: JSONValue = .object([
         "type": .string("object"),
         "properties": .object([
@@ -136,13 +131,6 @@ struct CreateCourseSectionTool: ContentTool {
             "name": .object([
                 "type": .string("string"),
                 "description": .string("Display name for the new section (non-empty), e.g. \"Labs\"."),
-            ]),
-            "defaultGradingMode": .object([
-                "type": .string("string"),
-                "enum": MCPEnumProse<GradingMode>.jsonEnum,
-                "description": .string(
-                    "Grading mode adopted by assignments moved here. Default \"browser\". A \"browser\" grade is a "
-                        + "participation grade; use \"worker\" where the grade must be correct."),
             ]),
         ]),
         "required": .array([.string("courseCode"), .string("name")]),
@@ -156,12 +144,11 @@ struct CreateCourseSectionTool: ContentTool {
             "courseTerm": MCPSchema.courseTermOutput,
             "sectionID": MCPSchema.string,
             "name": MCPSchema.string,
-            "defaultGradingMode": MCPSchema.string,
             "sortOrder": MCPSchema.integer,
         ]),
         "required": .array([
             .string("courseCode"), .string("courseKey"), .string("sectionID"), .string("name"),
-            .string("defaultGradingMode"), .string("sortOrder"),
+            .string("sortOrder"),
         ]),
     ])
     static let annotations: MCPToolAnnotations? = MCPToolAnnotations(
@@ -171,8 +158,7 @@ struct CreateCourseSectionTool: ContentTool {
     func execute(_ input: Input, _ context: ToolContext) async throws -> Output {
         let draft: CourseSectionDraft
         do {
-            draft = try CourseSectionDraft(
-                name: input.name, defaultGradingMode: input.defaultGradingMode ?? GradingMode.browser.rawValue)
+            draft = try CourseSectionDraft(name: input.name)
         } catch {
             throw mcpToolError(error)
         }
@@ -184,7 +170,6 @@ struct CreateCourseSectionTool: ContentTool {
             courseCode: course.code, courseKey: course.urlKey, courseTerm: course.term?.displayName,
             sectionID: try section.requireID().uuidString,
             name: section.name,
-            defaultGradingMode: section.defaultGradingMode,
             sortOrder: section.sortOrder)
     }
 }
@@ -203,7 +188,7 @@ struct SetAssignmentCourseSectionTool: ContentTool {
         /// The section the assignment now belongs to; "" when ungrouped.
         let sectionID: String
         let sectionName: String?
-        /// The assignment's grading mode after any section-driven sync.
+        /// The assignment's grading mode, which a move never changes.
         let gradingMode: String?
     }
 
@@ -211,9 +196,9 @@ struct SetAssignmentCourseSectionTool: ContentTool {
     static let description =
         "Place an assignment into a course section (assignment group like \"Labs\"), or ungroup it, by "
         + "assignment public ID. courseSectionID comes from list_course_sections; pass \"\" (or omit) "
-        + "to ungroup. Moving into a named section makes the assignment adopt that section's default "
-        + "grading mode (browser/worker) — matching the web instructor dashboard; ungrouping leaves "
-        + "the grading mode unchanged. This is organizational metadata and does not re-run validation "
+        + "to ungroup. A move changes neither the assignment's declared type nor its grading mode, which "
+        + "follows the type; update_assignment changes the type. This is organizational metadata and does not "
+        + "re-run validation "
         + "or change the open/closed state."
     static let inputSchema: JSONValue = .object([
         "type": .string("object"),
@@ -253,8 +238,8 @@ struct SetAssignmentCourseSectionTool: ContentTool {
         let resolvedSectionID = try await resolveCourseSectionID(
             input.courseSectionID, inCourse: assignment.courseID, owner: "assignment", context: context)
 
-        // Appends to the destination lane and adopts a named section's default
-        // grading mode, as the web moveToSection does; ungrouping leaves it unchanged.
+        // Appends to the destination lane, as the web moveToSection does. The
+        // type and the grading mode stay as they were.
         let moved = try await CourseSectionService.moveAssignment(
             assignment, toSection: resolvedSectionID, on: context.db)
 
@@ -272,26 +257,21 @@ struct SetAssignmentCourseSectionTool: ContentTool {
 struct RenameCourseSectionTool: ContentTool {
     struct Input: Decodable, Sendable {
         let courseSectionID: String
-        /// New display name; omit to leave unchanged.
-        let name: String?
-        /// "browser" or "worker"; omit to leave unchanged.
-        let defaultGradingMode: String?
+        /// The new display name.
+        let name: String
     }
 
     struct Output: Encodable, Sendable {
         let sectionID: String
         let name: String
-        let defaultGradingMode: String
         let sortOrder: Int
     }
 
     static let name = "rename_course_section"
     static let description =
-        "Rename a course section (assignment group like \"Labs\") and/or change its default grading "
-        + "mode, by course-section id (from list_course_sections). Provide name and/or "
-        + "defaultGradingMode (\"browser\"/\"worker\") — at least one. The default grading mode applies "
-        + "only to assignments moved into the section AFTERWARDS (via set_assignment_course_section); it does "
-        + "not re-grade or change assignments already in it. This is a course section (assignment "
+        "Rename a course section (assignment group like \"Labs\") by course-section id (from "
+        + "list_course_sections). A rename changes neither the type nor the grading of any assignment "
+        + "in it. This is a course section (assignment "
         + "group), not a test-suite section inside an assignment — use rename_suite_section for those."
     static let inputSchema: JSONValue = .object([
         "type": .string("object"),
@@ -302,15 +282,10 @@ struct RenameCourseSectionTool: ContentTool {
             ]),
             "name": .object([
                 "type": .string("string"),
-                "description": .string("New display name (non-empty); omit to leave unchanged."),
-            ]),
-            "defaultGradingMode": .object([
-                "type": .string("string"),
-                "enum": MCPEnumProse<GradingMode>.jsonEnum,
-                "description": .string("New default grading mode; omit to leave unchanged."),
+                "description": .string("New display name (non-empty)."),
             ]),
         ]),
-        "required": .array([.string("courseSectionID")]),
+        "required": .array([.string("courseSectionID"), .string("name")]),
         "additionalProperties": .bool(false),
     ])
     static let outputSchema: JSONValue? = .object([
@@ -318,11 +293,10 @@ struct RenameCourseSectionTool: ContentTool {
         "properties": .object([
             "sectionID": MCPSchema.string,
             "name": MCPSchema.string,
-            "defaultGradingMode": MCPSchema.string,
             "sortOrder": MCPSchema.integer,
         ]),
         "required": .array([
-            .string("sectionID"), .string("name"), .string("defaultGradingMode"), .string("sortOrder"),
+            .string("sectionID"), .string("name"), .string("sortOrder"),
         ]),
     ])
     static let annotations: MCPToolAnnotations? = MCPToolAnnotations(
@@ -330,16 +304,11 @@ struct RenameCourseSectionTool: ContentTool {
     static let requiredScopes: Set<ContentScope> = [.write]
 
     func execute(_ input: Input, _ context: ToolContext) async throws -> Output {
-        let newName = input.name?.trimmingCharacters(in: .whitespacesAndNewlines)
-        let newMode = input.defaultGradingMode?.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard newName != nil || newMode != nil else {
-            throw MCPToolError.invalidArguments(detail: "Provide at least one of: name, defaultGradingMode.")
-        }
         let section = try await resolveCourseSectionForEdit(
             sectionID: input.courseSectionID, context: context, atLeast: CourseRoleFloor.manageSections)
         let edit: CourseSectionEdit
         do {
-            edit = try CourseSectionEdit(name: newName, defaultGradingMode: newMode)
+            edit = try CourseSectionEdit(name: input.name)
         } catch {
             throw mcpToolError(error)
         }
@@ -347,7 +316,6 @@ struct RenameCourseSectionTool: ContentTool {
         return Output(
             sectionID: try section.requireID().uuidString,
             name: section.name,
-            defaultGradingMode: section.defaultGradingMode,
             sortOrder: section.sortOrder)
     }
 }
@@ -544,6 +512,5 @@ func mcpToolError(_ error: CourseSectionError) -> MCPToolError {
 
 // `currentManifestGradingMode` / `setManifestGradingMode` /
 // `setManifestGraderOnly` moved to Services/ManifestFieldEdits.swift (#1121):
-// they are cross-surface utilities (also used by AuthorScriptTool,
-// SetGradingModeTool, and the web CourseAdminRoutes+Sections), not
-// course-section concerns.
+// they are cross-surface utilities (also used by AuthorScriptTool and
+// SetGradingModeTool), not course-section concerns.

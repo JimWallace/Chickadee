@@ -34,13 +34,23 @@ IMAGE="ghcr.io/jimwallace/chickadee"
 cat > "$BIN/docker" <<'SH'
 #!/usr/bin/env bash
 printf 'docker %s\n' "$*" >> "$STUB/calls"
+# An image is published when the case says every image is (image_published), or
+# names its short commit (published_<sha7>).
+ref="${*: -1}"
+short="${ref##*:sha-}"
+published() { [ -f "$STUB/image_published" ] || [ -f "$STUB/published_$short" ]; }
 case "$1" in
   pull)
-    [ -f "$STUB/image_published" ] || { echo "manifest unknown" >&2; exit 1; }
+    published || { echo "manifest unknown" >&2; exit 1; }
+    ;;
+  manifest)
+    published || { echo "manifest unknown" >&2; exit 1; }
     ;;
   image)
     case "$*" in
-      *revision*) cat "$STUB/image_revision" ;;
+      *revision*)
+        if [ -f "$STUB/revision_$short" ]; then cat "$STUB/revision_$short"; else cat "$STUB/image_revision"; fi
+        ;;
       *RepoDigests*) echo "ghcr.io/jimwallace/chickadee@sha256:0123abcd" ;;
       # Reclaiming space frees enough when the case says so.
       *prune*) [ -f "$STUB/prune_frees" ] && echo $(( 50 * 1024 * 1024 )) > "$STUB/free_kib" ;;
@@ -81,7 +91,15 @@ done
 printf 'curl insecure=%s %s\n' "$insecure" "$url" >> "$STUB/calls"
 case "$url" in
   */releases/latest) printf '{"tag_name": "%s"}\n' "$(cat "$STUB/latest_release")" ;;
-  */commits/*) printf '{"sha": "%s"}\n' "$(cat "$STUB/release_sha")" ;;
+  */commits/*)
+    tag="${url##*/}"
+    if [ -f "$STUB/sha_$tag" ]; then sha="$(cat "$STUB/sha_$tag")"; else sha="$(cat "$STUB/release_sha")"; fi
+    printf '{"sha": "%s"}\n' "$sha"
+    ;;
+  */tags\?*) cat "$STUB/tags" 2>/dev/null || echo '[]' ;;
+  */releases\?*) [ -f "$STUB/releases_fail" ] && exit 22; cat "$STUB/releases_json" 2>/dev/null ;;
+  */compare/*) cat "$STUB/compare_json" 2>/dev/null ;;
+  */search/issues*) cat "$STUB/search_json" 2>/dev/null ;;
   */health)
     mode="$(cat "$STUB/health")"
     if [ "$mode" = "tls" ] && [ "$insecure" = "0" ]; then
@@ -122,7 +140,15 @@ cat > "$WORK/snapshot-script" <<'SH'
 printf 'snapshot %s\n' "$*" >> "$STUB/calls"
 SH
 
-chmod +x "$BIN/docker" "$BIN/curl" "$BIN/df" "$WORK/deploy-script" "$WORK/snapshot-script"
+# cosign verifies the image signature. It fails when the case says the image
+# is unsigned.
+cat > "$BIN/cosign" <<'SH'
+#!/usr/bin/env bash
+printf 'cosign %s\n' "$*" >> "$STUB/calls"
+[ ! -f "$STUB/unsigned" ] || { echo "Error: no matching attestations" >&2; exit 1; }
+SH
+
+chmod +x "$BIN/docker" "$BIN/curl" "$BIN/df" "$BIN/cosign" "$WORK/deploy-script" "$WORK/snapshot-script"
 touch "$WORK/docker-compose.yml"
 
 export STUB
@@ -154,6 +180,17 @@ repo_git() {
   esac
 }
 restart_self() { printf 'restart-self\n' >> "$STUB/calls"; }
+
+# The real installer downloads from GitHub. Keep it under another name for the
+# case that tests its hash check, and use the stub everywhere else.
+eval "real_$(declare -f ensure_cosign)"
+ensure_cosign() {
+  if [ -f "$STUB/cosign_missing" ]; then
+    WAIT_REASON="could not download cosign"
+    return 1
+  fi
+  COSIGN="$BIN/cosign"
+}
 
 # The fake clock. `sleep` advances it instead of waiting.
 FAKE_NOW=1000000
@@ -209,6 +246,10 @@ start_case() {
   DEPLOYED_VERSION="0.5.231"
   PAUSED=0
   APPROVED_VERSION=""
+  REFUSED_FALLBACKS=""
+  REFUSED_FALLBACKS_FOR=""
+  HELD_VERSION=""
+  NOTES_FOR=""
   clear_failures
 }
 
@@ -224,6 +265,41 @@ expect_calls "docker compose .* up -d --no-deps runner" 1
 expect_calls "docker compose .* pull" 0
 expect_state idle
 [ "$DEPLOYED_VERSION" = "0.5.232" ] || fail "expected 0.5.232 deployed, saw $DEPLOYED_VERSION"
+expect_calls "cosign verify-attestation --type slsaprovenance1 --certificate-oidc-issuer https://token.actions.githubusercontent.com --certificate-identity https://github.com/JimWallace/Chickadee/.github/workflows/docker-build.yml@refs/tags/v0.5.232 $IMAGE@sha256:0123abcd" 1
+
+# ---------------------------------------------------------------------------
+start_case "an image without a signed provenance is not deployed"
+touch "$STUB/unsigned"
+run_cycle
+expect_calls "cosign verify-attestation" 1
+expect_calls "docker tag" 0
+expect_calls "docker rmi $IMAGE:sha-b485699" 1
+expect_calls "deploy-script" 0
+expect_calls "snapshot" 0
+expect_state waiting_for_image
+grep -q "no provenance signed by docker-build.yml at v0.5.232" "$STATUS_FILE" \
+  || fail "expected the status to name the missing signature"
+
+# ---------------------------------------------------------------------------
+start_case "no cosign means no deploy"
+touch "$STUB/cosign_missing"
+run_cycle
+expect_calls "docker tag" 0
+expect_calls "deploy-script" 0
+expect_state waiting_for_image
+
+# ---------------------------------------------------------------------------
+start_case "a cosign download that does not match the pinned hash is refused"
+# The curl stub writes nothing, so the download is empty and its hash is wrong.
+if real_ensure_cosign; then
+  fail "expected the installer to refuse a download with the wrong hash"
+fi
+case "$WAIT_REASON" in
+  *"does not match its pinned SHA-256"*) ;;
+  *) fail "expected a hash mismatch, saw: $WAIT_REASON" ;;
+esac
+[ -z "$(find "$CHICKADEE_STATE_DIR/bin" -name 'cosign-*' 2>/dev/null)" ] \
+  || fail "a refused download must not be installed"
 
 # ---------------------------------------------------------------------------
 start_case "an unpublished release image waits without a swap or snapshot"
@@ -336,8 +412,8 @@ expect_calls "docker inspect" 2
 # ---------------------------------------------------------------------------
 start_case "a runner that exits at startup records the refresh as failed, with its error"
 touch "$STUB/runner_crashing"
-printf '%s\n' "Error: --sandbox is set, but this host cannot start the sandbox: unshare: write failed /proc/self/uid_map: Operation not permitted" \
-  "A container that drops capabilities or uses the default seccomp profile refuses user and mount namespaces. Remove --sandbox, or allow them." \
+printf '%s\n' "Error: the sandbox is on, but this host cannot start the sandbox: unshare: write failed /proc/self/uid_map: Operation not permitted" \
+  "A container that drops capabilities or uses the default seccomp profile refuses user and mount namespaces. Allow them, or start the runner with --no-sandbox." \
   > "$STUB/runner_logs"
 run_cycle
 expect_history runner-refresh failed
@@ -457,6 +533,440 @@ run_cycle
 expect_calls "deploy-script deploy" 1
 expect_calls "docker image prune -a -f" 1
 expect_state idle
+
+# ---------------------------------------------------------------------------
+# While the newest release waits for its image, the newest older release that
+# has one goes out. Production stayed on 0.5.964 for hours on 2026-11-16
+# because every merge moved the target before its image existed.
+# ---------------------------------------------------------------------------
+OLD_SHA="03df65cfb5cd97613bf7356a7204e88c866ca107"
+MID_SHA="5f1e2d3c4b5a69788796a5b4c3d2e1f0a9b8c7d6"
+
+fallback_case() {  # $1 = case name. v0.5.234 waits; v0.5.233 is built.
+  start_case "$1"
+  echo "v0.5.234" > "$STUB/latest_release"
+  echo "$RELEASE_SHA" > "$STUB/sha_v0.5.234"
+  echo "$OLD_SHA" > "$STUB/sha_v0.5.233"
+  echo "$MID_SHA" > "$STUB/sha_v0.5.232"
+  cat > "$STUB/tags" <<JSON
+[{"name": "v0.5.232", "commit": {"sha": "$MID_SHA"}},
+ {"name": "v0.5.234", "commit": {"sha": "$RELEASE_SHA"}},
+ {"name": "not-a-release", "commit": {"sha": "$OLD_SHA"}},
+ {"name": "v0.5.233", "commit": {"sha": "$OLD_SHA"}},
+ {"name": "v0.5.231", "commit": {"sha": "$MID_SHA"}}]
+JSON
+  rm "$STUB/image_published"
+  touch "$STUB/published_${OLD_SHA:0:7}" "$STUB/published_${MID_SHA:0:7}"
+  echo "$OLD_SHA" > "$STUB/revision_${OLD_SHA:0:7}"
+  echo "$MID_SHA" > "$STUB/revision_${MID_SHA:0:7}"
+  echo "0.5.233" > "$STUB/target_version"
+  echo "$OLD_SHA" > "$STUB/git_head"
+  echo "$OLD_SHA" > "$STUB/git_tag_commit"
+}
+
+# ---------------------------------------------------------------------------
+fallback_case "a newest release without an image does not hold back an older one that has one"
+run_cycle
+expect_calls "deploy-script deploy --yes" 1
+expect_calls "docker pull -q $IMAGE:sha-${OLD_SHA:0:7}" 1
+expect_calls "docker pull -q $IMAGE:sha-${MID_SHA:0:7}" 0
+expect_history fallback chosen
+[ "$DEPLOYED_VERSION" = "0.5.233" ] || fail "expected the fallback 0.5.233 deployed, saw $DEPLOYED_VERSION"
+[ "$LATEST_SEEN" = "v0.5.234" ] || fail "expected v0.5.234 still reported as the latest seen, saw $LATEST_SEEN"
+[ "$WAITING_VERSION" = "v0.5.234" ] || fail "the newest release lost its wait clock: $WAITING_VERSION"
+run_cycle
+expect_calls "deploy-script deploy --yes" 1
+expect_state waiting_for_image
+touch "$STUB/published_${RELEASE_SHA:0:7}"
+echo "0.5.234" > "$STUB/target_version"
+echo "$RELEASE_SHA" > "$STUB/git_head"
+echo "$RELEASE_SHA" > "$STUB/git_tag_commit"
+run_cycle
+expect_calls "deploy-script deploy --yes" 2
+expect_state idle
+[ "$DEPLOYED_VERSION" = "0.5.234" ] || fail "expected 0.5.234 deployed once built, saw $DEPLOYED_VERSION"
+
+# ---------------------------------------------------------------------------
+fallback_case "a newest release that never builds still becomes stuck after a fallback"
+run_cycle
+[ "$DEPLOYED_VERSION" = "0.5.233" ] || fail "expected the fallback 0.5.233 deployed, saw $DEPLOYED_VERSION"
+FAKE_NOW=$(( FAKE_NOW + 7200 ))
+run_cycle
+expect_state stuck
+
+# ---------------------------------------------------------------------------
+fallback_case "no fallback when no older release has an image"
+rm "$STUB/published_${OLD_SHA:0:7}" "$STUB/published_${MID_SHA:0:7}"
+run_cycle
+expect_calls "deploy-script" 0
+expect_calls "docker manifest inspect" 2
+expect_state waiting_for_image
+[ "$DEPLOYED_VERSION" = "0.5.231" ] || fail "a deploy happened without an image: $DEPLOYED_VERSION"
+
+# ---------------------------------------------------------------------------
+fallback_case "a fallback that is backed off after a failure is skipped"
+FAILING_VERSION="v0.5.233"
+RETRY_AT=$(( FAKE_NOW + 600 ))
+echo "0.5.232" > "$STUB/target_version"
+echo "$MID_SHA" > "$STUB/git_head"
+echo "$MID_SHA" > "$STUB/git_tag_commit"
+run_cycle
+expect_calls "docker pull -q $IMAGE:sha-${OLD_SHA:0:7}" 0
+[ "$DEPLOYED_VERSION" = "0.5.232" ] || fail "expected 0.5.232 deployed past the backed-off 0.5.233, saw $DEPLOYED_VERSION"
+
+# ---------------------------------------------------------------------------
+fallback_case "a disk hold does not send a fallback out"
+echo $(( 4 * 1024 * 1024 )) > "$STUB/free_kib"
+run_cycle
+expect_calls "docker manifest" 0
+expect_calls "deploy-script" 0
+expect_state disk_low
+
+# ---------------------------------------------------------------------------
+fallback_case "a fallback whose image fails to stage is tried once, then the next one goes out"
+echo "03df65c0000000000000000000000000000000ff" > "$STUB/revision_${OLD_SHA:0:7}"
+run_cycle
+expect_calls "deploy-script" 0
+expect_history fallback refused
+echo "0.5.232" > "$STUB/target_version"
+echo "$MID_SHA" > "$STUB/git_head"
+echo "$MID_SHA" > "$STUB/git_tag_commit"
+run_cycle
+expect_calls "docker pull -q $IMAGE:sha-${OLD_SHA:0:7}" 1
+[ "$DEPLOYED_VERSION" = "0.5.232" ] || fail "expected 0.5.232 deployed after 0.5.233 was refused, saw $DEPLOYED_VERSION"
+
+# ---------------------------------------------------------------------------
+start_case "a newest image that is published but refused sends no fallback out"
+echo "03df65cfb5cd97613bf7356a7204e88c866ca107" > "$STUB/image_revision"
+run_cycle
+expect_calls "docker manifest" 0
+expect_calls "deploy-script" 0
+expect_state waiting_for_image
+
+# ---------------------------------------------------------------------------
+# The release gate (docs/release-gate.md): deploy modes, the admin page's
+# request channel, and what survives a restart.
+# ---------------------------------------------------------------------------
+REQ="$CHICKADEE_STATE_DIR/requests"
+
+request() {  # $1 = file name, $2 = JSON body
+  mkdir -p "$REQ"
+  printf '%s' "$2" > "$REQ/$1"
+}
+
+expect_history_line() {  # $1 = a regex one history line must match
+  grep -qE -- "$1" "$HISTORY_FILE" 2>/dev/null || fail "expected a history line matching '$1'"
+}
+
+expect_status_field() {  # $1 = key, $2 = expected value
+  local v; v="$(json_field "$STATUS_FILE" "$1")"
+  [ "$v" = "$2" ] || fail "expected status $1='$2', saw '$v'"
+}
+
+minor_release() {  # the next release is the minor v0.6.0
+  echo "v0.6.0" > "$STUB/latest_release"
+  echo "0.6.0" > "$STUB/target_version"
+}
+
+# ---------------------------------------------------------------------------
+start_case "with no mode file, a patch deploys (gated-minors is the default)"
+run_cycle
+expect_calls "deploy-script deploy" 1
+expect_status_field mode gated-minors
+
+# ---------------------------------------------------------------------------
+start_case "with no mode file, a minor is held once and its notes are written"
+minor_release
+cat > "$STUB/releases_json" <<'JSON'
+[{"tag_name": "v0.6.0", "name": "Chickadee v0.6.0", "body": "- **Kernels.** Re-vendored (#3100).", "html_url": "https://example/r/600", "published_at": "2026-11-20T00:00:00Z"},
+ {"tag_name": "v0.5.232", "name": "Chickadee v0.5.232", "body": "- A fix (#3099).", "html_url": "https://example/r/5232", "published_at": "2026-11-19T00:00:00Z"},
+ {"tag_name": "v0.5.231", "name": "Chickadee v0.5.231", "body": "- Already live.", "html_url": "https://example/r/5231", "published_at": "2026-11-18T00:00:00Z"}]
+JSON
+cat > "$STUB/compare_json" <<'JSON'
+{"commits": [{"commit": {"message": "A fix (#3099)"}}, {"commit": {"message": "Re-vendor the xeus kernels (#3100)\n\nbody"}}]}
+JSON
+cat > "$STUB/search_json" <<'JSON'
+{"items": [{"number": 3100, "title": "Re-vendor the xeus kernels", "html_url": "https://example/pull/3100"}, {"number": 2000, "title": "An older minor", "html_url": "https://example/pull/2000"}]}
+JSON
+run_cycle
+run_cycle
+expect_calls "deploy-script" 0
+expect_state pending_approval
+expect_status_field heldVersion v0.6.0
+[ "$(grep -c '"action": "gate"' "$HISTORY_FILE")" = "1" ] || fail "expected one gate-held history entry for two held cycles"
+[ -f "$PENDING_NOTES_FILE" ] || fail "no pending-notes.json while holding"
+python3 - "$PENDING_NOTES_FILE" <<'PY' || fail "pending-notes.json does not carry the releases in range and the minor-release pull request"
+import json, sys
+notes = json.load(open(sys.argv[1]))
+assert notes["heldVersion"] == "v0.6.0", notes
+assert [r["tag"] for r in notes["releases"]] == ["v0.6.0", "v0.5.232"], notes["releases"]
+assert [p["number"] for p in notes["minorReleasePullRequests"]] == [3100], notes["minorReleasePullRequests"]
+PY
+expect_calls "curl insecure=0 https://api.github.com/repos/.*/releases?per_page" 1
+
+# ---------------------------------------------------------------------------
+start_case "autonomous deploys a minor"
+minor_release
+echo "autonomous" > "$CHICKADEE_STATE_DIR/mode"
+run_cycle
+expect_calls "deploy-script deploy" 1
+expect_status_field mode autonomous
+
+# ---------------------------------------------------------------------------
+start_case "autonomous still holds a major"
+echo "v1.0.0" > "$STUB/latest_release"
+echo "autonomous" > "$CHICKADEE_STATE_DIR/mode"
+run_cycle
+expect_calls "deploy-script" 0
+expect_state pending_approval
+
+# ---------------------------------------------------------------------------
+start_case "manual holds a patch"
+echo "manual" > "$CHICKADEE_STATE_DIR/mode"
+run_cycle
+expect_calls "deploy-script" 0
+expect_state pending_approval
+expect_status_field heldVersion v0.5.232
+
+# ---------------------------------------------------------------------------
+start_case "a mode file that names no mode means gated-minors"
+minor_release
+echo "yolo" > "$CHICKADEE_STATE_DIR/mode"
+run_cycle
+expect_calls "deploy-script" 0
+expect_status_field mode gated-minors
+
+# ---------------------------------------------------------------------------
+start_case "an approve request for the held release deploys it and is recorded with its user"
+minor_release
+run_cycle
+request "001-approve.json" '{"request": "approve", "version": "v0.6.0", "user": "alice"}'
+run_cycle
+expect_calls "deploy-script deploy" 1
+expect_history_line '"action": "approve", "result": "accepted".*"user": "alice"'
+[ -z "$(ls -A "$REQ")" ] || fail "the request file was not removed"
+[ ! -f "$APPROVED_FILE" ] || fail "the approval was not cleared after the deploy"
+[ ! -f "$PENDING_NOTES_FILE" ] || fail "pending-notes.json outlived the deploy"
+
+# ---------------------------------------------------------------------------
+start_case "an approve request for another version is refused"
+minor_release
+run_cycle
+request "001-approve.json" '{"request": "approve", "version": "v0.5.232", "user": "mallory"}'
+run_cycle
+expect_calls "deploy-script" 0
+expect_state pending_approval
+expect_history_line '"version": "v0.5.232", "action": "approve", "result": "refused".*"user": "mallory"'
+
+# ---------------------------------------------------------------------------
+start_case "a newer release that appears after an approval is held for its own approval"
+minor_release
+run_cycle
+request "001-approve.json" '{"request": "approve", "version": "v0.6.0", "user": "alice"}'
+echo "v0.6.1" > "$STUB/latest_release"
+run_cycle
+expect_calls "deploy-script" 0
+expect_status_field heldVersion v0.6.1
+
+# ---------------------------------------------------------------------------
+start_case "rollback, deploy, unknown, oversized, malformed and symlinked requests are refused and removed"
+request "01.json" '{"request": "rollback", "user": "mallory"}'
+request "02.json" '{"request": "deploy", "version": "v0.5.100", "user": "mallory"}'
+request "03.json" '{"request": "shell", "user": "mallory"}'
+request "04.json" "{\"request\": \"pause\", \"user\": \"mallory\", \"pad\": \"$(head -c 5000 /dev/zero | tr '\0' x)\"}"
+request "05.json" 'not json'
+ln -s /etc/passwd "$REQ/06.json"
+request "07.txt" '{"request": "pause"}'
+run_cycle
+expect_calls "deploy-script rollback" 0
+[ "$PAUSED" = "0" ] || fail "an oversized pause request was accepted"
+[ "$(grep -c '"action": "request", "result": "refused"' "$HISTORY_FILE")" = "6" ] || fail "expected six refused requests in the history"
+expect_history_line 'rollback is a host action'
+expect_history_line 'larger than 4096 bytes'
+expect_history_line 'not a regular file'
+[ "$(ls -A "$REQ")" = "07.txt" ] || fail "expected only the non-.json file to remain, saw: $(ls -A "$REQ" | tr '\n' ' ')"
+[ "$DEPLOYED_VERSION" = "0.5.232" ] || fail "refused requests stopped the ordinary patch deploy"
+
+# ---------------------------------------------------------------------------
+start_case "a FIFO or a directory named .json does not hang or repeat, and a flood waits"
+mkdir -p "$REQ"
+mkfifo "$REQ/01.json"
+mkdir -p "$REQ/02.json/inside"
+for n in $(seq 10 70); do request "$n.json" '{"request": "resume", "user": "flood"}'; done
+run_cycle
+expect_history_line 'not a regular file \(01.json\)'
+expect_history_line 'not a regular file \(02.json\)'
+expect_history_line '13 more requests wait for the next poll'
+[ ! -e "$REQ/01.json" ] && [ ! -e "$REQ/02.json" ] || fail "the FIFO or the directory was not removed"
+before="$(grep -c 'not a regular file' "$HISTORY_FILE")"
+run_cycle
+[ "$(grep -c 'not a regular file' "$HISTORY_FILE")" = "$before" ] || fail "a removed entry was refused again"
+[ -z "$(ls -A "$REQ")" ] || fail "the waiting requests were not read on the next poll"
+
+# ---------------------------------------------------------------------------
+start_case "notes whose fetch failed are fetched again on the next poll"
+minor_release
+touch "$STUB/releases_fail"
+run_cycle
+rm "$STUB/releases_fail"
+run_cycle
+expect_calls "curl insecure=0 https://api.github.com/repos/.*/releases?per_page" 2
+run_cycle
+expect_calls "curl insecure=0 https://api.github.com/repos/.*/releases?per_page" 2
+
+# ---------------------------------------------------------------------------
+start_case "a pause request persists, holds an approved release, and resume releases it"
+minor_release
+run_cycle
+request "001-approve.json" '{"request": "approve", "version": "v0.6.0", "user": "alice"}'
+request "002-pause.json" '{"request": "pause", "user": "alice"}'
+touch -t 202601010000 "$REQ/001-approve.json"
+run_cycle
+expect_state paused
+expect_calls "deploy-script" 0
+[ -f "$PAUSED_FILE" ] || fail "pause was not written to the state folder"
+[ "$(cat "$APPROVED_FILE" 2>/dev/null)" = "v0.6.0" ] || fail "the approval was not written to the state folder"
+# A restart (the daemon updating its own scripts) keeps both.
+PAUSED=0; APPROVED_VERSION=""; HELD_VERSION=""
+load_state
+[ "$PAUSED" = "1" ] || fail "pause did not survive a restart"
+[ "$APPROVED_VERSION" = "v0.6.0" ] || fail "the approval did not survive a restart"
+[ "$HELD_VERSION" = "v0.6.0" ] || fail "the held release did not survive a restart"
+run_cycle
+expect_calls "deploy-script" 0
+request "003-resume.json" '{"request": "resume", "user": "bob"}'
+run_cycle
+expect_calls "deploy-script deploy" 1
+[ ! -f "$PAUSED_FILE" ] || fail "resume did not remove the paused file"
+expect_history_line '"action": "resume", "result": "accepted".*"user": "bob"'
+
+# ---------------------------------------------------------------------------
+start_case "a mode request writes the mode file, in both directions"
+request "001-mode.json" '{"request": "mode", "mode": "autonomous", "user": "alice"}'
+run_cycle
+[ "$(cat "$CHICKADEE_STATE_DIR/mode")" = "autonomous" ] || fail "the mode request did not write the mode file"
+expect_history_line '"action": "mode", "result": "accepted", "detail": "autonomous".*"user": "alice"'
+request "002-mode.json" '{"request": "mode", "mode": "manual", "user": "alice"}'
+request "003-mode.json" '{"request": "mode", "mode": "anything", "user": "alice"}'
+touch -t 202601010000 "$REQ/002-mode.json"
+run_cycle
+[ "$(cat "$CHICKADEE_STATE_DIR/mode")" = "manual" ] || fail "a later invalid mode request changed the mode"
+expect_history_line 'mode names no known mode'
+
+# ---------------------------------------------------------------------------
+start_case "a host command can still approve any version and persists the pause"
+printf '{"command": "pause"}' > "$COMMAND_FILE"
+run_cycle
+[ -f "$PAUSED_FILE" ] || fail "a host pause was not written to the state folder"
+printf '{"command": "mode", "mode": "manual"}' > "$COMMAND_FILE"
+run_cycle
+[ "$(cat "$CHICKADEE_STATE_DIR/mode")" = "manual" ] || fail "a host mode command did not write the mode file"
+printf '{"command": "resume"}' > "$COMMAND_FILE"
+run_cycle
+expect_state pending_approval
+printf '{"command": "approve", "version": "v0.5.232"}' > "$COMMAND_FILE"
+run_cycle
+expect_calls "deploy-script deploy" 1
+
+# ---------------------------------------------------------------------------
+# The pre-release channel (docs/release-gate.md, "Pre-release channel").
+# ---------------------------------------------------------------------------
+start_case "versions order rc suffixes correctly"
+newer() { is_newer "$1" "$2" || fail "expected $1 > $2"; }
+not_newer() { ! is_newer "$1" "$2" || fail "expected $1 not > $2"; }
+newer v0.7.0-rc.3 0.6.12
+newer v0.7.0-rc.10 v0.7.0-rc.9
+newer v0.7.0 0.7.0-rc.3
+newer v0.7.1 v0.7.0
+not_newer v0.7.0-rc.3 0.7.0
+not_newer v0.7.0-rc.9 v0.7.0-rc.10
+not_newer v0.6.12 0.7.0-rc.1
+not_newer v0.7.0-rc.2 0.7.0-rc.2
+[ "$(bump_kind v0.7.0-rc.1 0.6.12)" = "minor" ] || fail "an rc of the next minor is not a minor bump"
+
+PRERELEASES_JSON='[{"tag_name": "v0.6.0-rc.2", "prerelease": true},
+ {"tag_name": "v0.6.0-rc.10", "prerelease": true},
+ {"tag_name": "v0.6.0-rc.9", "prerelease": true},
+ {"tag_name": "v0.6.1-rc.1", "prerelease": true, "draft": true},
+ {"tag_name": "v0.5.232", "prerelease": false}]'
+
+# ---------------------------------------------------------------------------
+start_case "the default channel never deploys a pre-release, however new"
+printf '%s' "$PRERELEASES_JSON" > "$STUB/releases_json"
+cat > "$STUB/tags" <<JSON
+[{"name": "v0.6.0-rc.10", "commit": {"sha": "$RELEASE_SHA"}},
+ {"name": "v0.5.232", "commit": {"sha": "$RELEASE_SHA"}}]
+JSON
+echo "autonomous" > "$CHICKADEE_STATE_DIR/mode"
+run_cycle
+expect_calls "curl insecure=0 https://api.github.com/repos/.*/releases/latest" 1
+expect_calls "releases?per_page=30" 0
+expect_calls "deploy-script deploy" 1
+[ "$DEPLOYED_VERSION" = "0.5.232" ] || fail "expected 0.5.232 deployed, saw $DEPLOYED_VERSION"
+expect_status_field channel releases
+[ -z "$(fetch_release_tags | grep -- '-rc\.')" ] || fail "the default channel lists a pre-release tag as a fallback"
+
+# ---------------------------------------------------------------------------
+start_case "the prereleases channel deploys the newest pre-release"
+printf '%s' "$PRERELEASES_JSON" > "$STUB/releases_json"
+echo "prereleases" > "$CHICKADEE_STATE_DIR/channel"
+echo "autonomous" > "$CHICKADEE_STATE_DIR/mode"
+echo "0.6.0-rc.10" > "$STUB/target_version"
+run_cycle
+expect_calls "curl insecure=0 https://api.github.com/repos/.*/releases/latest" 0
+expect_calls "deploy-script deploy" 1
+[ "$DEPLOYED_VERSION" = "0.6.0-rc.10" ] || fail "expected 0.6.0-rc.10 deployed, saw $DEPLOYED_VERSION"
+expect_status_field channel prereleases
+cat > "$STUB/tags" <<JSON
+[{"name": "v0.6.0-rc.9", "commit": {"sha": "a"}},
+ {"name": "v0.6.0", "commit": {"sha": "b"}},
+ {"name": "v0.6.0-rc.10", "commit": {"sha": "c"}},
+ {"name": "v0.5.232", "commit": {"sha": "d"}}]
+JSON
+[ "$(fetch_release_tags | cut -f1 | tr '\n' ' ')" = "v0.6.0 v0.6.0-rc.10 v0.6.0-rc.9 v0.5.232 " ] \
+  || fail "the prereleases channel orders its fallback tags wrongly: $(fetch_release_tags | cut -f1 | tr '\n' ' ')"
+
+# ---------------------------------------------------------------------------
+start_case "on the prereleases channel in gated-minors, an rc of the next minor is held"
+printf '%s' "$PRERELEASES_JSON" > "$STUB/releases_json"
+echo "prereleases" > "$CHICKADEE_STATE_DIR/channel"
+run_cycle
+expect_calls "deploy-script" 0
+expect_state pending_approval
+expect_status_field heldVersion v0.6.0-rc.10
+request "001-approve.json" '{"request": "approve", "version": "v0.6.0-rc.10", "user": "alice"}'
+echo "0.6.0-rc.10" > "$STUB/target_version"
+run_cycle
+expect_calls "deploy-script deploy" 1
+
+# ---------------------------------------------------------------------------
+start_case "a held rc lists its own notes, not every earlier rc"
+cat > "$STUB/releases_json" <<'JSON'
+[{"tag_name": "v0.6.0-rc.2", "prerelease": true, "body": "- Fragments (#3100)."},
+ {"tag_name": "v0.6.0-rc.1", "prerelease": true, "body": "- Fragments (#3100)."},
+ {"tag_name": "v0.5.232", "prerelease": false, "body": "- A fix."}]
+JSON
+echo "prereleases" > "$CHICKADEE_STATE_DIR/channel"
+run_cycle
+expect_status_field heldVersion v0.6.0-rc.2
+python3 - "$PENDING_NOTES_FILE" <<'PY' || fail "the notes of a held rc list other pre-releases"
+import json, sys
+notes = json.load(open(sys.argv[1]))
+assert [r["tag"] for r in notes["releases"]] == ["v0.6.0-rc.2", "v0.5.232"], notes["releases"]
+PY
+
+# ---------------------------------------------------------------------------
+start_case "the channel is host-only: a request to change it is refused"
+request "001-channel.json" '{"request": "channel", "channel": "prereleases", "user": "mallory"}'
+run_cycle
+[ ! -f "$CHICKADEE_STATE_DIR/channel" ] || fail "a request changed the channel"
+expect_history_line 'the release channel is a host setting.*"user": "mallory"'
+printf '{"command": "channel", "channel": "prereleases"}' > "$COMMAND_FILE"
+run_cycle
+[ "$(cat "$CHICKADEE_STATE_DIR/channel")" = "prereleases" ] || fail "a host channel command did not write the channel file"
+printf '{"command": "channel", "channel": "nightly"}' > "$COMMAND_FILE"
+run_cycle
+[ "$(cat "$CHICKADEE_STATE_DIR/channel")" = "prereleases" ] || fail "an unknown channel replaced the channel"
 
 # ---------------------------------------------------------------------------
 if [ "$FAILURES" -gt 0 ]; then

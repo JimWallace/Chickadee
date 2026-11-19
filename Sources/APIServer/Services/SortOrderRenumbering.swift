@@ -28,6 +28,9 @@
 //     every ungrouped item), assignments and content items together, and
 //     renumbers them 1..n. The two tables share one per-section sequence, so
 //     a partial list would leave two items at the same position.
+//   - A content item attached to an assignment is not a section item: it
+//     renders on the assignment's row, so it is neither counted nor accepted
+//     (an attached id is an unknown item).
 //   - All the writes of one reorder run in one transaction, so a failure
 //     part-way leaves the old order.
 
@@ -120,13 +123,16 @@ enum SortOrderRenumbering {
         }
     }
 
-    /// The number of assignments and content items in one section of the
-    /// course; a nil `sectionID` counts the ungrouped items.
+    /// The number of assignments and standalone content items in one section
+    /// of the course; a nil `sectionID` counts the ungrouped items. Attached
+    /// content items render on their assignment's row and are not counted.
     private static func itemCount(
         inSection sectionID: UUID?, ofCourse courseID: UUID, on db: any Database
     ) async throws -> Int {
         let assignments = APIAssignment.query(on: db).filter(\.$courseID == courseID)
-        let contentItems = APICourseContentItem.query(on: db).filter(\.$courseID == courseID)
+        let contentItems = APICourseContentItem.query(on: db)
+            .filter(\.$courseID == courseID)
+            .filter(\.$assignmentID == nil)
         if let sectionID {
             assignments.filter(\.$sectionID == sectionID)
             contentItems.filter(\.$sectionID == sectionID)
@@ -137,8 +143,9 @@ enum SortOrderRenumbering {
         return try await assignments.count() + contentItems.count()
     }
 
-    /// The assignment and content-item rows that `items` name, scoped to
-    /// `courseID` when it is set.
+    /// The assignment and standalone content-item rows that `items` name,
+    /// scoped to `courseID` when it is set. An attached content item is not
+    /// returned, so naming one is an unknown item.
     private static func rows(
         for items: [SortOrderItem], inCourse courseID: UUID?, on db: any Database
     ) async throws -> ([APIAssignment], [APICourseContentItem]) {
@@ -152,7 +159,9 @@ enum SortOrderRenumbering {
         }
         var contentItems: [APICourseContentItem] = []
         if !contentIDs.isEmpty {
-            let query = APICourseContentItem.query(on: db).filter(\.$id ~~ contentIDs)
+            let query = APICourseContentItem.query(on: db)
+                .filter(\.$id ~~ contentIDs)
+                .filter(\.$assignmentID == nil)
             if let courseID { query.filter(\.$courseID == courseID) }
             contentItems = try await query.all()
         }

@@ -117,6 +117,7 @@ struct MCPEnrollmentDenialContractTests {
             #"{"assignmentPublicID":"$A","id":"has_x","kind":"variable_exists","variable":"x"}"#),
         "update_notebook": Sample(#"{"assignmentPublicID":"$A","notebook":$NB}"#),
         "update_solution": Sample(#"{"assignmentPublicID":"$A","notebook":$NB}"#),
+        "begin_upload": Sample(#"{"courseCode":"CS246"}"#),
         "author_script": Sample(#"{"assignmentPublicID":"$A","filename":"test_new.sh","content":"exit 0\n"}"#),
         "delete_support_file": Sample(#"{"assignmentPublicID":"$A","filename":"cases.csv"}"#),
         "create_course_section": Sample(#"{"courseCode":"CS246","name":"Exams"}"#),
@@ -129,6 +130,7 @@ struct MCPEnrollmentDenialContractTests {
             #"{"courseCode":"CS246","title":"Reading","links":[{"label":"Notes","url":"https://example.com/notes"}]}"#),
         "update_content_item": Sample(#"{"contentItemID":"$C","title":"Renamed"}"#),
         "delete_content_item": Sample(#"{"contentItemID":"$C"}"#, .answersAsUnknownID),
+        "attach_content_item": Sample(#"{"contentItemID":"$C","assignmentPublicID":"$A"}"#),
         "reorder_content_items": Sample(#"{"courseCode":"CS246","orderedContentItemIDs":["$C"]}"#),
         "reorder_assignments": Sample(#"{"courseCode":"CS246","orderedAssignmentPublicIDs":["$A"]}"#),
         "reorder_section_items": Sample(

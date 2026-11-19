@@ -17,8 +17,8 @@
 // — BEFORE the scripts included at the end of <body> (app.js et al).
 //
 // What belongs here is the low-level shared utility: escaping, the CSRF token,
-// a status line, a fetch wrapper, an error extractor, a confirmation dialog, a
-// small DOM builder and the wire-once guard.
+// a status line, a fetch wrapper, an error extractor, a same-origin form-target
+// check, a confirmation dialog, a small DOM builder and the wire-once guard.
 // This module once held eighteen functions behind that one name, which is how
 // a chart renderer and an accordion came to be loaded by every page in the
 // product. Those are their own concerns and have their own files and names:
@@ -200,6 +200,27 @@
         banner.textContent = message;
         if (banner.scrollIntoView) banner.scrollIntoView({ block: 'nearest' });
         return banner;
+    }
+
+    // ── Form targets from data attributes ──
+    //
+    // A server-rendered `data-action` is always an in-app path. Before it
+    // becomes a form target, resolve it against the page origin and require
+    // the same origin, so a DOM-injected value cannot send a POST off-site or
+    // to a `javascript:` URL (CodeQL js/xss-through-dom). Returns the absolute
+    // URL, or null for a missing, malformed or foreign value. `origin` is for
+    // the unit tests; pages omit it.
+    /**
+     * @param {string | null | undefined} path
+     * @param {string} [origin]
+     * @returns {string | null}
+     */
+    function sameOriginURL(path, origin) {
+        if (!path) return null;
+        var base = origin || window.location.origin;
+        var url;
+        try { url = new URL(path, base); } catch (_) { return null; }
+        return url.origin === base ? url.href : null;
     }
 
     // ── Fetch error handling ──
@@ -388,6 +409,7 @@
         showActionError: showActionError,
         setStatus: setStatus,
         extractErrorMessage: extractErrorMessage,
+        sameOriginURL: sameOriginURL,
         fetchJSON: fetchJSON,
         el: el,
         wireOnce: wireOnce,

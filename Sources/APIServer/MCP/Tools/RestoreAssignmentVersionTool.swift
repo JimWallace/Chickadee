@@ -135,6 +135,17 @@ struct RestoreAssignmentVersionTool: ContentTool {
                 titleAtVersion: nil)
         }
 
+        // An older version may predate the declared type: browser grading on
+        // what is now an Assignment, or no activity on what is now a Class
+        // activity. Refused before anything is written, like every other door
+        // (docs/assignment-types.md). Only a rule the restore introduces.
+        if let restored = decodeManifest(fromJSON: target.manifest),
+            let violation = ManifestCoherence.violation(
+                for: assignment.declaredAssignmentType, introducedBy: { $0 = restored }, in: setup.manifest)
+        {
+            throw MCPToolError.invalidArguments(detail: violation)
+        }
+
         try await Self.materialize(
             target: target, fileMap: fileMap, setup: setup, blobs: blobs,
             testSetupsDirectory: directory)
@@ -221,7 +232,15 @@ struct RestoreAssignmentVersionTool: ContentTool {
         if let notebookHash = target.notebookHash {
             let path =
                 setup.notebookPath ?? (testSetupsDirectory + "\(setup.id ?? "unknown").ipynb")
-            try blobs.materialize(notebookHash, to: URL(fileURLWithPath: path))
+            let url = URL(fileURLWithPath: path)
+            try blobs.materialize(notebookHash, to: url)
+            // A snapshot taken before starter outputs were cleared on save
+            // still holds them; restoring it must not hand them to students.
+            let restored = try Data(contentsOf: url)
+            let cleared = NotebookOutputs.stripped(restored)
+            // The restore's own version row is recorded from the bytes on disk
+            // after this, so the cleared notebook is what that row holds.
+            if cleared != restored { try cleared.write(to: url, options: .atomic) }
             setup.notebookPath = path
         }
         // A snapshot with no notebook leaves the current one in place rather

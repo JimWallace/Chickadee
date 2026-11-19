@@ -205,7 +205,7 @@ private struct AdminCourseTableRow: HTML {
     let csrfToken: String
 
     private var detailsText: String {
-        let submissions = "\(course.submissionCount) submissions"
+        let submissions = "\(course.submissionCount) \(course.submissionCount == 1 ? "submission" : "submissions")"
         guard let term = course.termLabel, !term.isEmpty else { return submissions }
         return "\(term) · \(submissions)"
     }
@@ -231,7 +231,7 @@ private struct AdminCourseTableRow: HTML {
                         .class("btn action-btn action-btn-icon"), .href("/admin/courses/\(course.id)#clone-course"),
                         .title("Clone course"), .ariaLabel("Clone course")
                     ) {
-                        Icon("i-copy")
+                        Icon("i-copy-plus")
                     }
                     rowMenu
                 }
@@ -250,7 +250,7 @@ private struct AdminCourseTableRow: HTML {
                 .data(
                     "confirm",
                     value:
-                        "Archive \(course.code)? \(course.enrollmentCount) students lose access immediately. Submissions, grades and audit records are kept, and Unarchive on the course page puts it back."
+                        "Archive \(course.code)? \(course.enrollmentCount) \(course.enrollmentCount == 1 ? "student loses" : "students lose") access immediately. Submissions, grades and audit records are kept, and Unarchive on the course page puts it back."
                 )
             ) {
                 CSRFField(token: csrfToken)

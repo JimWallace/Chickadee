@@ -229,6 +229,14 @@ func normalizeNotebookForJupyterLite(_ data: Data) -> Data {
     return JSONValue.data(fromObject: notebook) ?? data
 }
 
+/// The bytes to store as a starter notebook: normalized for JupyterLite, with
+/// the author's cell outputs cleared (`NotebookOutputs`), so students run each
+/// cell themselves. Every write of a setup's starter notebook goes through
+/// this. The solution notebook and the author's own working copy do not.
+func starterNotebookForStorage(_ data: Data) -> Data {
+    NotebookOutputs.stripped(normalizeNotebookForJupyterLite(data))
+}
+
 /// Loads the notebook data for a test setup.
 /// Prefers the flat `.ipynb` file (Phase 8 editable path); falls back to zip extraction.
 ///
@@ -309,7 +317,10 @@ func resolveNotebook(from source: NotebookSourceRef) async -> NotebookResolution
         guard let data = await extractZipEntry(zipPath: source.zipPath, entryName: entryName),
             !data.isEmpty
         else { continue }
-        return .found(normalizeNotebookForJupyterLite(data))
+        // A starter that lives only in the zip was never written through
+        // `starterNotebookForStorage`, and `StripStarterNotebookOutputs`
+        // rewrites only flat files, so its outputs are cleared here.
+        return .found(starterNotebookForStorage(data))
     }
 
     return entries.isEmpty || !preferredEntryNames.isEmpty ? .unavailable : .absent

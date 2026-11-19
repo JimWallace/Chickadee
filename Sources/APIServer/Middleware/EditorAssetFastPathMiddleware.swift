@@ -149,10 +149,14 @@ struct EditorAssetFastPathMiddleware: AsyncMiddleware {
     }
 
     /// True for a conda tarball in a vendored `kernel_packages/` tree. Each name
-    /// maps to one set of bytes: an upstream artifact's `name-version-build`
-    /// never changes its bytes, and a tarball the build rewrites carries the
-    /// hash of its own bytes in its name (`scripts/patch-xeus-python-http.py`;
-    /// asserted by `scripts/check-xeus-vendored.sh` section 9). So a browser
+    /// maps to one set of files: an upstream artifact's `name-version-build`
+    /// never changes the files in it, and a tarball whose files the build
+    /// changes carries the hash of its own bytes in its name
+    /// (`scripts/patch-xeus-python-http.py`, `scripts/prune-kernel-packages.py`;
+    /// asserted by `scripts/check-xeus-vendored.sh` section 9). The build
+    /// writes every archive without a time or an owner, so the first re-vendor
+    /// after that change gave some upstream names new bytes with the same
+    /// files; a browser that cached the earlier bytes has the same files. So a browser
     /// that has a package never needs to ask for it again. That removes ~50
     /// conditional requests from every warm kernel boot, which is ~7,200 for a
     /// class of 150 that joins at once. A new version arrives under a new name

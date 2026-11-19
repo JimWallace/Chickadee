@@ -222,22 +222,24 @@ private func updateRecordBadge(
     higherWins: Bool = false,
     on db: any Database
 ) async throws {
-    let existing = try await APIClassAchievement.query(on: db)
+    let row = APIClassAchievement.query(on: db)
         .filter(\.$testSetupID == testSetupID)
         .filter(\.$achievementID == achievementID)
-        .first()
-    if let record = existing {
-        guard let current = record.metricValue,
-            higherWins ? newValue > current : newValue < current
-        else { return }
-        record.userID = userID
-        record.submissionID = submissionID
-        record.metricValue = newValue
-        try await record.update(on: db)
-    } else {
-        let badge = APIClassAchievement(
-            testSetupID: testSetupID, achievementID: achievementID,
-            userID: userID, submissionID: submissionID, metricValue: newValue)
-        try await badge.createIgnoringConflict(on: db)
-    }
+    try await writeBestSoFar(
+        raise: {
+            // A record with no value never moves: SQL's NULL compares false.
+            let better = row.copy().filter(\.$metricValue != nil)
+            try await (higherWins ? better.filter(\.$metricValue < newValue) : better.filter(\.$metricValue > newValue))
+                .set(\.$userID, to: userID)
+                .set(\.$submissionID, to: submissionID)
+                .set(\.$metricValue, to: newValue)
+                .update()
+        },
+        exists: { try await row.copy().first() != nil },
+        insert: {
+            try await APIClassAchievement(
+                testSetupID: testSetupID, achievementID: achievementID,
+                userID: userID, submissionID: submissionID, metricValue: newValue
+            ).create(on: db)
+        })
 }

@@ -1,7 +1,8 @@
 // APIServer/MCP/Tools/CreateAssignmentTool.swift
 //
-// Write tool: create a brand-new browser-graded, notebook-based assignment from
-// scratch in a course, by course code + title + starter notebook (.ipynb JSON).
+// Write tool: create a brand-new notebook-based assignment from scratch in a
+// course, by course code + title + starter notebook (.ipynb JSON), with an
+// optional declared type that sets the grading mode (docs/assignment-types.md).
 // content:write, course-scoped.
 //
 // This is the structured-spec creation path (roadmap Phase 4b), built on the
@@ -29,6 +30,16 @@ struct CreateAssignmentTool: ContentTool {
         /// An `AssignmentLanguage` raw value, or `"none"` for a shell-script
         /// suite. Required — see the schema description.
         let language: String
+        /// An `AssignmentType` raw value; absent = "lab" (see the schema).
+        let assignmentType: String?
+
+        init(courseCode: String, title: String, notebook: JSONValue, language: String, assignmentType: String? = nil) {
+            self.courseCode = courseCode
+            self.title = title
+            self.notebook = notebook
+            self.language = language
+            self.assignmentType = assignmentType
+        }
     }
 
     struct Output: Encodable, Sendable {
@@ -41,13 +52,22 @@ struct CreateAssignmentTool: ContentTool {
         let courseTerm: String?
         let cellCount: Int
         let isOpen: Bool
+        /// The declared `AssignmentType` raw value.
+        let assignmentType: String
+        /// The grading mode the type set ("browser" or "worker").
+        let gradingMode: String
     }
 
     static let name = "create_assignment"
     static let description =
-        "Create a new browser-graded, notebook-based assignment from scratch in a course, by course "
-        + "code + title + starter notebook (.ipynb JSON object with a \"cells\" array). The new "
-        + "assignment starts closed, unvalidated, with no due date and an empty test suite — add tests "
+        "Create a new notebook-based assignment from scratch in a course, by course code + title + "
+        + "starter notebook (.ipynb JSON object with a \"cells\" array). assignmentType "
+        + "(\(MCPEnumProse<AssignmentType>.quotedOrList)) declares the kind of work and sets the grading "
+        + "mode: a lab is graded in the student browser, an assignment and a class activity by the "
+        + "worker (an upload-only language always uses the worker). Omitted, it is \"lab\", or "
+        + "\"assignment\" for an upload-only language. A class "
+        + "activity needs an activity, which set_activity adds next; check_assignment reports it until "
+        + "then. get_server_info lists each type's rules. The new assignment starts closed, unvalidated, with no due date and an empty test suite — add tests "
         + "with update_suite / update_pattern_family and refine the notebook with update_notebook, then "
         + "open it. To duplicate an existing assignment instead, use clone_assignment."
     static let inputSchema: JSONValue = .object([
@@ -81,6 +101,15 @@ struct CreateAssignmentTool: ContentTool {
                         + "\(LanguageProse.uploadOnlyTokens) also sets submissionMode to uploadOnly, "
                         + "since those languages have no notebook workflow."),
             ]),
+            "assignmentType": .object([
+                "type": .string("string"),
+                "enum": MCPEnumProse<AssignmentType>.jsonEnum,
+                "description": .string(
+                    "The declared kind of work, which sets the grading mode: \"lab\" (browser-graded, a "
+                        + "participation grade; the default except for an upload-only language), \"assignment\" (worker-graded, for marks, "
+                        + "secret tests stay hidden) or \"classActivity\" (worker-graded, live, its "
+                        + "points stay in Chickadee)."),
+            ]),
         ]),
         "required": .array([
             .string("courseCode"), .string("title"), .string("notebook"), .string("language"),
@@ -98,11 +127,16 @@ struct CreateAssignmentTool: ContentTool {
             "courseTerm": MCPSchema.courseTermOutput,
             "cellCount": MCPSchema.integer,
             "isOpen": MCPSchema.boolean,
+            "assignmentType": .object([
+                "type": .string("string"),
+                "enum": MCPEnumProse<AssignmentType>.jsonEnum,
+            ]),
+            "gradingMode": MCPSchema.string,
         ]),
         "required": .array([
             .string("publicID"), .string("title"), .string("slug"), .string("courseCode"),
             .string("courseKey"),
-            .string("cellCount"), .string("isOpen"),
+            .string("cellCount"), .string("isOpen"), .string("assignmentType"), .string("gradingMode"),
         ]),
     ])
     static let annotations: MCPToolAnnotations? = MCPToolAnnotations(
@@ -123,6 +157,11 @@ struct CreateAssignmentTool: ContentTool {
         } catch {
             throw MCPToolError.invalidArguments(detail: unknownLanguageMessage(input.language))
         }
+        // Omitted keeps what this tool did before the type had rules: browser
+        // grading and a derived type (a Lab, or an Assignment for an
+        // upload-only language).
+        let assignmentType = try MCPEnumProse<AssignmentType>.parseOptional(
+            input.assignmentType, field: "assignmentType")
 
         // Creating an assignment is instructor-level (#417); archived is blocked too.
         // `courseCode` may be a bare code or a course key, so the output reports
@@ -141,7 +180,8 @@ struct CreateAssignmentTool: ContentTool {
         let created: AuthoredAssignment
         do {
             created = try await AssignmentAuthoringService.createAssignment(
-                courseID: courseID, title: title, language: declaredLanguage, notebookData: data,
+                courseID: courseID, title: title, language: declaredLanguage,
+                assignmentType: assignmentType, notebookData: data,
                 setupsDirectory: context.request.application.testSetupsDirectory, on: context.db,
                 ownerDB: context.mainDB)
         } catch let error as AssignmentAuthoringError {
@@ -163,7 +203,9 @@ struct CreateAssignmentTool: ContentTool {
             courseKey: course.urlKey,
             courseTerm: course.term?.displayName,
             cellCount: notebookCellCount(input.notebook),
-            isOpen: created.assignment.isOpen)
+            isOpen: created.assignment.isOpen,
+            assignmentType: created.assignment.assignmentType.rawValue,
+            gradingMode: currentManifestGradingMode(created.setup.manifest))
     }
 
 }

@@ -46,6 +46,13 @@ concurrency:
   group: browser-probes-${{ github.event_name }}-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
+# Least privilege by default (#3067). A job that needs more names it in its
+# own `permissions:`. `packages: read` lets the job containers and services
+# pull the GHCR mirrors with GITHUB_TOKEN.
+permissions:
+  contents: read
+  packages: read
+
 jobs:
   # One run decision per probe. On a pull request it is the probe's path
   # pattern (changed-paths fails safe to true). On a schedule it is the probe's
@@ -61,8 +68,9 @@ jobs:
       probes: ${{ steps.decide.outputs.probes }}
       any: ${{ steps.decide.outputs.any }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          persist-credentials: false
           fetch-depth: 1
       - id: smoke
         uses: ./.github/actions/changed-paths
@@ -165,7 +173,9 @@ jobs:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - uses: ./.github/actions/build-probe-server
         with:
           artifact-name: probe-server
@@ -249,7 +259,9 @@ jobs:
       TEST_DATABASE_PASSWORD: postgres
 
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       # Shared scaffold: exact-match build-cache restore,
       # server build, Node + Playwright install (engine download cached). See
@@ -259,6 +271,17 @@ jobs:
         with:
           browser: ${{ matrix.browser }}
           server-artifact: probe-server
+
+      # Failure diagnostics. Each check that reads SMOKE_SCREENSHOT_DIR saves
+      # its screenshots there, and run-smoke.sh puts each check in its own
+      # subdirectory and adds the server log when the check fails. The shell
+      # check also saves a full-page and an editor-frame screenshot, the
+      # browser console and a Playwright trace on a failure. The last step
+      # uploads the directory when a step fails. Set through GITHUB_ENV
+      # because in a container job `github.workspace` names the host path.
+      - name: Set the smoke diagnostics directory
+        shell: bash
+        run: echo "SMOKE_SCREENSHOT_DIR=$GITHUB_WORKSPACE/smoke-diagnostics" >> "$GITHUB_ENV"
 
       # selftest.sh drives the editor THREE ways against this one build, in the
       # matrix engine (Chromium / WebKit):
@@ -453,6 +476,27 @@ jobs:
           echo "::warning::FLAKE RETRY: webkit server drive e2e failed (rc=${rc}) — same flake class as the notebook-page e2e. Retrying once; a second failure fails the gate."
           SMOKE_BROWSER="$ENGINE" SMOKE_CHECK=notebook-server-drive-check.mjs Tools/editor-smoke-test/run-smoke.sh
 
+      # A staff authoring draft on the server drive (#2925): a saved edit
+      # survives a reload, Save to assignment raises no "File changed" on the
+      # next save, and a stored change made elsewhere opens the stored
+      # notebook with the unpublished edits kept in a named backup.
+      - name: Run authoring draft e2e (${{ matrix.browser }})
+        shell: bash
+        env:
+          ENGINE: ${{ matrix.browser }}
+        run: |
+          set -uo pipefail
+          if SMOKE_BROWSER="$ENGINE" SMOKE_CHECK=authoring-draft-check.mjs Tools/editor-smoke-test/run-smoke.sh; then
+            exit 0
+          else
+            rc=$?
+          fi
+          if [ "$ENGINE" != "webkit" ]; then
+            exit "$rc"
+          fi
+          echo "::warning::FLAKE RETRY: webkit authoring draft e2e failed (rc=${rc}) — same flake class as the notebook-page e2e. Retrying once; a second failure fails the gate."
+          SMOKE_BROWSER="$ENGINE" SMOKE_CHECK=authoring-draft-check.mjs Tools/editor-smoke-test/run-smoke.sh
+
       # The workbench shell (notebook views NB6): the rail lists the suite by
       # section and reveals an item's cell, a sheet opens and closes with focus
       # and Escape, a setting saved from a sheet keeps the kernel's names, and
@@ -515,6 +559,18 @@ jobs:
           echo "::warning::FLAKE RETRY: webkit workbench preview e2e failed (rc=${rc}) — same flake class as the notebook-page e2e. Retrying once; a second failure fails the gate."
           SMOKE_BROWSER="$ENGINE" SMOKE_CHECK=workbench-preview-check.mjs Tools/editor-smoke-test/run-smoke.sh
 
+      # Three days is enough to read a failure. `overwrite` because a re-run
+      # of the leg uploads under the same name.
+      - name: Upload smoke diagnostics (${{ matrix.browser }})
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: smoke-diagnostics-${{ matrix.browser }}
+          path: smoke-diagnostics/
+          if-no-files-found: warn
+          overwrite: true
+          retention-days: 3
+
   # Always-running required status. Green when the smoke passed OR was skipped
   # (no editor-relevant changes), red only when the smoke actually failed — so
   # this one check can be marked required without blocking unrelated PRs. Mark
@@ -533,8 +589,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          persist-credentials: false
           sparse-checkout: .github/actions/gate
       - uses: ./.github/actions/gate
         with:
@@ -612,7 +669,9 @@ jobs:
       TEST_DATABASE_PASSWORD: postgres
 
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - uses: ./.github/actions/browser-probe-setup
         with:
@@ -704,7 +763,9 @@ jobs:
       TEST_DATABASE_PASSWORD: postgres
 
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       # Shared scaffold: exact-match build-cache restore, server build,
       # Node + Playwright install (engine download cached).

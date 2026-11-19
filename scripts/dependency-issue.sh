@@ -22,11 +22,17 @@
 # goes through scripts/ci-post-sanitize.sh first. The key marker is appended
 # after that, because the sanitizer escapes HTML comments in its input.
 #
+# The scheduled checks on `main` that are not about a dependency (the macOS
+# build, visual regression) use the same issue life cycle under their own
+# label. They set ISSUE_LABEL and ISSUE_LABEL_DESCRIPTION in the step's env;
+# keys are unique per label, because every lookup filters on it.
+#
 # Needs GH_TOKEN (issues: write) and GITHUB_REPOSITORY.
 
 set -euo pipefail
 
-LABEL="dependency-update-failed"
+LABEL="${ISSUE_LABEL:-dependency-update-failed}"
+LABEL_DESCRIPTION="${ISSUE_LABEL_DESCRIPTION:-A dependency update the automation could not land; see scripts/dependency-issue.sh}"
 repo="${GITHUB_REPOSITORY:?GITHUB_REPOSITORY is not set}"
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
@@ -45,8 +51,7 @@ find_issue() {
 
 ensure_label() {
   gh label create "$LABEL" --repo "$repo" --color d93f0b --force \
-    --description "A dependency update the automation could not land; see scripts/dependency-issue.sh" \
-    >/dev/null
+    --description "$LABEL_DESCRIPTION" >/dev/null
 }
 
 cmd="${1:-}"
@@ -77,6 +82,8 @@ case "$cmd" in
       echo "usage: $0 close KEY COMMENT" >&2
       exit 2
     }
+    # A label that does not exist yet would make the lookup fail, not empty.
+    ensure_label
     existing="$(find_issue "$2")"
     if [ -n "$existing" ]; then
       gh issue close "$existing" --repo "$repo" --reason completed --comment "$3" >/dev/null

@@ -91,6 +91,11 @@ struct ClientDiagnosticsRoutes: RouteCollection {
             // Recorded so the admin browser-diagnostics surface gets a real
             // below-matrix / low-memory rate (attributed by browser from the UA).
             "browser_support", "device_warning",
+            // How much of a kernel boot came over the network
+            // (kernel-asset-telemetry.js): byte counts and a boot duration per
+            // source (editor / grading / prewarm). Sizes and timings only,
+            // never a file a student wrote.
+            "asset_load",
         ]
         guard allowedKinds.contains(body.kind) else {
             throw AppError.badRequest(reason: "Unknown kind")
@@ -131,7 +136,7 @@ struct ClientDiagnosticsRoutes: RouteCollection {
             userID: userID,
             testSetupID: verifiedSetupID,
             kind: body.kind,
-            subkey: trimmedSource
+            subkey: Self.rateLimitSubkey(kind: body.kind, source: trimmedSource, message: trimmedMessage)
         )
         let admitted = await limiter.admit(key: key, now: Date())
         guard admitted else { return .accepted }
@@ -149,6 +154,19 @@ struct ClientDiagnosticsRoutes: RouteCollection {
         )
         try await record.save(on: req.db)
         return .accepted
+    }
+}
+
+extension ClientDiagnosticsRoutes {
+    /// The rate limiter's sub-discriminator. The source, and for an
+    /// `asset_load` also its kernel environment (`env=` in the message): a
+    /// dashboard warms Python and R in one visit with no setup, and both
+    /// loads must count.
+    static func rateLimitSubkey(kind: String, source: String?, message: String?) -> String? {
+        guard kind == "asset_load", let message,
+            let env = message.split(separator: ";").first(where: { $0.hasPrefix("env=") })
+        else { return source }
+        return "\(source ?? "")|\(env.dropFirst("env=".count).prefix(64))"
     }
 }
 

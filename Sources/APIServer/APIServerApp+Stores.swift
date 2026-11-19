@@ -192,12 +192,6 @@ actor WorkerActivityStore {
         return (anyRecent, anyKnown)
     }
 
-    /// Versions advertised by runners still known this session — seen within
-    /// `rememberSeconds`. Feeds the runner-version-skew alert. Entries whose
-    /// `runnerVersion` is empty (a runner touched only by an HMAC keep-alive that
-    /// never carried a version) are omitted, so they can't masquerade as skew.
-    /// Non-mutating like `runnerPresence`: it does not prune, so evaluating the
-    /// alert never races the dashboard's pruning in `snapshotsSortedByRecent`.
     /// The workerID and version of each runner seen within `withinSeconds`.
     /// It reads only: unlike `snapshotsSortedByRecent`, it prunes nothing, so
     /// a short window here cannot drop an entry that another reader needs.
@@ -208,10 +202,24 @@ actor WorkerActivityStore {
             .sorted { $0.workerID < $1.workerID }
     }
 
+    /// Each runner still known this session, seen within `rememberSeconds`,
+    /// with the version it advertises, sorted by ID. Feeds the
+    /// runner-version-skew alert, which names the runners that are behind.
+    /// Entries whose `runnerVersion` is empty (a runner touched only by an HMAC
+    /// keep-alive that never carried a version) are omitted, so they can't
+    /// masquerade as skew. Non-mutating like `runnerPresence`: it does not
+    /// prune, so evaluating the alert never races the dashboard's pruning in
+    /// `snapshotsSortedByRecent`.
+    func knownRunnerVersionsByID(rememberSeconds: TimeInterval, now: Date = Date()) -> [RunnerVersionReport] {
+        entries
+            .filter { now.timeIntervalSince($0.value.lastSeen) <= rememberSeconds && !$0.value.runnerVersion.isEmpty }
+            .map { RunnerVersionReport(runnerID: $0.key, version: $0.value.runnerVersion) }
+            .sorted { $0.runnerID < $1.runnerID }
+    }
+
+    /// The versions alone, from `knownRunnerVersionsByID`.
     func knownRunnerVersions(rememberSeconds: TimeInterval, now: Date = Date()) -> [String] {
-        entries.values
-            .filter { now.timeIntervalSince($0.lastSeen) <= rememberSeconds && !$0.runnerVersion.isEmpty }
-            .map(\.runnerVersion)
+        knownRunnerVersionsByID(rememberSeconds: rememberSeconds, now: now).map(\.version)
     }
 }
 

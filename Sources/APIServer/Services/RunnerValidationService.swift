@@ -302,7 +302,6 @@ func materializeValidationGrading(
         setupID: setupID,
         templateNotebookData: templateNotebookData,
         testSetupsDirectory: testSetupsDirectory,
-        app: app,
         on: db,
         seeds: PinnedSeeds(assignment: variantSeedHex, course: variantCourseSeedHex, deal: variantDealNumber))
     return MaterializedValidationSubmission(submission: submission)
@@ -330,7 +329,6 @@ private func resolveAndCacheValidationMaterialization(
     setupID: String,
     templateNotebookData: Data,
     testSetupsDirectory: String,
-    app: Application,
     on db: any Database,
     seeds: PinnedSeeds = .fromSubmitter
 ) async {
@@ -599,6 +597,11 @@ func retestAllSubmissionsForSetup(
 /// predicate just before the write so it matches what the UPDATE affects (a
 /// concurrent insert between the two is benign — it's a freshly-pending row
 /// either way).
+///
+/// With `force`, a row a runner is grading is re-queued under it. Clearing
+/// `worker_id` and `assigned_at` is what ends that runner's claim: result
+/// ingest refuses its report (`ResultClaimCheck`), so the old suite's grade
+/// never completes the re-queued row.
 @discardableResult
 func bulkFlipStudentSubmissionsToPending(
     setupID: String,

@@ -61,6 +61,12 @@ struct LeaderboardBody: HTML {
                 // hidden), so a missing board means a missing composite.
                 p(.class("empty")) { "No composite is set up." }
             }
+        } else if board.showsBugHunt {
+            if let hunt = board.bugHunt {
+                BugHuntBoard(hunt: hunt)
+            } else {
+                p(.class("empty")) { "No bug hunt is set up." }
+            }
         } else if board.showsStandings {
             if board.standings.isEmpty {
                 p(.class("empty")) { "No submission has played a match yet." }

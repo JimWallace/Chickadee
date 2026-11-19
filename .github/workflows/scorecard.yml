@@ -1,0 +1,58 @@
+name: OpenSSF Scorecard
+
+# An outside benchmark of the repository's supply-chain posture (#3076).
+# Scorecard checks branch protection, pinned dependencies, token
+# permissions, dangerous workflow patterns, signed releases, the security
+# policy and more. The results go to the Security tab (code scanning) and to
+# the public Scorecard API, which the README badge reads.
+#
+# A low score fails nothing. Read the alerts in the Security tab, under the
+# "Scorecard" tool, and fix the cause. Do not dismiss an alert without a
+# reason in the dismissal comment.
+#
+# `publish_results: true` puts these restrictions on the job, and Scorecard
+# refuses to publish if they are broken: no `env:` or `defaults:` at the
+# workflow level, no container, no service, and only approved actions in
+# the job.
+
+on:
+  # Branch protection is read on the default branch only.
+  branch_protection_rule:
+  schedule:
+    - cron: "27 6 * * 1"
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  analysis:
+    name: Scorecard analysis
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      # Upload the SARIF to code scanning.
+      security-events: write
+      # Publish the results to the Scorecard API, signed with this run's
+      # OIDC identity.
+      id-token: write
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Run Scorecard
+        uses: ossf/scorecard-action@fa7117db83c52d787ae5a89f350999701505d78e # v2.5.0
+        with:
+          results_file: scorecard.sarif
+          results_format: sarif
+          publish_results: true
+
+      - name: Upload to code scanning
+        uses: github/codeql-action/upload-sarif@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
+        with:
+          sarif_file: scorecard.sarif
+          category: scorecard

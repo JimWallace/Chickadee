@@ -30,6 +30,25 @@ struct DatasetsBody: Content {
 struct DatasetsResponse: Content {
     var datasets: [DatasetSpec]
     var diagnostics: [DatasetFileDiagnostics]
+    /// Each dataset's delivery note (`DatasetDeliveryNote`), keyed by file, so
+    /// the panel repaints it from the server's words after every edit.
+    var deliveryNotes: [String: String]
+    /// What the save just changed beyond what was asked, keyed by file: a
+    /// library sample that covers the whole file is stored as none
+    /// (`WholeFileSampleNormalization.panelNote`). Empty on a GET. The panel
+    /// shows it in the row's status, where "Saved" would otherwise go.
+    var savedNotes: [String: String] = [:]
+
+    init(datasets: [DatasetSpec], diagnostics: [DatasetFileDiagnostics]) {
+        self.datasets = datasets
+        self.diagnostics = diagnostics
+        self.deliveryNotes = Dictionary(
+            datasets.compactMap { spec in
+                DatasetDeliveryNote.text(for: spec.deliveryMode, isPartition: spec.kind == .partition)
+                    .map { (spec.file, $0) }
+            },
+            uniquingKeysWith: { first, _ in first })
+    }
 }
 
 /// One dataset's estimate chips: two concise numbers the row shows inline —
@@ -77,7 +96,10 @@ func datasetDiagnosticsReports(
     zipPath: String, datasets: [DatasetSpec]
 ) async -> [DatasetFileDiagnostics] {
     var reports: [DatasetFileDiagnostics] = []
-    for spec in datasets {
+    // A spec that selects nothing gives every student the whole file, so
+    // there is nothing to estimate; reading a FHIR file as CSV would name a
+    // JSON fragment as a column (docs/fhir-datasets-plan.md §4).
+    for spec in datasets where spec.capabilities.selects {
         guard let data = await extractZipEntry(zipPath: zipPath, entryName: spec.file),
             let text = String(data: data, encoding: .utf8)
         else { continue }
@@ -192,12 +214,23 @@ private func estimateMeasureName(_ measure: DatasetColumnDivergence.Measure) -> 
 
 /// The full panel payload for a setup: its specs plus their estimate blocks,
 /// computed off the event loop.  The one constructor every datasets handler
-/// uses, so the GET and PUT of both pairs cannot disagree about what the
-/// panel is told.
-func datasetsPanelResponse(req: Request, setup: APITestSetup) async throws -> DatasetsResponse {
+/// uses (a PUT through the `saved:` wrapper below), so the GET and PUT of
+/// both pairs cannot disagree about what the panel is told.
+func datasetsPanelResponse(setup: APITestSetup) async throws -> DatasetsResponse {
     let specs = datasetSpecs(inManifest: setup.manifest)
     guard !specs.isEmpty else { return DatasetsResponse(datasets: [], diagnostics: []) }
     let zipPath = setup.zipPath
     let diagnostics = await datasetDiagnosticsReports(zipPath: zipPath, datasets: specs)
     return DatasetsResponse(datasets: specs, diagnostics: diagnostics)
+}
+
+/// The panel response after a save, with the save's normalizations as
+/// `savedNotes`.
+func datasetsPanelResponse(
+    setup: APITestSetup, saved normalized: [WholeFileSampleNormalization]
+) async throws -> DatasetsResponse {
+    var response = try await datasetsPanelResponse(setup: setup)
+    response.savedNotes = Dictionary(
+        normalized.map { ($0.file, $0.panelNote) }, uniquingKeysWith: { first, _ in first })
+    return response
 }

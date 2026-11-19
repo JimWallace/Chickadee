@@ -1,0 +1,41 @@
+diff --git a/Sources/muterCore/MutationOperators/RemoveSideEffectsOperator.swift b/Sources/muterCore/MutationOperators/RemoveSideEffectsOperator.swift
+--- a/Sources/muterCore/MutationOperators/RemoveSideEffectsOperator.swift
++++ b/Sources/muterCore/MutationOperators/RemoveSideEffectsOperator.swift
+@@ -112,6 +112,20 @@
+         }
+ 
+         private func statementContainsMutableToken(_ statement: CodeBlockItemListSyntax.Element) -> Bool {
++            // A declaration that names a binding is never a removable side
++            // effect: every later use of the name stops compiling, and with
++            // schemata one uncompilable mutant fails the whole build. The
++            // `doesntContainVariableAssignment` check below is meant to catch
++            // this, but its do-statement branch is true for any statement
++            // that is not a `do`, so a declaration whose text holds "_ = "
++            // anywhere -- even inside a closure, as in
++            // `let t = Task { _ = try? await f() }` -- was removed.
++            // `let _ = f()` names nothing, still compiles without the line,
++            // and stays a mutant.
++            if declaresNamedBinding(statement) {
++                return false
++            }
++
+             let doesntContainVariableAssignment = doesntContainVariableAssignment(statement.allChildren)
+             let containsDiscardedResult = statement.description.contains("_ = ")
+ 
+@@ -129,6 +143,16 @@
+                 && (containsDiscardedResult || containsFunctionCall)
+         }
+ 
++        private func declaresNamedBinding(_ statement: CodeBlockItemListSyntax.Element) -> Bool {
++            guard let declaration = statement.item.as(VariableDeclSyntax.self) else {
++                return false
++            }
++
++            return declaration.bindings.contains { binding in
++                !binding.pattern.is(WildcardPatternSyntax.self)
++            }
++        }
++
+         private func doesntContainVariableAssignment(_ children: SyntaxChildren) -> Bool {
+             let childrenAssignment = children.count(variableAssignmentStatements) == 0
+             let doStatementAssignment = filterDoStatement(children).count(variableAssignmentStatements) == 0

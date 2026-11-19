@@ -52,7 +52,11 @@ func decideDeployerUnhealthy(
     if let state = status.state, deployerUnhealthyStates.contains(state) {
         let detail = status.detail.map { ": \($0)" } ?? ""
         return RuleEvaluation(
-            isFiring: true, summary: "The auto-deploy daemon reports \(state)\(detail)", details: details)
+            isFiring: true,
+            summary:
+                "The auto-deploy daemon reports \(state)\(detail). Production is not taking new releases. "
+                + "Check chickadee-deployer on the host (get_deploy_status).",
+            details: details)
     }
     guard status.paused != true, status.state != "paused" else { return .ok }
 

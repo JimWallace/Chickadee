@@ -10,6 +10,10 @@ import { definedNames, sectionHeading } from './definitions.js';
 export interface GuideAnchor {
   kind: string;
   name: string;
+  /** True when a script test names several defined names and this one was
+   * taken only because it comes first in the notebook: a helper the test
+   * calls, such as `bmi` in a test of `bmi_category`, not the task's own cell. */
+  ambiguous?: boolean | null;
 }
 
 export interface GuideCheck {
@@ -56,6 +60,15 @@ export interface Placement {
   anchorCells: (number | null)[];
   /** The anchor names the notebook no longer defines (a renamed function). */
   missing: string[];
+  /** The markdown cell whose `## ` heading the task sits under, or null. */
+  headingCell: number | null;
+  /** What the task is called, in the editor and in the page's outline alike:
+   * the notebook heading it sits under, else the suite's name for it. */
+  title: string;
+  /** The cells of the placing anchors that were found. */
+  found: number[];
+  /** The cell of the task's own `## ` heading, or null. */
+  own: number | null;
 }
 
 /** Trailing whitespace on each line and at the end gone, CRLF as LF: the
@@ -95,25 +108,110 @@ export function anchorCell(anchor: GuideAnchor, cells: CellInfo[], patterns: Reg
   return null;
 }
 
-/** Where `task` goes in `cells`. */
+/**
+ * The positions in `task.anchors` that place the task. An ambiguous anchor is
+ * a helper that several tasks' tests call, so it would pull every one of their
+ * headers up to the same cell. It counts only when the task has no other.
+ */
+export function placingAnchors(task: GuideTask): number[] {
+  const all = task.anchors.map((_, i) => i);
+  const firm = all.filter(i => !task.anchors[i].ambiguous);
+  return firm.length ? firm : all;
+}
+
+/** The nearest markdown cell with a `## ` heading at or above `cell`, or null. */
+export function headingAbove(cell: number, cells: CellInfo[]): number | null {
+  for (let i = cell; i >= 0; i--) {
+    if (cells[i].type === 'markdown' && sectionHeading(cells[i].source) !== null) {
+      return i;
+    }
+  }
+  return null;
+}
+
+/**
+ * Where `task` goes in `cells`, on its own. `placeTasks` places a whole guide,
+ * and settles two tasks that would take the same notebook heading.
+ *
+ * The task sits under a notebook heading: its own section name when the
+ * notebook has that `## ` heading, else the nearest `## ` heading above its
+ * first anchored cell. That heading is the task's title, so the outline, the
+ * header and the notebook all say "Part 4: Write two small functions", not
+ * one of those plus a suite name ("Other checks", "Question 1") the student
+ * never sees in the notebook. A task placed only by a shared helper takes no
+ * heading: the helper's heading belongs to another task.
+ */
 export function placeTask(task: GuideTask, cells: CellInfo[], patterns: RegExp[]): Placement {
   const anchorCells = task.anchors.map(a => anchorCell(a, cells, patterns));
   const missing = task.anchors.filter((a, i) => anchorCells[i] === null && a.kind !== 'section').map(a => a.name);
-  const found = anchorCells.filter((i): i is number => i !== null);
-  const heading = task.heading
+  const placing = placingAnchors(task);
+  const found = placing.map(i => anchorCells[i]).filter((i): i is number => i !== null);
+  const own = task.heading
     ? cells.findIndex(c => c.type === 'markdown' && sectionHeading(c.source) === task.heading)
     : -1;
-  // Above the `## ` heading; with no heading, above the first anchored cell.
-  const headerCell = heading !== -1 ? heading : found.length ? Math.min(...found) : null;
-  // Under the last anchored cell; with none found, under the heading.
-  const checksCell = found.length ? Math.max(...found) : heading !== -1 ? heading : null;
-  return { headerCell, checksCell, anchorCells, missing };
+  const firm = placing.every(i => !task.anchors[i].ambiguous);
+  const headingCell = own !== -1 ? own : firm && found.length ? headingAbove(Math.min(...found), cells) : null;
+  return layout(task, cells, anchorCells, missing, found, own !== -1 ? own : null, headingCell);
+}
+
+function layout(
+  task: GuideTask,
+  cells: CellInfo[],
+  anchorCells: (number | null)[],
+  missing: string[],
+  found: number[],
+  own: number | null,
+  headingCell: number | null
+): Placement {
+  // Above the heading; with none, above the first anchored cell.
+  const headerCell = headingCell ?? (found.length ? Math.min(...found) : null);
+  // Under the last anchored cell; with none found, under its own heading.
+  const checksCell = found.length ? Math.max(...found) : own;
+  const title = (headingCell !== null ? sectionHeading(cells[headingCell].source) : null) ?? task.heading ?? task.name;
+  return { headerCell, checksCell, anchorCells, missing, headingCell, title, found, own };
+}
+
+/**
+ * Where each task in `tasks` goes. A notebook heading is one task's title.
+ * A task's own heading is always its own. A heading found above the anchors
+ * goes to the task whose first anchored cell comes first under it, in
+ * notebook order, so the cells from the heading on belong to that task
+ * (`taskOfCell`). Any other task that finds it sits above its own first
+ * anchored cell, under the suite name.
+ */
+export function placeTasks(tasks: GuideTask[], cells: CellInfo[], patterns: RegExp[]): Placement[] {
+  const placements = tasks.map(t => placeTask(t, cells, patterns));
+  const owner = new Map<number, number>();
+  placements.forEach((p, i) => {
+    if (p.own !== null) {
+      owner.set(p.own, i);
+    }
+  });
+  const first = (p: Placement) => Math.min(...p.found);
+  placements.forEach((p, i) => {
+    if (p.headingCell === null || p.headingCell === p.own) {
+      return;
+    }
+    const current = owner.get(p.headingCell);
+    if (current === undefined) {
+      owner.set(p.headingCell, i);
+    } else if (placements[current].own !== p.headingCell && first(p) < first(placements[current])) {
+      owner.set(p.headingCell, i);
+    }
+  });
+  return placements.map((p, i) =>
+    p.headingCell === null || owner.get(p.headingCell) === i
+      ? p
+      : layout(tasks[i], cells, p.anchorCells, p.missing, p.found, p.own, null)
+  );
 }
 
 /**
  * The status a task shows: the server's (`pass`, `fail`, `fresh` or null),
- * or `starter` when every anchor cell still holds the student's starter.
- * `starter` wins over the attempt: the student has reset the cell.
+ * or `starter` when every placing anchor cell still holds the student's
+ * starter. `starter` wins over the attempt: the student has reset the cell.
+ * A shared helper the task's tests call does not decide it: a finished `bmi`
+ * does not make an untouched `is_obese` anything but the starter.
  */
 export function taskStatus(
   task: GuideTask,
@@ -121,7 +219,10 @@ export function taskStatus(
   cells: CellInfo[],
   starterSources: { [key: string]: string }
 ): string | null {
-  const keyed = task.anchors.map((a, i) => ({ key: starterKey(a), cell: placement.anchorCells[i] }));
+  const keyed = placingAnchors(task).map(i => ({
+    key: starterKey(task.anchors[i]),
+    cell: placement.anchorCells[i]
+  }));
   const comparable =
     keyed.length > 0 && keyed.every(({ key, cell }) => cell !== null && starterSources[key] !== undefined);
   if (

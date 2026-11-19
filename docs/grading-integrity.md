@@ -14,7 +14,7 @@ Decisions D1 to D3 below were agreed with the maintainer on 2026-10-05.
 
 ## What this document is not about
 
-The runner sandbox (`--sandbox`) protects the server, the network and the other
+The runner sandbox (on by default; `--no-sandbox` turns it off) protects the server, the network and the other
 jobs on a runner from a submission. The closed staff assignment `k6Szng` checks
 it on every runner (#2061, #2225, #2237). This document is about the other
 direction: protecting the grade from the student whose code runs. The sandbox
@@ -40,6 +40,10 @@ happens only on a browser failover or an instructor retest.
   change on the runner can fix this.
 - The browser receives every suite script except grader-only files, so release
   and secret tests are readable in the developer tools.
+- The browser Python grader treats a submission's exit as the native runner
+  does: a `SystemExit` raised in the submission's own code is an error.
+  Both call `_check_submission_exit` in `Tools/runner-support/test_runtime.py`.
+  Before this, the browser read a submission's `sys.exit(0)` as a pass.
 
 ### The native runner
 
@@ -62,7 +66,10 @@ The last row is what phase 2 leaves open. It needs phase 3.
 The result of a test is its exit code and its last stdout line
 (`interpretScriptOutput`). Nothing authenticates either one. The browser
 kernels use a per-run nonce, but it only delimits the wrapper's own report: a
-submission that exits with status 0 still reads as a pass.
+submission that exits with status 0 still reads as a pass. The nonce is not a
+secret from the submission either. In Python it is a constant in the grading
+cell's code, so a submission that walks its call frames can read it, print a
+report of its own and stop the real one from printing.
 
 ## Decisions
 
@@ -106,6 +113,16 @@ instructor cares less that each result is correct, and less that the solution
 stays secret. Work where the grade must be correct already has a choice: an
 assignment declares `gradingMode` as `browser` or `worker`, and a
 worker-graded assignment is graded on a native runner only.
+
+**The browser guard for Assignments (2026-11-10).** The declared type now
+enforces that choice (docs/assignment-types.md, decision 1). An assignment of
+type Assignment refuses browser grading at every door: the grading-mode edit,
+a submission-mode or language edit that would make browser grading effective,
+a version restore and a change of type. A course section no longer carries a
+grading mode, so moving an Assignment into a section of browser-graded labs
+leaves it on the worker; before, the move adopted the section's browser
+default and shipped the Assignment's release and secret tests to every
+student. A browser-graded piece of work is a Lab.
 
 **Two facts from the code** (2026-11-05):
 
@@ -185,9 +202,10 @@ What shipped:
   per test. The sandbox does the same job in the one shared directory: while a
   suite script runs, it covers each of the job's other suite scripts with
   `/dev/null` on Linux and denies them in the profile on macOS
-  (`NativeScriptExecutor.suiteScripts`). This holds on a runner started with
-  `--sandbox`, as all three production runners were on 2026-10-06 (#2348). An
-  unsandboxed runner hides nothing.
+  (`NativeScriptExecutor.suiteScripts`). This holds on every sandboxed runner:
+  all three production runners were on 2026-10-06, and the sandbox is the
+  default since 0.6.0 (#2348). A runner started with `--no-sandbox` hides
+  nothing.
 - **Exit masks, in the injected runtimes.** The runner writes `test_runtime.*`
   into every job, so a mask there covers every assignment at once, with no
   re-save of its generated tests. Python: the native bootstrap

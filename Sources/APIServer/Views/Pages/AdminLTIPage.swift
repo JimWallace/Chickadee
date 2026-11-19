@@ -149,12 +149,12 @@ private struct LTIPlatformRow: HTML {
     var body: some HTML {
         tr {
             td(.class("item-tile-cell")) {
-                span(.class("item-tile")) { Icon("i-link") }
+                span(.class("item-tile")) { Icon("i-plug") }
             }
             td(.class("item-main")) {
                 div(.class("item-title")) { platform.displayName }
                 div(.class("item-details")) {
-                    "\(platform.deploymentCount) deployments · "
+                    "\(platform.deploymentCount) \(platform.deploymentCount == 1 ? "deployment" : "deployments") · "
                     code { platform.issuer }
                     " · client "
                     code { platform.clientID }

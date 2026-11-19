@@ -72,6 +72,12 @@ Exit 1 on drift, with `*.diff.png` / `*.actual.png` evidence. In CI
 (`visual-regression.yml`, path-filtered, not a required check) the evidence
 uploads as the `visual-diffs` artifact.
 
+The path filter can miss a change that alters a page from outside its paths.
+So the same job also runs each Thursday on `main`, against the baselines that
+`main` carries. A red run there files one issue labelled
+`scheduled-check-failed` (key `visual-main`) with a brief, and the next green
+run closes it. The weekly digest lists the newest scheduled run.
+
 ## When the check fails on a PR
 
 Download the `visual-diffs` artifact and compare each `*.diff.png` with the

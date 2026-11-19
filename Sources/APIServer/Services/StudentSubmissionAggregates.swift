@@ -8,13 +8,11 @@
 // loaders push the folds into the database and return O(visible setups) rows.
 //
 // The grade fold mirrors `APIResult.gradePercentValue` (the #1085/#1111
-// "highest grade wins" policy, branch for branch): MAX is taken over the raw
-// per-row fraction and rounded ONCE in Swift with the same `.rounded()` the
-// accessor uses. Rounding is monotone, so max-then-round equals
-// round-then-max — the SQL never re-implements the rounding and the two
-// paths cannot disagree on a boundary like 87.5. Rows whose four grade
-// columns are all nil contribute NULL to the MAX, exactly as the
-// column-first accessor reports no grade for them.
+// "highest grade wins" policy, branch for branch) through `GradePercentSQL`:
+// the best full-mark and best partial raw percents come from SQL, and Swift
+// rounds them once with the rule of `GradePercent.of`, which caps a partial
+// mark at 99. Rows whose four grade columns are all nil contribute NULL, as
+// the column-first accessor reports no grade for them.
 
 import Fluent
 import Foundation
@@ -88,10 +86,12 @@ func studentBestGradePercentBySetup(
     }
     struct BestRow: Decodable {
         let testSetupID: String
-        let bestFraction: Double?
+        let bestFull: Double?
+        let bestPartial: Double?
         enum CodingKeys: String, CodingKey {
             case testSetupID = "test_setup_id"
-            case bestFraction = "best_fraction"
+            case bestFull = "best_full"
+            case bestPartial = "best_partial"
         }
     }
     // CAST(... AS DOUBLE PRECISION) resolves to an 8-byte IEEE double on both
@@ -101,13 +101,7 @@ func studentBestGradePercentBySetup(
     let rows = try await sql.raw(
         """
         SELECT s.test_setup_id AS test_setup_id,
-            MAX(CASE
-                WHEN r.total_points > 0 AND r.earned_points IS NOT NULL
-                    THEN r.earned_points / r.total_points * 100
-                WHEN r.total_tests > 0 AND r.pass_count IS NOT NULL
-                    THEN CAST(r.pass_count AS DOUBLE PRECISION)
-                        / CAST(r.total_tests AS DOUBLE PRECISION) * 100
-            END) AS best_fraction
+            \(GradePercentSQL.foldColumns)
         FROM \(unsafeRaw: APIResult.schema) r
         INNER JOIN \(unsafeRaw: APISubmission.schema) s ON s.id = r.submission_id
         WHERE s.user_id = \(bind: userID)
@@ -118,8 +112,8 @@ func studentBestGradePercentBySetup(
     ).all(decoding: BestRow.self)
     var best: [String: Int] = [:]
     for row in rows {
-        guard let fraction = row.bestFraction else { continue }
-        let percent = Int(fraction.rounded())
+        guard let percent = GradePercentSQL.percent(bestFull: row.bestFull, bestPartial: row.bestPartial)
+        else { continue }
         if percent > 0 { best[row.testSetupID] = percent }
     }
     return best
@@ -128,11 +122,13 @@ func studentBestGradePercentBySetup(
 // MARK: - By-student variants (instructor roster, #1382 item 6)
 
 /// Per-student submission summary for one assignment's setup: the latest
-/// submission's id and the attempt count — `studentSubmissionSummaryBySetup`
-/// partitioned by student instead of by setup, for the instructor
-/// assignment-submissions roster.
+/// submission's id and time, and the attempt count —
+/// `studentSubmissionSummaryBySetup` partitioned by student instead of by
+/// setup, for the instructor assignment-submissions roster. The time comes
+/// from the same ranked row, so the roster needs no second read by id.
 struct SetupStudentSubmissionSummary {
     let latestSubmissionID: String
+    let latestSubmittedAt: Date?
     let submissionCount: Int
 }
 
@@ -147,17 +143,19 @@ func submissionSummaryByStudent(
     struct SummaryRow: Decodable {
         let userID: UUID
         let id: String
+        let submittedAt: Date?
         let total: Int
         enum CodingKeys: String, CodingKey {
             case userID = "user_id"
             case id
+            case submittedAt = "submitted_at"
             case total
         }
     }
     let rows = try await sql.raw(
         """
-        SELECT user_id, id, total FROM (
-            SELECT user_id, id,
+        SELECT user_id, id, submitted_at, total FROM (
+            SELECT user_id, id, submitted_at,
                 ROW_NUMBER() OVER (
                     PARTITION BY user_id
                     ORDER BY submitted_at DESC, attempt_number DESC
@@ -173,7 +171,7 @@ func submissionSummaryByStudent(
     ).all(decoding: SummaryRow.self)
     return rows.reduce(into: [:]) {
         $0[$1.userID] = SetupStudentSubmissionSummary(
-            latestSubmissionID: $1.id, submissionCount: $1.total)
+            latestSubmissionID: $1.id, latestSubmittedAt: $1.submittedAt, submissionCount: $1.total)
     }
 }
 
@@ -193,22 +191,18 @@ func bestGradePercentByStudent(
     }
     struct BestRow: Decodable {
         let userID: UUID
-        let bestFraction: Double?
+        let bestFull: Double?
+        let bestPartial: Double?
         enum CodingKeys: String, CodingKey {
             case userID = "user_id"
-            case bestFraction = "best_fraction"
+            case bestFull = "best_full"
+            case bestPartial = "best_partial"
         }
     }
     let rows = try await sql.raw(
         """
         SELECT s.user_id AS user_id,
-            MAX(CASE
-                WHEN r.total_points > 0 AND r.earned_points IS NOT NULL
-                    THEN r.earned_points / r.total_points * 100
-                WHEN r.total_tests > 0 AND r.pass_count IS NOT NULL
-                    THEN CAST(r.pass_count AS DOUBLE PRECISION)
-                        / CAST(r.total_tests AS DOUBLE PRECISION) * 100
-            END) AS best_fraction
+            \(GradePercentSQL.foldColumns)
         FROM \(unsafeRaw: APIResult.schema) r
         INNER JOIN \(unsafeRaw: APISubmission.schema) s ON s.id = r.submission_id
         WHERE s.test_setup_id = \(bind: setupID)
@@ -219,8 +213,9 @@ func bestGradePercentByStudent(
     ).all(decoding: BestRow.self)
     var best: [UUID: Int] = [:]
     for row in rows {
-        guard let fraction = row.bestFraction else { continue }
-        best[row.userID] = Int(fraction.rounded())
+        guard let percent = GradePercentSQL.percent(bestFull: row.bestFull, bestPartial: row.bestPartial)
+        else { continue }
+        best[row.userID] = percent
     }
     return best
 }
@@ -268,6 +263,7 @@ private func submissionSummaryByStudentViaFluent(
         .sort(\.$attemptNumber, .descending)
         .field(\.$id)
         .field(\.$userID)
+        .field(\.$submittedAt)
         .all()
     var summary: [UUID: SetupStudentSubmissionSummary] = [:]
     for row in rows {
@@ -275,10 +271,11 @@ private func submissionSummaryByStudentViaFluent(
         if let existing = summary[userID] {
             summary[userID] = SetupStudentSubmissionSummary(
                 latestSubmissionID: existing.latestSubmissionID,
+                latestSubmittedAt: existing.latestSubmittedAt,
                 submissionCount: existing.submissionCount + 1)
         } else {
             summary[userID] = SetupStudentSubmissionSummary(
-                latestSubmissionID: id, submissionCount: 1)
+                latestSubmissionID: id, latestSubmittedAt: row.submittedAt, submissionCount: 1)
         }
     }
     return summary

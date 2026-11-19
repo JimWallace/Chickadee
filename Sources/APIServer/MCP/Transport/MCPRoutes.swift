@@ -176,7 +176,7 @@ struct MCPRoutes: RouteCollection {
                 let structured = (try? JSONValue(encoding: output)) ?? .object([:])
                 finalResponse = mcpModernized(
                     .success(id: id, result: mcpToolSuccessResult(structured)),
-                    era: era, serverInfo: serverInfo)
+                    era: era, serverInfo: serverInfo, method: .toolsCall)
                 toolOutcome = .success
             } catch {
                 application.logger.error("MCP tool validate_assignment failed while watching: \(error)")

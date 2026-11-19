@@ -35,6 +35,9 @@
     --gray-900: #111827;
     --surface: #FFFFFF;
     --surface-muted: #F8FAFC;
+    /* The bare .tier badge. In dark mode --gray-100 is --surface, so the
+       badge needs the next step up to show at all. */
+    --badge-neutral-bg: var(--gray-100);
     --danger-bg: #FEF2F2;
     --danger-border: #FECACA;
     --accent-bg: #FEF9DB;   /* gold tint — grade pills / score badges */
@@ -61,6 +64,12 @@
     --kind-outline-fg: #5B3F8C;
     --kind-graded-bg: var(--health-teal);
     --kind-graded-fg: #FFFFFF;
+    /* The declared assignment type (docs/assignment-types.md): a Lab is
+       indigo and a Class activity magenta, beside the teal Assignment. */
+    --kind-lab-bg: #4C5BC4;
+    --kind-lab-fg: #FFFFFF;
+    --kind-activity-bg: #B03A7E;
+    --kind-activity-fg: #FFFFFF;
     --state-amber: #D69E2E;  /* state dot: preview / TA — pairs with the select text */
     --amber-bg: #FFFBEB;    /* pale amber — hint / warning callouts */
     --warning-bg: #FFF8E1;  /* warm amber tint — submission warning callout */
@@ -350,6 +359,20 @@
     --avatar-quantumcats-orbit: #7CA3EA;
     --avatar-quantumcats-cat: #2B1D3A;
     --avatar-quantumcats-eye: #F4F1FA;
+    /* The cross-fade ring: granted by an instructor's achievement
+       (docs/achievement-rewards.md, decision 4). Eight flat steps from blue
+       on the left to red on the right, the Cross-fade pattern of "The Class
+       Paints a Picture" (red x*4, blue 236 - x*4) sampled at each step and
+       lifted toward white until it holds the term-ring contrast floors
+       (AvatarCrossFadeRingTests). No dark mirror. */
+    --avatar-crossfade-1: #5047E9;
+    --avatar-crossfade-2: #6747D2;
+    --avatar-crossfade-3: #7945BD;
+    --avatar-crossfade-4: #8E40A3;
+    --avatar-crossfade-5: #9F3889;
+    --avatar-crossfade-6: #B32965;
+    --avatar-crossfade-7: #C30A34;
+    --avatar-crossfade-8: #E0000C;
     --avatar-ouroboros-body: #3F8E4A;
     --avatar-ouroboros-back: #2A6B36;
     --avatar-greenlight-band: #3E9653;
@@ -406,6 +429,7 @@
         --gray-900: #E5E7EB;
         --surface: #111827;
         --surface-muted: #0F172A;
+        --badge-neutral-bg: var(--gray-200);
         --danger-bg: #3B1217;
         --danger-border: #7F1D1D;
         --accent-bg: #3D2800;   /* dark gold tint */
@@ -446,6 +470,10 @@
         --kind-outline-fg: #CDB9F0;
         --kind-graded-bg: #007C87;
         --kind-graded-fg: #FFFFFF;
+        --kind-lab-bg: #4C5BC4;
+        --kind-lab-fg: #FFFFFF;
+        --kind-activity-bg: #A3346F;
+        --kind-activity-fg: #FFFFFF;
         --state-amber: #ECC94B;
         --avatar-back-pebble: #32332F;
         --avatar-staff-ring: #E5E7EB;
@@ -488,6 +516,7 @@
     --gray-900: #E5E7EB;
     --surface: #111827;
     --surface-muted: #0F172A;
+    --badge-neutral-bg: var(--gray-200);
     --danger-bg: #3B1217;
     --danger-border: #7F1D1D;
     --accent-bg: #3D2800;   /* dark gold tint */
@@ -528,6 +557,10 @@
     --kind-outline-fg: #CDB9F0;
     --kind-graded-bg: #007C87;
     --kind-graded-fg: #FFFFFF;
+    --kind-lab-bg: #4C5BC4;
+    --kind-lab-fg: #FFFFFF;
+    --kind-activity-bg: #A3346F;
+    --kind-activity-fg: #FFFFFF;
     --state-amber: #ECC94B;
     --avatar-back-pebble: #32332F;
     --avatar-staff-ring: #E5E7EB;
@@ -1132,7 +1165,7 @@ th.sort-desc .sort-header::after { content: "↓"; }
     font-size: var(--text-2xs);
     padding: .1rem .4rem;
     border-radius: var(--radius-full);
-    background: var(--gray-100);
+    background: var(--badge-neutral-bg);
     color: var(--gray-600);
     font-weight: 500;
 }
@@ -1848,6 +1881,14 @@ body:has(.notebook-header .nb-title-block) .nav {
     text-align: center;
 }
 
+/* A POST action inside the footer line (the consent screen's account switch):
+   a button, so it needs the link colour an <a> gets for free. */
+.auth-alt .btn-link {
+    color: var(--blue);
+    font-size: inherit;
+    text-decoration: underline;
+}
+
 /* ── Nav username + logout button ────────────────────── */
 
 /* Applied alongside .nav-link on the account-menu toggle; color intentionally
@@ -2083,7 +2124,7 @@ body:has(.notebook-header .nb-title-block) .nav {
 }
 
 .tier-unpublished {
-    background: var(--gray-100);
+    background: var(--badge-neutral-bg);
     color: var(--gray-600);
 }
 
@@ -2296,11 +2337,23 @@ body:has(.notebook-header .nb-title-block) .nav {
 }
 
 .submission-score-row .diagnostics-cards {
-    flex: 1 1 20rem;
-    /* Always four across: these are one reading, not a responsive grid. Below
-       the flex-basis the whole block wraps under the grade rather than
-       splitting 3+1. */
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    flex: 1 1 24rem;
+    /* Five across (passed, failed, errors, timed out, skipped): one
+       partition of the tests, not a responsive grid. Below the flex-basis the
+       whole block wraps under the grade rather than splitting 4+1. A phone
+       is the one exception (the media query below). */
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+/* A phone has no room for five: at 375px each tile was about 49px wide, and
+   "Skipped", "Passed" and a three-digit count spilled out of it. Three across
+   (3 + 2) with tighter padding keeps every label and number inside its tile
+   down to 320px. */
+@media (max-width: 640px) {
+    .submission-score-row .diagnostics-cards {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: .5rem;
+    }
+    .submission-score-row .diagnostic-card { padding: .5rem .6rem; }
 }
 
 .score-delta {
@@ -2437,6 +2490,10 @@ body:has(.notebook-header .nb-title-block) .nav {
 .diff-context { color: inherit; }
 .diff-added { background: var(--success-bg); color: var(--success-fg); }
 .diff-removed { background: var(--danger-bg); color: var(--danger-fg); }
+/* A bug hunt's code map: a line the class has not covered yet, and one where
+   only some of the items on it are covered. */
+.diff-uncovered { background: var(--gray-100); color: var(--gray-600); }
+.diff-partial { background: var(--warning-bg); }
 .diff-fold td {
     padding: .2rem .75rem;
     background: var(--gray-50);
@@ -2548,6 +2605,8 @@ body:has(.notebook-header .nb-title-block) .nav {
 .item-tile[data-kind="document"] { background: var(--kind-document-bg); color: var(--kind-document-fg); }
 .item-tile[data-kind="outline"] { background: var(--kind-outline-bg); color: var(--kind-outline-fg); }
 .item-tile[data-kind="graded"] { background: var(--kind-graded-bg); color: var(--kind-graded-fg); }
+.item-tile[data-kind="lab"] { background: var(--kind-lab-bg); color: var(--kind-lab-fg); }
+.item-tile[data-kind="activity"] { background: var(--kind-activity-bg); color: var(--kind-activity-fg); }
 .item-tile[data-kind="ok"] { background: var(--open-bg); color: var(--open-fg); }
 .item-tile[data-kind="alert"] { background: var(--danger-bg); color: var(--danger-fg); }
 
@@ -2912,6 +2971,17 @@ body:has(.notebook-header .nb-title-block) .nav {
 .composite-tile .composite-frame { max-width: 16rem; }
 /* Every lab's image, side by side, under a per-group composite's staff board. */
 .composite-labs { display: grid; grid-template-columns: repeat(auto-fill, minmax(16rem, 1fr)); gap: 1.5rem; }
+
+/* Bug hunt (docs/bug-hunt-code-map.md): the share the class has covered in
+   the score figure, and the code in the diff listing (.diff-uncovered and
+   .diff-partial sit with the listing's row states). */
+.bug-hunt { display: flex; flex-direction: column; gap: 1rem; }
+.bug-hunt-share { display: flex; align-items: baseline; gap: .75rem; }
+.bug-hunt-count { font-size: var(--text-lg); color: var(--gray-600); }
+/* The projector shows the share and the code at the room's size. */
+.present-bug-hunt { flex: 1; }
+.present-bug-hunt .score-figure { font-size: 6em; }
+.present-bug-hunt .diff-table { font-size: var(--text-lg); }
 .composite-labs-item { display: flex; flex-direction: column; gap: .5rem; }
 .composite-labs-item > h3, .composite-labs-item > p { margin: 0; }
 @media (prefers-reduced-motion: reduce) {
@@ -3242,6 +3312,25 @@ body:has(.notebook-header .nb-title-block) .nav {
 .fieldset-plain > legend { margin-bottom: .75rem; font-weight: 600; }
 .checkbox-list { display: flex; flex-direction: column; gap: .6rem; }
 .checkbox-row { display: flex; align-items: center; gap: .6rem; cursor: pointer; }
+/* A choice with a one-line description under its name (the deploy mode).
+   The radio sits beside the name, not centred on the two lines. */
+.checkbox-row--described { align-items: flex-start; }
+.checkbox-row--described > input { margin-top: .3rem; }
+
+/* A .card with its own padding, for a card whose content is a form or a
+   heading over lists (the admin Deployment page: the approval form, the
+   contract changes, each release's notes).  An <h4> is a small category
+   heading above its own list.  The reset at the top zeroes list padding,
+   so a bare <ul> hangs its bullets outside the text column. */
+.card--padded { padding: 1rem 1.25rem; }
+.card--padded > h3 { margin-bottom: .5rem; font-size: var(--text-md); }
+.card--padded > h4 {
+    margin: .75rem 0 .25rem;
+    font-size: var(--text-sm);
+    color: var(--gray-600);
+}
+.card--padded > ul { padding-left: 1.25rem; }
+.card--padded > ul > li + li { margin-top: .25rem; }
 
 .field-note { margin-top: .25rem; font-size: var(--text-sm); }
 
@@ -3333,6 +3422,10 @@ body:has(.notebook-header .nb-title-block) .nav {
     line-height: 1.2;
 }
 .chip-row { display: flex; flex-wrap: wrap; gap: .45rem; }
+/* DueDate: the relative reading follows the absolute date. The span is
+   seeded empty (the date is the no-JS fallback), so the separator shows
+   only once relative-time.js has filled it. */
+.due-relative:not(:empty)::before { content: "· "; }
 
 /* Horizontal cluster of controls (button groups, inline actions). */
 .toolbar { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; }
@@ -3488,8 +3581,8 @@ body:has(.notebook-header .nb-title-block) .nav {
 /* JS-shown proximity warning by the due-date field (palette amber, was a
    hardcoded #c05000); display stays inline (toggled to '' by script). */
 .date-warning { color: var(--amber); margin-top: .4rem; }
-/* JS-shown grading-mode hint under the section picker (display toggled inline). */
-.grading-mode-hint { margin-top: .3rem; }
+/* The selected assignment type's one-sentence hint under the new-assignment titlebar row. */
+.assignment-type-hint { margin-top: .3rem; }
 /* Runner-requirements row + its two grow-to-fill labelled inputs. */
 .runner-req-row { display: flex; gap: 1rem; flex-wrap: wrap; margin: .5rem 0 1.25rem; }
 .req-field { display: flex; align-items: center; gap: .4rem; font-size: var(--text-base); flex: 1; min-width: 12rem; }
@@ -3872,9 +3965,7 @@ td.pf-var-locked-value { font-family: var(--font-mono); font-size: var(--text-sm
     background: transparent;
     color: var(--muted);
 }
-.section-mode-note { font-size: var(--text-sm); color: var(--gray-500); }
 .section-action--push { margin-left: auto; }
-.grading-mode-select { font-size: var(--text-base); padding: .25rem .45rem; }
 /* Tight row of icon/action buttons in an assignment-row Actions cell. It sets
    no white-space and no button padding: the extension and grade-override
    popover forms open inside the cell and would inherit both. */
@@ -4752,6 +4843,14 @@ tr.drop-adopt  { outline: 2px solid var(--blue); outline-offset: -2px; }
 .av-spectrum-moss { fill: var(--avatar-accent-moss); }
 .av-spectrum-lagoon { fill: var(--avatar-accent-lagoon); }
 .av-spectrum-orchid { fill: var(--avatar-accent-orchid); }
+.av-crossfade-1 { fill: var(--avatar-crossfade-1); }
+.av-crossfade-2 { fill: var(--avatar-crossfade-2); }
+.av-crossfade-3 { fill: var(--avatar-crossfade-3); }
+.av-crossfade-4 { fill: var(--avatar-crossfade-4); }
+.av-crossfade-5 { fill: var(--avatar-crossfade-5); }
+.av-crossfade-6 { fill: var(--avatar-crossfade-6); }
+.av-crossfade-7 { fill: var(--avatar-crossfade-7); }
+.av-crossfade-8 { fill: var(--avatar-crossfade-8); }
 .av-gear { fill: var(--avatar-gear); }
 .av-gear-line { fill: none; stroke: var(--avatar-gear); }
 .av-bloom-eye { fill: var(--avatar-bloom-eye); }

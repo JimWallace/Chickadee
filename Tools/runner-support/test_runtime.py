@@ -13,7 +13,10 @@ def _caller_file(depth: int = 3) -> Path:
 
 
 def _first_comment_label() -> str:
-    path = _caller_file()
+    return _label_for(_caller_file())
+
+
+def _label_for(path: Path) -> str:
     try:
         for line in path.read_text(encoding="utf-8").splitlines():
             s = line.strip()
@@ -71,8 +74,10 @@ def failed(message: str = "failed"):
     raise SystemExit(1)
 
 
-def errored(message: str = "error", err: Optional[Exception] = None):
-    label = _first_comment_label()
+def errored(
+    message: str = "error", err: Optional[Exception] = None, *, label: Optional[str] = None
+):
+    label = label or _first_comment_label()
     text = message if isinstance(message, str) else str(message)
     summary = _first_nonempty_line(text) or "error"
     if text.strip() and text.strip() != "error":
@@ -181,6 +186,39 @@ def _ordered_student_files() -> List[Path]:
     if preferred is not None:
         return [preferred]
     return _candidate_student_files()
+
+
+def _raised_in_submission(exit_request: BaseException) -> bool:
+    files = {path.resolve() for path in _ordered_student_files()}
+    frame = exit_request.__traceback__
+    while frame is not None:
+        if Path(frame.tb_frame.f_code.co_filename).resolve() in files:
+            return True
+        frame = frame.tb_next
+    return False
+
+
+def _check_submission_exit(exit_request: BaseException, script: str) -> None:
+    """Called by both graders when a test script ends with SystemExit.
+
+    A test's result is its exit status, and the submission runs inside the
+    test's process. A `SystemExit` raised in the submission's own code (a
+    `sys.exit(0)` in a function the test calls, or at the top level of a
+    notebook the test runs) would otherwise end the test with the submission's
+    status, and status 0 reads as a pass. This reports an error instead, by
+    raising `SystemExit(2)`. An exit from the test itself, or from
+    passed/failed/errored, returns and the caller re-raises it unchanged.
+
+    One copy for the native runner (Sources/Worker/ScriptInvocation.swift) and
+    the browser grader (Public/python-grading-shared.js), so the two cannot
+    disagree about which exits count. This does not stop a determined
+    submission (docs/grading-integrity.md).
+    """
+    if _raised_in_submission(exit_request):
+        errored(
+            f"the submission ended the test (SystemExit: {exit_request.code!r})",
+            label=_label_for(Path(script)),
+        )
 
 
 _loaded_student_modules: Optional[Dict[str, Any]] = None

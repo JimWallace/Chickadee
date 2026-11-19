@@ -46,6 +46,9 @@ struct GetServerInfoTool: ContentTool {
         /// Every class-activity kind the server can author and grade — see
         /// `MCPActivityKindCapability`. Same reasoning as `languages`.
         let activityKinds: [MCPActivityKindCapability]
+        /// Every declared assignment type and its rules — see
+        /// `MCPAssignmentTypeCapability`. Same reasoning as `languages`.
+        let assignmentTypes: [MCPAssignmentTypeCapability]
     }
 
     static let name = "get_server_info"
@@ -61,7 +64,10 @@ struct GetServerInfoTool: ContentTool {
         + "NOT uniform across languages, and this is the same predicate that refuses a save, so it "
         + "will not disagree with what you are allowed to write. `activityKinds` lists every class-"
         + "activity kind (\(MCPActivityProse.tokens)) with what each does and how the class's results "
-        + "combine. Also use it to confirm a deploy is "
+        + "combine. `assignmentTypes` lists every assignment type "
+        + "(\(MCPEnumProse<AssignmentType>.quotedOrList)) with its rules: the grading mode it sets on "
+        + "create, whether browser grading is allowed, whether an activity is required, and whether "
+        + "grades go to the LMS and slip days apply. Also use it to confirm a deploy is "
         + "live (a tool call hits the running process, unlike a cached tool list) or to check "
         + "whether write tools will work before calling them. Read-only; touches no course, "
         + "student, or database state."
@@ -134,10 +140,31 @@ struct GetServerInfoTool: ContentTool {
                     ]),
                 ]),
             ]),
+            "assignmentTypes": .object([
+                "type": .string("array"),
+                "description": .string("Every declared assignment type and the rules it carries."),
+                "items": .object([
+                    "type": .string("object"),
+                    "properties": .object([
+                        "name": .object([
+                            "type": .string("string"),
+                            "enum": MCPEnumProse<AssignmentType>.jsonEnum,
+                        ]),
+                        "displayName": MCPSchema.string,
+                        "defaultGradingMode": MCPSchema.string,
+                        "allowsBrowserGrading": MCPSchema.boolean,
+                        "requiresActivity": MCPSchema.boolean,
+                        "pushesGradesToLMS": MCPSchema.boolean,
+                        "allowsSlipDays": MCPSchema.boolean,
+                        "rules": .object(["type": .string("array"), "items": MCPSchema.string]),
+                    ]),
+                ]),
+            ]),
         ]),
         "required": .array([
             .string("version"), .string("mcpMode"), .string("advertisedScopes"),
             .string("writeEnabled"), .string("languages"), .string("activityKinds"),
+            .string("assignmentTypes"),
         ]),
     ])
     static let requiredScopes: Set<ContentScope> = [.read]
@@ -150,6 +177,7 @@ struct GetServerInfoTool: ContentTool {
             advertisedScopes: mode.advertisedScopes.map(\.rawValue),
             writeEnabled: mode.scopeCeiling.contains(.write),
             languages: MCPLanguageCapability.all,
-            activityKinds: MCPActivityKindCapability.all)
+            activityKinds: MCPActivityKindCapability.all,
+            assignmentTypes: MCPAssignmentTypeCapability.all)
     }
 }

@@ -455,22 +455,55 @@ public struct AchievementReward: Codable, Equatable, Sendable {
     /// Graded bonus points for `points` rewards (the "pinned grade").  Awarded
     /// positively only; nil for cosmetic rewards.
     public let points: Int?
+    /// The `WardrobeItem` raw value a `wardrobe` reward grants, such as
+    /// "border.crossfade"; nil for every other reward
+    /// (docs/achievement-rewards.md, decision 4). Decoded with
+    /// `decodeIfPresent`, so a manifest saved before it decodes unchanged.
+    public let item: String?
 
-    public init(type: RewardType, label: String, icon: String? = nil, points: Int? = nil) {
+    public init(type: RewardType, label: String, icon: String? = nil, points: Int? = nil, item: String? = nil) {
         self.type = type
         self.label = label
         self.icon = icon
         self.points = points
+        self.item = item
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case type, label, icon, points, item
+    }
+
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        type = try c.decode(RewardType.self, forKey: .type)
+        label = try c.decode(String.self, forKey: .label)
+        icon = try c.decodeIfPresent(String.self, forKey: .icon)
+        points = try c.decodeIfPresent(Int.self, forKey: .points)
+        item = try c.decodeIfPresent(String.self, forKey: .item)
+    }
+
+    /// The item a `wardrobe` reward grants, when it names a grantable one;
+    /// nil for every other reward, and for an item that is not in
+    /// `WardrobeItem.grantable`.
+    public var wardrobeItem: WardrobeItem? {
+        guard type == .wardrobe, let item, let granted = WardrobeItem(rawValue: item),
+            WardrobeItem.grantable.contains(granted)
+        else { return nil }
+        return granted
     }
 }
 
-public enum RewardType: String, Codable, Sendable {
+public enum RewardType: String, Codable, CaseIterable, Sendable {
     /// A cosmetic badge shown on the student's submission.
     case badge
     /// A one-holder record title (class records).
     case title
     /// A positive grade bonus.
     case points
+    /// A wardrobe item for the student's bird, named by `AchievementReward.item`
+    /// (docs/achievement-rewards.md, decision 4). Hidden until earned
+    /// (decision 5): no student page shows it as a goal or a badge.
+    case wardrobe
 }
 
 /// The dimension a `record`-scoped achievement ranks students on.

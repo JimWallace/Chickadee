@@ -67,39 +67,41 @@ import Vapor
         }
     }
 
-    private func setupAndSection(
-        manifest: String, sectionMode: GradingMode
-    ) async throws -> (APITestSetup, APICourseSection) {
+    /// A course, an Assignment-typed assignment on `manifest`, and a section
+    /// named "Labs".
+    private func assignmentAndLabSection(
+        manifest: String
+    ) async throws -> (APIAssignment, APICourseSection) {
         let course = try await makeTestCourse(on: app, code: "MODE-\(UUID().uuidString.prefix(4))")
         let courseID = try course.requireID()
         let setup = try await makeTestSetup(
             on: app, id: "mode_\(UUID().uuidString.prefix(8))", courseID: courseID, manifest: manifest)
+        let assignment = APIAssignment(
+            testSetupID: try setup.requireID(), title: "Assignment 1", dueAt: nil, isOpen: false,
+            courseID: courseID)
+        assignment.assignmentType = .assignment
+        try await assignment.save(on: app.db)
         let section = APICourseSection(
-            name: "Labs", defaultGradingMode: sectionMode.rawValue, sortOrder: 1, courseID: courseID)
+            name: "Labs", sortOrder: 1, courseID: courseID)
         try await section.save(on: app.db)
-        return (setup, section)
+        return (assignment, section)
     }
 
-    @Test func aMoveAdoptsTheSectionsGradingMode() async throws {
+    /// A move into a section changes neither the type nor the grading mode
+    /// (docs/assignment-types.md, phase 3). Before, it adopted the section's
+    /// browser default and shipped an Assignment's secret tests to every
+    /// student.
+    @Test func aMoveChangesNeitherTheTypeNorTheGrading() async throws {
         try await withApp(app) { app in
-            let (setup, section) = try await setupAndSection(
-                manifest: TestManifests.workerEmpty,
-                sectionMode: .browser)
-            #expect(try await adoptSectionGradingMode(section, setup: setup, on: app.db) == "browser")
-            #expect(setup.decodedManifest()?.gradingMode == .browser)
-        }
-    }
+            let (assignment, section) = try await assignmentAndLabSection(manifest: TestManifests.workerEmpty)
+            let moved = try await CourseSectionService.moveAssignment(
+                assignment, toSection: try section.requireID(), on: app.db)
 
-    /// Browser grading would break a manifest rule here, so the setup keeps
-    /// worker grading and the move does not fail.
-    @Test(arguments: [
-        #"{"schemaVersion":1,"gradingMode":"worker","submissionMode":"uploadOnly","testSuites":[],"timeLimitSeconds":10}"#,
-        #"{"schemaVersion":1,"gradingMode":"worker","graderOnlyFiles":["answers.csv"],"testSuites":[],"timeLimitSeconds":10}"#,
-    ])
-    func aMoveKeepsWorkerGradingWhenBrowserWouldBeIncoherent(_ manifest: String) async throws {
-        try await withApp(app) { app in
-            let (setup, section) = try await setupAndSection(manifest: manifest, sectionMode: .browser)
-            #expect(try await adoptSectionGradingMode(section, setup: setup, on: app.db) == "worker")
+            #expect(moved.gradingMode == "worker")
+            let stored = try #require(try await APIAssignment.find(assignment.id, on: app.db))
+            #expect(stored.assignmentType == .assignment)
+            #expect(stored.sectionID == section.id)
+            let setup = try #require(try await APITestSetup.find(assignment.testSetupID, on: app.db))
             #expect(setup.decodedManifest()?.gradingMode == .worker)
         }
     }

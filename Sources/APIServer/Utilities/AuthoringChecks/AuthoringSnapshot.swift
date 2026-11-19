@@ -31,6 +31,10 @@ struct AuthoringSnapshot: Sendable {
     }
 
     let manifest: TestProperties
+    /// The assignment's declared type, so the type rules are reported with
+    /// the manifest rules (docs/assignment-types.md). Nil checks the manifest
+    /// alone.
+    var assignmentType: AssignmentType?
     /// The latest validation run of the reference solution, or nil before one.
     var solutionRun: TestOutcomeCollection?
     /// The current variant batch, in variant order. Empty when the manifest
@@ -50,4 +54,7 @@ struct AuthoringSnapshot: Sendable {
     /// One evaluation per validation-variant seed. Empty when the manifest
     /// declares no expressions.
     var seedEvaluations: [SeedEvaluation] = []
+    /// Every dataset spec whose sample covers its whole file, read against
+    /// the setup zip. Empty when there is none or the zip could not be read.
+    var wholeFileSamples: [WholeFilePerStudentSample] = []
 }

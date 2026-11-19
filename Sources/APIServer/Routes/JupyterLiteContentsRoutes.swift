@@ -62,18 +62,42 @@ struct JupyterLiteContentsRoutes: RouteCollection {
         let fm = FileManager.default
         let baseDir = req.application.directory.publicDirectory + "jupyterlite/files/"
         try fm.createDirectory(atPath: baseDir, withIntermediateDirectories: true)
-        let baseURL = URL(fileURLWithPath: baseDir, isDirectory: true).standardizedFileURL
+        // Resolved, because the production image links `jupyterlite/files` to
+        // the data volume (`Dockerfile`). Unresolved, the drive root is the link
+        // itself, which `isDirectory` does not count as a folder, so a staff
+        // listing of the root answered 404 and the editor's file browser showed
+        // "Directory not found" on every poll.
+        let baseURL = URL(fileURLWithPath: baseDir, isDirectory: true).standardizedFileURL.resolvingSymlinksInPath()
 
         // The kernel's file system walks to the notebook's folder one level at a
         // time, so it reads `users` before `users/<id>`. A student who may not
-        // read the tree gets a `users` that lists only their own folder; a 403
-        // here leaves the kernel's working directory at the drive root (#469).
-        if !isStaff, let userRoot = try userRootPath(for: caller, isStaff: false),
-            relativePath.trimmingCharacters(in: CharacterSet(charactersIn: "/")) == "users"
-        {
+        // read the tree gets a `users` that lists only their own folder, never a
+        // 403, which can leave the kernel unable to boot (below; #469).
+        //
+        // The drive root is read the same way, by `os.listdir('/drive')`: a
+        // student gets a root whose one child is `users`. (The IndexedDB drive
+        // reads the root as `all.json`, which still answers with the student's
+        // own folder below.)
+        //
+        // Course staff who are not admins read `users` the same way. Staff
+        // drafts moved to the server drive in #2925, and listing `users` is
+        // admin-only (`mayReadUserFile` with no owner), so a staff kernel got a
+        // 403 there, and on the service-worker transport (WebKit) the kernel
+        // never received an answer and never reached idle (2026-11). As for a
+        // student, the listing creates the caller's own folder if it is
+        // missing. Another user's folder is still reached by its path,
+        // through `mayReadUserFile`.
+        let requested = relativePath.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        let includeContent = req.query[String.self, at: "content"] == "1"
+        if requested == "users", !caller.isAdmin, let userRoot = try userRootPath(for: caller, isStaff: false) {
             return try ownUsersDirectoryResponse(
-                baseURL: baseURL, userRoot: userRoot, fileManager: fm,
-                includeContent: req.query[String.self, at: "content"] == "1")
+                baseURL: baseURL, userRoot: userRoot, fileManager: fm, includeContent: includeContent)
+        }
+        if !isStaff, let userRoot = try userRootPath(for: caller, isStaff: false) {
+            if requested.isEmpty {
+                return try studentRootDirectoryResponse(
+                    baseURL: baseURL, userRoot: userRoot, fileManager: fm, includeContent: includeContent)
+            }
         }
 
         let cleanRel = try scopedRelativePath(for: caller, requested: relativePath, isStaff: isStaff)
@@ -169,12 +193,27 @@ struct JupyterLiteContentsRoutes: RouteCollection {
     /// save of it from this caller. JupyterLab opens a file it may not write
     /// read-only, so a staff member reading a student's copy, a support file, a
     /// dataset or a `view-`/`preview-` record gets no autosave that the server
-    /// would refuse (#469).
+    /// would refuse (#469). A student's copy of an assignment that is closed
+    /// or not yet open to them reads as read-only too, so an editor left open
+    /// past the close does not autosave into the gate's refusal (#2927).
     private func mayWrite(req: Request, caller: APIUser, relativePath: String, url: URL) async throws -> Bool {
         guard !isSymlink(url: url), let userRoot = try userRootPath(for: caller, isStaff: false),
             relativePath.hasPrefix(userRoot + "/")
         else { return false }
         let parts = relativePath.split(separator: "/", maxSplits: 3).map(String.init)
+        if parts.count >= 3 {
+            let target = WritableTarget(relativePath: relativePath, url: url)
+            do {
+                try await gateStudentWrite(req: req, caller: caller, target)
+            } catch is AssignmentSubmissionGateError {
+                return false
+            } catch let error as AppError {
+                // An unenrolled student: the write routes refuse them too.
+                if case .notFound = error { return false }
+                if case .forbidden = error { return false }
+                throw error
+            }
+        }
         guard parts.count == 4 else { return true }
         let protected = try await WorkingCopyProtectedFiles.paths(
             setupID: parts[2], on: req.db, application: req.application)
@@ -276,6 +315,27 @@ struct JupyterLiteContentsRoutes: RouteCollection {
             JupyterContentsModel(
                 name: "users", path: "users", lastModified: modified, created: created,
                 content: includeContent ? .children([own]) : .none, format: "json",
+                mimetype: "application/json", size: 0, writable: false, type: "directory"))
+    }
+
+    /// The drive root as a student sees it: a directory whose one child is
+    /// `users`, which in turn lists only their own folder.
+    private func studentRootDirectoryResponse(
+        baseURL: URL, userRoot: String, fileManager: FileManager, includeContent: Bool
+    ) throws -> Response {
+        let rootURL = baseURL.appendingPathComponent(userRoot, isDirectory: true)
+        try fileManager.createDirectory(at: rootURL, withIntermediateDirectories: true)
+        let attributes = attributesForItem(url: rootURL, fileManager: fileManager)
+        let modified = isoDate(asDate(attributes[.modificationDate]))
+        let created = isoDate(asDate(attributes[.creationDate]))
+        let users = JupyterContentsModel(
+            name: "users", path: "users", lastModified: modified, created: created,
+            content: .none, format: "json", mimetype: "application/json", size: 0, writable: false,
+            type: "directory")
+        return try jsonResponse(
+            JupyterContentsModel(
+                name: "", path: "", lastModified: modified, created: created,
+                content: includeContent ? .children([users]) : .none, format: "json",
                 mimetype: "application/json", size: 0, writable: false, type: "directory"))
     }
 

@@ -4,19 +4,21 @@ The rules for a new table, a new migration and a new query. Each rule is here
 because a load test or an audit found its defect after it shipped. The
 2026-11 audit found the same few defect classes behind a run of perf PRs
 (#2894 to #2923). Each PR fixed one call site and nothing stopped the next.
+The course-scale measurements, and the foreign-key index rule that came out
+of them, are in [database-performance.md](database-performance.md).
 
-Four guards and one review hold these rules. The guards run in the
+Five guards and one review hold these rules. The guards run in the
 `api-tests` lane; the review runs in a Claude Code session (CI runs no
 model).
 
 | Rule | Held by |
 |---|---|
-| Every foreign key has an index | `SchemaDesignTests.everyForeignKeyHasAnIndex` |
+| A foreign key has a leading index, or a reason on the list | `ForeignKeyIndexCoverageTests` |
 | No index is covered by another | `SchemaDesignTests.noIndexIsCoveredByAnother` |
 | Timestamps are `timestamptz`; new JSON is `jsonb` | `SchemaDesignTests.columnTypesFollowTheConventions` |
 | Every model field has a column, and no non-optional field sits over a nullable column | `ModelSchemaAgreementTests` |
 | A delete leaves no row keyed to what it deleted | `StudentWorkDeletionCoverageTests` |
-| A hot request sends a fixed number of statements | `HotPathStatementBudgetTests` |
+| A hot request stays within its statement budget | `StatementBudgetTests`, `RunnerStatementBudgetTests` |
 | Everything that needs judgment (below) | the `db-review` agent |
 
 The schema guards read the migrated test schema through `pg_catalog`
@@ -30,9 +32,12 @@ only shrink: an entry that no longer applies fails its test.
   wait for a load test. Name every query the feature runs and give each one
   an index whose leading columns match its filter. Before 2026-11, 45 of the
   67 named indexes arrived later in index-only migrations.
-- **Index every foreign key.** Postgres does not index the referencing side.
-  Without an index, each deleted parent row scans the child table once. A
-  course purge scanned `request_metrics` once per submission this way.
+- **Index a foreign key whose parent is deleted in bulk** (submissions,
+  setups, assignments). Postgres does not index the referencing side, so each
+  deleted parent row scans the child table once. A key to a user or a course,
+  or on a small table, may stay unindexed with its reason on the
+  `ForeignKeyIndexCoverageTests` list
+  ([database-performance.md](database-performance.md), "Rules").
 - **Name indexes `idx_<table>_<columns>`**, with the full table name.
 - **Prefer a foreign key.** A key column without one (`test_setup_id` as a
   string, a soft-removed `group_id`) needs a reason in the migration's header
@@ -99,11 +104,14 @@ only shrink: an entry that no longer applies fails its test.
 
 ## Hot paths and their budgets
 
-`HotPathStatementBudgetTests` pins the exact statement count of the idle
-runner poll, a claim, a result report, the status poll, the student dashboard
-and the submission page. A change in either direction fails the test: lower
-the budget when a change saves a statement, and give the reason in the commit
-when it adds one. The test prints every statement the request sent.
+`StatementBudgetTests` (`Tests/APITests/Performance/`) holds ten pages and
+the idle runner poll at a statement budget, and checks that no page sends more
+statements for more data. `RunnerStatementBudgetTests` holds a claim and a
+result report, which need a pending job. A count above its budget fails and
+lists every statement the request sent. A count below it prints a note: lower
+the budget then, and give the reason in the pull request when one must rise.
+The course-scale measurements behind the budgets are in
+[database-performance.md](database-performance.md).
 
 To measure a query's plan, use `EXPLAIN (ANALYZE, BUFFERS)` against a
 database seeded to production size. The CI database is nearly empty, so its
