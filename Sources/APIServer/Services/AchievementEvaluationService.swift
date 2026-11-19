@@ -113,7 +113,17 @@ func evaluateClassGoalAchievements(
     logger: Logger,
     now: Date = Date()
 ) async throws -> Int {
-    let assignments = try await APIAssignment.query(on: db).all()
+    // Archived courses are skipped: their goals are history, and the sweep
+    // runs on a timer forever, so each tick would otherwise decode every
+    // manifest of every past term. By the maintainer's decision, a course
+    // archived before a goal's deadline keeps the snapshot it had: it is not
+    // locked, and its bonus is not frozen or pushed again.
+    let archivedCourseIDs = try await APICourse.query(on: db).filter(\.$isArchived == true).all(\.$id)
+    var assignmentQuery = APIAssignment.query(on: db)
+    if !archivedCourseIDs.isEmpty {
+        assignmentQuery = assignmentQuery.filter(\.$courseID !~ archivedCourseIDs)
+    }
+    let assignments = try await assignmentQuery.all()
     var written = 0
 
     // One batched query for every referenced setup instead of a find() per
