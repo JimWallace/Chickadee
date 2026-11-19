@@ -94,7 +94,7 @@ jobs:
     # creates a database per boot in it, through psql in the swift-ci image.
     services:
       postgres:
-        image: ghcr.io/jimwallace/chickadee/postgres:16
+        image: ghcr.io/jimwallace/chickadee/postgres:18
         credentials:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}

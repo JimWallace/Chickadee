@@ -79,11 +79,12 @@ Requires Swift 6.4 ([swift.org](https://swift.org/download)). On macOS, it requi
 
 Chickadee stores everything in PostgreSQL, and so do its tests. The test suite
 connects to `localhost:5432` as user `postgres` with password `postgres`, and
-uses the database `chickadee_test`. Any PostgreSQL 16 install works, such as
+uses the database `chickadee_test`. Production and CI run PostgreSQL 18; any
+install of 16 or newer works, such as
 Postgres.app or Homebrew. With Docker, these commands start one:
 
 ```bash
-docker run -d --name chickadee-postgres -p 5432:5432 -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=chickadee_test postgres:16
+docker run -d --name chickadee-postgres -p 5432:5432 -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=chickadee_test postgres:18
 swift build
 swift test
 ```

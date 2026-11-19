@@ -102,8 +102,9 @@ jobs:
           mirror docker.io/library/swift:6.4-resolute swift:6.4-resolute
           mirror docker.io/library/swift:6.4-noble swift:6.4-noble
           mirror docker.io/library/postgres:16 postgres:16
-          # 18 first, ahead of the test jobs moving to it (#3148). Drop the 16
-          # line once no workflow references postgres:16.
+          # 16 stays as the starting point of the upgrade test
+          # (db-major-upgrade.yml), which moves a 16 cluster to 18. Drop it
+          # with that test's next bump.
           mirror docker.io/library/postgres:18 postgres:18
 
       - name: Build and push the derived CI test image

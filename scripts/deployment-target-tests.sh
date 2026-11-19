@@ -48,6 +48,17 @@ check "an explicit base file still picks up the override beside it" \
     "-f $tmp/custom.yml -f $tmp/docker-compose.override.yml" \
     "$(chickadee_compose_file_args "$tmp" "$tmp/custom.yml" | tr '\n' ' ' | sed 's/ $//')"
 
+# db-major-upgrade.sh's pin of the db image and volume comes last, so it wins.
+touch "$tmp/docker-compose.db.yml"
+check "the db pin file is included last" \
+    "-f $tmp/docker-compose.yml -f $tmp/docker-compose.override.yml -f $tmp/docker-compose.db.yml" \
+    "$(chickadee_compose_file_args "$tmp" | tr '\n' ' ' | sed 's/ $//')"
+
+rm "$tmp/docker-compose.override.yml"
+check "the db pin file is included without an override file" \
+    "-f $tmp/docker-compose.yml -f $tmp/docker-compose.db.yml" \
+    "$(chickadee_compose_file_args "$tmp" | tr '\n' ' ' | sed 's/ $//')"
+
 # ---------------------------------------------------------------------------
 # chickadee_resolve_server_target — which container to READ from
 # ---------------------------------------------------------------------------
