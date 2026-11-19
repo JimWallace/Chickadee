@@ -126,12 +126,11 @@ private func snapshotEntrants(
         .sorted { a, b in
             let (ta, tb) = (a.submittedAt ?? .distantPast, b.submittedAt ?? .distantPast)
             if ta != tb { return ta < tb }
-            return (a.id ?? "") < (b.id ?? "")
+            return a.id < b.id
         }
         .enumerated()
-        .compactMap { index, submission in
-            guard let userID = submission.userID, let submissionID = submission.id else { return nil }
-            return TournamentEntrant(seed: index + 1, userID: userID, submissionID: submissionID)
+        .map { index, submission in
+            TournamentEntrant(seed: index + 1, userID: submission.userID, submissionID: submission.id)
         }
 }
 
