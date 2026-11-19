@@ -565,7 +565,11 @@ private let metadataSubjectActions: [String] = [
 /// `value` as it appears inside an audit row's metadata text: a JSON string,
 /// quotes included, escaped by the encoder that `APIAuditLogEntry
 /// .encodeMetadata` uses. A metadata value equal to `value` contains this
-/// token exactly.
+/// token exactly. Key order does not matter here, only how a value is
+/// escaped: if `encodeMetadata` ever changes that (for example
+/// `.withoutEscapingSlashes`), change this encoder to match, or the SQL
+/// prefilter drops rows. `DataExportAuditMetadataTests` checks a name with a
+/// slash.
 private func auditMetadataToken(_ value: String) -> String? {
     (try? JSONEncoder().encode(value)).flatMap { String(data: $0, encoding: .utf8) }
 }

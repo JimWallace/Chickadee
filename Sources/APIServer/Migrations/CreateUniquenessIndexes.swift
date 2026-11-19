@@ -16,7 +16,10 @@
 //   rows, and the workbench listed both batches.
 //
 // Each step first removes the duplicates already present, keeping the newest
-// row, so the unique index cannot fail on a production database. The tables
+// row, so the unique index cannot fail on a production database. The older
+// rows go on purpose: every reader already took the newest (credentials sort
+// by `captured_at`, variants were meant to be one batch), so nothing reads
+// them. An older duplicate tournament run is superseded, not deleted. The tables
 // are small (a row per tournament, per instructor, per variant), so the
 // plain index builds are brief.
 //

@@ -105,19 +105,12 @@ enum UserActivityChartService {
         )
     }
 
-    /// The bucket a time falls in: whole buckets since `start`, clamped to
-    /// `0..<bucketCount` so the boundary at exactly `now` lands in the last
-    /// bucket rather than past it.
-    static func bucketIndex(of time: Date, from start: Date, bucketSeconds: TimeInterval, bucketCount: Int) -> Int {
-        let index = Int(time.timeIntervalSince(start) / bucketSeconds)
-        return min(max(index, 0), bucketCount - 1)
-    }
-
     /// The number of distinct users with an event in each bucket of
     /// `[start, end]`, keyed by bucket index; an empty bucket is absent.
     /// Postgres groups the events, so a month window of hundreds of thousands
     /// of events comes back as at most `bucketCount` rows. The index is the
-    /// one `bucketIndex` computes.
+    /// whole buckets since `start`, clamped to `0..<bucketCount` so an event
+    /// at exactly `end` lands in the last bucket rather than past it.
     private static func distinctUsersPerBucket(
         from start: Date, through end: Date, bucketSeconds: TimeInterval, bucketCount: Int, on db: any Database
     ) async throws -> [Int: Int] {
@@ -132,7 +125,7 @@ enum UserActivityChartService {
                 .all()
             {
                 guard let createdAt = event.createdAt else { continue }
-                let index = bucketIndex(of: createdAt, from: start, bucketSeconds: bucketSeconds, bucketCount: bucketCount)
+                let index = min(max(Int(createdAt.timeIntervalSince(start) / bucketSeconds), 0), bucketCount - 1)
                 users[index, default: []].insert(event.userID)
             }
             return users.mapValues(\.count)
