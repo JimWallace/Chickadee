@@ -582,6 +582,11 @@ private func registerLateSchemaMigrations(on app: Application) {
     // The drop of four indexes that another index covers
     // (SchemaDesignTests). Index only; the tables are created far above.
     app.migrations.add(DropCoveredIndexes())
+    // One running tournament per setup and group, one BrightSpace credential
+    // per scope, one validation variant per setup and index, held by unique
+    // indexes after the duplicates go. Raw SQL over columns their `Create*`
+    // migrations made far above.
+    app.migrations.add(CreateUniquenessIndexes())
 }
 
 /// The data migrations, registered after every schema migration (#1805).
