@@ -113,11 +113,22 @@ enum MetricBucketAccumulators {
         _ metrics: [APIRequestMetric],
         window: BucketWindow
     ) -> [RequestBucketAccumulator] {
+        accumulateRequestTimings(
+            metrics.map { RequestTiming(finishedAt: $0.finishedAt, durationMs: $0.durationMs) }, window: window)
+    }
+
+    /// `accumulateRequestMetrics` over plain rows: the metrics series reads
+    /// the two columns through SQLKit, not as Fluent models, because a 72-hour
+    /// window holds tens of thousands of requests.
+    static func accumulateRequestTimings(
+        _ timings: [RequestTiming],
+        window: BucketWindow
+    ) -> [RequestBucketAccumulator] {
         var buckets = Array(repeating: RequestBucketAccumulator(), count: window.bucketCount)
-        for metric in metrics {
-            guard let index = window.bucketIndex(for: metric.finishedAt) else { continue }
+        for timing in timings {
+            guard let index = window.bucketIndex(for: timing.finishedAt) else { continue }
             buckets[index].requestCount += 1
-            buckets[index].durationValues.append(metric.durationMs)
+            buckets[index].durationValues.append(timing.durationMs)
         }
         return buckets
     }
@@ -217,5 +228,17 @@ enum MetricBucketAccumulators {
     static func percentile95(_ values: [Int]) -> Int? {
         guard !values.isEmpty else { return nil }
         return percentile(values.sorted(), percentile: 0.95)
+    }
+}
+
+/// One request's finish time and duration: the two columns of
+/// `request_metrics` the metrics series reads.
+struct RequestTiming: Decodable, Sendable {
+    let finishedAt: Date
+    let durationMs: Int
+
+    enum CodingKeys: String, CodingKey {
+        case finishedAt = "finished_at"
+        case durationMs = "duration_ms"
     }
 }

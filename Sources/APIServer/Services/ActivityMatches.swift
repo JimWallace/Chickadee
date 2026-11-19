@@ -67,14 +67,32 @@ func latestStudentSubmissionsByUser(
     if let excluded { studentSet.remove(excluded) }
     let students = Array(studentSet)
     guard !students.isEmpty else { return [:] }
-    let candidates = try await APISubmission.query(on: db)
-        .filter(\.$testSetupID == setupID)
-        .filter(\.$kind == APISubmission.Kind.student)
-        .filter(\.$status == SubmissionStatus.complete.rawValue)
-        .filter(\.$userID ~~ students)
-        .sort(\.$submittedAt, .descending)
-        .all()
-    return latestStudentSubmissions(from: candidates, students: studentSet)
+    guard let sql = db as? (any SQLDatabase) else {
+        let candidates = try await APISubmission.query(on: db)
+            .filter(\.$testSetupID == setupID)
+            .filter(\.$kind == APISubmission.Kind.student)
+            .filter(\.$status == SubmissionStatus.complete.rawValue)
+            .filter(\.$userID ~~ students)
+            .sort(\.$submittedAt, .descending)
+            .all()
+        return latestStudentSubmissions(from: candidates, students: studentSet)
+    }
+    // Pick the newest per student in SQL, then read only those rows: the
+    // claim path runs this per job, and a setup's complete submissions are
+    // every attempt of the term. `DESC` keeps the old order (Postgres puts a
+    // NULL `submitted_at` first, as the Fluent sort did); `id` breaks ties.
+    let latestIDs = try await sql.raw(
+        """
+        SELECT DISTINCT ON (user_id) id FROM \(unsafeRaw: APISubmission.schema)
+        WHERE test_setup_id = \(bind: setupID) AND kind = \(bind: APISubmission.Kind.student)
+          AND status = \(bind: SubmissionStatus.complete.rawValue) AND user_id = ANY(\(bind: students))
+        ORDER BY user_id, submitted_at DESC, id DESC
+        """
+    ).all().map { try $0.decode(column: "id", as: String.self) }
+    guard !latestIDs.isEmpty else { return [:] }
+    let rows = try await APISubmission.query(on: db).filter(\.$id ~~ latestIDs).all()
+    return Dictionary(
+        rows.compactMap { row in row.userID.map { ($0, row) } }, uniquingKeysWith: { first, _ in first })
 }
 
 /// The pick behind `latestStudentSubmissionsByUser`: the first complete

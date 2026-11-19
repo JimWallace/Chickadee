@@ -545,6 +545,11 @@ private func registerLateSchemaMigrations(on app: Application) {
     // (docs/assignment-types.md, phase 3). `CreateCourses` no longer creates
     // them, so the drop is `IF EXISTS`.
     app.migrations.add(DropSectionDefaultColumns())
+    // One running tournament per setup and group, one BrightSpace credential
+    // per scope, one validation variant per setup and index, held by unique
+    // indexes after the duplicates go. Raw SQL over columns their `Create*`
+    // migrations made far above.
+    app.migrations.add(CreateUniquenessIndexes())
 }
 
 /// The data migrations, registered after every schema migration (#1805).

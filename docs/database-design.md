@@ -125,4 +125,7 @@ Each server process opens up to 4 connections per event loop (one loop per
 core), and the optional MCP pool as many again. During a blue-green overlap
 two servers are connected. Keep
 `2 × 4 × cores` (doubled again with the MCP pool), plus the runner, below
-Postgres's `max_connections` (200 in `docker-compose.yml`).
+Postgres's `max_connections` (200 in `docker-compose.yml`). That is enough for
+24 cores, or 12 with the MCP pool. On a larger host, raise `max_connections`
+before the next deploy: the overlap is when the ceiling is reached, and a
+refused connection can stop the new server from starting.

@@ -17,6 +17,7 @@
 import Core
 import Fluent
 import Foundation
+import SQLKit
 import Vapor
 
 // MARK: - Sync-row flags
@@ -178,16 +179,58 @@ func requeueForImmediateSync(_ rows: [any BrightSpaceSyncFlaggable], on db: any 
         row.brightspaceSyncPending = true
         row.brightspacePendingSince = Date.distantPast
         row.brightspaceSyncError = nil
-        try await row.save(on: db)
+    }
+    try await writeSyncFlags(of: rows, on: db) { update in
+        update
+            .set("brightspace_sync_pending", to: true)
+            .set("brightspace_pending_since", to: Date.distantPast)
+            .set("brightspace_sync_error", to: SQLLiteral.null)
     }
 }
 
 /// Clears the pending flag on every row in the group (the "nothing to
 /// push" no-op outcome).
 func clearPendingFlag(_ rows: [any BrightSpaceSyncFlaggable], on db: any Database) async throws {
+    for row in rows { row.brightspaceSyncPending = false }
+    try await writeSyncFlags(of: rows, on: db) { update in
+        update.set("brightspace_sync_pending", to: false)
+    }
+}
+
+/// Writes the sync columns that `set` names to every row in `rows`, in one
+/// `UPDATE` per table rather than one save per row: a "Push all" or a sweep
+/// group can hold a whole class. The three flaggable tables share the
+/// column names. The caller has already set the same values on the models.
+private func writeSyncFlags(
+    of rows: [any BrightSpaceSyncFlaggable], on db: any Database,
+    set: (SQLUpdateBuilder) -> SQLUpdateBuilder
+) async throws {
+    guard let sql = db as? (any SQLDatabase) else {
+        for row in rows { try await row.save(on: db) }
+        return
+    }
+    var resultIDs: [String] = []
+    var overrideIDs: [UUID] = []
+    var clearIDs: [UUID] = []
     for row in rows {
-        row.brightspaceSyncPending = false
-        try await row.save(on: db)
+        if let result = row as? APIResult, let id = result.id {
+            resultIDs.append(id)
+        } else if let override = row as? APIGradeOverride, let id = override.id {
+            overrideIDs.append(id)
+        } else if let clear = row as? APIBrightSpaceGradeClear, let id = clear.id {
+            clearIDs.append(id)
+        } else {
+            try await row.save(on: db)
+        }
+    }
+    for chunk in chunkedForInFilter(resultIDs) {
+        try await set(sql.update(APIResult.schema)).where("id", .in, chunk).run()
+    }
+    for chunk in chunkedForInFilter(overrideIDs) {
+        try await set(sql.update(APIGradeOverride.schema)).where("id", .in, chunk).run()
+    }
+    for chunk in chunkedForInFilter(clearIDs) {
+        try await set(sql.update(APIBrightSpaceGradeClear.schema)).where("id", .in, chunk).run()
     }
 }
 

@@ -1813,6 +1813,44 @@ coordination, and each must see every edit.
     a row per request or per job stays unindexed (`CreateForeignKeyIndexes`,
     `docs/database-performance.md`).
 
+### One row per scope: `CreateUniquenessIndexes`
+
+- **Writers:** `startTournament` (`tournament_runs`),
+  `BrightSpaceCredentialStore.save` (`brightspace_credentials`),
+  `upsertValidationVariant` (`validation_variants`), and
+  `CourseGroupStore.createSet` and `setSource` (`course_group_sets`).
+- **Readers:** the tournament result path and lists (the running run of a
+  setup and group), `BrightSpaceClientRegistry` (the credential of a scope),
+  the validation readers (`GetValidationResultTool`,
+  `AuthoringSnapshot+Loading`, the instructor list), which expect one batch,
+  and every lab feature, which reads the course's first group set.
+- **Rules:**
+  - A unique index holds each rule: one `running` run per setup and group
+    (`NULLS NOT DISTINCT`, so the whole class is one scope), one credential
+    per user or the deployment, one variant per setup and index, one group
+    set per course.
+  - A writer that replaces the row of a scope takes a per-scope advisory
+    lock in its transaction, or upserts, so two requests at once serialize
+    instead of failing on the index; a group-set create that loses the race
+    uses the set that won. A new writer of these tables does the same.
+
+### Grade-push queue rows: LTI and BrightSpace sync flags
+
+- **Writers:** `LTIGradeSyncQueue.markPending` (one upsert per chunk),
+  `flagStudentForBrightSpaceSync`, `requeueForImmediateSync` and
+  `clearPendingFlag` (one `UPDATE` per table, not a model save).
+- **Readers:** the LTI and BrightSpace sweeps, and the LMS pages.
+- **Rules:**
+  - A row that is already pending keeps its `pending_since`, so a stream
+    of new results cannot hold a push back forever. Setting a row pending
+    again clears its error and failure reason.
+  - The bulk writes bypass Fluent, so they do not bump `updated_at` on
+    `grade_overrides`. Nothing reads that column for sync; a reader that
+    needs it sets it in the `UPDATE`.
+  - A grade override set or cleared runs its push requests inside its own
+    transaction. They touch only the database; a push that calls the LMS
+    belongs in a sweep, never in that transaction.
+
 ### Notebook-check kind support
 
 - **Parallel paths:** `notebookCheckKindIsSupported` and

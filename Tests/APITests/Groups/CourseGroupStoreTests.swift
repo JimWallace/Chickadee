@@ -144,7 +144,11 @@ import VaporTesting
     @Test func aGroupOfAnotherSetIsRefused() async throws {
         try await withTestApp { app in
             let f = try await fixture(on: app)
-            let other = try await CourseGroupStore.createSet(courseID: f.courseID, name: "Teams", on: app.db)
+            // A course has one set (`idx_course_group_sets_course`), so the
+            // other set is another course's.
+            let otherCourse = try await makeTestCourse(on: app, code: "TEAMS101")
+            let other = try await CourseGroupStore.createSet(
+                courseID: try otherCourse.requireID(), name: "Teams", on: app.db)
             let team = try await CourseGroupStore.addGroup(named: "Team 1", to: other, on: app.db)
             await #expect(throws: CourseGroupError.groupNotInSet) {
                 try await CourseGroupStore.setMembership(
@@ -156,8 +160,11 @@ import VaporTesting
     @Test func aSyncedSetRefusesEdits() async throws {
         try await withTestApp { app in
             let f = try await fixture(on: app)
+            // The fixture's course has its one set already, so the synced set
+            // is another course's.
+            let syncedCourse = try await makeTestCourse(on: app, code: "SYNCED101")
             let synced = APICourseGroupSet(
-                courseID: f.courseID, name: "LEARN labs", source: .learnSections, externalID: "123")
+                courseID: try syncedCourse.requireID(), name: "LEARN labs", source: .learnSections, externalID: "123")
             try await synced.save(on: app.db)
             await #expect(throws: CourseGroupError.setNotEditable) {
                 _ = try await CourseGroupStore.addGroup(named: "Lab 1", to: synced, on: app.db)

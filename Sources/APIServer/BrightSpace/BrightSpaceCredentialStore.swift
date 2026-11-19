@@ -14,6 +14,7 @@
 // `BrightSpaceClientRegistry` / `Application.brightSpaceClient(forCourse:)`.
 
 import Fluent
+import SQLKit
 import Vapor
 
 enum BrightSpaceCredentialStore {
@@ -46,19 +47,29 @@ enum BrightSpaceCredentialStore {
         userID: UUID? = nil,
         on db: any Database
     ) async throws {
-        if let userID {
-            try await APIBrightSpaceCredential.query(on: db).filter(\.$userID == userID).delete()
-        } else {
-            try await APIBrightSpaceCredential.query(on: db).filter(\.$userID == nil).delete()
+        // One transaction under a per-scope advisory lock: the scope's row is
+        // replaced as a unit, and two saves of one scope run one after the
+        // other instead of both inserting (`idx_brightspace_credentials_user`
+        // allows one row per scope).
+        try await db.transaction { tx in
+            if let sql = tx as? (any SQLDatabase) {
+                let scope = "chickadee.brightspace-credential:\(userID?.uuidString ?? "-")"
+                try await sql.raw("SELECT pg_advisory_xact_lock(hashtext(\(bind: scope)))").run()
+            }
+            if let userID {
+                try await APIBrightSpaceCredential.query(on: tx).filter(\.$userID == userID).delete()
+            } else {
+                try await APIBrightSpaceCredential.query(on: tx).filter(\.$userID == nil).delete()
+            }
+            let record = APIBrightSpaceCredential(
+                valenceUserID: valenceUserID,
+                valenceUserKey: valenceUserKey,
+                identityName: identityName,
+                capturedByUserID: capturedByUserID,
+                userID: userID
+            )
+            try await record.save(on: tx)
         }
-        let record = APIBrightSpaceCredential(
-            valenceUserID: valenceUserID,
-            valenceUserKey: valenceUserKey,
-            identityName: identityName,
-            capturedByUserID: capturedByUserID,
-            userID: userID
-        )
-        try await record.save(on: db)
     }
 
     /// Removes the deployment-wide credential (admin "Clear authorization").

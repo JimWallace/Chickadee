@@ -252,9 +252,13 @@ services:
     image: postgres:18
     restart: unless-stopped
     # Modest tuning over the stock image. max_connections must clear the
-    # app's pool ceiling of 4 connections x event loops (loops = host
-    # cores): 200 covers a 32-core host with headroom, where the stock 100
-    # would not. Per-session statement/idle bounds are set by the app
+    # app's pool ceiling: 4 connections x event loops (loops = host cores)
+    # per server process, doubled again when the least-privilege MCP pool
+    # is configured. A blue-green deploy runs two server processes at once,
+    # so the peak is 2 x 4 x cores (x 2 with the MCP pool), plus the runner.
+    # 200 covers that up to 24 cores, or 12 with the MCP pool; on a larger
+    # host raise it (docs/database-design.md, "Connections"). The stock 100
+    # covers 12 cores. Per-session statement/idle bounds are set by the app
     # itself (PostgresSessionBounds in DatabaseConfiguration.swift), not
     # here. pg_stat_statements records per-statement timing for the admin
     # MCP tool get_query_stats; Postgres loads it only at startup
