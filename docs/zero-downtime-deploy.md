@@ -442,12 +442,12 @@ accepts exactly these:
 
 | Request | Accepted when |
 |---|---|
-| `{"request":"approve","version":"vX.Y.Z"}` | `vX.Y.Z` is the release the daemon is holding |
+| `{"request":"approve","version":"vX.Y.Z"}` | `vX.Y.Z` is the release the daemon is holding, or the pre-release it offers (`prereleaseVersion`) |
 | `{"request":"mode","mode":"autonomous"}` (or `gated-minors`, `manual`) | always |
 | `{"request":"pause"}`, `{"request":"resume"}` | always |
 
 Anything else is refused and written to the history: an unknown request, a
-`rollback` or `deploy`, a change of channel, a version that is not the held one, a file over 4 KB,
+`rollback` or `deploy`, a change of channel, a version that is neither the held release nor the offered pre-release, a file over 4 KB,
 an entry that is not a regular file. Each request, accepted or refused, is a
 line in `history.jsonl` with the admin's username, which the app writes into
 the request. The app also records each request it writes in the audit log

@@ -51,7 +51,7 @@ such merge with fragments, for the dev server, which runs ahead of production
 on the `prereleases` channel. The rc is a tag on a commit of its own that
 stamps only `ChickadeeVersion.swift`; `main`, `VERSION` and the fragments are
 not touched, the image never becomes `:latest`, and production never deploys a
-pre-release (`docs/release-gate.md`, "Pre-release channel").
+pre-release on its own (`docs/release-gate.md`, "Pre-release channel").
 
 At merge time, the `contract-change` check fails a pull request that changes
 a contract path unless it carries the `minor-release` label, which says "this

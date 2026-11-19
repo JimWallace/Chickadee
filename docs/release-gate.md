@@ -184,7 +184,8 @@ when the tag push carries `RELEASE_TOKEN`, as for a stable release.
 The channel is **host-only**. It is set by a host command
 (`{"command":"channel","channel":"prereleases"}` in `command.json`) or by
 writing the file. The app's request channel refuses any request to change it,
-so the admin page can never point production at pre-releases. The page shows
+so the admin page can never point production at the pre-release channel; it
+can only approve one offered rc ("Approving a pre-release on production"). The page shows
 the channel read-only.
 
 Versions order with their rc suffix: `0.7.0-rc.3` > `0.6.12`,
@@ -219,7 +220,7 @@ for an explicit approval only:
   writes its notes, in the shape of `pending-notes.json`, to
   `prerelease-notes.json`. A cut minor, or the rc deploying, retires the offer.
 - **The card.** The admin page shows a "Coming next" card: the rc, a
-  Pre-release badge, "Not cut yet; the dev server runs it", its notes and the
+  Pre-release badge, "Runs on the dev server; deploys here only when approved.", its notes and the
   `minor-release` pull requests it carries, and the same typed-version
   approval form as a held release.
 - **The approval.** `{"request":"approve","version":"vX.Y.0-rc.N"}` is
