@@ -51,7 +51,7 @@ enum LTIGradeSyncQueue {
             .filter(\.$userID != nil)
             .unique()
             .all(\.$userID)
-            .compactMap { $0 }
+            .compactMap(\.self)
         let overridden = try await APIGradeOverride.query(on: db)
             .filter(\.$testSetupID == testSetupID)
             .unique()

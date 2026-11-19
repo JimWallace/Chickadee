@@ -92,9 +92,9 @@ func recordClassItemCoverage(
     // The first submission to cover an item keeps it: the unique
     // `(test_setup_id, item)` turns every later insert into nothing.
     if let sql = db as? (any SQLDatabase) {
-        try await insertCoverageIgnoringConflict(
-            into: APIClassItemCoverage.schema, keyColumns: ["test_setup_id", "item"], testSetupID: testSetupID,
-            groupID: nil, items: covered, userID: userID, submissionID: submissionID, on: sql)
+        try await CoverageInsert(
+            testSetupID: testSetupID, groupID: nil, items: covered, userID: userID, submissionID: submissionID
+        ).run(into: APIClassItemCoverage.schema, keyColumns: ["test_setup_id", "item"], on: sql)
         return
     }
     let seen = Set(
@@ -110,29 +110,36 @@ func recordClassItemCoverage(
     }
 }
 
-/// Inserts one coverage row per distinct item in one statement, and skips the
-/// items that a row already holds (`ON CONFLICT DO NOTHING` on `keyColumns`,
-/// the table's unique key). `groupID` is set only for the per-lab table.
-private func insertCoverageIgnoringConflict(
-    into table: String, keyColumns: [String], testSetupID: String, groupID: UUID?, items: [String],
-    userID: UUID, submissionID: String, on sql: any SQLDatabase
-) async throws {
-    var distinct: [String] = []
-    var seen: Set<String> = []
-    for item in items where seen.insert(item).inserted { distinct.append(item) }
-    guard !distinct.isEmpty else { return }
+/// One submission's covered items, written as coverage rows. `groupID` is
+/// set only for the per-lab table.
+private struct CoverageInsert {
+    let testSetupID: String
+    let groupID: UUID?
+    let items: [String]
+    let userID: UUID
+    let submissionID: String
 
-    let now = Date()
-    var columns = ["id", "test_setup_id", "item", "user_id", "submission_id", "covered_at"]
-    if groupID != nil { columns.insert("group_id", at: 2) }
-    var insert = sql.insert(into: table).columns(columns)
-    for item in distinct {
-        var row: [any SQLExpression] = [SQLBind(UUID()), SQLBind(testSetupID)]
-        if let groupID { row.append(SQLBind(groupID)) }
-        row += [SQLBind(item), SQLBind(userID), SQLBind(submissionID), SQLBind(now)]
-        insert = insert.values(row)
+    /// Inserts one row per distinct item in one statement, and skips the items
+    /// that a row already holds (`ON CONFLICT DO NOTHING` on `keyColumns`, the
+    /// table's unique key).
+    func run(into table: String, keyColumns: [String], on sql: any SQLDatabase) async throws {
+        var distinct: [String] = []
+        var seen: Set<String> = []
+        for item in items where seen.insert(item).inserted { distinct.append(item) }
+        guard !distinct.isEmpty else { return }
+
+        let now = Date()
+        var columns = ["id", "test_setup_id", "item", "user_id", "submission_id", "covered_at"]
+        if groupID != nil { columns.insert("group_id", at: 2) }
+        var insert = sql.insert(into: table).columns(columns)
+        for item in distinct {
+            var row: [any SQLExpression] = [SQLBind(UUID()), SQLBind(testSetupID)]
+            if let groupID { row.append(SQLBind(groupID)) }
+            row += [SQLBind(item), SQLBind(userID), SQLBind(submissionID), SQLBind(now)]
+            insert = insert.values(row)
+        }
+        try await insert.ignoringConflicts(with: keyColumns).run()
     }
-    try await insert.ignoringConflicts(with: keyColumns).run()
 }
 
 /// The class's coverage of one assignment: how many distinct items have been
@@ -164,10 +171,9 @@ func recordLabItemCoverage(
     on db: any Database
 ) async throws {
     if let sql = db as? (any SQLDatabase) {
-        try await insertCoverageIgnoringConflict(
-            into: APIGroupClassItemCoverage.schema, keyColumns: ["test_setup_id", "group_id", "item"],
-            testSetupID: testSetupID, groupID: groupID, items: items, userID: userID, submissionID: submissionID,
-            on: sql)
+        try await CoverageInsert(
+            testSetupID: testSetupID, groupID: groupID, items: items, userID: userID, submissionID: submissionID
+        ).run(into: APIGroupClassItemCoverage.schema, keyColumns: ["test_setup_id", "group_id", "item"], on: sql)
         return
     }
     let seen = Set(
