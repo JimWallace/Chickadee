@@ -222,16 +222,6 @@ import VaporTesting
         }
     }
 
-    @Test func courseWithoutATermIsPlacedByCreationDate() throws {
-        let course = APICourse(code: "NT101", name: "No term")
-        var calendar = Calendar(identifier: .gregorian)
-        calendar.timeZone = try #require(TimeZone(identifier: "America/Toronto"))
-        course.createdAt = calendar.date(from: DateComponents(year: 2026, month: 10, day: 1))
-        let placed = try #require(UsageStatisticsBuilder.placement(of: course))
-        #expect(placed.term.shortLabel == "F26")
-        #expect(placed.inferred)
-    }
-
     @Test func rejectsBadTermsAndYears() async throws {
         try await withApp(app) { app in
             _ = try await makeTestUser(on: app, username: "us-admin-bad", role: "admin")
@@ -248,6 +238,20 @@ import VaporTesting
                     .init(scope: "everyone"), context(subject: "us-admin-bad"))
             }
         }
+    }
+}
+
+/// The pure helpers, apart from the class suite: a test there builds an app
+/// in `init`, and a body that skips `withApp` leaves it un-shut-down.
+@Suite struct UsageStatisticsHelperTests {
+    @Test func courseWithoutATermIsPlacedByCreationDate() throws {
+        let course = APICourse(code: "NT101", name: "No term")
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = try #require(TimeZone(identifier: "America/Toronto"))
+        course.createdAt = calendar.date(from: DateComponents(year: 2026, month: 10, day: 1))
+        let placed = try #require(UsageStatisticsBuilder.placement(of: course))
+        #expect(placed.term.shortLabel == "F26")
+        #expect(placed.inferred)
     }
 
     @Test func medianOfSubmissionCounts() {
