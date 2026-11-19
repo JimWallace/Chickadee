@@ -20,11 +20,17 @@ struct DeployStatusFile: Decodable, Sendable {
     let channel: String?
     let heldVersion: String?
     let approvedVersion: String?
+    /// On the `releases` channel, the newest pre-release newer than
+    /// production, offered for an explicit approval. Nil from an older
+    /// daemon, on `prereleases`, and when none is newer.
+    let prereleaseVersion: String?
     let scriptsRevision: String?
     let updatedAt: String?
 }
 
-/// pending-notes.json: what approving the held release would ship.
+/// pending-notes.json: what approving the held release would ship. The
+/// daemon writes prerelease-notes.json in the same shape for the offered
+/// pre-release, with its tag in `heldVersion`.
 struct DeployPendingNotes: Decodable, Sendable {
     struct Release: Decodable, Sendable {
         let tag: String

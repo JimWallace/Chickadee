@@ -64,6 +64,9 @@ struct AdminDeploymentView: Sendable {
     let channel: String
     let updatedAt: String?
     let held: Held?
+    /// On production's channel, the newest pre-release, offered for an
+    /// explicit approval: the Coming next card. No mode deploys it.
+    var prerelease: Held?
     /// Requests written and not yet read by the daemon, which reads them on
     /// every poll.
     let waitingRequests: Int
@@ -80,6 +83,9 @@ struct AdminDeploymentView: Sendable {
         let heldVersion = status?.heldVersion.flatMap { $0.isEmpty ? nil : $0 }
         let held = heldVersion.map { version in
             makeHeld(version: version, approved: status?.approvedVersion == version, notes: folder.pendingNotes())
+        }
+        let prerelease = status?.prereleaseVersion.flatMap { $0.isEmpty ? nil : $0 }.map { version in
+            makeHeld(version: version, approved: status?.approvedVersion == version, notes: folder.prereleaseNotes())
         }
         let history = folder.history(limit: historyLimit).map { record in
             HistoryRow(
@@ -99,6 +105,7 @@ struct AdminDeploymentView: Sendable {
             channel: status?.channel ?? "releases",
             updatedAt: status?.updatedAt,
             held: held,
+            prerelease: prerelease,
             waitingRequests: folder.waitingRequestCount(),
             canSendRequests: FileManager.default.fileExists(atPath: folder.requestsFolder.path),
             history: history)

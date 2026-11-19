@@ -20,6 +20,10 @@
 #   paused             — present while auto-deploy is paused
 #   approved           — the release that was approved, until it deploys
 #   pending-notes.json — the release notes of what the held release would ship
+#   prerelease-notes.json — on the `releases` channel, the newest pre-release
+#                        newer than production, with its notes, for the admin
+#                        page's Coming next card. It deploys only when an admin
+#                        approves that exact version; no mode deploys it.
 #   command.json       — commands FROM the host operator:
 #                        {"command":"pause|resume|approve|rollback|deploy|mode|channel","version":"vX.Y.Z","mode":"...","channel":"..."}
 #   channel            — the release channel: releases (absent, production) or
@@ -91,6 +95,7 @@ DEFAULT_CHANNEL="releases"
 PAUSED_FILE="$STATE_DIR/paused"
 APPROVED_FILE="$STATE_DIR/approved"
 PENDING_NOTES_FILE="$STATE_DIR/pending-notes.json"
+PRERELEASE_NOTES_FILE="$STATE_DIR/prerelease-notes.json"
 REQUESTS_DIR="$STATE_DIR/requests"
 # A request file larger than this is refused unread.
 MAX_REQUEST_BYTES=4096
@@ -103,6 +108,18 @@ PAUSED=0
 HELD_VERSION=""
 # The held release whose notes pending-notes.json carries.
 NOTES_FOR=""
+# On the `releases` channel: the newest pre-release newer than production and
+# than the newest release, which the admin page offers for approval, and the
+# one whose notes prerelease-notes.json carries. Production never deploys a
+# pre-release on its own, in any mode: only an approval of this exact version
+# does (docs/release-gate.md, "Approving a pre-release on production").
+PRERELEASE_VERSION=""
+PRERELEASE_NOTES_FOR=""
+# Epoch before which failed pre-release notes are not fetched again. The notes
+# cost three API calls, and the API allows 60 an hour unauthenticated, so a
+# failing fetch must not repeat every poll beside a held release's own.
+PRERELEASE_NOTES_RETRY_AT=0
+PRERELEASE_NOTES_RETRY_SECS=1800
 
 # Consecutive failed deploys of the same version. A deploy that fails once is
 # ordinary; one that fails identically for hours is a condition no rule here used
@@ -278,7 +295,23 @@ is_gated() {
      && [ "$(minor_of "$new")" -gt "$(minor_of "$cur")" ]; then
     return 0
   fi
+  # Production runs an approved pre-release of this minor: the release that
+  # follows it (the minor itself, or a later rc) carries what merged after
+  # the approved rc, so it waits as the minor would.
+  if after_running_prerelease "$new" "$cur"; then
+    return 0
+  fi
   return 1
+}
+
+# True (0) on production's channel when $2 (what runs) is a pre-release, which
+# there only an approval puts in place, and $1 is in the same minor. On
+# `prereleases` the daemon deploys rcs itself, so a running rc means nothing.
+after_running_prerelease() {
+  local new="$1" cur="$2"
+  [ "$(current_channel)" != "prereleases" ] || return 1
+  [[ "$cur" == *-rc.* ]] || return 1
+  [ "$(major_of "$new")" -eq "$(major_of "$cur")" ] && [ "$(minor_of "$new")" -eq "$(minor_of "$cur")" ]
 }
 
 # The kind of bump from $2 to $1, for the status detail.
@@ -286,6 +319,7 @@ bump_kind() {
   local new="$1" cur="$2"
   if [ "$(major_of "$new")" -gt "$(major_of "$cur")" ]; then echo major
   elif [ "$(minor_of "$new")" -gt "$(minor_of "$cur")" ]; then echo minor
+  elif after_running_prerelease "$new" "$cur"; then echo minor
   else echo patch
   fi
 }
@@ -310,6 +344,28 @@ def key(tag):
         return None
     return (int(m[1]), int(m[2]), int(m[3]), 0 if m[4] else 1, int(m[5] or 0))
 tags = [r.get("tag_name", "") for r in json.load(sys.stdin) if not r.get("draft")]
+tags = [t for t in tags if key(t)]
+print(max(tags, key=key) if tags else "")
+' 2>/dev/null
+}
+
+# The newest non-draft pre-release (vX.Y.Z-rc.N) in the releases list, by
+# version_key order, or nothing when there is none. Returns 1 when the list
+# could not be read, so a failed fetch is not mistaken for "no pre-release".
+# Production's channel reads it for the admin page's Coming next card only;
+# fetch_latest_release never returns one there.
+fetch_newest_prerelease() {
+  local listed
+  listed="$(curl -fsS --max-time 30 "https://api.github.com/repos/$REPO/releases?per_page=100" 2>/dev/null)" || return 1
+  printf '%s' "$listed" | python3 -c '
+import json, re, sys
+def key(tag):
+    m = re.fullmatch(r"v([0-9]+)\.([0-9]+)\.([0-9]+)-rc\.([0-9]+)", tag)
+    return (int(m[1]), int(m[2]), int(m[3]), int(m[4])) if m else None
+listed = json.load(sys.stdin)
+if not isinstance(listed, list):
+    sys.exit(1)
+tags = [r.get("tag_name", "") for r in listed if r.get("prerelease") and not r.get("draft")]
 tags = [t for t in tags if key(t)]
 print(max(tags, key=key) if tags else "")
 ' 2>/dev/null
@@ -389,9 +445,9 @@ probe_public_health() {
 write_status() {  # $1=state $2=detail
   mkdir -p "$STATE_DIR"
   python3 - "$STATUS_FILE" "$1" "$DEPLOYED_VERSION" "$LATEST_SEEN" "$2" "$PAUSED" "$(scripts_revision)" \
-    "$(current_mode)" "$HELD_VERSION" "$APPROVED_VERSION" "$(current_channel)" <<'PY' 2>/dev/null || true
+    "$(current_mode)" "$HELD_VERSION" "$APPROVED_VERSION" "$(current_channel)" "$PRERELEASE_VERSION" <<'PY' 2>/dev/null || true
 import json, os, sys, datetime
-path, state, deployed, latest, detail, paused, scripts, mode, held, approved, channel = sys.argv[1:12]
+path, state, deployed, latest, detail, paused, scripts, mode, held, approved, channel, prerelease = sys.argv[1:13]
 tmp = path + ".tmp"
 json.dump({
     "state": state,
@@ -403,6 +459,7 @@ json.dump({
     "channel": channel,
     "heldVersion": held or None,
     "approvedVersion": approved or None,
+    "prereleaseVersion": prerelease or None,
     "scriptsRevision": scripts,
     "updatedAt": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
 }, open(tmp, "w"), indent=2)
@@ -626,9 +683,14 @@ handle_requests() {
           set_approved "$arg"
           log "approved $arg by $by"
           append_history "$arg" approve accepted "admin page" "$by"
+        elif [ -n "$PRERELEASE_VERSION" ] && [ "$arg" = "$PRERELEASE_VERSION" ]; then
+          set_approved "$arg"
+          log "approved pre-release $arg by $by"
+          append_history "$arg" approve accepted "admin page (pre-release)" "$by"
         else
-          log "refused approval of $arg from $by: held is ${HELD_VERSION:-nothing}"
-          append_history "$arg" approve refused "not the held release (held: ${HELD_VERSION:-nothing})" "$by"
+          log "refused approval of $arg from $by: held is ${HELD_VERSION:-nothing}, pre-release is ${PRERELEASE_VERSION:-nothing}"
+          append_history "$arg" approve refused \
+            "not the held release or the offered pre-release (held: ${HELD_VERSION:-nothing}, pre-release: ${PRERELEASE_VERSION:-nothing})" "$by"
         fi
         ;;
       mode)
@@ -660,14 +722,26 @@ handle_requests() {
 # complete either way.
 # ---------------------------------------------------------------------------
 write_pending_notes() {  # $1 = held version tag
-  local held="$1" releases compare minor
+  if write_notes_file "$1" "$PENDING_NOTES_FILE"; then NOTES_FOR="$1"; else NOTES_FOR=""; fi
+}
+
+# The newest pre-release's notes, for the Coming next card, in the same shape.
+write_prerelease_notes() {  # $1 = pre-release tag
+  if write_notes_file "$1" "$PRERELEASE_NOTES_FILE"; then PRERELEASE_NOTES_FOR="$1"; else PRERELEASE_NOTES_FOR=""; fi
+}
+
+# Writes the notes of what deploying $1 over production would ship to $2.
+# Returns 1 when a fetch failed (a rate limit, a timeout), so the caller tries
+# again on the next poll and the page does not show partial notes for long.
+write_notes_file() {  # $1 = version tag, $2 = file
+  local held="$1" out="$2" releases compare minor
   releases="$(mktemp)"; compare="$(mktemp)"; minor="$(mktemp)"
   local fetched=1
   curl -fsS --max-time 30 "https://api.github.com/repos/$REPO/releases?per_page=100" > "$releases" 2>/dev/null || fetched=0
   curl -fsS --max-time 30 "https://api.github.com/repos/$REPO/compare/v$(strip_v "$DEPLOYED_VERSION")...$held" > "$compare" 2>/dev/null || fetched=0
   curl -fsS --max-time 30 "https://api.github.com/search/issues?q=repo:$REPO+is:pr+is:merged+label:minor-release&per_page=100" > "$minor" 2>/dev/null || fetched=0
   mkdir -p "$STATE_DIR"
-  python3 - "$PENDING_NOTES_FILE" "$DEPLOYED_VERSION" "$held" "$releases" "$compare" "$minor" "$fetched" <<'PY' 2>/dev/null || true
+  python3 - "$out" "$DEPLOYED_VERSION" "$held" "$releases" "$compare" "$minor" "$fetched" <<'PY' 2>/dev/null || true
 import datetime, json, os, re, sys
 path, deployed, held, releases_file, compare_file, minor_file, complete = sys.argv[1:8]
 
@@ -735,9 +809,7 @@ json.dump({
 os.replace(tmp, path)
 PY
   rm -f "$releases" "$compare" "$minor"
-  # A failed fetch (a rate limit, a timeout) is tried again on the next poll,
-  # so the admin page does not show partial notes for the whole hold.
-  if [ "$fetched" = "1" ]; then NOTES_FOR="$held"; else NOTES_FOR=""; fi
+  [ "$fetched" = "1" ]
 }
 
 # Nothing is held: forget the held release and its notes.
@@ -745,6 +817,44 @@ clear_held() {
   HELD_VERSION=""
   NOTES_FOR=""
   rm -f "$PENDING_NOTES_FILE"
+}
+
+# No pre-release is offered: forget it and its notes.
+clear_prerelease() {
+  PRERELEASE_VERSION=""
+  PRERELEASE_NOTES_FOR=""
+  rm -f "$PRERELEASE_NOTES_FILE"
+}
+
+# On the `releases` channel, offer the newest pre-release that is newer than
+# production and than the newest release ($1), with its notes. On
+# `prereleases` the daemon deploys rcs itself, so nothing is offered. A failed
+# fetch keeps what was offered; a cut minor or a deployed rc retires it.
+track_prerelease() {  # $1 = the newest release on this channel
+  if [ "$(current_channel)" = "prereleases" ]; then
+    [ -z "$PRERELEASE_VERSION" ] || clear_prerelease
+    return 0
+  fi
+  local rc
+  # A failed fetch keeps what was offered; an empty list withdraws it.
+  rc="$(fetch_newest_prerelease)" || rc="$PRERELEASE_VERSION"
+  if [ -z "$rc" ] || ! is_newer "$rc" "$DEPLOYED_VERSION" || ! is_newer "$rc" "$1"; then
+    [ -z "$PRERELEASE_VERSION" ] || clear_prerelease
+    return 0
+  fi
+  if [ "$PRERELEASE_VERSION" != "$rc" ]; then
+    PRERELEASE_VERSION="$rc"
+    log "pre-release $rc is offered for approval on the admin page"
+  fi
+  if { [ "$PRERELEASE_NOTES_FOR" != "$rc" ] || [ ! -f "$PRERELEASE_NOTES_FILE" ]; } \
+     && [ "$(now_epoch)" -ge "$PRERELEASE_NOTES_RETRY_AT" ]; then
+    write_prerelease_notes "$rc"
+    if [ "$PRERELEASE_NOTES_FOR" = "$rc" ]; then
+      PRERELEASE_NOTES_RETRY_AT=0
+    else
+      PRERELEASE_NOTES_RETRY_AT=$(( $(now_epoch) + PRERELEASE_NOTES_RETRY_SECS ))
+    fi
+  fi
 }
 
 # ---------------------------------------------------------------------------
@@ -1320,6 +1430,13 @@ load_state() {
   if [ -f "$PENDING_NOTES_FILE" ] && [ "$(json_field "$PENDING_NOTES_FILE" complete)" = "True" ]; then
     NOTES_FOR="$(json_field "$PENDING_NOTES_FILE" heldVersion)"
   fi
+  PRERELEASE_VERSION=""
+  [ -f "$STATUS_FILE" ] && PRERELEASE_VERSION="$(json_field "$STATUS_FILE" prereleaseVersion)"
+  [ "$PRERELEASE_VERSION" = "None" ] && PRERELEASE_VERSION=""
+  PRERELEASE_NOTES_FOR=""
+  if [ -f "$PRERELEASE_NOTES_FILE" ] && [ "$(json_field "$PRERELEASE_NOTES_FILE" complete)" = "True" ]; then
+    PRERELEASE_NOTES_FOR="$(json_field "$PRERELEASE_NOTES_FILE" heldVersion)"
+  fi
   return 0
 }
 
@@ -1344,6 +1461,47 @@ run_cycle() {
     return
   fi
   LATEST_SEEN="$latest"
+  track_prerelease "$latest"
+
+  # An approved pre-release deploys at once, and only that exact version. The
+  # approval was accepted only for the pre-release this daemon offered; a
+  # newer one that appeared since needs its own, and a release cut since
+  # (the minor) retires it. While its image is still being built this waits
+  # here; auto-release cuts no patch while the labelled pull requests the rc
+  # carries are on main, but a patch cut by hand can still arrive.
+  #
+  # The wait is bounded. An rc whose image is not deployable after
+  # WAIT_STUCK_AFTER_SECS (a tag build that failed, or an rc that was never
+  # built) loses its approval, and this poll goes on to the release path, so
+  # a patch is not held behind it. The rc stays offered, so an admin can
+  # approve it again once its image exists.
+  if [[ "$APPROVED_VERSION" == *-rc.* ]] && [ "$(current_channel)" != "prereleases" ]; then
+    if is_newer "$APPROVED_VERSION" "$DEPLOYED_VERSION" && is_newer "$APPROVED_VERSION" "$latest"; then
+      local pre="$APPROVED_VERSION" prc
+      do_deploy "$pre"
+      prc=$?
+      # Only an image wait counts. A disk-low hold also returns 2, but it is
+      # not the rc's fault and holds every release alike.
+      if [ "$prc" -eq 2 ] && [ "$DISK_LOW_VERSION" != "$pre" ] && [ "$WAITING_VERSION" = "$pre" ] \
+         && [ $(( $(now_epoch) - WAITING_SINCE )) -ge "$WAIT_STUCK_AFTER_SECS" ]; then
+        log "dropping the approval of $pre: no deployable image after $(( WAIT_STUCK_AFTER_SECS / 60 )) min: $WAIT_REASON"
+        append_history "$pre" approve expired "no deployable image after $(( WAIT_STUCK_AFTER_SECS / 60 )) min; approve it again once the image exists: $WAIT_REASON"
+        set_approved ""
+        WAITING_VERSION=""
+        WAITING_SINCE=0
+        # The release path below writes its own status; this one stands only
+        # when it returns before it does.
+        write_status idle "approval of $pre expired: no deployable image"
+      else
+        # Kept while the image is still being built, as for a held release.
+        [ "$prc" -eq 2 ] || set_approved ""
+        [ "$prc" -ne 0 ] || track_prerelease "$latest"
+        return
+      fi
+    else
+      set_approved ""
+    fi
+  fi
 
   if ! is_newer "$latest" "$DEPLOYED_VERSION"; then
     clear_held
