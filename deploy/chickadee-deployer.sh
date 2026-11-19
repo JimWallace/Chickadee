@@ -1467,19 +1467,40 @@ run_cycle() {
   # approval was accepted only for the pre-release this daemon offered; a
   # newer one that appeared since needs its own, and a release cut since
   # (the minor) retires it. While its image is still being built this waits
-  # here; no patch is cut meanwhile, because auto-release holds while the
-  # labelled pull requests the rc carries are on main.
+  # here; auto-release cuts no patch while the labelled pull requests the rc
+  # carries are on main, but a patch cut by hand can still arrive.
+  #
+  # The wait is bounded. An rc whose image is not deployable after
+  # WAIT_STUCK_AFTER_SECS (a tag build that failed, or an rc that was never
+  # built) loses its approval, and this poll goes on to the release path, so
+  # a patch is not held behind it. The rc stays offered, so an admin can
+  # approve it again once its image exists.
   if [[ "$APPROVED_VERSION" == *-rc.* ]] && [ "$(current_channel)" != "prereleases" ]; then
     if is_newer "$APPROVED_VERSION" "$DEPLOYED_VERSION" && is_newer "$APPROVED_VERSION" "$latest"; then
       local pre="$APPROVED_VERSION" prc
       do_deploy "$pre"
       prc=$?
-      # Kept while the image is still being built, as for a held release.
-      [ "$prc" -eq 2 ] || set_approved ""
-      [ "$prc" -ne 0 ] || track_prerelease "$latest"
-      return
+      # Only an image wait counts. A disk-low hold also returns 2, but it is
+      # not the rc's fault and holds every release alike.
+      if [ "$prc" -eq 2 ] && [ "$DISK_LOW_VERSION" != "$pre" ] && [ "$WAITING_VERSION" = "$pre" ] \
+         && [ $(( $(now_epoch) - WAITING_SINCE )) -ge "$WAIT_STUCK_AFTER_SECS" ]; then
+        log "dropping the approval of $pre: no deployable image after $(( WAIT_STUCK_AFTER_SECS / 60 )) min: $WAIT_REASON"
+        append_history "$pre" approve expired "no deployable image after $(( WAIT_STUCK_AFTER_SECS / 60 )) min; approve it again once the image exists: $WAIT_REASON"
+        set_approved ""
+        WAITING_VERSION=""
+        WAITING_SINCE=0
+        # The release path below writes its own status; this one stands only
+        # when it returns before it does.
+        write_status idle "approval of $pre expired: no deployable image"
+      else
+        # Kept while the image is still being built, as for a held release.
+        [ "$prc" -eq 2 ] || set_approved ""
+        [ "$prc" -ne 0 ] || track_prerelease "$latest"
+        return
+      fi
+    else
+      set_approved ""
     fi
-    set_approved ""
   fi
 
   if ! is_newer "$latest" "$DEPLOYED_VERSION"; then

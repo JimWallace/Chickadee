@@ -1042,6 +1042,41 @@ expect_calls "deploy-script" 0
 expect_status_field heldVersion v0.6.0
 [ ! -f "$APPROVED_FILE" ] || fail "the approval of an rc older than the cut minor survived"
 
+offer_case "an approved pre-release whose image never publishes does not hold a patch"
+rm "$STUB/image_published"
+run_cycle
+request "001-approve.json" '{"request": "approve", "version": "v0.6.0-rc.10", "user": "alice"}'
+run_cycle
+expect_state waiting_for_image
+[ "$APPROVED_VERSION" = "v0.6.0-rc.10" ] || fail "the approval of an rc was dropped while its image was built"
+echo "v0.5.232" > "$STUB/latest_release"
+run_cycle
+expect_calls "deploy-script" 0
+[ "$APPROVED_VERSION" = "v0.6.0-rc.10" ] || fail "the approval of an rc was dropped before its wait ran out"
+FAKE_NOW=$(( FAKE_NOW + 7200 ))
+run_cycle
+[ -z "$APPROVED_VERSION" ] || fail "the approval of an rc with no image outlived the wait"
+[ ! -f "$APPROVED_FILE" ] || fail "approved file outlived the expired rc approval"
+expect_history_line '"version": "v0.6.0-rc.10", "action": "approve", "result": "expired"'
+expect_calls "deploy-script" 0
+touch "$STUB/image_published"
+echo "0.5.232" > "$STUB/target_version"
+run_cycle
+expect_calls "deploy-script deploy" 1
+[ "$DEPLOYED_VERSION" = "0.5.232" ] || fail "expected the patch 0.5.232 deployed after the rc approval expired, saw $DEPLOYED_VERSION"
+expect_status_field prereleaseVersion v0.6.0-rc.10
+
+offer_case "a disk-low hold does not expire the approval of a pre-release"
+rm "$STUB/image_published"
+run_cycle
+request "001-approve.json" '{"request": "approve", "version": "v0.6.0-rc.10", "user": "alice"}'
+run_cycle
+FAKE_NOW=$(( FAKE_NOW + 7200 ))
+echo $(( 4 * 1024 * 1024 )) > "$STUB/free_kib"
+run_cycle
+[ "$APPROVED_VERSION" = "v0.6.0-rc.10" ] || fail "a disk-low hold expired the approval of an rc"
+expect_state disk_low
+
 offer_case "a failed list keeps the offer; an empty list withdraws it"
 run_cycle
 expect_status_field prereleaseVersion v0.6.0-rc.10
