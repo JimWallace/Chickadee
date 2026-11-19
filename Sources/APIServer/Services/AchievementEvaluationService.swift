@@ -149,6 +149,16 @@ func evaluateClassGoalAchievements(
     // which could grant unearned bonus points all the way to the CSV/LMS.
     let studentIDsByCourse = try await CourseRoster.studentIDsByCourse(goalCourseIDs, on: db)
 
+    // Every class-wide snapshot of the goal-carrying setups in one read, not
+    // one per setup: most are locked, and the lock check below needs them.
+    let classSetupIDs = goalCarrying.filter { $0.properties.activity?.isPerGroup != true }.compactMap(\.setup.id)
+    var snapshotsBySetup: [String: [APIAchievementResult]] = [:]
+    for chunk in chunkedForInFilter(classSetupIDs) {
+        for row in try await APIAchievementResult.query(on: db).filter(\.$testSetupID ~~ chunk).all() {
+            snapshotsBySetup[row.testSetupID, default: []].append(row)
+        }
+    }
+
     for entry in goalCarrying {
         let assignment = entry.assignment
         let goals = entry.goals
@@ -167,11 +177,8 @@ func evaluateClassGoalAchievements(
             continue
         }
 
-        let existing = try await APIAchievementResult.query(on: db)
-            .filter(\.$testSetupID == setupID)
-            .all()
         var rowByAchievement: [String: any ClassGoalSnapshot] = [:]
-        for row in existing { rowByAchievement[row.achievementID] = row }
+        for row in snapshotsBySetup[setupID] ?? [] { rowByAchievement[row.achievementID] = row }
 
         // Every goal here already frozen → nothing to recompute for this setup.
         if goals.allSatisfy({ rowByAchievement[$0.id]?.locked == true }) { continue }

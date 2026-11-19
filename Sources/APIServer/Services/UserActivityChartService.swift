@@ -6,8 +6,8 @@
 //
 // Buckets are fixed-duration slots rolling back from `now` (not calendar
 // aligned), which keeps the math DST-safe and the query a single trailing
-// range scan.  Aggregation is done in Swift over the fetched rows rather than
-// in SQL, without dialect-specific date functions.
+// range scan.  Postgres counts the distinct users of each bucket, so the
+// request reads one row per bucket, not one per event.
 
 import Core
 import Fluent
@@ -84,31 +84,17 @@ enum UserActivityChartService {
     ) async throws -> ActivityChartData {
         let windowStart = now.addingTimeInterval(-window.totalSeconds)
 
-        // Single trailing range scan; only the small set of in-window rows is
-        // fetched and bucketed in memory.
-        let events = try await eventTimes(from: windowStart, through: now, on: db)
-
         let bucketCount = window.bucketCount
         let bucketSeconds = window.bucketSeconds
-        var bucketUsers = [Set<UUID>](repeating: [], count: bucketCount)
-
-        for event in events {
-            guard let createdAt = event.createdAt else { continue }
-            let offset = createdAt.timeIntervalSince(windowStart)
-            var index = Int(offset / bucketSeconds)
-            // Clamp defensively so the boundary at exactly `now` lands in the
-            // last bucket rather than overflowing the array.
-            if index < 0 { index = 0 }
-            if index >= bucketCount { index = bucketCount - 1 }
-            bucketUsers[index].insert(event.userID)
-        }
+        let counts = try await distinctUsersPerBucket(
+            from: windowStart, through: now, bucketSeconds: bucketSeconds, bucketCount: bucketCount, on: db)
 
         let buckets = (0..<bucketCount).map { index -> ActivityBucket in
             let start = windowStart.addingTimeInterval(Double(index) * bucketSeconds)
             return ActivityBucket(
                 label: window.label(forBucketStart: start),
                 startISO: iso8601String(start),
-                count: bucketUsers[index].count
+                count: counts[index] ?? 0
             )
         }
 
@@ -119,43 +105,53 @@ enum UserActivityChartService {
         )
     }
 
-    /// The two columns bucketing reads, of one activity event.
-    private struct EventTime: Decodable {
-        let userID: UUID
-        let createdAt: Date?
-
-        enum CodingKeys: String, CodingKey {
-            case userID = "user_id"
-            case createdAt = "created_at"
-        }
+    /// The bucket a time falls in: whole buckets since `start`, clamped to
+    /// `0..<bucketCount` so the boundary at exactly `now` lands in the last
+    /// bucket rather than past it.
+    static func bucketIndex(of time: Date, from start: Date, bucketSeconds: TimeInterval, bucketCount: Int) -> Int {
+        let index = Int(time.timeIntervalSince(start) / bucketSeconds)
+        return min(max(index, 0), bucketCount - 1)
     }
 
-    /// Every event in `[start, end]`, as its user and time only. A month
-    /// window holds hundreds of thousands of rows, so the SQL path decodes
-    /// plain values rather than models, and selects only the columns of
-    /// `idx_user_activity_events_created_user`, which allows an index-only
-    /// scan.
-    private static func eventTimes(
-        from start: Date, through end: Date, on db: any Database
-    ) async throws
-        -> [EventTime]
-    {
+    /// The number of distinct users with an event in each bucket of
+    /// `[start, end]`, keyed by bucket index; an empty bucket is absent.
+    /// Postgres groups the events, so a month window of hundreds of thousands
+    /// of events comes back as at most `bucketCount` rows. The index is the
+    /// one `bucketIndex` computes.
+    private static func distinctUsersPerBucket(
+        from start: Date, through end: Date, bucketSeconds: TimeInterval, bucketCount: Int, on db: any Database
+    ) async throws -> [Int: Int] {
         guard let sql = db as? (any SQLDatabase) else {
             // Non-SQL fallback (not hit by the Postgres driver in use).
-            return try await APIUserActivityEvent.query(on: db)
+            var users: [Int: Set<UUID>] = [:]
+            for event in try await APIUserActivityEvent.query(on: db)
                 .filter(\.$createdAt >= start)
                 .filter(\.$createdAt <= end)
                 .field(\.$userID)
                 .field(\.$createdAt)
                 .all()
-                .map { EventTime(userID: $0.userID, createdAt: $0.createdAt) }
+            {
+                guard let createdAt = event.createdAt else { continue }
+                let index = bucketIndex(of: createdAt, from: start, bucketSeconds: bucketSeconds, bucketCount: bucketCount)
+                users[index, default: []].insert(event.userID)
+            }
+            return users.mapValues(\.count)
         }
-        return try await sql.select()
-            .column("user_id")
-            .column("created_at")
-            .from(APIUserActivityEvent.schema)
-            .where("created_at", .greaterThanOrEqual, start)
-            .where("created_at", .lessThanOrEqual, end)
-            .all(decoding: EventTime.self)
+        let rows = try await sql.raw(
+            """
+            SELECT LEAST(GREATEST(
+                     floor(extract(epoch FROM (created_at - \(bind: start))) / \(bind: bucketSeconds)), 0),
+                     \(bind: bucketCount - 1))::int AS bucket,
+                   count(DISTINCT user_id)::int AS users
+            FROM \(unsafeRaw: APIUserActivityEvent.schema)
+            WHERE created_at >= \(bind: start) AND created_at <= \(bind: end)
+            GROUP BY 1
+            """
+        ).all()
+        var counts: [Int: Int] = [:]
+        for row in rows {
+            counts[try row.decode(column: "bucket", as: Int.self)] = try row.decode(column: "users", as: Int.self)
+        }
+        return counts
     }
 }

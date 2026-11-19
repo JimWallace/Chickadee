@@ -21,7 +21,9 @@
 
 import Core
 import Fluent
+import FluentSQL
 import Foundation
+import SQLKit
 import Vapor
 
 // MARK: - Snapshot types (one per JSON file in the zip)
@@ -560,6 +562,14 @@ private let metadataSubjectActions: [String] = [
     .slipDayRefunded, .slipDayAdjustmentChanged,
 ].map(\.rawValue)
 
+/// `value` as it appears inside an audit row's metadata text: a JSON string,
+/// quotes included, escaped by the encoder that `APIAuditLogEntry
+/// .encodeMetadata` uses. A metadata value equal to `value` contains this
+/// token exactly.
+private func auditMetadataToken(_ value: String) -> String? {
+    (try? JSONEncoder().encode(value)).flatMap { String(data: $0, encoding: .utf8) }
+}
+
 private func gatherAuditEntries(
     for user: APIUser, on db: any Database
 ) async throws -> [DataExportAuditEntry] {
@@ -578,9 +588,18 @@ private func gatherAuditEntries(
 
     // Entries about the user that only name them in metadata (extensions,
     // grade overrides, reveal re-grants, per-student retests target the
-    // assignment). Candidates by action, confirmed in Swift.
+    // assignment). Candidates by action and by a metadata text that holds the
+    // user's name or id as a JSON string, confirmed in Swift. The text test
+    // keeps the candidates to this user's rows rather than every such row of
+    // the deployment.
+    let needles = [user.username, uuidString].compactMap(auditMetadataToken)
     let metadataCandidates = try await APIAuditLogEntry.query(on: db)
         .filter(\.$action ~~ metadataSubjectActions)
+        .group(.or) { or in
+            for needle in needles {
+                or.filter(.sql(embed: "strpos(\(ident: "metadata"), \(bind: needle)) > 0"))
+            }
+        }
         .all()
 
     var byID: [UUID: APIAuditLogEntry] = [:]

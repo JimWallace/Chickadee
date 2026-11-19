@@ -7,6 +7,7 @@
 import Core
 import Fluent
 import Foundation
+import SQLKit
 import Vapor
 
 extension OperationalDiagnosticsService {
@@ -154,11 +155,27 @@ extension OperationalDiagnosticsService {
         // SQL path would silently change reported percentiles.  Unordered on
         // purpose: the accumulators bucket by index and sort within
         // `percentile95`, so a DB sort here is wasted work.
-        let requestMetrics = try await APIRequestMetric.query(on: req.db)
-            .filter(\.$finishedAt >= window.windowStart)
-            .field(\.$finishedAt)
-            .field(\.$durationMs)
-            .all()
+        //
+        // The request rows decode as plain values through SQLKit: hydrating
+        // each one as a Fluent model costs about 50 µs on the event loop, and
+        // a busy 72-hour window holds tens of thousands
+        // (docs/database-performance.md).
+        let requestTimings: [RequestTiming]
+        if let sql = req.db as? (any SQLDatabase) {
+            requestTimings = try await sql.select()
+                .column("finished_at")
+                .column("duration_ms")
+                .from(APIRequestMetric.schema)
+                .where("finished_at", .greaterThanOrEqual, window.windowStart)
+                .all(decoding: RequestTiming.self)
+        } else {
+            requestTimings = try await APIRequestMetric.query(on: req.db)
+                .filter(\.$finishedAt >= window.windowStart)
+                .field(\.$finishedAt)
+                .field(\.$durationMs)
+                .all()
+                .map { RequestTiming(finishedAt: $0.finishedAt, durationMs: $0.durationMs) }
+        }
 
         let jobMetrics = try await JobExecutionMetric.query(on: req.db)
             .filter(\.$completedAt >= window.windowStart)
@@ -168,7 +185,7 @@ extension OperationalDiagnosticsService {
             .field(\.$executionMs)
             .all()
 
-        let requests = MetricBucketAccumulators.accumulateRequestMetrics(requestMetrics, window: window)
+        let requests = MetricBucketAccumulators.accumulateRequestTimings(requestTimings, window: window)
         let jobs = MetricBucketAccumulators.accumulateJobMetrics(jobMetrics, window: window)
 
         return InternalMetricsTimeSeriesResponse(
