@@ -299,7 +299,7 @@ checks; MCP agents acting on an admin's behalf stay enrollment-scoped. See
 | Mode | Behaviour |
 |------|-----------|
 | `.local` | Username + bcrypt password stored in `users` table |
-| `.sso` | OIDC Authorization Code + PKCE against an external IdP |
+| `.sso` | OIDC Authorization Code + PKCE (with a nonce, and the ID token checks of OIDC Core 3.1.3.7) against an external IdP |
 | `.dual` | Both active simultaneously; SSO is the primary path |
 
 SSO implementation lives in `SSOAuthRoutes.swift` and `OIDCConfiguration.swift`.

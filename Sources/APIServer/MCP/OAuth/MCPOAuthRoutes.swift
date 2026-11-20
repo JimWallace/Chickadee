@@ -48,8 +48,6 @@ struct MCPOAuthRoutes: Sendable {
     /// Shared by the authorize, token, and registration extensions (consent
     /// tokens, codes, refresh tokens, client IDs).
     static func randomToken() -> String {
-        var rng = SystemRandomNumberGenerator()
-        let bytes = (0..<32).map { _ in UInt8.random(in: 0...255, using: &rng) }
-        return Data(bytes).base64URLEncodedString()
+        randomURLSafeToken()
     }
 }

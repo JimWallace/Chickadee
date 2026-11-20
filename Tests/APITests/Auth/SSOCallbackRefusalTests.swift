@@ -5,8 +5,9 @@
 // a callback with a valid state but no code, a token endpoint that refuses
 // every request shape or answers with a body that does not decode, an ID token
 // that is expired or signed with the wrong key, an ID token from the wrong
-// issuer, an SSO username that a local account already holds, and the audit
-// entry for a role change that the admin allowlist causes.
+// issuer, an ID token whose nonce, authorized party or issue time is wrong
+// (OIDC Core 3.1.3.7), an SSO username that a local account already holds,
+// and the audit entry for a role change that the admin allowlist causes.
 //
 // The identity provider is a loopback Vapor app on 127.0.0.1. Nothing leaves
 // the machine.
@@ -41,13 +42,19 @@ private let refusalTestClientID = "refusal-client-id"
         case malformedSuccess
         /// HTTP 400 to a request with an Authorization header (the
         /// client_secret_basic shape); HTTP 200 with the token otherwise.
-        case rejectBasicAuth(idToken: String)
+        case rejectBasicAuth(TokenSpec)
         /// HTTP 200 with the token to every request.
-        case succeed(idToken: String)
+        case succeed(TokenSpec)
     }
 
     private actor TokenEndpointLog {
         private(set) var requests: [(authorized: Bool, body: String)] = []
+        /// The nonce of the last visit to `/authorize`.
+        private(set) var authorizedNonce: String?
+
+        func recordAuthorization(nonce: String?) {
+            authorizedNonce = nonce
+        }
 
         func record(authorized: Bool, body: String) {
             requests.append((authorized, body))
@@ -80,6 +87,10 @@ private let refusalTestClientID = "refusal-client-id"
         ) { app in
             app.http.server.configuration.hostname = "127.0.0.1"
             app.http.server.configuration.port = 0
+            app.get("authorize") { req async -> HTTPStatus in
+                await log.recordAuthorization(nonce: req.query[String.self, at: "nonce"])
+                return .ok
+            }
             app.post("token") { req async throws -> Response in
                 var body = req.body.data ?? ByteBuffer()
                 let bodyString = body.readString(length: body.readableBytes) ?? ""
@@ -92,12 +103,15 @@ private let refusalTestClientID = "refusal-client-id"
                     (status, text) = (.badRequest, #"{"error":"invalid_grant"}"#)
                 case .malformedSuccess:
                     (status, text) = (.ok, #"{"unexpected":"shape"}"#)
-                case .rejectBasicAuth(let idToken):
-                    (status, text) =
-                        authorized
-                        ? (.badRequest, #"{"error":"invalid_client"}"#)
-                        : (.ok, Self.tokenJSON(idToken))
-                case .succeed(let idToken):
+                case .rejectBasicAuth(let spec):
+                    if authorized {
+                        (status, text) = (.badRequest, #"{"error":"invalid_client"}"#)
+                    } else {
+                        let idToken = try await Self.signedToken(spec, loginNonce: await log.authorizedNonce)
+                        (status, text) = (.ok, Self.tokenJSON(idToken))
+                    }
+                case .succeed(let spec):
+                    let idToken = try await Self.signedToken(spec, loginNonce: await log.authorizedNonce)
                     (status, text) = (.ok, Self.tokenJSON(idToken))
                 }
                 let response = Response(status: status, body: .init(string: text))
@@ -144,7 +158,18 @@ private let refusalTestClientID = "refusal-client-id"
         return app
     }
 
-    private struct TokenSpec {
+    /// Which nonce the mock IdP puts in the ID token.
+    enum NonceChoice: Sendable {
+        /// The nonce of the login's visit to `/authorize`, as a real IdP does.
+        case fromLogin
+        /// No nonce claim.
+        case absent
+        /// A fixed value that no login sent.
+        case fixed(String)
+    }
+
+    /// The ID token the mock IdP signs when the code is redeemed.
+    struct TokenSpec: Sendable {
         var issuer = refusalTestIssuer
         var subject = "refusal-subject"
         var username: String? = "rdoe"
@@ -152,22 +177,34 @@ private let refusalTestClientID = "refusal-client-id"
         var givenName: String? = "Rae"
         var familyName: String? = "Doe"
         var expiresIn: TimeInterval = 300
+        var issuedIn: TimeInterval = 0
+        var audience = [refusalTestClientID]
+        var azp: String?
+        var nonce = NonceChoice.fromLogin
         var key: HMACKey = refusalTestSigningKey
     }
 
-    private func signedToken(_ spec: TokenSpec) async throws -> String {
+    private static func signedToken(_ spec: TokenSpec, loginNonce: String?) async throws -> String {
+        let nonce: String? =
+            switch spec.nonce {
+            case .fromLogin: loginNonce
+            case .absent: nil
+            case .fixed(let value): value
+            }
         let claims = OIDCIDTokenClaims(
             sub: .init(value: spec.subject),
             iss: .init(value: spec.issuer),
-            aud: .init(value: [refusalTestClientID]),
+            aud: .init(value: spec.audience),
             exp: .init(value: Date().addingTimeInterval(spec.expiresIn)),
-            iat: .init(value: Date()),
+            iat: .init(value: Date().addingTimeInterval(spec.issuedIn)),
             name: spec.name,
             preferredName: nil,
             givenName: spec.givenName,
             familyName: spec.familyName,
             preferredUsername: spec.username,
             email: nil,
+            nonce: nonce,
+            azp: spec.azp,
             extraClaims: [:]
         )
         return try await JWTKeyCollection()
@@ -189,6 +226,9 @@ private let refusalTestClientID = "refusal-client-id"
         let components = try #require(URLComponents(string: location))
         let state = try #require(components.queryItems?.first { $0.name == "state" }?.value)
         #expect(!cookie.isEmpty)
+        // Visit the mock IdP's authorization endpoint as the browser would,
+        // so it learns this login's nonce.
+        _ = try await app.client.get(URI(string: location))
         return (cookie, state)
     }
 
@@ -272,8 +312,8 @@ private let refusalTestClientID = "refusal-client-id"
     }
 
     @Test func callbackUsesTheClientSecretPostShapeWhenBasicAuthIsRejected() async throws {
-        let idToken = try await signedToken(TokenSpec(subject: "post-shape-subject"))
-        try await withProvider(mode: .rejectBasicAuth(idToken: idToken)) { app, provider in
+        let spec = TokenSpec(subject: "post-shape-subject")
+        try await withProvider(mode: .rejectBasicAuth(spec)) { app, provider in
             let location = try await completeLogin(on: app)
             #expect(location == "/")
             #expect(await provider.log.authorizedFlags() == [true, false])
@@ -287,8 +327,8 @@ private let refusalTestClientID = "refusal-client-id"
     // MARK: - ssoCallback: ID token refusals
 
     @Test func callbackRefusesAnExpiredIDToken() async throws {
-        let idToken = try await signedToken(TokenSpec(subject: "expired-subject", expiresIn: -600))
-        try await withProvider(mode: .succeed(idToken: idToken)) { app, _ in
+        let spec = TokenSpec(subject: "expired-subject", expiresIn: -600)
+        try await withProvider(mode: .succeed(spec)) { app, _ in
             let location = try await completeLogin(on: app)
             #expect(location == "/login?error=sso_failed")
             #expect(try await userCount(subject: "expired-subject", on: app) == 0)
@@ -296,8 +336,8 @@ private let refusalTestClientID = "refusal-client-id"
     }
 
     @Test func callbackRefusesAnIDTokenSignedWithAnUntrustedKey() async throws {
-        let idToken = try await signedToken(TokenSpec(subject: "forged-subject", key: untrustedSigningKey))
-        try await withProvider(mode: .succeed(idToken: idToken)) { app, _ in
+        let spec = TokenSpec(subject: "forged-subject", key: untrustedSigningKey)
+        try await withProvider(mode: .succeed(spec)) { app, _ in
             let location = try await completeLogin(on: app)
             #expect(location == "/login?error=sso_failed")
             #expect(try await userCount(subject: "forged-subject", on: app) == 0)
@@ -305,20 +345,96 @@ private let refusalTestClientID = "refusal-client-id"
     }
 
     @Test func callbackRefusesAnIDTokenFromAnotherIssuer() async throws {
-        let idToken = try await signedToken(
-            TokenSpec(issuer: "http://127.0.0.1/other-issuer", subject: "wrong-issuer-subject"))
-        try await withProvider(mode: .succeed(idToken: idToken)) { app, _ in
+        let spec = TokenSpec(issuer: "http://127.0.0.1/other-issuer", subject: "wrong-issuer-subject")
+        try await withProvider(mode: .succeed(spec)) { app, _ in
             let location = try await completeLogin(on: app)
             #expect(location == "/login?error=sso_failed")
             #expect(try await userCount(subject: "wrong-issuer-subject", on: app) == 0)
         }
     }
 
+    @Test func callbackRefusesAnIDTokenWithoutANonce() async throws {
+        let spec = TokenSpec(subject: "no-nonce-subject", nonce: .absent)
+        try await withProvider(mode: .succeed(spec)) { app, _ in
+            let location = try await completeLogin(on: app)
+            #expect(location == "/login?error=sso_failed")
+            #expect(try await userCount(subject: "no-nonce-subject", on: app) == 0)
+        }
+    }
+
+    @Test func callbackRefusesAnIDTokenWhoseNonceThisLoginDidNotSend() async throws {
+        let spec = TokenSpec(subject: "replayed-subject", nonce: .fixed("nonce-of-another-login"))
+        try await withProvider(mode: .succeed(spec)) { app, _ in
+            let location = try await completeLogin(on: app)
+            #expect(location == "/login?error=sso_failed")
+            #expect(try await userCount(subject: "replayed-subject", on: app) == 0)
+        }
+    }
+
+    @Test func startSendsAFreshNonceOnEachLogin() async throws {
+        let spec = TokenSpec()
+        try await withProvider(mode: .succeed(spec)) { app, provider in
+            _ = try await startLogin(on: app)
+            let first = try #require(await provider.log.authorizedNonce)
+            _ = try await startLogin(on: app)
+            let second = try #require(await provider.log.authorizedNonce)
+            #expect(!first.isEmpty)
+            #expect(first != second)
+        }
+    }
+
+    @Test func callbackRefusesAnIDTokenForAnotherAuthorizedParty() async throws {
+        let spec = TokenSpec(subject: "other-azp-subject", azp: "another-client")
+        try await withProvider(mode: .succeed(spec)) { app, _ in
+            let location = try await completeLogin(on: app)
+            #expect(location == "/login?error=sso_failed")
+            #expect(try await userCount(subject: "other-azp-subject", on: app) == 0)
+        }
+    }
+
+    @Test func callbackRefusesAMultiAudienceIDTokenWithoutAnAuthorizedParty() async throws {
+        let spec = TokenSpec(subject: "multi-aud-subject", audience: [refusalTestClientID, "another-client"])
+        try await withProvider(mode: .succeed(spec)) { app, _ in
+            let location = try await completeLogin(on: app)
+            #expect(location == "/login?error=sso_failed")
+            #expect(try await userCount(subject: "multi-aud-subject", on: app) == 0)
+        }
+    }
+
+    @Test func callbackAcceptsAMultiAudienceIDTokenThatNamesThisClientAsAuthorizedParty() async throws {
+        let spec = TokenSpec(
+            subject: "multi-aud-azp-subject", audience: [refusalTestClientID, "another-client"],
+            azp: refusalTestClientID)
+        try await withProvider(mode: .succeed(spec)) { app, _ in
+            let location = try await completeLogin(on: app)
+            #expect(location == "/")
+            #expect(try await userCount(subject: "multi-aud-azp-subject", on: app) == 1)
+        }
+    }
+
+    @Test func callbackRefusesAnIDTokenIssuedInTheFuture() async throws {
+        let spec = TokenSpec(subject: "future-iat-subject", expiresIn: 3600, issuedIn: 1800)
+        try await withProvider(mode: .succeed(spec)) { app, _ in
+            let location = try await completeLogin(on: app)
+            #expect(location == "/login?error=sso_failed")
+            #expect(try await userCount(subject: "future-iat-subject", on: app) == 0)
+        }
+    }
+
+    @Test func callbackAcceptsAnIssueTimeWithinTheClockSkew() async throws {
+        let spec = TokenSpec(subject: "skewed-iat-subject", issuedIn: 60)
+        try await withProvider(mode: .succeed(spec)) { app, _ in
+            let location = try await completeLogin(on: app)
+            #expect(location == "/")
+            #expect(try await userCount(subject: "skewed-iat-subject", on: app) == 1)
+        }
+    }
+
     // MARK: - ssoCallback: upsert
 
     @Test func callbackIsRefusedWhenALocalAccountHoldsTheUsername() async throws {
-        let idToken = try await signedToken(TokenSpec(subject: "collision-subject", username: "localholder"))
-        try await withProvider(mode: .succeed(idToken: idToken)) { app, _ in
+        let spec = TokenSpec(subject: "collision-subject", username: "localholder")
+        try await withProvider(mode: .succeed(spec)) { app, _ in
             let local = try await makeTestUser(on: app, username: "localholder", role: "user")
             let location = try await completeLogin(on: app)
             #expect(location == "/login?error=sso_failed")
@@ -331,9 +447,8 @@ private let refusalTestClientID = "refusal-client-id"
     }
 
     @Test func displayNameFallsBackToGivenAndFamilyNameWhenNameIsBlank() async throws {
-        let idToken = try await signedToken(
-            TokenSpec(subject: "given-family-subject", name: "  ", givenName: "Ada", familyName: "Lovelace"))
-        try await withProvider(mode: .succeed(idToken: idToken)) { app, _ in
+        let spec = TokenSpec(subject: "given-family-subject", name: "  ", givenName: "Ada", familyName: "Lovelace")
+        try await withProvider(mode: .succeed(spec)) { app, _ in
             let location = try await completeLogin(on: app)
             #expect(location == "/")
             let user = try #require(
@@ -343,9 +458,8 @@ private let refusalTestClientID = "refusal-client-id"
     }
 
     @Test func displayNameStaysNilWhenNoNameClaimIsSent() async throws {
-        let idToken = try await signedToken(
-            TokenSpec(subject: "no-name-subject", name: nil, givenName: nil, familyName: " "))
-        try await withProvider(mode: .succeed(idToken: idToken)) { app, _ in
+        let spec = TokenSpec(subject: "no-name-subject", name: nil, givenName: nil, familyName: " ")
+        try await withProvider(mode: .succeed(spec)) { app, _ in
             let location = try await completeLogin(on: app)
             #expect(location == "/")
             let user = try #require(
@@ -355,8 +469,8 @@ private let refusalTestClientID = "refusal-client-id"
     }
 
     @Test func allowlistPromotionOfAnExistingUserIsAuditedOnce() async throws {
-        let idToken = try await signedToken(TokenSpec(subject: "promoted-subject", username: "promoteme"))
-        try await withProvider(mode: .succeed(idToken: idToken)) { app, _ in
+        let spec = TokenSpec(subject: "promoted-subject", username: "promoteme")
+        try await withProvider(mode: .succeed(spec)) { app, _ in
             let existing = APIUser(
                 username: "promoteme", passwordHash: "", role: UserRole.user.rawValue,
                 authProvider: "duo-oidc", externalSubject: "promoted-subject")

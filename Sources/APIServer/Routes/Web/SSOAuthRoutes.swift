@@ -6,8 +6,8 @@
 // DUO OIDC provider. After a successful callback, the user is upserted in the
 // local database and a Vapor session is established (same mechanism as local login).
 //
-//   GET /auth/sso/start     → generate PKCE + state, redirect to IdP authorization URL
-//   GET /auth/sso/callback  → validate state, exchange code, verify ID token, upsert user
+//   GET /auth/sso/start     → generate PKCE, state and nonce, redirect to IdP authorization URL
+//   GET /auth/sso/callback  → validate state, exchange code, verify ID token and nonce, upsert user
 
 import Crypto
 import Fluent
@@ -70,19 +70,22 @@ struct SSOAuthRoutes: RouteCollection {
             return req.redirect(to: "/login?error=sso_not_configured")
         }
 
-        // PKCE: generate random 32-byte code_verifier, then SHA-256 → base64url code_challenge
-        var rng = SystemRandomNumberGenerator()
-        let codeVerifierBytes = (0..<32).map { _ in UInt8.random(in: 0...255, using: &rng) }
-        let codeVerifier = Data(codeVerifierBytes).base64URLEncodedString()
+        // PKCE: random code_verifier, then SHA-256 → base64url code_challenge
+        let codeVerifier = randomURLSafeToken()
         let codeChallenge = Data(SHA256.hash(data: Data(codeVerifier.utf8))).base64URLEncodedString()
 
         // State token for CSRF protection
-        let stateBytes = (0..<32).map { _ in UInt8.random(in: 0...255, using: &rng) }
-        let state = Data(stateBytes).base64URLEncodedString()
+        let state = randomURLSafeToken()
+
+        // Nonce: the IdP copies it into the ID token, which binds the token to
+        // this browser's login and stops a token from another login being
+        // replayed into this one (OIDC Core 3.1.2.1).
+        let nonce = randomURLSafeToken()
 
         // Persist in session so callback can validate
         req.session.data["oidc_state"] = state
         req.session.data["oidc_verifier"] = codeVerifier
+        req.session.data["oidc_nonce"] = nonce
 
         // If a logout/idle-timeout set the re-auth marker, force the IdP to
         // re-authenticate (`prompt=login`) instead of silently honouring its
@@ -99,6 +102,7 @@ struct SSOAuthRoutes: RouteCollection {
             URLQueryItem(name: "scope", value: "openid profile email groups"),
             URLQueryItem(name: "redirect_uri", value: config.redirectURI),
             URLQueryItem(name: "state", value: state),
+            URLQueryItem(name: "nonce", value: nonce),
             URLQueryItem(name: "code_challenge", value: codeChallenge),
             URLQueryItem(name: "code_challenge_method", value: "S256"),
         ]
@@ -146,10 +150,12 @@ struct SSOAuthRoutes: RouteCollection {
         let returnedState = req.query[String.self, at: "state"] ?? ""
         let storedState = req.session.data["oidc_state"] ?? ""
         let codeVerifier = req.session.data["oidc_verifier"] ?? ""
+        let expectedNonce = req.session.data["oidc_nonce"] ?? ""
 
         // Always clear session values — whether we succeed or fail below
         req.session.data["oidc_state"] = nil
         req.session.data["oidc_verifier"] = nil
+        req.session.data["oidc_nonce"] = nil
 
         guard !returnedState.isEmpty, returnedState == storedState else {
             req.logger.warning("SSO callback: state mismatch (possible CSRF or stale session)")
@@ -192,13 +198,16 @@ struct SSOAuthRoutes: RouteCollection {
             return req.redirect(to: "/login?error=sso_failed")
         }
 
-        // Validate issuer and audience manually (JWTKit verifies signature + exp only)
-        guard claims.iss.value == config.discovery.issuer else {
-            req.logger.error("ID token issuer mismatch: got \(claims.iss.value), expected \(config.discovery.issuer)")
-            return req.redirect(to: "/login?error=sso_failed")
-        }
-        guard claims.aud.value.contains(config.clientID) else {
-            req.logger.error("ID token audience does not contain client_id")
+        // The ID token rules JWTKit does not check: issuer, audience, azp, iat
+        // and nonce (OIDC Core 3.1.3.7).
+        do throws(OIDCIDTokenRefusal) {
+            try claims.validate(
+                issuer: config.discovery.issuer,
+                clientID: config.clientID,
+                expectedNonce: expectedNonce
+            )
+        } catch {
+            req.logger.error("ID token refused: \(error) (iss=\(claims.iss.value))")
             return req.redirect(to: "/login?error=sso_failed")
         }
 
