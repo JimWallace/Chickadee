@@ -1,0 +1,3 @@
+### Changed
+
+- **Tests for the admin course and runner routes.** New suites cover the refusals of the admin course routes (a blank create form, a delete of a course that is not archived, bad ids, an unknown per-course role, a role change for a user who is not enrolled, an unknown user, a CSV enroll into an archived or unknown course, a student who posts to an admin route), the course-page unenroll and the CSV enroll, the LEARN org-unit binding on the course edit form, and the runner detail page for a pruned or unknown runner, the time-limit note, the cache hit rate and the capability tags. No product code changed.
