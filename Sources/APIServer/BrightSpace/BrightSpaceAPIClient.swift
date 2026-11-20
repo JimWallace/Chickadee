@@ -147,8 +147,6 @@ actor BrightSpaceAPIClient: BrightSpaceGrading {
                 switch method.uppercased() {
                 case "PUT":
                     return try await app.client.put(uri) { req in try beforeSend?(&req) }
-                case "POST":
-                    return try await app.client.post(uri) { req in try beforeSend?(&req) }
                 case "DELETE":
                     return try await app.client.delete(uri) { req in try beforeSend?(&req) }
                 default:

@@ -1,20 +1,17 @@
-// Tests/APITests/Admin/RunnerLoadSwiftFallbackTests.swift
+// Tests/APITests/Admin/RunnerLoadPointsTests.swift
 //
 // Two parts of the admin card load math that `MetricsCardSeriesTests` does
 // not reach:
 //
 // - `peakLoadPoint`: the "Max Load" headline picks the point with the highest
 //   utilization ratio, and on a tie the one with more active jobs.
-// - The Swift fallbacks of `runnerLoadPoints` and `runnerTimeseriesSummaries`,
-//   which run for a driver without SQL. The test database is Postgres, so the
-//   tests reach the fallbacks through `NonSQLDatabase`, a wrapper that
-//   forwards every query but is not an `SQLDatabase`. Each fallback must give
-//   the same result as the SQL path over the same rows.
+// - The SQL aggregation of `runnerLoadPoints` and `runnerTimeseriesSummaries`:
+//   per bucket the load keeps each runner's peak, then sums the runners, and
+//   rows before the window are excluded. These cases came from the tests of
+//   the removed non-SQL fallbacks (#3159); they now run on the SQL path only.
 
 import Fluent
-import FluentKit
 import Foundation
-import SQLKit
 import Testing
 import Vapor
 import VaporTesting
@@ -70,42 +67,11 @@ import VaporTesting
     }
 }
 
-/// A `Database` that forwards to another one and is not an `SQLDatabase`, so
-/// code that checks `db as? any SQLDatabase` takes its non-SQL path.
-private struct NonSQLDatabase: Database {
-    let base: any Database
-
-    var context: DatabaseContext { base.context }
-    var inTransaction: Bool { base.inTransaction }
-
-    func execute(
-        query: DatabaseQuery, onOutput: @escaping @Sendable (any DatabaseOutput) -> Void
-    ) -> EventLoopFuture<Void> {
-        base.execute(query: query, onOutput: onOutput)
-    }
-
-    func execute(schema: DatabaseSchema) -> EventLoopFuture<Void> {
-        base.execute(schema: schema)
-    }
-
-    func execute(enum: DatabaseEnum) -> EventLoopFuture<Void> {
-        base.execute(enum: `enum`)
-    }
-
-    func transaction<T>(_ closure: @escaping @Sendable (any Database) -> EventLoopFuture<T>) -> EventLoopFuture<T> {
-        base.transaction { closure(NonSQLDatabase(base: $0)) }
-    }
-
-    func withConnection<T>(_ closure: @escaping @Sendable (any Database) -> EventLoopFuture<T>) -> EventLoopFuture<T> {
-        base.withConnection { closure(NonSQLDatabase(base: $0)) }
-    }
-}
-
-@Suite(.serialized) final class RunnerLoadSwiftFallbackTests {
+@Suite(.serialized) final class RunnerLoadPointsTests {
     let app: Application
 
     init() async throws {
-        self.app = try await makeTestApp(prefix: "chickadee-load-fallback")
+        self.app = try await makeTestApp(prefix: "chickadee-load-points")
     }
 
     private func saveSnapshot(runner: String, at date: Date, active: Int, max: Int) async throws {
@@ -123,11 +89,10 @@ private struct NonSQLDatabase: Database {
         ).save(on: app.db)
     }
 
-    /// Per (bucket, runner) the fallback keeps the runner's peak, then sums
-    /// the runners: two reports from one runner in a bucket are not added.
-    @Test func runnerLoadPointsFallbackTakesEachRunnersPeakThenSums() async throws {
+    /// Per (bucket, runner) the load keeps the runner's peak, then sums the
+    /// runners: two reports from one runner in a bucket are not added.
+    @Test func runnerLoadPointsTakeEachRunnersPeakThenSum() async throws {
         try await withApp(app) { app in
-            #expect(!(NonSQLDatabase(base: app.db) is any SQLDatabase))
             let bucket = 300.0
             let now = Date()
             // The start of a 5-minute bucket well inside the last hour, so
@@ -144,24 +109,17 @@ private struct NonSQLDatabase: Database {
             try await saveSnapshot(runner: "r1", at: now.addingTimeInterval(-7200), active: 4, max: 4)
 
             let since = now.addingTimeInterval(-3600)
-            let fallback = try await app.diagnostics.runnerLoadPoints(
-                since: since, on: NonSQLDatabase(base: app.db))
+            let points = try await app.diagnostics.runnerLoadPoints(since: since, on: app.db)
 
-            #expect(fallback.map(\.bucketStart) == [anchor, anchor.addingTimeInterval(2 * bucket)])
-            #expect(fallback.map(\.totalActive) == [5, 0])
-            #expect(fallback.map(\.totalMax) == [6, 4])
-
-            // Parity: the SQL path gives the same points over the same rows.
-            let viaSQL = try await app.diagnostics.runnerLoadPoints(since: since, on: app.db)
-            #expect(viaSQL.map(\.bucketStart) == fallback.map(\.bucketStart))
-            #expect(viaSQL.map(\.totalActive) == fallback.map(\.totalActive))
-            #expect(viaSQL.map(\.totalMax) == fallback.map(\.totalMax))
+            #expect(points.map(\.bucketStart) == [anchor, anchor.addingTimeInterval(2 * bucket)])
+            #expect(points.map(\.totalActive) == [5, 0])
+            #expect(points.map(\.totalMax) == [6, 4])
         }
     }
 
-    /// The time-series fallback averages and peaks per-snapshot utilization
-    /// per display bucket, and gives the same summaries as the SQL path.
-    @Test func runnerTimeseriesSummariesFallbackMatchesTheSQLPath() async throws {
+    /// The time series averages and peaks per-snapshot utilization per
+    /// display bucket, and excludes rows before the window.
+    @Test func runnerTimeseriesSummariesExcludeRowsBeforeTheWindow() async throws {
         try await withApp(app) { app in
             let now = Date()
             let window = BucketWindow.resolve(
@@ -175,17 +133,13 @@ private struct NonSQLDatabase: Database {
             // Before the window: excluded.
             try await saveSnapshot(runner: "r2", at: now.addingTimeInterval(-7200), active: 4, max: 4)
 
-            let fallback = try await app.diagnostics.runnerTimeseriesSummaries(
-                window: window, on: NonSQLDatabase(base: app.db))
+            let summaries = try await app.diagnostics.runnerTimeseriesSummaries(window: window, on: app.db)
 
-            #expect(fallback.count == 2)
-            #expect(fallback.first?.avgUtilizationPercent == 75)
-            #expect(fallback.first?.maxUtilizationPercent == 100)
-            #expect(fallback.last?.avgUtilizationPercent == 25)
-            #expect(fallback.last?.maxUtilizationPercent == 25)
-
-            let viaSQL = try await app.diagnostics.runnerTimeseriesSummaries(window: window, on: app.db)
-            #expect(viaSQL == fallback)
+            #expect(summaries.count == 2)
+            #expect(summaries.first?.avgUtilizationPercent == 75)
+            #expect(summaries.first?.maxUtilizationPercent == 100)
+            #expect(summaries.last?.avgUtilizationPercent == 25)
+            #expect(summaries.last?.maxUtilizationPercent == 25)
         }
     }
 }

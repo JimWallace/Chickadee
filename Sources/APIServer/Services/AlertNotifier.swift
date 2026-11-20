@@ -71,13 +71,6 @@ enum HealthRule: String, CaseIterable, Codable, Sendable {
         case .brightspaceSyncFailing: return "warning"
         }
     }
-
-    /// Whether a firing of this rule pages the operator webhook. Informational
-    /// rules (`info` severity) still surface on `/admin/alerts` and via the
-    /// `get_health_alerts` admin tool, but they are advisory and do not page — so
-    /// a low-stakes signal like a runner being a release behind never reads as an
-    /// outage.
-    var pagesOperator: Bool { severity != "info" }
 }
 
 struct AlertMessage: Content, Sendable {

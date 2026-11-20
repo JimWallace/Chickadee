@@ -34,8 +34,7 @@ func studentSubmissionSummaryBySetup(
 ) async throws -> [String: StudentSetupSubmissionSummary] {
     guard !setupIDs.isEmpty else { return [:] }
     guard let sql = db as? (any SQLDatabase) else {
-        return try await studentSubmissionSummaryBySetupViaFluent(
-            userID: userID, setupIDs: setupIDs, on: db)
+        throw AppError.internalFailure(reason: "The submission summary needs a SQL database.")
     }
     struct SummaryRow: Decodable {
         let testSetupID: String
@@ -81,8 +80,7 @@ func studentBestGradePercentBySetup(
 ) async throws -> [String: Int] {
     guard !setupIDs.isEmpty else { return [:] }
     guard let sql = db as? (any SQLDatabase) else {
-        return try await studentBestGradePercentBySetupViaFluent(
-            userID: userID, setupIDs: setupIDs, on: db)
+        throw AppError.internalFailure(reason: "The best grade read needs a SQL database.")
     }
     struct BestRow: Decodable {
         let testSetupID: String
@@ -137,8 +135,7 @@ func submissionSummaryByStudent(
 ) async throws -> [UUID: SetupStudentSubmissionSummary] {
     guard !studentIDs.isEmpty else { return [:] }
     guard let sql = db as? (any SQLDatabase) else {
-        return try await submissionSummaryByStudentViaFluent(
-            setupID: setupID, studentIDs: studentIDs, on: db)
+        throw AppError.internalFailure(reason: "The submission summary needs a SQL database.")
     }
     struct SummaryRow: Decodable {
         let userID: UUID
@@ -186,8 +183,7 @@ func bestGradePercentByStudent(
 ) async throws -> [UUID: Int] {
     guard !studentIDs.isEmpty else { return [:] }
     guard let sql = db as? (any SQLDatabase) else {
-        return try await bestGradePercentByStudentViaFluent(
-            setupID: setupID, studentIDs: studentIDs, on: db)
+        throw AppError.internalFailure(reason: "The best grade read needs a SQL database.")
     }
     struct BestRow: Decodable {
         let userID: UUID
@@ -216,125 +212,6 @@ func bestGradePercentByStudent(
         guard let percent = GradePercentSQL.percent(bestFull: row.bestFull, bestPartial: row.bestPartial)
         else { continue }
         best[row.userID] = percent
-    }
-    return best
-}
-
-// MARK: - Non-SQL fallbacks
-//
-// Not hit by the Postgres driver in use. They load the rows and run
-// the identical folds in Swift.
-
-private func studentSubmissionSummaryBySetupViaFluent(
-    userID: UUID, setupIDs: [String], on db: any Database
-) async throws -> [String: StudentSetupSubmissionSummary] {
-    let rows = try await APISubmission.query(on: db)
-        .filter(\.$userID == userID)
-        .filter(\.$testSetupID ~~ setupIDs)
-        .filter(\.$kind == APISubmission.Kind.student)
-        .sort(\.$submittedAt, .descending)
-        .sort(\.$attemptNumber, .descending)
-        .field(\.$id)
-        .field(\.$testSetupID)
-        .all()
-    var summary: [String: StudentSetupSubmissionSummary] = [:]
-    for row in rows {
-        guard let id = row.id else { continue }
-        if let existing = summary[row.testSetupID] {
-            summary[row.testSetupID] = StudentSetupSubmissionSummary(
-                latestSubmissionID: existing.latestSubmissionID,
-                submissionCount: existing.submissionCount + 1)
-        } else {
-            summary[row.testSetupID] = StudentSetupSubmissionSummary(
-                latestSubmissionID: id, submissionCount: 1)
-        }
-    }
-    return summary
-}
-
-private func submissionSummaryByStudentViaFluent(
-    setupID: String, studentIDs: [UUID], on db: any Database
-) async throws -> [UUID: SetupStudentSubmissionSummary] {
-    let rows = try await APISubmission.query(on: db)
-        .filter(\.$testSetupID == setupID)
-        .filter(\.$kind == APISubmission.Kind.student)
-        .filter(\.$userID ~~ studentIDs)
-        .sort(\.$submittedAt, .descending)
-        .sort(\.$attemptNumber, .descending)
-        .field(\.$id)
-        .field(\.$userID)
-        .field(\.$submittedAt)
-        .all()
-    var summary: [UUID: SetupStudentSubmissionSummary] = [:]
-    for row in rows {
-        guard let id = row.id, let userID = row.userID else { continue }
-        if let existing = summary[userID] {
-            summary[userID] = SetupStudentSubmissionSummary(
-                latestSubmissionID: existing.latestSubmissionID,
-                latestSubmittedAt: existing.latestSubmittedAt,
-                submissionCount: existing.submissionCount + 1)
-        } else {
-            summary[userID] = SetupStudentSubmissionSummary(
-                latestSubmissionID: id, latestSubmittedAt: row.submittedAt, submissionCount: 1)
-        }
-    }
-    return summary
-}
-
-private func bestGradePercentByStudentViaFluent(
-    setupID: String, studentIDs: [UUID], on db: any Database
-) async throws -> [UUID: Int] {
-    let submissions = try await APISubmission.query(on: db)
-        .filter(\.$testSetupID == setupID)
-        .filter(\.$kind == APISubmission.Kind.student)
-        .filter(\.$userID ~~ studentIDs)
-        .field(\.$id)
-        .field(\.$userID)
-        .all()
-    var studentBySubmissionID: [String: UUID] = [:]
-    for submission in submissions {
-        guard let id = submission.id, let userID = submission.userID else { continue }
-        studentBySubmissionID[id] = userID
-    }
-    guard !studentBySubmissionID.isEmpty else { return [:] }
-    let results = try await APIResult.query(on: db)
-        .filter(\.$submissionID ~~ Array(studentBySubmissionID.keys))
-        .all()
-    var best: [UUID: Int] = [:]
-    for row in results {
-        guard let userID = studentBySubmissionID[row.submissionID],
-            let pct = row.gradePercentValue
-        else { continue }
-        if pct > (best[userID] ?? -1) { best[userID] = pct }
-    }
-    return best
-}
-
-private func studentBestGradePercentBySetupViaFluent(
-    userID: UUID, setupIDs: [String], on db: any Database
-) async throws -> [String: Int] {
-    let submissions = try await APISubmission.query(on: db)
-        .filter(\.$userID == userID)
-        .filter(\.$testSetupID ~~ setupIDs)
-        .filter(\.$kind == APISubmission.Kind.student)
-        .field(\.$id)
-        .field(\.$testSetupID)
-        .all()
-    var setupBySubmissionID: [String: String] = [:]
-    for submission in submissions {
-        guard let id = submission.id else { continue }
-        setupBySubmissionID[id] = submission.testSetupID
-    }
-    guard !setupBySubmissionID.isEmpty else { return [:] }
-    let results = try await APIResult.query(on: db)
-        .filter(\.$submissionID ~~ Array(setupBySubmissionID.keys))
-        .all()
-    var best: [String: Int] = [:]
-    for row in results {
-        guard let setupID = setupBySubmissionID[row.submissionID],
-            let pct = row.gradePercentValue
-        else { continue }
-        if pct > (best[setupID] ?? 0) { best[setupID] = pct }
     }
     return best
 }

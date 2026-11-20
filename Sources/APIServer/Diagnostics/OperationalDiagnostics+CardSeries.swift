@@ -8,9 +8,7 @@
 // heartbeat every ~30s), so 30 days is tens of thousands of rows — far more
 // than the submission-bound job-metric / queue-depth sources.  We therefore
 // pre-aggregate it to per-5-minute summed load *in the database*, collapsing
-// that scan to a few hundred rows.  A driver without SQL keeps an equivalent
-// Swift aggregation; both paths produce the same `RunnerLoadPoint` list, so
-// the card math downstream is identical.
+// that scan to a few hundred rows.
 
 import Core
 import Fluent
@@ -167,19 +165,17 @@ extension OperationalDiagnosticsService {
         return peak
     }
 
-    /// Summed runner load per `loadBucketSeconds` bucket since `outerStart`.
-    /// Aggregates in SQL; a driver without SQL aggregates in Swift over the raw
-    /// rows.
+    /// Summed runner load per `loadBucketSeconds` bucket since `outerStart`,
+    /// aggregated in SQL.
     func runnerLoadPoints(since outerStart: Date, on db: any Database) async throws -> [RunnerLoadPoint] {
-        if let sql = db as? (any SQLDatabase) {
-            return try await runnerLoadPointsViaPostgres(sql, since: outerStart)
+        guard let sql = db as? (any SQLDatabase) else {
+            throw AppError.internalFailure(reason: "The runner load series needs a SQL database.")
         }
-        return try await runnerLoadPointsInSwift(since: outerStart, on: db)
+        return try await runnerLoadPointsViaPostgres(sql, since: outerStart)
     }
 
     /// One column per (bucket, runner) is reduced to its peak load, then summed
-    /// across runners per bucket — entirely in the database.  Mirrors the
-    /// Swift fallback's semantics.
+    /// across runners per bucket — entirely in the database.
     private func runnerLoadPointsViaPostgres(
         _ sql: any SQLDatabase,
         since outerStart: Date
@@ -230,66 +226,19 @@ extension OperationalDiagnosticsService {
         }
     }
 
-    /// Swift-side equivalent of `runnerLoadPointsViaPostgres`, for a driver
-    /// without SQL.  Per (bucket, runner) keep the
-    /// peak active/capacity, then sum across runners per bucket.
-    private func runnerLoadPointsInSwift(
-        since outerStart: Date,
-        on db: any Database
-    ) async throws -> [RunnerLoadPoint] {
-        let snapshots = try await RunnerSnapshot.query(on: db)
-            .filter(\.$recordedAt >= outerStart)
-            .field(\.$recordedAt)
-            .field(\.$runnerID)
-            .field(\.$activeJobs)
-            .field(\.$maxJobs)
-            .all()
-
-        // bucket index -> runner id -> (peak active, peak max) in that bucket.
-        var perRunner: [Int: [String: (active: Int, max: Int)]] = [:]
-        for snapshot in snapshots {
-            let bucket = Int(snapshot.recordedAt.timeIntervalSince1970) / loadBucketSeconds
-            var runners = perRunner[bucket] ?? [:]
-            let existing = runners[snapshot.runnerID]
-            runners[snapshot.runnerID] = (
-                active: Swift.max(existing?.active ?? 0, snapshot.activeJobs),
-                max: Swift.max(existing?.max ?? 0, snapshot.maxJobs)
-            )
-            perRunner[bucket] = runners
-        }
-
-        return perRunner.keys.sorted().map { bucket in
-            let runners = perRunner[bucket] ?? [:]
-            return RunnerLoadPoint(
-                bucketStart: Date(timeIntervalSince1970: Double(bucket * loadBucketSeconds)),
-                totalActive: runners.values.reduce(0) { $0 + $1.active },
-                totalMax: runners.values.reduce(0) { $0 + $1.max }
-            )
-        }
-    }
-
     // MARK: - Time-series runner summaries
 
     /// Per-display-bucket runner utilization summary for `/admin/metrics/
     /// timeseries`, pre-aggregated so the endpoint never streams the full
-    /// RunnerSnapshot scan.  Aggregates per display bucket in SQL; a driver
-    /// without SQL reuses the raw-row accumulator, which must yield identical
-    /// summaries.
+    /// RunnerSnapshot scan.  Aggregates per display bucket in SQL.
     func runnerTimeseriesSummaries(
         window: BucketWindow,
         on db: any Database
     ) async throws -> [RunnerBucketSummary] {
-        if let sql = db as? (any SQLDatabase) {
-            return try await runnerTimeseriesSummariesViaPostgres(sql, window: window)
+        guard let sql = db as? (any SQLDatabase) else {
+            throw AppError.internalFailure(reason: "The runner time series needs a SQL database.")
         }
-        let snapshots = try await RunnerSnapshot.query(on: db)
-            .filter(\.$recordedAt >= window.windowStart)
-            .field(\.$recordedAt)
-            .field(\.$activeJobs)
-            .field(\.$maxJobs)
-            .all()
-        let accumulators = MetricBucketAccumulators.accumulateRunnerSnapshots(snapshots, window: window)
-        return MetricBucketAccumulators.summarizeRunnerBuckets(accumulators)
+        return try await runnerTimeseriesSummariesViaPostgres(sql, window: window)
     }
 
     /// SQL equivalent of `accumulateRunnerSnapshots` + `summarizeRunnerBuckets`:
