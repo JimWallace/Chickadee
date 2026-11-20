@@ -82,7 +82,7 @@ enum JobOpponentSelection {
     /// One classmate a matrix job plays, planned before its row opens.
     private struct PlannedClassmate {
         let chosen: ChosenOpponent
-        let classmate: APISubmission
+        let classmate: ChosenOpponent.Submission
         let classmateID: String
         let seed: String
         /// Nil when the download URL cannot be built from the base URL.
