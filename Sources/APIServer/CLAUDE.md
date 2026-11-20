@@ -122,7 +122,7 @@ is non-local.
 **Auth is pluggable.** `AUTH_MODE` env var selects `.local` (username/password),
 `.sso` (OIDC/OAuth), or `.dual` (both active simultaneously). `APIUser` carries
 `authProvider` + `externalSubject` for SSO identity. Both `.local` and `.sso`
-are fully implemented. The OIDC flow uses Authorization Code + PKCE; the
+are fully implemented. The OIDC flow uses Authorization Code + PKCE and a nonce; the
 discovery document and JWKS are fetched at startup from `OIDC_AUTH_SERVER`.
 Role assignment uses the `SSO_ADMIN_USERS` env var (a comma-separated identity
 allowlist checked against JWT claims on every login); instructor authority is

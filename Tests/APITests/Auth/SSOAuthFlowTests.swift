@@ -28,46 +28,65 @@ private let mockIdentityProviderSigningKey: HMACKey = "chickadee-sso-test-signin
 
 @Suite(.timeLimit(.minutes(2))) struct SSOAuthFlowTests {
 
+    /// The mock IdP's token endpoint. Like a real IdP, it signs the ID token
+    /// when the code is redeemed, with the nonce that the browser's visit to
+    /// `/authorize` carried.
     private actor MockTokenEndpoint {
         enum Mode {
             case alwaysFail
-            case succeedImmediately(idToken: String)
-            case succeedImmediatelyWithRefreshToken(idToken: String, refreshToken: String)
-            case succeedWithoutVerifier(idToken: String)
+            case succeedImmediately(idToken: OIDCIDTokenClaims)
+            case succeedImmediatelyWithRefreshToken(idToken: OIDCIDTokenClaims, refreshToken: String)
+            case succeedWithoutVerifier(idToken: OIDCIDTokenClaims)
         }
 
         let mode: Mode
         private(set) var requestBodies: [String] = []
         private(set) var revocationBodies: [String] = []
+        private var authorizedNonce: String?
 
         init(mode: Mode) {
             self.mode = mode
         }
 
-        func record(body: String) -> (status: HTTPResponseStatus, body: String) {
+        func recordAuthorization(nonce: String?) {
+            authorizedNonce = nonce
+        }
+
+        private func sign(_ claims: OIDCIDTokenClaims) async throws -> String {
+            var claims = claims
+            claims.nonce = authorizedNonce
+            return try await JWTKeyCollection()
+                .add(hmac: mockIdentityProviderSigningKey, digestAlgorithm: .sha256)
+                .sign(claims)
+        }
+
+        func record(body: String) async throws -> (status: HTTPResponseStatus, body: String) {
             requestBodies.append(body)
 
             switch mode {
             case .alwaysFail:
                 return (.badRequest, #"{"error":"invalid_grant"}"#)
-            case .succeedImmediately(let idToken):
+            case .succeedImmediately(let claims):
+                let idToken = try await sign(claims)
                 return (
                     .ok,
                     """
                     {"access_token":"access-token","id_token":"\(idToken)","token_type":"Bearer","expires_in":300}
                     """
                 )
-            case .succeedImmediatelyWithRefreshToken(let idToken, let refreshToken):
+            case .succeedImmediatelyWithRefreshToken(let claims, let refreshToken):
+                let idToken = try await sign(claims)
                 return (
                     .ok,
                     """
                     {"access_token":"access-token","refresh_token":"\(refreshToken)","id_token":"\(idToken)","token_type":"Bearer","expires_in":300}
                     """
                 )
-            case .succeedWithoutVerifier(let idToken):
+            case .succeedWithoutVerifier(let claims):
                 if body.contains("code_verifier=") {
                     return (.badRequest, #"{"error":"pkce_not_supported"}"#)
                 }
+                let idToken = try await sign(claims)
                 return (
                     .ok,
                     """
@@ -111,7 +130,9 @@ private let mockIdentityProviderSigningKey: HMACKey = "chickadee-sso-test-signin
         return app
     }
 
-    private func signedToken(
+    /// The claims the mock IdP signs; it adds the login's nonce when the
+    /// code is redeemed.
+    private func idTokenClaims(
         issuer: String,
         audience: [String],
         subject: String = "subject-123",
@@ -119,8 +140,8 @@ private let mockIdentityProviderSigningKey: HMACKey = "chickadee-sso-test-signin
         name: String? = "Jane Doe",
         email: String? = "jdoe@example.com",
         extraClaims: [String: String] = [:]
-    ) async throws -> String {
-        let claims = OIDCIDTokenClaims(
+    ) -> OIDCIDTokenClaims {
+        OIDCIDTokenClaims(
             sub: .init(value: subject),
             iss: .init(value: issuer),
             aud: .init(value: audience),
@@ -134,10 +155,6 @@ private let mockIdentityProviderSigningKey: HMACKey = "chickadee-sso-test-signin
             email: email,
             extraClaims: extraClaims
         )
-
-        return try await JWTKeyCollection()
-            .add(hmac: mockIdentityProviderSigningKey, digestAlgorithm: .sha256)
-            .sign(claims)
     }
 
     private func makeMockOIDCProvider(
@@ -155,10 +172,15 @@ private let mockIdentityProviderSigningKey: HMACKey = "chickadee-sso-test-signin
             app.post("token") { req async throws -> Response in
                 var body = req.body.data ?? ByteBuffer()
                 let bodyString = body.readString(length: body.readableBytes) ?? ""
-                let result = await tokenEndpoint.record(body: bodyString)
+                let result = try await tokenEndpoint.record(body: bodyString)
                 let response = Response(status: result.status, body: .init(string: result.body))
                 response.headers.contentType = .json
                 return response
+            }
+
+            app.get("authorize") { req async -> HTTPStatus in
+                await tokenEndpoint.recordAuthorization(nonce: req.query[String.self, at: "nonce"])
+                return .ok
             }
 
             app.post("revoke") { req async throws -> HTTPStatus in
@@ -197,6 +219,13 @@ private let mockIdentityProviderSigningKey: HMACKey = "chickadee-sso-test-signin
         let state = components.queryItems?.first(where: { $0.name == "state" })?.value ?? ""
         #expect(sessionCookie.isEmpty == false)
         #expect(state.isEmpty == false)
+        // Visit the authorization endpoint as the browser would, when it is
+        // the loopback mock IdP, so the IdP learns this login's nonce. A test
+        // on the static duo-test.example.com config never redeems a code, so
+        // it needs no nonce; one that does must point at the loopback IdP.
+        if components.host == "127.0.0.1" {
+            _ = try await app.client.get(URI(string: redirectLocation))
+        }
         return (sessionCookie, state)
     }
 
@@ -365,8 +394,12 @@ private let mockIdentityProviderSigningKey: HMACKey = "chickadee-sso-test-signin
 
     @Test func sSOCallback_missingCodeFails() async throws {
         try await withApp(try await makeApp()) { app in
+            // A valid state, so the request passes the state check and is
+            // refused by the missing-code check.
+            let start = try await startSSOSession(on: app)
             try await app.asyncTest(
-                .GET, "/auth/sso/callback?state=somestate",
+                .GET, "/auth/sso/callback?state=\(start.state)",
+                beforeRequest: { req in req.headers.add(name: .cookie, value: start.cookie) },
                 afterResponse: { res in
                     #expect(res.status == .seeOther)
                     #expect(
@@ -404,7 +437,7 @@ private let mockIdentityProviderSigningKey: HMACKey = "chickadee-sso-test-signin
     }
 
     @Test func sSOCallbackSuccessUsesFallbackTokenRequestAndUpsertsMappedUser() async throws {
-        let idToken = try await signedToken(
+        let idToken = idTokenClaims(
             issuer: "http://127.0.0.1/issuer",
             audience: ["test-client-id"],
             subject: "subject-fallback"
@@ -466,7 +499,7 @@ private let mockIdentityProviderSigningKey: HMACKey = "chickadee-sso-test-signin
     }
 
     @Test func sSOCallbackRejectsAudienceMismatchAfterTokenExchange() async throws {
-        let idToken = try await signedToken(
+        let idToken = idTokenClaims(
             issuer: "http://127.0.0.1/issuer",
             audience: ["wrong-client"],
             subject: "subject-bad-aud"
@@ -515,7 +548,7 @@ private let mockIdentityProviderSigningKey: HMACKey = "chickadee-sso-test-signin
     }
 
     @Test func sSOCallbackUsesConfiguredCustomUsernameClaimAndRepairsExistingUsername() async throws {
-        let idToken = try await signedToken(
+        let idToken = idTokenClaims(
             issuer: "http://127.0.0.1/issuer",
             audience: ["test-client-id"],
             subject: "subject-custom-claim",
@@ -589,7 +622,7 @@ private let mockIdentityProviderSigningKey: HMACKey = "chickadee-sso-test-signin
         // externalSubject. Their real first login must adopt that exact row
         // (claiming it with the subject), not create a duplicate — so any grade
         // override already attached to the stub stays bound to the same user.
-        let idToken = try await signedToken(
+        let idToken = idTokenClaims(
             issuer: "http://127.0.0.1/issuer",
             audience: ["test-client-id"],
             subject: "subject-stub-adopt",
@@ -664,7 +697,7 @@ private let mockIdentityProviderSigningKey: HMACKey = "chickadee-sso-test-signin
         // An admin set up a course for an instructor who has never logged in
         // (`provisionStaffEnrollment`). Their first SSO login must adopt that
         // placeholder, so they land in the course as its instructor.
-        let idToken = try await signedToken(
+        let idToken = idTokenClaims(
             issuer: "http://127.0.0.1/issuer",
             audience: ["test-client-id"],
             subject: "subject-new-prof",
@@ -730,7 +763,7 @@ private let mockIdentityProviderSigningKey: HMACKey = "chickadee-sso-test-signin
     }
 
     @Test func sSOCallbackPreservesExplicitUserIDClaimWhenRepairingUsername() async throws {
-        let idToken = try await signedToken(
+        let idToken = idTokenClaims(
             issuer: "http://127.0.0.1/issuer",
             audience: ["test-client-id"],
             subject: "subject-user-id-claim",
@@ -802,7 +835,7 @@ private let mockIdentityProviderSigningKey: HMACKey = "chickadee-sso-test-signin
 
     @Test func sSOCallbackCreatesNewUserWithCustomUsernameClaim() async throws {
         let subject = "subject-brand-new-user"
-        let idToken = try await signedToken(
+        let idToken = idTokenClaims(
             issuer: "http://127.0.0.1/issuer",
             audience: ["test-client-id"],
             subject: subject,
@@ -867,7 +900,7 @@ private let mockIdentityProviderSigningKey: HMACKey = "chickadee-sso-test-signin
     }
 
     @Test func logoutRevokesAccessAndRefreshTokensAndRedirectsToEndSession() async throws {
-        let idToken = try await signedToken(
+        let idToken = idTokenClaims(
             issuer: "http://127.0.0.1/issuer",
             audience: ["test-client-id"],
             subject: "subject-logout"
