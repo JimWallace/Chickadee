@@ -262,7 +262,12 @@ private struct DeploymentModeSection: HTML {
                     .data("confirm", value: "Save the deploy mode? The deployer follows it at its next poll.")
                 ) {
                     CSRFField(token: csrfToken)
-                    DeploymentModeChoices(current: view.mode, isEnabled: true)
+                    DeploymentModeChoices(current: view.pendingMode ?? view.mode, isEnabled: true)
+                    if let pending = view.pendingMode {
+                        p(.class("field-note field-note--muted")) {
+                            "\(pending.label) requested; the deployer applies it at its next poll."
+                        }
+                    }
                     div(.class("toolbar")) {
                         button(.class("btn btn-primary"), .type(.submit)) { "Save mode" }
                     }

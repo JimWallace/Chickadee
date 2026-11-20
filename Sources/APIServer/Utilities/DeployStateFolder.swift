@@ -56,6 +56,30 @@ struct DeployStateFolder: Sendable {
         return Array(records.suffix(max(limit, 0)).reversed())
     }
 
+    /// The deploy mode the daemon reports, or its default when it reports none.
+    func modeInForce() -> DeployMode {
+        status()?.mode.flatMap(DeployMode.init(rawValue:)) ?? .daemonDefault
+    }
+
+    /// The requests the daemon has not read yet, oldest first. A file that
+    /// does not parse as one of the four, or is not a small regular file, is
+    /// skipped.
+    func waitingRequests() -> [DeployRequest] {
+        let names = (try? FileManager.default.contentsOfDirectory(atPath: requestsFolder.path)) ?? []
+        return names.filter { $0.hasSuffix(".json") }.sorted().compactMap { name in
+            // Only a regular file under the daemon's own 4 KB limit: a FIFO or
+            // a symlink in this app-writable folder must not hang the page.
+            let url = requestsFolder.appendingPathComponent(name)
+            guard let attributes = try? FileManager.default.attributesOfItem(atPath: url.path),
+                attributes[.type] as? FileAttributeType == .typeRegular,
+                (attributes[.size] as? Int ?? .max) <= 4096,
+                let data = try? Data(contentsOf: url),
+                let body = try? JSONDecoder().decode([String: String].self, from: data)
+            else { return nil }
+            return DeployRequest(body: body)
+        }
+    }
+
     /// Request files the daemon has not read yet. It reads them every poll.
     func waitingRequestCount() -> Int {
         let names = (try? FileManager.default.contentsOfDirectory(atPath: requestsFolder.path)) ?? []
