@@ -26,7 +26,7 @@ extension AdminRoutes {
     /// Post-redirect notices, as keys so a query string cannot put arbitrary
     /// text on the page.
     enum DeploymentNotice: String {
-        case approved, modeRequested, paused, resumed
+        case approved, modeRequested, paused, resumed, alreadyWaiting, modeUnchanged
         case versionMismatch, nothingHeld, unknownMode, requestsFolderMissing, writeFailed
 
         var message: String {
@@ -35,6 +35,8 @@ extension AdminRoutes {
             case .modeRequested: "Mode change sent; it takes effect on the daemon’s next poll."
             case .paused: "Pause sent; it takes effect on the daemon’s next poll."
             case .resumed: "Resume sent; it takes effect on the daemon’s next poll."
+            case .alreadyWaiting: "Already sent; it takes effect on the daemon’s next poll."
+            case .modeUnchanged: "That is already the deploy mode; nothing was sent."
             case .versionMismatch:
                 "Nothing was sent: the version you typed is neither the held release nor the offered pre-release."
             case .nothingHeld: "Nothing was sent: no release or pre-release is waiting for approval."
@@ -47,7 +49,7 @@ extension AdminRoutes {
 
         var isError: Bool {
             switch self {
-            case .approved, .modeRequested, .paused, .resumed: false
+            case .approved, .modeRequested, .paused, .resumed, .alreadyWaiting, .modeUnchanged: false
             case .versionMismatch, .nothingHeld, .unknownMode, .requestsFolderMissing, .writeFailed: true
             }
         }
@@ -133,6 +135,13 @@ extension AdminRoutes {
         folder: DeployStateFolder, req: Request
     ) async -> Response {
         let user = req.auth.get(APIUser.self)?.username ?? "unknown"
+        // A request that repeats what already waits, or a mode change to the
+        // mode in force, would only repeat itself in the history.
+        switch request.redundancy(waiting: folder.waitingRequests(), modeInForce: folder.modeInForce()) {
+        case .alreadyWaiting: return redirect(req, .alreadyWaiting)
+        case .alreadyInForce: return redirect(req, .modeUnchanged)
+        case nil: break
+        }
         do {
             let file = try folder.write(request, user: user)
             await AuditLogger.record(
