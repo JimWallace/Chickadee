@@ -153,6 +153,5 @@ import VaporTesting
     @Test func aFiringRulePagesTheOperator() {
         // It is an outage the running process hides, so it must not be advisory.
         #expect(HealthRule.outboundEgressFailing.severity == "critical")
-        #expect(HealthRule.outboundEgressFailing.pagesOperator)
     }
 }

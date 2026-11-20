@@ -171,21 +171,14 @@ private func loadPendingQueueState(on application: Application, now: Date) async
     // Use the effective enqueue time (retestedAt ?? submittedAt) so a fresh
     // retest of an old submission doesn't look like it's been queued for days.
     // Matches the queueWaitMs baseline established in v0.4.45.
+    // `evaluateDatabaseUnreachable` fires for a database without SQL, and
+    // the sweep then stops before it reads the queue.
     guard let sql = application.db as? (any SQLDatabase) else {
-        // Non-SQL fallback (not hit by the Postgres driver in use).
-        let pending = try await APISubmission.query(on: application.db)
-            .filter(\.$status == SubmissionStatus.pending.rawValue)
-            .field(\.$retestedAt)
-            .field(\.$submittedAt)
-            .all()
-        let oldestEnqueuedAt = pending.compactMap { $0.retestedAt ?? $0.submittedAt }.min()
-        return PendingQueueState(
-            pendingCount: pending.count, oldestPendingAge: oldestEnqueuedAt.map { now.timeIntervalSince($0) })
+        throw AppError.internalFailure(reason: "The pending queue read needs a SQL database.")
     }
     // One aggregate row instead of every pending row: the pending set is
     // largest exactly when this rule matters. MIN skips a row whose two
-    // times are both NULL, as `compactMap` does above, and is NULL (no age)
-    // when nothing is pending.
+    // times are both NULL, and is NULL (no age) when nothing is pending.
     let enqueuedAt = SQLFunction("COALESCE", args: SQLColumn("retested_at"), SQLColumn("submitted_at"))
     let row = try await sql.select()
         .column(SQLFunction("COUNT", args: SQLLiteral.all), as: "pending_count")
@@ -616,11 +609,7 @@ private func evaluateBrightspaceSyncFailing(
 private func evaluateDatabaseUnreachable(on application: Application) async -> RuleEvaluation {
     do {
         guard let sql = application.db as? (any SQLDatabase) else {
-            return RuleEvaluation(
-                isFiring: true,
-                summary: "Database does not expose SQL interface",
-                details: ["error": "not_sql_database"]
-            )
+            throw AppError.internalFailure(reason: "The database check needs a SQL database.")
         }
         _ = try await sql.raw("SELECT 1").all()
         return .ok
@@ -693,9 +682,9 @@ struct AlertFiringRecord: Encodable, Sendable {
     let resolved: Bool
     let summary: String
     let firedAt: String
-    /// Whether this rule pages the operator webhook at all. Advisory (`info`)
-    /// rules are recorded here for the dashboard but never paged, so the view can
-    /// show "advisory" rather than mistaking a deliberate non-page for a failure.
+    /// Whether this firing paged the operator webhook at all. Every rule pages
+    /// now (none has `info` severity), so a sweep always records true; the
+    /// alerts page still reads "advisory, not paged" for a record that did not.
     let paged: Bool
     let delivered: Bool
     let deliveryError: String?
@@ -827,26 +816,21 @@ actor ServerHealthAlertMonitor {
                 firedAt: now,
                 application: application
             )
-            // Advisory (`info`-severity) rules are recorded and logged so they
-            // stay visible on `/admin/alerts` and via `get_health_alerts`, but
-            // they never page the operator webhook.
-            let pages = transition.rule.pagesOperator
+            // Every rule pages the operator webhook: none has `info` severity.
             var delivered = false
             var deliveryError: String?
-            if pages {
-                do {
-                    try await activeNotifier.send(alert, on: application)
-                    delivered = true
-                } catch {
-                    deliveryError = String(describing: error)
-                    application.logger.warning(
-                        "alert_delivery_failed",
-                        metadata: [
-                            "rule": .string(alert.rule),
-                            "resolved": .stringConvertible(alert.resolved),
-                            "error": .string(deliveryError ?? "unknown"),
-                        ])
-                }
+            do {
+                try await activeNotifier.send(alert, on: application)
+                delivered = true
+            } catch {
+                deliveryError = String(describing: error)
+                application.logger.warning(
+                    "alert_delivery_failed",
+                    metadata: [
+                        "rule": .string(alert.rule),
+                        "resolved": .stringConvertible(alert.resolved),
+                        "error": .string(deliveryError ?? "unknown"),
+                    ])
             }
             application.logger.info(
                 "alert_emitted",
@@ -854,7 +838,7 @@ actor ServerHealthAlertMonitor {
                     "rule": .string(alert.rule),
                     "resolved": .stringConvertible(alert.resolved),
                     "summary": .string(alert.summary),
-                    "paged": .stringConvertible(pages),
+                    "paged": .stringConvertible(true),
                     "delivered": .stringConvertible(delivered),
                 ])
             appendFiring(
@@ -863,7 +847,7 @@ actor ServerHealthAlertMonitor {
                     resolved: alert.resolved,
                     summary: alert.summary,
                     firedAt: alert.firedAt,
-                    paged: pages,
+                    paged: true,
                     delivered: delivered,
                     deliveryError: deliveryError
                 ))

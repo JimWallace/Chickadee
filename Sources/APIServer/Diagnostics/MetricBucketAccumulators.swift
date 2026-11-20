@@ -56,10 +56,10 @@ struct RunnerBucketAccumulator: Sendable, Equatable {
 }
 
 /// Per-bucket runner summary used to build the time-series response.  Decouples
-/// the wire response from *how* the runner stats were aggregated: a driver
-/// without SQL summarizes raw `RunnerBucketAccumulator`s in Swift, while SQL
-/// computes these three values directly in the database (see
-/// `runnerTimeseriesSummaries`).  Both paths must produce identical summaries.
+/// the wire response from *how* the runner stats were aggregated: SQL computes
+/// these three values directly in the database (see
+/// `runnerTimeseriesSummaries`), and the tests summarize raw
+/// `RunnerBucketAccumulator`s in Swift as the reference.
 struct RunnerBucketSummary: Sendable, Equatable {
     var avgUtilizationPercent: Int?
     var maxUtilizationPercent: Int?
@@ -168,8 +168,8 @@ enum MetricBucketAccumulators {
     }
 
     /// Collapse raw per-bucket accumulators into the lighter per-bucket
-    /// summaries the response is built from.  Used by the non-SQL path and the
-    /// tests; the SQL path computes equivalent summaries in the database.
+    /// summaries the response is built from.  The tests use it as the
+    /// reference; the server computes equivalent summaries in the database.
     static func summarizeRunnerBuckets(
         _ accumulators: [RunnerBucketAccumulator]
     ) -> [RunnerBucketSummary] {

@@ -61,7 +61,6 @@ import Vapor
 
     @Test func theRuleIsAWarningThatPages() {
         #expect(HealthRule.diskSpaceLow.severity == "warning")
-        #expect(HealthRule.diskSpaceLow.pagesOperator)
     }
 
     @Test func theAlertsPageStatesTheThreshold() {

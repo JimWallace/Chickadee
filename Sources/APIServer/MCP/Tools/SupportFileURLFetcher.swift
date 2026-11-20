@@ -172,10 +172,7 @@ enum SupportFileURLFetcher {
             throw SupportFileFetchError.invalidURL(urlString)
         }
         let addresses = try await resolve(host)
-        try refuseBlocked(addresses, host: host, logger: logger)
-        guard let address = connectionAddress(from: addresses) else {
-            throw SupportFileFetchError.dnsFailed(host: host)
-        }
+        let address = try refuseBlocked(addresses, host: host, logger: logger)
         return [host: address]
     }
 
@@ -189,19 +186,16 @@ enum SupportFileURLFetcher {
         return configuration
     }
 
-    /// The checked address to connect to.  An IPv4 address comes first when
-    /// there is one: a pin gives the client one address and no fallback, and a
-    /// container often has no IPv6 route.
-    static func connectionAddress(from addresses: [String]) -> String? {
-        addresses.first { BlockedIPClassifier.parseIPv4($0) != nil } ?? addresses.first
-    }
-
     /// Throws `dnsFailed` for an empty list and `blockedAddress` for the first
-    /// non-public address.
+    /// non-public address. Otherwise returns the checked address to connect
+    /// to.  An IPv4 address comes first when there is one: a pin gives the
+    /// client one address and no fallback, and a container often has no IPv6
+    /// route.
+    @discardableResult
     private static func refuseBlocked(
         _ addresses: [String], host: String, logger: Logger
-    ) throws(SupportFileFetchError) {
-        guard !addresses.isEmpty else { throw SupportFileFetchError.dnsFailed(host: host) }
+    ) throws(SupportFileFetchError) -> String {
+        guard let firstAddress = addresses.first else { throw SupportFileFetchError.dnsFailed(host: host) }
         for ip in addresses where BlockedIPClassifier.isBlocked(ip) {
             // The resolved address is instructor-URL infrastructure, not a
             // client IP, but it still goes in metadata: the admin query_logs
@@ -211,6 +205,7 @@ enum SupportFileURLFetcher {
                 metadata: ["ip": .string("\(ip)")])
             throw SupportFileFetchError.blockedAddress(host: host, ip: ip)
         }
+        return addresses.first { BlockedIPClassifier.parseIPv4($0) != nil } ?? firstAddress
     }
 
     /// Fetches the URL under the SSRF guards and returns the body as UTF-8 text.
