@@ -160,9 +160,9 @@ import VaporTesting
             let now = Date()
             let s1 = try await makeSetup(id: "ics_s1").requireID()
             let s2 = try await makeSetup(id: "ics_s2").requireID()
-            let studentA = try await makeStudent(username: "ics_a")
-            let studentB = try await makeStudent(username: "ics_b")
-            let studentC = try await makeStudent(username: "ics_c")
+            let studentA = try await makeTestUser(on: app, username: "ics_a", passwordHash: "x").requireID()
+            let studentB = try await makeTestUser(on: app, username: "ics_b", passwordHash: "x").requireID()
+            let studentC = try await makeTestUser(on: app, username: "ics_c", passwordHash: "x").requireID()
 
             try await saveStudentSubmission(
                 id: "ics_1", setupID: s1, userID: studentA, at: now.addingTimeInterval(-2 * 3600))
@@ -222,12 +222,6 @@ import VaporTesting
         try await diagnostic.save(on: app.db)
         diagnostic.createdAt = at
         try await diagnostic.update(on: app.db)
-    }
-
-    private func makeStudent(username: String) async throws -> UUID {
-        let user = APIUser(username: username, passwordHash: "x", role: "student")
-        try await user.save(on: app.db)
-        return try user.requireID()
     }
 
     private func saveStudentSubmission(id: String, setupID: String, userID: UUID, at: Date) async throws {

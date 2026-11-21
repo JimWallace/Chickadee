@@ -19,11 +19,6 @@ import Vapor
         return req
     }
 
-    private func enroll(_ user: APIUser, in course: APICourse, as role: CourseRole, on app: Application) async throws {
-        let row = APICourseEnrollment(userID: try user.requireID(), courseID: try course.requireID(), role: role)
-        try await row.save(on: app.db)
-    }
-
     // MARK: - loadCourse
 
     @Test func loadCourseReturnsTheCourseAndTheRawParameter() async throws {
@@ -56,7 +51,8 @@ import Vapor
         try await withTestApp { app in
             let course = try await makeTestCourse(on: app, code: "CS136")
             let prof = try await makeTestUser(on: app, username: "prof")
-            try await enroll(prof, in: course, as: .instructor, on: app)
+            try await makeTestEnrollment(
+                on: app, userID: try prof.requireID(), courseID: try course.requireID(), role: .instructor)
             let req = try request(on: app, params: ["courseID": course.requireID().uuidString], caller: prof)
             let loaded = try await loadCourseForWrite(req, atLeast: .instructor)
             #expect(try loaded.id == course.requireID())
@@ -67,7 +63,8 @@ import Vapor
         try await withTestApp { app in
             let course = try await makeTestCourse(on: app, code: "CS136")
             let assistant = try await makeTestUser(on: app, username: "ta")
-            try await enroll(assistant, in: course, as: .ta, on: app)
+            try await makeTestEnrollment(
+                on: app, userID: try assistant.requireID(), courseID: try course.requireID(), role: .ta)
             let req = try request(on: app, params: ["courseID": course.requireID().uuidString], caller: assistant)
             let error = await #expect(throws: AppError.self) {
                 _ = try await loadCourseForWrite(req, atLeast: .instructor)
@@ -80,7 +77,8 @@ import Vapor
         try await withTestApp { app in
             let course = try await makeTestCourse(on: app, code: "CS136", archived: true)
             let prof = try await makeTestUser(on: app, username: "prof")
-            try await enroll(prof, in: course, as: .instructor, on: app)
+            try await makeTestEnrollment(
+                on: app, userID: try prof.requireID(), courseID: try course.requireID(), role: .instructor)
             let req = try request(on: app, params: ["courseID": course.requireID().uuidString], caller: prof)
             let error = await #expect(throws: AppError.self) {
                 _ = try await loadCourseForWrite(req, atLeast: .instructor)
@@ -106,7 +104,8 @@ import Vapor
         try await withTestApp { app in
             let course = try await makeTestCourse(on: app, code: "CS136")
             let prof = try await makeTestUser(on: app, username: "prof")
-            try await enroll(prof, in: course, as: .instructor, on: app)
+            try await makeTestEnrollment(
+                on: app, userID: try prof.requireID(), courseID: try course.requireID(), role: .instructor)
             let section = APICourseSection(name: "Week 1", sortOrder: 1, courseID: try course.requireID())
             try await section.save(on: app.db)
             let req = try request(on: app, params: ["sectionID": section.requireID().uuidString])
@@ -121,7 +120,8 @@ import Vapor
             let mine = try await makeTestCourse(on: app, code: "CS136")
             let other = try await makeTestCourse(on: app, code: "CS246")
             let prof = try await makeTestUser(on: app, username: "prof")
-            try await enroll(prof, in: mine, as: .instructor, on: app)
+            try await makeTestEnrollment(
+                on: app, userID: try prof.requireID(), courseID: try mine.requireID(), role: .instructor)
             let section = APICourseSection(name: "Week 1", sortOrder: 1, courseID: try other.requireID())
             try await section.save(on: app.db)
             let req = try request(on: app, params: ["sectionID": section.requireID().uuidString])
@@ -139,7 +139,8 @@ import Vapor
         try await withTestApp { app in
             let course = try await makeTestCourse(on: app, code: "CS136")
             let prof = try await makeTestUser(on: app, username: "prof")
-            try await enroll(prof, in: course, as: .instructor, on: app)
+            try await makeTestEnrollment(
+                on: app, userID: try prof.requireID(), courseID: try course.requireID(), role: .instructor)
             let params = parameter.map { ["sectionID": $0] } ?? [:]
             let error = await #expect(throws: AppError.self) {
                 _ = try await loadCourseSectionForWrite(
@@ -155,7 +156,8 @@ import Vapor
         try await withTestApp { app in
             let course = try await makeTestCourse(on: app, code: "CS136")
             let assistant = try await makeTestUser(on: app, username: "ta")
-            try await enroll(assistant, in: course, as: .ta, on: app)
+            try await makeTestEnrollment(
+                on: app, userID: try assistant.requireID(), courseID: try course.requireID(), role: .ta)
             let section = APICourseSection(name: "Week 1", sortOrder: 1, courseID: try course.requireID())
             try await section.save(on: app.db)
             let req = try request(on: app, params: ["sectionID": section.requireID().uuidString])

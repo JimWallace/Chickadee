@@ -56,13 +56,6 @@ import VaporTesting
         return Data(json.utf8)
     }
 
-    /// Creates a zip at `zipPath` via the system `zip` CLI (matches the
-    /// pattern in ScriptEditRoutesTests so the same skip-on-missing-tooling
-    /// guard applies).
-    private func makeZipAt(zipPath: String, entries: [(name: String, content: Data)]) async throws {
-        try await writeZipFixture(at: zipPath, dataEntries: entries.map { ($0.name, $0.content) })
-    }
-
     @discardableResult
     private func insertSetup(
         id: String,
@@ -78,7 +71,7 @@ import VaporTesting
             zipEntries.isEmpty
             ? [("placeholder.txt", Data("placeholder\n".utf8))]
             : zipEntries
-        try await makeZipAt(zipPath: zipPath, entries: starter)
+        try await writeZipFixture(at: zipPath, dataEntries: starter.map { ($0.0, $0.1) })
 
         var notebookPath: String?
         if let nb = notebookOnDisk {

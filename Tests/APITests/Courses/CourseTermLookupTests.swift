@@ -33,12 +33,6 @@ import VaporTesting
         return course
     }
 
-    private func enroll(_ user: APIUser, in course: APICourse, role: CourseRole = .student) async throws {
-        try await APICourseEnrollment(
-            userID: try user.requireID(), courseID: try course.requireID(), role: role
-        ).save(on: app.db)
-    }
-
     private func toolContext(subject: String) -> ToolContext {
         ToolContext(
             request: makeTestRequest(on: app),
@@ -162,7 +156,8 @@ import VaporTesting
             let older = try await course("CS241", fall26)
             try await course("CS241", winter27)
             let student = try await makeTestUser(on: app, username: "lookup_student")
-            try await enroll(student, in: older)
+            try await makeTestEnrollment(
+                on: app, userID: try student.requireID(), courseID: try older.requireID(), role: .student)
             let found = try await findActiveCourse(byKey: "CS241", viewer: student.id, on: app.db)
             #expect(found?.id == older.id)
         }
@@ -210,7 +205,8 @@ import VaporTesting
             let cookie = try await loginUser(username: "vanity_term", password: "pw", role: "user", on: app)
             let student = try #require(
                 try await APIUser.query(on: app.db).filter(\.$username == "vanity_term").first())
-            try await enroll(student, in: older)
+            try await makeTestEnrollment(
+                on: app, userID: try student.requireID(), courseID: try older.requireID(), role: .student)
 
             // The bare code resolves to the offering the student is in.
             try await app.asyncTest(
@@ -243,8 +239,10 @@ import VaporTesting
             let older = try await course("CS246", fall26)
             let newer = try await course("CS246", winter27)
             let instructor = try await makeTestUser(on: app, username: "term_mcp", role: "instructor")
-            try await enroll(instructor, in: older, role: .instructor)
-            try await enroll(instructor, in: newer, role: .instructor)
+            try await makeTestEnrollment(
+                on: app, userID: try instructor.requireID(), courseID: try older.requireID(), role: .instructor)
+            try await makeTestEnrollment(
+                on: app, userID: try instructor.requireID(), courseID: try newer.requireID(), role: .instructor)
             let context = toolContext(subject: "term_mcp")
 
             let read = try await resolveMCPCourse(key: "CS246", context: context, forWrite: false)
@@ -270,7 +268,8 @@ import VaporTesting
             let active = try await course("CS247", winter27)
             let other = try await course("CS247", AcademicTerm(year: 2027, season: .spring))
             let instructor = try await makeTestUser(on: app, username: "term_mcp2", role: "instructor")
-            try await enroll(instructor, in: active, role: .instructor)
+            try await makeTestEnrollment(
+                on: app, userID: try instructor.requireID(), courseID: try active.requireID(), role: .instructor)
             _ = other
             let context = toolContext(subject: "term_mcp2")
 
@@ -293,8 +292,10 @@ import VaporTesting
             let legacy = try await course("CS243-F26", nil, archived: true)
             let termed = try await course("CS243", fall26)
             let instructor = try await makeTestUser(on: app, username: "term_mcp3", role: "instructor")
-            try await enroll(instructor, in: legacy, role: .instructor)
-            try await enroll(instructor, in: termed, role: .instructor)
+            try await makeTestEnrollment(
+                on: app, userID: try instructor.requireID(), courseID: try legacy.requireID(), role: .instructor)
+            try await makeTestEnrollment(
+                on: app, userID: try instructor.requireID(), courseID: try termed.requireID(), role: .instructor)
             let context = toolContext(subject: "term_mcp3")
 
             let overMCP = try await resolveMCPCourse(key: "CS243-F26", context: context, forWrite: true)
@@ -314,8 +315,10 @@ import VaporTesting
             let termed = try await course("CS248", fall26, name: "Termed")
             let plain = try await course("CS249", nil, name: "Plain")
             let instructor = try await makeTestUser(on: app, username: "term_list", role: "instructor")
-            try await enroll(instructor, in: termed, role: .instructor)
-            try await enroll(instructor, in: plain, role: .instructor)
+            try await makeTestEnrollment(
+                on: app, userID: try instructor.requireID(), courseID: try termed.requireID(), role: .instructor)
+            try await makeTestEnrollment(
+                on: app, userID: try instructor.requireID(), courseID: try plain.requireID(), role: .instructor)
 
             let output = try await ListCoursesTool().execute(
                 ListCoursesTool.Input(), toolContext(subject: "term_list"))

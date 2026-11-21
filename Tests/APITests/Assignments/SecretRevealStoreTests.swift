@@ -23,12 +23,6 @@ import VaporTesting
 
     // MARK: - Helpers
 
-    private func makeUser(username: String) async throws -> APIUser {
-        let user = APIUser(username: username, passwordHash: "x", role: "student")
-        try await user.save(on: app.db)
-        return user
-    }
-
     private func makeAssignment(
         courseID: UUID, secretRevealEnabled: Bool = false
     ) async throws
@@ -63,7 +57,7 @@ import VaporTesting
 
     @Test func spendToken_createsRowAndIsIdempotent() async throws {
         try await withApp(app) { _ in
-            let user = try await makeUser(username: "alice")
+            let user = try await makeTestUser(on: app, username: "alice", passwordHash: "x")
             let course = try await makeCourse()
             let assignment = try await makeAssignment(courseID: try course.requireID())
             let userID = try user.requireID()
@@ -91,7 +85,7 @@ import VaporTesting
 
     @Test func regrantToken_deletesRowAndReportsExistence() async throws {
         try await withApp(app) { _ in
-            let user = try await makeUser(username: "bob")
+            let user = try await makeTestUser(on: app, username: "bob", passwordHash: "x")
             let course = try await makeCourse()
             let assignment = try await makeAssignment(courseID: try course.requireID())
             let userID = try user.requireID()
@@ -115,9 +109,9 @@ import VaporTesting
 
     @Test func spentUserIDs_returnsExactlyTheSpenders() async throws {
         try await withApp(app) { _ in
-            let alice = try await makeUser(username: "alice2")
-            let bob = try await makeUser(username: "bob2")
-            let carol = try await makeUser(username: "carol2")
+            let alice = try await makeTestUser(on: app, username: "alice2", passwordHash: "x")
+            let bob = try await makeTestUser(on: app, username: "bob2", passwordHash: "x")
+            let carol = try await makeTestUser(on: app, username: "carol2", passwordHash: "x")
             let course = try await makeCourse()
             let assignment = try await makeAssignment(courseID: try course.requireID())
             let other = try await makeAssignment(courseID: try course.requireID())
@@ -139,7 +133,7 @@ import VaporTesting
 
     @Test func spendRows_cascadeDeleteWithAssignment() async throws {
         try await withApp(app) { _ in
-            let user = try await makeUser(username: "dave")
+            let user = try await makeTestUser(on: app, username: "dave", passwordHash: "x")
             let course = try await makeCourse()
             let assignment = try await makeAssignment(courseID: try course.requireID())
             let userID = try user.requireID()
@@ -160,7 +154,7 @@ import VaporTesting
 
     @Test func resolve_revealedOnlyWhenEnabledAndSpent() async throws {
         try await withApp(app) { _ in
-            let user = try await makeUser(username: "erin")
+            let user = try await makeTestUser(on: app, username: "erin", passwordHash: "x")
             let course = try await makeCourse()
             let assignment = try await makeAssignment(
                 courseID: try course.requireID(), secretRevealEnabled: true)
@@ -182,7 +176,7 @@ import VaporTesting
 
     @Test func resolve_toggleOffHidesEvenWithSpendRow() async throws {
         try await withApp(app) { _ in
-            let user = try await makeUser(username: "frank")
+            let user = try await makeTestUser(on: app, username: "frank", passwordHash: "x")
             let course = try await makeCourse()
             let assignment = try await makeAssignment(
                 courseID: try course.requireID(), secretRevealEnabled: true)
@@ -206,7 +200,7 @@ import VaporTesting
 
     @Test func resolve_staffAndMissingInputsShortCircuit() async throws {
         try await withApp(app) { _ in
-            let user = try await makeUser(username: "grace")
+            let user = try await makeTestUser(on: app, username: "grace", passwordHash: "x")
             let course = try await makeCourse()
             let assignment = try await makeAssignment(
                 courseID: try course.requireID(), secretRevealEnabled: true)
