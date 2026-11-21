@@ -197,18 +197,10 @@ private actor ResolveRecorder {
             let bound = try await makeCourse(
                 code: "RSMON", orgUnitID: "ou-mon", username: "rs_mon", on: app)
 
-            monitor.start(application: app)
-            var leased = false
-            for _ in 0..<200 {
-                if try await SweepLease.find("LEARN roster readiness", on: app.db) != nil {
-                    leased = true
-                    break
-                }
-                try await Task.sleep(for: .milliseconds(25))
-            }
-            await monitor.stop()
+            await monitor.sweepOnce(application: app)
+            let leased = try await SweepLease.find("LEARN roster readiness", on: app.db) != nil
 
-            #expect(leased, "the first tick runs at start")
+            #expect(leased, "the tick takes the lease")
             let row = try await reload(bound.enrollment, on: app)
             #expect(row.learnSyncReadiness == .unconfirmed)
             #expect(row.brightspaceCheckedAt == nil)

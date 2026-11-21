@@ -181,16 +181,8 @@ import VaporTesting
 
             let monitor = app.ltiGradeSyncMonitor
             #expect(monitor.name == "LTI grade sync")
-            monitor.start(application: app)
-            var finished = false
-            for _ in 0..<200 {
-                if try await !row(fixture).pending {
-                    finished = true
-                    break
-                }
-                try await Task.sleep(for: .milliseconds(25))
-            }
-            await monitor.stop()
+            await monitor.sweepOnce(application: app)
+            let finished = try await !row(fixture).pending
 
             #expect(finished)
             try await expectSent(fixture)

@@ -3,7 +3,8 @@
 // The leased tick of `PeriodicSweepMonitor` (#1155) and its lifecycle
 // handler. `PeriodicSweepMonitorTests` covers the wait at `stop()`; this
 // suite covers what one tick does when this instance does not hold the
-// lease, when the lease check itself fails, and when the sweep throws.
+// lease, when the lease check itself fails, and when the sweep throws. Each
+// tick test awaits `sweepOnce`, which runs the same leased tick as the loop.
 
 import ChickadeeTestSupport
 import Fluent
@@ -59,11 +60,7 @@ struct PeriodicSweepMonitorLeaseTests {
             }
             #expect(try await monitor.acquireLease(application: app) == false)
 
-            monitor.start(application: app)
-            try await Self.waitUntil("the tick logs its skip") {
-                !capture.messages(containing: "sweep skipped").isEmpty
-            }
-            await monitor.stop()
+            await monitor.sweepOnce(application: app)
 
             #expect(await counter.runs == 0)
             #expect(
@@ -76,7 +73,7 @@ struct PeriodicSweepMonitorLeaseTests {
 
     /// The lease check fails (Postgres refuses a NUL byte in the key): the
     /// tick logs a warning and does not run the sweep. The error never
-    /// escapes the loop.
+    /// escapes the tick.
     @Test func aFailedLeaseCheckLogsAWarningAndSkipsTheSweep() async throws {
         try await withTestApp { app in
             let capture = CapturedLog()
@@ -86,11 +83,7 @@ struct PeriodicSweepMonitorLeaseTests {
                 await counter.record()
             }
 
-            monitor.start(application: app)
-            try await Self.waitUntil("the tick logs the lease failure") {
-                !capture.messages(containing: "sweep lease check failed").isEmpty
-            }
-            await monitor.stop()
+            await monitor.sweepOnce(application: app)
 
             #expect(await counter.runs == 0)
             #expect(capture.messages(at: .warning, containing: "sweep lease check failed").count == 1)
@@ -99,8 +92,7 @@ struct PeriodicSweepMonitorLeaseTests {
     }
 
     /// A sweep that throws is logged at error with the monitor's name and
-    /// the error's description; the loop survives it, so `stop()` still
-    /// returns normally.
+    /// the error's description; the error never escapes the tick.
     @Test func aThrowingSweepIsLoggedAsAnError() async throws {
         try await withTestApp { app in
             let capture = CapturedLog()
@@ -111,11 +103,7 @@ struct PeriodicSweepMonitorLeaseTests {
                 throw SweepLeaseProbeError()
             }
 
-            monitor.start(application: app)
-            try await Self.waitUntil("the sweep failure is logged") {
-                !capture.messages(containing: "sweep failed").isEmpty
-            }
-            await monitor.stop()
+            await monitor.sweepOnce(application: app)
 
             #expect(await counter.runs == 1)
             #expect(
@@ -136,10 +124,7 @@ struct PeriodicSweepMonitorLeaseTests {
                 throw CancellationError()
             }
 
-            monitor.start(application: app)
-            try await Self.waitUntil("the sweep runs") { await counter.runs == 1 }
-            // `stop()` waits for the loop, so the catch has run by now.
-            await monitor.stop()
+            await monitor.sweepOnce(application: app)
 
             #expect(capture.messages(containing: "sweep failed").isEmpty)
             #expect(capture.messages(at: .error, containing: "lease-gap-cancelled").isEmpty)

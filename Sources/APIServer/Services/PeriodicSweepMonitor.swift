@@ -107,6 +107,13 @@ final class PeriodicSweepMonitor: Sendable {
         }
     }
 
+    /// Runs one leased tick now, as the loop's first iteration does, and
+    /// returns when it has ended. For tests: a test that awaits this needs no
+    /// wall-clock poll for the loop's first tick.
+    func sweepOnce(application: Application) async {
+        await runLeasedSweep(application: application, context: "")
+    }
+
     func start(application: Application) {
         running.withLock { running in
             guard running == nil else { return }
