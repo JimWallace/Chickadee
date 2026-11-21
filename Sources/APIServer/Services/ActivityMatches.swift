@@ -86,16 +86,7 @@ func latestStudentSubmissionsByUser(
     let students = Array(studentSet)
     guard !students.isEmpty else { return [:] }
     guard let sql = db as? (any SQLDatabase) else {
-        let candidates = try await APISubmission.query(on: db)
-            .filter(\.$testSetupID == setupID)
-            .filter(\.$kind == APISubmission.Kind.student)
-            .filter(\.$status == SubmissionStatus.complete.rawValue)
-            .filter(\.$userID ~~ students)
-            .sort(\.$submittedAt, .descending)
-            .all()
-        return latestStudentSubmissions(from: candidates, students: studentSet).compactMapValues {
-            LatestStudentSubmission($0)
-        }
+        throw AppError.internalFailure(reason: "The latest student submissions read needs a SQL database.")
     }
     // One statement picks the newest per student and reads the five columns
     // the readers use: the claim path runs this per job, and a setup's

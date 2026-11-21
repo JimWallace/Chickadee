@@ -91,23 +91,12 @@ func recordClassItemCoverage(
     // suite can carry dozens of variants and this runs on the result path.
     // The first submission to cover an item keeps it: the unique
     // `(test_setup_id, item)` turns every later insert into nothing.
-    if let sql = db as? (any SQLDatabase) {
-        try await CoverageInsert(
-            testSetupID: testSetupID, groupID: nil, items: covered, userID: userID, submissionID: submissionID
-        ).run(into: APIClassItemCoverage.schema, keyColumns: ["test_setup_id", "item"], on: sql)
-        return
+    guard let sql = db as? (any SQLDatabase) else {
+        throw AppError.internalFailure(reason: "The class coverage write needs a SQL database.")
     }
-    let seen = Set(
-        try await APIClassItemCoverage.query(on: db)
-            .filter(\.$testSetupID == testSetupID)
-            .filter(\.$item ~~ covered)
-            .all()
-            .map(\.item))
-    for item in covered where !seen.contains(item) {
-        try await APIClassItemCoverage(
-            testSetupID: testSetupID, item: item, userID: userID, submissionID: submissionID
-        ).createIgnoringConflict(on: db)
-    }
+    try await CoverageInsert(
+        testSetupID: testSetupID, groupID: nil, items: covered, userID: userID, submissionID: submissionID
+    ).run(into: APIClassItemCoverage.schema, keyColumns: ["test_setup_id", "item"], on: sql)
 }
 
 /// One submission's covered items, written as coverage rows. `groupID` is
@@ -170,24 +159,12 @@ func recordLabItemCoverage(
     testSetupID: String, groupID: UUID, items: [String], userID: UUID, submissionID: String,
     on db: any Database
 ) async throws {
-    if let sql = db as? (any SQLDatabase) {
-        try await CoverageInsert(
-            testSetupID: testSetupID, groupID: groupID, items: items, userID: userID, submissionID: submissionID
-        ).run(into: APIGroupClassItemCoverage.schema, keyColumns: ["test_setup_id", "group_id", "item"], on: sql)
-        return
+    guard let sql = db as? (any SQLDatabase) else {
+        throw AppError.internalFailure(reason: "The lab coverage write needs a SQL database.")
     }
-    let seen = Set(
-        try await APIGroupClassItemCoverage.query(on: db)
-            .filter(\.$testSetupID == testSetupID)
-            .filter(\.$groupID == groupID)
-            .filter(\.$item ~~ items)
-            .all()
-            .map(\.item))
-    for item in items where !seen.contains(item) {
-        try await APIGroupClassItemCoverage(
-            testSetupID: testSetupID, groupID: groupID, item: item, userID: userID, submissionID: submissionID
-        ).createIgnoringConflict(on: db)
-    }
+    try await CoverageInsert(
+        testSetupID: testSetupID, groupID: groupID, items: items, userID: userID, submissionID: submissionID
+    ).run(into: APIGroupClassItemCoverage.schema, keyColumns: ["test_setup_id", "group_id", "item"], on: sql)
 }
 
 /// Every lab's coverage of one assignment, by lab.
