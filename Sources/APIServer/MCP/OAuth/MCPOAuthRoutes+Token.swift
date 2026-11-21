@@ -244,7 +244,9 @@ extension MCPOAuthRoutes {
     private static func rotateRefreshHash(
         on db: any Database, currentHash: String, newHash: String
     ) async throws -> Bool {
-        guard let sql = db as? (any SQLDatabase) else { return true }
+        guard let sql = db as? (any SQLDatabase) else {
+            throw AppError.internalFailure(reason: "The refresh token rotation needs a SQL database.")
+        }
         let rows = try await sql.raw(
             "UPDATE \(unsafeRaw: MCPGrant.schema) SET previous_refresh_token_hash = refresh_token_hash, refresh_token_hash = \(bind: newHash) WHERE refresh_token_hash = \(bind: currentHash) AND revoked = false RETURNING id"
         ).all()

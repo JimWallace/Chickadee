@@ -130,7 +130,9 @@ enum MCPUploadService {
     /// Sets `uploaded_at` on a live, unclaimed row, and returns true only when
     /// this call set it.
     private static func claim(id: UUID, tokenHash: String, on db: any Database, now: Date) async throws -> Bool {
-        guard let sql = db as? (any SQLDatabase) else { return true }
+        guard let sql = db as? (any SQLDatabase) else {
+            throw AppError.internalFailure(reason: "The upload claim needs a SQL database.")
+        }
         let rows = try await sql.raw(
             """
             UPDATE mcp_uploads SET uploaded_at = \(bind: now) \

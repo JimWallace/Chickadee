@@ -168,13 +168,7 @@ extension InstructorDashboardRoutes {
     ) async throws -> [GradesCSVStudent] {
         guard !ids.isEmpty else { return [] }
         guard let sql = db as? (any SQLDatabase) else {
-            return try await APIUser.query(on: db)
-                .filter(\.$id ~~ ids)
-                .sort(\.$username, .ascending)
-                .all()
-                .compactMap { user in
-                    user.id.map { GradesCSVStudent(id: $0, username: user.username, studentID: user.studentID) }
-                }
+            throw AppError.internalFailure(reason: "The grades export needs a SQL database.")
         }
         let rows = try await sql.select()
             .column("id")
