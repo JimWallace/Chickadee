@@ -198,7 +198,7 @@ private struct ContentItemEditPopover: HTML {
                     label(.class("form-label")) {
                         "Add files"
                         input(
-                            .class("form-input editor-input"), .type(.file), .name("attachmentFiles"), .multiple)
+                            .class("form-input editor-input"), .type(.file), .name("attachmentFiles[]"), .multiple)
                     }
                     button(.class("btn btn-primary btn-compact"), .type(.submit)) { "Save changes" }
                 }
