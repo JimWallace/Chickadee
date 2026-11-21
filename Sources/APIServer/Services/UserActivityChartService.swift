@@ -115,20 +115,7 @@ enum UserActivityChartService {
         from start: Date, through end: Date, bucketSeconds: TimeInterval, bucketCount: Int, on db: any Database
     ) async throws -> [Int: Int] {
         guard let sql = db as? (any SQLDatabase) else {
-            // Non-SQL fallback (not hit by the Postgres driver in use).
-            var users: [Int: Set<UUID>] = [:]
-            for event in try await APIUserActivityEvent.query(on: db)
-                .filter(\.$createdAt >= start)
-                .filter(\.$createdAt <= end)
-                .field(\.$userID)
-                .field(\.$createdAt)
-                .all()
-            {
-                guard let createdAt = event.createdAt else { continue }
-                let index = min(max(Int(createdAt.timeIntervalSince(start) / bucketSeconds), 0), bucketCount - 1)
-                users[index, default: []].insert(event.userID)
-            }
-            return users.mapValues(\.count)
+            throw AppError.internalFailure(reason: "The user activity chart needs a SQL database.")
         }
         let rows = try await sql.raw(
             """
