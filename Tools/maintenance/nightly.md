@@ -111,9 +111,9 @@ say so. Do not start a long CI run and wait for it; the next night takes it.
 With the time left before 07:00, take work from these sources, in this
 order. One work item is one pull request.
 
-1. **Audit findings.** Open `ui-audit` and `docs-audit` issues: fix the
-   findings that have one clear fix. Leave `dead-code` issues alone: their
-   removals need test edits, which wait for a live session
+1. **Audit findings.** Open `ui-audit`, `docs-audit` and `dead-code`
+   issues: fix the findings that have one clear fix. A `dead-code` item in
+   "Remove with its tests" is removed with those tests
    (`audit-rotation.md`, section 3).
 2. **Maintenance issues.** Open issues labelled `tech-debt`,
    `maintenance`, `flake-telemetry`, `performance` or `tests`, oldest
@@ -121,8 +121,9 @@ order. One work item is one pull request.
 3. **Deeper sweeps.** Run the mutation tool on a tier that the weekly sweep
    does not cover, and answer the survivors. Find coverage gaps in
    `test-coverage.yml`'s newest report (`gh run download RUN_ID -n
-   coverage-lcov -D SCRATCHPAD/coverage`) and close them with new test
-   files.
+   coverage-lcov -D SCRATCHPAD/coverage`) and close them in the suite that
+   already tests the type. Add a new file only for a type that has no
+   suite.
    Move npm dependencies that are behind, within their ranges. Leave the
    xeus kernels to `kernel-currency.yml` (`scheduled-checks.md`).
 4. **The nightly tests and this steward.** Find what made CI or tonight's

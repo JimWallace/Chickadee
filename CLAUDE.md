@@ -445,7 +445,10 @@ The hooks in `.claude/hooks/` do three jobs, so you need not (a fourth,
   In a mode where no person answers prompts (`auto`, `dontAsk`,
   `bypassPermissions`) it denies the change instead (#2832). Then tell the
   maintainer the exact edit and why, and wait: they approve by switching the
-  session out of that mode, and the hook asks them directly.
+  session out of that mode, and the hook asks them directly. On a
+  `steward/` branch the hook allows the change in any mode: the nightly
+  steward may edit tests (`Tools/maintenance/README.md`). The branch name
+  is the only sign, so do not use a `steward/` branch for other work.
   `scripts/test-claude-hooks.py` tests the three job hooks in CI.
 
 ---
