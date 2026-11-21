@@ -577,3 +577,4 @@ range, or when the total payload for all slots is more than 4 MB.
 | Class film: each student renders one segment of a fly-through | `sequence` |
 | The class is the CT scanner: each student backprojects one angle | `sum` |
 | Teleradiology race: each student streams one scan over a slow link | `gallery` |
+| The Kestrel Chase: each student locates one shared route from their own part of the evidence (`docs/examples/kestrel-chase/`) | `sum` |

@@ -1,0 +1,10 @@
+# Output of generate_case.py. The seed decides the route, and the keys are
+# the answers, so a generated case never belongs in this public repository.
+case/
+route_key.json
+decoy_*
+practice_*
+daylight_log.csv
+pings.csv
+relays.csv
+__pycache__/

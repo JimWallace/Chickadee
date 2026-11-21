@@ -25,6 +25,7 @@ that §7 describes are in that pull request, not on `main`.
 | Storage | One versioned **description** per version (`description_json`, a discriminated `DatasetDescription`), instead of a new column per format. CSV keeps `columns_json`; no data migration. Rename `summary_json` before the branch merges. |
 | Bundles and manifests | A general rule instead of a bump per format: `schemaVersion` 3 means "datasets carry `format`", and a reader refuses an unknown format **by name**. A manifest with an unknown format still decodes and delivers the file whole. Both decoders must ship before a third value is ever written. |
 | Graphs | The mini web becomes a library dataset as a **shared JSON document**. Selection by subgraph is not worth building: it breaks the lesson's measured claims and has no disjoint split (§7). Per-student variation comes from personalization. |
+| Geospatial | **Points are CSV** with `lat` and `lon` columns, which ship today. **Boundaries are GeoJSON**, a format of its own on the JSON document framing, shared, in WGS84 and simplified to under 1 MB. Basemap tiles are static files, not a dataset (§8). |
 | Next kinds, in order | (1) a generic JSON document, shared only; (2) "sample by key column" for CSV, which reuses the FHIR unit index; (3) generic NDJSON records. Parquet, images, WFDB signals and SQLite wait (§3). |
 
 ---
@@ -65,7 +66,7 @@ the materializer.**
 | Graph | a referral network, the mini web's links, a citation net | edge-list CSV, or a JSON document | node, but edges span two | **shared** (§7) | node and edge counts, degree range, components | counts, an example node | small | no graph format; a table or a document |
 | HL7 v2 | ADT and ORU messages | blocks (MSH to the next MSH) | message, or the messages of one PID-3 | sample by message or patient | message types, segment types, counts | counts, an example message | 1 to 2 KB per message | later, if a course asks; today a CSV fallback (FHIR plan §10) |
 | Text corpus | discharge summaries | NDJSON records with a text field | document | sample by document | as NDJSON records, plus token and length ranges | counts, an example document | small | covered by NDJSON records |
-| Geospatial | clinic locations, catchments | GeoJSON (one document) or GeoJSON Lines | feature | shared, or sample by feature for GeoJSON Lines | geometry types, bounding box, property keys (a dictionary like a table's) | counts, bbox, example | the boundary files are large | later; shared GeoJSON is just a JSON document |
+| Geospatial | clinic locations, catchments | GeoJSON (one document) or GeoJSON Lines | feature | shared, or sample by feature for GeoJSON Lines | geometry types, bounding box, property keys (a dictionary like a table's) | counts, bbox, example | the boundary files are large | points ship as CSV today; GeoJSON follows the JSON document kind (§8) |
 | Signals, binary | WFDB, EDF | binary, often two files | recording | shared | sample rate, leads, duration | metadata | MBs per recording | defer: binary and multi-file (§6) |
 | Columnar | Parquet | binary | row group | shared | schema | schema | compact | defer: no `pyarrow` in the browser kernel (`environment-python.yml`) |
 | Images | dermatology, X-ray | binary, many files | image | shared | dimensions, count | thumbnails | the 16 MB cap | non-goal: one file per dataset, text pipeline |
@@ -392,7 +393,132 @@ graph summary the table and document profiles cannot give.
 
 ---
 
-## 8. Feature interactions
+## 8. Geospatial data
+
+### Why now
+
+A geospatial class activity needs map data that the server holds. Mapping
+libraries cannot fetch data at run time: the editor's CSP is
+`connect-src 'self'` and `img-src 'self' data: blob:`
+(`SecurityHeadersMiddleware`), so no tile server, CDN or open-data portal is
+reachable from a notebook. The data has to be in the course library.
+
+The activities that drive this section all use kinds already in the
+activity family (`docs/class-activities.md`, `docs/class-composite.md`):
+
+| Activity | Kind | Data it needs |
+|---|---|---|
+| Each student renders one map tile; the projector assembles the region | `classComposite`, `tile` | region boundaries |
+| Each student maps the same rates with an assigned classification and colour scale; the class compares the maps | `classComposite`, `gallery` | region boundaries, a rates table |
+| Each student renders one week of case counts; the class makes an animation | `classComposite`, `sequence` | region boundaries, a weekly counts table |
+| Choose K clinic sites that minimize mean travel distance to the population | `bestMetric` or `kingOfTheHill` | population points, existing facilities |
+| Implement a projection and score its distortion | `bestMetric` | world boundaries |
+| Find the seeded bugs in a point-in-polygon routine | `bugHunt` | small hand-made polygons in the test setup |
+
+None of these needs a new Python package. GeoJSON is JSON, so `json`,
+`numpy` and `matplotlib`, which the kernel ships, can read, project and draw
+it. Packages such as `shapely` and `geopandas` are a separate decision with
+their own boot cost and loading risk (`Tools/jupyterlite/CLAUDE.md`).
+
+### Three kinds of geospatial data, three answers
+
+**Decision M1. A point layer is a CSV.** A table with `lat` and `lon`
+columns (WGS84, decimal degrees) needs no new format. It gets sampling,
+strata, partitions and personalization from the table profile as it is.
+Facility locations, population points and geocoded events all take this
+form.
+
+**Decision M2. A boundary layer is a GeoJSON document, shared.** GeoJSON is
+a `DatasetFormat` case of its own, not a reading of a generic JSON document.
+Its framing is the document framing of the JSON document kind (§3, first new
+kind), and it shares that kind's reader (K4). Its profile is its own: the
+validation, summary, extension and media type below. A format of its own is
+what lets a reader that predates it refuse it by name (§5) instead of
+showing coordinates as an opaque JSON value. So GeoJSON is built after the
+JSON document kind, not with it. It is delivered whole to every student. Per-student variation comes from
+the tables joined to it, which are CSVs and can be personalized. Selection
+by feature waits for GeoJSON Lines, which is line-framed and can use the
+unit index (one feature per unit). No activity above needs that selection.
+
+**Decision M3. Basemap tiles are not a dataset.** A tile set is a directory
+of thousands of small images keyed by zoom, column and row. It is served as
+static files from the server's own origin, which `img-src 'self'` already
+allows. It is also useless without a map widget in the kernel (ipyleaflet or
+similar) and a vendored Leaflet, so it waits on the package work. No
+activity above needs tiles.
+
+### What the GeoJSON profile answers
+
+The seven questions of §2, for GeoJSON:
+
+| # | Answer |
+|---|---|
+| Q1 | It parses as JSON; the top level is a `FeatureCollection`; every geometry is `Point`, `LineString`, `Polygon` or a `Multi*` of them; every coordinate is within lon −180…180 and lat −90…90. A `crs` member, or coordinates outside those ranges, is refused with a message that names projected coordinates as the likely cause. The profile holds the feature count, the geometry types and their counts, the bounding box and the property keys. |
+| Q2 | Prose on the document and per property key, as a table's column dictionary. The prose carries to a new version by key. |
+| Q3 | The unit is the feature. Selection: none (shared only, M2). |
+| Q4 | The whole file. |
+| Q5 | Not applicable: the unit index is nil, as for the JSON document (§7), so there is no empty slice. |
+| Q6 | Feature count, geometry types, bounding box, the property-key table, an example feature's properties. No coordinates on the page; they are unreadable and long. |
+| Q7 | `.geojson`, `application/geo+json`, features. |
+
+### How to prepare a boundary file
+
+Government boundary files are tens of megabytes at full resolution. A
+browser-graded lab downloads a shared dataset for each grade (§10), so each
+file is prepared before upload:
+
+- **WGS84 longitude and latitude (EPSG:4326)**, as RFC 7946 requires. The
+  students do the projecting; that is the lesson.
+- **Simplified to under 1 MB**, for example with mapshaper, keeping shared
+  borders shared so that neighbouring regions do not gap or overlap.
+- **Coordinates rounded to 5 decimal places**, about 1 m at Ontario's
+  latitudes.
+- **Minimal properties:** one stable join key and one name. Population,
+  rates and counts live in CSVs and are joined on the key, which is a skill
+  the lab teaches.
+- **No shapefiles.** A shapefile is several files and needs GDAL to read.
+  **No TopoJSON.** It is smaller, but decoding it needs a library the kernel
+  does not ship.
+
+### What to host
+
+The sources and licences below are the plan, not a verified record. Confirm
+each licence, current boundary vintage and download path before the first
+upload, and record the attribution in the dataset's prose.
+
+| Dataset | Layer | Source | Licence | Used by |
+|---|---|---|---|---|
+| Healthcare facilities, Canada (Ontario subset) | points, CSV | Statistics Canada, Open Database of Healthcare Facilities | Open Government Licence – Canada | clinic siting |
+| Population by dissemination area, with a representative point | points, CSV | Statistics Canada, 2021 Census profile and boundary files | Statistics Canada Open Licence | clinic siting, rates |
+| Weekly case counts by public health unit | table, CSV | **synthetic**, generated for the course | none needed | animation, gallery |
+| Ontario public health unit boundaries | GeoJSON | Ontario GeoHub | Open Government Licence – Ontario | tile composite, gallery, animation |
+| Ontario Health regions | GeoJSON | Ontario GeoHub | Open Government Licence – Ontario | a coarser choropleth |
+| Census divisions and subdivisions, Ontario | GeoJSON | Statistics Canada boundary files | Statistics Canada Open Licence | finer maps; joins to census tables |
+| Region of Waterloo boundaries | GeoJSON | Region of Waterloo open data | the region's open data licence | a local-scale tile composite |
+| World countries (1:110m) and first-level divisions (1:50m) | GeoJSON | Natural Earth | public domain | projection distortion |
+
+Case counts are synthetic on purpose. Public reporting of real case counts
+carries use terms and small-cell suppression, and synthetic counts can be
+personalized so that no two students map the same numbers. Health-unit
+boundaries change when units merge, so the join key in the counts table must
+come from the same boundary vintage as the GeoJSON.
+
+### Order of work
+
+1. **Now, no code:** the point CSVs and the synthetic counts table, uploaded
+   as ordinary CSV datasets. This supports clinic siting and the data side
+   of the animation.
+2. **With the JSON document kind:** the GeoJSON profile above, then the
+   Ontario public health unit boundaries and Natural Earth countries as the
+   first two library datasets. This supports the tile composite, the gallery
+   and the projection activity.
+3. **Later, on demand:** GeoJSON Lines with selection by feature, then a
+   basemap tile set for the Region of Waterloo if a lab asks for one and the
+   map widget is in the kernel.
+
+---
+
+## 9. Feature interactions
 
 The "Dataset format: `DatasetFormat`" section of
 `docs/feature-interactions.md` lists the readers today and ends "a new format
@@ -410,7 +536,7 @@ updates every reader above, or says why it does not". With this plan:
 
 ---
 
-## 9. Risks and open questions
+## 10. Risks and open questions
 
 | Risk | What happens | Mitigation |
 |---|---|---|
@@ -438,3 +564,5 @@ Open questions for the maintainer:
 6. **HL7 v2.** The FHIR plan made it a non-goal with a CSV fallback. Under
    this plan it is a block-framed format with a message unit. Keep it a
    non-goal unless HLTH 230 asks.
+7. **Geospatial (§8).** Approve the source list, and confirm that boundaries
+   stay shared-only GeoJSON until an activity needs selection by feature.
