@@ -111,9 +111,12 @@ enum CourseContentService {
         return trimmed
     }
 
+    /// A site-relative link is a plain server path (`isSafeLocalPath`): a
+    /// second "/" or a backslash makes it protocol-relative (`//host`, and
+    /// browsers read a backslash as a slash), which links off the site.
     private static func isSafeLinkURL(_ url: String) -> Bool {
         let lower = url.lowercased()
-        return lower.hasPrefix("http://") || lower.hasPrefix("https://") || url.hasPrefix("/")
+        return lower.hasPrefix("http://") || lower.hasPrefix("https://") || isSafeLocalPath(url)
     }
 
     // MARK: - Writes
