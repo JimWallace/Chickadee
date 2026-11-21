@@ -83,11 +83,6 @@ import VaporTesting
             #expect(staff.rows.map(\.username) == ["lbg_metric_0", "lbg_metric_1", "lbg_metric_2"])
             #expect(staff.rows.map(\.submissionCountText) == ["2 submissions", "1 submission", "0 submissions"])
             #expect(staff.you == nil)
-
-            let notSQL = ForwardingTestDatabase(base: app.db)
-            #expect(
-                try await leaderboardSubmissionCounts(setupID: "lbg_metric", on: notSQL)
-                    == leaderboardSubmissionCounts(setupID: "lbg_metric", on: app.db))
         }
     }
 

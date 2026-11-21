@@ -33,13 +33,4 @@ struct LatestStudentSubmission: Sendable, Decodable {
         self.filename = filename
         self.zipPath = zipPath
     }
-
-    /// The same columns of a loaded submission; nil when it has no id or
-    /// no owner.
-    init?(_ submission: APISubmission) {
-        guard let id = submission.id, let userID = submission.userID else { return nil }
-        self.init(
-            id: id, userID: userID, submittedAt: submission.submittedAt, filename: submission.filename,
-            zipPath: submission.zipPath)
-    }
 }
