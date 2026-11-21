@@ -346,7 +346,7 @@ private struct AddMaterialPanel: HTML {
                 }
                 label(.class("form-label")) {
                     "Files (optional)"
-                    input(.class("form-input editor-input"), .type(.file), .name("attachmentFiles"), .multiple)
+                    input(.class("form-input editor-input"), .type(.file), .name("attachmentFiles[]"), .multiple)
                 }
                 div(.class("toolbar")) {
                     button(.class("btn btn-primary btn-compact"), .type(.submit)) { "Add material" }
