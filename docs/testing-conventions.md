@@ -81,6 +81,9 @@ keeps the short form and points here.
   parameterized test, or a body whose first half runs without the tool — and
   each such site says so in a comment. "Test setup is broken" is still
   `throw IssueRecorded("...")`, which fails with a clear message.
+- **Each Swift test lane reports its slowest suites.** `scripts/report-slow-suites.sh`
+  writes the 20 suites with the most scheduled test time to the job summary; the
+  times include the wait for a slot, so compare a suite across runs.
 - **APITests is grouped by feature.** Each suite lives in a folder named for
   the feature it covers: `Admin`, `Assignments`, `Auth`, `AuthoringChecks`,
   `BrightSpace`, `Courses`, `Gamification`, `GitHub`, `Grading`, `Groups`,

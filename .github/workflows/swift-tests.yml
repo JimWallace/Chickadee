@@ -447,6 +447,11 @@ jobs:
           CACHE_HIT: ${{ steps.setup.outputs.cache-hit }}
         run: scripts/ci-swift-test-lane.sh core-tests --parallel --filter "CoreTests|LoadTestTests"
 
+      - name: Report the slowest suites
+        # A report, never a gate: the script always exits 0.
+        if: always()
+        run: scripts/report-slow-suites.sh
+
   api-tests:
     runs-on: ubuntu-latest
     needs: [changes, build]
@@ -532,6 +537,11 @@ jobs:
           SWT_EXPERIMENTAL_MAXIMUM_PARALLELIZATION_WIDTH: "4"
           CACHE_HIT: ${{ steps.setup.outputs.cache-hit }}
         run: scripts/ci-swift-test-lane.sh api-tests --filter APITests
+
+      - name: Report the slowest suites
+        # A report, never a gate: the script always exits 0.
+        if: always()
+        run: scripts/report-slow-suites.sh
 
   browser-runner-tests:
     runs-on: ubuntu-latest
@@ -672,6 +682,11 @@ jobs:
           SWT_EXPERIMENTAL_MAXIMUM_PARALLELIZATION_WIDTH: "4"
           CACHE_HIT: ${{ steps.setup.outputs.cache-hit }}
         run: scripts/ci-swift-test-lane.sh worker-tests --filter WorkerTests
+
+      - name: Report the slowest suites
+        # A report, never a gate: the script always exits 0.
+        if: always()
+        run: scripts/report-slow-suites.sh
 
       - name: Print the wedge watchdog dump
         # WedgeWatchdog writes its thread table to a file before it aborts,
