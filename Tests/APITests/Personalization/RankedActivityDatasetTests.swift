@@ -154,8 +154,7 @@ import Vapor
                     .init(
                         assignmentPublicID: assignment.publicID, filename: "cases.csv", sampleSize: 3,
                         stratumColumn: nil, remove: nil, transforms: nil),
-                    ToolContext(
-                        request: makeTestRequest(on: app), subject: "rkd2_tester", grantedScopes: [.read, .write]))
+                    mcpContext(app, subject: "rkd2_tester"))
             }
             #expect(try await reloaded(setup, on: app).decodedManifest()?.datasets.isEmpty == true)
         }

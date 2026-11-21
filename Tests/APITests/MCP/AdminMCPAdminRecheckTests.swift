@@ -90,10 +90,7 @@ import VaporTesting
     private func callResult(
         _ dispatcher: AdminMCPDispatcher, tool: String, subject: String, app: Application
     ) async throws -> CallResult {
-        let context = AdminToolContext(
-            request: makeTestRequest(on: app),
-            subject: subject,
-            grantedScopes: Set(DiagnosticScope.allCases))
+        let context = adminMCPContext(app, subject: subject, scopes: Set(DiagnosticScope.allCases))
         let request = JSONRPCRequest(
             jsonrpc: "2.0", id: .number(1), method: "tools/call",
             params: .object(["name": .string(tool), "arguments": .object([:])]))

@@ -22,18 +22,6 @@ import VaporTesting
     private let clientID = "test-agent"
     private let clientName = "Test Agent"
     private let redirectURI = "https://app.example/callback"
-    private let codeVerifier = "abcdefghijklmnopqrstuvwxyz0123456789-._~ABCDEFGH"
-
-    private var codeChallenge: String {
-        Self.base64url(Data(SHA256.hash(data: Data(codeVerifier.utf8))))
-    }
-
-    private static func base64url(_ data: Data) -> String {
-        data.base64EncodedString()
-            .replacingOccurrences(of: "+", with: "-")
-            .replacingOccurrences(of: "/", with: "_")
-            .replacingOccurrences(of: "=", with: "")
-    }
 
     // MARK: - App builders
 
@@ -54,7 +42,7 @@ import VaporTesting
         return (app, authority)
     }
 
-    // MARK: - OAuth flow helpers (mirror MCPOAuthFlowTests)
+    // MARK: - OAuth flow helpers (the shared ones are in MCPOAuthTestKit)
 
     private func seedClient(
         _ app: Application, clientID: String, name: String, redirectURI: String
@@ -63,54 +51,16 @@ import VaporTesting
             .save(on: app.db)
     }
 
-    private func authorizePath(clientID: String, redirectURI: String, scope: String) -> String {
-        var components = URLComponents()
-        components.path = "/oauth/authorize"
-        components.queryItems = [
-            URLQueryItem(name: "response_type", value: "code"),
-            URLQueryItem(name: "client_id", value: clientID),
-            URLQueryItem(name: "redirect_uri", value: redirectURI),
-            URLQueryItem(name: "scope", value: scope),
-            URLQueryItem(name: "state", value: "xyz"),
-            URLQueryItem(name: "code_challenge", value: codeChallenge),
-            URLQueryItem(name: "code_challenge_method", value: "S256"),
-        ]
-        return components.string ?? "/oauth/authorize"
-    }
-
     private func consent(
         _ app: Application, cookie: String, clientID: String, redirectURI: String,
         scope: String, decision: String
     ) async throws -> TestResponse {
         // GET the consent screen (authenticated) to mint the single-use token,
         // then submit it. The POST carries no cookie — the token alone guards it.
-        var html = ""
-        try await app.asyncTest(
-            .GET, authorizePath(clientID: clientID, redirectURI: redirectURI, scope: scope),
-            beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
-            afterResponse: { res in html = res.body.string })
-        let marker = "name=\"request_token\" value=\""
-        let after = try #require(html.range(of: marker)).upperBound
-        let tail = html[after...]
-        let end = try #require(tail.firstIndex(of: "\""))
-        let token = String(tail[..<end])
-        return try await app.asyncSendRequest(
-            .POST, "/oauth/authorize",
-            beforeRequest: { req in
-                try req.content.encode(
-                    ["request_token": token, "decision": decision], as: .urlEncodedForm)
-            })
-    }
-
-    private func tokenPost(_ app: Application, fields: [String: String]) async throws -> TestResponse {
-        try await app.asyncSendRequest(
-            .POST, "/oauth/token",
-            beforeRequest: { req in try req.content.encode(fields, as: .urlEncodedForm) })
-    }
-
-    private func queryValue(_ name: String, in location: String?) -> String? {
-        guard let location, let components = URLComponents(string: location) else { return nil }
-        return components.queryItems?.first(where: { $0.name == name })?.value
+        try await mcpConsent(
+            app, cookie: cookie,
+            authorizePath: mcpAuthorizePath(clientID: clientID, redirectURI: redirectURI, scope: scope),
+            decision: decision)
     }
 
     /// Runs consent → code → token so a persisted `MCPGrant` exists for the
@@ -126,7 +76,7 @@ import VaporTesting
             app,
             fields: [
                 "grant_type": "authorization_code", "code": code,
-                "redirect_uri": redirectURI, "client_id": clientID, "code_verifier": codeVerifier,
+                "redirect_uri": redirectURI, "client_id": clientID, "code_verifier": mcpTestCodeVerifier,
             ])
         #expect(tokenRes.status == .ok)
     }
@@ -200,7 +150,7 @@ import VaporTesting
             let code = try #require(queryValue("code", in: consentRes.headers.first(name: .location)))
             let fields = [
                 "grant_type": "authorization_code", "code": code,
-                "redirect_uri": redirectURI, "client_id": clientID, "code_verifier": codeVerifier,
+                "redirect_uri": redirectURI, "client_id": clientID, "code_verifier": mcpTestCodeVerifier,
             ]
             let first = try await tokenPost(app, fields: fields)
             #expect(first.status == .ok)

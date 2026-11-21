@@ -124,10 +124,7 @@ import Vapor
         try await withTestApp { app in
             let course = try await makeTestCourse(on: app, code: "CS136", name: "Systems")
             let boss = try await makeTestUser(on: app, username: "boss", role: "admin")
-            let context = ToolContext(
-                request: makeTestRequest(on: app),
-                subject: "boss",
-                grantedScopes: [.read, .write])
+            let context = mcpContext(app, subject: "boss")
 
             await #expect(throws: MCPToolError.self) {
                 try await context.authorizeCourseAccess(course.requireID())

@@ -167,8 +167,7 @@ import VaporTesting
             try await scenario.enroll("tester", role: "instructor", on: app)
             let assignment = scenario.assignment
             _ = try await CourseGroupStore.createSet(courseID: scenario.courseID, name: "Lab sections", on: app.db)
-            let context = ToolContext(
-                request: makeTestRequest(on: app), subject: "tester", grantedScopes: [.read, .write])
+            let context = mcpContext(app)
 
             var input = SetActivityTool.Input(
                 assignmentPublicID: assignment.publicID, kind: "bestMetric", leaderboardVisibility: nil)

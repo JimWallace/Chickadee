@@ -233,10 +233,7 @@ import VaporTesting
             let assignment = try await makeTestAssignment(
                 on: app, testSetupID: setupID, courseID: courseID, title: "MCP Lab")
 
-            let context = ToolContext(
-                request: makeTestRequest(on: app),
-                subject: "vmcp",
-                grantedScopes: [.read, .write])
+            let context = mcpContext(app, subject: "vmcp")
 
             _ = try await SetTimeLimitTool().execute(
                 SetTimeLimitTool.Input(
