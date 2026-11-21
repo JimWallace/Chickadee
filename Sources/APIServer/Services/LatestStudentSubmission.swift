@@ -25,12 +25,4 @@ struct LatestStudentSubmission: Sendable, Decodable {
         case filename
         case zipPath = "zip_path"
     }
-
-    init(id: String, userID: UUID, submittedAt: Date?, filename: String?, zipPath: String) {
-        self.id = id
-        self.userID = userID
-        self.submittedAt = submittedAt
-        self.filename = filename
-        self.zipPath = zipPath
-    }
 }
