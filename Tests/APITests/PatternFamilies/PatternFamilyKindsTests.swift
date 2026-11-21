@@ -6,7 +6,6 @@
 // helpers (makeFixture, writeEmptyZip, etc.).
 
 import Core
-import Crypto
 import Fluent
 import Foundation
 import Testing

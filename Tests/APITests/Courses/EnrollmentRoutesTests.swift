@@ -9,7 +9,6 @@
 // triggered by CourseEnrollmentMode.auto courses.
 
 import Core
-import Crypto
 import Fluent
 import Foundation
 import Testing
