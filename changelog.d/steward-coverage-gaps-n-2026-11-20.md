@@ -1,0 +1,3 @@
+### Added
+
+- **Tests for the login lockout, the login rate limit and the roster refusals.** Two new suites cover the per-IP 429 of the login rate limit and its reset when the minute passes, the per-username lockout and its reset when the window passes, the case-insensitive lockout key, the last X-Forwarded-For entry as the rate-limit key, the stale-row sweep, the IdP end-session return address on logout, a TA and an instructor of another course refused every roster change with the roster unchanged, the per-course role change, the last-instructor guard, and the malformed-id and missing-row refusals of the roster routes. No product code changed.
