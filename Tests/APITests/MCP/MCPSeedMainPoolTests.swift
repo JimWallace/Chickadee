@@ -43,10 +43,8 @@ import Vapor
     /// the seed step would not fail here and a row would land on the content
     /// pool — exactly the wall breach this guards.)
     @Test func globalInputsApplyRoutesSeedWriteToSeedDBNotContentPool() async throws {
-        let contentApp = try await makeTestApp()
-        let seedlessApp = try await makeSeedlessPool()
-        do {
-            try await withApp(contentApp) { app in
+        try await withApp(try await makeSeedlessPool()) { seedlessApp in
+            try await withTestApp { app in
                 let course = try await makeTestCourse(on: app, code: "CS246", name: "OOP")
                 let courseID = try course.requireID()
                 let tester = try await makeTestUser(on: app, username: "tester", role: "instructor")
@@ -71,10 +69,6 @@ import Vapor
                 let leaked = try await APIAssignmentPersonalizationSeed.query(on: app.db).count()
                 #expect(leaked == 0, "seed bookkeeping must not touch the content (.mcp) pool")
             }
-            try await seedlessApp.tearDownTestApp()
-        } catch {
-            try? await seedlessApp.tearDownTestApp()
-            throw error
         }
     }
 
@@ -83,10 +77,8 @@ import Vapor
     /// Same guarantee for the section-scoped path: the seed bookkeeping goes to
     /// `seedDB`, not the content `db`.
     @Test func sectionInputsApplyRoutesSeedWriteToSeedDBNotContentPool() async throws {
-        let contentApp = try await makeTestApp()
-        let seedlessApp = try await makeSeedlessPool()
-        do {
-            try await withApp(contentApp) { app in
+        try await withApp(try await makeSeedlessPool()) { seedlessApp in
+            try await withTestApp { app in
                 let course = try await makeTestCourse(on: app, code: "CS246", name: "OOP")
                 let courseID = try course.requireID()
                 let tester = try await makeTestUser(on: app, username: "tester", role: "instructor")
@@ -115,10 +107,6 @@ import Vapor
                 let leaked = try await APIAssignmentPersonalizationSeed.query(on: app.db).count()
                 #expect(leaked == 0, "seed bookkeeping must not touch the content (.mcp) pool")
             }
-            try await seedlessApp.tearDownTestApp()
-        } catch {
-            try? await seedlessApp.tearDownTestApp()
-            throw error
         }
     }
 

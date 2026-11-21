@@ -164,7 +164,8 @@ import VaporTesting
 /// Builds two bare Applications over one Postgres schema (migrated once, the
 /// first app's test database) and guarantees both are torn down. Used by the
 /// #1154 cross-instance tests; lives here because this file hosts the first
-/// of them.
+/// of them. Not `withApp`: B shares A's schema, so B only shuts down and A's
+/// teardown alone drops the schema and returns it to the pool.
 func withTwoAppsOnSharedDatabase(
     _ body: (Application, Application) async throws -> Void
 ) async throws {
